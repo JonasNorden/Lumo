@@ -122,14 +122,18 @@
     selectedIndex: 0
   };
   const menuAmbientGlows = [
-    { x: 0.155, y: 0.252, r: 0.018, amp: 0.16, speed: 0.44, phase: 0.3 },
-    { x: 0.228, y: 0.338, r: 0.014, amp: 0.13, speed: 0.40, phase: 1.1 },
-    { x: 0.307, y: 0.192, r: 0.016, amp: 0.15, speed: 0.36, phase: 2.5 },
-    { x: 0.412, y: 0.274, r: 0.013, amp: 0.12, speed: 0.52, phase: 3.4 },
-    { x: 0.631, y: 0.247, r: 0.015, amp: 0.15, speed: 0.42, phase: 4.2 },
-    { x: 0.724, y: 0.355, r: 0.013, amp: 0.12, speed: 0.37, phase: 5.0 },
-    { x: 0.808, y: 0.548, r: 0.017, amp: 0.17, speed: 0.34, phase: 5.8 },
-    { x: 0.885, y: 0.414, r: 0.015, amp: 0.14, speed: 0.46, phase: 0.7 }
+    { x: 0.135, y: 0.238, r: 0.022, amp: 0.24, speed: 0.52, phase: 0.3 },
+    { x: 0.214, y: 0.322, r: 0.018, amp: 0.20, speed: 0.48, phase: 1.1 },
+    { x: 0.296, y: 0.185, r: 0.021, amp: 0.23, speed: 0.40, phase: 2.5 },
+    { x: 0.388, y: 0.266, r: 0.017, amp: 0.19, speed: 0.58, phase: 3.4 },
+    { x: 0.462, y: 0.198, r: 0.016, amp: 0.18, speed: 0.46, phase: 4.8 },
+    { x: 0.614, y: 0.232, r: 0.020, amp: 0.22, speed: 0.49, phase: 4.2 },
+    { x: 0.698, y: 0.338, r: 0.017, amp: 0.19, speed: 0.44, phase: 5.0 },
+    { x: 0.776, y: 0.512, r: 0.022, amp: 0.24, speed: 0.39, phase: 5.8 },
+    { x: 0.862, y: 0.392, r: 0.019, amp: 0.21, speed: 0.54, phase: 0.7 },
+    { x: 0.915, y: 0.296, r: 0.016, amp: 0.18, speed: 0.47, phase: 1.9 },
+    { x: 0.548, y: 0.436, r: 0.018, amp: 0.20, speed: 0.42, phase: 2.9 },
+    { x: 0.332, y: 0.474, r: 0.017, amp: 0.19, speed: 0.45, phase: 3.8 }
   ];
 
   function drawMenuAmbientGlows(ctx, drawX, drawY, drawW, drawH, t){
@@ -139,15 +143,15 @@
 
     for (const glow of menuAmbientGlows){
       const pulse = 0.5 + 0.5 * Math.sin((t * glow.speed) + glow.phase);
-      const alpha = 0.08 + glow.amp * pulse;
-      const radius = minSize * glow.r * (1 + pulse * 0.2);
+      const alpha = 0.14 + glow.amp * pulse;
+      const radius = minSize * glow.r * (1 + pulse * 0.34);
       const x = drawX + drawW * glow.x;
       const y = drawY + drawH * glow.y;
 
       const g = ctx.createRadialGradient(x, y, 0, x, y, radius);
-      g.addColorStop(0, `rgba(255, 220, 134, ${alpha.toFixed(3)})`);
-      g.addColorStop(0.45, `rgba(255, 192, 92, ${(alpha * 0.65).toFixed(3)})`);
-      g.addColorStop(0.7, `rgba(255, 166, 70, ${(alpha * 0.28).toFixed(3)})`);
+      g.addColorStop(0, `rgba(255, 229, 146, ${alpha.toFixed(3)})`);
+      g.addColorStop(0.38, `rgba(255, 200, 102, ${(alpha * 0.74).toFixed(3)})`);
+      g.addColorStop(0.72, `rgba(255, 170, 72, ${(alpha * 0.34).toFixed(3)})`);
       g.addColorStop(1, "rgba(255, 140, 48, 0)");
 
       ctx.fillStyle = g;
@@ -165,15 +169,33 @@
 
     const spriteW = drawW * 0.205;
     const spriteH = spriteW * (img.naturalHeight / img.naturalWidth);
-    const baseX = drawX + drawW * 0.72;
-    const baseY = drawY + drawH * 0.38;
+    const baseX = (drawX + drawW * 0.72) - 40;
+    const baseY = (drawY + drawH * 0.38) - 70;
 
     const hoverY = Math.sin(t * 0.48) * 8;
     const driftX = Math.sin((t * 0.31) + 1.8) * 5;
 
+    const spriteX = baseX + driftX;
+    const spriteY = baseY + hoverY;
+    const haloPulse = 0.5 + 0.5 * Math.sin((t * 0.78) + 0.9);
+    const haloRadius = spriteW * (0.78 + haloPulse * 0.08);
+    const haloCenterX = spriteX + (spriteW * 0.52);
+    const haloCenterY = spriteY + (spriteH * 0.49);
+
     ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    const halo = ctx.createRadialGradient(haloCenterX, haloCenterY, 0, haloCenterX, haloCenterY, haloRadius);
+    halo.addColorStop(0, `rgba(162, 255, 246, ${(0.20 + haloPulse * 0.08).toFixed(3)})`);
+    halo.addColorStop(0.45, `rgba(132, 234, 255, ${(0.12 + haloPulse * 0.05).toFixed(3)})`);
+    halo.addColorStop(0.85, "rgba(98, 206, 255, 0.03)");
+    halo.addColorStop(1, "rgba(98, 206, 255, 0)");
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(haloCenterX, haloCenterY, haloRadius, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.globalCompositeOperation = "source-over";
-    ctx.drawImage(img, baseX + driftX, baseY + hoverY, spriteW, spriteH);
+    ctx.drawImage(img, spriteX, spriteY, spriteW, spriteH);
     ctx.restore();
   }
 
