@@ -184,6 +184,26 @@ const b = hudCanvas._pauseBtn;
     gameState = GameState.PLAYING;
   }
 
+  function drawTrackedText(ctx, text, x, y, spacing){
+    const totalSpacing = Math.max(0, text.length - 1) * spacing;
+    let cursor = x - totalSpacing * 0.5;
+    for (let i = 0; i < text.length; i++){
+      const ch = text[i];
+      ctx.fillText(ch, cursor, y);
+      cursor += ctx.measureText(ch).width + spacing;
+    }
+  }
+
+  function strokeTrackedText(ctx, text, x, y, spacing){
+    const totalSpacing = Math.max(0, text.length - 1) * spacing;
+    let cursor = x - totalSpacing * 0.5;
+    for (let i = 0; i < text.length; i++){
+      const ch = text[i];
+      ctx.strokeText(ch, cursor, y);
+      cursor += ctx.measureText(ch).width + spacing;
+    }
+  }
+
   function pushEnergyPopup(pctLoss){
     const geom = hudCanvas._barGeom;
     const xBase = geom ? (geom.x + geom.w + 12) : (r.w * 0.06);
@@ -531,26 +551,61 @@ const b = hudCanvas._pauseBtn;
 
       // Keep text inside the board area and match existing retro UI style.
       const titleX = r.w * 0.5;
-      const titleY = r.h * 0.37;
+      const titleY = r.h * 0.255;
       const promptX = r.w * 0.5;
       const promptY = r.h * 0.76;
+      const titleText = "LEVEL COMPLETE";
+      const titleSpacing = Math.max(1.2, r.w * 0.0018);
+
+      // Embossed plaque to integrate the title with the board frame.
+      const plaqueW = r.w * 0.58;
+      const plaqueH = r.h * 0.105;
+      const plaqueX = titleX - plaqueW * 0.5;
+      const plaqueY = titleY - plaqueH * 0.72;
+      const plateGrad = ctx.createLinearGradient(0, plaqueY, 0, plaqueY + plaqueH);
+      plateGrad.addColorStop(0.0, "rgba(152,87,42,0.94)");
+      plateGrad.addColorStop(0.52, "rgba(107,63,31,0.96)");
+      plateGrad.addColorStop(1.0, "rgba(71,40,18,0.96)");
+
+      ctx.beginPath();
+      ctx.moveTo(plaqueX + 24, plaqueY + 3);
+      ctx.quadraticCurveTo(plaqueX + plaqueW * 0.5, plaqueY - 18, plaqueX + plaqueW - 24, plaqueY + 3);
+      ctx.lineTo(plaqueX + plaqueW - 8, plaqueY + plaqueH - 8);
+      ctx.quadraticCurveTo(plaqueX + plaqueW * 0.5, plaqueY + plaqueH + 14, plaqueX + 8, plaqueY + plaqueH - 8);
+      ctx.closePath();
+      ctx.fillStyle = plateGrad;
+      ctx.shadowColor = "rgba(0,0,0,0.42)";
+      ctx.shadowBlur = 14;
+      ctx.shadowOffsetY = 6;
+      ctx.fill();
+
+      ctx.shadowColor = "transparent";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(227,164,94,0.55)";
+      ctx.stroke();
 
       // Main title
-      ctx.font = '52px "Cooper Black","Arial Black",Impact,sans-serif';
+      ctx.font = '34px "Trebuchet MS","Arial Black",sans-serif';
       ctx.lineJoin = "round";
       ctx.miterLimit = 2;
-      ctx.lineWidth = 14;
-      ctx.strokeStyle = "rgba(0,0,0,0.62)";
-      ctx.strokeText("LEVEL COMPLETE", titleX, titleY);
-      ctx.lineWidth = 7;
-      ctx.strokeStyle = "rgba(76,112,170,0.9)";
-      ctx.strokeText("LEVEL COMPLETE", titleX, titleY);
-      const titleGrad = ctx.createLinearGradient(0, titleY - 32, 0, titleY + 32);
-      titleGrad.addColorStop(0.0, "#FDF2C1");
-      titleGrad.addColorStop(0.55, "#FFD56A");
-      titleGrad.addColorStop(1.0, "#F89A2E");
+      ctx.lineWidth = 10;
+      ctx.strokeStyle = "rgba(0,0,0,0.5)";
+      strokeTrackedText(ctx, titleText, titleX, titleY + 2, titleSpacing);
+
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = "rgba(69,27,8,0.95)";
+      strokeTrackedText(ctx, titleText, titleX, titleY, titleSpacing);
+
+      const titleGrad = ctx.createLinearGradient(0, titleY - 22, 0, titleY + 16);
+      titleGrad.addColorStop(0.0, "#FFE3A4");
+      titleGrad.addColorStop(0.5, "#F8C96A");
+      titleGrad.addColorStop(1.0, "#CB7A2A");
       ctx.fillStyle = titleGrad;
-      ctx.fillText("LEVEL COMPLETE", titleX, titleY);
+      drawTrackedText(ctx, titleText, titleX, titleY, titleSpacing);
+
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(255,237,176,0.58)";
+      strokeTrackedText(ctx, titleText, titleX, titleY - 1, titleSpacing);
 
       // Prompt text
       ctx.font = '30px "Cooper Black","Arial Black",Impact,sans-serif';
