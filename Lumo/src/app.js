@@ -647,7 +647,7 @@ const b = hudCanvas._pauseBtn;
     }
 
     // Respawn overlay (CANON)
-    if (player.isRespawning && player.isRespawning()){
+    if (gameState !== GameState.GAME_OVER && player.lives > 0 && player.isRespawning && player.isRespawning()){
       const ctx = r.ctx;
       const n = (typeof player.getRespawnCount === "function") ? player.getRespawnCount() : 0;
 
