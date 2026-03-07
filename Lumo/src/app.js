@@ -150,10 +150,10 @@
   }
 
   function returnToStartAfterGameOver(){
-    restart();
     paused = false;
     gameOverReadyForInput = false;
-    hudDebug.textContent = "Game Over -> restarted at start level";
+    gameState = GameState.MENU;
+    hudDebug.textContent = "Game Over -> main menu";
   }
 
   // Klick på canvas = toggle pause / klicka på paus-knappen
@@ -553,6 +553,61 @@ const b = hudCanvas._pauseBtn;
     r.clear();
     const ctx = r.ctx;
 
+    if (gameState === GameState.MENU){
+      const img = menuBackgroundImage;
+      if (img && img.complete && img.naturalWidth > 0){
+        ctx.drawImage(img, 0, 0, r.w, r.h);
+      } else {
+        ctx.fillStyle = "#03131A";
+        ctx.fillRect(0, 0, r.w, r.h);
+      }
+
+      ctx.save();
+
+      const panelX = r.w * 0.235;
+      const panelY = r.h * 0.485;
+      const tilt = -0.065;
+      const lineH = Math.max(26, r.h * 0.048);
+
+      ctx.translate(panelX, panelY);
+      ctx.rotate(tilt);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = `${Math.max(20, Math.round(r.h * 0.042))}px "Orbitron","Eurostile","Trebuchet MS",sans-serif`;
+
+      for (let i = 0; i < menuItems.length; i++){
+        const isActive = i === 0;
+        const y = (i - (menuItems.length - 1) * 0.5) * lineH;
+        const label = menuItems[i];
+
+        ctx.shadowColor = isActive ? "rgba(88,255,255,0.55)" : "rgba(70,220,240,0.35)";
+        ctx.shadowBlur = isActive ? 10 : 6;
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "rgba(0,32,38,0.62)";
+        ctx.strokeText(label, 0, y);
+        ctx.fillStyle = isActive ? "#BFFFFF" : "#87EAF6";
+        ctx.fillText(label, 0, y);
+
+        if (isActive){
+          const metrics = ctx.measureText(label);
+          const textW = metrics.width;
+          const textH = lineH * 0.72;
+          const c = Math.cos(tilt);
+          const s = Math.sin(tilt);
+          const cx = panelX + (0 * c - y * s);
+          const cy = panelY + (0 * s + y * c);
+          menuUi.beginQuestBounds = {
+            x: cx - textW * 0.5,
+            y: cy - textH * 0.5,
+            w: textW,
+            h: textH
+          };
+        }
+      }
+      ctx.restore();
+      return;
+    }
+
     // WORLD_CLIP_BEGIN: prevent drawing outside level bounds (eg BG stamps below grid)
     const worldHpx = (world.h || 30) * (world.tileSize || 24);
     const worldTop = Math.round(-cam.y); // screen-space Y where world y=0 begins (handles letterboxing)
@@ -612,59 +667,7 @@ const b = hudCanvas._pauseBtn;
 
     r.drawDarkness(lights);
 
-    if (gameState === GameState.MENU){
-      const img = menuBackgroundImage;
-      if (img && img.complete && img.naturalWidth > 0){
-        ctx.drawImage(img, 0, 0, r.w, r.h);
-      } else {
-        ctx.fillStyle = "#03131A";
-        ctx.fillRect(0, 0, r.w, r.h);
-      }
-
-      ctx.save();
-
-      const panelX = r.w * 0.235;
-      const panelY = r.h * 0.485;
-      const tilt = -0.065;
-      const lineH = Math.max(26, r.h * 0.048);
-
-      ctx.translate(panelX, panelY);
-      ctx.rotate(tilt);
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = `${Math.max(20, Math.round(r.h * 0.042))}px "Orbitron","Eurostile","Trebuchet MS",sans-serif`;
-
-      for (let i = 0; i < menuItems.length; i++){
-        const isActive = i === 0;
-        const y = (i - (menuItems.length - 1) * 0.5) * lineH;
-        const label = menuItems[i];
-
-        ctx.shadowColor = isActive ? "rgba(88,255,255,0.55)" : "rgba(70,220,240,0.35)";
-        ctx.shadowBlur = isActive ? 10 : 6;
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = "rgba(0,32,38,0.62)";
-        ctx.strokeText(label, 0, y);
-        ctx.fillStyle = isActive ? "#BFFFFF" : "#87EAF6";
-        ctx.fillText(label, 0, y);
-
-        if (isActive){
-          const metrics = ctx.measureText(label);
-          const textW = metrics.width;
-          const textH = lineH * 0.72;
-          const c = Math.cos(tilt);
-          const s = Math.sin(tilt);
-          const cx = panelX + (0 * c - y * s);
-          const cy = panelY + (0 * s + y * c);
-          menuUi.beginQuestBounds = {
-            x: cx - textW * 0.5,
-            y: cy - textH * 0.5,
-            w: textW,
-            h: textH
-          };
-        }
-      }
-      ctx.restore();
-    } else if (gameState === GameState.GAME_OVER){
+    if (gameState === GameState.GAME_OVER){
       const img = gameOverImage;
       if (img && img.complete && img.naturalWidth > 0){
         const scale = Math.min(r.w / img.naturalWidth, r.h / img.naturalHeight);
@@ -964,7 +967,7 @@ const b = hudCanvas._pauseBtn;
           overlay.classList.remove("is-on");
           overlay.setAttribute("aria-hidden", "true");
           bootActive = false;
-          paused = true;
+          paused = false;
           gameState = GameState.MENU;
         }, 250);
       }
@@ -975,7 +978,10 @@ const b = hudCanvas._pauseBtn;
   Lumo.Input.init();
   Lumo.Time.start();
   wireImport();
-  restart();
+  player.lives = 4;
+  player.flares = 1;
+  player.refill();
+  gameState = GameState.BOOTING;
   bootStart();
   requestAnimationFrame(tick);
 })();
