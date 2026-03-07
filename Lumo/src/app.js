@@ -77,6 +77,7 @@
   let paused = false;
   let bootActive = false;
   let intermissionReadyForInput = false;
+  let gameOverReadyForInput = false;
   let gameState = GameState.BOOTING;
   const BOOT_MS = 5000;
 // HUD-state för canvasoverlay
@@ -104,6 +105,9 @@
   const intermissionImage = new Image();
   intermissionImage.src = "data/assets/ui/intermission_level_complete.png";
 
+  const gameOverImage = new Image();
+  gameOverImage.src = "data/assets/ui/gameover.png";
+
   function startNextQuest(){
     const nextLevel = levelManager.getNextLevel();
     if (!nextLevel){
@@ -121,6 +125,13 @@
     hudDebug.textContent = "Level complete";
     intermissionReadyForInput = true;
     gameState = GameState.INTERMISSION;
+  }
+
+  function returnToStartAfterGameOver(){
+    restart();
+    paused = false;
+    gameOverReadyForInput = false;
+    hudDebug.textContent = "Game Over -> restarted at start level";
   }
 
   // Klick på canvas = toggle pause / klicka på paus-knappen
@@ -148,6 +159,13 @@ const b = hudCanvas._pauseBtn;
 
   // P = pause/resume
   window.addEventListener("keydown", (e) => {
+    if (gameState === GameState.GAME_OVER){
+      if (e.repeat) return;
+      if (gameOverReadyForInput) returnToStartAfterGameOver();
+      e.preventDefault();
+      return;
+    }
+
     if (gameState === GameState.INTERMISSION){
       if (e.repeat) return;
       if (intermissionReadyForInput) startNextQuest();
@@ -166,6 +184,8 @@ const b = hudCanvas._pauseBtn;
   Lumo.debug = { player, world, ents, hudCanvas, levelManager, GameState };
 
   function syncGameState(){
+    const prevState = gameState;
+
     if (bootActive){
       gameState = GameState.BOOTING;
       return;
@@ -179,9 +199,14 @@ const b = hudCanvas._pauseBtn;
     }
     if (player.lives <= 0){
       gameState = GameState.GAME_OVER;
+      gameOverReadyForInput = true;
+      if (prevState !== GameState.GAME_OVER){
+        hudDebug.textContent = "Game Over";
+      }
       return;
     }
     gameState = GameState.PLAYING;
+    gameOverReadyForInput = false;
   }
 
   function drawTrackedText(ctx, text, x, y, spacing){
@@ -338,6 +363,7 @@ const b = hudCanvas._pauseBtn;
     hudCanvas.flareFlash = 0;
     hudCanvas.checkpointLit = false;
     hudCanvas.checkpointRingT = 0;
+    gameOverReadyForInput = false;
 
     loadLevel(lvl);
     gameState = GameState.PLAYING;
@@ -537,7 +563,36 @@ const b = hudCanvas._pauseBtn;
 
     r.drawDarkness(lights);
 
-    if (paused && !bootActive){
+    if (gameState === GameState.GAME_OVER){
+      const img = gameOverImage;
+      if (img && img.complete && img.naturalWidth > 0){
+        ctx.drawImage(img, 0, 0, r.w, r.h);
+      } else {
+        ctx.fillStyle = "#080A13";
+        ctx.fillRect(0, 0, r.w, r.h);
+      }
+
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      ctx.font = '56px "Arial Black",sans-serif';
+      ctx.lineWidth = 10;
+      ctx.strokeStyle = "rgba(0,0,0,0.75)";
+      ctx.strokeText("GAME OVER", r.w * 0.5, r.h * 0.22);
+      ctx.fillStyle = "#F4E8C7";
+      ctx.fillText("GAME OVER", r.w * 0.5, r.h * 0.22);
+
+      ctx.font = '24px "Trebuchet MS",Arial,sans-serif';
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = "rgba(0,0,0,0.7)";
+      ctx.strokeText("Press any key to return to main menu", r.w * 0.5, r.h * 0.9);
+      ctx.fillStyle = "#F4E8C7";
+      ctx.fillText("Press any key to return to main menu", r.w * 0.5, r.h * 0.9);
+
+      ctx.restore();
+    } else if (paused && !bootActive){
       r.drawPauseOverlay();
     } else if (gameState === GameState.INTERMISSION){
       const img = intermissionImage;
