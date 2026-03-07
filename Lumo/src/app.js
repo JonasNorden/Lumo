@@ -118,6 +118,38 @@
     itemBounds: [],
     selectedIndex: 0
   };
+  const menuAmbientGlows = [
+    { x: 0.195, y: 0.304, r: 0.015, amp: 0.10, speed: 0.55, phase: 0.3 },
+    { x: 0.323, y: 0.215, r: 0.012, amp: 0.08, speed: 0.42, phase: 1.9 },
+    { x: 0.694, y: 0.266, r: 0.014, amp: 0.09, speed: 0.48, phase: 2.8 },
+    { x: 0.782, y: 0.588, r: 0.013, amp: 0.11, speed: 0.36, phase: 4.2 }
+  ];
+
+  function drawMenuAmbientGlows(ctx, drawX, drawY, drawW, drawH, t){
+    const minSize = Math.min(drawW, drawH);
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+
+    for (const glow of menuAmbientGlows){
+      const pulse = 0.5 + 0.5 * Math.sin((t * glow.speed) + glow.phase);
+      const alpha = 0.04 + glow.amp * pulse;
+      const radius = minSize * glow.r * (0.95 + pulse * 0.12);
+      const x = drawX + drawW * glow.x;
+      const y = drawY + drawH * glow.y;
+
+      const g = ctx.createRadialGradient(x, y, 0, x, y, radius);
+      g.addColorStop(0, `rgba(255, 214, 128, ${alpha.toFixed(3)})`);
+      g.addColorStop(0.55, `rgba(255, 176, 74, ${(alpha * 0.45).toFixed(3)})`);
+      g.addColorStop(1, "rgba(255, 140, 48, 0)");
+
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
 
   function startMenuQuest(){
     const lvl = levelManager.getStartLevel();
@@ -593,6 +625,7 @@ const b = hudCanvas._pauseBtn;
         const drawX = (r.w - drawW) * 0.5;
         const drawY = (r.h - drawH) * 0.5;
         ctx.drawImage(img, drawX, drawY, drawW, drawH);
+        drawMenuAmbientGlows(ctx, drawX, drawY, drawW, drawH, Lumo.Time.t || 0);
       } else {
         ctx.fillStyle = "#03131A";
         ctx.fillRect(0, 0, r.w, r.h);
