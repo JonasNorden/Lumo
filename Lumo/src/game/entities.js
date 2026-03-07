@@ -1,0 +1,1732 @@
+(() => {
+  window.Lumo = window.Lumo || {};
+
+  class Entities {
+    constructor(){
+      this.items = [];
+
+      // Fog volumes (Smooke-style) — isolated, visual-only
+      this._fogVolumes = [];
+      this._fogFrame = 0;
+
+      // Catalog (optional): allows generic decor sizing/perch data from data/catalog_entities.js
+      this._catById = null;
+      if (window.LUMO_CATALOG_ENTITIES && Array.isArray(window.LUMO_CATALOG_ENTITIES)){
+        this._catById = {};
+        for (const d of window.LUMO_CATALOG_ENTITIES){
+          if (d && typeof d.id === "string") this._catById[d.id] = d;
+        }
+      }
+
+      this._autoSpawnedTestDarkCreature = false; // spawn one test creature if none exists
+
+            // Sprites (HUD använder flare.png, kastad flare använder flare_2.png)
+      // Runtime-sprites för entities
+    this.sprites = {
+  // thrown flare
+  flareAir: this._tryLoadImage("data/assets/ui/flare_2.png"),
+
+  // flare pickup (placed in level)
+  flarePickup: this._tryLoadImage("data/assets/sprites/pickups/flare_pickup_01.png"),
+
+  // power-cell variants (randomized per instance at spawn)
+  powerCells: [
+    this._tryLoadImage("data/assets/sprites/pickups/pc_01.png"),
+    this._tryLoadImage("data/assets/sprites/pickups/pc_02.png"),
+    this._tryLoadImage("data/assets/sprites/pickups/pc_03.png"),
+    this._tryLoadImage("data/assets/sprites/pickups/pc_04.png")
+  ],
+
+  // fireflies (randomized per instance at spawn)
+  fireflies: [
+    this._tryLoadImage("data/assets/sprites/lights/firefly_01.png"),
+    this._tryLoadImage("data/assets/sprites/lights/firefly_02.png"),
+    this._tryLoadImage("data/assets/sprites/lights/firefly_03.png")
+  ],
+
+  // lantern (static safe light)
+  lantern: this._tryLoadImage("data/assets/sprites/lights/lantern_01.png"),
+
+  // checkpoint (try a few common legacy paths)
+  checkpoints: [
+      this._tryLoadImage("data/assets/sprites/lights/lantern_2.png"),
+      ]
+
+};
+
+
+    }
+
+    _tryLoadImage(src){
+      try{
+        const img = new Image();
+        img.src = src;
+        img._ok = false;
+        img.onload = () => { img._ok = true; };
+        img.onerror = () => { img._ok = false; };
+        return img;
+      }catch(_){
+        return null;
+      }
+    }
+
+    clear(){
+      this.items.length = 0;
+      this._fogVolumes.length = 0;
+      this._fogFrame = 0;
+      this._autoSpawnedTestDarkCreature = false;
+    }
+
+    loadFromLevel(levelObj){
+      this.clear();
+
+      // Accept both runtime formats:
+      //  A) levelObj.entities: [{type, x, y, ...}]  (engine-native)
+      //  B) levelObj.layers.ents: [{id, x, y, w, h, anchor, offsetX, offsetY, aggroRadius, params}] (LumoEditor export)
+      const listA = (levelObj && Array.isArray(levelObj.entities)) ? levelObj.entities : null;
+      const listB = (levelObj && levelObj.layers && Array.isArray(levelObj.layers.ents)) ? levelObj.layers.ents : null;
+
+      const list = listA || listB || [];
+
+      if (listB && !listA){
+        // If the level doesn't define spawn, derive it from start_01 (editor mandatory entity).
+        if (!levelObj.spawn && !(levelObj.meta && levelObj.meta.spawn)){
+          const start = listB.find(e => e && e.id === "start_01");
+          if (start) levelObj.spawn = { x: start.x|0, y: start.y|0 };
+        }
+      }
+
+      for (const e of list){
+        this.spawnFromDef(e, levelObj);
+      }
+
+      // If we got entities (either format), do NOT inject demo objects.
+      const hadEntities = (Array.isArray(listA) && listA.length) || (Array.isArray(listB) && listB.length);
+
+      // Om leveln saknar entities → lägg in lite test-grejer (ENDAST i debug-läge)
+      // Aktivera manuellt i konsolen om du vill: window.Lumo.DEBUG_DEMO_ENTS = true;
+      if (!hadEntities && (Lumo && Lumo.DEBUG_DEMO_ENTS)){
+        this.items.push(this.makePowerCell(8, 24));
+        this.items.push(this.makeFlarePickup(12, 24));
+        this.items.push(this.makeLantern(18, 24));
+        this.items.push(this.makeEnemy(40, 24));
+        // Dark creature auto-spawnas nära spelaren i update()
+      }
+}
+
+    spawnFromDef(e, levelObj){
+      if (!e) return;
+
+      // Editor-export path (id-based)
+      if (e.id){
+        const id = String(e.id);
+        const tx = e.x|0, ty = e.y|0;
+        const offX = (typeof e.offsetX === "number") ? e.offsetX : 0;
+        const offY = (typeof e.offsetY === "number") ? e.offsetY : 0;
+        const anchor = (e.anchor === "TL") ? "TL" : "BL";
+        const params = (e.params && typeof e.params === "object") ? e.params : {};
+
+        // Helper: convert a tile-anchored BL entity into runtime pixels + optional y-offset
+        const applyAnchor = (obj, w=null, h=null) => {
+          const ts = (levelObj && levelObj.meta && levelObj.meta.tileSize) ? levelObj.meta.tileSize : (Lumo.TILE || 24);
+          const W = (w==null) ? (obj.w||0) : w;
+          const H = (h==null) ? (obj.h||0) : h;
+
+          // Default to bottom-left anchor so it "sits" on the tile.
+          if (anchor === "BL"){
+            // Place object's bottom on tile bottom, then apply overlap offset.
+            obj.x = (tx * ts) + offX;
+            obj.y = (ty * ts) + (ts - H);
+            obj._offY = offY; // applied in draw()
+          } else {
+            obj.x = (tx * ts) + offX;
+            obj.y = (ty * ts);
+            obj._offY = offY;
+          }
+          return obj;
+        };
+
+                if (id === "start_01"){
+          // Start = ren spawn-marker (osynlig i runtime). Spawn härleds i init() via levelObj.spawn.
+          return;
+        }
+
+        if (id === "checkpoint_01"){
+          // Checkpoint = engine-native (placeholder tills du sätter sprite)
+          const cp = this.makeCheckpoint(tx, ty);
+          applyAnchor(cp, cp.w, cp.h);
+          this.items.push(cp);
+          return;
+        }
+
+
+                if (id === "exit_01"){
+          // Exit = ren mål-marker (osynlig i runtime just nu)
+          const ts = (levelObj && levelObj.meta && levelObj.meta.tileSize) ? levelObj.meta.tileSize : (Lumo.TILE || 24);
+          const ex = { type:"exit", active:true, hidden:true, x:tx*ts, y:ty*ts, w:ts, h:ts };
+          applyAnchor(ex, ex.w, ex.h);
+          this.items.push(ex);
+          return;
+        }
+
+        if (id === "lantern_01"){
+          const radius = (typeof params.radius === "number") ? params.radius : 170;
+          const strength = (typeof params.strength === "number") ? params.strength : 0.85;
+          const ln = this.makeLantern(tx, ty, radius, strength);
+          applyAnchor(ln, ln.w, ln.h);
+          this.items.push(ln);
+          return;
+        }
+
+
+        if (id === "fog_volume"){
+          // FogVolume (visual-only) — accepts both export variants:
+          // 1) params: { ... }  2) params: { params: { ... } }
+          const P = (params.params && typeof params.params === "object") ? params.params : params;
+
+          const area = (P.area && typeof P.area === "object") ? P.area : {};
+          const look = (P.look && typeof P.look === "object") ? P.look : {};
+          const smoothing = (P.smoothing && typeof P.smoothing === "object") ? P.smoothing : {};
+          const interaction = (P.interaction && typeof P.interaction === "object") ? P.interaction : {};
+          const organic = (P.organic && typeof P.organic === "object") ? P.organic : {};
+          const render = (P.render && typeof P.render === "object") ? P.render : {};
+
+
+          const ts = (levelObj && levelObj.meta && levelObj.meta.tileSize) ? levelObj.meta.tileSize : (Lumo.TILE || 24);
+
+          // Area in pixels (preferred from Smooke export). Fallbacks are tile-based.
+          // Bounds: support both tile-based entities (x/y in tiles, w/h ~ tile size) AND pixel-rect fog volumes (w/h much larger).
+          const hasRect = (typeof e.w === "number" && e.w > ts * 2) || (typeof e.h === "number" && e.h > ts * 2);
+          const rectX0 = hasRect ? (+e.x) : (tx * ts);
+          const rectW  = hasRect ? (+e.w || 0) : (ts * 12);
+          const rectX1 = hasRect ? (+e.x + (+e.w || 0)) : (rectX0 + rectW);
+          const rectY0 = hasRect ? (+e.y + (+e.h || ts)) : ((ty + 1) * ts);
+
+          const x0 = (typeof area.x0 === "number") ? area.x0 : rectX0;
+          const x1 = (typeof area.x1 === "number") ? area.x1 : (rectX1);
+          const y0 = (typeof area.y0 === "number") ? area.y0 : rectY0;
+          const falloff = (typeof area.falloff === "number") ? area.falloff : 0;
+
+          // Look (keep cheap defaults; we can tune later)
+          const density   = (typeof look.density   === "number") ? look.density   : 0.14;
+          const lift      = (typeof look.lift      === "number") ? look.lift      : 8;
+          const thickness = (typeof look.thickness === "number") ? look.thickness : 44;
+          let layers      = (typeof look.layers    === "number") ? (look.layers|0) : 28;
+          if (layers < 8) layers = 8;
+          if (layers > 36) layers = 36;
+          // Look extras (premium): tint + exposure (lets you dim/boost without changing density)
+          const color    = (typeof look.color === "string") ? look.color : "#E1EEFF";
+          const exposure = (typeof look.exposure === "number") ? look.exposure : 1.0;
+
+          // Render extras (premium): blend mode (screen/normal/add etc.)
+          const blend = (render && typeof render.blend === "string") ? render.blend : "screen";
+
+
+          // Smoothing (Smooke style)
+          const diffuse = (typeof smoothing.diffuse === "number") ? smoothing.diffuse : 0.24;
+          const relax   = (typeof smoothing.relax   === "number") ? smoothing.relax   : 0.24;
+          const visc    = (typeof smoothing.visc    === "number") ? smoothing.visc    : 0.94;
+
+          // Interaction
+          const radius = (typeof interaction.radius === "number") ? interaction.radius : 92;
+          const push   = (typeof interaction.push   === "number") ? interaction.push   : 2.4;
+          const bulge  = (typeof interaction.bulge  === "number") ? interaction.bulge  : 2.2;
+          const gate   = (typeof interaction.gate   === "number") ? interaction.gate   : 70;
+
+          // Organic (premium): idle waves even when Lumo is far away.
+          const orgStrength = (organic && typeof organic.strength === "number") ? organic.strength : 0.0;
+          const orgScale    = (organic && typeof organic.scale    === "number") ? organic.scale    : 1.0;
+          const orgSpeed    = (organic && typeof organic.speed    === "number") ? organic.speed    : 1.0;
+
+
+          // 1D field resolution (hard budget: never too large)
+          const widthPx = Math.max(32, x1 - x0);
+          let N = Math.floor(widthPx / 10); // ~10px per cell
+          if (N < 64) N = 64;
+          if (N > 220) N = 220;
+
+          const field = new Float32Array(N);
+          const vel   = new Float32Array(N);
+
+          this._fogVolumes.push({
+            x0, x1, y0, falloff,
+            density, lift, thickness, layers,
+            color, exposure, blend,
+            diffuse, relax, visc,
+            radius, push, bulge, gate,
+            orgStrength, orgScale, orgSpeed,
+            N, field, vel,
+            t: 0,
+          });
+          return;
+        }
+
+        if (id === "powercell_01"){
+          const pc = this.makePowerCell(tx, ty);
+          applyAnchor(pc, pc.w, pc.h);
+          this.items.push(pc);
+          return;
+        }
+
+if (id === "flare_pickup_01"){
+  const amount = (typeof params.amount === "number") ? params.amount : 1;
+  const fp = this.makeFlarePickup(tx, ty, amount);
+  applyAnchor(fp, fp.w, fp.h);
+  this.items.push(fp);
+  return;
+}
+
+        
+        if (id === "firefly_01"){
+          const ff = this.makeFirefly(tx, ty, { w:12, h:12, params });
+          applyAnchor(ff, ff.w, ff.h);
+          this.items.push(ff);
+          return;
+        }
+
+if (id === "dark_creature_01"){
+          const dc = this.makeDarkCreature(tx, ty, { w:18, h:18, params: e.params });
+          applyAnchor(dc, dc.w, dc.h);
+          this.items.push(dc);
+          return;
+        }
+
+        
+
+// Generic catalog-driven decor (no collision).
+// Any entity id present in catalog_entities.js with category === "decor" will spawn as a visual decor sprite.
+if (this._catById){
+  const def = this._catById[id];
+  if (def && def.category === "decor"){
+    const ts = this.ts;
+    const wPx = (typeof def.w === "number") ? def.w : ts;
+    const hPx = (typeof def.h === "number") ? def.h : ts;
+    const perchOffsetY = (typeof def.perchOffsetY === "number") ? def.perchOffsetY : 0;
+
+    // Image path:
+    // - default: catalog img
+    // - flower: allow params.variant 1..4 to select flower_01..04
+    let imgPath = (typeof def.img === "string") ? def.img : "";
+    if (id === "decor_flower_01"){
+      let vRaw = (params && Object.prototype.hasOwnProperty.call(params, "variant")) ? params.variant : 1;
+      let v = (typeof vRaw === "number") ? (vRaw|0) : parseInt(vRaw, 10);
+      if (!Number.isFinite(v)) v = 1;
+      if (v < 1) v = 1;
+      if (v > 4) v = 4;
+      // If catalog img ends with flower_01.png, swap to selected variant.
+      if (typeof imgPath === "string" && imgPath.indexOf("flower_01.png") !== -1){
+        imgPath = imgPath.replace("flower_01.png", "flower_0" + v + ".png");
+      } else if (typeof imgPath === "string" && imgPath.match(/flower_0\d\.png$/)){
+        imgPath = imgPath.replace(/flower_0\d\.png$/, "flower_0" + v + ".png");
+      } else {
+        // Safe fallback
+        imgPath = "data/assets/sprites/decor/flower_0" + v + ".png";
+      }
+    }
+
+    const dc = {
+      type:"decor",
+      active:true,
+      decorId:id,
+      x: tx*ts,
+      y: ty*ts,
+      w: wPx,
+      h: hPx,
+      perchOffsetY: perchOffsetY,
+      img: imgPath ? this._tryLoadImage(imgPath) : null,
+    };
+    applyAnchor(dc, dc.w, dc.h);
+    this.items.push(dc);
+    return;
+  }
+}// Unknown editor entity id -> ignore (keeps runtime robust)
+        return;
+      }
+
+      // Engine-native path (type-based)
+      if (e.type === "powerCell") this.items.push(this.makePowerCell(e.x, e.y));
+      else if (e.type === "checkpoint") this.items.push(this.makeCheckpoint(e.x, e.y));
+      else if (e.type === "lantern") this.items.push(this.makeLantern(e.x, e.y, e.radius, e.strength));
+      else if (e.type === "flarePickup") this.items.push(this.makeFlarePickup(e.x, e.y, e.amount));
+      else if (e.type === "patrolEnemy") this.items.push(this.makeEnemy(e.x, e.y, e.left, e.right));
+      else if (e.type === "movingPlatform") this.items.push(this.makeMovingPlatformFromDef(e, levelObj));
+      else if (e.type === "darkCreature") this.items.push(this.makeDarkCreature(e.x, e.y, e));
+    }
+
+    // tile coords in, store pixels
+  makePowerCell(tx, ty){
+  const ts = Lumo.TILE || 24;
+
+  // Alternativ A: äkta slump per runtime-load (väljs en gång per entity)
+  const arr = (this.sprites && Array.isArray(this.sprites.powerCells)) ? this.sprites.powerCells : [];
+  const pick = arr.length ? arr[(Math.random() * arr.length) | 0] : null;
+
+  // Skala till exakt 1 tile
+  return {
+    type:"powerCell",
+    active:true,
+    x:tx*ts,
+    y:ty*ts,
+    w:ts,
+    h:ts,
+    _pcSprite: pick
+  };
+}
+
+    makeFireflyPx(px, py, w=12, h=12, params=null){
+      const ts = Lumo.TILE || 24;
+
+      const arr = (this.sprites && Array.isArray(this.sprites.fireflies)) ? this.sprites.fireflies : [];
+      const pick = arr.length ? arr[(Math.random() * arr.length) | 0] : null;
+
+      const p = (params && typeof params === "object") ? params : {};
+
+      const num = (v) => {
+        if (typeof v === "number") return v;
+        if (typeof v === "string" && v.trim() !== ""){
+          const n = parseFloat(v);
+          return Number.isFinite(n) ? n : null;
+        }
+        return null;
+      };
+
+      // Editor shows lightDiameter; runtime uses lightRadius (radius). Support both.
+      const lrRaw = num(p.lightRadius);
+      const ldRaw = num(p.lightDiameter);
+      const lightRadius = (ldRaw != null) ? (ldRaw * 0.5) : ((lrRaw != null) ? lrRaw : 120);
+      const lsRaw = num(p.lightStrength);
+      const lightStrength = (lsRaw != null) ? lsRaw : 0.8;
+
+      const aggroTiles = (typeof p.aggroTiles === "number") ? p.aggroTiles : 6;
+
+      const flyRangeX = (typeof p.flyRangeX === "number") ? p.flyRangeX
+        : ((typeof p.flyRadius === "number") ? p.flyRadius : 5);
+      const flyRangeYUp = (typeof p.flyRangeYUp === "number") ? p.flyRangeYUp
+        : ((typeof p.flyRadius === "number") ? p.flyRadius : 5);
+
+      const flySpeed = (typeof p.flySpeed === "number") ? p.flySpeed : 45;
+      const smooth = (typeof p.smooth === "number") ? p.smooth : 7.0;
+      const flyTime = (typeof p.flyTime === "number") ? p.flyTime : 2.5;
+
+      const cooldown = (typeof p.cooldown === "number") ? p.cooldown : 2.0;
+      const fadeIn = (typeof p.fadeIn === "number") ? p.fadeIn : 0.35;
+      const fadeOut = (typeof p.fadeOut === "number") ? p.fadeOut : 0.45;
+
+      const perchSearchRadius = (typeof p.perchSearchRadius === "number") ? p.perchSearchRadius : 6;
+
+      return {
+        type:"firefly",
+        active:true,
+        x:px, y:py,
+        w, h,
+
+        _ffSprite: pick,
+        dir: 1,
+
+        homeX: px,
+        homeY: py,
+
+        lightRadius,
+        lightStrength,
+        lightK: 0,
+
+        aggroR: aggroTiles * ts,
+        flyRX: flyRangeX * ts,
+        flyRY: flyRangeYUp * ts,
+        flySpeed,
+        smooth,
+        flyTime,
+        perchR: perchSearchRadius * ts,
+        cooldown,
+        fadeIn,
+        fadeOut,
+
+        mode: "rest",
+        cdT: 0,
+        tFly: 0,
+        tWander: 0,
+
+        destX: px,
+        destY: py,
+        landX: px,
+        landY: py,
+
+        vx: 0,
+        vy: 0,
+
+        _tail: [],
+        _tailSpawnT: 0,
+
+        solid:false
+      };
+    }
+
+    makeFirefly(tx, ty, def){
+      const ts = Lumo.TILE || 24;
+      const w = (def && def.w) ? (def.w|0) : 12;
+      const h = (def && def.h) ? (def.h|0) : 12;
+      const params = (def && def.params && typeof def.params === "object") ? def.params : null;
+
+      const px = (tx * ts);
+      const py = (ty * ts);
+      return this.makeFireflyPx(px, py, w, h, params);
+    }
+
+
+
+
+    makeCheckpoint(tx, ty){
+      const ts = Lumo.TILE || 24;
+      return { type:"checkpoint", active:true, x:tx*ts, y:ty*ts, w:ts, h:ts };
+    }
+
+    makeLantern(tx, ty, radius=170, strength=0.85){
+      const ts = Lumo.TILE || 24;
+      return {
+        type:"lantern",
+        active:true,
+        x:tx*ts,
+        y:ty*ts,
+        w:14,
+        h:14,
+        radius,
+        strength
+      };
+    }
+
+    makeFlarePickup(tx, ty, amount=1){
+      const ts = Lumo.TILE || 24;
+      return {
+        type:"flarePickup",
+        active:true,
+        x:tx*ts,
+        y:ty*ts,
+        w:12,
+        h:12,
+        amount: amount|0
+      };
+    }
+
+    makeEnemy(tx, ty, left=null, right=null){
+      const ts = Lumo.TILE || 24;
+      const x = tx*ts, y = ty*ts;
+      return {
+        type:"patrolEnemy",
+        active:true,
+        x, y,
+        w:18, h:18,
+        vx: 50,
+        homeX: x,
+        left: (left==null ? x - ts*6 : left*ts),
+        right:(right==null? x + ts*6 : right*ts),
+        aggroR: 140,
+        chasing:false
+      };
+    }
+
+    // Dark creature med pixlar direkt (används för auto-spawn nära spelaren)
+    makeDarkCreaturePx(px, py, w=18, h=18, params=null){
+      return {
+        type:"darkCreature",
+        active:true,
+        x:px,
+        y:py,
+        w, h,
+        _dangerT: 0,
+        _hitCd: 0,
+        isDarkActive:false,
+        // params (optional)
+        hp: (params && params.hp != null) ? (+params.hp) : 3,
+        hitCooldown: (params && params.hitCooldown != null) ? (+params.hitCooldown) : 0.6,
+        safeDelay: (params && params.safeDelay != null) ? (+params.safeDelay) : 0.6,
+        patrolTiles: (params && params.patrolTiles != null) ? (+params.patrolTiles) : 0,
+        aggroTiles: (params && params.aggroTiles != null) ? (+params.aggroTiles) : 0,
+        energyLoss: (params && params.energyLoss != null) ? (+params.energyLoss) : 40,
+        knockbackX: (params && params.knockbackX != null) ? (+params.knockbackX) : 260,
+        knockbackY: (params && params.knockbackY != null) ? (+params.knockbackY) : -220,
+        reactsToFlares: (params && params.reactsToFlares != null) ? (!!params.reactsToFlares) : true,
+        solid:false
+      };
+    }
+
+    // Dark creature från tile-coords (level-data)
+    makeDarkCreature(tx, ty, def){
+      const ts = Lumo.TILE || 24;
+      const w = (def && def.w) ? (def.w|0) : 18;
+      const h = (def && def.h) ? (def.h|0) : 18;
+      const params = (def && def.params && typeof def.params === "object") ? def.params : null;
+      return this.makeDarkCreaturePx(tx*ts, ty*ts, w, h, params);
+    }
+
+    // basic moving platform factory (direct pixels)
+    makeMovingPlatform(x, y, w, h, path){
+      return {
+        type:"movingPlatform",
+        active:true,
+        x, y,
+        w, h,
+        vx:0, vy:0,
+
+        // prev positions for player.js carry logic
+        prevX: x,
+        prevY: y,
+
+        path,
+        speed: 80,
+        loop: "pingpong",
+        oneWay:false,
+        carryVelocityToPlayer:true,
+        pushoutSafety:6,
+        _pathIndex:0,
+        _dir:1
+      };
+    }
+
+    // moving platform factory (from level def)
+    makeMovingPlatformFromDef(def, levelObj){
+      const ts = (levelObj && levelObj.meta && levelObj.meta.tileSize) ? levelObj.meta.tileSize : (Lumo.TILE || 24);
+      const px = (def.x|0) * ts;
+      const py = (def.y|0) * ts;
+      const w = (def.w|0) * ts;
+      const h = (def.h|0) * ts;
+
+      const path = [];
+      if (def.path && Array.isArray(def.path)){
+        for (const p of def.path){
+          if (!p) continue;
+          path.push({ x:(p.x|0)*ts, y:(p.y|0)*ts });
+        }
+      }
+
+      return {
+        type:"movingPlatform",
+        active:true,
+        x:px,
+        y:py,
+        w, h,
+        vx:0, vy:0,
+
+        // prev positions for player.js carry logic
+        prevX: px,
+        prevY: py,
+
+        path,
+        speed: def.speed || 70,
+        loop: def.loop || "pingpong",
+        oneWay: !!def.oneWay,
+        carryVelocityToPlayer: !!def.carryVelocityToPlayer,
+        pushoutSafety: def.pushoutSafety || 6,
+        _pathIndex: 0,
+        _dir: 1
+      };
+    }
+
+    // Convenience wrapper för player: kasta flare
+    spawnThrownFlare(px, py){
+      const vx = 380;
+      const vy = -520;
+      this.spawnFlare(px, py, vx, vy);
+    }
+
+    // Skapa flare-entitet (pixlar in)
+    spawnFlare(px, py, vx, vy){
+      this.items.push({
+        type:"flare",
+        active:true,
+        x:px, y:py,
+        w:10, h:10,
+        vx, vy,
+        bounces:0,
+
+        // rotation
+        rot:0,
+        rotSpeed: Math.PI / 0.4,   // lite snabbare rotation
+        airborne:true,
+
+        // ljusbeteende
+        t:0,
+        life:12.0,
+        fadeLast:3.0,
+        radius0:220
+      });
+    }
+
+    update(dt, world, player){
+      const g = 980;
+      const ts = Lumo.TILE || 24;
+
+      // Frame-gate reset (used by power-cell gradual fill) — once per update() call.
+      // Must NOT depend on lanterns existing in the level.
+      this.__pcFillFrame = 0;
+
+      // auto-spawn dark creature nära spelaren (TEST-HELPER, AVSTÄNGD som default)
+      // Aktivera manuellt vid behov: window.Lumo.DEBUG_TEST_DARKCREATURE = true;
+      if (Lumo && Lumo.DEBUG_TEST_DARKCREATURE){
+        if (!this._autoSpawnedTestDarkCreature){
+        let hasDC = false;
+        for (const e of this.items){
+          if (e.active && e.type === "darkCreature"){ hasDC = true; break; }
+        }
+      }
+        if (!hasDC && player){
+          this.items.push(this.makeDarkCreaturePx(player.x + 300, player.y, 18, 18));
+          this._autoSpawnedTestDarkCreature = true;
+        } else if (hasDC){
+          this._autoSpawnedTestDarkCreature = true;
+        }
+      }
+
+            for (const e of this.items){
+        if (!e.active) continue;
+        if (e.hidden) continue;
+if (e.type === "lantern"){
+  // Subtil magisk idle-float + långsam "andning" i ljusstyrka (endast visuellt)
+  // - Mer upp/ner än sidled
+  // - Varje lantern osynkad via slumpade faser + individuella hastigheter
+  if (e._idleInit !== true){
+    e._idleInit = true;
+    e._t = Math.random() * 100.0;
+
+    // Random phases (unsynced)
+    e._phx1 = Math.random() * Math.PI * 2;
+    e._phx2 = Math.random() * Math.PI * 2;
+    e._phy1 = Math.random() * Math.PI * 2;
+    e._phy2 = Math.random() * Math.PI * 2;
+    e._php  = Math.random() * Math.PI * 2; // pulse phase
+
+    // Amplitudes (requested: more up/down)
+    e._ax = 0.6 + Math.random() * 0.9;   // ~0.6..1.5 px in X
+    e._ay = 7.0 + Math.random() * 4.8;   // ~3.2..8.0 px in Y (more vertical)
+
+    // Individual speed multipliers (prevents sync)
+    e._sx = 0.70 + Math.random() * 0.70; // 0.70..1.40
+    e._sy = 0.65 + Math.random() * 0.75; // 0.65..1.40
+    e._sp = 0.75 + Math.random() * 0.60; // 0.75..1.35 (breathing)
+
+    // Remember base light settings (for breathing)
+    e._baseStrength = (typeof e.strength === "number") ? e.strength : 0.85;
+    e._baseRadius   = (typeof e.radius === "number") ? e.radius : 170;
+  }
+
+  e._t += dt;
+  const t0 = e._t;
+
+  // Smooth, layered motion (no sharp corners)
+  const dx =
+    Math.sin((t0 * 0.48 * e._sx) + e._phx1) * e._ax +
+    Math.sin((t0 * 0.14 * e._sx) + e._phx2) * (e._ax * 0.28);
+
+  const dy =
+    Math.sin((t0 * 0.42 * e._sy) + e._phy1) * e._ay +
+    Math.sin((t0 * 0.12 * e._sy) + e._phy2) * (e._ay * 0.22);
+
+  // Apply as render offsets (draw only)
+  e._offX = dx;
+  e._offY = dy;
+
+  // Slow breathing pulse for the lantern light (strength + tiny radius drift)
+  const breath = 0.5 + 0.5 * Math.sin((t0 * 0.42 * e._sp) + e._php); // 0..1
+  e.strength = e._baseStrength * (0.80 + 0.20 * breath);
+  e.radius   = e._baseRadius   * (0.95 + 0.05 * breath);
+}
+
+        if (e.type === "flare"){
+          e.t += dt;
+          e.vy += g * dt;
+
+          // integrate
+          e.x += e.vx * dt;
+          e.y += e.vy * dt;
+
+          // rotation
+          e.rot = (e.rot || 0) + (e.rotSpeed || 0) * dt;
+
+          // collide with world
+          const col = world.collideRect(e.x, e.y, e.w, e.h);
+          if (col.hit){
+            // bounce a bit on first impacts
+            if (e.bounces < 2){
+              if (col.nx !== 0) e.vx *= -0.4;
+              if (col.ny !== 0) e.vy *= -0.4;
+              e.bounces++;
+            } else {
+              // stop
+              e.vx = 0;
+              e.vy = 0;
+            }
+
+            // separate
+            e.x += col.nx * col.depth;
+            e.y += col.ny * col.depth;
+
+            // if resting on ground -> stop rotation
+            if (col.ny === -1){
+              e.rotSpeed = 0;
+              e.airborne = false;
+            }
+          }
+
+          // expire
+          if (e.t > e.life){
+            e.active = false;
+          }
+        }
+
+        if (e.type === "movingPlatform"){
+          // store prev
+          e.prevX = e.x;
+          e.prevY = e.y;
+
+          if (e.path && e.path.length >= 2){
+            const target = e.path[e._pathIndex];
+            const dx = target.x - e.x;
+            const dy = target.y - e.y;
+            const dist = Math.hypot(dx, dy);
+            const sp = e.speed || 60;
+
+            if (dist < 1){
+              // advance
+              e._pathIndex += e._dir;
+              if (e._pathIndex >= e.path.length){
+                if (e.loop === "loop"){
+                  e._pathIndex = 0;
+                } else {
+                  e._pathIndex = e.path.length - 2;
+                  e._dir = -1;
+                }
+              } else if (e._pathIndex < 0){
+                e._pathIndex = 1;
+                e._dir = 1;
+              }
+            } else {
+              e.vx = (dx / dist) * sp;
+              e.vy = (dy / dist) * sp;
+              e.x += e.vx * dt;
+              e.y += e.vy * dt;
+            }
+          }
+        }
+
+        if (e.type === "patrolEnemy"){
+          if (!e.chasing){
+            e.x += e.vx * dt;
+            if (e.x < e.left){ e.x = e.left; e.vx *= -1; }
+            if (e.x > e.right){ e.x = e.right; e.vx *= -1; }
+          }
+
+          if (player){
+            const cx = e.x + e.w/2;
+            const cy = e.y + e.h/2;
+            const pcx = player.x + player.w/2;
+            const pcy = player.y + player.h/2;
+            const d = Math.hypot(pcx - cx, pcy - cy);
+            e.chasing = d < (e.aggroR || 140);
+            if (e.chasing){
+              const dir = Math.sign(pcx - cx);
+              e.vx = dir * 90;
+              e.x += e.vx * dt;
+            }
+          }
+        }
+
+
+
+        if (e.type === "darkCreature"){
+          if (e._hitCd > 0) e._hitCd -= dt;
+
+          // lit test: player + flares only (lantern ignored intentionally)
+          const cx = e.x + e.w/2;
+          const cy = e.y + e.h/2;
+          const lit = (e.reactsToFlares === false) ? this.isPointLitFromPlayerOnly(cx, cy, player) : this.isPointLit(cx, cy, player);
+
+          if (lit){
+            // safe while lit, but keep danger for a moment after light ends
+            e.isDarkActive = false;
+            e._dangerT = (e.safeDelay != null ? e.safeDelay : 0.25);
+          } else {
+            if (e._dangerT > 0){
+              e._dangerT -= dt;
+              e.isDarkActive = false;
+            } else {
+              e.isDarkActive = true;
+            }
+          }
+
+          // contact damage when dangerous
+          if (player && e.isDarkActive && e._hitCd <= 0){
+            const hit = this.aabb(player.x, player.y, player.w, player.h, e.x, e.y, e.w, e.h);
+            if (hit){
+              e._hitCd = (e.hitCooldown != null ? e.hitCooldown : 0.6);
+              // delegate to player damage system if present
+              if (typeof player.takeHit === "function"){
+                player.takeHit({ knockbackX: Math.sign(player.x - e.x) * (e.knockbackX ?? 260), knockbackY: (e.knockbackY ?? -220), energyLoss: (e.energyLoss ?? 40) });
+              } else {
+                // fallback
+                player.vx += Math.sign(player.x - e.x) * (e.knockbackX ?? 260);
+                player.vy = (e.knockbackY ?? -220);
+              }
+            }
+          }
+        }
+        if (e.type === "firefly"){
+          const ts = Lumo.TILE || 24;
+
+          if (!e._tail) e._tail = [];
+          for (let i = e._tail.length - 1; i >= 0; i--){
+            e._tail[i].t += dt;
+            if (e._tail[i].t > 0.35) e._tail.splice(i, 1);
+          }
+
+          const cx = e.x + e.w/2;
+          const cy = e.y + e.h/2;
+
+          const pickWanderTarget = () => {
+            const rx = (typeof e.flyRX === "number") ? e.flyRX : (ts*5);
+            const ry = (typeof e.flyRY === "number") ? e.flyRY : (ts*5);
+
+            const dx = (Math.random()*2 - 1) * rx;
+            const dyUp = Math.random() * ry;
+
+            e.destX = e.homeX + dx;
+            e.destY = e.homeY - dyUp;
+
+            e.tWander = 0.9 + Math.random() * 0.9;
+          };
+
+          const findPerch = () => {
+            const rx = (typeof e.flyRX === "number") ? e.flyRX : (ts*5);
+            const ry = (typeof e.flyRY === "number") ? e.flyRY : (ts*5);
+
+            let best = null;
+            let bestD = Infinity;
+
+            for (const p of this.items){
+              if (!p || !p.active) continue;
+              if (p === e) continue;
+              if (p.type !== "decor") continue;
+
+              const px = p.x + p.w/2;
+              const perchOffset = (typeof p.perchOffsetY === "number") ? p.perchOffsetY : 0;
+            const py = p.y + p.h + perchOffset;
+
+              const inRect =
+                (px >= e.homeX - rx && px <= e.homeX + rx) &&
+                (py >= e.homeY - ry && py <= e.homeY);
+              if (!inRect) continue;
+
+              const d = Math.hypot(px - cx, py - cy);
+              if (d <= (e.perchR || ts*6) && d < bestD){
+                best = { x:px, y:py };
+                bestD = d;
+              }
+            }
+            return best;
+          };
+
+          if (e.cdT > 0) e.cdT = Math.max(0, e.cdT - dt);
+
+          const speed = (typeof e.flySpeed === "number") ? e.flySpeed : 45;
+          const smooth = (typeof e.smooth === "number") ? e.smooth : 7.0;
+
+          const moveToward = (tx, ty, spdMul) => {
+            const dx = tx - e.x;
+            const dy = ty - e.y;
+            const dist = Math.hypot(dx, dy) || 1;
+
+            const desiredVx = (dx / dist) * speed * spdMul;
+            const desiredVy = (dy / dist) * speed * spdMul;
+
+            e.vx += (desiredVx - e.vx) * smooth * dt;
+            e.vy += (desiredVy - e.vy) * smooth * dt;
+
+            e.x += e.vx * dt;
+            e.y += e.vy * dt;
+
+            if (e.y > e.homeY) e.y = e.homeY;
+
+            if (Math.abs(e.vx) > 1) e.dir = (e.vx >= 0) ? 1 : -1;
+
+            return dist;
+          };
+
+          const fadeIn = (typeof e.fadeIn === "number" && e.fadeIn > 0) ? e.fadeIn : 0.35;
+          const fadeOut = (typeof e.fadeOut === "number" && e.fadeOut > 0) ? e.fadeOut : 0.45;
+
+          if (e.mode === "rest"){
+            e.vx = 0; e.vy = 0;
+            e.lightK = 0;
+
+            if (e.cdT <= 0){
+              const near = this.isFireflyTriggeredByAnyLight(cx, cy, player, (e.aggroR || ts*6), e);
+              if (near){
+                e.mode = "takeoff";
+                e.tFly = (e.flyTime != null ? e.flyTime : 2.5);
+                pickWanderTarget();
+              }
+            }
+          }
+          else if (e.mode === "takeoff"){
+            e.lightK = Math.min(1, e.lightK + dt / fadeIn);
+            moveToward(e.destX, e.destY, 0.65);
+            if (e.lightK >= 0.999) e.mode = "fly";
+          }
+          else if (e.mode === "fly"){
+            e.lightK = 1;
+
+            e.tFly -= dt;
+            e.tWander -= dt;
+
+            const dist = moveToward(e.destX, e.destY, 1.0);
+
+            e._tailSpawnT = (e._tailSpawnT || 0) - dt;
+            if (e._tailSpawnT <= 0){
+              e._tailSpawnT = 0.04;
+              const tailX = (e.dir === 1) ? (e.x + 2) : (e.x + e.w - 2);
+              const tailY = e.y + e.h * 0.65;
+              e._tail.push({ x: tailX + (Math.random()*2-1), y: tailY + (Math.random()*2-1), t:0 });
+              if (e._tail.length > 14) e._tail.shift();
+            }
+
+            if (e.tWander <= 0 || dist < 8){
+              pickWanderTarget();
+            }
+
+            if (e.tFly <= 0){
+              const perch = findPerch();
+              if (perch){
+                e.landX = perch.x - e.w/2;
+                e.landY = perch.y - e.h;
+              } else {
+                e.landX = e.homeX;
+                e.landY = e.homeY;
+              }
+              e.mode = "landing";
+            }
+          }
+          else if (e.mode === "landing"){
+            // Robust landing: don't let smoothing hover forever just above the perch.
+            e._landingT = (e._landingT || 0) + dt;
+
+            // Mild ease-in near target to feel organic.
+            const dx0 = e.landX - e.x;
+            const dy0 = e.landY - e.y;
+            const dist0 = Math.hypot(dx0, dy0);
+            const d0 = 80; // px where we start easing down (tweak: 60..110)
+            const spdMul = (dist0 < d0) ? (0.25 + 0.30 * (dist0 / d0)) : 0.55;
+
+            moveToward(e.landX, e.landY, spdMul);
+
+            // Ljuset ska vara kvar under hela inflygningen
+            e.lightK = 1;
+
+            // Snap conditions (distance OR timeout)
+            const dx1 = e.landX - e.x;
+            const dy1 = e.landY - e.y;
+            const dist1 = Math.hypot(dx1, dy1);
+            if (dist1 < 6 || (Math.abs(dx1) < 2 && Math.abs(dy1) < 2) || (e._landingT > 3 && dist1 < 2)){
+              // Touchdown: lås position och växla till "landed"
+              e.x = e.landX;
+              e.y = Math.min(e.landY, e.homeY);
+              e.vx = 0; e.vy = 0;
+              e.mode = "landed";
+              e._landedT = 0;
+              e._landingT = 0;
+            }
+          }
+          else if (e.mode === "landed"){
+            // Canon: fully lit while perched, then everything OFF exactly at 0.6s.
+            const HOLD = 0.60; // do not change (canon)
+            const FADE = 0.18; // tweak: 0.10..0.28 (after-glow before off)
+
+            e.vx = 0; e.vy = 0;
+            e._landedT = (e._landedT || 0) + dt;
+
+            if (e._landedT < (HOLD - FADE)){
+              e.lightK = 1;
+            } else {
+              const p = Math.max(0, Math.min(1, (e._landedT - (HOLD - FADE)) / FADE));
+              const s = p*p*(3 - 2*p); // smoothstep
+              e.lightK = 1 - s;
+            }
+
+            if (e._landedT >= HOLD){
+              e.lightK = 0;
+              e.mode = "rest";
+              e.cdT = (typeof e.cooldown === "number") ? e.cooldown : 2.0;
+            }
+          }
+        }
+
+
+
+        // pickups
+        if (player){
+          // Power-cell: gradvis energifyllning (retro) — körs deterministiskt 1 gång per frame
+          // Vi gör det här med en intern frame-gate, så den INTE blir snabbare ju fler entities som finns.
+          if (player.__pcFill){
+            // initiera gate för den här frame:n om den inte finns
+            if (this.__pcFillFrame == null) this.__pcFillFrame = 0;
+
+            // använd en frame-tick som vi nollställer per update()-anrop (se längst ner i blocket)
+            if (this.__pcFillFrame === 0){
+              player.__pcFill.t += dt;
+              const t = Math.min(1, player.__pcFill.t / player.__pcFill.dur);
+
+              // mjuk "ease-out" retro-känsla
+              const k = 1 - Math.pow(1 - t, 3);
+
+              // spara startvärde första gången
+              if (player.__pcFill.from == null){
+                player.__pcFill.from = (typeof player.energy === "number") ? player.energy : 0;
+              }
+
+              // uppdatera energi
+              if (typeof player.energy === "number"){
+                player.energy = player.__pcFill.from + (1 - player.__pcFill.from) * k;
+              } else if (typeof player.chargeEnergy === "function"){
+                // fallback om energy inte finns: pumpa i små steg mot max
+                const prev = player.__pcFill.prevK || 0;
+                const deltaK = Math.max(0, k - prev);
+                player.__pcFill.prevK = k;
+                player.chargeEnergy(999 * deltaK);
+              }
+
+              // klar
+              if (t >= 1){
+                player.__pcFill = null;
+              }
+
+              // markera att laddningen redan tickats denna frame
+              this.__pcFillFrame = 1;
+            }
+          }
+
+          if ((e.type === "powerCell" || e.type === "flarePickup") && e.active){
+            const hit = this.aabb(player.x, player.y, player.w, player.h, e.x, e.y, e.w, e.h);
+            if (hit){
+              e.active = false;
+
+              if (e.type === "powerCell"){
+                // Starta en kort laddningsfas istället för PANG-fullt
+                player.__pcFill = { t: 0, dur: 1.6, from: null, prevK: 0 };
+              }
+
+              if (e.type === "flarePickup"){
+                if (typeof player.addFlares === "function") player.addFlares(e.amount || 1);
+              }
+            }
+          }
+
+          if (e.type === "lantern" && e.active){
+            // lantern charge if player is inside radius
+
+            const cx = e.x + e.w/2;
+            const cy = e.y + e.h/2;
+            const pcx = player.x + player.w/2;
+            const pcy = player.y + player.h/2;
+            const d = Math.hypot(pcx - cx, pcy - cy);
+            if (d <= (e.radius || 170)){
+              if (typeof player.chargeEnergy === "function"){
+                // Charge rate tuned to visibly counter normal movement drain.
+                // Per-second charge ≈ strength * 0.12
+                player.chargeEnergy((e.strength || 0.85) * 0.12 * dt);
+              }
+            }
+          }
+
+          if (e.type === "checkpoint" && e.active){
+            const hit = this.aabb(player.x, player.y, player.w, player.h, e.x, e.y, e.w, e.h);
+            if (hit && typeof player.setCheckpoint === "function"){
+              player.setCheckpoint(e.x, e.y);
+            }
+          }
+        }
+      }
+
+      // --- FogVolume update (Smooke-style, hard budget) ---
+      // Runs only every 3rd update() call to protect frame time and input.
+      this._fogFrame++;
+      if ((this._fogFrame % 3) === 0 && this._fogVolumes.length){
+        for (const f of this._fogVolumes){
+          const N = f.N;
+          const field = f.field;
+          const vel = f.vel;
+
+          // Diffusion (laplacian) into velocity
+          const D = f.diffuse;
+          for (let i=1;i<N-1;i++){
+            const lap = field[i-1] - 2*field[i] + field[i+1];
+            vel[i] += lap * D * 120 * dt;
+          }
+
+          // Relax + visc
+          const R = f.relax;
+          const V = f.visc;
+          for (let i=0;i<N;i++){
+            vel[i] += (0 - field[i]) * R * 120 * dt;
+            vel[i] *= V;
+            field[i] += vel[i] * dt;
+
+            // Clamp to keep things stable
+            if (field[i] > 2.2) field[i] = 2.2;
+            else if (field[i] < -2.2) field[i] = -2.2;
+          }
+
+
+          // Organic idle waves (premium) — visible even without player interaction.
+          if (f.orgStrength && f.orgStrength > 0){
+            f.t = (f.t || 0) + dt * (f.orgSpeed || 1);
+            const s = f.orgStrength;
+            const sc = Math.max(0.2, f.orgScale || 1);
+            for (let i=0;i<N;i++){
+              const u = i / (N-1);
+              const w =
+                Math.sin((u * 6.283) * (1.2/sc) + f.t * 0.9) * 0.55 +
+                Math.sin((u * 6.283) * (2.3/sc) - f.t * 1.3) * 0.30 +
+                Math.sin((u * 6.283) * (3.7/sc) + f.t * 1.8) * 0.15;
+              vel[i] += w * s * 0.22 * dt * 60;
+            }
+          }
+
+          // Player interaction (gated by speed)
+          if (player){
+            const vx = (typeof player.vx === "number") ? player.vx : 0;
+            const speed = Math.abs(vx);
+            if (speed > f.gate){
+              const centerX = (player.x + player.w*0.5);
+          // Only react when Lumo is actually inside the fog volume (prevents early reaction).
+          if (centerX < f.x0 || centerX > f.x1) continue;
+              const u = (centerX - f.x0) / Math.max(1, (f.x1 - f.x0));
+              const c = Math.max(0, Math.min(N-1, Math.floor(u * (N-1))));
+
+              const radCells = Math.max(3, Math.floor((f.radius / Math.max(1,(f.x1 - f.x0))) * N));
+              const dir = (vx >= 0) ? 1 : -1;
+              const amp = Math.min(2.2, speed / 210);
+
+              const ahead = Math.max(2, Math.floor(radCells * 0.35));
+              const back  = Math.max(1, Math.floor(radCells * 0.15));
+
+              // Bulge ahead
+              for (let k=-radCells;k<=radCells;k++){
+                const i = c + (dir * ahead) + k;
+                if (i<0||i>=N) continue;
+                const q = 1 - Math.abs(k)/radCells;
+                field[i] += f.bulge * amp * q*q * 0.18;
+              }
+
+              // Push down behind
+              for (let k=-radCells;k<=radCells;k++){
+                const i = c - (dir * back) + k;
+                if (i<0||i>=N) continue;
+                const q = 1 - Math.abs(k)/radCells;
+                field[i] -= f.push * amp * q*q * 0.22;
+              }
+            }
+          }
+        }
+      }
+
+    }
+
+    aabb(ax, ay, aw, ah, bx, by, bw, bh){
+      return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+    }
+
+    // TEST MODE för dark creature:
+    // Lit if inside ANY flare radius (with fade) OR player lightRadius.
+    // Lanterns ignoreras med flit (lättare att verifiera CAPS/dark-beteende).
+    isPointLit(x, y, player){
+      // player-ljus
+      if (player && typeof player.lightRadius === "number" && player.lightRadius > 0){
+        const pcx = player.x + player.w/2;
+        const pcy = player.y + player.h/2;
+        if (Math.hypot(x - pcx, y - pcy) <= player.lightRadius) return true;
+      }
+
+      // flares
+      for (const e of this.items){
+        if (!e.active) continue;
+        if (e.type !== "flare") continue;
+
+        const t = e.t;
+        const life = e.life;
+        const fade = e.fadeLast;
+
+        let k = 1.0;
+        if (t > life - fade){
+          const p = (t - (life - fade)) / fade;
+          k = Math.max(0, 1.0 - p);
+        }
+
+        const r = (e.radius0 || 220) * k;
+        const cx = e.x + e.w/2;
+        const cy = e.y + e.h/2;
+        if (Math.hypot(x - cx, y - cy) <= r) return true;
+      }
+
+      return false;
+    }
+
+    isPointLitFromPlayerOnly(x, y, player){
+      if (player && typeof player.lightRadius === "number" && player.lightRadius > 0){
+        const pcx = player.x + player.w/2;
+        const pcy = player.y + player.h/2;
+        return (Math.hypot(x - pcx, y - pcy) <= player.lightRadius);
+      }
+      return false;
+    }
+    // Firefly trigger: ONLY reacts to Lumo / lantern / flare (NOT itself, NOT other fireflies)
+    isFireflyTriggeredByAnyLight(x, y, player, aggroR, self){
+      const r = (typeof aggroR === "number") ? aggroR : 0;
+
+      if (player && typeof player.lightRadius === "number" && player.lightRadius > 0){
+        const pcx = player.x + player.w/2;
+        const pcy = player.y + player.h/2;
+        const d = Math.hypot(x - pcx, y - pcy);
+        if (d <= r && d <= player.lightRadius) return true;
+      }
+
+      for (const e of this.items){
+        if (!e || !e.active) continue;
+        if (e === self) continue;
+
+        if (e.type === "lantern"){
+          const cx = e.x + e.w/2;
+          const cy = e.y + e.h/2;
+          const rad = (typeof e.radius === "number") ? e.radius : 170;
+          const strength = (typeof e.strength === "number") ? e.strength : 0.85;
+          if (strength <= 0.01) continue;
+          const d = Math.hypot(x - cx, y - cy);
+          if (d <= r && d <= rad) return true;
+        }
+
+        if (e.type === "flare"){
+          const t = e.t;
+          const life = e.life;
+          const fade = e.fadeLast;
+          let k = 1.0;
+          if (t > life - fade){
+            const p = (t - (life - fade)) / fade;
+            k = Math.max(0, 1.0 - p);
+          }
+          if (k <= 0.01) continue;
+
+          const rad = (e.radius0 || 220) * k;
+          const cx = e.x + e.w/2;
+          const cy = e.y + e.h/2;
+          const d = Math.hypot(x - cx, y - cy);
+          if (d <= r && d <= rad) return true;
+        }
+      }
+
+      return false;
+    }
+
+
+
+    // lights
+    getLights(cam){
+      const lights = [];
+
+      for (const e of this.items){
+        if (!e.active) continue;
+
+        if (e.type === "lantern"){
+          lights.push({
+            x: (e.x + e.w/2) - cam.x,
+            y: (e.y + e.h/2) - cam.y,
+            r: e.radius || 170,
+            strength: e.strength || 0.85
+          });
+        }
+
+        if (e.type === "firefly"){
+          const k = (typeof e.lightK === "number") ? e.lightK : 0;
+          if (k > 0.01){
+            // Support both radius and diameter contracts (diameter preferred if present)
+            const baseR = (typeof e.lightDiameter === "number" && e.lightDiameter > 0)
+              ? (e.lightDiameter * 0.5)
+              : (e.lightRadius || 120);
+
+            lights.push({
+              x: (e.x + e.w/2) - cam.x,
+              y: (e.y + e.h/2) - cam.y,
+              r: baseR * k,
+              strength: (e.lightStrength || 0.8) * k
+            });
+          }
+        }
+
+
+        if (e.type === "flare"){
+          // flare light radius fades at the end
+          const t = e.t;
+          const life = e.life;
+          const fade = e.fadeLast;
+          let k = 1.0;
+
+          if (t > life - fade){
+            const p = (t - (life - fade)) / fade;
+            k = Math.max(0, 1.0 - p);
+          }
+
+          const r = (e.radius0 || 220) * k;
+          lights.push({
+            x: (e.x + e.w/2) - cam.x,
+            y: (e.y + e.h/2) - cam.y,
+            r,
+            strength: 0.90 * k
+          });
+        }
+
+        if (e.type === "darkCreature"){
+          if (e.isDarkActive){
+            // används mest för debug, radius 0 = ingen extra ljus
+            lights.push({
+              x: (e.x + e.w/2) - cam.x,
+              y: (e.y + e.h/2) - cam.y,
+              r: 0,
+              strength: 0
+            });
+          }
+        }
+      }
+      return lights;
+    }
+
+    draw(ctx, cam){
+      for (const e of this.items){
+        if (!e.active) continue;
+
+        let sx, sy;
+if (e.type === "lantern"){
+  // Lantern: subpixel movement for smooth float (avoid floor jitter)
+  sx = (e.x - cam.x) + (e._offX || 0);
+  sy = (e.y - cam.y) + (e._offY || 0);
+} else {
+  sx = Math.floor((e.x - cam.x) + (e._offX || 0));
+  sy = Math.floor((e.y - cam.y) + (e._offY || 0));
+}
+if (e.type === "powerCell"){
+  const img = e._pcSprite || (this.sprites?.powerCells?.[0] ?? null);
+
+  if (img && img._ok){
+    // Rita som exakt 1 tile (24×24)
+    ctx.drawImage(img, sx, sy, e.w, e.h);
+  } else {
+    // Fallback om något inte laddat än
+    ctx.fillStyle = "rgba(200,255,255,0.95)";
+    ctx.fillRect(sx, sy, e.w, e.h);
+  }
+}
+
+
+               if (e.type === "flarePickup"){
+          const img = this.sprites && this.sprites.flarePickup;
+          if (img && img._ok){
+            // draw sprite slightly larger for readability
+            const size = Math.max(e.w, e.h) * 2.0;
+            const cx = sx + e.w/2;
+            const cy = sy + e.h/2;
+            ctx.drawImage(img, cx - size/2, cy - size/2, size, size);
+          } else {
+            // fallback placeholder
+            ctx.fillStyle = "rgba(255,200,120,0.95)";
+            ctx.fillRect(sx, sy, e.w, e.h);
+          }
+        }
+        if (e.type === "checkpoint"){
+          const list = this.sprites && this.sprites.checkpoints;
+          const img = (list && list.length) ? (list.find(im => im && im._ok) || list[0]) : null;
+          if (img && img._ok){
+            // 1 tile (24×24)
+            ctx.drawImage(img, Math.floor(sx), Math.floor(sy), 24, 24);
+          } else {
+            // Fallback (only if sprite missing)
+            ctx.fillStyle = "rgba(120,255,180,0.95)";
+            ctx.fillRect(sx, sy, e.w, e.h);
+          }
+        }
+        if (e.type === "lantern"){
+          // Sprite-glow in the world layer (so the lantern "glows", not only punches darkness)
+          const gx = sx + e.w * 0.5;
+          const gy = sy + e.h * 0.5;
+          const outer = (typeof e.glowR === "number") ? e.glowR : 50; // user-tuned
+          const inner = 6;
+          const g = ctx.createRadialGradient(gx, gy, inner, gx, gy, outer);
+          g.addColorStop(0, "rgba(255,220,140,0.55)");
+          g.addColorStop(0.45, "rgba(255,200,110,0.22)");
+          g.addColorStop(1, "rgba(255,200,110,0)");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(gx, gy, outer, 0, Math.PI * 2);
+          ctx.fill();
+
+          const img = this.sprites && this.sprites.lantern;
+          if (img && img._ok){
+            // Visual can be larger than collision/interaction box (14×14).
+            // Anchor sprite to bottom-center of the lantern entity.
+            const drawW = 24;
+            const drawH = 32;
+            const cx = sx + e.w * 0.5;
+            const bottom = sy + e.h;
+            ctx.drawImage(img, (cx - drawW/2), (bottom - drawH), drawW, drawH);
+          } else {
+            // Fallback placeholder
+            ctx.fillStyle = "rgba(255,255,160,0.95)";
+            ctx.fillRect(sx, sy, e.w, e.h);
+          }
+        }
+
+        if (e.type === "exit"){
+          ctx.strokeStyle = "rgba(120,180,255,0.95)";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(sx+2, sy+2, e.w-4, e.h-4);
+        }
+        if (e.type === "firefly"){
+          const tail = e._tail || [];
+          for (let i = 0; i < tail.length; i++){
+            const p = tail[i];
+            const a = Math.max(0, 1 - (p.t / 0.35));
+            const px = Math.floor(p.x - cam.x);
+            const py = Math.floor(p.y - cam.y);
+
+            if (i === tail.length - 1){
+              ctx.fillStyle = "rgba(255,230,120," + (0.85 * a).toFixed(3) + ")";
+              ctx.beginPath();
+              ctx.arc(px, py, 2.0, 0, Math.PI*2);
+              ctx.fill();
+            } else {
+              ctx.fillStyle = "rgba(255,255,255," + (0.45 * a).toFixed(3) + ")";
+              ctx.beginPath();
+              ctx.arc(px, py, 1.2, 0, Math.PI*2);
+              ctx.fill();
+            }
+          }
+
+          
+          // Rump glow (golden halo) while the firefly light is active
+          const kGlow = (typeof e.lightK === "number") ? e.lightK : 0;
+          if (kGlow > 0.01){
+            const dir = (e.dir || 1);
+            const gx = (dir === 1) ? (sx + 2) : (sx + e.w - 2);
+            const gy = sy + e.h * 0.92;
+            const r0 = 2.5;
+            const r1 = 14; // outer radius
+            ctx.save();
+            ctx.globalCompositeOperation = "lighter";
+            const g = ctx.createRadialGradient(gx, gy, r0, gx, gy, r1);
+            g.addColorStop(0.0, "rgba(255,220,140," + (0.85 * kGlow).toFixed(3) + ")");
+            g.addColorStop(0.35, "rgba(255,195,95," + (0.55 * kGlow).toFixed(3) + ")");
+            g.addColorStop(1.0, "rgba(255,195,95,0)");
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(gx, gy, r1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprites.fireflies[0]) || null;
+          if (img && img._ok){
+            if ((e.dir || 1) === -1){
+              ctx.save();
+              ctx.translate(sx + e.w, sy);
+              ctx.scale(-1, 1);
+              ctx.drawImage(img, 0, 0, e.w, e.h);
+              ctx.restore();
+            } else {
+              ctx.drawImage(img, sx, sy, e.w, e.h);
+            }
+          } else {
+            ctx.fillStyle = "rgba(255,255,180,0.85)";
+            ctx.fillRect(sx, sy, e.w, e.h);
+          }
+        }
+
+
+
+        if (e.type === "decor"){
+          if (e.img && e.img.complete && e.img.naturalWidth > 0){
+            ctx.drawImage(e.img, sx, sy, e.w, e.h);
+          } else {
+            ctx.fillStyle = "rgba(120,200,120,0.35)";
+            ctx.fillRect(sx, sy, e.w, e.h);
+          }
+        }
+
+        if (e.type === "patrolEnemy"){
+          ctx.fillStyle = "rgba(255,80,80,0.70)";
+          ctx.fillRect(sx, sy, e.w, e.h);
+        }
+
+        if (e.type === "flare"){
+          const img = this.sprites && this.sprites.flareAir;
+          if (img && img._ok){
+            const cx = sx + e.w/2;
+            const cy = sy + e.h/2;
+            const size = Math.max(e.w, e.h) * 1.8;
+            const rot = e.rot || 0;
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(rot);
+            ctx.drawImage(img, -size/2, -size/2, size, size);
+            ctx.restore();
+          } else {
+            ctx.fillStyle = "rgba(170,120,255,0.85)";
+            ctx.fillRect(sx, sy, e.w, e.h);
+          }
+        }
+
+        if (e.type === "movingPlatform"){
+          ctx.fillStyle = "rgba(100,120,140,0.95)";
+          ctx.fillRect(sx, sy, e.w, e.h);
+          ctx.fillStyle = "rgba(255,255,255,0.06)";
+          ctx.fillRect(sx, sy, e.w, 2);
+        }
+
+        if (e.type === "darkCreature"){
+          // gul i mörker (farlig), rosa i ljus (safe)
+          const color = e.isDarkActive ? "rgba(255,230,80,0.95)" : "rgba(255,80,200,0.95)";
+          ctx.fillStyle = color;
+          ctx.fillRect(sx, sy, e.w, e.h);
+        }
+      }
+    }
+
+    // Fog overlay pass (intended to be called AFTER renderer.drawDarkness()).
+    // Safe even if not used by app.js.
+    drawOverDarkness(ctx, cam){
+      if (!this._fogVolumes.length) return;
+
+      for (const f of this._fogVolumes){
+        const N = f.N;
+        const field = f.field;
+
+        const x0s = (f.x0 - cam.x);
+        const x1s = (f.x1 - cam.x);
+        const width = Math.max(1, Math.round(x1s - x0s));
+        const step = width / (N - 1);
+
+        const baseYs = (f.y0 - cam.y);
+
+        // Premium: color + exposure + blend
+        const col = (typeof f.color === "string") ? f.color : "#E1EEFF";
+        const exposure = (typeof f.exposure === "number") ? f.exposure : 1.0;
+
+        // Parse color (hex "#RRGGBB" / "#RGB" or "rgb(r,g,b)" / "rgba(r,g,b,a)")
+        let cr=225, cg=238, cb=255;
+        if (col[0] === "#" && (col.length === 7 || col.length === 4)){
+          if (col.length === 7){
+            cr = parseInt(col.slice(1,3),16);
+            cg = parseInt(col.slice(3,5),16);
+            cb = parseInt(col.slice(5,7),16);
+          } else {
+            cr = parseInt(col[1]+col[1],16);
+            cg = parseInt(col[2]+col[2],16);
+            cb = parseInt(col[3]+col[3],16);
+          }
+        } else if (col.startsWith("rgb")){
+          const nums = col.replace(/rgba?\(/,'').replace(/\)/,'').split(',').map(s=>parseFloat(s.trim()));
+          if (nums.length >= 3){
+            cr = nums[0]|0; cg = nums[1]|0; cb = nums[2]|0;
+          }
+        }
+
+        // Offscreen buffer (so masking never touches the game canvas)
+        let cvs = f._cvs, octx = f._ctx;
+        // Height budget: only what we need above base (keeps perf stable)
+        const hNeed = Math.max(64, Math.round(f.lift + f.thickness + 140));
+        const height = Math.min(900, hNeed);
+
+        if (!cvs || cvs.width !== width || cvs.height !== height){
+          cvs = document.createElement("canvas");
+          cvs.width = width;
+          cvs.height = height;
+          octx = cvs.getContext("2d");
+          f._cvs = cvs;
+          f._ctx = octx;
+        } else {
+          octx.clearRect(0,0,width,height);
+        }
+
+        const layers = Math.max(6, Math.min(32, f.layers|0));
+        const baseY = height; // bottom edge for fill
+        const fallPx = Math.max(0, f.falloff || 0);
+
+        // --- draw fog into offscreen ---
+        octx.save();
+        octx.globalCompositeOperation = "source-over";
+
+        for (let li=0; li<layers; li++){
+          const a = (layers <= 1) ? 0 : (li / (layers - 1));
+          // Much lighter by default so Lumo remains visible
+          const alpha = f.density * (0.14 + (1 - a) * 0.62);
+          if (alpha <= 0.001) continue;
+
+          const lift = f.lift + a * f.thickness;
+
+          octx.beginPath();
+          for (let i=0;i<N;i++){
+            const x = i * step;
+
+            // Height falloff near the ends (uses the same falloff length the editor sets).
+            // This makes the fog "drop in height" toward the ends, not just fade in opacity.
+            let edgeMask = 1;
+            if (fallPx > 0){
+              const d = Math.min(x, width - x);          // distance to nearest end (px)
+              edgeMask = Math.max(0, Math.min(1, d / fallPx));
+              // smoothstep
+              edgeMask = edgeMask * edgeMask * (3 - 2 * edgeMask);
+            }
+
+            const h = Math.max(0, field[i]) * (9 + (1 - a) * 18);
+            const y = (baseY - lift) - (h * edgeMask);
+if (i === 0) octx.moveTo(x, y);
+            else octx.lineTo(x, y);
+          }
+          octx.lineTo(width, baseY);
+          octx.lineTo(0, baseY);
+          octx.closePath();
+
+          octx.fillStyle = `rgba(${cr},${cg},${cb},${Math.max(0, Math.min(1, alpha*exposure))})`;
+          octx.fill();
+        }
+
+        // --- apply true end-falloff mask (fades ALL pixels, not just height) ---
+        if (fallPx > 0){
+          // Allow falloff length up to the full volume length.
+          // If fallPx > width/2 we smoothly taper from both ends all the way to the center (no plateau).
+          const t = Math.min(0.5, fallPx / Math.max(1, width));
+          const fpL = t * width;
+          const fpR = width - fpL;
+octx.globalCompositeOperation = "destination-in";
+
+          const g = octx.createLinearGradient(0,0,width,0);
+          g.addColorStop(0.0, "rgba(255,255,255,0)");
+          g.addColorStop(fpL / width, "rgba(255,255,255,1)");
+          g.addColorStop(fpR / width, "rgba(255,255,255,1)");
+          g.addColorStop(1.0, "rgba(255,255,255,0)");
+octx.fillStyle = g;
+          octx.fillRect(0,0,width,height);
+        }
+
+        octx.restore();
+
+        // --- draw to game canvas over darkness (soft, non-blocking) ---
+        ctx.save();
+        
+        const b = (typeof f.blend === "string") ? f.blend : "screen";
+        ctx.globalCompositeOperation = (b === "add") ? "lighter" : (b === "normal" ? "source-over" : "screen");
+
+        ctx.globalAlpha = 0.60; // keep Lumo readable in thick fog
+
+        // draw so the offscreen bottom aligns to fog base (y0)
+        ctx.drawImage(cvs, x0s, baseYs - height);
+
+        ctx.restore();
+      }
+    }
+
+  }
+
+  Lumo.Entities = Entities;
+})();

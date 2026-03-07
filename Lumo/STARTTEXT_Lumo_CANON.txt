@@ -1,0 +1,100 @@
+STARTTEXT — Projekt Lumo (CANON / FULL, uppdaterad)
+
+1) Projektöversikt
+- Lumo är ett 2D-plattformsspel byggt i ren offline HTML/JavaScript och körs via file://.
+- Inga servrar, inga build-steg, inga bundlers, inga externa bibliotek.
+- Projektet är system-drivet, inte content-drivet.
+- Miljöbegränsning: spelet kan läsa lokala bilder/ljud från mappar men kan inte skriva filer automatiskt. All export/spar sker manuellt (du ersätter filer själv).
+
+2) Designfilosofi
+- Gameplay först.
+- System före innehåll.
+- Stabil baseline → iterativa förbättringar.
+- Editor och runtime måste vara deterministiskt synkade.
+- En ändring i taget.
+- Inga magiska specialfall utan tydlig data eller kontrakt.
+- Allt ska vara revert-bart.
+- Lumo är inte ett enemy-spel. Kärnan är ljus, energi, position, timing.
+
+3) Spelidé (kort)
+- Lumo är en ben- och armlös varelse som glider fram.
+- Huvudet är en genomskinlig kupa fylld med ljus.
+- Världen är i princip helt mörk. Ljus = gameplay.
+
+4) Teknisk grund
+- Tile size: 24×24 px.
+- Level size: 500×30 tiles.
+- Uppdateringsordning (får ej brytas): Input → Player update → Entities update → Rendering.
+- Renderer: ingen gameplay-logik; darkness overlay & compositing; hämtar ljuskällor via getLights().
+
+5) Filstruktur (enligt uppladdade filer)
+- Runtime: Lumo.html
+- Editor: LumoEditor.html
+- CSS: styles.css
+- Core: input.js, camera.js, renderer.js, time.js, util.js
+- Game: app.js, world.js, player.js, entities.js
+- Data: tileset.js, catalog_tiles.js, catalog_bg.js, catalog_entities.js, levels/level01.js
+- Assets: data/assets/... (sprites, UI, etc)
+
+6) Editor (LumoEditor)
+- Offline-editor med grid (24×24), layers (Background / Tiles / Entities), stackbara entities, anchor (BL/TL), offset-stöd, minimap, warnings/guide-system, darkness-preview.
+- Editor och runtime ska använda samma kataloger för data (katalog-baserad arkitektur).
+
+7) Katalog-baserad arkitektur (entities)
+- data/catalog_entities.js är source of truth för:
+  - decor-entities
+  - sprite path (img)
+  - pixelstorlek (w/h)
+  - anchor
+  - perch-data för firefly (perchOffsetY)
+  - framtida semantik (preferredPerch m.m.)
+  - (målbild) defaults + shownParams för editor-param UI
+
+8) Decor-system (data-driven)
+- Runtime läser catalog_entities.js.
+- Alla entities med category: "decor" spawnas generiskt.
+- Ingen hårdkodad whitelist; inga special-cases.
+- Decor kan vara valfri storlek (24×24, 24×40, 64×96 etc).
+
+9) Firefly (ff) — beteende och krav
+- Dekorativ, systemdriven ljusvarelse: ingen collision, ingen damage.
+- Reagerar på ljus (Lumo, lantern, flare) och triggas (aggro) av närliggande ljuskällor.
+- Flyger mjukt i område, landar organiskt på decor, ritas framför decor.
+- Landning är data-driven via decor.perchOffsetY (plus små jitter-regler).
+
+9A) Firefly — stabiliserade beteenden (återställda regressioner)
+- Ska inte alltid landa på spawn: väljer perch på decor inom sitt område.
+- Flygtid: default längre (flyTime default 5.0s om inget annat sätts).
+- Ska inte slockna före landning:
+  - landing: fortsatt tänd
+  - settle: tänd i ~0.6s (default) efter att den landat
+  - fadeout: slocknar efter settle
+  - rest: cooldown innan nästa takeoff
+- Landing ska kännas levande: oregelbunden motion fram till att den snappar till perch.
+
+9B) Firefly — bugfix som krävdes för att den inte ska “fastna”
+- Under normal flygning clamas Y till homeY (flyger inte “under” sin baseline).
+- Under landing/settle/fadeout måste den få gå ner till landY, annars fastnar den ovanför perch och går aldrig in i settle/fadeout.
+- Åtgärd: clamp-logiken i movement tillåter nu descent till max(homeY, landY) under landing/settle/fadeout.
+
+10) Firefly — “bakdels-aura” (tail aura) i darkness-lagret (NYTT/ÅTERINFÖRT)
+- Förutom fireflyn stora glow finns en separat liten gul aura kring bakdelen (“stjärten”) i darkness-overlay:
+  - Den tänds när aggro är aktiv (takeoff/fly/landing).
+  - Den släcks när firefly landat (settle/fadeout/rest).
+- Radie är justerbar och avsedd att tweak’as för “rätt känsla”:
+  - tailAuraMin (default 5)
+  - tailAuraMax (default 9)
+  - (valfritt om implementerat) tailAuraStrength för intensitet
+- Radien slumpas per flygning inom spannet [tailAuraMin, tailAuraMax] och kan ändras direkt i entities.js eller via params per instans.
+
+11) Runtime UI (testfas vs slutmål)
+- Nuvarande runtime-UI (load/reset/instruktioner) är demo/test.
+- Slutversion ska ha startsida, meny, fullscreen, settings (volym, keybinds, ev annat).
+- Dessa UI-planer ska inte blockeras av systemförändringar i core/level format.
+
+12) Arbetsprincip i projektet
+- Vi jobbar offline-first och manuellt filflöde är ok: export/import sker genom att du ersätter filer i din lokala folder.
+- Vi gör en sak i taget och håller ändringar revert-bara.
+- När något regressar: snabb isolering → minimal patch → test.
+
+SLUT PÅ STARTTEXT — Projekt Lumo (CANON)

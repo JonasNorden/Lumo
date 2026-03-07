@@ -1,0 +1,761 @@
+🟡 PROJEKT LUMO — CANON STARTTEXT (V3 PLUS · FULL · AUTORITATIV · AKTUELL · KONSOLIDERAD · V2-BAS + CHAT-EXTENSIONS)
+0) Syfte med detta dokument (KANON)
+
+Detta dokument är CANON för projekt Lumo och används vid uppstart av ny chat för att:
+
+Förhindra antaganden, regressioner och genvägar
+
+Låsa projektets tekniska ramverk och arbetsprinciper
+
+Säkerställa determinism och revert-barhet
+
+Tvinga fram korrekt arbetssätt: stabil baseline → små isolerade steg
+
+Skydda runtime (spelet) från att “sabbas” av AI-förslag
+
+När användaren säger:
+“Nu är det dags att stänga chatten och starta ny chat”
+…ska assistenten alltid följa detta dokument exakt.
+
+NY KANON-REGEL (V3 PLUS):
+När användaren säger att chatten ska stängas/byter chat, ska assistenten ALLTID svara:
+
+“Vad bra — då ska jag bara skapa den fullständiga starttexten åt dig först, så du kan fortsätta exakt här när du vill.”
+
+…och sedan leverera en uppdaterad CANON STARTTEXT (utan att kapa, förenkla eller sammanfatta bort backlog/krav).
+
+Projektöversikt (KANON)
+
+Lumo är ett 2D-plattformsspel byggt i ren offline HTML + JavaScript och körs via file://.
+
+Inga servrar
+
+Inga build-steg
+
+Inga bundlers
+
+Inga externa bibliotek
+
+Projektet är system-drivet före content.
+Alla system ska vara:
+
+deterministiska
+
+begripliga
+
+möjliga att backa (revert-bara)
+
+Miljöbegränsning
+
+Spelet kan läsa lokala bilder/ljud från mappar
+
+Spelet kan inte skriva filer automatiskt
+
+All export/spar sker manuellt genom att användaren ersätter filer
+
+Projektet har vuxit från demoversioner med hårdkodad logik till ett editor-drivet flöde.
+All känd legacy-logik ska identifieras och rensas bort – inga dolda specialfall accepteras.
+
+Designfilosofi (FASTSLAGEN)
+
+Gameplay först
+
+System före innehåll
+
+Stabil baseline → iterativa förbättringar
+
+Editor och runtime måste vara deterministiskt synkade
+
+En ändring i taget
+
+Inga magiska specialfall utan tydlig data eller kontrakt
+
+Allt ska vara revert-bart
+
+Lumo är inte ett enemy-spel. Kärnan är:
+
+ljus
+
+energi
+
+position
+
+timing
+
+Inte strid.
+
+Spelets känsla ska vara:
+lågmäld · trygg men sårbar · poetisk
+aldrig stressig.
+
+Spelidé (KANON)
+
+Lumo är en arm- och benlös varelse som glider fram.
+Huvudet är en genomskinlig kupa fylld med ljus.
+Världen är i princip helt mörk.
+
+Ljus = gameplay
+
+Lumo lyser upp världen
+
+Ljuskällor påverkar omgivningen
+
+Mörkret är aktivt och hotfullt, men subtilt
+
+Teknisk grund (KANON)
+
+Tile size: 24×24 px
+Level size: 500×30 tiles
+
+Uppdateringsordning (får ej brytas):
+Input → Player update → Entities update → Rendering
+
+Renderer (KANON)
+
+Innehåller ingen gameplay-logik
+
+Darkness overlay via compositing
+
+Hämtar ljuskällor via getLights()
+
+Filstruktur (KANON)
+Runtime
+
+Lumo.html – startpunkt (fullscreen, ingen legacy-UI)
+
+app.js – game loop, state, overlays (boot, respawn)
+
+renderer.js – rendering, darkness, HUD (canvas)
+
+entities.js – all runtime-logik för entities
+
+player.js
+
+world.js
+
+camera.js
+
+input.js
+
+time.js
+
+util.js
+
+Data
+
+data/levels/*.js
+
+data/catalog_entities.js
+
+data/catalog_bg.js
+
+data/catalog_tiles.js
+
+data/tileset.js
+
+data/assets/
+
+sprites/
+
+ui/
+
+ljud/
+
+Editor
+
+LumoEditor.html
+
+Delar kataloger och kontrakt med runtime
+
+Layout & Presentation (NUVARANDE LÄGE — KANON)
+
+Fullscreen-layout
+
+Canvas fyller hela fönstret
+
+All legacy-UI är visuellt borttagen
+
+Nödvändiga DOM-hooks finns kvar osynliga
+
+Canvas skalas inte via CSS
+
+World-visning
+
+När viewporten är högre än världen (30×24 = 720 px):
+
+världen centreras vertikalt
+
+inget ritas utanför world-gränsen (clip)
+
+inget läckage av tiles eller BG tillåts
+
+Boot / Startsekvens (STABIL – ÅTERSTÄLLD)
+
+Vid start visas boot/splash overlay innan spelet börjar.
+
+Splash
+
+Bild: data/assets/ui/Lumo.png
+
+Fullscreen
+
+background-size: contain
+
+Loading bar
+
+Segmenterad loading-bar (ticks)
+
+Samma visuella språk som energy-baren
+
+Visas i nedre delen av skärmen
+
+Text
+
+“Loading…”
+
+Subtil breathing-animation
+
+Tidsstyrning
+
+Varaktighet: ~5 sek
+
+Under boot: paused = true (spelet uppdateras inte)
+
+Efter boot: overlay göms, paused = false, spelet startar
+
+Systemet är förberett för framtida: splash → menu → game.
+
+Lanterns (POLISH KLAR – ÅTERSTÄLLT)
+
+Lantern är en trygg, statisk ljuskälla.
+
+Rörelse
+
+Mjuk, långsam fairy-float
+
+Sinusbaserad
+
+Endast vertikal rörelse
+
+Per-instans fas (osynkade)
+
+Sub-pixel precision
+
+Ingen stepping/jitter
+
+Amplitud (FASTSLAGEN)
+
+Vertikal rörelse: ~7–12 px
+
+Långsam, premium känsla
+
+Ljus
+
+Subtil breathing (strength + radius)
+
+Endast visuellt (ingen gameplay-påverkan)
+
+Sprite-glow (VIKTIGT)
+
+Synligt ljussken i sprite-lagret
+
+Radial gradient (gul → transparent)
+
+Glow-radius: 50 px
+
+Oberoende av darkness punch-out
+
+Fireflies (KANON)
+
+Ljusvarelser
+
+Ingen collision
+
+Ingen damage
+
+Reagerar på ljus (Lumo, lantern, flare)
+
+Flyger, landar, slocknar organiskt
+
+Visuellt
+
+Tail-aura (gul radial gradient)
+
+Delar visuellt språk med lanterns
+
+UPPDATERING (DENNA CHAT):
+Fireflys unika parametrar visas igen i editorns modal via catalog_entities.js (defaults + shownParams är återställda för firefly).
+
+Checkpoint (KANON – LEGACY RENSAD)
+
+Tidigare hårdkodade placeholder-sprites borttagna
+
+Checkpoint renderas via entity-pipeline
+
+Sprite som används: data/assets/sprites/lights/lantern_2.png
+
+Storlek: 24×24 px
+
+Renderas med glow (samma system som lantern)
+
+VIKTIGT
+
+Inga hårdkodade fallback-paths till checkpoint.png eller UI-bilder finns kvar
+
+Alla legacy tryLoadImage("checkpoint.png")-anrop är borttagna
+
+Katalogen är single source of truth
+
+Respawn Overlay (PREMIUM – FASTSLAGEN)
+
+Respawn overlay ritas i canvas (app.js).
+
+Utseende:
+[ RESPAWN ] [ N ]
+
+RESPAWN
+
+Stor, bullig cartoon-font
+
+Guld-gradient (ljus gul → orange)
+
+Blå outline + mörk ytterstroke
+
+Siffra
+
+Countdown: 3 → 2 → 1
+
+Ingen text under ordet
+
+Gradient: svart → röd
+
+Guldig kant
+
+Starkare skugga
+
+Spacing
+
+gap mellan ord och siffra: 60
+
+När räknaren når 0:
+
+Lumo respawnar enligt kod (checkpoint-logik)
+
+HUD (KANON)
+
+HUD ritas helt i renderer.js
+
+Ingen DOM-HUD synlig
+
+Energi som horisontell top-strip
+
+HUD stör inte spelplanen
+
+Kollision & Tiles (KANON)
+
+Standard tile: 24×24 px
+
+Större tiles (ex 48×48): visual storlek ≠ grid-storlek
+collision hanteras korrekt i runtime
+ingen editor-fuskstämpling
+inga genvägar
+
+Nya tiles läggs till strikt via:
+
+catalog_tiles.js
+
+tileset.js
+
+Kollision definieras endast där.
+Inga antaganden, inga shortcuts.
+
+Runtime cleanup (BEKRÄFTAD)
+
+Gamla demo-spawns borttagna
+
+Inga spök-entities spawnas
+
+start_01 är osynlig spawn-marker
+
+exit_01 är synlig placeholder (avsiktligt)
+
+Konsolen ska vara tyst
+
+Arbetsprincip (OBRUTEN — KANON)
+
+Offline-first
+
+Manuellt filflöde är OK
+
+En sak i taget
+
+Vid regression: isolera → laga exakt → testa → fortsätt
+
+Inga genvägar, inget fusk, inga antaganden
+
+NY KANON-REGEL (V3 PLUS):
+Användaren kan inte koda. Assistenten får inte “förklara kod” som leverans.
+Leverans = filer som fungerar eller exakta 1:1 block att byta med tydliga ankare.
+
+Backlog (Översikt)
+
+Checkpoint “awake-state” (världsfeedback)
+Exit → Door (visuell först)
+Firefly ↔ Lantern-samspel
+
+Editor UX:
+
+box-select
+
+box-fill
+
+Undo/Redo (senare, kontrollerat)
+
+NY BACKLOG (V3 PLUS — från denna chat):
+
+Återställa/återsäkra Lumos “pulserande andningsljus” om det inte längre syns (ska finnas i koden men kan ha tappat effekt).
+
+Förtydliga vad light-occlusion-reglage betyder (helst i editor eller i renderer-konstanter, men utan att riskera runtime).
+
+Prestanda-optimering av occlusion: kvalitet kvar, min CPU/GPU-kostnad.
+
+UPPDATERING (DENNA CHAT — “TA BORT TILLS VIDARE”):
+Dessa ska tas bort från backlog tills vidare:
+
+samspel lanterna–firefly
+
+UX box-select, box-fill (box-fill fungerar)
+
+checkpoint awake state
+
+(De ska inte föreslås igen förrän användaren explicit ber om det.)
+
+NYTT I DEN HÄR CHATTEN — FOGVOLUME / SMOOKE (KANON-TILLÄGG)
+17.1 Målet (KANON)
+
+Vi har en stand-alone HTML-simulator för marknära dimma/rök: Smooke / FogVolume.
+
+FogVolume ska i spelet:
+
+ligga på exakt rätt plats enligt level-data
+
+bete sig som en oformbar massa
+
+pressas undan när Lumo rör sig
+
+bulla upp framför rörelseriktningen
+
+återgå långsamt till jämn nivå
+
+aldrig gå under marknivå
+
+ha falloff i öppna ändar (tunnas ut mjukt)
+
+bonus (inte prio): kunna rinna ner snyggt i hål om mark saknas
+
+17.2 Projektkrav (KANON)
+
+Inga nya filer i spelet för att bära Smooke-exporten
+
+JSON-exporten från Smooke ska inte användas som extern fil i runtime
+
+Däremot ska exportens parametrar vara:
+
+defaults när man placerar fog_volume i editorn
+
+och kunna återges i runtime genom level-data
+
+Användaren kan inte koda.
+Assistenten måste leverera kompletta filer för 1:1 byte.
+
+17.3 Volym-kategori (KANON)
+
+FogVolume ska ligga i en egen kategori/grupp som kan växa med:
+
+lava
+
+vatten
+
+syra
+
+träsk
+
+Kategorin heter i praktiken Volumes (eller motsvarande) och är en logisk “typfamilj”.
+
+17.4 Status vid slutet av denna chatt (KANON — UPPDATERAD)
+
+FogVolume är nu: TOP NOTCH / PREMIUM och fungerar i runtime.
+
+Kvaliteter som är uppnådda och ska bevaras:
+
+inga ränder/staplar, ingen “cirkel-look”
+
+perfekt mjölkig, trögflytande känsla
+
+reagerar korrekt först när Lumo går in i dimman (inte före)
+
+falloff i höjd kan styras (obegränsad längd upp till ritad dimma)
+
+parametrar finns i LumoEditor-modalen (area/look/smoothing/interaction/organic/render)
+
+färg/blend ska kunna tweakas via parametrar (inte hårdkodat)
+
+VIKTIGT lagerkrav (KANON):
+Fog ska ligga:
+
+framför ALLT spelinnehåll
+
+men bakom mörkret
+→ fog syns bara där mörkret punchas bort.
+
+17.5 Kritisk regel för FogVolume-arbetet (KANON)
+
+För att undvika att spelet sabbas:
+
+Baslinje först: Spelet ska vara 100% fungerande och oförändrat innan dimma integreras.
+
+Max 1 steg åt gången.
+
+Max 1 filbyte per steg om möjligt.
+
+Ingen klass-ersättning: Entities-klassens befintliga API får inte brytas.
+
+Ingen darkness-regression.
+
+Alltid revert-barhet.
+
+17.6 “Två export-varianter” (KANON)
+
+Editorn kan exportera fog-params på två sätt:
+
+ibland “extra inpackade”
+
+ibland “direkt”
+
+Runtime måste acceptera båda exportvarianterna utan att användaren manuellt editerar levels.
+
+17.7 Nästa steg (KANON — FOG)
+
+Fog-projektet är i praktiken “stängt” för feature-arbete.
+Endast tweak/polish om behov uppstår, men inga strukturella ändringar utan explicit beslut.
+
+NYTT I DEN HÄR CHATTEN — LIGHT OCCLUSION (KANON-TILLÄGG)
+18.1 Målet (KANON)
+
+Lumos ljus ska:
+
+punchas ut ur mörkret
+
+lysa där det är fritt
+
+klippas av där collision stoppar (mark/vägg/tak)
+
+ha mjuk, naturlig gradient mot ytor (inte sax-kant)
+
+18.2 Light Occlusion Lab (KANON)
+
+Det finns ett fristående labb för att experimentera med ljusocclusion offline:
+
+light_occlusion_lab.html (och uppföljare)
+
+Syfte:
+
+snabb iterering utan att sabba spelet
+
+slider-styrda parametrar för rays/step/feather/penumbra osv.
+
+18.3 Status vid slutet av denna chatt (KANON — UPPDATERAD)
+
+Största genombrottet i Lumo hittills är uppnått:
+
+Ljuset beter sig som önskat i runtime
+
+Fog ligger på rätt lager
+
+Mörkret punchas korrekt
+
+Occlusion tar hänsyn till omgivning (collision) och klipper med mjuk ramp
+
+Polish som fortfarande kan tweakas:
+
+Feather kan skapa “multi-linjer” om den görs i flera pass
+
+Downlight under Lumo kan ibland bli för stor om feather-ringar läcker
+
+Lumos “andningspuls” kan vara borta och ska återställas utan regression
+
+Prestanda-optimering utan kvalitetsförlust
+
+ARBETSPRINCIPER FÖR ASSISTENTEN (SUPER-KANON)
+
+Absolut obligatoriskt:
+
+INGET gissande. INGA antaganden. INGA genvägar.
+
+Allt du refererar till ska finnas exakt i de uppladdade filerna.
+
+Om du hänvisar till en rad/variabel som inte finns: det är ett fel.
+
+Användaren kan inte koda: leverans ska vara:
+
+en ny fil för 1:1 byte, eller
+
+exakt block att byta + exakt ankaretext som matchar 1:1
+
+“Förklaringar” är inte leverans. Leverans är fungerande filer.
+
+Max en förändring per steg, och alltid testbar direkt.
+
+Vid regression: backa direkt till senaste stabila läget och fortsätt därifrån.
+
+STARTLÄGE FÖR NY CHAT (VIKTIGT BETEENDE — UPPDATERAD CANON)
+20.1 ASSISTENTENS FÖRSTA ÅTGÄRD
+
+Be användaren ladda upp projektets filer.
+
+INGEN kommentar. Inget svar. Inte ett ord.
+Assistenten ska vara helt tyst under uppladdningen:
+
+inga kvittenser
+
+inga analyser
+
+inga reaktioner
+
+20.2 VILKA FILER SKA LADDAS UPP (KANON — FULL RUNTIME SET)
+
+Minsta uppsättning (för att kunna göra något utan antaganden):
+
+Runtime:
+
+Lumo.html
+
+app.js
+
+renderer.js
+
+entities.js
+
+player.js
+
+world.js
+
+camera.js
+
+input.js
+
+time.js
+
+util.js
+
+Data/katalog:
+
+catalog_entities.js
+
+catalog_tiles.js
+
+tileset.js
+
+level01.js (eller aktuell level)
+
+Editor (om editor-UX eller fog-modal ska ändras):
+
+LumoEditor.html
+
+Referens/labb (om ljus fortsätter tweakas):
+
+light_occlusion_lab.html (om den finns i din lokala uppsättning)
+
+Fog-simulator (endast referens vid behov):
+
+smooke.html
+
+ev. fog_vol.json (endast som referens, inte runtime-fil)
+
+20.3 TRIGGER FÖR ATT FÅ BÖRJA ARBETA
+
+Först när användaren skriver exakt:
+
+“So̊där, det var allt – nu kan vi dra igång”
+
+…då får assistenten börja arbeta.
+
+SLUTORD / HANDOFF (KANON)
+
+Detta dokument är CANON.
+Det ska användas vid varje ny chat-uppstart.
+
+Målet är att skydda Lumo från:
+
+regressioner
+
+genvägar
+
+otestade “idéer”
+
+brutna kontrakt mellan editor och runtime
+
+Assistenten ska alltid prioritera:
+stabilitet → isolering → testbarhet → determinism
+framför snabbhet eller “smarthet”.
+
+🔒 SLUT.
+
+✅ AKTUELLA CHAT-EXTENSIONS (DENNA CHAT) — LÄGG TILL, KAPA INTE
+
+Detta är tillägg som är sant efter senaste stabila läget.
+
+A) Lumo sprites (påbörjat, systemet finns)
+
+Sprites ligger här:
+data/assets/sprites/lumo/
+
+Nuvarande mål:
+
+lumo_idle_1–4.png används och animeras (pingpong) när Lumo står still.
+
+lumo_walk_1.png används när Lumo rör sig vänster/höger (förberett för fler walk-frames när de finns).
+
+Jump/boost/shoot/flare sprites kommer senare; om de saknas används befintliga frames tills vidare.
+
+B) Lumo head halo (alltid på)
+
+En liten ring/halo av gult ljus runt huvudet som alltid syns.
+
+Ska vara enkel att justera eller ta bort (isolerat block).
+
+C) Ice tiles (nya)
+
+Två tiles finns:
+
+data/assets/tiles/ice_00.png (solid, normal friktion)
+
+data/assets/tiles/ice_01.png (solid, slippery)
+
+Slippery är nu korrekt inställt i tileset.js.
+
+D) Brake på is (nytt, stabilt)
+
+Ny sprite:
+
+lumo_brake_1.png
+
+Beteende (KANON):
+
+När Lumo går in på is och du släpper vänster/höger så glider han vidare.
+
+Under glidet ska brake-spriten visas tills Lumo står still, eller tills du trycker input igen.
+
+Detta är löst robust med hysteresis/minimitid så det inte fladdrar mellan idle/brake.
+
+E) Fog editor bugfixes (nu stabilt)
+
+FogVolume-hjälp/modal tänds endast för fog_volume (inte för alla entities).
+
+Fog-placering stöder åter drag: klick-håll-dra-släpp (inte bara 1 tile).
+
+F) Firefly modal-parametrar återställda
+
+Firefly visar sina unika parametrar i modalen igen (via catalog_entities.js).
+
+Om du vill, kan jag också göra en ”diff-vänlig” variant (samma innehåll, bara med tydligare rubrik-separering) – men endast om du ber om det, och då utan att kapa en enda rad.

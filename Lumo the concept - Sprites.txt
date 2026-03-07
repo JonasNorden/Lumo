@@ -1,0 +1,194 @@
+🎮 SPRITE STARTTEXT – Projekt Lumo
+
+Jag arbetar med ett 2D-plattformsspel som heter Lumo.
+
+🧠 Spel & tema
+
+Spelet är ett mörkt, stämningsdrivet 2D-spel
+
+Gameplay bygger på ljus, energi, timing och position
+
+Huvudkaraktären är Lumo – en glidande varelse vars ljus är centralt för spelmekaniken
+
+Känslan ska vara mjuk, fysisk, organisk och tydlig, inte cartoony eller överdetaljerad
+
+🧱 Tekniska ramar (MYCKET VIKTIGT)
+
+Tile size: 24×24 px (grundmått)
+
+Alla sprites ska:
+
+fungera i 2D side-view
+
+vara helt platta (ingen 3D, ingen isometrisk vy)
+
+vara ritade rakt från sidan
+
+Bakgrunden MÅSTE vara helt transparent
+
+Ingen färg
+
+Ingen glow bakåt
+
+Inga gradients i bakgrunden
+
+All grafik ska fungera på pixel-perfekt nivå
+
+❌ INTE tillåtet:
+
+3D-perspektiv
+
+Isometriska vinklar
+
+Sned kamera
+
+För-renderade ljuseffekter i bakgrunden
+
+🎨 Stil & uttryck
+
+Pixel art eller pixel-tight stil
+
+Mjuk form, tydliga siluetter
+
+Kontrasten mellan ljus och mörker är viktigare än färgrikedom
+
+Ljuset ska upplevas som något levande, inte bara en effekt
+
+🔄 Animation & omfattning
+
+Jag kommer behöva många sprites för samma karaktär:
+
+idle
+
+rörelse
+
+hopp
+
+fall
+
+landning
+
+skada
+
+död
+
+abilities (pulse, boost, flare m.m.)
+
+Hellre för många animationer än för få
+
+Animationer kan vara korta (3–8 frames), tydlighet är viktigare än komplexitet
+
+📦 Leveranskrav
+
+Transparent bakgrund (PNG)
+
+Samma karaktär ska hålla konsekvent proportion, center och höjd
+
+Ingen beskärning som varierar mellan frames
+
+Undvik överdriven motion blur eller glow som förstör läsbarhet
+
+🎯 Mål
+
+Målet är spelbar, systemvänlig grafik som:
+
+är lätt att animera
+
+lätt att mappa till states i kod
+
+fungerar i ett mörkt spelrum
+
+åldras väl när spelet växer
+
+
+
+
+
+
+
+✨ SPRITE STARTTEXT – Lumo (Huvudkaraktär)
+
+Jag behöver sprites för Lumo, huvudkaraktären i ett 2D side-scrolling plattformsspel.
+
+🧠 Karaktärskoncept
+Lumo är inte mänsklig
+Han har inga ben och inga armar
+Han glider / flyter fram snarare än går
+Hans kropp är enkel, mjuk och organisk
+Huvudet är en genomskinlig kupa fylld med ett levande ljus.
+Ljuset är själva kärnan i gameplay.
+
+🔦 Ljusets roll
+
+Ljuset representerar:
+energi
+liv
+säkerhet
+
+Ljuset ska kännas:
+mjukt
+pulserande
+levande
+
+Ljuset ska INTE:
+vara explosivt
+vara hårt
+dominera hela bilden
+
+🧱 Tekniska ramar (låsta)
+
+Tile size: 24×24 px
+Sprites ska:
+passa inom 24×24 eller något högre (ex. 24×28, 24×32 vid hopp)
+vara ritade i ren 2D sidovy
+fungera i pixel-tight rendering
+Bakgrunden måste vara helt transparent
+Inga 3D-perspektiv
+Ingen isometrisk vy
+Ingen sned kamera
+
+🎨 Stil & känsla
+
+Minimalistisk men uttrycksfull
+Tydlig siluett även i mörker
+
+Rörelser ska kännas:
+mjuka
+viktade
+nästan undervattens-lika
+Hellre subtil animation än överdriven action
+
+🔄 Animationer jag behöver
+
+Jag kommer behöva många animationer av samma karaktär, t.ex.:
+idle (svävande / pulserande)
+rörelse framåt (glid)
+hoppa / lyfta
+falla
+landa
+boost / dash
+pulse (energiutslag)
+ta skada
+dö
+respawn
+Det är OK att föreslå extra animationer om de stärker uttrycket.
+
+❗ Viktigt att undvika
+
+Inbyggd bakgrund
+Glow som går utanför sprite-kroppen
+För små detaljer som försvinner i mörker
+För mänskliga proportioner eller rörelsemönster
+
+🎯 Mål
+
+Målet är en huvudkaraktär som:
+är direkt igenkännbar
+känns levande även när han står still
+fungerar i ett mörkt spel
+är lätt att animera och mappa till gameplay-states
+
+Jag har redan bild på hur Lumo ser ut, jag kommer ladda upp den, 
+och det är från den du ska skapa mina 2D sprite i chibi tema. Lumo kommer 
+vara 24px bred, höjden blir vad den bli för att hålla proportionerna och 
+fastställs efter första bilderna jag får av dig.

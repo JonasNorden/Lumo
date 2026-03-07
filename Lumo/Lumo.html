@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lumo</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- Boot / Loading overlay (future: Menu) -->
+  <div id="bootOverlay" aria-hidden="true">
+    <div class="bootScreen" role="presentation"></div>
+    <div class="bootHUD" role="presentation">
+      <div class="bootBar" id="bootBar"></div>
+      <div class="bootText" id="bootText">Loading...</div>
+    </div>
+  </div>
+
+  <!-- Legacy DOM hooks required by app.js (kept hidden via CSS) -->
+  <button id="btnRestart" type="button">Restart</button>
+  <input id="fileLevel" type="file" accept=".json,.js,application/json,text/javascript" />
+  <div id="hudLives"></div>
+  <div id="hudEnergy"></div>
+  <div id="hudLight"></div>
+  <div id="hudCP"></div>
+  <div id="hudDebug"></div>
+
+  <script defer src="data/tileset.js"></script>
+  <script defer src="data/catalog_bg.js"></script>
+  <script defer src="data/catalog_tiles.js"></script>
+  <script defer src="data/levels/level01.js"></script>
+  <script defer src="src/core/util.js"></script>
+  <script defer src="src/core/input.js"></script>
+  <script defer src="src/core/time.js"></script>
+  <script defer src="src/core/camera.js"></script>
+  <script defer src="src/core/renderer.js"></script>
+  <script defer src="src/game/world.js"></script>
+  <script defer src="src/game/player.js"></script>
+  <script defer src="data/catalog_entities.js"></script>
+  <script defer src="src/game/entities.js"></script>
+  <script defer src="src/app.js"></script>
+</body>
+</html>

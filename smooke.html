@@ -1,0 +1,853 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lumo Fog Lab — v8.2 (Controls + Autosave)</title>
+  <style>
+    :root{
+      --bg0:#060712; --bg1:#0b0f1d;
+      --panel:#0e1324cc; --panel2:#0e1324ee;
+      --txt:#e9edf7; --muted:#9aa6c2;
+      --acc:#f7c84b;
+    }
+    html,body{height:100%;margin:0;overflow:hidden;
+      background: radial-gradient(1200px 700px at 50% 30%, #121a33 0%, var(--bg1) 35%, var(--bg0) 100%);
+      color:var(--txt); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    }
+    #wrap{position:fixed;inset:0;display:grid;grid-template-columns:1fr 380px;gap:14px;padding:14px;box-sizing:border-box;}
+    .card{background:var(--panel);border:1px solid #1c2642;border-radius:18px;box-shadow:0 18px 50px rgba(0,0,0,.35);
+      overflow:hidden;backdrop-filter: blur(10px);}
+    #stageCard{position:relative;}
+    canvas{display:block;width:100%;height:100%; outline:none;}
+    #hud{position:absolute;left:14px;top:14px;background:linear-gradient(180deg,var(--panel2),#0b1020cc);
+      border:1px solid #1c2642;border-radius:14px;padding:10px 12px;font-size:12px;color:var(--muted);
+      max-width: 640px;box-shadow:0 12px 30px rgba(0,0,0,.35);pointer-events:none;}
+    #hud b{color:var(--txt);font-weight:800;}
+    #hud .dot{display:inline-block;width:7px;height:7px;border-radius:99px;background:var(--acc);margin:0 6px 0 0;vertical-align:middle;}
+    #hud .kbd{color:var(--txt);background:#0b1020;border:1px solid #223056;padding:1px 6px;border-radius:8px;font-weight:800;}
+    #hud .sep{opacity:.5;margin:0 6px;}
+
+    #controlsCard{display:flex;flex-direction:column;}
+    .titleRow{padding:12px 14px 0 14px;}
+    .titleRow h1{font-size:14px;margin:0;}
+    .titleRow p{margin:6px 0 0 0;font-size:12px;color:var(--muted);line-height:1.35;}
+
+    .btnRow{display:flex;gap:8px;padding:10px 14px 12px 14px;flex-wrap:wrap;}
+    button{appearance:none;border:1px solid #243154;background:linear-gradient(180deg,#151d33,#0d1326);color:var(--txt);
+      border-radius:12px;padding:8px 10px;font-size:12px;cursor:pointer;box-shadow:0 10px 20px rgba(0,0,0,.25);}
+    button:hover{border-color:#32426f;} button:active{transform:translateY(1px);}
+    button.primary{border-color:#5a4a21;background:linear-gradient(180deg,#2a2415,#15120b);box-shadow:0 10px 25px rgba(247,200,75,.12);}
+    button.good{border-color:#2b5a42;background:linear-gradient(180deg,#152a22,#0c1712);}
+    button.warn{border-color:#5c2a2a;background:linear-gradient(180deg,#2a1515,#170c0c);}
+
+    #controls{padding:14px;display:flex;flex-direction:column;gap:12px;overflow:auto;}
+    .group{border:1px solid #1c2642;border-radius:16px;padding:12px;background:linear-gradient(180deg,#0f152a99,#0b1020aa);}
+    .group h2{font-size:12px;margin:0 0 10px 0;color:var(--muted);letter-spacing:.25px;text-transform:uppercase;}
+    .row{display:grid;grid-template-columns:1fr 90px;gap:10px;align-items:center;margin:8px 0;}
+    .row label{font-size:12px;color:var(--txt);}
+    .val{font-size:12px;color:var(--muted);text-align:right;font-variant-numeric: tabular-nums;}
+    input[type="range"]{width:100%;accent-color:var(--acc);}
+    .hint{font-size:11px;color:var(--muted);line-height:1.35;margin-top:6px;}
+
+    .checkRow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;}
+    .checkRow label{font-size:12px;color:var(--txt);display:flex;align-items:center;gap:8px;}
+    .checkRow input{transform:scale(1.1);accent-color:var(--acc);}
+
+    @media (max-width: 980px){
+      #wrap{grid-template-columns:1fr;}
+      #stageCard{min-height:60vh;}
+    }
+  </style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stageCard" class="card">
+    <canvas id="c" tabindex="0"></canvas>
+    <div id="hud">
+      <div><span class="dot"></span><b>Lumo Fog Lab — v8.2</b> <span style="opacity:.7">· Controls + Autosave</span></div>
+      <div style="margin-top:6px;">
+        <span class="kbd">←</span><span class="kbd">→</span> gå
+        <span class="sep">·</span>
+        <span class="kbd">A</span> hoppa
+        <span class="sep">·</span>
+        <span class="kbd">R</span> reset
+        <span class="sep">·</span>
+        <span class="kbd">Space</span> pausa
+        <br/>
+        Tips: klicka i spelet om tangenterna inte svarar (canvas tar fokus).
+      </div>
+    </div>
+  </div>
+
+  <div id="controlsCard" class="card">
+    <div class="titleRow">
+      <h1>Reglage</h1>
+      <p>Allt sparas automatiskt på din dator (i webbläsaren). Export laddar ner en .json med dina värden.</p>
+    </div>
+
+    <div class="btnRow">
+      <button class="primary" id="btnReset">Reset</button>
+      <button id="btnPause">Pausa</button>
+      <button class="good" id="btnExport">Export (.json)</button>
+      <button id="btnSave">Spara nu</button>
+      <button class="warn" id="btnClearSave">Rensa sparat</button>
+    </div>
+
+    <div id="controls">
+      <div class="group">
+        <h2>Fog look</h2>
+
+        <div class="row"><label for="density">Täthet</label><div class="val" id="vDensity"></div></div>
+        <input id="density" type="range" min="0.08" max="0.85" value="0.36" step="0.01"/>
+
+        <div class="row"><label for="lift">Höjd över mark (px)</label><div class="val" id="vLift"></div></div>
+        <input id="lift" type="range" min="3" max="18" value="9" step="1"/>
+
+        <div class="row"><label for="thickness">Tjocklek/volym (px)</label><div class="val" id="vThickness"></div></div>
+        <input id="thickness" type="range" min="14" max="90" value="58" step="1"/>
+
+        <div class="row"><label for="layers">Lager (kvalitet)</label><div class="val" id="vLayers"></div></div>
+        <input id="layers" type="range" min="12" max="90" value="54" step="1"/>
+
+        <div class="row"><label for="noise">Noise/mikrostruktur</label><div class="val" id="vNoise"></div></div>
+        <input id="noise" type="range" min="0" max="1" value="0.74" step="0.01"/>
+
+        <div class="row"><label for="drift">Drift</label><div class="val" id="vDrift"></div></div>
+        <input id="drift" type="range" min="0" max="1" value="0.20" step="0.01"/>
+      </div>
+
+      <div class="group">
+        <h2>Utjämning</h2>
+
+        <div class="row"><label for="diffuse">Diffusion</label><div class="val" id="vDiffuse"></div></div>
+        <input id="diffuse" type="range" min="0.02" max="0.55" value="0.24" step="0.01"/>
+
+        <div class="row"><label for="relax">Relax</label><div class="val" id="vRelax"></div></div>
+        <input id="relax" type="range" min="0.02" max="0.55" value="0.24" step="0.01"/>
+
+        <div class="row"><label for="visc">Viskositet</label><div class="val" id="vVisc"></div></div>
+        <input id="visc" type="range" min="0.86" max="0.997" value="0.945" step="0.001"/>
+      </div>
+
+      <div class="group">
+        <h2>Interaktion</h2>
+
+        <div class="row"><label for="radius">Radie</label><div class="val" id="vRadius"></div></div>
+        <input id="radius" type="range" min="18" max="180" value="92" step="1"/>
+
+        <div class="row"><label for="push">Clear (bakom)</label><div class="val" id="vPush"></div></div>
+        <input id="push" type="range" min="0" max="5.0" value="2.40" step="0.01"/>
+
+        <div class="row"><label for="bulge">Bulge (fram)</label><div class="val" id="vBulge"></div></div>
+        <input id="bulge" type="range" min="0" max="5.0" value="2.20" step="0.01"/>
+
+        <div class="row"><label for="gate">Move-gate</label><div class="val" id="vGate"></div></div>
+        <input id="gate" type="range" min="0" max="900" value="70" step="10"/>
+      </div>
+
+      <div class="group">
+        <h2>Band + Organic</h2>
+
+        <div class="row"><label for="platformWidth">Plattformens bredd</label><div class="val" id="vPW"></div></div>
+        <input id="platformWidth" type="range" min="260" max="920" value="720" step="10"/>
+
+        <div class="row"><label for="lumoScale">Lumo-skala</label><div class="val" id="vLS"></div></div>
+        <input id="lumoScale" type="range" min="2" max="7" value="4" step="1"/>
+
+        <div class="row"><label for="fogLength">Dimlängd (band)</label><div class="val" id="vFL"></div></div>
+        <input id="fogLength" type="range" min="180" max="900" value="480" step="10"/>
+
+        <div class="row"><label for="falloff">Falloff-längd (px)</label><div class="val" id="vFO"></div></div>
+        <input id="falloff" type="range" min="10" max="320" value="140" step="5"/>
+
+        <div class="row"><label for="organic">Organic styrka</label><div class="val" id="vOrg"></div></div>
+        <input id="organic" type="range" min="0" max="1" value="0.55" step="0.01"/>
+
+        <div class="row"><label for="orgScale">Organic skala</label><div class="val" id="vOrgS"></div></div>
+        <input id="orgScale" type="range" min="0.2" max="2.5" value="0.85" step="0.01"/>
+
+        <div class="row"><label for="orgSpeed">Organic hastighet</label><div class="val" id="vOrgV"></div></div>
+        <input id="orgSpeed" type="range" min="0" max="2.0" value="0.35" step="0.01"/>
+
+        <div class="checkRow">
+          <label><input id="behindFog" type="checkbox" /> Lumo bakom dimman (mer omsvept)</label>
+        </div>
+
+        <div class="hint">Autosave gör att dina inställningar ligger kvar nästa gång du öppnar filen.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const SAVE_KEY = "LUMO_FOG_LAB_V8_2";
+
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha:true });
+
+  // Focus canvas on click so keys always work
+  canvas.addEventListener('pointerdown', () => canvas.focus());
+
+  let W=0,H=0,DPR=1;
+  function resize(){
+    DPR = Math.min(2, window.devicePixelRatio || 1);
+    const r = canvas.getBoundingClientRect();
+    W = Math.max(320, Math.floor(r.width));
+    H = Math.max(320, Math.floor(r.height));
+    canvas.width = Math.floor(W*DPR);
+    canvas.height = Math.floor(H*DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+  }
+  window.addEventListener('resize', resize);
+
+  const $ = id => document.getElementById(id);
+
+  const s = {
+    density:$('density'), lift:$('lift'), thickness:$('thickness'), layers:$('layers'),
+    noise:$('noise'), drift:$('drift'),
+    diffuse:$('diffuse'), relax:$('relax'), visc:$('visc'),
+    radius:$('radius'), push:$('push'), bulge:$('bulge'), gate:$('gate'),
+    platformWidth:$('platformWidth'), lumoScale:$('lumoScale'),
+    fogLength:$('fogLength'), falloff:$('falloff'),
+    organic:$('organic'), orgScale:$('orgScale'), orgSpeed:$('orgSpeed'),
+    behindFog:$('behindFog')
+  };
+
+  const v = {
+    density:$('vDensity'), lift:$('vLift'), thickness:$('vThickness'), layers:$('vLayers'),
+    noise:$('vNoise'), drift:$('vDrift'),
+    diffuse:$('vDiffuse'), relax:$('vRelax'), visc:$('vVisc'),
+    radius:$('vRadius'), push:$('vPush'), bulge:$('vBulge'), gate:$('vGate'),
+    pw:$('vPW'), ls:$('vLS'),
+    fl:$('vFL'), fo:$('vFO'),
+    org:$('vOrg'), orgS:$('vOrgS'), orgV:$('vOrgV')
+  };
+
+  function sync(){
+    v.density.textContent=(+s.density.value).toFixed(2);
+    v.lift.textContent=s.lift.value+" px";
+    v.thickness.textContent=s.thickness.value+" px";
+    v.layers.textContent=s.layers.value;
+    v.noise.textContent=(+s.noise.value).toFixed(2);
+    v.drift.textContent=(+s.drift.value).toFixed(2);
+    v.diffuse.textContent=(+s.diffuse.value).toFixed(2);
+    v.relax.textContent=(+s.relax.value).toFixed(2);
+    v.visc.textContent=(+s.visc.value).toFixed(3);
+    v.radius.textContent=s.radius.value+" px";
+    v.push.textContent=(+s.push.value).toFixed(2);
+    v.bulge.textContent=(+s.bulge.value).toFixed(2);
+    v.gate.textContent=s.gate.value+" px/s";
+    v.pw.textContent=s.platformWidth.value+" px";
+    v.ls.textContent=s.lumoScale.value+"×";
+    v.fl.textContent=s.fogLength.value+" px";
+    v.fo.textContent=s.falloff.value+" px";
+    v.org.textContent=(+s.organic.value).toFixed(2);
+    v.orgS.textContent=(+s.orgScale.value).toFixed(2);
+    v.orgV.textContent=(+s.orgSpeed.value).toFixed(2);
+  }
+
+  function getSettings(){
+    return {
+      density:s.density.value, lift:s.lift.value, thickness:s.thickness.value, layers:s.layers.value,
+      noise:s.noise.value, drift:s.drift.value,
+      diffuse:s.diffuse.value, relax:s.relax.value, visc:s.visc.value,
+      radius:s.radius.value, push:s.push.value, bulge:s.bulge.value, gate:s.gate.value,
+      platformWidth:s.platformWidth.value, lumoScale:s.lumoScale.value,
+      fogLength:s.fogLength.value, falloff:s.falloff.value,
+      organic:s.organic.value, orgScale:s.orgScale.value, orgSpeed:s.orgSpeed.value,
+      behindFog:s.behindFog.checked ? 1 : 0
+    };
+  }
+  function applySettings(obj){
+    if(!obj) return;
+    for(const [k,val] of Object.entries(obj)){
+      if(!(k in s)) continue;
+      if(s[k].type === 'checkbox') s[k].checked = !!val;
+      else s[k].value = val;
+    }
+  }
+  function saveSettings(){
+    try{ localStorage.setItem(SAVE_KEY, JSON.stringify(getSettings())); }catch(e){}
+  }
+  function loadSettings(){
+    try{
+      const raw = localStorage.getItem(SAVE_KEY);
+      if(!raw) return;
+      const obj = JSON.parse(raw);
+      // checkbox fix
+      if('behindFog' in obj) obj.behindFog = !!obj.behindFog;
+      applySettings(obj);
+    }catch(e){}
+  }
+  function clearSaved(){
+    try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+  }
+
+  // Load saved settings FIRST, then sync UI
+  loadSettings();
+  sync();
+
+  // Autosave on any input
+  Object.values(s).forEach(el=>{
+    el.addEventListener('input', ()=>{ sync(); saveSettings(); });
+    el.addEventListener('change', ()=>{ sync(); saveSettings(); });
+  });
+
+  // Buttons
+  $('btnSave').addEventListener('click', ()=>saveSettings());
+  $('btnClearSave').addEventListener('click', ()=>{ clearSaved(); });
+
+  let paused=false;
+
+  const keys = { left:false, right:false, jump:false };
+
+  // Prevent arrows from scrolling the page and make controls reliable
+  function isTypingTarget(el){
+    if(!el) return false;
+    const tag = (el.tagName||"").toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select';
+  }
+
+  window.addEventListener('keydown', (e)=>{
+    if(isTypingTarget(document.activeElement)) return;
+
+    if(e.code==='ArrowLeft'){ keys.left=true; e.preventDefault(); }
+    if(e.code==='ArrowRight'){ keys.right=true; e.preventDefault(); }
+    if(e.key && e.key.toLowerCase()==='a'){ keys.jump=true; e.preventDefault(); }
+
+    if(e.code==='Space'){ paused=!paused; $('btnPause').textContent = paused ? "Fortsätt" : "Pausa"; e.preventDefault(); }
+    if(e.key && e.key.toLowerCase()==='r'){ resetAll(); e.preventDefault(); }
+  }, {passive:false});
+
+  window.addEventListener('keyup', (e)=>{
+    if(e.code==='ArrowLeft'){ keys.left=false; e.preventDefault(); }
+    if(e.code==='ArrowRight'){ keys.right=false; e.preventDefault(); }
+    if(e.key && e.key.toLowerCase()==='a'){ keys.jump=false; e.preventDefault(); }
+  }, {passive:false});
+
+  const scene = { platform:{x:0,y:0,w:720,h:26}, groundY:0 };
+  const fogBand = { x0:0, x1:0, falloff:140 };
+  const lumo = { x:0,y:0, w:24,h:36,scale:4, vx:0, vy:0, onGround:true };
+
+  $('btnPause').addEventListener('click', ()=>{ paused=!paused; $('btnPause').textContent = paused ? "Fortsätt" : "Pausa"; });
+  $('btnReset').addEventListener('click', resetAll);
+  $('btnExport').addEventListener('click', exportJSON);
+
+  let N=0;
+  let field=null, vel=null;
+  let t=0;
+
+  function allocField(){
+    N = Math.max(260, Math.floor(scene.platform.w / 1.4));
+    field = new Float32Array(N);
+    vel   = new Float32Array(N);
+  }
+  function resetField(){ field.fill(0); vel.fill(0); }
+
+  function idxFromX(x){
+    const u = (x - scene.platform.x) / scene.platform.w;
+    return Math.max(0, Math.min(N-1, Math.floor(u*(N-1))));
+  }
+
+  function hash(n){ n=(n<<13)^n; return 1.0-(((n*(n*n*15731+789221)+1376312589)&0x7fffffff)/1073741824.0); }
+  function noise1(x){
+    const xi=Math.floor(x), xf=x-xi;
+    const a=hash(xi), b=hash(xi+1);
+    const u=xf*xf*(3-2*xf);
+    return a*(1-u)+b*u;
+  }
+  function smooth01(x){
+    x = Math.max(0, Math.min(1, x));
+    return x*x*(3-2*x);
+  }
+
+  function stepFog(dt, speed){
+    const diffuse = +s.diffuse.value;
+    const relax   = +s.relax.value;
+    const visc    = +s.visc.value;
+    const drift   = +s.drift.value;
+
+    for(let i=1;i<N-1;i++){
+      const lap = field[i-1] - 2*field[i] + field[i+1];
+      vel[i] += lap * diffuse * 120 * dt;
+    }
+
+    for(let i=0;i<N;i++){
+      vel[i] += (0 - field[i]) * relax * 120 * dt;
+      vel[i] *= visc;
+      field[i] += vel[i] * dt;
+      field[i] = Math.max(-2.2, Math.min(2.2, field[i]));
+    }
+
+    if(drift > 0.001){
+      const shift = drift * 0.85 * dt;
+      if(Math.abs(shift) > 0.00001){
+        const tmp = new Float32Array(N);
+        for(let i=0;i<N;i++){
+          const src = i - shift;
+          const i0 = Math.floor(src), f = src - i0;
+          const a = field[Math.max(0, Math.min(N-1, i0))];
+          const b = field[Math.max(0, Math.min(N-1, i0+1))];
+          tmp[i] = a*(1-f) + b*f;
+        }
+        field.set(tmp);
+      }
+    }
+
+    const gate = +s.gate.value;
+    if(speed > gate){
+      const radiusPx = +s.radius.value;
+      const clearK = +s.push.value;
+      const bulgeK = +s.bulge.value;
+
+      const center = idxFromX(lumo.x);
+      const pxPerCell = scene.platform.w/(N-1);
+      const radCells = Math.max(3, Math.floor(radiusPx / pxPerCell));
+
+      const dir = Math.sign(lumo.vx) || 1;
+      const amp = Math.min(2.2, speed / 210);
+
+      const aheadOffset = Math.max(2, Math.floor(radCells * 0.35));
+      const bulgeCenter = center + dir * aheadOffset;
+
+      const behindOffset = Math.max(1, Math.floor(radCells * 0.15));
+      const clearCenter  = center - dir * behindOffset;
+
+      for(let k=-radCells;k<=radCells;k++){
+        const i = bulgeCenter + k;
+        if(i<0||i>=N) continue;
+        const u = (k / radCells) * dir;
+        const frontMask = smooth01((u + 0.05));
+        const q = 1 - Math.abs(k)/radCells;
+        const w = q*q;
+        const ridge = bulgeK * amp * w * (0.18 + 0.82*frontMask);
+        field[i] += ridge * 0.32;
+      }
+
+      for(let k=-radCells;k<=radCells;k++){
+        const i = clearCenter + k;
+        if(i<0||i>=N) continue;
+        const u = (k / radCells) * dir;
+        const backMask = smooth01((-u + 0.10));
+        const q = 1 - Math.abs(k)/radCells;
+        const w = q*q;
+        const wake = clearK * amp * w * (0.25 + 0.75*backMask);
+        field[i] -= wake * 0.46;
+        vel[i] += dir * wake * 0.0022;
+      }
+    }
+  }
+
+  function roundRect(ctx,x,y,w,h,r){
+    const rr=Math.min(r,w*0.5,h*0.5);
+    ctx.beginPath();
+    ctx.moveTo(x+rr,y);
+    ctx.arcTo(x+w,y,x+w,y+h,rr);
+    ctx.arcTo(x+w,y+h,x,y+h,rr);
+    ctx.arcTo(x,y+h,x,y,rr);
+    ctx.arcTo(x,y,x+w,y,rr);
+    ctx.closePath();
+  }
+
+  function drawBackground(){
+    ctx.fillStyle='#070917';
+    ctx.fillRect(0,0,W,H);
+    const g = ctx.createRadialGradient(W*0.58, H*0.42, 20, W*0.58, H*0.42, Math.max(W,H)*0.75);
+    g.addColorStop(0,'rgba(80,120,255,0.22)');
+    g.addColorStop(0.35,'rgba(70,120,255,0.10)');
+    g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+
+    ctx.globalAlpha=0.35;
+    for(let i=0;i<80;i++){
+      const x=(noise1(i*2.1)*0.5+0.5)*W;
+      const y=(noise1(i*4.7+12.3)*0.5+0.5)*H*0.55;
+      const r=(noise1(i*9.9+4)*0.5+0.5)*1.5;
+      ctx.fillStyle = i%9===0 ? 'rgba(120,210,255,0.65)' : 'rgba(255,255,255,0.30)';
+      ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+  }
+
+  function drawPlatform(){
+    const p=scene.platform;
+    ctx.save();
+    const gx = ctx.createLinearGradient(p.x,p.y,p.x,p.y+p.h*2.5);
+    gx.addColorStop(0,'#2a2f3d'); gx.addColorStop(0.5,'#1b2132'); gx.addColorStop(1,'#101528');
+    ctx.fillStyle=gx; roundRect(ctx,p.x,p.y,p.w,p.h,14); ctx.fill();
+
+    ctx.globalAlpha=0.9;
+    const g2 = ctx.createLinearGradient(p.x,p.y,p.x+p.w,p.y);
+    g2.addColorStop(0,'#2e5b3f'); g2.addColorStop(0.5,'#3b7a52'); g2.addColorStop(1,'#2a5f42');
+    ctx.fillStyle=g2; roundRect(ctx,p.x+6,p.y+4,p.w-12,Math.max(8,p.h*0.38),12); ctx.fill();
+
+    const solidW = 36;
+    const solidH = p.h * 2.2;
+    const sx = fogBand.x0 - solidW + 6;
+    const sy = p.y - solidH + p.h;
+    const gs = ctx.createLinearGradient(sx,sy,sx+solidW,sy+solidH);
+    gs.addColorStop(0,'#272a33');
+    gs.addColorStop(0.5,'#14171f');
+    gs.addColorStop(1,'#080a10');
+    ctx.globalAlpha=1;
+    roundRect(ctx,sx,sy,solidW,solidH,8);
+    ctx.fillStyle=gs; ctx.fill();
+    ctx.restore();
+  }
+
+  function drawLumo(){
+    if(!Number.isFinite(lumo.x) || !Number.isFinite(lumo.y)) return;
+
+    const sc = parseInt(s.lumoScale.value,10);
+    lumo.scale=sc;
+    const w=lumo.w*sc, h=lumo.h*sc;
+    const x=lumo.x, y=lumo.y;
+
+    ctx.save();
+    ctx.globalAlpha=0.25; ctx.fillStyle='#000';
+    ctx.beginPath(); ctx.ellipse(x,y+4,w*0.32,w*0.14,0,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+
+    const bodyW=w*0.90, bodyH=h*0.52;
+    const bodyX=x-bodyW*0.5, bodyY=y-bodyH;
+    ctx.save();
+    const gBody=ctx.createRadialGradient(x,bodyY+bodyH*0.2,w*0.1,x,bodyY+bodyH*0.55,w*0.65);
+    gBody.addColorStop(0,'#f3f1ea'); gBody.addColorStop(0.55,'#d8d2c6'); gBody.addColorStop(1,'#a79e92');
+    ctx.fillStyle=gBody; roundRect(ctx,bodyX,bodyY,bodyW,bodyH,18); ctx.fill();
+    ctx.restore();
+
+    const headW=w*0.88, headH=h*0.52;
+    const headX=x-headW*0.5, headY=y-h;
+    ctx.save();
+    ctx.globalAlpha=0.95;
+    const gGlass=ctx.createLinearGradient(headX,headY,headX+headW,headY+headH);
+    gGlass.addColorStop(0,'#f4f7ffcc'); gGlass.addColorStop(0.35,'#dfe8ff66'); gGlass.addColorStop(1,'#b8c8ff33');
+    ctx.fillStyle=gGlass; roundRect(ctx,headX,headY,headW,headH,18); ctx.fill();
+
+    ctx.globalAlpha=0.88;
+    const gGlow=ctx.createRadialGradient(x,headY+headH*0.55,headW*0.08,x,headY+headH*0.55,headW*0.65);
+    gGlow.addColorStop(0,'#ffd76a'); gGlow.addColorStop(0.45,'#f7c84b'); gGlow.addColorStop(1,'rgba(247,200,75,0)');
+    ctx.fillStyle=gGlow; ctx.fillRect(headX,headY,headW,headH);
+    ctx.restore();
+  }
+
+  function organicMaskAtX(x, time){
+    const strength = +s.organic.value;
+    if(strength <= 0.0001) return 1;
+
+    const scale = +s.orgScale.value;
+    const speed = +s.orgSpeed.value;
+
+    const u = (x * 0.004 * scale) + time * (0.10 * speed);
+    const n1 = noise1(u);
+    const n2 = noise1(u*1.7 + 12.3);
+    const n3 = noise1(u*0.65 - 7.1);
+
+    const mix = ((n1*0.55 + n2*0.30 + n3*0.15) * 0.5 + 0.5);
+    const m = 0.75 + mix * 0.55;
+    return 1 + (m-1) * strength;
+  }
+
+  function drawFog(frontPass=false){
+    const base = +s.density.value;
+    const lift = +s.lift.value;
+    const thick = +s.thickness.value;
+    const layers = parseInt(s.layers.value,10);
+    const noiseAmt = +s.noise.value;
+
+    const topBase = scene.groundY - lift;
+    const bottom = scene.groundY;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(scene.platform.x, 0, scene.platform.w, scene.groundY);
+    ctx.clip();
+
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = frontPass ? 0.33 : 0.82;
+
+    const pxPerCell = scene.platform.w/(N-1);
+    const falloffPx = Math.max(10, fogBand.falloff);
+
+    for(let li=0; li<layers; li++){
+      const a = li/(layers-1);
+      const yBase = bottom - a*thick;
+
+      const sliceAlpha = (1 - a);
+      const alphaBase = (base * 0.18) * (0.22 + sliceAlpha*0.98);
+      if(alphaBase < 0.001) continue;
+
+      ctx.beginPath();
+      for(let i=0;i<N;i++){
+        const x = scene.platform.x + i*pxPerCell;
+
+        let maskEdge = 0;
+        if(x >= fogBand.x0 && x <= fogBand.x1){
+          const dOpen = fogBand.x1 - x;
+          const raw = Math.max(0, Math.min(1, dOpen / falloffPx));
+          maskEdge = smooth01(raw);
+        }
+
+        if(maskEdge <= 0.0005){
+          if(i===0) ctx.moveTo(x, bottom);
+          else ctx.lineTo(x, bottom);
+          continue;
+        }
+
+        const topWeight = smooth01(Math.max(0, Math.min(1, (0.55 - a) / 0.55)));
+        const org = organicMaskAtX(x, t) * (0.70 + 0.30*topWeight);
+
+        const dev = field[i];
+        const bulge = Math.max(0, dev);
+
+        const n = noise1(i*0.22 + t*(0.95 + a*0.85));
+        const m = (n*0.5 + 0.5);
+        const wave = noiseAmt * (m - 0.5) * (10 + (1-a)*18);
+
+        const yyBaseRaw = yBase + wave - bulge * (10 + (1-a)*30);
+        const yyOrg = bottom - (bottom - yyBaseRaw) * org;
+        const yyBase = Math.min(yyOrg, scene.groundY - 1);
+
+        const yy = bottom - (bottom - yyBase) * maskEdge;
+
+        if(i===0) ctx.moveTo(x, yy);
+        else ctx.lineTo(x, yy);
+      }
+      ctx.lineTo(fogBand.x1, bottom);
+      ctx.lineTo(fogBand.x0, bottom);
+      ctx.closePath();
+
+      ctx.fillStyle = `rgba(225,238,255,${alphaBase})`;
+      ctx.fill();
+    }
+
+    ctx.globalAlpha *= 0.55;
+    ctx.strokeStyle = `rgba(210,228,255,${Math.min(0.30, base*0.35)})`;
+    ctx.lineWidth = 18;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for(let i=0;i<N;i++){
+      const x = scene.platform.x + i*pxPerCell;
+
+      let maskEdge = 0;
+      if(x >= fogBand.x0 && x <= fogBand.x1){
+        const dOpen = fogBand.x1 - x;
+        const raw = Math.max(0, Math.min(1, dOpen / falloffPx));
+        maskEdge = smooth01(raw);
+      }
+      if(maskEdge <= 0.0005){
+        if(i===0) ctx.moveTo(x, bottom);
+        else ctx.lineTo(x, bottom);
+        continue;
+      }
+
+      const org = organicMaskAtX(x, t);
+      const dev = field[i];
+      const bulge = Math.max(0, dev);
+      const n = noise1(i*0.22 + t*1.05);
+      const m = (n*0.5 + 0.5);
+      const wave = noiseAmt * (m - 0.5) * 10;
+
+      const yyBaseRaw = topBase + wave - bulge*22;
+      const yyOrg = bottom - (bottom - yyBaseRaw) * org;
+      const yyBase = Math.min(yyOrg, scene.groundY - 1);
+      const yy = bottom - (bottom - yyBase) * maskEdge;
+
+      if(i===0) ctx.moveTo(x, yy);
+      else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function updateLayout(){
+    scene.platform.w = parseInt(s.platformWidth.value,10);
+    scene.platform.h = 26;
+    scene.platform.x = (W - scene.platform.w)*0.5;
+    scene.platform.y = Math.floor(H*0.68);
+    scene.groundY = scene.platform.y;
+
+    const targetN = Math.max(260, Math.floor(scene.platform.w / 1.4));
+    if(targetN !== N) { allocField(); resetField(); }
+
+    const fogLen = parseInt(s.fogLength.value,10);
+
+    const pad = 80;
+    fogBand.x0 = scene.platform.x + pad;
+    const maxEnd = scene.platform.x + scene.platform.w - 20;
+    fogBand.x1 = Math.min(fogBand.x0 + fogLen, maxEnd);
+
+    fogBand.falloff = parseInt(s.falloff.value,10);
+  }
+
+  function resetAll(){
+    updateLayout();
+    lumo.scale = parseInt(s.lumoScale.value,10);
+    lumo.x = (fogBand.x0 + fogBand.x1) * 0.5;
+    lumo.y = scene.groundY;
+    lumo.vx = 0;
+    lumo.vy = 0;
+    lumo.onGround = true;
+    resetField();
+    t=0;
+    saveSettings(); // spara reset också
+  }
+
+  function stepPlayer(dt){
+    const sc = parseInt(s.lumoScale.value,10);
+    lumo.scale = sc;
+
+    const halfW = (lumo.w*sc)*0.5;
+    const ground = scene.groundY;
+
+    const accel = 2400;
+    const maxSpeed = 420;
+    const friction = 2200;
+    const gravity = 2400;
+    const jumpV = 760;
+
+    let ax = 0;
+    if(keys.left) ax -= accel;
+    if(keys.right) ax += accel;
+
+    lumo.vx += ax*dt;
+
+    if(!keys.left && !keys.right){
+      const sign = Math.sign(lumo.vx);
+      const mag = Math.max(0, Math.abs(lumo.vx) - friction*dt);
+      lumo.vx = mag * sign;
+    }
+
+    lumo.vx = Math.max(-maxSpeed, Math.min(maxSpeed, lumo.vx));
+
+    if(keys.jump && lumo.onGround){
+      lumo.vy = -jumpV;
+      lumo.onGround = false;
+    }
+
+    lumo.vy += gravity*dt;
+
+    lumo.x += lumo.vx*dt;
+    lumo.y += lumo.vy*dt;
+
+    lumo.x = Math.max(scene.platform.x + halfW, Math.min(scene.platform.x + scene.platform.w - halfW, lumo.x));
+
+    if(lumo.y >= ground){
+      lumo.y = ground;
+      lumo.vy = 0;
+      lumo.onGround = true;
+    }
+  }
+
+  function exportJSON(){
+    const data = {
+      type: "FogVolume",
+      version: "v8.2",
+      area: {
+        x0: Math.round(fogBand.x0),
+        x1: Math.round(fogBand.x1),
+        falloff: parseInt(s.falloff.value,10)
+      },
+      look: {
+        density: +s.density.value,
+        lift: parseInt(s.lift.value,10),
+        thickness: parseInt(s.thickness.value,10),
+        layers: parseInt(s.layers.value,10),
+        noise: +s.noise.value,
+        drift: +s.drift.value
+      },
+      smoothing: {
+        diffuse: +s.diffuse.value,
+        relax: +s.relax.value,
+        visc: +s.visc.value
+      },
+      interaction: {
+        radius: parseInt(s.radius.value,10),
+        push: +s.push.value,
+        bulge: +s.bulge.value,
+        gate: parseInt(s.gate.value,10)
+      },
+      organic: {
+        strength: +s.organic.value,
+        scale: +s.orgScale.value,
+        speed: +s.orgSpeed.value
+      },
+      render: {
+        lumoBehindFog: !!s.behindFog.checked
+      }
+    };
+
+    const pretty = JSON.stringify(data, null, 2);
+    const blob = new Blob([pretty], {type:"application/json"});
+    const url = URL.createObjectURL(blob);
+
+    const stamp = new Date().toISOString().replace(/[:.]/g,'-');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `fogVolume_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url), 500);
+  }
+
+  // init
+  resize();
+  allocField();
+  // After loadSettings we should start with a clean layout based on saved sliders
+  updateLayout();
+  // Put Lumo in a safe place
+  lumo.scale = parseInt(s.lumoScale.value,10);
+  lumo.x = (fogBand.x0 + fogBand.x1) * 0.5;
+  lumo.y = scene.groundY;
+  lumo.vx = 0; lumo.vy = 0; lumo.onGround = true;
+  resetField();
+  canvas.focus(); // make keys work right away
+
+  let last = performance.now();
+  function frame(now){
+    const dt = Math.min(0.033, (now-last)/1000);
+    last = now;
+
+    updateLayout();
+    if(!paused){
+      stepPlayer(dt);
+      stepFog(dt, Math.abs(lumo.vx));
+      t += dt;
+    }
+
+    ctx.clearRect(0,0,W,H);
+
+    const behind = !!s.behindFog.checked;
+
+    drawBackground();
+    drawPlatform();
+
+    if(behind){
+      drawLumo();
+      drawFog(false);
+      drawFog(true);
+    }else{
+      drawFog(false);
+      drawLumo();
+      drawFog(true);
+    }
+
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // Bind buttons that depend on functions declared below
+  document.getElementById('btnClearSave').addEventListener('click', ()=>{
+    clearSaved();
+    // reload defaults by reloading page quickly
+    location.reload();
+  });
+
+})();
+</script>
+</body>
+</html>
