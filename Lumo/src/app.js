@@ -601,7 +601,7 @@ const b = hudCanvas._pauseBtn;
       ctx.save();
 
       const panelX = r.w * 0.37;
-      const panelY = r.h * 0.475;
+      const panelY = (r.h * 0.475) - 13;
       const textOffsetX = 20;
       const textOffsetY = -14;
       const tilt = 0.03;
