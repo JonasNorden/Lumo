@@ -114,7 +114,9 @@
 
   const menuItems = ["Begin Quest", "Settings", "Score Board", "Credits", "Fan Art"];
   const menuUi = {
-    beginQuestBounds: null
+    beginQuestBounds: null,
+    itemBounds: [],
+    selectedIndex: 0
   };
 
   function startMenuQuest(){
@@ -194,12 +196,41 @@ const b = hudCanvas._pauseBtn;
     }
   });
 
+  canvas.addEventListener("mousemove", (e) => {
+    if (bootActive || gameState !== GameState.MENU) return;
+    if (!menuUi.itemBounds.length) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const sx = r.w / rect.width;
+    const sy = r.h / rect.height;
+    const mx = (e.clientX - rect.left) * sx;
+    const my = (e.clientY - rect.top) * sy;
+
+    for (let i = 0; i < menuUi.itemBounds.length; i++){
+      const b = menuUi.itemBounds[i];
+      if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
+        menuUi.selectedIndex = i;
+        break;
+      }
+    }
+  });
+
   // P = pause/resume
   window.addEventListener("keydown", (e) => {
     if (gameState === GameState.MENU){
       if (e.repeat) return;
+      if (e.key === "ArrowDown"){
+        menuUi.selectedIndex = (menuUi.selectedIndex + 1) % menuItems.length;
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "ArrowUp"){
+        menuUi.selectedIndex = (menuUi.selectedIndex - 1 + menuItems.length) % menuItems.length;
+        e.preventDefault();
+        return;
+      }
       if (e.key === "Enter" || e.key === " "){
-        startMenuQuest();
+        if (menuUi.selectedIndex === 0) startMenuQuest();
         e.preventDefault();
       }
       return;
@@ -556,7 +587,12 @@ const b = hudCanvas._pauseBtn;
     if (gameState === GameState.MENU){
       const img = menuBackgroundImage;
       if (img && img.complete && img.naturalWidth > 0){
-        ctx.drawImage(img, 0, 0, r.w, r.h);
+        const scale = Math.min(r.w / img.naturalWidth, r.h / img.naturalHeight);
+        const drawW = img.naturalWidth * scale;
+        const drawH = img.naturalHeight * scale;
+        const drawX = (r.w - drawW) * 0.5;
+        const drawY = (r.h - drawH) * 0.5;
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
       } else {
         ctx.fillStyle = "#03131A";
         ctx.fillRect(0, 0, r.w, r.h);
@@ -564,44 +600,50 @@ const b = hudCanvas._pauseBtn;
 
       ctx.save();
 
-      const panelX = r.w * 0.235;
-      const panelY = r.h * 0.485;
-      const tilt = -0.065;
-      const lineH = Math.max(26, r.h * 0.048);
+      const panelX = r.w * 0.34;
+      const panelY = r.h * 0.49;
+      const tilt = 0.065;
+      const lineH = Math.max(30, r.h * 0.056);
 
       ctx.translate(panelX, panelY);
       ctx.rotate(tilt);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = `${Math.max(20, Math.round(r.h * 0.042))}px "Orbitron","Eurostile","Trebuchet MS",sans-serif`;
+      ctx.font = `${Math.max(23, Math.round(r.h * 0.046))}px "Orbitron","Eurostile","Trebuchet MS",sans-serif`;
+
+      menuUi.itemBounds = [];
+      menuUi.beginQuestBounds = null;
 
       for (let i = 0; i < menuItems.length; i++){
-        const isActive = i === 0;
+        const isActive = i === menuUi.selectedIndex;
         const y = (i - (menuItems.length - 1) * 0.5) * lineH;
         const label = menuItems[i];
 
-        ctx.shadowColor = isActive ? "rgba(88,255,255,0.55)" : "rgba(70,220,240,0.35)";
-        ctx.shadowBlur = isActive ? 10 : 6;
+        ctx.shadowColor = isActive ? "rgba(108,255,255,0.68)" : "rgba(70,220,240,0.32)";
+        ctx.shadowBlur = isActive ? 13 : 6;
         ctx.lineWidth = 4;
         ctx.strokeStyle = "rgba(0,32,38,0.62)";
         ctx.strokeText(label, 0, y);
-        ctx.fillStyle = isActive ? "#BFFFFF" : "#87EAF6";
+        ctx.fillStyle = isActive ? "#CFFFFF" : "#87EAF6";
         ctx.fillText(label, 0, y);
 
-        if (isActive){
-          const metrics = ctx.measureText(label);
-          const textW = metrics.width;
-          const textH = lineH * 0.72;
-          const c = Math.cos(tilt);
-          const s = Math.sin(tilt);
-          const cx = panelX + (0 * c - y * s);
-          const cy = panelY + (0 * s + y * c);
-          menuUi.beginQuestBounds = {
-            x: cx - textW * 0.5,
-            y: cy - textH * 0.5,
-            w: textW,
-            h: textH
-          };
+        const metrics = ctx.measureText(label);
+        const textW = metrics.width;
+        const textH = lineH * 0.74;
+        const c = Math.cos(tilt);
+        const s = Math.sin(tilt);
+        const cx = panelX + (0 * c - y * s);
+        const cy = panelY + (0 * s + y * c);
+        const bounds = {
+          x: cx - textW * 0.5,
+          y: cy - textH * 0.5,
+          w: textW,
+          h: textH
+        };
+        menuUi.itemBounds.push(bounds);
+
+        if (i === 0){
+          menuUi.beginQuestBounds = bounds;
         }
       }
       ctx.restore();
