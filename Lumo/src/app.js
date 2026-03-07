@@ -9,6 +9,31 @@
   const ents = new Lumo.Entities();
   const player = new Lumo.Player();
 
+  const GameState = Object.freeze({
+    BOOTING: "booting",
+    PLAYING: "playing",
+    PAUSED: "paused",
+    GAME_OVER: "game_over"
+  });
+
+  class LevelManager {
+    constructor(levels){
+      this.levels = levels || {};
+      this.startLevelKey = "level01";
+      this.lastLoadedLevel = null;
+    }
+
+    getStartLevel(){
+      return this.levels[this.startLevelKey] || null;
+    }
+
+    remember(levelObj){
+      this.lastLoadedLevel = levelObj || null;
+    }
+  }
+
+  const levelManager = new LevelManager((Lumo && Lumo.Levels) ? Lumo.Levels : {});
+
   // Gamla HUD-element i HTML (högerpanel) - vi gömmer dem men uppdaterar fortfarande text
   const hudLives = document.getElementById("hudLives");
   const hudEnergy = document.getElementById("hudEnergy");
@@ -24,6 +49,7 @@
 
   let paused = false;
   let bootActive = false;
+  let gameState = GameState.BOOTING;
   const BOOT_MS = 5000;
 // HUD-state för canvasoverlay
   const hudCanvas = {
@@ -52,6 +78,7 @@
     if (bootActive) return;
     if (paused){
       paused = false;
+      gameState = GameState.PLAYING;
       return;
     }
 const b = hudCanvas._pauseBtn;
@@ -65,6 +92,7 @@ const b = hudCanvas._pauseBtn;
 
     if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
       paused = true;
+      gameState = GameState.PAUSED;
     }
   });
 
@@ -73,11 +101,28 @@ const b = hudCanvas._pauseBtn;
     if (e.repeat) return;
     if (e.key === "p" || e.key === "P"){
       paused = !paused;
+      gameState = paused ? GameState.PAUSED : GameState.PLAYING;
       e.preventDefault();
     }
   });
 
-  Lumo.debug = { player, world, ents, hudCanvas };
+  Lumo.debug = { player, world, ents, hudCanvas, levelManager, GameState };
+
+  function syncGameState(){
+    if (bootActive){
+      gameState = GameState.BOOTING;
+      return;
+    }
+    if (paused){
+      gameState = GameState.PAUSED;
+      return;
+    }
+    if (player.lives <= 0){
+      gameState = GameState.GAME_OVER;
+      return;
+    }
+    gameState = GameState.PLAYING;
+  }
 
   function pushEnergyPopup(pctLoss){
     const geom = hudCanvas._barGeom;
@@ -157,6 +202,7 @@ const b = hudCanvas._pauseBtn;
 
     world.loadLevel(levelObj);
     ents.loadFromLevel(levelObj);
+    levelManager.remember(levelObj);
 
     // tileSize
     const ts = (levelObj.meta && levelObj.meta.tileSize) ? levelObj.meta.tileSize
@@ -194,7 +240,7 @@ const b = hudCanvas._pauseBtn;
     player.lives = 4;
     player.flares = 1;
 
-    const lvl = (Lumo && Lumo.Levels && Lumo.Levels.level01) ? Lumo.Levels.level01 : null;
+    const lvl = levelManager.getStartLevel();
     if (!lvl){
       hudDebug.textContent = "Restart failed: level01 not found";
       console.error("restart: Lumo.Levels.level01 missing");
@@ -210,6 +256,7 @@ const b = hudCanvas._pauseBtn;
     hudCanvas.checkpointRingT = 0;
 
     loadLevel(lvl);
+    gameState = GameState.PLAYING;
   }
 
   function resize(){
@@ -300,6 +347,7 @@ const b = hudCanvas._pauseBtn;
 
     if (player.lives <= 0){
       hudDebug.textContent = `Game Over → press Restart`;
+      gameState = GameState.GAME_OVER;
     }
   }
 
@@ -474,6 +522,7 @@ const b = hudCanvas._pauseBtn;
   function tick(){
     resize();
     const dt = Lumo.Time.tick();
+    syncGameState();
 
     if (!paused){
       if (player.lives > 0){
@@ -563,6 +612,7 @@ const b = hudCanvas._pauseBtn;
 
         obj.meta.tileSize = obj.meta.tileSize || 24;
         loadLevel(obj);
+        syncGameState();
 
       } catch (err){
         hudDebug.textContent = `Import failed: ${err.message}`;
@@ -583,6 +633,7 @@ const b = hudCanvas._pauseBtn;
 
     bootActive = true;
     paused = true;
+    gameState = GameState.BOOTING;
 
     overlay.classList.add("is-on");
     overlay.setAttribute("aria-hidden", "false");
@@ -615,6 +666,7 @@ const b = hudCanvas._pauseBtn;
           overlay.setAttribute("aria-hidden", "true");
           bootActive = false;
           paused = false;
+          gameState = GameState.PLAYING;
         }, 250);
       }
     }, stepMs);
