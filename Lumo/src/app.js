@@ -185,22 +185,26 @@ const b = hudCanvas._pauseBtn;
   }
 
   function drawTrackedText(ctx, text, x, y, spacing){
+    const glyphWidths = Array.from(text, (ch) => ctx.measureText(ch).width);
     const totalSpacing = Math.max(0, text.length - 1) * spacing;
-    let cursor = x - totalSpacing * 0.5;
+    const totalWidth = glyphWidths.reduce((sum, w) => sum + w, 0) + totalSpacing;
+    let cursor = x - totalWidth * 0.5 + (glyphWidths[0] || 0) * 0.5;
     for (let i = 0; i < text.length; i++){
       const ch = text[i];
       ctx.fillText(ch, cursor, y);
-      cursor += ctx.measureText(ch).width + spacing;
+      cursor += glyphWidths[i] * 0.5 + spacing + (glyphWidths[i + 1] || 0) * 0.5;
     }
   }
 
   function strokeTrackedText(ctx, text, x, y, spacing){
+    const glyphWidths = Array.from(text, (ch) => ctx.measureText(ch).width);
     const totalSpacing = Math.max(0, text.length - 1) * spacing;
-    let cursor = x - totalSpacing * 0.5;
+    const totalWidth = glyphWidths.reduce((sum, w) => sum + w, 0) + totalSpacing;
+    let cursor = x - totalWidth * 0.5 + (glyphWidths[0] || 0) * 0.5;
     for (let i = 0; i < text.length; i++){
       const ch = text[i];
       ctx.strokeText(ch, cursor, y);
-      cursor += ctx.measureText(ch).width + spacing;
+      cursor += glyphWidths[i] * 0.5 + spacing + (glyphWidths[i + 1] || 0) * 0.5;
     }
   }
 
@@ -550,7 +554,7 @@ const b = hudCanvas._pauseBtn;
       ctx.textBaseline = "middle";
 
       // Keep text inside the board area and match existing retro UI style.
-      const titleX = r.w * 0.5;
+      const titleX = ctx.canvas.width / 2;
       const titleY = r.h * 0.255;
       const promptX = r.w * 0.5;
       const promptY = r.h * 0.76;
@@ -558,7 +562,7 @@ const b = hudCanvas._pauseBtn;
       const titleSpacing = Math.max(1.2, r.w * 0.0018);
 
       // Main title
-      ctx.textAlign = "left";
+      ctx.textAlign = "center";
       ctx.font = '34px "Trebuchet MS","Arial Black",sans-serif';
       ctx.lineJoin = "round";
       ctx.miterLimit = 2;
