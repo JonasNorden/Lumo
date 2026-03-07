@@ -602,8 +602,10 @@ const b = hudCanvas._pauseBtn;
 
       const panelX = r.w * 0.37;
       const panelY = r.h * 0.475;
+      const textOffsetX = 20;
+      const textOffsetY = -14;
       const tilt = 0.03;
-      const lineH = Math.max(30, r.h * 0.056);
+      const lineH = Math.max(30, r.h * 0.056) * 0.88;
 
       ctx.translate(panelX, panelY);
       ctx.rotate(tilt);
@@ -617,23 +619,25 @@ const b = hudCanvas._pauseBtn;
       for (let i = 0; i < menuItems.length; i++){
         const isActive = i === menuUi.selectedIndex;
         const y = (i - (menuItems.length - 1) * 0.5) * lineH;
+        const textX = textOffsetX;
+        const textY = y + textOffsetY;
         const label = menuItems[i];
 
         ctx.shadowColor = isActive ? "rgba(108,255,255,0.68)" : "rgba(70,220,240,0.32)";
         ctx.shadowBlur = isActive ? 13 : 6;
         ctx.lineWidth = 4;
         ctx.strokeStyle = "rgba(0,32,38,0.62)";
-        ctx.strokeText(label, 0, y);
+        ctx.strokeText(label, textX, textY);
         ctx.fillStyle = isActive ? "#CFFFFF" : "#87EAF6";
-        ctx.fillText(label, 0, y);
+        ctx.fillText(label, textX, textY);
 
         const metrics = ctx.measureText(label);
         const textW = metrics.width;
         const textH = lineH * 0.74;
         const c = Math.cos(tilt);
         const s = Math.sin(tilt);
-        const cx = panelX + (0 * c - y * s);
-        const cy = panelY + (0 * s + y * c);
+        const cx = panelX + (textX * c - textY * s);
+        const cy = panelY + (textX * s + textY * c);
         const bounds = {
           x: cx - textW * 0.5,
           y: cy - textH * 0.5,
