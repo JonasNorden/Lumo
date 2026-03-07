@@ -600,16 +600,16 @@ const b = hudCanvas._pauseBtn;
 
       ctx.save();
 
-      const panelX = r.w * 0.34;
-      const panelY = r.h * 0.49;
-      const tilt = 0.065;
+      const panelX = r.w * 0.37;
+      const panelY = r.h * 0.475;
+      const tilt = 0.03;
       const lineH = Math.max(30, r.h * 0.056);
 
       ctx.translate(panelX, panelY);
       ctx.rotate(tilt);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = `${Math.max(23, Math.round(r.h * 0.046))}px "Orbitron","Eurostile","Trebuchet MS",sans-serif`;
+      ctx.font = `${Math.max(21, Math.round(r.h * 0.041))}px "Orbitron","Eurostile","Trebuchet MS",sans-serif`;
 
       menuUi.itemBounds = [];
       menuUi.beginQuestBounds = null;
