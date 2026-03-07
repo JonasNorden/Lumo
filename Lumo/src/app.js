@@ -577,13 +577,6 @@ const b = hudCanvas._pauseBtn;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
-      ctx.font = '56px "Arial Black",sans-serif';
-      ctx.lineWidth = 10;
-      ctx.strokeStyle = "rgba(0,0,0,0.75)";
-      ctx.strokeText("GAME OVER", r.w * 0.5, r.h * 0.22);
-      ctx.fillStyle = "#F4E8C7";
-      ctx.fillText("GAME OVER", r.w * 0.5, r.h * 0.22);
-
       ctx.font = '24px "Trebuchet MS",Arial,sans-serif';
       ctx.lineWidth = 7;
       ctx.strokeStyle = "rgba(0,0,0,0.7)";
