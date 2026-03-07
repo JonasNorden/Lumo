@@ -146,30 +146,36 @@
     ctx.globalCompositeOperation = "screen";
 
     for (const glow of menuAmbientGlows){
-      const pulse = 0.5 + 0.5 * Math.sin((t * glow.speed) + glow.phase);
-      const alpha = 0.32 + glow.amp * pulse;
-      const radius = minSize * glow.r * (1 + pulse * 0.72);
-      const x = drawX + drawW * glow.x;
-      const y = drawY + drawH * glow.y;
+      const pulse = 0.5 + 0.5 * Math.sin((t * (glow.speed * 1.72)) + glow.phase);
+      const flutter = 0.5 + 0.5 * Math.sin((t * (glow.speed * 3.7)) + (glow.phase * 2.1));
+      const alpha = 0.19 + glow.amp * (pulse * 0.52 + flutter * 0.26);
+      const radius = minSize * glow.r * (0.88 + pulse * 0.58);
+
+      const driftX = Math.sin((t * (0.19 + glow.speed * 0.11)) + glow.phase * 1.9) * (drawW * 0.0048);
+      const driftY = Math.cos((t * (0.17 + glow.speed * 0.09)) + glow.phase * 1.6) * (drawH * 0.0052);
+      const orbitX = Math.sin((t * (0.41 + glow.speed * 0.16)) + glow.phase * 0.7) * (drawW * 0.0023);
+      const orbitY = Math.cos((t * (0.37 + glow.speed * 0.14)) + glow.phase * 0.9) * (drawH * 0.0026);
+      const x = drawX + drawW * glow.x + driftX + orbitX;
+      const y = drawY + drawH * glow.y + driftY + orbitY;
 
       const g = ctx.createRadialGradient(x, y, 0, x, y, radius);
-      g.addColorStop(0, `rgba(255, 248, 198, ${(alpha * 1.22).toFixed(3)})`);
-      g.addColorStop(0.26, `rgba(255, 225, 138, ${(alpha * 0.98).toFixed(3)})`);
-      g.addColorStop(0.58, `rgba(255, 188, 98, ${(alpha * 0.62).toFixed(3)})`);
-      g.addColorStop(0.84, `rgba(255, 144, 68, ${(alpha * 0.28).toFixed(3)})`);
-      g.addColorStop(1, "rgba(255, 140, 48, 0)");
+      g.addColorStop(0, `rgba(255, 236, 196, ${(alpha * 1.02).toFixed(3)})`);
+      g.addColorStop(0.28, `rgba(244, 192, 127, ${(alpha * 0.88).toFixed(3)})`);
+      g.addColorStop(0.62, `rgba(216, 143, 90, ${(alpha * 0.56).toFixed(3)})`);
+      g.addColorStop(0.86, `rgba(182, 102, 66, ${(alpha * 0.24).toFixed(3)})`);
+      g.addColorStop(1, "rgba(168, 90, 58, 0)");
 
-      ctx.shadowColor = `rgba(255, 214, 122, ${(alpha * 0.95).toFixed(3)})`;
-      ctx.shadowBlur = radius * 0.78;
+      ctx.shadowColor = `rgba(226, 158, 96, ${(alpha * 0.78).toFixed(3)})`;
+      ctx.shadowBlur = radius * 0.72;
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, Math.PI * 2);
       ctx.fill();
 
       const coreRadius = Math.max(2, radius * 0.16);
-      ctx.shadowColor = `rgba(255, 240, 183, ${(alpha * 1.05).toFixed(3)})`;
-      ctx.shadowBlur = radius * 0.36;
-      ctx.fillStyle = `rgba(255, 247, 210, ${(0.42 + pulse * 0.42).toFixed(3)})`;
+      ctx.shadowColor = `rgba(242, 200, 148, ${(alpha * 0.85).toFixed(3)})`;
+      ctx.shadowBlur = radius * 0.3;
+      ctx.fillStyle = `rgba(255, 225, 182, ${(0.28 + pulse * 0.26 + flutter * 0.12).toFixed(3)})`;
       ctx.beginPath();
       ctx.arc(x, y, coreRadius, 0, Math.PI * 2);
       ctx.fill();
@@ -192,17 +198,17 @@
 
     const spriteX = baseX + driftX;
     const spriteY = baseY + hoverY;
-    const haloPulse = 0.5 + 0.5 * Math.sin((t * 0.78) + 0.9);
-    const haloRadius = spriteW * (0.78 + haloPulse * 0.08);
+    const haloPulse = 0.5 + 0.5 * Math.sin((t * 0.84) + 0.9);
+    const haloRadius = spriteW * (0.96 + haloPulse * 0.16);
     const haloCenterX = spriteX + (spriteW * 0.52);
     const haloCenterY = spriteY + (spriteH * 0.49);
 
     ctx.save();
     ctx.globalCompositeOperation = "screen";
     const halo = ctx.createRadialGradient(haloCenterX, haloCenterY, 0, haloCenterX, haloCenterY, haloRadius);
-    halo.addColorStop(0, `rgba(162, 255, 246, ${(0.20 + haloPulse * 0.08).toFixed(3)})`);
-    halo.addColorStop(0.45, `rgba(132, 234, 255, ${(0.12 + haloPulse * 0.05).toFixed(3)})`);
-    halo.addColorStop(0.85, "rgba(98, 206, 255, 0.03)");
+    halo.addColorStop(0, `rgba(176, 255, 246, ${(0.34 + haloPulse * 0.12).toFixed(3)})`);
+    halo.addColorStop(0.45, `rgba(132, 234, 255, ${(0.2 + haloPulse * 0.08).toFixed(3)})`);
+    halo.addColorStop(0.85, "rgba(98, 206, 255, 0.08)");
     halo.addColorStop(1, "rgba(98, 206, 255, 0)");
     ctx.fillStyle = halo;
     ctx.beginPath();
