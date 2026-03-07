@@ -527,13 +527,38 @@ const b = hudCanvas._pauseBtn;
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.textAlign = "center";
-      ctx.fillStyle = "#FFFFFF";
+      ctx.textBaseline = "middle";
 
-      ctx.font = 'bold 54px "Arial Black", Arial, sans-serif';
-      ctx.fillText("LEVEL COMPLETE", r.w * 0.5, r.h * 0.24);
+      // Keep text inside the board area and match existing retro UI style.
+      const titleX = r.w * 0.5;
+      const titleY = r.h * 0.37;
+      const promptX = r.w * 0.5;
+      const promptY = r.h * 0.76;
 
-      ctx.font = '28px Arial, sans-serif';
-      ctx.fillText("Press any key to start next quest", r.w * 0.5, r.h * 0.84);
+      // Main title
+      ctx.font = '52px "Cooper Black","Arial Black",Impact,sans-serif';
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      ctx.lineWidth = 14;
+      ctx.strokeStyle = "rgba(0,0,0,0.62)";
+      ctx.strokeText("LEVEL COMPLETE", titleX, titleY);
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = "rgba(76,112,170,0.9)";
+      ctx.strokeText("LEVEL COMPLETE", titleX, titleY);
+      const titleGrad = ctx.createLinearGradient(0, titleY - 32, 0, titleY + 32);
+      titleGrad.addColorStop(0.0, "#FDF2C1");
+      titleGrad.addColorStop(0.55, "#FFD56A");
+      titleGrad.addColorStop(1.0, "#F89A2E");
+      ctx.fillStyle = titleGrad;
+      ctx.fillText("LEVEL COMPLETE", titleX, titleY);
+
+      // Prompt text
+      ctx.font = '30px "Cooper Black","Arial Black",Impact,sans-serif';
+      ctx.lineWidth = 9;
+      ctx.strokeStyle = "rgba(0,0,0,0.7)";
+      ctx.strokeText("Press any key to start next quest", promptX, promptY);
+      ctx.fillStyle = "#F5E8C6";
+      ctx.fillText("Press any key to start next quest", promptX, promptY);
       ctx.restore();
     } else {
       r.drawHUD(hudCanvas);
