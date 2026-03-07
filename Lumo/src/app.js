@@ -566,7 +566,12 @@ const b = hudCanvas._pauseBtn;
     if (gameState === GameState.GAME_OVER){
       const img = gameOverImage;
       if (img && img.complete && img.naturalWidth > 0){
-        ctx.drawImage(img, 0, 0, r.w, r.h);
+        const scale = Math.min(r.w / img.naturalWidth, r.h / img.naturalHeight);
+        const drawW = img.naturalWidth * scale;
+        const drawH = img.naturalHeight * scale;
+        const drawX = (r.w - drawW) * 0.5;
+        const drawY = (r.h - drawH) * 0.5;
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
       } else {
         ctx.fillStyle = "#080A13";
         ctx.fillRect(0, 0, r.w, r.h);
