@@ -13,7 +13,8 @@
     BOOTING: "booting",
     PLAYING: "playing",
     PAUSED: "paused",
-    GAME_OVER: "game_over"
+    GAME_OVER: "game_over",
+    INTERMISSION: "intermission"
   });
 
   class LevelManager {
@@ -21,6 +22,7 @@
       this.levels = levels || {};
       this.startLevelKey = "level01";
       this.lastLoadedLevel = null;
+      this.levelOrder = Object.keys(this.levels);
     }
 
     getStartLevel(){
@@ -29,6 +31,31 @@
 
     remember(levelObj){
       this.lastLoadedLevel = levelObj || null;
+    }
+
+    getNextLevel(){
+      if (!this.levelOrder.length) return null;
+
+      const current = this.lastLoadedLevel;
+      let currentIdx = -1;
+
+      if (current){
+        for (let i = 0; i < this.levelOrder.length; i++){
+          const key = this.levelOrder[i];
+          if (this.levels[key] === current){
+            currentIdx = i;
+            break;
+          }
+        }
+      }
+
+      if (currentIdx < 0){
+        const start = this.getStartLevel();
+        return start || this.levels[this.levelOrder[0]] || null;
+      }
+
+      const nextIdx = (currentIdx + 1) % this.levelOrder.length;
+      return this.levels[this.levelOrder[nextIdx]] || null;
     }
   }
 
@@ -49,6 +76,7 @@
 
   let paused = false;
   let bootActive = false;
+  let intermissionReadyForInput = false;
   let gameState = GameState.BOOTING;
   const BOOT_MS = 5000;
 // HUD-state för canvasoverlay
@@ -72,6 +100,28 @@
     _prevFlares: 1,
     _boostAcc: 0
   };
+
+  const intermissionImage = new Image();
+  intermissionImage.src = "data/assets/ui/intermission_level_complete.png";
+
+  function startNextQuest(){
+    const nextLevel = levelManager.getNextLevel();
+    if (!nextLevel){
+      hudDebug.textContent = "Next level not found";
+      return;
+    }
+
+    loadLevel(nextLevel);
+    paused = false;
+    intermissionReadyForInput = false;
+    gameState = GameState.PLAYING;
+  }
+
+  function completeLevel(){
+    hudDebug.textContent = "Level complete";
+    intermissionReadyForInput = true;
+    gameState = GameState.INTERMISSION;
+  }
 
   // Klick på canvas = toggle pause / klicka på paus-knappen
   canvas.addEventListener("mousedown", (e) => {
@@ -98,6 +148,13 @@ const b = hudCanvas._pauseBtn;
 
   // P = pause/resume
   window.addEventListener("keydown", (e) => {
+    if (gameState === GameState.INTERMISSION){
+      if (e.repeat) return;
+      if (intermissionReadyForInput) startNextQuest();
+      e.preventDefault();
+      return;
+    }
+
     if (e.repeat) return;
     if (e.key === "p" || e.key === "P"){
       paused = !paused;
@@ -111,6 +168,9 @@ const b = hudCanvas._pauseBtn;
   function syncGameState(){
     if (bootActive){
       gameState = GameState.BOOTING;
+      return;
+    }
+    if (gameState === GameState.INTERMISSION){
       return;
     }
     if (paused){
@@ -307,6 +367,11 @@ const b = hudCanvas._pauseBtn;
           setCheckpoint(e.x, e.y);
           hudDebug.textContent = `Checkpoint set`;
         }
+
+        if (e.type === "exit"){
+          e.active = false;
+          completeLevel();
+        }
       }
     }
 
@@ -450,6 +515,26 @@ const b = hudCanvas._pauseBtn;
 
     if (paused && !bootActive){
       r.drawPauseOverlay();
+    } else if (gameState === GameState.INTERMISSION){
+      const img = intermissionImage;
+      if (img && img.complete && img.naturalWidth > 0){
+        ctx.drawImage(img, 0, 0, r.w, r.h);
+      } else {
+        ctx.fillStyle = "#0E1530";
+        ctx.fillRect(0, 0, r.w, r.h);
+      }
+
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#FFFFFF";
+
+      ctx.font = 'bold 54px "Arial Black", Arial, sans-serif';
+      ctx.fillText("LEVEL COMPLETE", r.w * 0.5, r.h * 0.24);
+
+      ctx.font = '28px Arial, sans-serif';
+      ctx.fillText("Press any key to start next quest", r.w * 0.5, r.h * 0.84);
+      ctx.restore();
     } else {
       r.drawHUD(hudCanvas);
     }
@@ -524,7 +609,7 @@ const b = hudCanvas._pauseBtn;
     const dt = Lumo.Time.tick();
     syncGameState();
 
-    if (!paused){
+    if (!paused && gameState === GameState.PLAYING){
       if (player.lives > 0){
         player.update(dt, world);
 
@@ -562,8 +647,9 @@ const b = hudCanvas._pauseBtn;
 
       detectHudEvents(dt);
       updateHudPopups(dt);
-      updateHUD(dt);
     }
+
+    updateHUD(dt);
 
     draw();
     requestAnimationFrame(tick);
