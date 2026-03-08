@@ -1312,6 +1312,32 @@ display:none;
 
   function _buildParamSchemaCache(){
     const map = {};
+    const hardcodedSchemas = {
+      dark_creature_01: {
+        defaults: {
+          hp: 3,
+          hitCooldown: 0.6,
+          safeDelay: 0.6,
+          patrolTiles: 0,
+          aggroTiles: 0,
+          energyLoss: 40,
+          knockbackX: 260,
+          knockbackY: -220,
+          reactsToFlares: true,
+        },
+        shownParams: [
+          "hp",
+          "hitCooldown",
+          "safeDelay",
+          "patrolTiles",
+          "aggroTiles",
+          "energyLoss",
+          "knockbackX",
+          "knockbackY",
+          "reactsToFlares",
+        ],
+      },
+    };
     const list = (window.LUMO_CATALOG_ENTITIES && Array.isArray(window.LUMO_CATALOG_ENTITIES))
       ? window.LUMO_CATALOG_ENTITIES
       : [];
@@ -1331,6 +1357,19 @@ display:none;
         return { key, label: _humanizeKey(key), placeholder: ph };
       });
     }
+
+    // Safety net: if a catalog entry is missing or malformed, keep known game-critical schemas.
+    for (const [id, schema] of Object.entries(hardcodedSchemas)){
+      if (map[id]) continue;
+      const defaults = schema.defaults || {};
+      const shown = Array.isArray(schema.shownParams) ? schema.shownParams : Object.keys(defaults);
+      map[id] = shown.map((key) => {
+        const hasDef = Object.prototype.hasOwnProperty.call(defaults, key);
+        const ph = hasDef ? String(defaults[key]) : "";
+        return { key, label: _humanizeKey(key), placeholder: ph };
+      });
+    }
+
     return map;
   }
 
