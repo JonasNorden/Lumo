@@ -238,10 +238,47 @@
       return;
     }
 
+    resetRunStateForNewGame();
     loadLevel(lvl);
     paused = false;
     gameState = GameState.PLAYING;
     hudDebug.textContent = "Begin Quest -> level01";
+  }
+
+  function resetRunStateForNewGame(){
+    paused = false;
+    intermissionReadyForInput = false;
+    gameOverReadyForInput = false;
+
+    player.lives = 4;
+    player.flares = 1;
+    player.invuln = 0;
+    player.knockTimer = 0;
+
+    if (player._respawn){
+      player._respawn.active = false;
+      player._respawn.t = 0;
+      player._respawn.lastCount = 0;
+    }
+    if (player._damage){
+      player._damage.active = false;
+      player._damage.t = 0;
+      player._damage.pendingDeath = false;
+    }
+    if (player._deathAnim){
+      player._deathAnim.active = false;
+      player._deathAnim.t = 0;
+      player._deathAnim.fade = 1;
+      player._deathAnim.rot = 0;
+    }
+
+    hudCanvas.popups = [];
+    hudCanvas._prevPulseActive = false;
+    hudCanvas._prevFlares = player.flares|0;
+    hudCanvas._boostAcc = 0;
+    hudCanvas.flareFlash = 0;
+    hudCanvas.checkpointLit = false;
+    hudCanvas.checkpointRingT = 0;
   }
 
   function startNextQuest(){
@@ -438,6 +475,7 @@ const b = hudCanvas._pauseBtn;
       probe.pause();
       probe.currentTime = 0;
       menuMusicUnlocked = true;
+      music.current = null;
       updateMusicByState();
     };
 
@@ -1211,6 +1249,7 @@ const b = hudCanvas._pauseBtn;
           bootActive = false;
           paused = false;
           gameState = GameState.MENU;
+          unlockMenuMusicFromInteraction();
         }, 250);
       }
     }, stepMs);
