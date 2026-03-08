@@ -361,10 +361,30 @@
     intermissionReadyForInput = false;
     gameOverReadyForInput = false;
 
+    // New run must not inherit anything from the previous run.
+    levelManager.lastLoadedLevel = null;
+
+    checkpoint = null;
+    _cpKey = "";
+    if (hudCP) hudCP.textContent = "-";
+
     player.lives = 4;
     player.flares = 1;
     player.invuln = 0;
     player.knockTimer = 0;
+    player.lockMinX = 0;
+    player.checkpoint = null;
+    player._checkpointChanged = false;
+
+    // Ensure no old run state can complete after a menu restart.
+    player.x = 0;
+    player.y = 0;
+    player.vx = 0;
+    player.vy = 0;
+    player.onGround = false;
+    player.onPlatform = null;
+    player.coyoteTimer = 0;
+    player.jumpBufferTimer = 0;
 
     if (player._respawn){
       player._respawn.active = false;
@@ -388,6 +408,7 @@
     hudCanvas._prevFlares = player.flares|0;
     hudCanvas._boostAcc = 0;
     hudCanvas.flareFlash = 0;
+    hudCanvas.score = 0;
     hudCanvas.checkpointLit = false;
     hudCanvas.checkpointRingT = 0;
   }
