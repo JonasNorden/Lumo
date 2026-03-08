@@ -737,12 +737,21 @@ const b = hudCanvas._pauseBtn;
 
     if (gameState === GameState.MENU){
       const img = menuBackgroundImage;
+      let bgDrawX = 0;
+      let bgDrawY = 0;
+      let bgDrawW = r.w;
+      let bgDrawH = r.h;
+
       if (img && img.complete && img.naturalWidth > 0){
         const scale = Math.min(r.w / img.naturalWidth, r.h / img.naturalHeight);
         const drawW = img.naturalWidth * scale;
         const drawH = img.naturalHeight * scale;
         const drawX = (r.w - drawW) * 0.5;
         const drawY = (r.h - drawH) * 0.5;
+        bgDrawX = drawX;
+        bgDrawY = drawY;
+        bgDrawW = drawW;
+        bgDrawH = drawH;
         ctx.drawImage(img, drawX, drawY, drawW, drawH);
         drawMenuAmbientGlows(ctx, drawX, drawY, drawW, drawH, Lumo.Time.t || 0);
         drawMenuLumoSprite(ctx, drawX, drawY, drawW, drawH, Lumo.Time.t || 0);
@@ -753,18 +762,18 @@ const b = hudCanvas._pauseBtn;
 
       ctx.save();
 
-      const panelX = r.w * 0.37;
-      const panelY = (r.h * 0.475) - 13;
-      const textOffsetX = 20;
-      const textOffsetY = -14;
+      const panelX = bgDrawX + bgDrawW * 0.37;
+      const panelY = (bgDrawY + bgDrawH * 0.475) - 13;
+      const textOffsetX = bgDrawW * (20 / 1920);
+      const textOffsetY = bgDrawH * (-14 / 1080);
       const tilt = 0.03;
-      const lineH = Math.max(30, r.h * 0.056) * 0.88;
+      const lineH = Math.max(30, bgDrawH * 0.056) * 0.88;
 
       ctx.translate(panelX, panelY);
       ctx.rotate(tilt);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.font = `${Math.max(21, Math.round(r.h * 0.041))}px "Orbitron","Eurostile","Trebuchet MS",sans-serif`;
+      ctx.font = `${Math.max(21, Math.round(bgDrawH * 0.041))}px "Orbitron","Eurostile","Trebuchet MS",sans-serif`;
 
       menuUi.itemBounds = [];
       menuUi.beginQuestBounds = null;
