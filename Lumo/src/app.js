@@ -120,6 +120,7 @@
     gameplay: new Audio("data/assets/sfx/game_play_1.mp3"),
     current: null
   };
+  let menuMusicUnlocked = false;
   music.menu.loop = true;
   music.gameplay.loop = true;
   music.menu.volume = 0.42;
@@ -273,6 +274,7 @@
   canvas.addEventListener("mousedown", (e) => {
     if (bootActive) return;
     if (gameState === GameState.MENU){
+      unlockMenuMusicFromInteraction();
       const b = menuUi.beginQuestBounds;
       if (!b) return;
 
@@ -329,6 +331,7 @@ const b = hudCanvas._pauseBtn;
   // P = pause/resume
   window.addEventListener("keydown", (e) => {
     if (gameState === GameState.MENU){
+      unlockMenuMusicFromInteraction();
       if (e.repeat) return;
       if (e.key === "ArrowDown"){
         menuUi.selectedIndex = (menuUi.selectedIndex + 1) % menuItems.length;
@@ -416,11 +419,34 @@ const b = hudCanvas._pauseBtn;
 
     music.current = track || null;
     if (!track) return;
+    if (track === music.menu && !menuMusicUnlocked) return;
 
     const playP = track.play();
     if (playP && typeof playP.catch === "function"){
       playP.catch(() => {});
     }
+  }
+
+
+  function unlockMenuMusicFromInteraction(){
+    if (menuMusicUnlocked) return;
+    if (gameState !== GameState.MENU) return;
+
+    const probe = music.menu;
+    const playP = probe.play();
+    const onUnlocked = () => {
+      probe.pause();
+      probe.currentTime = 0;
+      menuMusicUnlocked = true;
+      updateMusicByState();
+    };
+
+    if (playP && typeof playP.then === "function"){
+      playP.then(onUnlocked).catch(() => {});
+      return;
+    }
+
+    onUnlocked();
   }
 
   function updateMusicByState(){
@@ -1035,39 +1061,46 @@ const b = hudCanvas._pauseBtn;
     updateMusicByState();
 
     if (!paused && gameState === GameState.PLAYING){
-      if (player.lives > 0){
+      const shouldUpdatePlayer =
+        player.lives > 0 ||
+        (typeof player.isDeathAnimating === "function" && player.isDeathAnimating()) ||
+        (typeof player.isRespawning === "function" && player.isRespawning());
+
+      if (shouldUpdatePlayer){
         player.update(dt, world);
 
-        const req = (typeof player.popThrowFlareRequest === "function")
-          ? player.popThrowFlareRequest()
-          : null;
+        if (player.lives > 0){
+          const req = (typeof player.popThrowFlareRequest === "function")
+            ? player.popThrowFlareRequest()
+            : null;
 
-        if (req){
-          if (typeof ents.spawnFlare === "function"){
-            ents.spawnFlare(req.x, req.y, req.vx, req.vy);
-          } else if (typeof ents.spawnThrownFlare === "function"){
-            ents.spawnThrownFlare(req.x, req.y);
+          if (req){
+            if (typeof ents.spawnFlare === "function"){
+              ents.spawnFlare(req.x, req.y, req.vx, req.vy);
+            } else if (typeof ents.spawnThrownFlare === "function"){
+              ents.spawnThrownFlare(req.x, req.y);
+            }
           }
-        }
 
-        ents.update(dt, world, player);
+          ents.update(dt, world, player);
 
-        // checkpoint activation comes from Entities.update → player.setCheckpoint()
-        syncCheckpointFromPlayer();
+          // checkpoint activation comes from Entities.update → player.setCheckpoint()
+          syncCheckpointFromPlayer();
 
-        // if we just respawned, snap camera immediately (CANON)
-        if (player._justRespawned){
-          player._justRespawned = false;
-          if (typeof cam.snapTo === "function"){
-            cam.snapTo(player, world.pxW, world.pxH);
+          // if we just respawned, snap camera immediately (CANON)
+          if (player._justRespawned){
+            player._justRespawned = false;
+            if (typeof cam.snapTo === "function"){
+              cam.snapTo(player, world.pxW, world.pxH);
+            } else {
+              cam.follow(player, world.pxW, world.pxH);
+            }
           } else {
             cam.follow(player, world.pxW, world.pxH);
           }
-        } else {
-          cam.follow(player, world.pxW, world.pxH);
-        }
 
-        handleInteractions();
+          handleInteractions();
+        }
       }
 
       detectHudEvents(dt);
