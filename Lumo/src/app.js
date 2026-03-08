@@ -115,6 +115,16 @@
   const menuLumoSpriteImage = new Image();
   menuLumoSpriteImage.src = "data/assets/ui/lumo_sprite.png";
 
+  const music = {
+    menu: new Audio("data/assets/sfx/menu_music.mp3"),
+    gameplay: new Audio("data/assets/sfx/game_play_1.mp3"),
+    current: null
+  };
+  music.menu.loop = true;
+  music.gameplay.loop = true;
+  music.menu.volume = 0.42;
+  music.gameplay.volume = 0.45;
+
   const menuItems = ["Begin Quest", "Settings", "Score Board", "Credits", "Fan Art"];
   const menuUi = {
     beginQuestBounds: null,
@@ -379,6 +389,10 @@ const b = hudCanvas._pauseBtn;
       return;
     }
     if (player.lives <= 0){
+      if (typeof player.isDeathAnimating === "function" && player.isDeathAnimating()){
+        gameState = GameState.PLAYING;
+        return;
+      }
       gameState = GameState.GAME_OVER;
       gameOverReadyForInput = true;
       if (prevState !== GameState.GAME_OVER){
@@ -388,6 +402,31 @@ const b = hudCanvas._pauseBtn;
     }
     gameState = GameState.PLAYING;
     gameOverReadyForInput = false;
+  }
+
+  function switchMusic(track){
+    if (music.current === track) return;
+
+    for (const a of [music.menu, music.gameplay]){
+      if (a !== track){
+        a.pause();
+        a.currentTime = 0;
+      }
+    }
+
+    music.current = track || null;
+    if (!track) return;
+
+    const playP = track.play();
+    if (playP && typeof playP.catch === "function"){
+      playP.catch(() => {});
+    }
+  }
+
+  function updateMusicByState(){
+    if (gameState === GameState.MENU) return switchMusic(music.menu);
+    if (gameState === GameState.PLAYING) return switchMusic(music.gameplay);
+    return switchMusic(null);
   }
 
   function drawTrackedText(ctx, text, x, y, spacing){
@@ -606,7 +645,11 @@ const b = hudCanvas._pauseBtn;
       }
     }
 
-    if ((player.invuln || 0) <= 0 && !(player.isRespawning && player.isRespawning())){
+    if (
+      (player.invuln || 0) <= 0 &&
+      !(player.isRespawning && player.isRespawning()) &&
+      !(typeof player.isDeathAnimating === "function" && player.isDeathAnimating())
+    ){
       const tiles = world.queryTiles(player.x, player.y, player.w, player.h);
       for (const t of tiles){
         if (t.def.hazard){
@@ -619,7 +662,11 @@ const b = hudCanvas._pauseBtn;
       }
     }
 
-    if ((player.invuln || 0) <= 0 && !(player.isRespawning && player.isRespawning())){
+    if (
+      (player.invuln || 0) <= 0 &&
+      !(player.isRespawning && player.isRespawning()) &&
+      !(typeof player.isDeathAnimating === "function" && player.isDeathAnimating())
+    ){
       for (const e of ents.items){
         if (!e.active) continue;
         if (!(e.type === "enemy" || e.type === "patrolEnemy")) continue;
@@ -641,7 +688,10 @@ const b = hudCanvas._pauseBtn;
       }
     }
 
-    if (player.lives <= 0){
+    if (
+      player.lives <= 0 &&
+      !(typeof player.isDeathAnimating === "function" && player.isDeathAnimating())
+    ){
       hudDebug.textContent = `Game Over → press Restart`;
       gameState = GameState.GAME_OVER;
     }
@@ -778,7 +828,7 @@ const b = hudCanvas._pauseBtn;
       kind: "player",
       x: (player.x + player.w/2) - cam.x,
       y: (player.y + 10) - cam.y,
-      r: player.lightRadius,
+      r: (typeof player.getRenderLightRadius === "function") ? player.getRenderLightRadius() : player.lightRadius,
       strength: 0.6,
       energy: (typeof player.energy === "number") ? player.energy : 1
     });
@@ -973,6 +1023,7 @@ const b = hudCanvas._pauseBtn;
     resize();
     const dt = Lumo.Time.tick();
     syncGameState();
+    updateMusicByState();
 
     if (!paused && gameState === GameState.PLAYING){
       if (player.lives > 0){
