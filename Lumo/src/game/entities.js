@@ -291,7 +291,11 @@ if (id === "flare_pickup_01"){
         }
 
 if (id === "dark_creature_01"){
-          const dc = this.makeDarkCreature(tx, ty, { w:18, h:18, params });
+          const mergedParams = { ...(params || {}) };
+          if (!Number.isFinite(+mergedParams.aggroTiles) && Number.isFinite(+e.aggroRadius)){
+            mergedParams.aggroRadius = +e.aggroRadius;
+          }
+          const dc = this.makeDarkCreature(tx, ty, { w:18, h:18, params: mergedParams });
           applyAnchor(dc, dc.w, dc.h);
           this.items.push(dc);
           return;
@@ -532,6 +536,7 @@ if (this._catById){
 
     // Dark creature med pixlar direkt (används för auto-spawn nära spelaren)
     makeDarkCreaturePx(px, py, w=18, h=18, params=null){
+      const ts = Lumo.TILE || 24;
       const nOr = (v, fallback) => {
         const n = +v;
         return Number.isFinite(n) ? n : fallback;
@@ -545,6 +550,12 @@ if (this._catById){
         }
         return !!v;
       };
+
+      const rawAggroTiles = nOr(params && params.aggroTiles, null);
+      const rawAggroRadiusPx = nOr(params && params.aggroRadius, null);
+      const aggroTiles = (rawAggroTiles != null)
+        ? rawAggroTiles
+        : ((rawAggroRadiusPx != null) ? (rawAggroRadiusPx / ts) : 0);
 
       return {
         type:"darkCreature",
@@ -563,7 +574,7 @@ if (this._catById){
         hitCooldown: nOr(params && params.hitCooldown, 0.6),
         safeDelay: nOr(params && params.safeDelay, 0.6),
         patrolTiles: nOr(params && params.patrolTiles, 0),
-        aggroTiles: nOr(params && params.aggroTiles, 0),
+        aggroTiles,
         energyLoss: nOr(params && params.energyLoss, 40),
         knockbackX: nOr(params && params.knockbackX, 260),
         knockbackY: nOr(params && params.knockbackY, -220),
@@ -686,12 +697,12 @@ if (this._catById){
       // auto-spawn dark creature nära spelaren (TEST-HELPER, AVSTÄNGD som default)
       // Aktivera manuellt vid behov: window.Lumo.DEBUG_TEST_DARKCREATURE = true;
       if (Lumo && Lumo.DEBUG_TEST_DARKCREATURE){
-        if (!this._autoSpawnedTestDarkCreature){
         let hasDC = false;
-        for (const e of this.items){
-          if (e.active && e.type === "darkCreature"){ hasDC = true; break; }
+        if (!this._autoSpawnedTestDarkCreature){
+          for (const e of this.items){
+            if (e.active && e.type === "darkCreature"){ hasDC = true; break; }
+          }
         }
-      }
         if (!hasDC && player){
           this.items.push(this.makeDarkCreaturePx(player.x + 300, player.y, 18, 18));
           this._autoSpawnedTestDarkCreature = true;
