@@ -12,6 +12,7 @@
   const GameState = Object.freeze({
     BOOTING: "booting",
     MENU: "menu",
+    SETTINGS: "settings",
     PLAYING: "playing",
     PAUSED: "paused",
     GAME_OVER: "game_over",
@@ -120,11 +121,23 @@
     gameplay: new Audio("data/assets/sfx/game_play_1.mp3"),
     current: null
   };
+  const SETTINGS_STORAGE_KEY = "lumo.settings.audio.v1";
+  const defaultAudioSettings = Object.freeze({
+    musicVolume: 0.42,
+    sfxVolume: 0.6
+  });
+  const audioSettings = loadAudioSettings();
+  const settingsItems = ["Music Volume", "SFX Volume", "Back"];
+  const settingsUi = {
+    selectedIndex: 0,
+    rowBounds: [],
+    sliderBounds: []
+  };
+  let sfxCtx = null;
   let menuMusicUnlocked = false;
   music.menu.loop = true;
   music.gameplay.loop = true;
-  music.menu.volume = 0.42;
-  music.gameplay.volume = 0.45;
+  applyMusicVolume(audioSettings.musicVolume);
 
   const menuItems = ["Begin Quest", "Settings", "Score Board", "Credits", "Fan Art"];
   const menuUi = {
@@ -150,6 +163,104 @@
     { x: 0.742, y: 0.214, r: 0.018, amp: 0.39, speed: 0.57, phase: 4.9 },
     { x: 0.848, y: 0.566, r: 0.017, amp: 0.37, speed: 0.43, phase: 5.4 }
   ];
+
+  function clamp01(v){
+    return Math.max(0, Math.min(1, Number(v) || 0));
+  }
+
+  function loadAudioSettings(){
+    try {
+      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (!raw) return { ...defaultAudioSettings };
+      const parsed = JSON.parse(raw);
+      return {
+        musicVolume: clamp01(parsed.musicVolume),
+        sfxVolume: clamp01(parsed.sfxVolume)
+      };
+    } catch (_err){
+      return { ...defaultAudioSettings };
+    }
+  }
+
+  function saveAudioSettings(){
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(audioSettings));
+    } catch (_err){
+      // ignore write errors
+    }
+  }
+
+  function applyMusicVolume(v){
+    const vol = clamp01(v);
+    audioSettings.musicVolume = vol;
+    music.menu.volume = vol;
+    music.gameplay.volume = vol;
+  }
+
+  function getSfxCtx(){
+    if (!sfxCtx){
+      const Ctor = window.AudioContext || window.webkitAudioContext;
+      if (!Ctor) return null;
+      sfxCtx = new Ctor();
+    }
+    return sfxCtx;
+  }
+
+  function playUiSfx(kind){
+    const vol = clamp01(audioSettings.sfxVolume);
+    if (vol <= 0.001) return;
+
+    const ctx = getSfxCtx();
+    if (!ctx) return;
+    if (ctx.state === "suspended"){
+      ctx.resume().catch(() => {});
+    }
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const isConfirm = kind === "confirm";
+
+    osc.type = isConfirm ? "triangle" : "sine";
+    osc.frequency.setValueAtTime(isConfirm ? 580 : 420, now);
+    osc.frequency.exponentialRampToValueAtTime(isConfirm ? 740 : 360, now + (isConfirm ? 0.09 : 0.06));
+
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol * (isConfirm ? 0.09 : 0.06)), now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + (isConfirm ? 0.13 : 0.08));
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + (isConfirm ? 0.15 : 0.1));
+  }
+
+  function setSfxVolume(v){
+    audioSettings.sfxVolume = clamp01(v);
+  }
+
+  function adjustSelectedSetting(delta){
+    if (settingsUi.selectedIndex === 0){
+      applyMusicVolume(audioSettings.musicVolume + delta);
+      saveAudioSettings();
+      playUiSfx("navigate");
+    } else if (settingsUi.selectedIndex === 1){
+      setSfxVolume(audioSettings.sfxVolume + delta);
+      saveAudioSettings();
+      playUiSfx("navigate");
+    }
+  }
+
+  function returnToMenuFromSettings(){
+    gameState = GameState.MENU;
+    playUiSfx("confirm");
+  }
+
+  function enterSettings(){
+    settingsUi.selectedIndex = 0;
+    gameState = GameState.SETTINGS;
+    playUiSfx("confirm");
+  }
 
   function drawMenuAmbientGlows(ctx, drawX, drawY, drawW, drawH, t){
     const minSize = Math.min(drawW, drawH);
@@ -312,17 +423,58 @@
     if (bootActive) return;
     if (gameState === GameState.MENU){
       unlockMenuMusicFromInteraction();
-      const b = menuUi.beginQuestBounds;
-      if (!b) return;
-
       const rect = canvas.getBoundingClientRect();
       const sx = r.w / rect.width;
       const sy = r.h / rect.height;
       const mx = (e.clientX - rect.left) * sx;
       const my = (e.clientY - rect.top) * sy;
 
-      if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
-        startMenuQuest();
+      for (let i = 0; i < menuUi.itemBounds.length; i++){
+        const b = menuUi.itemBounds[i];
+        if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
+          menuUi.selectedIndex = i;
+          if (i === 0){
+            playUiSfx("confirm");
+            startMenuQuest();
+          } else if (i === 1){
+            enterSettings();
+          }
+          break;
+        }
+      }
+      return;
+    }
+
+    if (gameState === GameState.SETTINGS){
+      const rect = canvas.getBoundingClientRect();
+      const sx = r.w / rect.width;
+      const sy = r.h / rect.height;
+      const mx = (e.clientX - rect.left) * sx;
+      const my = (e.clientY - rect.top) * sy;
+
+      for (let i = 0; i < settingsUi.rowBounds.length; i++){
+        const b = settingsUi.rowBounds[i];
+        if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
+          settingsUi.selectedIndex = i;
+          if (i === 2){
+            returnToMenuFromSettings();
+            return;
+          }
+        }
+      }
+
+      for (let i = 0; i < settingsUi.sliderBounds.length; i++){
+        const b = settingsUi.sliderBounds[i];
+        if (!b) continue;
+        if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
+          const pct = clamp01((mx - b.x) / b.w);
+          settingsUi.selectedIndex = i;
+          if (i === 0) applyMusicVolume(pct);
+          if (i === 1) setSfxVolume(pct);
+          saveAudioSettings();
+          playUiSfx("navigate");
+          return;
+        }
       }
       return;
     }
@@ -347,8 +499,7 @@ const b = hudCanvas._pauseBtn;
   });
 
   canvas.addEventListener("mousemove", (e) => {
-    if (bootActive || gameState !== GameState.MENU) return;
-    if (!menuUi.itemBounds.length) return;
+    if (bootActive) return;
 
     const rect = canvas.getBoundingClientRect();
     const sx = r.w / rect.width;
@@ -356,11 +507,39 @@ const b = hudCanvas._pauseBtn;
     const mx = (e.clientX - rect.left) * sx;
     const my = (e.clientY - rect.top) * sy;
 
-    for (let i = 0; i < menuUi.itemBounds.length; i++){
-      const b = menuUi.itemBounds[i];
+    if (gameState === GameState.MENU){
+      if (!menuUi.itemBounds.length) return;
+
+      for (let i = 0; i < menuUi.itemBounds.length; i++){
+        const b = menuUi.itemBounds[i];
+        if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
+          menuUi.selectedIndex = i;
+          break;
+        }
+      }
+      return;
+    }
+
+    if (gameState !== GameState.SETTINGS) return;
+
+    for (let i = 0; i < settingsUi.rowBounds.length; i++){
+      const b = settingsUi.rowBounds[i];
       if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
-        menuUi.selectedIndex = i;
+        settingsUi.selectedIndex = i;
         break;
+      }
+    }
+
+    if ((e.buttons & 1) === 0) return;
+    for (let i = 0; i < settingsUi.sliderBounds.length; i++){
+      const b = settingsUi.sliderBounds[i];
+      if (!b) continue;
+      if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
+        const pct = clamp01((mx - b.x) / b.w);
+        settingsUi.selectedIndex = i;
+        if (i === 0) applyMusicVolume(pct);
+        if (i === 1) setSfxVolume(pct);
+        saveAudioSettings();
       }
     }
   });
@@ -372,16 +551,61 @@ const b = hudCanvas._pauseBtn;
       if (e.repeat) return;
       if (e.key === "ArrowDown"){
         menuUi.selectedIndex = (menuUi.selectedIndex + 1) % menuItems.length;
+        playUiSfx("navigate");
         e.preventDefault();
         return;
       }
       if (e.key === "ArrowUp"){
         menuUi.selectedIndex = (menuUi.selectedIndex - 1 + menuItems.length) % menuItems.length;
+        playUiSfx("navigate");
         e.preventDefault();
         return;
       }
       if (e.key === "Enter" || e.key === " "){
-        if (menuUi.selectedIndex === 0) startMenuQuest();
+        if (menuUi.selectedIndex === 0){
+          playUiSfx("confirm");
+          startMenuQuest();
+        } else if (menuUi.selectedIndex === 1){
+          enterSettings();
+        }
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if (gameState === GameState.SETTINGS){
+      if (e.repeat) return;
+      if (e.key === "Escape"){
+        returnToMenuFromSettings();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "ArrowDown"){
+        settingsUi.selectedIndex = (settingsUi.selectedIndex + 1) % settingsItems.length;
+        playUiSfx("navigate");
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "ArrowUp"){
+        settingsUi.selectedIndex = (settingsUi.selectedIndex - 1 + settingsItems.length) % settingsItems.length;
+        playUiSfx("navigate");
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "ArrowLeft"){
+        adjustSelectedSetting(-0.05);
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "ArrowRight"){
+        adjustSelectedSetting(0.05);
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "Enter" || e.key === " "){
+        if (settingsUi.selectedIndex === 2){
+          returnToMenuFromSettings();
+        }
         e.preventDefault();
       }
       return;
@@ -426,6 +650,9 @@ const b = hudCanvas._pauseBtn;
       return;
     }
     if (gameState === GameState.MENU){
+      return;
+    }
+    if (gameState === GameState.SETTINGS){
       return;
     }
     if (player.lives <= 0){
@@ -488,7 +715,7 @@ const b = hudCanvas._pauseBtn;
   }
 
   function updateMusicByState(){
-    if (gameState === GameState.MENU) return switchMusic(music.menu);
+    if (gameState === GameState.MENU || gameState === GameState.SETTINGS) return switchMusic(music.menu);
     if (gameState === GameState.PLAYING) return switchMusic(music.gameplay);
     return switchMusic(null);
   }
@@ -876,6 +1103,99 @@ const b = hudCanvas._pauseBtn;
           menuUi.beginQuestBounds = bounds;
         }
       }
+      ctx.restore();
+      return;
+    }
+
+    if (gameState === GameState.SETTINGS){
+      const img = menuBackgroundImage;
+      if (img && img.complete && img.naturalWidth > 0){
+        const scale = Math.min(r.w / img.naturalWidth, r.h / img.naturalHeight);
+        const drawW = img.naturalWidth * scale;
+        const drawH = img.naturalHeight * scale;
+        const drawX = (r.w - drawW) * 0.5;
+        const drawY = (r.h - drawH) * 0.5;
+        ctx.drawImage(img, drawX, drawY, drawW, drawH);
+        drawMenuAmbientGlows(ctx, drawX, drawY, drawW, drawH, Lumo.Time.t || 0);
+      } else {
+        ctx.fillStyle = "#03131A";
+        ctx.fillRect(0, 0, r.w, r.h);
+      }
+
+      const panelW = Math.min(r.w * 0.68, 780);
+      const panelH = Math.min(r.h * 0.64, 500);
+      const panelX = (r.w - panelW) * 0.5;
+      const panelY = (r.h - panelH) * 0.5;
+
+      settingsUi.rowBounds = [];
+      settingsUi.sliderBounds = [];
+
+      ctx.save();
+      ctx.fillStyle = "rgba(4,16,24,0.72)";
+      ctx.strokeStyle = "rgba(111,241,255,0.48)";
+      ctx.lineWidth = 2;
+      ctx.shadowColor = "rgba(93,217,255,0.2)";
+      ctx.shadowBlur = 18;
+      ctx.fillRect(panelX, panelY, panelW, panelH);
+      ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = `${Math.max(28, Math.round(r.h * 0.055))}px "Orbitron","Trebuchet MS",sans-serif`;
+      ctx.fillStyle = "#CFFFFF";
+      ctx.fillText("SETTINGS", r.w * 0.5, panelY + panelH * 0.14);
+
+      const labels = ["Music Volume", "SFX Volume"];
+      const values = [audioSettings.musicVolume, audioSettings.sfxVolume];
+
+      for (let i = 0; i < labels.length; i++){
+        const rowY = panelY + panelH * (0.34 + i * 0.22);
+        const isActive = settingsUi.selectedIndex === i;
+        const rowRect = { x: panelX + panelW * 0.1, y: rowY - 22, w: panelW * 0.8, h: 44 };
+        settingsUi.rowBounds.push(rowRect);
+
+        ctx.textAlign = "left";
+        ctx.font = `${Math.max(20, Math.round(r.h * 0.038))}px "Trebuchet MS",sans-serif`;
+        ctx.fillStyle = isActive ? "#D6FFFF" : "#8CE8F5";
+        ctx.fillText(labels[i], panelX + panelW * 0.1, rowY - 30);
+
+        const sliderX = panelX + panelW * 0.1;
+        const sliderY = rowY;
+        const sliderW = panelW * 0.8;
+        const sliderH = 12;
+        settingsUi.sliderBounds[i] = { x: sliderX, y: sliderY - sliderH, w: sliderW, h: sliderH * 2 };
+
+        ctx.fillStyle = "rgba(16,59,74,0.86)";
+        ctx.fillRect(sliderX, sliderY - sliderH * 0.5, sliderW, sliderH);
+
+        ctx.fillStyle = isActive ? "#93F6FF" : "#66CFE3";
+        ctx.fillRect(sliderX, sliderY - sliderH * 0.5, sliderW * values[i], sliderH);
+
+        const knobX = sliderX + sliderW * values[i];
+        ctx.fillStyle = isActive ? "#E4FFFF" : "#B2F4FF";
+        ctx.beginPath();
+        ctx.arc(knobX, sliderY, 9, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.textAlign = "right";
+        ctx.font = `${Math.max(18, Math.round(r.h * 0.03))}px "Orbitron","Trebuchet MS",sans-serif`;
+        ctx.fillStyle = "#D6F7FF";
+        ctx.fillText(`${Math.round(values[i] * 100)}%`, panelX + panelW * 0.9, rowY - 30);
+      }
+
+      const backY = panelY + panelH * 0.85;
+      const backActive = settingsUi.selectedIndex === 2;
+      const backText = "Back to Main Menu";
+      ctx.textAlign = "center";
+      ctx.font = `${Math.max(22, Math.round(r.h * 0.04))}px "Trebuchet MS",sans-serif`;
+      ctx.fillStyle = backActive ? "#D6FFFF" : "#8CE8F5";
+      ctx.fillText(backText, r.w * 0.5, backY);
+      const bw = ctx.measureText(backText).width;
+      settingsUi.rowBounds.push({ x: r.w * 0.5 - bw * 0.5, y: backY - 22, w: bw, h: 44 });
+
+      ctx.font = `${Math.max(14, Math.round(r.h * 0.024))}px "Trebuchet MS",sans-serif`;
+      ctx.fillStyle = "rgba(191,237,244,0.92)";
+      ctx.fillText("↑/↓ välj • ←/→ justera • Enter/Esc tillbaka", r.w * 0.5, panelY + panelH * 0.95);
       ctx.restore();
       return;
     }
