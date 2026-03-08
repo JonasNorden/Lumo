@@ -44,7 +44,7 @@ window.LUMO_CATALOG_ENTITIES = [
     "name": "Dark Creature",
     "group": "Creatures",
     "category": "decor",
-    "img": "data/assets/sprites/creatures/dark_creature_01.png",
+    "img": "data/assets/sprites/creatures/dc_idle_3.png",
     "anchor": "BL"
   },
   {

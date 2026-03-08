@@ -47,6 +47,12 @@
   // lantern (static safe light)
   lantern: this._tryLoadImage("data/assets/sprites/lights/lantern_01.png"),
 
+  // dark creature idle loop (2-frame)
+  darkCreatureIdle: [
+    this._tryLoadImage("data/assets/sprites/creatures/dc_idle_3.png"),
+    this._tryLoadImage("data/assets/sprites/creatures/dc_idle_4.png")
+  ],
+
   // checkpoint (try a few common legacy paths)
   checkpoints: [
       this._tryLoadImage("data/assets/sprites/lights/lantern_2.png"),
@@ -545,6 +551,7 @@ if (this._catById){
         knockbackX: (params && params.knockbackX != null) ? (+params.knockbackX) : 260,
         knockbackY: (params && params.knockbackY != null) ? (+params.knockbackY) : -220,
         reactsToFlares: (params && params.reactsToFlares != null) ? (!!params.reactsToFlares) : true,
+        _animT: Math.random() * 0.8,
         solid:false
       };
     }
@@ -832,6 +839,7 @@ if (e.type === "lantern"){
 
 
         if (e.type === "darkCreature"){
+          e._animT = (e._animT || 0) + dt;
           if (e._hitCd > 0) e._hitCd -= dt;
 
           // lit test: player + flares only (lantern ignored intentionally)
@@ -1584,10 +1592,31 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
         }
 
         if (e.type === "darkCreature"){
-          // gul i mörker (farlig), rosa i ljus (safe)
-          const color = e.isDarkActive ? "rgba(255,230,80,0.95)" : "rgba(255,80,200,0.95)";
-          ctx.fillStyle = color;
-          ctx.fillRect(sx, sy, e.w, e.h);
+          const frames = (this.sprites && Array.isArray(this.sprites.darkCreatureIdle))
+            ? this.sprites.darkCreatureIdle
+            : [];
+
+          const frameDur = 0.4;
+          const frameIdx = Math.floor((e._animT || 0) / frameDur) % 2;
+          const img = frames[frameIdx] || frames[0] || null;
+
+          if (img && img._ok){
+            const iw = (img.naturalWidth || img.width || 1);
+            const ih = (img.naturalHeight || img.height || 1);
+            const scale = Math.min(48 / iw, 48 / ih);
+            const drawW = iw * scale;
+            const drawH = ih * scale;
+
+            // Keep collision footprint unchanged; render sprite centered and bottom-aligned.
+            const drawX = sx + (e.w - drawW) * 0.5;
+            const drawY = sy + e.h - drawH;
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
+          } else {
+            // fallback if sprite not loaded
+            const color = e.isDarkActive ? "rgba(255,230,80,0.95)" : "rgba(255,80,200,0.95)";
+            ctx.fillStyle = color;
+            ctx.fillRect(sx, sy, e.w, e.h);
+          }
         }
       }
     }
