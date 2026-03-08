@@ -53,6 +53,14 @@
     this._tryLoadImage("data/assets/sprites/creatures/dc_idle_4.png")
   ],
 
+  // dark spell projectile + impact/hazard sequence
+  darkSpell: {
+    flight: this._tryLoadImage("data/assets/sprites/creatures/void_m_04.png"),
+    impact03: this._tryLoadImage("data/assets/sprites/creatures/void_m_03.png"),
+    impact02: this._tryLoadImage("data/assets/sprites/creatures/void_m_02.png"),
+    impact01: this._tryLoadImage("data/assets/sprites/creatures/void_m_01.png")
+  },
+
   // checkpoint (try a few common legacy paths)
   checkpoints: [
       this._tryLoadImage("data/assets/sprites/lights/lantern_2.png"),
@@ -575,13 +583,77 @@ if (this._catById){
         safeDelay: nOr(params && params.safeDelay, 0.6),
         patrolTiles: nOr(params && params.patrolTiles, 0),
         aggroTiles,
+        aggroRadiusPx: (rawAggroRadiusPx != null) ? rawAggroRadiusPx : null,
         energyLoss: nOr(params && params.energyLoss, 40),
         knockbackX: nOr(params && params.knockbackX, 260),
         knockbackY: nOr(params && params.knockbackY, -220),
+        castCooldown: nOr(params && params.castCooldown, 5.5),
+        spellSpeedX: nOr(params && params.spellSpeedX, 190),
+        spellGravity: nOr(params && params.spellGravity, 760),
+        _castCd: Math.random() * 0.35,
+        _pulseHitId: -1,
         reactsToFlares: boolOr(params && params.reactsToFlares, true),
         _animT: Math.random() * 0.8,
         solid:false
       };
+    }
+
+    _damagePlayer(player, sourceCx, knockbackX, knockbackY, energyLoss){
+      if (!player) return;
+      const dir = Math.sign((player.x + player.w*0.5) - sourceCx) || 1;
+      const kbX = dir * knockbackX;
+      if (typeof player.takeHit === "function"){
+        player.takeHit({ knockbackX: kbX, knockbackY, energyLoss });
+        return;
+      }
+      player.vx += kbX;
+      player.vy = knockbackY;
+      if (typeof player.energy === "number" && typeof player.setEnergy === "function"){
+        player.setEnergy(player.energy - (energyLoss / 100));
+      }
+    }
+
+    spawnDarkSpellProjectile(x, y, vx, vy, source){
+      this.items.push({
+        type:"darkSpellProjectile",
+        active:true,
+        x, y,
+        w:12,
+        h:12,
+        vx, vy,
+        gravity: source?.spellGravity || 760,
+        rot: Math.atan2(vy, vx),
+        age:0,
+        maxAge:4.0,
+        energyLoss: source?.energyLoss ?? 40,
+        knockbackX: source?.knockbackX ?? 260,
+        knockbackY: source?.knockbackY ?? -220,
+      });
+    }
+
+    spawnDarkSpellHazard(centerX, centerY, source){
+      const w = 18;
+      const h = 18;
+      this.items.push({
+        type:"darkSpellHazard",
+        active:true,
+        x:centerX - w*0.5,
+        y:centerY - h*0.5,
+        w, h,
+        vy:0,
+        gravity: source?.spellGravity || 760,
+        t:0,
+        impactSeq:0.45,
+        life:5.0,
+        fadeStart:3.9,
+        alpha:1,
+        falling:true,
+        grounded:false,
+        hitCd:0,
+        energyLoss: source?.energyLoss ?? 40,
+        knockbackX: source?.knockbackX ?? 260,
+        knockbackY: source?.knockbackY ?? -220,
+      });
     }
 
     // Dark creature från tile-coords (level-data)
@@ -842,6 +914,75 @@ if (e.type === "lantern"){
           }
         }
 
+        if (e.type === "darkSpellProjectile"){
+          e.age += dt;
+          e.vy += (e.gravity || 760) * dt;
+          e.x += e.vx * dt;
+          e.y += e.vy * dt;
+          e.rot = Math.atan2(e.vy || 0, e.vx || 0);
+
+          let impacted = false;
+
+          if (player && this.aabb(player.x, player.y, player.w, player.h, e.x, e.y, e.w, e.h)){
+            const cx = e.x + e.w*0.5;
+            this._damagePlayer(player, cx, e.knockbackX ?? 260, e.knockbackY ?? -220, e.energyLoss ?? 40);
+            impacted = true;
+          }
+
+          const col = world.collideRect(e.x, e.y, e.w, e.h);
+          if (!impacted && col.hit){
+            e.x += col.nx * col.depth;
+            e.y += col.ny * col.depth;
+            impacted = true;
+          }
+
+          if (!impacted && e.age >= (e.maxAge || 4.0)) impacted = true;
+
+          if (impacted){
+            this.spawnDarkSpellHazard(e.x + e.w*0.5, e.y + e.h*0.5, e);
+            e.active = false;
+            continue;
+          }
+        }
+
+        if (e.type === "darkSpellHazard"){
+          e.t += dt;
+          if (e.hitCd > 0) e.hitCd -= dt;
+
+          if (e.falling){
+            e.vy += (e.gravity || 760) * dt;
+            e.y += e.vy * dt;
+            const col = world.collideRect(e.x, e.y, e.w, e.h);
+            if (col.hit){
+              e.x += col.nx * col.depth;
+              e.y += col.ny * col.depth;
+              if (col.ny === -1){
+                e.falling = false;
+                e.grounded = true;
+                e.vy = 0;
+              }
+            }
+          }
+
+          if (e.t >= (e.fadeStart || 3.9)){
+            const left = Math.max(0.001, (e.life || 5) - (e.fadeStart || 3.9));
+            e.alpha = Math.max(0, ((e.life || 5) - e.t) / left);
+          } else {
+            e.alpha = 1;
+          }
+
+          if (player && e.hitCd <= 0 && e.alpha > 0.02 && this.aabb(player.x, player.y, player.w, player.h, e.x, e.y, e.w, e.h)){
+            const cx = e.x + e.w*0.5;
+            this._damagePlayer(player, cx, e.knockbackX ?? 260, e.knockbackY ?? -220, e.energyLoss ?? 40);
+            e.hitCd = 0.5;
+          }
+
+          if (e.t >= (e.life || 5)){
+            e.active = false;
+            continue;
+          }
+        }
+
         if (e.type === "patrolEnemy"){
           if (!e.chasing){
             e.x += e.vx * dt;
@@ -869,6 +1010,7 @@ if (e.type === "lantern"){
         if (e.type === "darkCreature"){
           e._animT = (e._animT || 0) + dt;
           if (e._hitCd > 0) e._hitCd -= dt;
+          if (e._castCd > 0) e._castCd -= dt;
 
           // lit test: player + flares only (lantern ignored intentionally)
           const cx = e.x + e.w/2;
@@ -902,41 +1044,45 @@ if (e.type === "lantern"){
             }
           }
 
-          // Movement: patrol around home, and aggro-chase player when close.
-          const patrolPx = Math.max(0, (e.patrolTiles || 0) * ts);
-          const aggroPx = Math.max(0, (e.aggroTiles || 0) * ts);
-          const baseSpeed = 72;
+          // Stand-ground behavior: no patrol, no chase, no facing/rotation changes.
+          e.vx = 0;
 
-          let targetVx = 0;
-          if (player && aggroPx > 0){
+          const aggroPx = (typeof e.aggroRadiusPx === "number" && e.aggroRadiusPx > 0)
+            ? e.aggroRadiusPx
+            : Math.max(0, (e.aggroTiles || 0) * ts);
+
+          const insideLumoAura = this.isPointLitFromPlayerOnly(cx, cy, player);
+          if (player && e.isDarkActive && !insideLumoAura && aggroPx > 0 && e._castCd <= 0){
             const pcx = player.x + player.w/2;
             const pcy = player.y + player.h/2;
-            const d = Math.hypot(pcx - cx, pcy - cy);
-            if (d <= aggroPx && e.isDarkActive){
-              targetVx = Math.sign(pcx - cx) * (baseSpeed * 1.35);
+            const dx = pcx - cx;
+            const dy = pcy - cy;
+            const d = Math.hypot(dx, dy);
+            if (d <= aggroPx){
+              const dir = (Math.abs(dx) < 0.001) ? 1 : Math.sign(dx);
+              const vxAbs = Math.min(260, Math.max(120, Math.abs(e.spellSpeedX || 190)));
+              const vx = dir * vxAbs;
+              const gSpell = (e.spellGravity || 760);
+              const tFlight = Math.max(0.25, Math.min(1.25, Math.abs(dx) / Math.max(1, Math.abs(vx))));
+              let vy = (dy - (0.5 * gSpell * tFlight * tFlight)) / tFlight;
+              if (!Number.isFinite(vy)) vy = -220;
+              vy = Math.max(-560, Math.min(240, vy));
+
+              this.spawnDarkSpellProjectile(cx - 6, cy - 10, vx, vy, e);
+              e._castCd = Math.max(0.1, e.castCooldown || 5.5);
             }
           }
 
-          if (targetVx === 0 && patrolPx > 0){
-            if (typeof e._patrolDir !== "number" || e._patrolDir === 0){
-              e._patrolDir = (Math.random() < 0.5) ? -1 : 1;
-            }
-            const leftBound = (e.homeX || e.x) - patrolPx;
-            const rightBound = (e.homeX || e.x) + patrolPx;
-            if (e.x <= leftBound) e._patrolDir = 1;
-            else if (e.x >= rightBound) e._patrolDir = -1;
-            targetVx = e._patrolDir * baseSpeed;
-          }
-
-          e.vx = targetVx;
-          if (e.vx){
-            const nx = e.x + e.vx * dt;
-            const col = world.collideRect(nx, e.y, e.w, e.h);
-            if (!col.hit){
-              e.x = nx;
-            } else {
-              e._patrolDir = -((e._patrolDir || 1));
-              e.vx = 0;
+          if (player && player.pulse && player.pulse.active){
+            const pulseId = (typeof player.pulse.id === "number") ? player.pulse.id : 0;
+            const dist = Math.hypot((player.x + player.w*0.5) - cx, (player.y + player.h*0.5) - cy);
+            if (pulseId !== e._pulseHitId && dist <= (player.pulse.r + Math.max(e.w, e.h)*0.55)){
+              e._pulseHitId = pulseId;
+              e.hp = (Number.isFinite(e.hp) ? e.hp : 3) - 1;
+              if (e.hp <= 0){
+                e.active = false;
+                continue;
+              }
             }
           }
 
@@ -1412,6 +1558,7 @@ if (e.type === "lantern"){
           const d = Math.hypot(x - cx, y - cy);
           if (d <= r && d <= rad) return true;
         }
+
       }
 
       return false;
@@ -1669,6 +1816,45 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
             ctx.fillStyle = "rgba(170,120,255,0.85)";
             ctx.fillRect(sx, sy, e.w, e.h);
           }
+        }
+
+        if (e.type === "darkSpellProjectile"){
+          const spr = this.sprites && this.sprites.darkSpell;
+          const img = spr && spr.flight;
+          if (img && img._ok){
+            const cx = sx + e.w * 0.5;
+            const cy = sy + e.h * 0.5;
+            const size = Math.max(e.w, e.h) * 1.8;
+            ctx.save();
+            ctx.translate(cx, cy);
+            ctx.rotate(e.rot || 0);
+            ctx.drawImage(img, -size/2, -size/2, size, size);
+            ctx.restore();
+          } else {
+            ctx.fillStyle = "rgba(160,120,255,0.9)";
+            ctx.fillRect(sx, sy, e.w, e.h);
+          }
+        }
+
+        if (e.type === "darkSpellHazard"){
+          const spr = this.sprites && this.sprites.darkSpell;
+          const t = e.t || 0;
+          let img = spr && spr.impact01;
+          if (t < 0.15) img = spr && spr.impact03;
+          else if (t < 0.30) img = spr && spr.impact02;
+
+          ctx.save();
+          ctx.globalAlpha = Math.max(0, Math.min(1, (typeof e.alpha === "number") ? e.alpha : 1));
+          if (img && img._ok){
+            const size = Math.max(e.w, e.h) * 2.1;
+            const cx = sx + e.w * 0.5;
+            const cy = sy + e.h * 0.5;
+            ctx.drawImage(img, cx - size*0.5, cy - size*0.5, size, size);
+          } else {
+            ctx.fillStyle = "rgba(145,110,210,0.85)";
+            ctx.fillRect(sx, sy, e.w, e.h);
+          }
+          ctx.restore();
         }
 
         if (e.type === "movingPlatform"){

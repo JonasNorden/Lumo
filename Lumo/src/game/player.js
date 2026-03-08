@@ -70,7 +70,7 @@
       this.boostMult = 1.55;
 
       // Pulse
-      this.pulse = { active:false, r:0, alpha:0, thickness:3 };
+      this.pulse = { active:false, r:0, alpha:0, thickness:3, id:0 };
 
       // Flares
       this.flares = 1;
@@ -331,6 +331,7 @@
       this.pulse.r = 8;
       this.pulse.alpha = 0.9;
       this.pulse.thickness = 3;
+      this.pulse.id = ((this.pulse.id|0) + 1) | 0;
     }
 
     updatePulse(dt){
