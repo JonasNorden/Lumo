@@ -291,7 +291,7 @@ if (id === "flare_pickup_01"){
         }
 
 if (id === "dark_creature_01"){
-          const dc = this.makeDarkCreature(tx, ty, { w:18, h:18, params: e.params });
+          const dc = this.makeDarkCreature(tx, ty, { w:18, h:18, params });
           applyAnchor(dc, dc.w, dc.h);
           this.items.push(dc);
           return;

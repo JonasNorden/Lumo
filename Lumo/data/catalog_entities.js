@@ -45,7 +45,29 @@ window.LUMO_CATALOG_ENTITIES = [
     "group": "Creatures",
     "category": "decor",
     "img": "data/assets/sprites/creatures/dc_idle_3.png",
-    "anchor": "BL"
+    "anchor": "BL",
+    "defaults": {
+      "hp": 3,
+      "hitCooldown": 0.6,
+      "safeDelay": 0.6,
+      "patrolTiles": 0,
+      "aggroTiles": 0,
+      "energyLoss": 40,
+      "knockbackX": 260,
+      "knockbackY": -220,
+      "reactsToFlares": true
+    },
+    "shownParams": [
+      "hp",
+      "hitCooldown",
+      "safeDelay",
+      "patrolTiles",
+      "aggroTiles",
+      "energyLoss",
+      "knockbackX",
+      "knockbackY",
+      "reactsToFlares"
+    ]
   },
   {
     "id": "decor_flower_01",
