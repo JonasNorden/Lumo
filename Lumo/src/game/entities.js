@@ -532,25 +532,42 @@ if (this._catById){
 
     // Dark creature med pixlar direkt (används för auto-spawn nära spelaren)
     makeDarkCreaturePx(px, py, w=18, h=18, params=null){
+      const nOr = (v, fallback) => {
+        const n = +v;
+        return Number.isFinite(n) ? n : fallback;
+      };
+      const boolOr = (v, fallback) => {
+        if (v == null) return fallback;
+        if (typeof v === "string"){
+          const t = v.trim().toLowerCase();
+          if (t === "false" || t === "0" || t === "no") return false;
+          if (t === "true" || t === "1" || t === "yes") return true;
+        }
+        return !!v;
+      };
+
       return {
         type:"darkCreature",
         active:true,
         x:px,
         y:py,
         w, h,
+        homeX: px,
         _dangerT: 0,
         _hitCd: 0,
+        _lightTick: 0,
         isDarkActive:false,
+        vx: 0,
         // params (optional)
-        hp: (params && params.hp != null) ? (+params.hp) : 3,
-        hitCooldown: (params && params.hitCooldown != null) ? (+params.hitCooldown) : 0.6,
-        safeDelay: (params && params.safeDelay != null) ? (+params.safeDelay) : 0.6,
-        patrolTiles: (params && params.patrolTiles != null) ? (+params.patrolTiles) : 0,
-        aggroTiles: (params && params.aggroTiles != null) ? (+params.aggroTiles) : 0,
-        energyLoss: (params && params.energyLoss != null) ? (+params.energyLoss) : 40,
-        knockbackX: (params && params.knockbackX != null) ? (+params.knockbackX) : 260,
-        knockbackY: (params && params.knockbackY != null) ? (+params.knockbackY) : -220,
-        reactsToFlares: (params && params.reactsToFlares != null) ? (!!params.reactsToFlares) : true,
+        hp: nOr(params && params.hp, 3),
+        hitCooldown: nOr(params && params.hitCooldown, 0.6),
+        safeDelay: nOr(params && params.safeDelay, 0.6),
+        patrolTiles: nOr(params && params.patrolTiles, 0),
+        aggroTiles: nOr(params && params.aggroTiles, 0),
+        energyLoss: nOr(params && params.energyLoss, 40),
+        knockbackX: nOr(params && params.knockbackX, 260),
+        knockbackY: nOr(params && params.knockbackY, -220),
+        reactsToFlares: boolOr(params && params.reactsToFlares, true),
         _animT: Math.random() * 0.8,
         solid:false
       };
@@ -851,7 +868,21 @@ if (e.type === "lantern"){
             // safe while lit, but keep danger for a moment after light ends
             e.isDarkActive = false;
             e._dangerT = (e.safeDelay != null ? e.safeDelay : 0.25);
+
+            // Light hurts dark creatures over time; hp decides how long they survive in light.
+            // This makes flare/player light interactions meaningful and predictable.
+            e._lightTick = (e._lightTick || 0) + dt;
+            if (e._lightTick >= 1.0){
+              const dmg = Math.floor(e._lightTick);
+              e._lightTick -= dmg;
+              e.hp = (Number.isFinite(e.hp) ? e.hp : 3) - dmg;
+              if (e.hp <= 0){
+                e.active = false;
+                continue;
+              }
+            }
           } else {
+            e._lightTick = 0;
             if (e._dangerT > 0){
               e._dangerT -= dt;
               e.isDarkActive = false;
@@ -860,18 +891,63 @@ if (e.type === "lantern"){
             }
           }
 
+          // Movement: patrol around home, and aggro-chase player when close.
+          const patrolPx = Math.max(0, (e.patrolTiles || 0) * ts);
+          const aggroPx = Math.max(0, (e.aggroTiles || 0) * ts);
+          const baseSpeed = 72;
+
+          let targetVx = 0;
+          if (player && aggroPx > 0){
+            const pcx = player.x + player.w/2;
+            const pcy = player.y + player.h/2;
+            const d = Math.hypot(pcx - cx, pcy - cy);
+            if (d <= aggroPx && e.isDarkActive){
+              targetVx = Math.sign(pcx - cx) * (baseSpeed * 1.35);
+            }
+          }
+
+          if (targetVx === 0 && patrolPx > 0){
+            if (typeof e._patrolDir !== "number" || e._patrolDir === 0){
+              e._patrolDir = (Math.random() < 0.5) ? -1 : 1;
+            }
+            const leftBound = (e.homeX || e.x) - patrolPx;
+            const rightBound = (e.homeX || e.x) + patrolPx;
+            if (e.x <= leftBound) e._patrolDir = 1;
+            else if (e.x >= rightBound) e._patrolDir = -1;
+            targetVx = e._patrolDir * baseSpeed;
+          }
+
+          e.vx = targetVx;
+          if (e.vx){
+            const nx = e.x + e.vx * dt;
+            const col = world.collideRect(nx, e.y, e.w, e.h);
+            if (!col.hit){
+              e.x = nx;
+            } else {
+              e._patrolDir = -((e._patrolDir || 1));
+              e.vx = 0;
+            }
+          }
+
           // contact damage when dangerous
           if (player && e.isDarkActive && e._hitCd <= 0){
             const hit = this.aabb(player.x, player.y, player.w, player.h, e.x, e.y, e.w, e.h);
             if (hit){
               e._hitCd = (e.hitCooldown != null ? e.hitCooldown : 0.6);
+              const kbX = Math.sign((player.x + player.w*0.5) - cx) * (e.knockbackX ?? 260);
+              const kbY = (e.knockbackY ?? -220);
+              const energyLoss = (e.energyLoss ?? 40);
+
               // delegate to player damage system if present
               if (typeof player.takeHit === "function"){
-                player.takeHit({ knockbackX: Math.sign(player.x - e.x) * (e.knockbackX ?? 260), knockbackY: (e.knockbackY ?? -220), energyLoss: (e.energyLoss ?? 40) });
+                player.takeHit({ knockbackX: kbX, knockbackY: kbY, energyLoss });
               } else {
-                // fallback
-                player.vx += Math.sign(player.x - e.x) * (e.knockbackX ?? 260);
-                player.vy = (e.knockbackY ?? -220);
+                // fallback path must still drain energy, otherwise creature feels passive.
+                player.vx += kbX;
+                player.vy = kbY;
+                if (typeof player.energy === "number" && typeof player.setEnergy === "function"){
+                  player.setEnergy(player.energy - (energyLoss / 100));
+                }
               }
             }
           }
