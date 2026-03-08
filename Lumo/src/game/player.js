@@ -263,6 +263,19 @@
       this.onPlatform = null;
     }
 
+    _beginRespawnCountdown(){
+      if (!this._respawn) this._respawn = { active:false, t:0, total:3, lastCount:0 };
+      this._respawn.total = 3;
+      this._respawn.t = this._respawn.total;
+      this._respawn.lastCount = Math.ceil(this._respawn.t);
+      this._respawn.active = true;
+
+      this.vx = 0;
+      this.vy = 0;
+      this.onGround = false;
+      this.onPlatform = null;
+    }
+
     _applyRespawnEnergyPolicy(){
       // Policy is NOT final yet.
       // For now we keep the existing placeholder: respawn at ~50% energy.
@@ -437,7 +450,7 @@
         if (p >= 1){
           this._deathAnim.active = false;
           if (this.lives > 0){
-            this._doRespawn(world);
+            this._beginRespawnCountdown();
           }
         }
         return;
