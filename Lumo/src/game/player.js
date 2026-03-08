@@ -94,6 +94,7 @@
         cache: new Map(),
         idle: ["lumo_idle_1.png","lumo_idle_2.png","lumo_idle_3.png","lumo_idle_4.png"],
         walk: ["lumo_walk_1.png","lumo_walk_2.png","lumo_walk_3.png","lumo_walk_4.png"],
+        death: ["lumo_death_1.png","lumo_death_2.png","lumo_death_3.png","lumo_death_4.png"],
       };
 
       // --- Preload brake sprite so the first brake does not miss due to async image load ---
@@ -122,6 +123,23 @@
       // --- Brake sprite state (ice) ---
       // Shows lumo_brake_1.png when releasing left/right on slippery (ice) until stopped.
       this._brake = { active:false, prevMoving:false, slipUntil:0, lockUntil:0 };
+
+      // Short hit reaction (damage pose + push back), then death animation.
+      this.knockTimer = 0;
+      this._damage = {
+        active: false,
+        t: 0,
+        duration: 0.12,
+        pendingDeath: false
+      };
+
+      this._deathAnim = {
+        active: false,
+        t: 0,
+        duration: 0.72,
+        fade: 1,
+        rot: 0
+      };
 
     }
 
@@ -201,21 +219,46 @@
       return Math.max(0, Math.min(3, Math.ceil(this._respawn.t)));
     }
 
+    isDeathAnimating(){
+      return !!((this._damage && this._damage.active) || (this._deathAnim && this._deathAnim.active));
+    }
+
     beginRespawn(){
       if (this.isRespawning()) return;
+      if (this._damage.active || this._deathAnim.active) return;
       if (this.lives <= 0) return;
 
-      // lose a life now, then countdown → respawn
+      // lose life now, then run short hit + death reaction.
       this.lives = Math.max(0, this.lives - 1);
 
-      this._respawn.active = true;
-      this._respawn.total = 3;
-      this._respawn.t = 3.0;
-      this._respawn.lastCount = 3;
+      const dir = (this.facing < 0) ? 1 : -1;
+      this.knockTimer = this._damage.duration;
+      this.vx = 180 * dir;
+      this.vy = -120;
 
-      // freeze motion during countdown
-      this.vx = 0;
-      this.vy = 0;
+      this._damage.active = true;
+      this._damage.t = 0;
+      this._damage.pendingDeath = true;
+
+      this._deathAnim.active = false;
+      this._deathAnim.t = 0;
+      this._deathAnim.fade = 1;
+      this._deathAnim.rot = 0;
+
+      this.onGround = false;
+      this.onPlatform = null;
+    }
+
+    _startDeathAnimation(){
+      this._damage.pendingDeath = false;
+      this._deathAnim.active = true;
+      this._deathAnim.t = 0;
+      this._deathAnim.fade = 1;
+      this._deathAnim.rot = 0;
+
+      const dir = (this.facing < 0) ? 1 : -1;
+      this.vx = 120 * dir;
+      this.vy = -180;
       this.onGround = false;
       this.onPlatform = null;
     }
@@ -363,8 +406,42 @@
       this.groundFriction = this._baseGroundFriction * fm;
     }
 
-        update(dt, world){
+    update(dt, world){
       this._t = (this._t || 0) + dt;
+
+      if (this._damage && this._damage.active){
+        this._damage.t += dt;
+        this.vy += this.gravityUp * dt;
+        this.moveAndCollide(dt, world);
+        this.vx *= 0.82;
+
+        if (this._damage.t >= this._damage.duration){
+          this._damage.active = false;
+          this.knockTimer = 0;
+          if (this._damage.pendingDeath) this._startDeathAnimation();
+        }
+        return;
+      }
+
+      if (this._deathAnim && this._deathAnim.active){
+        this._deathAnim.t += dt;
+        const p = U().clamp(this._deathAnim.t / Math.max(0.001, this._deathAnim.duration), 0, 1);
+
+        this.vy += this.gravityDown * 0.5 * dt;
+        this.vx *= (1 - Math.min(0.45, 1.7 * dt));
+        this.moveAndCollide(dt, world);
+
+        this._deathAnim.fade = 1 - p;
+        this._deathAnim.rot = (Math.PI / 2.6) * p * ((this.facing < 0) ? 1 : -1);
+
+        if (p >= 1){
+          this._deathAnim.active = false;
+          if (this.lives > 0){
+            this._doRespawn(world);
+          }
+        }
+        return;
+      }
 
       // Respawn countdown state: freeze player until timer expires
       if (this._respawn && this._respawn.active){
@@ -847,8 +924,14 @@
         if (spr && spr.base){
           let name = null;
 
-          // If brake is active, force brake sprite (single frame)
-          if (this._brake && this._brake.active){
+          // If taking damage, force hit-pose sprite.
+          if (this._damage && this._damage.active){
+            name = "lumo_brake_1.png";
+          } else if (this._deathAnim && this._deathAnim.active){
+            const d = this._deathAnim;
+            const idx = Math.max(0, Math.min(3, Math.floor((d.t / Math.max(0.001, d.duration)) * 4)));
+            name = spr.death[idx] || "lumo_death_4.png";
+          } else if (this._brake && this._brake.active){
             name = "lumo_brake_1.png";
           } else {
             const list = (a.mode === "walk") ? spr.walk : spr.idle;
@@ -884,6 +967,15 @@
             const py = sy + this.h;
 
             ctx.save();
+
+            if (this._deathAnim && this._deathAnim.active){
+              const px = sx + (this.w * 0.5);
+              const py = sy + this.h * 0.62;
+              ctx.translate(px, py);
+              ctx.rotate(this._deathAnim.rot || 0);
+              ctx.translate(-px, -py);
+              ctx.globalAlpha *= U().clamp(this._deathAnim.fade, 0, 1);
+            }
 
             // Facing flip around center
             if (this.facing < 0){
@@ -950,6 +1042,13 @@
       }
 
       ctx.restore();
+    }
+
+    getRenderLightRadius(){
+      if (this._deathAnim && this._deathAnim.active){
+        return Math.max(0, this.lightRadius * U().clamp(this._deathAnim.fade, 0, 1));
+      }
+      return this.lightRadius;
     }
   }
 
