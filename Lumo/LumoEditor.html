@@ -1104,6 +1104,33 @@ display:none;
   }
   function setBtnOn(btn, on){ btn.classList.toggle("on", !!on); }
 
+  function nOrNull(v){
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function getAggroRadiusPx(ent){
+    if (!ent || typeof ent !== "object") return 0;
+
+    const topLevelPx = [ent.aggroRadius, ent.aggroRange]
+      .map(nOrNull)
+      .find(v => v != null && v > 0);
+    if (topLevelPx != null) return topLevelPx;
+
+    const p = (ent.params && typeof ent.params === "object") ? ent.params : null;
+    if (!p) return 0;
+
+    const paramsPx = [p.aggroRadius, p.aggroRange]
+      .map(nOrNull)
+      .find(v => v != null && v > 0);
+    if (paramsPx != null) return paramsPx;
+
+    const tiles = nOrNull(p.aggroTiles);
+    if (tiles != null && tiles > 0) return tiles * TS;
+
+    return 0;
+  }
+
   function loadImage(path){
     if (!path) return Promise.resolve(null);
     if (state.imgCache.has(path)) return Promise.resolve(state.imgCache.get(path));
@@ -2454,11 +2481,12 @@ function drawEntities(){
         ctx.fillText(e.id, s.x+4, s.y+14);
       }
 
-      if (state.aggroOn && e.aggroRadius){
+      const aggroRadiusPx = getAggroRadiusPx(e);
+      if (state.aggroOn && aggroRadiusPx > 0){
         const cx = baseX + TS/2;
         const cy = baseY + TS/2;
         const cs = worldToScreen(cx, cy);
-        const r = e.aggroRadius;
+        const r = aggroRadiusPx;
 
         ctx.save();
         ctx.strokeStyle = "rgba(255,59,79,0.85)";
@@ -3311,7 +3339,7 @@ const mainArr = obj.layers && obj.layers.main;
               w:o.w||TS,h:o.h||TS,
               anchor:o.anchor||"BL",
               offX:o.offsetX||0,offY:(o.offsetY!=null?o.offsetY:4),
-              aggroRadius:o.aggroRadius||0,
+              aggroRadius:getAggroRadiusPx(o),
               params:o.params||{}
             }));
           }
@@ -3348,7 +3376,9 @@ const mainArr = obj.layers && obj.layers.main;
     levelHEl.addEventListener("change", ensureLevelSize);
 
     clampCamera();
-    state.guideOpen = false;
+    state.guideOpen = true;
+    guideBody.style.display = "block";
+    btnGuideToggle.textContent = "Hide";
     state.guideDirty = true;
     loadCatalogs();
     render();
