@@ -590,9 +590,14 @@ if (this._catById){
         bodyKnockbackX: nOr(params && params.bodyKnockbackX, 160),
         bodyKnockbackY: nOr(params && params.bodyKnockbackY, -140),
         castCooldown: nOr(params && params.castCooldown, 5.5),
+        castChargeTime: nOr(params && params.castChargeTime, 0.5),
         spellSpeedX: nOr(params && params.spellSpeedX, 190),
         spellGravity: nOr(params && params.spellGravity, 760),
+        targetJitterPx: nOr(params && params.targetJitterPx, 3),
         _castCd: Math.random() * 0.35,
+        _castChargeT: 0,
+        _castTargetX: 0,
+        _castTargetY: 0,
         _pulseHitId: -1,
         reactsToFlares: boolOr(params && params.reactsToFlares, true),
         _animT: Math.random() * 0.8,
@@ -611,7 +616,33 @@ if (this._catById){
       e._dissolveSpawnT = 0;
       e._hitCd = 999;
       e._castCd = 999;
+      e._castChargeT = 0;
       e.vx = 0;
+    }
+
+    _spawnDarkCastChargeParticles(e, dt){
+      if (!e || dt <= 0) return;
+      const spawnCount = Math.floor(18 * dt + Math.random());
+      const cx = e.x + e.w * 0.5;
+      const cy = e.y + e.h * 0.45;
+      for (let i=0;i<spawnCount;i++){
+        const a = Math.random() * Math.PI * 2;
+        const r = 4 + Math.random() * 8;
+        const px = cx + Math.cos(a) * r;
+        const py = cy + Math.sin(a) * r;
+        this.items.push({
+          type:"darkCastChargeParticle",
+          active:true,
+          x:px,
+          y:py,
+          vx:(cx - px) * (4.2 + Math.random() * 1.8),
+          vy:(cy - py) * (4.2 + Math.random() * 1.8) - (6 + Math.random() * 8),
+          t:0,
+          life:0.2 + Math.random() * 0.18,
+          size:0.9 + Math.random() * 1.5,
+          alpha:0.22 + Math.random() * 0.2
+        });
+      }
     }
 
     _spawnDarkFlareConsumeVfx(flare, darkCreature, dt){
@@ -1119,22 +1150,49 @@ if (e.type === "lantern"){
             : Math.max(0, (e.aggroTiles || 0) * ts);
 
           const insideLumoAura = this.isPointLitFromPlayerOnly(cx, cy, player);
-          if (player && e.isDarkActive && !insideLumoAura && aggroPx > 0 && e._castCd <= 0){
+          const canCastNow = !!(player && e.isDarkActive && !insideLumoAura && aggroPx > 0);
+
+          if (e._castChargeT > 0){
+            if (!canCastNow){
+              e._castChargeT = 0;
+            } else {
+              const pcx = player.x + player.w/2;
+              const pcy = player.y + player.h/2;
+              const d = Math.hypot(pcx - cx, pcy - cy);
+              if (d > aggroPx){
+                e._castChargeT = 0;
+              } else {
+                this._spawnDarkCastChargeParticles(e, dt);
+                e._castChargeT -= dt;
+                if (e._castChargeT <= 0){
+                  const tx = e._castTargetX;
+                  const ty = e._castTargetY;
+                  const dx = tx - cx;
+                  const dy = ty - cy;
+                  const tFlight = Math.max(0.35, Math.min(1.2, d / Math.max(120, Math.abs(e.spellSpeedX || 190))));
+                  const vx = dx / Math.max(0.001, tFlight);
+                  let vy = (dy - (0.5 * (e.spellGravity || 760) * tFlight * tFlight)) / Math.max(0.001, tFlight);
+                  if (!Number.isFinite(vy)) vy = -220;
+                  this.spawnDarkSpellProjectile(cx - 6, cy - 10, vx, vy, e);
+                  e._castCd = Math.max(0.1, e.castCooldown || 5.5);
+                  e._castChargeT = 0;
+                }
+              }
+            }
+          }
+
+          if (canCastNow && e._castChargeT <= 0 && e._castCd <= 0){
             const pcx = player.x + player.w/2;
             const pcy = player.y + player.h/2;
             const dx = pcx - cx;
             const dy = pcy - cy;
             const d = Math.hypot(dx, dy);
             if (d <= aggroPx){
-              const gSpell = (e.spellGravity || 760);
-              const desiredSpeed = Math.max(120, Math.abs(e.spellSpeedX || 190));
-              const tFlight = Math.max(0.35, Math.min(1.2, d / desiredSpeed));
-              const vx = dx / Math.max(0.001, tFlight);
-              let vy = (dy - (0.5 * gSpell * tFlight * tFlight)) / Math.max(0.001, tFlight);
-              if (!Number.isFinite(vy)) vy = -220;
-
-              this.spawnDarkSpellProjectile(cx - 6, cy - 10, vx, vy, e);
-              e._castCd = Math.max(0.1, e.castCooldown || 5.5);
+              const jitter = Math.max(0, e.targetJitterPx || 0);
+              e._castTargetX = pcx + (Math.random()*2 - 1) * jitter;
+              e._castTargetY = pcy + (Math.random()*2 - 1) * jitter;
+              e._castChargeT = Math.max(0.05, e.castChargeTime || 0.5);
+              this._spawnDarkCastChargeParticles(e, Math.min(dt, 0.06));
             }
           }
 
@@ -1193,6 +1251,19 @@ if (e.type === "lantern"){
           e.x += e.vx * dt;
           e.y += e.vy * dt;
           e.vx *= 0.985;
+        }
+
+        if (e.type === "darkCastChargeParticle"){
+          e.t += dt;
+          const p = e.t / Math.max(0.001, e.life || 1);
+          if (p >= 1){
+            e.active = false;
+            continue;
+          }
+          e.x += e.vx * dt;
+          e.y += e.vy * dt;
+          e.vx *= 0.9;
+          e.vy *= 0.9;
         }
 
         if (e.type === "firefly"){
@@ -1991,6 +2062,16 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           ctx.fillStyle = "rgba(110,74,186," + a.toFixed(3) + ")";
           ctx.beginPath();
           ctx.arc(sx + s * 0.5, sy + s * 0.5, Math.max(0.6, s), 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        if (e.type === "darkCastChargeParticle"){
+          const p = Math.max(0, Math.min(1, (e.t || 0) / Math.max(0.001, e.life || 1)));
+          const a = (e.alpha || 0.3) * (1 - p);
+          const s = (e.size || 1.5) * (1 - p * 0.3);
+          ctx.fillStyle = "rgba(136,30,30," + a.toFixed(3) + ")";
+          ctx.beginPath();
+          ctx.arc(sx + s * 0.5, sy + s * 0.5, Math.max(0.4, s), 0, Math.PI * 2);
           ctx.fill();
         }
 
