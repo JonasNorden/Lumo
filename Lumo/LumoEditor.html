@@ -1166,11 +1166,16 @@ display:none;
       const radiusPx = readRadiusFromSpec(ent, p, spec);
       if (!(radiusPx > 0)) continue;
       const usage = inferRadiusUsage(ent, asset, spec.usage);
+      const color = RADIUS_OVERLAY_COLORS[usage] || RADIUS_OVERLAY_COLORS.trigger;
+      const style = (usage === "light")
+        ? { lineWidth: 1.5, lineDash: [9, 6], doubleRing: true, innerScale: 0.88 }
+        : { lineWidth: 1.5, lineDash: [6, 6], doubleRing: false, innerScale: 1.0 };
       return {
         radiusPx,
         usage,
-        color: RADIUS_OVERLAY_COLORS[usage] || RADIUS_OVERLAY_COLORS.trigger,
+        color,
         key: spec.key,
+        style,
       };
     }
 
@@ -2533,14 +2538,23 @@ function drawEntities(){
         const cy = baseY + TS/2;
         const cs = worldToScreen(cx, cy);
         const r = radiusOverlay.radiusPx;
+        const style = radiusOverlay.style || {};
 
         ctx.save();
         ctx.strokeStyle = radiusOverlay.color;
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([6,6]);
+        ctx.lineWidth = style.lineWidth || 1.5;
+        ctx.setLineDash(Array.isArray(style.lineDash) ? style.lineDash : [6,6]);
         ctx.beginPath();
         ctx.arc(cs.x, cs.y, r, 0, Math.PI*2);
         ctx.stroke();
+
+        if (style.doubleRing){
+          ctx.setLineDash([4,6]);
+          ctx.lineWidth = Math.max(1, (style.lineWidth || 1.5) - 0.25);
+          ctx.beginPath();
+          ctx.arc(cs.x, cs.y, r * (style.innerScale || 0.88), 0, Math.PI*2);
+          ctx.stroke();
+        }
         ctx.restore();
       }
     }

@@ -29,7 +29,15 @@ window.LUMO_CATALOG_ENTITIES = [
     "group": "Lights",
     "category": "decor",
     "img": "data/assets/sprites/lights/lantern_01.png",
-    "anchor": "BL"
+    "anchor": "BL",
+    "defaults": {
+      "radius": 170,
+      "strength": 0.85
+    },
+    "shownParams": [
+      "radius",
+      "strength"
+    ]
   },
   {
     "id": "powercell_01",
