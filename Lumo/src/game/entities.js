@@ -763,6 +763,7 @@ if (this._catById){
     update(dt, world, player){
       const g = 980;
       const ts = Lumo.TILE || 24;
+      const flareBurnNearDarkCreatureMul = 2.5;
 
       // Frame-gate reset (used by power-cell gradual fill) — once per update() call.
       // Must NOT depend on lanterns existing in the level.
@@ -840,7 +841,8 @@ if (e.type === "lantern"){
 }
 
         if (e.type === "flare"){
-          e.t += dt;
+          const flareBurnMul = this.isFlareInsideAnyDarkCreatureAggro(e, ts) ? flareBurnNearDarkCreatureMul : 1;
+          e.t += dt * flareBurnMul;
           e.vy += g * dt;
 
           // integrate
@@ -1492,6 +1494,27 @@ if (e.type === "lantern"){
         const pcy = player.y + player.h/2;
         return (Math.hypot(x - pcx, y - pcy) <= player.lightRadius);
       }
+      return false;
+    }
+
+    isFlareInsideAnyDarkCreatureAggro(flare, tileSize){
+      if (!flare || !flare.active) return false;
+      const fx = flare.x + flare.w * 0.5;
+      const fy = flare.y + flare.h * 0.5;
+
+      for (const e of this.items){
+        if (!e || !e.active || e.type !== "darkCreature") continue;
+
+        const aggroPx = (typeof e.aggroRadiusPx === "number" && e.aggroRadiusPx > 0)
+          ? e.aggroRadiusPx
+          : Math.max(0, (e.aggroTiles || 0) * tileSize);
+        if (aggroPx <= 0) continue;
+
+        const cx = e.x + e.w * 0.5;
+        const cy = e.y + e.h * 0.5;
+        if (Math.hypot(fx - cx, fy - cy) <= aggroPx) return true;
+      }
+
       return false;
     }
     // Firefly trigger: ONLY reacts to Lumo / lantern / flare (NOT itself, NOT other fireflies)
