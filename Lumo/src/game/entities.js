@@ -574,7 +574,6 @@ if (this._catById){
         homeX: px,
         _dangerT: 0,
         _hitCd: 0,
-        _lightTick: 0,
         isDarkActive:false,
         vx: 0,
         // params (optional)
@@ -1021,21 +1020,7 @@ if (e.type === "lantern"){
             // safe while lit, but keep danger for a moment after light ends
             e.isDarkActive = false;
             e._dangerT = (e.safeDelay != null ? e.safeDelay : 0.25);
-
-            // Light hurts dark creatures over time; hp decides how long they survive in light.
-            // This makes flare/player light interactions meaningful and predictable.
-            e._lightTick = (e._lightTick || 0) + dt;
-            if (e._lightTick >= 1.0){
-              const dmg = Math.floor(e._lightTick);
-              e._lightTick -= dmg;
-              e.hp = (Number.isFinite(e.hp) ? e.hp : 3) - dmg;
-              if (e.hp <= 0){
-                e.active = false;
-                continue;
-              }
-            }
           } else {
-            e._lightTick = 0;
             if (e._dangerT > 0){
               e._dangerT -= dt;
               e.isDarkActive = false;
