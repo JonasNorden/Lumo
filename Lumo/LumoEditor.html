@@ -1123,6 +1123,7 @@ display:none;
     { key: "lightRadius", source: "both", unit: "px", usage: "light" },
     { key: "lightRange", source: "both", unit: "px", usage: "light" },
     { key: "lightDiameter", source: "params", unit: "diameter", usage: "light" },
+    { key: "radius", source: "both", unit: "px", usage: "light" },
 
     { key: "triggerRadius", source: "both", unit: "px", usage: "trigger" },
     { key: "interactionRadius", source: "both", unit: "px", usage: "trigger" },
@@ -1139,11 +1140,16 @@ display:none;
 
     // Gameplay/reactive actors should stay on single-ring overlays even if
     // they have runtime light behavior (e.g. firefly).
-    if (entId.includes("firefly")) return "aggro";
+    // Explicit editor mapping rules:
+    // - Lantern is a static light source (yellow double ring).
+    // - Firefly uses a non-hostile reaction/trigger radius (purple single ring).
+    if (entId.includes("lantern")) return "light";
+    if (entId.includes("firefly")) return "trigger";
+
     if (/(enemy|creature|aggro|ai|hostile)/.test(meta)) return "aggro";
 
     // Static placed light sources use the editor's double-ring light style.
-    if (entId.includes("lantern") || (fallbackUsage === "light" && /(light|glow|lamp)/.test(meta))) return "light";
+    if (fallbackUsage === "light" && /(light|glow|lamp)/.test(meta)) return "light";
     return fallbackUsage || "trigger";
   }
 
