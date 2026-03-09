@@ -586,6 +586,9 @@ if (this._catById){
         energyLoss: nOr(params && params.energyLoss, 40),
         knockbackX: nOr(params && params.knockbackX, 260),
         knockbackY: nOr(params && params.knockbackY, -220),
+        bodyEnergyLoss: nOr(params && params.bodyEnergyLoss, nOr(params && params.energyLoss, 40)),
+        bodyKnockbackX: nOr(params && params.bodyKnockbackX, 160),
+        bodyKnockbackY: nOr(params && params.bodyKnockbackY, -140),
         castCooldown: nOr(params && params.castCooldown, 5.5),
         spellSpeedX: nOr(params && params.spellSpeedX, 190),
         spellGravity: nOr(params && params.spellGravity, 760),
@@ -1044,14 +1047,12 @@ if (e.type === "lantern"){
             const dy = pcy - cy;
             const d = Math.hypot(dx, dy);
             if (d <= aggroPx){
-              const dir = (Math.abs(dx) < 0.001) ? 1 : Math.sign(dx);
-              const vxAbs = Math.min(260, Math.max(120, Math.abs(e.spellSpeedX || 190)));
-              const vx = dir * vxAbs;
               const gSpell = (e.spellGravity || 760);
-              const tFlight = Math.max(0.25, Math.min(1.25, Math.abs(dx) / Math.max(1, Math.abs(vx))));
-              let vy = (dy - (0.5 * gSpell * tFlight * tFlight)) / tFlight;
+              const desiredSpeed = Math.max(120, Math.abs(e.spellSpeedX || 190));
+              const tFlight = Math.max(0.35, Math.min(1.2, d / desiredSpeed));
+              const vx = dx / Math.max(0.001, tFlight);
+              let vy = (dy - (0.5 * gSpell * tFlight * tFlight)) / Math.max(0.001, tFlight);
               if (!Number.isFinite(vy)) vy = -220;
-              vy = Math.max(-560, Math.min(240, vy));
 
               this.spawnDarkSpellProjectile(cx - 6, cy - 10, vx, vy, e);
               e._castCd = Math.max(0.1, e.castCooldown || 5.5);
@@ -1071,26 +1072,18 @@ if (e.type === "lantern"){
             }
           }
 
-          // contact damage when dangerous
-          if (player && e.isDarkActive && e._hitCd <= 0){
+          // body-contact damage is always active (independent from casting/aura state)
+          if (player && e._hitCd <= 0){
             const hit = this.aabb(player.x, player.y, player.w, player.h, e.x, e.y, e.w, e.h);
             if (hit){
               e._hitCd = (e.hitCooldown != null ? e.hitCooldown : 0.6);
-              const kbX = Math.sign((player.x + player.w*0.5) - cx) * (e.knockbackX ?? 260);
-              const kbY = (e.knockbackY ?? -220);
-              const energyLoss = (e.energyLoss ?? 40);
-
-              // delegate to player damage system if present
-              if (typeof player.takeHit === "function"){
-                player.takeHit({ knockbackX: kbX, knockbackY: kbY, energyLoss });
-              } else {
-                // fallback path must still drain energy, otherwise creature feels passive.
-                player.vx += kbX;
-                player.vy = kbY;
-                if (typeof player.energy === "number" && typeof player.setEnergy === "function"){
-                  player.setEnergy(player.energy - (energyLoss / 100));
-                }
-              }
+              this._damagePlayer(
+                player,
+                cx,
+                e.bodyKnockbackX ?? 160,
+                e.bodyKnockbackY ?? -140,
+                e.bodyEnergyLoss ?? e.energyLoss ?? 40
+              );
             }
           }
         }
