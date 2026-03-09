@@ -596,8 +596,70 @@ if (this._catById){
         _pulseHitId: -1,
         reactsToFlares: boolOr(params && params.reactsToFlares, true),
         _animT: Math.random() * 0.8,
+        dying:false,
+        dissolveT:0,
+        dissolveDur:1.35,
+        _dissolveSpawnT:0,
         solid:false
       };
+    }
+
+    _startDarkCreatureDissolve(e){
+      if (!e || e.dying) return;
+      e.dying = true;
+      e.dissolveT = 0;
+      e._dissolveSpawnT = 0;
+      e._hitCd = 999;
+      e._castCd = 999;
+      e.vx = 0;
+    }
+
+    _spawnDarkFlareConsumeVfx(flare, darkCreature, dt){
+      if (!flare || !darkCreature || dt <= 0) return;
+      const spawnCount = Math.floor(13 * dt + Math.random());
+      for (let i=0;i<spawnCount;i++){
+        const fx = flare.x + flare.w * 0.5 + (Math.random()*2 - 1) * 5;
+        const fy = flare.y + flare.h * 0.5 + (Math.random()*2 - 1) * 5;
+        const tx = darkCreature.x + darkCreature.w * 0.5;
+        const ty = darkCreature.y + darkCreature.h * 0.45;
+        const dx = tx - fx;
+        const dy = ty - fy;
+        const len = Math.max(0.001, Math.hypot(dx, dy));
+        const sp = 70 + Math.random() * 65;
+        this.items.push({
+          type:"flareConsumeVfx",
+          active:true,
+          x:fx,
+          y:fy,
+          vx:(dx / len) * sp,
+          vy:(dy / len) * sp,
+          tx,
+          ty,
+          t:0,
+          life:0.42 + Math.random() * 0.20,
+          size:1.8 + Math.random() * 1.6,
+          alpha:0.46 + Math.random() * 0.28
+        });
+      }
+    }
+
+    _spawnDarkDissolveParticles(e, dt){
+      if (!e || dt <= 0) return;
+      const spawnCount = Math.floor(42 * dt + Math.random());
+      for (let i=0;i<spawnCount;i++){
+        this.items.push({
+          type:"darkDissolveParticle",
+          active:true,
+          x:e.x + Math.random() * e.w,
+          y:e.y + e.h - 1,
+          vx:(Math.random()*2 - 1) * 8,
+          vy:-(55 + Math.random() * 70),
+          t:0,
+          life:0.95 + Math.random() * 0.45,
+          size:2.2 + Math.random() * 1.9,
+          alpha:0.58 + Math.random() * 0.24
+        });
+      }
     }
 
     _damagePlayer(player, sourceCx, knockbackX, knockbackY, energyLoss){
@@ -841,8 +903,10 @@ if (e.type === "lantern"){
 }
 
         if (e.type === "flare"){
-          const flareBurnMul = this.isFlareInsideAnyDarkCreatureAggro(e, ts) ? flareBurnNearDarkCreatureMul : 1;
+          const consumingDc = this.findDarkCreatureConsumingFlare(e, ts);
+          const flareBurnMul = consumingDc ? flareBurnNearDarkCreatureMul : 1;
           e.t += dt * flareBurnMul;
+          if (consumingDc) this._spawnDarkFlareConsumeVfx(e, consumingDc, dt);
           e.vy += g * dt;
 
           // integrate
@@ -1012,6 +1076,19 @@ if (e.type === "lantern"){
 
 
         if (e.type === "darkCreature"){
+          if (e.dying){
+            e.dissolveT = (e.dissolveT || 0) + dt;
+            e._dissolveSpawnT = (e._dissolveSpawnT || 0) - dt;
+            if (e._dissolveSpawnT <= 0){
+              e._dissolveSpawnT = 0.035;
+              this._spawnDarkDissolveParticles(e, 0.035);
+            }
+            if (e.dissolveT >= (e.dissolveDur || 1.35)){
+              e.active = false;
+            }
+            continue;
+          }
+
           e._animT = (e._animT || 0) + dt;
           if (e._hitCd > 0) e._hitCd -= dt;
           if (e._castCd > 0) e._castCd -= dt;
@@ -1068,8 +1145,7 @@ if (e.type === "lantern"){
               e._pulseHitId = pulseId;
               e.hp = (Number.isFinite(e.hp) ? e.hp : 3) - 1;
               if (e.hp <= 0){
-                e.active = false;
-                continue;
+                this._startDarkCreatureDissolve(e);
               }
             }
           }
@@ -1089,6 +1165,36 @@ if (e.type === "lantern"){
             }
           }
         }
+        if (e.type === "flareConsumeVfx"){
+          e.t += dt;
+          const p = e.t / Math.max(0.001, e.life || 0.5);
+          if (p >= 1){
+            e.active = false;
+            continue;
+          }
+          const ax = ((e.tx || e.x) - e.x) * 9.2;
+          const ay = ((e.ty || e.y) - e.y) * 9.2;
+          e.vx += ax * dt;
+          e.vy += ay * dt;
+          e.vx *= 0.9;
+          e.vy *= 0.9;
+          e.x += e.vx * dt;
+          e.y += e.vy * dt;
+        }
+
+        if (e.type === "darkDissolveParticle"){
+          e.t += dt;
+          const p = e.t / Math.max(0.001, e.life || 1);
+          if (p >= 1){
+            e.active = false;
+            continue;
+          }
+          e.vy -= 24 * dt;
+          e.x += e.vx * dt;
+          e.y += e.vy * dt;
+          e.vx *= 0.985;
+        }
+
         if (e.type === "firefly"){
           const ts = Lumo.TILE || 24;
 
@@ -1497,13 +1603,15 @@ if (e.type === "lantern"){
       return false;
     }
 
-    isFlareInsideAnyDarkCreatureAggro(flare, tileSize){
-      if (!flare || !flare.active) return false;
+    findDarkCreatureConsumingFlare(flare, tileSize){
+      if (!flare || !flare.active) return null;
       const fx = flare.x + flare.w * 0.5;
       const fy = flare.y + flare.h * 0.5;
+      let best = null;
+      let bestD = Infinity;
 
       for (const e of this.items){
-        if (!e || !e.active || e.type !== "darkCreature") continue;
+        if (!e || !e.active || e.type !== "darkCreature" || e.dying) continue;
 
         const aggroPx = (typeof e.aggroRadiusPx === "number" && e.aggroRadiusPx > 0)
           ? e.aggroRadiusPx
@@ -1512,10 +1620,18 @@ if (e.type === "lantern"){
 
         const cx = e.x + e.w * 0.5;
         const cy = e.y + e.h * 0.5;
-        if (Math.hypot(fx - cx, fy - cy) <= aggroPx) return true;
+        const d = Math.hypot(fx - cx, fy - cy);
+        if (d <= aggroPx && d < bestD){
+          best = e;
+          bestD = d;
+        }
       }
 
-      return false;
+      return best;
+    }
+
+    isFlareInsideAnyDarkCreatureAggro(flare, tileSize){
+      return !!this.findDarkCreatureConsumingFlare(flare, tileSize);
     }
     // Firefly trigger: ONLY reacts to Lumo / lantern / flare (NOT itself, NOT other fireflies)
     isFireflyTriggeredByAnyLight(x, y, player, aggroR, self){
@@ -1858,6 +1974,26 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           ctx.restore();
         }
 
+        if (e.type === "flareConsumeVfx"){
+          const p = Math.max(0, Math.min(1, (e.t || 0) / Math.max(0.001, e.life || 1)));
+          const a = (e.alpha || 0.55) * (1 - p);
+          const s = (e.size || 2) * (1 - p * 0.45);
+          ctx.fillStyle = "rgba(118,82,190," + a.toFixed(3) + ")";
+          ctx.beginPath();
+          ctx.arc(sx + s * 0.5, sy + s * 0.5, Math.max(0.5, s), 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        if (e.type === "darkDissolveParticle"){
+          const p = Math.max(0, Math.min(1, (e.t || 0) / Math.max(0.001, e.life || 1)));
+          const a = (e.alpha || 0.65) * (1 - p);
+          const s = (e.size || 2.5) * (1 - p * 0.35);
+          ctx.fillStyle = "rgba(110,74,186," + a.toFixed(3) + ")";
+          ctx.beginPath();
+          ctx.arc(sx + s * 0.5, sy + s * 0.5, Math.max(0.6, s), 0, Math.PI * 2);
+          ctx.fill();
+        }
+
         if (e.type === "movingPlatform"){
           ctx.fillStyle = "rgba(100,120,140,0.95)";
           ctx.fillRect(sx, sy, e.w, e.h);
@@ -1884,6 +2020,10 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
             // Keep collision footprint unchanged; render sprite centered and bottom-aligned.
             const drawX = sx + (e.w - drawW) * 0.5;
             const drawY = sy + e.h - drawH;
+            if (e.dying){
+              const k = Math.max(0, 1 - ((e.dissolveT || 0) / Math.max(0.001, e.dissolveDur || 1.35)));
+              ctx.globalAlpha *= k;
+            }
             ctx.drawImage(img, drawX, drawY, drawW, drawH);
           } else {
             // fallback if sprite not loaded
