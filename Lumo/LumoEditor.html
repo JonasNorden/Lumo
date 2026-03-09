@@ -1109,26 +1109,72 @@ display:none;
     return Number.isFinite(n) ? n : null;
   }
 
-  function getAggroRadiusPx(ent){
-    if (!ent || typeof ent !== "object") return 0;
+  const RADIUS_OVERLAY_COLORS = {
+    aggro: "rgba(255,59,79,0.85)",
+    light: "rgba(255,214,77,0.9)",
+    trigger: "rgba(189,114,255,0.9)",
+  };
 
-    const topLevelPx = [ent.aggroRadius, ent.aggroRange]
-      .map(nOrNull)
-      .find(v => v != null && v > 0);
-    if (topLevelPx != null) return topLevelPx;
+  const RADIUS_PARAM_SPECS = [
+    { key: "aggroRadius", source: "both", unit: "px", usage: "aggro" },
+    { key: "aggroRange", source: "both", unit: "px", usage: "aggro" },
+    { key: "aggroTiles", source: "params", unit: "tiles", usage: "aggro" },
+
+    { key: "lightRadius", source: "both", unit: "px", usage: "light" },
+    { key: "lightRange", source: "both", unit: "px", usage: "light" },
+    { key: "lightDiameter", source: "params", unit: "diameter", usage: "light" },
+
+    { key: "triggerRadius", source: "both", unit: "px", usage: "trigger" },
+    { key: "interactionRadius", source: "both", unit: "px", usage: "trigger" },
+    { key: "interactRadius", source: "both", unit: "px", usage: "trigger" },
+    { key: "range", source: "params", unit: "px", usage: "trigger" },
+  ];
+
+  function inferRadiusUsage(ent, asset, fallbackUsage){
+    const meta = [asset?.group, asset?.category, asset?.name, asset?.id, ent?.id]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    if (/(light|lantern|firefly|glow|lamp)/.test(meta)) return "light";
+    if (/(enemy|creature|aggro|ai|hostile)/.test(meta)) return "aggro";
+    return fallbackUsage || "trigger";
+  }
+
+  function readRadiusFromSpec(ent, p, spec){
+    const readTop = spec.source === "both";
+    const readParams = spec.source === "both" || spec.source === "params";
+    const rawVals = [];
+    if (readTop) rawVals.push(ent?.[spec.key]);
+    if (readParams) rawVals.push(p?.[spec.key]);
+
+    const raw = rawVals.map(nOrNull).find(v => v != null && v > 0);
+    if (raw == null) return null;
+
+    if (spec.unit === "tiles") return raw * TS;
+    if (spec.unit === "diameter") return raw / 2;
+    return raw;
+  }
+
+  function getRadiusOverlay(ent){
+    if (!ent || typeof ent !== "object") return null;
 
     const p = (ent.params && typeof ent.params === "object") ? ent.params : null;
-    if (!p) return 0;
+    const asset = getEntAssetById(ent.id);
 
-    const paramsPx = [p.aggroRadius, p.aggroRange]
-      .map(nOrNull)
-      .find(v => v != null && v > 0);
-    if (paramsPx != null) return paramsPx;
+    for (const spec of RADIUS_PARAM_SPECS){
+      const radiusPx = readRadiusFromSpec(ent, p, spec);
+      if (!(radiusPx > 0)) continue;
+      const usage = inferRadiusUsage(ent, asset, spec.usage);
+      return {
+        radiusPx,
+        usage,
+        color: RADIUS_OVERLAY_COLORS[usage] || RADIUS_OVERLAY_COLORS.trigger,
+        key: spec.key,
+      };
+    }
 
-    const tiles = nOrNull(p.aggroTiles);
-    if (tiles != null && tiles > 0) return tiles * TS;
-
-    return 0;
+    return null;
   }
 
   function loadImage(path){
@@ -2481,15 +2527,15 @@ function drawEntities(){
         ctx.fillText(e.id, s.x+4, s.y+14);
       }
 
-      const aggroRadiusPx = getAggroRadiusPx(e);
-      if (state.aggroOn && aggroRadiusPx > 0){
+      const radiusOverlay = getRadiusOverlay(e);
+      if (state.aggroOn && radiusOverlay && radiusOverlay.radiusPx > 0){
         const cx = baseX + TS/2;
         const cy = baseY + TS/2;
         const cs = worldToScreen(cx, cy);
-        const r = aggroRadiusPx;
+        const r = radiusOverlay.radiusPx;
 
         ctx.save();
-        ctx.strokeStyle = "rgba(255,59,79,0.85)";
+        ctx.strokeStyle = radiusOverlay.color;
         ctx.lineWidth = 1.5;
         ctx.setLineDash([6,6]);
         ctx.beginPath();
@@ -3339,7 +3385,7 @@ const mainArr = obj.layers && obj.layers.main;
               w:o.w||TS,h:o.h||TS,
               anchor:o.anchor||"BL",
               offX:o.offsetX||0,offY:(o.offsetY!=null?o.offsetY:4),
-              aggroRadius:getAggroRadiusPx(o),
+              aggroRadius:(nOrNull(o.aggroRadius) || 0),
               params:o.params||{}
             }));
           }
