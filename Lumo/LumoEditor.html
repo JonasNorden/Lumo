@@ -1131,13 +1131,19 @@ display:none;
   ];
 
   function inferRadiusUsage(ent, asset, fallbackUsage){
+    const entId = String(ent?.id || "").toLowerCase();
     const meta = [asset?.group, asset?.category, asset?.name, asset?.id, ent?.id]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
 
-    if (/(light|lantern|firefly|glow|lamp)/.test(meta)) return "light";
+    // Gameplay/reactive actors should stay on single-ring overlays even if
+    // they have runtime light behavior (e.g. firefly).
+    if (entId.includes("firefly")) return "aggro";
     if (/(enemy|creature|aggro|ai|hostile)/.test(meta)) return "aggro";
+
+    // Static placed light sources use the editor's double-ring light style.
+    if (entId.includes("lantern") || (fallbackUsage === "light" && /(light|glow|lamp)/.test(meta))) return "light";
     return fallbackUsage || "trigger";
   }
 
