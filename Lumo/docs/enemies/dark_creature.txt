@@ -1,0 +1,252 @@
+Dark Creature – Design Specification
+
+(Lumo Gameplay System)
+
+Core Identity
+
+Dark Creature is a stand-ground void entity that controls space through projectile hazards and interaction with light.
+
+It does not patrol or chase the player.
+It remains mostly stationary, drifting slightly to feel alive.
+
+The creature becomes dangerous when the player enters its aggro radius.
+
+Behavior Overview
+Idle
+
+Default state.
+
+Behavior:
+
+stationary
+
+slight floating/drifting motion
+
+no facing direction
+
+no patrol
+
+no chase
+
+The creature exists as a dark hovering mass.
+
+Aggro
+
+When Lumo enters the aggro radius, the creature prepares to attack.
+
+The aggro radius is defined by:
+
+aggroTiles
+
+in the level editor.
+
+Aggro is purely distance-based.
+
+Dark Spell Attack
+Cast Charge
+
+Before firing, Dark Creature performs a short charge.
+
+Duration:
+
+~0.5 seconds
+
+During this time:
+
+dark energy gathers around the creature
+
+subtle particle effect appears
+
+attack can be interrupted by Lumo’s aura
+
+If Lumo’s aura reaches the creature during charge:
+
+cast is cancelled
+Projectile Behavior
+
+The projectile is the Dark Spell.
+
+Properties:
+
+ballistic arc trajectory
+
+gravity affected
+
+aimed at Lumo’s position at cast time
+
+no homing after launch
+
+slight target jitter (~3px) to avoid robotic precision
+
+If Lumo stands still, the projectile should hit.
+
+Projectile Visuals
+
+Flight sprite:
+
+void_m_04
+
+Sprite rotates using velocity direction:
+
+angle = atan2(vy, vx)
+
+This ensures the tail always points backward.
+
+Impact
+
+When Dark Spell hits:
+
+ground
+
+terrain
+
+or Lumo
+
+it enters the hazard state.
+
+Impact animation sequence:
+
+void_m_03
+void_m_02
+void_m_01
+Hazard
+
+After impact, a void hazard remains on the ground.
+
+Duration:
+
+5 seconds
+
+Properties:
+
+damages Lumo
+
+causes pushback
+
+drains Lumo energy
+
+fades out after duration
+
+Hazard always settles on the ground surface.
+
+Combat Interactions
+Lumo Aura
+
+When Dark Creature is inside Lumos aura:
+
+it cannot cast
+
+it is not damaged
+
+The aura neutralizes attacks but does not destroy the creature.
+
+Flare
+
+Flare light does not damage the creature.
+
+Instead:
+
+Dark Creature consumes flare light
+
+flare lifetime drains faster while inside aggro radius
+
+visual particles travel from flare → creature
+
+Pulse
+
+Dark Creature can only be killed by:
+
+Lumo Pulse
+
+Pulse deals HP damage.
+
+Body Contact
+
+Touching Dark Creature causes:
+
+pushback
+
+energy loss
+
+This remains dangerous even when the creature is neutralized by aura.
+
+Death
+
+Dark Creature does not use death sprites.
+
+Instead it dissolves.
+
+Sequence:
+
+creature begins fading
+
+void particles spawn at bottom edge
+
+particles rise upward like bubbling void energy
+
+particles fade and shrink
+
+creature disappears
+
+Particles should:
+
+rise vertically
+
+move slowly
+
+have minimal sideways drift
+
+Level Design Role
+
+Dark Creature is a space-control enemy.
+
+It creates three gameplay zones:
+
+Long range
+projectile threat
+
+Mid range
+aura neutralizes casting
+
+Close range
+body contact danger
+
+The player must balance:
+
+positioning
+
+light usage
+
+pulse energy
+
+Editor Support
+
+Editor visualization includes:
+
+Aggro radius:
+
+single red dashed ring
+
+Light sources (lantern etc):
+
+yellow double ring
+
+Trigger entities:
+
+purple single ring
+
+All overlays share the same global toggle.
+
+Design Rules
+
+Dark Creature must always remain:
+
+stand-ground
+
+readable
+
+interruptible by light
+
+killable only by Pulse
+
+It should create tactical obstacles rather than chase pressure.
