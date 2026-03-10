@@ -80,6 +80,38 @@ window.LUMO_CATALOG_ENTITIES = [
     ]
   },
   {
+    "id": "hover_void_01",
+    "name": "Hover Void",
+    "group": "Creatures",
+    "category": "decor",
+    "img": "data/assets/sprites/creatures/void_m_04.png",
+    "anchor": "BL",
+    "defaults": {
+      "aggroTiles": 7,
+      "maxHp": 3,
+      "colorVariant": 0,
+      "loseSightTiles": 11,
+      "attackCooldownMin": 1,
+      "attackCooldownMax": 3,
+      "attackDamage": 12,
+      "attackPushback": 180,
+      "braveGroupSize": 3,
+      "swarmGroupSize": 6
+    },
+    "shownParams": [
+      "aggroTiles",
+      "maxHp",
+      "colorVariant",
+      "loseSightTiles",
+      "attackCooldownMin",
+      "attackCooldownMax",
+      "attackDamage",
+      "attackPushback",
+      "braveGroupSize",
+      "swarmGroupSize"
+    ]
+  },
+  {
     "id": "decor_flower_01",
     "name": "Flower",
     "group": "Decor",

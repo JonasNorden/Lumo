@@ -19,6 +19,7 @@
       }
 
       this._autoSpawnedTestDarkCreature = false; // spawn one test creature if none exists
+      this._hoverVoidAttackGlobalCd = 0;
 
             // Sprites (HUD använder flare.png, kastad flare använder flare_2.png)
       // Runtime-sprites för entities
@@ -89,6 +90,7 @@
       this._fogVolumes.length = 0;
       this._fogFrame = 0;
       this._autoSpawnedTestDarkCreature = false;
+      this._hoverVoidAttackGlobalCd = 0;
     }
 
     loadFromLevel(levelObj){
@@ -310,6 +312,14 @@ if (id === "dark_creature_01"){
         }
 
         
+if (id === "hover_void_01"){
+          const hv = this.makeHoverVoid(tx, ty, { w:16, h:16, params });
+          applyAnchor(hv, hv.w, hv.h);
+          this.items.push(hv);
+          return;
+        }
+
+        
 
 // Generic catalog-driven decor (no collision).
 // Any entity id present in catalog_entities.js with category === "decor" will spawn as a visual decor sprite.
@@ -369,6 +379,7 @@ if (this._catById){
       else if (e.type === "patrolEnemy") this.items.push(this.makeEnemy(e.x, e.y, e.left, e.right));
       else if (e.type === "movingPlatform") this.items.push(this.makeMovingPlatformFromDef(e, levelObj));
       else if (e.type === "darkCreature") this.items.push(this.makeDarkCreature(e.x, e.y, e));
+      else if (e.type === "hoverVoid") this.items.push(this.makeHoverVoid(e.x, e.y, e));
     }
 
     // tile coords in, store pixels
@@ -607,6 +618,77 @@ if (this._catById){
         _dissolveSpawnT:0,
         solid:false
       };
+    }
+
+    makeHoverVoidPx(px, py, w=16, h=16, params=null){
+      const ts = Lumo.TILE || 24;
+      const nOr = (v, fallback) => {
+        const n = +v;
+        return Number.isFinite(n) ? n : fallback;
+      };
+      const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      const aggroTiles = Math.max(0, nOr(params && params.aggroTiles, 7));
+      const maxHp = Math.max(1, Math.floor(nOr(params && params.maxHp, 3)));
+      const colorVariant = clamp(Math.floor(nOr(params && params.colorVariant, 0)), 0, 3);
+      const loseSightTiles = Math.max(aggroTiles, nOr(params && params.loseSightTiles, 11));
+      let attackCooldownMin = Math.max(0.2, nOr(params && params.attackCooldownMin, 1));
+      let attackCooldownMax = Math.max(attackCooldownMin, nOr(params && params.attackCooldownMax, 3));
+      const attackDamage = Math.max(0, nOr(params && params.attackDamage, 12));
+      const attackPushback = Math.max(0, nOr(params && params.attackPushback, 180));
+      const braveGroupSize = Math.max(1, Math.floor(nOr(params && params.braveGroupSize, 3)));
+      const swarmGroupSize = Math.max(braveGroupSize, Math.floor(nOr(params && params.swarmGroupSize, 6)));
+
+      return {
+        type:"hoverVoid",
+        active:true,
+        x:px,
+        y:py,
+        w, h,
+        homeX:px,
+        homeY:py,
+        vx:0,
+        vy:0,
+        hp:maxHp,
+        maxHp,
+        aggroTiles,
+        loseSightTiles,
+        colorVariant,
+        attackCooldownMin,
+        attackCooldownMax,
+        attackDamage,
+        attackPushback,
+        braveGroupSize,
+        swarmGroupSize,
+        awake:false,
+        sleepBlend:1,
+        eyeBlend:0,
+        _pulseHitId:-1,
+        _wakeHold:0,
+        _t:Math.random()*100,
+        _blinkT:2 + Math.random()*5,
+        _blinkDur:0,
+        _angryT:0,
+        _angryCd:5 + Math.random()*6,
+        _bickerCd:0.2 + Math.random()*0.9,
+        _targetVX:0,
+        _targetVY:0,
+        _recoilT:0,
+        _lungeState:"idle",
+        _lungeActor:false,
+        _lungeT:0,
+        _lungeDirX:0,
+        _lungeDirY:0,
+        _lungeHitDone:false,
+        _attackCd:attackCooldownMin + Math.random()*(attackCooldownMax-attackCooldownMin),
+      };
+    }
+
+    makeHoverVoid(tx, ty, def){
+      const ts = Lumo.TILE || 24;
+      const w = (def && def.w) ? (def.w|0) : 16;
+      const h = (def && def.h) ? (def.h|0) : 16;
+      const params = (def && def.params && typeof def.params === "object") ? def.params : null;
+      return this.makeHoverVoidPx(tx*ts, ty*ts, w, h, params);
     }
 
     _startDarkCreatureDissolve(e){
@@ -856,6 +938,7 @@ if (this._catById){
     update(dt, world, player){
       const g = 980;
       const ts = Lumo.TILE || 24;
+      this._lastPlayer = player || null;
       const flareBurnNearDarkCreatureMul = 2.5;
 
       // Frame-gate reset (used by power-cell gradual fill) — once per update() call.
@@ -878,6 +961,9 @@ if (this._catById){
           this._autoSpawnedTestDarkCreature = true;
         }
       }
+
+      if (this._hoverVoidAttackGlobalCd > 0) this._hoverVoidAttackGlobalCd -= dt;
+      const hoverVoids = this.items.filter((it) => it && it.active && it.type === "hoverVoid");
 
             for (const e of this.items){
         if (!e.active) continue;
@@ -1223,6 +1309,189 @@ if (e.type === "lantern"){
             }
           }
         }
+        if (e.type === "hoverVoid"){
+          const cx = e.x + e.w*0.5;
+          const cy = e.y + e.h*0.5;
+          e._t = (e._t || 0) + dt;
+          e._targetVX = 0;
+          e._targetVY = Math.sin(e._t * 1.3 + cx * 0.01) * 12;
+          if (e._attackCd > 0) e._attackCd -= dt;
+          if (e._recoilT > 0) e._recoilT -= dt;
+
+          const pcx = player ? (player.x + player.w*0.5) : cx;
+          const pcy = player ? (player.y + player.h*0.5) : cy;
+          const toPlayerX = pcx - cx;
+          const toPlayerY = pcy - cy;
+          const dPlayer = Math.hypot(toPlayerX, toPlayerY);
+          const wakeR = Math.max(0, e.aggroTiles * ts);
+          const loseR = Math.max(wakeR, e.loseSightTiles * ts);
+
+          if (!e.awake && player && dPlayer <= wakeR) e.awake = true;
+          if (e.awake){
+            if (player && dPlayer <= loseR) e._wakeHold = 1.4;
+            else e._wakeHold = Math.max(0, (e._wakeHold || 0) - dt);
+            if (e._wakeHold <= 0) e.awake = false;
+          }
+
+          e.eyeBlend += (e.awake ? 1 : -1) * dt * 2.5;
+          e.eyeBlend = Math.max(0, Math.min(1, e.eyeBlend));
+          e.sleepBlend += (e.awake ? -1 : 1) * dt * 0.8;
+          e.sleepBlend = Math.max(0, Math.min(1, e.sleepBlend));
+
+          if (e.awake){
+            e._blinkT -= dt;
+            if (e._blinkT <= 0){
+              e._blinkDur = 0.12 + Math.random()*0.07;
+              e._blinkT = 6 + Math.random()*9;
+            }
+            if (e._blinkDur > 0) e._blinkDur -= dt;
+
+            if (e._lungeState === "idle"){
+              const awakeList = hoverVoids.filter((h) => h.awake);
+              const groupSize = awakeList.length;
+              const brave = groupSize >= e.braveGroupSize;
+              const targetDist = 3 * ts;
+              if (player && dPlayer > targetDist){
+                const d = Math.max(0.001, dPlayer);
+                e._targetVX += (toPlayerX / d) * 52;
+                e._targetVY += (toPlayerY / d) * 52;
+              } else if (player){
+                const d = Math.max(0.001, dPlayer);
+                e._targetVX -= (toPlayerX / d) * 22;
+                e._targetVY -= (toPlayerY / d) * 22;
+              }
+
+              let neighborCount = 0;
+              for (const other of awakeList){
+                if (other === e) continue;
+                const ocx = other.x + other.w*0.5;
+                const ocy = other.y + other.h*0.5;
+                const dx = ocx - cx;
+                const dy = ocy - cy;
+                const d = Math.hypot(dx, dy);
+                if (d < ts * 6){
+                  neighborCount++;
+                  const socialPull = Math.max(0, 1 - d / (ts * 6));
+                  e._targetVX += (dx / Math.max(0.001, d)) * 24 * socialPull;
+                  e._targetVY += (dy / Math.max(0.001, d)) * 24 * socialPull;
+                }
+                const sepR = ts * 1.25;
+                if (d > 0.001 && d < sepR){
+                  const push = (1 - d / sepR) * 85;
+                  e._targetVX -= (dx / d) * push;
+                  e._targetVY -= (dy / d) * push;
+                }
+                if (d > 0.001 && d < ts * 0.95 && e._bickerCd <= 0){
+                  const recoil = 80;
+                  e.vx -= (dx / d) * recoil;
+                  e.vy -= (dy / d) * recoil;
+                  e._bickerCd = 0.55 + Math.random() * 0.65;
+                  e._angryT = Math.max(e._angryT, 0.22 + Math.random() * 0.3);
+                }
+              }
+              if (e._bickerCd > 0) e._bickerCd -= dt;
+
+              e._angryCd -= dt;
+              if (neighborCount >= 1 && e._angryCd <= 0 && Math.random() < dt * 0.1){
+                e._angryT = 3 + Math.random()*2;
+                e._angryCd = 15;
+              }
+
+              const swarmBonus = (groupSize >= e.swarmGroupSize) ? 0.6 : 0;
+              const canAttack = brave && player && dPlayer <= Math.max(ts * 1.0, targetDist + ts * 0.5);
+              if (canAttack && e._attackCd <= 0 && this._hoverVoidAttackGlobalCd <= 0){
+                e._lungeState = "out";
+                e._lungeActor = true;
+                e._lungeT = 0;
+                const d = Math.max(0.001, dPlayer);
+                e._lungeDirX = toPlayerX / d;
+                e._lungeDirY = toPlayerY / d;
+                e._lungeHitDone = false;
+                e._angryT = Math.max(e._angryT, 0.55);
+                const gap = e.attackCooldownMin + Math.random() * Math.max(0.01, (e.attackCooldownMax - e.attackCooldownMin));
+                e._attackCd = gap;
+                this._hoverVoidAttackGlobalCd = gap + swarmBonus;
+              }
+            }
+          } else {
+            e._targetVX += (Math.sin(e._t*0.7 + cy * 0.02) * 16);
+            e._targetVY += (Math.cos(e._t*0.6 + cx * 0.02) * 12);
+          }
+
+          if (e._lungeState !== "idle"){
+            e._angryT = Math.max(e._angryT, 0.08);
+            e._lungeT += dt;
+            const speedOut = 210 + (hoverVoids.length >= e.swarmGroupSize ? 80 : 0);
+            if (e._lungeState === "out"){
+              e._targetVX = e._lungeDirX * speedOut;
+              e._targetVY = e._lungeDirY * speedOut;
+              if (!e._lungeHitDone && player){
+                const near = this.aabb(player.x-4, player.y-4, player.w+8, player.h+8, e.x, e.y, e.w, e.h);
+                if (near){
+                  e._lungeHitDone = true;
+                  this._damagePlayer(player, cx, e.attackPushback ?? 180, -95, e.attackDamage ?? 12);
+                  e.vx -= e._lungeDirX * 80;
+                  e.vy -= e._lungeDirY * 80;
+                  e._recoilT = 0.2;
+                  e._lungeState = "back";
+                  e._lungeT = 0;
+                }
+              }
+              if (e._lungeT >= 0.32){
+                e._lungeState = "back";
+                e._lungeT = 0;
+              }
+            } else if (e._lungeState === "back"){
+              e._targetVX = -e._lungeDirX * 165;
+              e._targetVY = -e._lungeDirY * 165;
+              if (e._lungeT >= 0.28){
+                e._lungeState = "idle";
+                e._lungeActor = false;
+                e._lungeT = 0;
+              }
+            }
+          }
+
+          if (e._angryT > 0) e._angryT -= dt;
+
+          const smooth = 7.5;
+          e.vx += (e._targetVX - e.vx) * Math.min(1, smooth * dt);
+          e.vy += (e._targetVY - e.vy) * Math.min(1, smooth * dt);
+          if (e._recoilT > 0){
+            e.vx *= 0.92;
+            e.vy *= 0.92;
+          }
+          const maxSpd = 125 + (hoverVoids.filter((h)=>h.awake).length >= e.swarmGroupSize ? 35 : 0);
+          const sp = Math.hypot(e.vx, e.vy);
+          if (sp > maxSpd){
+            e.vx = (e.vx / sp) * maxSpd;
+            e.vy = (e.vy / sp) * maxSpd;
+          }
+
+          e.x += e.vx * dt;
+          e.y += e.vy * dt;
+
+          const col = world.collideRect(e.x, e.y, e.w, e.h);
+          if (col.hit){
+            e.x += col.nx * col.depth;
+            e.y += col.ny * col.depth;
+            if (col.nx !== 0) e.vx *= -0.18;
+            if (col.ny !== 0) e.vy *= -0.18;
+          }
+
+          if (player && player.pulse && player.pulse.active){
+            const pulseId = (typeof player.pulse.id === "number") ? player.pulse.id : 0;
+            const dist = Math.hypot((player.x + player.w*0.5) - cx, (player.y + player.h*0.5) - cy);
+            if (pulseId !== e._pulseHitId && dist <= (player.pulse.r + Math.max(e.w, e.h)*0.6)){
+              e._pulseHitId = pulseId;
+              e.hp = (Number.isFinite(e.hp) ? e.hp : e.maxHp || 3) - 1;
+              if (e.hp <= 0){
+                e.active = false;
+              }
+            }
+          }
+        }
+
         if (e.type === "flareConsumeVfx"){
           e.t += dt;
           const p = e.t / Math.max(0.001, e.life || 0.5);
@@ -1628,6 +1897,58 @@ if (e.type === "lantern"){
 
     aabb(ax, ay, aw, ah, bx, by, bw, bh){
       return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+    }
+
+    _hoverVoidPalette(variant){
+      const v = ((variant|0) % 4 + 4) % 4;
+      const arr = [
+        { mid:"rgba(88,54,130,0.45)", edge:"rgba(106,72,164,0.18)", eye:"rgba(214,164,255,0.95)" },
+        { mid:"rgba(120,46,64,0.46)", edge:"rgba(156,68,96,0.2)", eye:"rgba(255,138,174,0.95)" },
+        { mid:"rgba(60,92,58,0.44)", edge:"rgba(92,126,78,0.2)", eye:"rgba(176,255,160,0.95)" },
+        { mid:"rgba(134,88,36,0.46)", edge:"rgba(180,120,56,0.2)", eye:"rgba(255,214,124,0.95)" },
+      ];
+      return arr[v];
+    }
+
+    isPointLitAnySource(x, y, player){
+      if (player && typeof player.lightRadius === "number" && player.lightRadius > 0){
+        const pcx = player.x + player.w/2;
+        const pcy = player.y + player.h/2;
+        if (Math.hypot(x - pcx, y - pcy) <= player.lightRadius) return true;
+      }
+      for (const e of this.items){
+        if (!e || !e.active) continue;
+        if (e.type === "lantern"){
+          const cx = e.x + e.w*0.5;
+          const cy = e.y + e.h*0.5;
+          const rad = (typeof e.radius === "number") ? e.radius : 170;
+          const strength = (typeof e.strength === "number") ? e.strength : 0.85;
+          if (strength > 0.01 && Math.hypot(x-cx, y-cy) <= rad) return true;
+        }
+        if (e.type === "firefly"){
+          const k = (typeof e.lightK === "number") ? e.lightK : 0;
+          if (k <= 0.01) continue;
+          const cx = e.x + e.w*0.5;
+          const cy = e.y + e.h*0.5;
+          const baseR = (typeof e.lightDiameter === "number" && e.lightDiameter > 0) ? (e.lightDiameter * 0.5) : (e.lightRadius || 120);
+          if (Math.hypot(x-cx, y-cy) <= baseR * k) return true;
+        }
+        if (e.type === "flare"){
+          const t = e.t;
+          const life = e.life;
+          const fade = e.fadeLast;
+          let q = 1.0;
+          if (t > life - fade){
+            const p = (t - (life - fade)) / fade;
+            q = Math.max(0, 1.0 - p);
+          }
+          const r = (e.radius0 || 220) * q;
+          const cx = e.x + e.w/2;
+          const cy = e.y + e.h/2;
+          if (Math.hypot(x-cx, y-cy) <= r) return true;
+        }
+      }
+      return false;
     }
 
     // TEST MODE för dark creature:
@@ -2045,6 +2366,7 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           ctx.restore();
         }
 
+
         if (e.type === "flareConsumeVfx"){
           const p = Math.max(0, Math.min(1, (e.t || 0) / Math.max(0.001, e.life || 1)));
           const a = (e.alpha || 0.55) * (1 - p);
@@ -2080,6 +2402,68 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           ctx.fillRect(sx, sy, e.w, e.h);
           ctx.fillStyle = "rgba(255,255,255,0.06)";
           ctx.fillRect(sx, sy, e.w, 2);
+        }
+
+        if (e.type === "hoverVoid"){
+          const cx = sx + e.w * 0.5;
+          const cy = sy + e.h * 0.5;
+          const lit = this.isPointLitAnySource(e.x + e.w*0.5, e.y + e.h*0.5, this._lastPlayer);
+          const palette = this._hoverVoidPalette(e.colorVariant || 0);
+          const bodyAlpha = lit ? (0.38 + (1 - (e.sleepBlend || 1)) * 0.42) : 0;
+          if (bodyAlpha > 0.01){
+            const r = Math.max(e.w, e.h) * 0.9;
+            const grad = ctx.createRadialGradient(cx, cy, r * 0.15, cx, cy, r);
+            grad.addColorStop(0.0, "rgba(8,8,14," + (bodyAlpha * 0.95).toFixed(3) + ")");
+            grad.addColorStop(0.45, palette.mid.replace(/0\.\d+\)/, (bodyAlpha * 0.7).toFixed(3) + ")"));
+            grad.addColorStop(1.0, palette.edge.replace(/0\.\d+\)/, "0)"));
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, e.w * 0.85, e.h * 0.75, Math.sin((e._t || 0) * 0.7) * 0.08, 0, Math.PI*2);
+            ctx.fill();
+          }
+
+          const eyeK = Math.max(0, Math.min(1, e.eyeBlend || 0));
+          if (eyeK > 0.01){
+            const blink = (e._blinkDur > 0) ? 0.15 : 1;
+            const angry = (e._angryT > 0 || e._lungeState !== "idle");
+            const leftR = 2.8;
+            const rightR = 1.9;
+            const eyeY = cy - 1;
+            const leftX = cx - 2.7;
+            const rightX = cx + 2.2;
+            ctx.fillStyle = palette.eye.replace(/0\.\d+\)/, (0.88 * eyeK).toFixed(3) + ")");
+            if (!angry){
+              ctx.beginPath();
+              ctx.ellipse(leftX, eyeY, leftR, leftR * blink, 0, 0, Math.PI*2);
+              ctx.fill();
+              ctx.beginPath();
+              ctx.ellipse(rightX, eyeY + 0.2, rightR, rightR * blink, 0, 0, Math.PI*2);
+              ctx.fill();
+            } else {
+              const drawAngryEye = (x, y, r, inward) => {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI, false);
+                ctx.closePath();
+                ctx.clip();
+                ctx.beginPath();
+                if (inward < 0){
+                  ctx.moveTo(x - r * 1.1, y - r * 1.3);
+                  ctx.lineTo(x + r * 0.95, y - r * 0.2);
+                  ctx.lineTo(x + r * 1.1, y + r * 1.3);
+                } else {
+                  ctx.moveTo(x + r * 1.1, y - r * 1.3);
+                  ctx.lineTo(x - r * 0.95, y - r * 0.2);
+                  ctx.lineTo(x - r * 1.1, y + r * 1.3);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+              };
+              drawAngryEye(leftX, eyeY + 1.2, leftR, 1);
+              drawAngryEye(rightX, eyeY + 1.3, rightR, -1);
+            }
+          }
         }
 
         if (e.type === "darkCreature"){
