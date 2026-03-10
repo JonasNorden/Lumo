@@ -1145,6 +1145,7 @@ display:none;
     // - Firefly uses a non-hostile reaction/trigger radius (purple single ring).
     if (entId.includes("lantern")) return "light";
     if (entId.includes("firefly")) return "trigger";
+    if (entId.includes("hover_void")) return "trigger";
 
     if (/(enemy|creature|aggro|ai|hostile)/.test(meta)) return "aggro";
 
