@@ -678,6 +678,7 @@ if (this._catById){
         _lungeT:0,
         _lungeDirX:0,
         _lungeDirY:0,
+        _facingX:1,
         _lungeHitDone:false,
         _attackCd:attackCooldownMin + Math.random()*(attackCooldownMax-attackCooldownMin),
       };
@@ -1457,6 +1458,9 @@ if (e.type === "lantern"){
           const smooth = 7.5;
           e.vx += (e._targetVX - e.vx) * Math.min(1, smooth * dt);
           e.vy += (e._targetVY - e.vy) * Math.min(1, smooth * dt);
+          const faceThreshold = 14;
+          if (e.vx > faceThreshold) e._facingX = 1;
+          else if (e.vx < -faceThreshold) e._facingX = -1;
           if (e._recoilT > 0){
             e.vx *= 0.92;
             e.vy *= 0.92;
@@ -2409,12 +2413,12 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           const cy = sy + e.h * 0.5;
           const lit = this.isPointLitAnySource(e.x + e.w*0.5, e.y + e.h*0.5, this._lastPlayer);
           const palette = this._hoverVoidPalette(e.colorVariant || 0);
-          const bodyAlpha = lit ? (0.38 + (1 - (e.sleepBlend || 1)) * 0.42) : 0;
+          const bodyAlpha = lit ? (0.46 + (1 - (e.sleepBlend || 1)) * 0.48) : 0;
           if (bodyAlpha > 0.01){
             const r = Math.max(e.w, e.h) * 0.95;
             const grad = ctx.createRadialGradient(cx, cy, r * 0.12, cx, cy, r);
-            grad.addColorStop(0.0, "rgba(" + palette.center[0] + "," + palette.center[1] + "," + palette.center[2] + "," + (bodyAlpha * 0.88).toFixed(3) + ")");
-            grad.addColorStop(0.46, "rgba(" + palette.mid[0] + "," + palette.mid[1] + "," + palette.mid[2] + "," + (bodyAlpha * 0.56).toFixed(3) + ")");
+            grad.addColorStop(0.0, "rgba(" + palette.center[0] + "," + palette.center[1] + "," + palette.center[2] + "," + (bodyAlpha * 0.97).toFixed(3) + ")");
+            grad.addColorStop(0.5, "rgba(" + palette.mid[0] + "," + palette.mid[1] + "," + palette.mid[2] + "," + (bodyAlpha * 0.66).toFixed(3) + ")");
             grad.addColorStop(1.0, "rgba(" + palette.edge[0] + "," + palette.edge[1] + "," + palette.edge[2] + ",0)");
             ctx.fillStyle = grad;
             ctx.beginPath();
@@ -2427,21 +2431,23 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
             const blink = (e._blinkDur > 0) ? 0.15 : 1;
             const angry = (e._angryT > 0 || e._lungeState !== "idle");
             const sEye = Math.min(e.w, e.h) / 16;
-            const leftR = 2.8 * sEye;
-            const rightR = 1.9 * sEye;
-            const eyeY = cy - 1 * sEye;
-            const leftX = cx - 2.7 * sEye;
-            const rightX = cx + 2.2 * sEye;
+            const facingX = (e._facingX === -1) ? -1 : 1;
+            const largeR = 2.8 * sEye;
+            const smallR = 1.9 * sEye;
+            const largeX = cx - (7 * sEye) * facingX;
+            const largeY = cy - 6 * sEye;
+            const smallX = cx + (6 * sEye) * facingX;
+            const smallY = cy - 4 * sEye;
             const eyeAlpha = (0.9 * eyeK);
             ctx.fillStyle = "rgba(243,240,255," + eyeAlpha.toFixed(3) + ")";
             ctx.shadowColor = "rgba(243,240,255," + (0.55 * eyeK).toFixed(3) + ")";
             ctx.shadowBlur = 5;
             if (!angry){
               ctx.beginPath();
-              ctx.ellipse(leftX, eyeY, leftR, leftR * blink, 0, 0, Math.PI*2);
+              ctx.ellipse(largeX, largeY, largeR, largeR * blink, 0, 0, Math.PI*2);
               ctx.fill();
               ctx.beginPath();
-              ctx.ellipse(rightX, eyeY + 0.2, rightR, rightR * blink, 0, 0, Math.PI*2);
+              ctx.ellipse(smallX, smallY, smallR, smallR * blink, 0, 0, Math.PI*2);
               ctx.fill();
             } else {
               const drawFilledAngryEye = (x, y, r, tilt) => {
@@ -2471,17 +2477,17 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
                 ctx.restore();
               };
               if ((e._blinkDur || 0) <= 0) {
-                drawFilledAngryEye(cx - 7 * sEye, cy - 6 * sEye, 3.5 * sEye, -1);
-                drawFilledAngryEye(cx + 6 * sEye, cy - 4 * sEye, 2.3 * sEye, 1);
+                drawFilledAngryEye(largeX, largeY, 3.5 * sEye, -1 * facingX);
+                drawFilledAngryEye(smallX, smallY, 2.3 * sEye, 1 * facingX);
               } else {
                 ctx.strokeStyle = "rgba(243,240,255," + eyeAlpha.toFixed(3) + ")";
                 ctx.lineWidth = 1.8;
                 ctx.lineCap = "round";
                 ctx.beginPath();
-                ctx.moveTo(cx - 10.2 * sEye, cy - 8.0 * sEye);
-                ctx.lineTo(cx - 4.2 * sEye, cy - 5.8 * sEye);
-                ctx.moveTo(cx + 4.0 * sEye, cy - 5.8 * sEye);
-                ctx.lineTo(cx + 8.2 * sEye, cy - 8.0 * sEye);
+                ctx.moveTo(largeX - 3.2 * sEye * facingX, largeY - 2.0 * sEye);
+                ctx.lineTo(largeX + 2.8 * sEye * facingX, largeY + 0.2 * sEye);
+                ctx.moveTo(smallX - 2.0 * sEye * facingX, smallY + 0.2 * sEye);
+                ctx.lineTo(smallX + 2.2 * sEye * facingX, smallY - 2.0 * sEye);
                 ctx.stroke();
               }
             }
