@@ -88,6 +88,7 @@ window.LUMO_CATALOG_ENTITIES = [
     "anchor": "BL",
     "defaults": {
       "aggroTiles": 7,
+      "followTiles": 7,
       "maxHp": 3,
       "colorVariant": 0,
       "loseSightTiles": 11,
@@ -100,6 +101,7 @@ window.LUMO_CATALOG_ENTITIES = [
     },
     "shownParams": [
       "aggroTiles",
+      "followTiles",
       "maxHp",
       "colorVariant",
       "loseSightTiles",
