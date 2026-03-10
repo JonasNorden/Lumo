@@ -2413,12 +2413,12 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           const cy = sy + e.h * 0.5;
           const lit = this.isPointLitAnySource(e.x + e.w*0.5, e.y + e.h*0.5, this._lastPlayer);
           const palette = this._hoverVoidPalette(e.colorVariant || 0);
-          const bodyAlpha = lit ? (0.46 + (1 - (e.sleepBlend || 1)) * 0.48) : 0;
+          const bodyAlpha = lit ? (0.53 + (1 - (e.sleepBlend || 1)) * 0.55) : 0;
           if (bodyAlpha > 0.01){
             const r = Math.max(e.w, e.h) * 0.95;
             const grad = ctx.createRadialGradient(cx, cy, r * 0.12, cx, cy, r);
-            grad.addColorStop(0.0, "rgba(" + palette.center[0] + "," + palette.center[1] + "," + palette.center[2] + "," + (bodyAlpha * 0.97).toFixed(3) + ")");
-            grad.addColorStop(0.5, "rgba(" + palette.mid[0] + "," + palette.mid[1] + "," + palette.mid[2] + "," + (bodyAlpha * 0.66).toFixed(3) + ")");
+            grad.addColorStop(0.0, "rgba(" + palette.center[0] + "," + palette.center[1] + "," + palette.center[2] + "," + (bodyAlpha * 1.02).toFixed(3) + ")");
+            grad.addColorStop(0.5, "rgba(" + palette.mid[0] + "," + palette.mid[1] + "," + palette.mid[2] + "," + (bodyAlpha * 0.72).toFixed(3) + ")");
             grad.addColorStop(1.0, "rgba(" + palette.edge[0] + "," + palette.edge[1] + "," + palette.edge[2] + ",0)");
             ctx.fillStyle = grad;
             ctx.beginPath();
@@ -2438,10 +2438,10 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
             const largeY = cy - 6 * sEye;
             const smallX = cx + (6 * sEye) * facingX;
             const smallY = cy - 4 * sEye;
-            const eyeAlpha = (0.9 * eyeK);
-            ctx.fillStyle = "rgba(243,240,255," + eyeAlpha.toFixed(3) + ")";
-            ctx.shadowColor = "rgba(243,240,255," + (0.55 * eyeK).toFixed(3) + ")";
-            ctx.shadowBlur = 5;
+            const eyeAlpha = (0.97 * eyeK);
+            ctx.fillStyle = "rgba(246,250,255," + eyeAlpha.toFixed(3) + ")";
+            ctx.shadowColor = "rgba(205,240,255," + (0.82 * eyeK).toFixed(3) + ")";
+            ctx.shadowBlur = 8;
             if (!angry){
               ctx.beginPath();
               ctx.ellipse(largeX, largeY, largeR, largeR * blink, 0, 0, Math.PI*2);
