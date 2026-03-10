@@ -628,6 +628,8 @@ if (this._catById){
       };
       const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
       const aggroTiles = Math.max(0, nOr(params && params.aggroTiles, 7));
+      const followTilesRaw = nOr(params && params.followTiles, null);
+      const followTiles = Math.max(0, (followTilesRaw != null) ? followTilesRaw : aggroTiles);
       const maxHp = Math.max(1, Math.floor(nOr(params && params.maxHp, 3)));
       const colorVariant = clamp(Math.floor(nOr(params && params.colorVariant, 0)), 0, 3);
       const loseSightTiles = Math.max(aggroTiles, nOr(params && params.loseSightTiles, 11));
@@ -651,6 +653,7 @@ if (this._catById){
         hp:maxHp,
         maxHp,
         aggroTiles,
+        followTiles,
         loseSightTiles,
         colorVariant,
         attackCooldownMin,
@@ -1325,6 +1328,8 @@ if (e.type === "lantern"){
           const toPlayerY = pcy - cy;
           const dPlayer = Math.hypot(toPlayerX, toPlayerY);
           const wakeR = Math.max(0, e.aggroTiles * ts);
+          const followTiles = Number.isFinite(e.followTiles) ? e.followTiles : e.aggroTiles;
+          const followR = Math.max(0, followTiles * ts);
           const loseR = Math.max(wakeR, e.loseSightTiles * ts);
 
           if (!e.awake && player && dPlayer <= wakeR) e.awake = true;
@@ -1352,11 +1357,12 @@ if (e.type === "lantern"){
               const groupSize = awakeList.length;
               const brave = groupSize >= e.braveGroupSize;
               const targetDist = 3 * ts;
-              if (player && dPlayer > targetDist){
+              const shouldFollow = !!(player && dPlayer <= followR);
+              if (shouldFollow && dPlayer > targetDist){
                 const d = Math.max(0.001, dPlayer);
                 e._targetVX += (toPlayerX / d) * 52;
                 e._targetVY += (toPlayerY / d) * 52;
-              } else if (player){
+              } else if (shouldFollow){
                 const d = Math.max(0.001, dPlayer);
                 e._targetVX -= (toPlayerX / d) * 22;
                 e._targetVY -= (toPlayerY / d) * 22;
@@ -1399,7 +1405,7 @@ if (e.type === "lantern"){
               }
 
               const swarmBonus = (groupSize >= e.swarmGroupSize) ? 0.6 : 0;
-              const canAttack = brave && player && dPlayer <= Math.max(ts * 1.0, targetDist + ts * 0.5);
+              const canAttack = brave && shouldFollow && dPlayer <= Math.max(ts * 1.0, targetDist + ts * 0.5);
               if (canAttack && e._attackCd <= 0 && this._hoverVoidAttackGlobalCd <= 0){
                 e._lungeState = "out";
                 e._lungeActor = true;
@@ -2413,16 +2419,17 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           const cy = sy + e.h * 0.5;
           const lit = this.isPointLitAnySource(e.x + e.w*0.5, e.y + e.h*0.5, this._lastPlayer);
           const palette = this._hoverVoidPalette(e.colorVariant || 0);
-          const bodyAlpha = lit ? (0.53 + (1 - (e.sleepBlend || 1)) * 0.55) : 0;
+          const bodyAlpha = lit ? (0.61 + (1 - (e.sleepBlend || 1)) * 0.63) : 0;
           if (bodyAlpha > 0.01){
             const r = Math.max(e.w, e.h) * 0.95;
             const grad = ctx.createRadialGradient(cx, cy, r * 0.12, cx, cy, r);
-            grad.addColorStop(0.0, "rgba(" + palette.center[0] + "," + palette.center[1] + "," + palette.center[2] + "," + (bodyAlpha * 1.02).toFixed(3) + ")");
-            grad.addColorStop(0.5, "rgba(" + palette.mid[0] + "," + palette.mid[1] + "," + palette.mid[2] + "," + (bodyAlpha * 0.72).toFixed(3) + ")");
+            grad.addColorStop(0.0, "rgba(" + palette.center[0] + "," + palette.center[1] + "," + palette.center[2] + "," + (bodyAlpha * 1.15).toFixed(3) + ")");
+            grad.addColorStop(0.5, "rgba(" + palette.mid[0] + "," + palette.mid[1] + "," + palette.mid[2] + "," + (bodyAlpha * 0.83).toFixed(3) + ")");
             grad.addColorStop(1.0, "rgba(" + palette.edge[0] + "," + palette.edge[1] + "," + palette.edge[2] + ",0)");
             ctx.fillStyle = grad;
+            const bodyScale = 1.15;
             ctx.beginPath();
-            ctx.ellipse(cx, cy, e.w * 0.85, e.h * 0.75, Math.sin((e._t || 0) * 0.7) * 0.08, 0, Math.PI*2);
+            ctx.ellipse(cx, cy, e.w * 0.85 * bodyScale, e.h * 0.75 * bodyScale, Math.sin((e._t || 0) * 0.7) * 0.08, 0, Math.PI*2);
             ctx.fill();
           }
 
@@ -2438,10 +2445,10 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
             const largeY = cy - 6 * sEye;
             const smallX = cx + (6 * sEye) * facingX;
             const smallY = cy - 4 * sEye;
-            const eyeAlpha = (0.97 * eyeK);
+            const eyeAlpha = (1.0 * eyeK);
             ctx.fillStyle = "rgba(246,250,255," + eyeAlpha.toFixed(3) + ")";
-            ctx.shadowColor = "rgba(205,240,255," + (0.82 * eyeK).toFixed(3) + ")";
-            ctx.shadowBlur = 8;
+            ctx.shadowColor = "rgba(205,240,255," + (0.95 * eyeK).toFixed(3) + ")";
+            ctx.shadowBlur = 11;
             if (!angry){
               ctx.beginPath();
               ctx.ellipse(largeX, largeY, largeR, largeR * blink, 0, 0, Math.PI*2);
