@@ -1457,42 +1457,28 @@ const b = hudCanvas._pauseBtn;
         }
       }
       if (hasSaveSlot()){
-        const previewZoneX = bgDrawW * 0.2;
-        const previewZoneY = -bgDrawH * 0.205;
-        const previewZoneW = bgDrawW * 0.375;
-        const previewZoneH = bgDrawH * 0.525;
-        const insetPad = Math.max(12, Math.round(bgDrawH * 0.012));
-
-        const zoneGradient = ctx.createLinearGradient(
-          previewZoneX,
-          previewZoneY,
-          previewZoneX + previewZoneW,
-          previewZoneY + previewZoneH
-        );
-        zoneGradient.addColorStop(0, "rgba(7,30,42,0.2)");
-        zoneGradient.addColorStop(0.5, "rgba(18,58,74,0.34)");
-        zoneGradient.addColorStop(1, "rgba(6,22,35,0.24)");
-        ctx.fillStyle = zoneGradient;
-        ctx.fillRect(previewZoneX, previewZoneY, previewZoneW, previewZoneH);
-
-        ctx.strokeStyle = "rgba(126,239,255,0.26)";
-        ctx.lineWidth = 1.4;
-        ctx.strokeRect(previewZoneX, previewZoneY, previewZoneW, previewZoneH);
+        const previewInsetX = bgDrawW * 0.27;
+        const previewInsetY = -bgDrawH * 0.16;
+        const previewInsetW = bgDrawW * 0.27;
+        const previewInsetH = bgDrawH * 0.265;
+        const textInsetX = bgDrawW * 0.27;
+        const textInsetY = bgDrawH * 0.135;
+        const insetPad = Math.max(10, Math.round(bgDrawH * 0.01));
 
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
-        ctx.font = `${Math.max(18, Math.round(bgDrawH * 0.028))}px "Orbitron","Trebuchet MS",sans-serif`;
+        ctx.font = `${Math.max(17, Math.round(bgDrawH * 0.025))}px "Orbitron","Trebuchet MS",sans-serif`;
         ctx.fillStyle = "rgba(210,253,255,0.95)";
-        ctx.fillText("Last save", previewZoneX + insetPad, previewZoneY + insetPad * 0.65);
+        ctx.fillText("Last save", textInsetX, textInsetY - Math.max(28, bgDrawH * 0.032));
 
-        const snapX = previewZoneX + insetPad;
-        const snapY = previewZoneY + insetPad + Math.max(24, Math.round(bgDrawH * 0.028));
-        const snapW = previewZoneW - insetPad * 2;
-        const snapH = previewZoneH * 0.56;
+        const snapX = previewInsetX;
+        const snapY = previewInsetY;
+        const snapW = previewInsetW;
+        const snapH = previewInsetH;
 
         const snapBack = ctx.createLinearGradient(snapX, snapY, snapX + snapW, snapY + snapH);
-        snapBack.addColorStop(0, "rgba(10,38,51,0.88)");
-        snapBack.addColorStop(1, "rgba(6,24,36,0.9)");
+        snapBack.addColorStop(0, "rgba(9,31,43,0.55)");
+        snapBack.addColorStop(1, "rgba(8,24,35,0.62)");
         ctx.fillStyle = snapBack;
         ctx.fillRect(snapX, snapY, snapW, snapH);
 
@@ -1503,18 +1489,22 @@ const b = hudCanvas._pauseBtn;
           }
         }
 
-        ctx.strokeStyle = "rgba(145,233,246,0.52)";
-        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = "rgba(145,233,246,0.3)";
+        ctx.lineWidth = 1.2;
         ctx.strokeRect(snapX, snapY, snapW, snapH);
 
-        const infoY = snapY + snapH + Math.max(12, Math.round(bgDrawH * 0.014));
-        const infoLineH = Math.max(21, Math.round(bgDrawH * 0.03));
+        ctx.strokeStyle = "rgba(141,224,240,0.18)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(snapX + insetPad, snapY + insetPad, snapW - insetPad * 2, snapH - insetPad * 2);
+
+        const infoY = textInsetY;
+        const infoLineH = Math.max(20, Math.round(bgDrawH * 0.028));
         ctx.font = `${Math.max(16, Math.round(bgDrawH * 0.024))}px "Trebuchet MS",sans-serif`;
         ctx.fillStyle = "rgba(200,242,252,0.95)";
-        ctx.fillText(saveSlot.levelName || saveSlot.levelKey || "Unknown level", snapX, infoY);
+        ctx.fillText(saveSlot.levelName || saveSlot.levelKey || "Unknown level", textInsetX, infoY);
         ctx.fillStyle = "rgba(176,226,238,0.92)";
-        ctx.fillText(`Saved: ${formatSavedTimestamp(saveSlot.savedAtMs)}`, snapX, infoY + infoLineH);
-        ctx.fillText(`Session: ${formatSessionDuration(saveSlot.sessionDurationSec)}`, snapX, infoY + infoLineH * 2);
+        ctx.fillText(`Saved: ${formatSavedTimestamp(saveSlot.savedAtMs)}`, textInsetX, infoY + infoLineH);
+        ctx.fillText(`Session: ${formatSessionDuration(saveSlot.sessionDurationSec)}`, textInsetX, infoY + infoLineH * 2);
       }
       ctx.restore();
 
