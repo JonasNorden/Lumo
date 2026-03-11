@@ -179,6 +179,26 @@
     { x: 0.742, y: 0.214, r: 0.018, amp: 0.39, speed: 0.57, phase: 4.9 },
     { x: 0.848, y: 0.566, r: 0.017, amp: 0.37, speed: 0.43, phase: 5.4 }
   ];
+  const previewDebug = {
+    x: 0,
+    y: 0,
+    w: 0,
+    h: 0,
+    initialized: false,
+    panelX: 0,
+    panelY: 0,
+    tilt: 0
+  };
+
+  function logPreviewDebugBox(){
+    const c = Math.cos(previewDebug.tilt);
+    const s = Math.sin(previewDebug.tilt);
+    const topLeftX = previewDebug.panelX + (previewDebug.x * c - previewDebug.y * s);
+    const topLeftY = previewDebug.panelY + (previewDebug.x * s + previewDebug.y * c);
+    console.log(
+      `[TEMP DEBUG] Preview debug box: x=${Math.round(previewDebug.x)}, y=${Math.round(previewDebug.y)}, w=${Math.round(previewDebug.w)}, h=${Math.round(previewDebug.h)} | screenTopLeftX=${Math.round(topLeftX)}, screenTopLeftY=${Math.round(topLeftY)}`
+    );
+  }
 
   function clamp01(v){
     return Math.max(0, Math.min(1, Number(v) || 0));
@@ -885,6 +905,34 @@ const b = hudCanvas._pauseBtn;
         e.preventDefault();
         return;
       }
+      if (hasSaveSlot()){
+        const step = e.shiftKey ? 10 : 1;
+        if (e.key === "ArrowLeft"){
+          previewDebug.x -= step;
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "ArrowRight"){
+          previewDebug.x += step;
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "ArrowUp"){
+          previewDebug.y -= step;
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "ArrowDown"){
+          previewDebug.y += step;
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "Enter"){
+          logPreviewDebugBox();
+          e.preventDefault();
+          return;
+        }
+      }
       if (e.key === "Enter" || e.key === " "){
         activateMenuItem(menuUi.selectedIndex);
         e.preventDefault();
@@ -1465,16 +1513,27 @@ const b = hudCanvas._pauseBtn;
         const textInsetY = bgDrawH * 0.116;
         const insetPad = Math.max(10, Math.round(bgDrawH * 0.01));
 
+        if (!previewDebug.initialized){
+          previewDebug.x = previewInsetX;
+          previewDebug.y = previewInsetY;
+          previewDebug.w = previewInsetW;
+          previewDebug.h = previewInsetH;
+          previewDebug.initialized = true;
+        }
+        previewDebug.panelX = panelX;
+        previewDebug.panelY = panelY;
+        previewDebug.tilt = tilt;
+
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
         ctx.font = `${Math.max(17, Math.round(bgDrawH * 0.025))}px "Orbitron","Trebuchet MS",sans-serif`;
         ctx.fillStyle = "rgba(210,253,255,0.95)";
         ctx.fillText("Last save", textInsetX, textInsetY - Math.max(28, bgDrawH * 0.032));
 
-        const snapX = previewInsetX;
-        const snapY = previewInsetY;
-        const snapW = previewInsetW;
-        const snapH = previewInsetH;
+        const snapX = previewDebug.x;
+        const snapY = previewDebug.y;
+        const snapW = previewDebug.w;
+        const snapH = previewDebug.h;
 
         const snapBack = ctx.createLinearGradient(snapX, snapY, snapX + snapW, snapY + snapH);
         snapBack.addColorStop(0, "rgba(9,31,43,0.55)");
@@ -1505,6 +1564,17 @@ const b = hudCanvas._pauseBtn;
         ctx.fillStyle = "rgba(176,226,238,0.92)";
         ctx.fillText(`Saved: ${formatSavedTimestamp(saveSlot.savedAtMs)}`, textInsetX, infoY + infoLineH);
         ctx.fillText(`Session: ${formatSessionDuration(saveSlot.sessionDurationSec)}`, textInsetX, infoY + infoLineH * 2);
+
+        ctx.strokeStyle = "rgba(255,88,88,0.95)";
+        ctx.lineWidth = 2;
+        ctx.fillStyle = "rgba(255,88,88,0.16)";
+        ctx.fillRect(snapX, snapY, snapW, snapH);
+        ctx.strokeRect(snapX, snapY, snapW, snapH);
+
+        ctx.font = `${Math.max(11, Math.round(bgDrawH * 0.0155))}px "Trebuchet MS",sans-serif`;
+        ctx.fillStyle = "rgba(255,230,230,0.98)";
+        const debugLabel = `TEMP PREVIEW DEBUG x=${Math.round(snapX)} y=${Math.round(snapY)} w=${Math.round(snapW)} h=${Math.round(snapH)} (Shift=10px, Enter=log)`;
+        ctx.fillText(debugLabel, snapX + 6, Math.max(4, snapY - 18));
       }
       ctx.restore();
 
