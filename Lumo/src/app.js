@@ -1456,53 +1456,67 @@ const b = hudCanvas._pauseBtn;
           menuUi.beginQuestBounds = bounds;
         }
       }
-      ctx.restore();
-
       if (hasSaveSlot()){
-        const previewX = bgDrawX + bgDrawW * 0.56;
-        const previewY = bgDrawY + bgDrawH * 0.24;
-        const previewW = bgDrawW * 0.34;
-        const previewH = bgDrawH * 0.52;
-        ctx.save();
-        ctx.fillStyle = "rgba(3,17,26,0.72)";
-        ctx.strokeStyle = "rgba(126,239,255,0.42)";
-        ctx.lineWidth = 2;
-        ctx.fillRect(previewX, previewY, previewW, previewH);
-        ctx.strokeRect(previewX, previewY, previewW, previewH);
+        const previewZoneX = bgDrawW * 0.2;
+        const previewZoneY = -bgDrawH * 0.205;
+        const previewZoneW = bgDrawW * 0.375;
+        const previewZoneH = bgDrawH * 0.525;
+        const insetPad = Math.max(12, Math.round(bgDrawH * 0.012));
+
+        const zoneGradient = ctx.createLinearGradient(
+          previewZoneX,
+          previewZoneY,
+          previewZoneX + previewZoneW,
+          previewZoneY + previewZoneH
+        );
+        zoneGradient.addColorStop(0, "rgba(7,30,42,0.2)");
+        zoneGradient.addColorStop(0.5, "rgba(18,58,74,0.34)");
+        zoneGradient.addColorStop(1, "rgba(6,22,35,0.24)");
+        ctx.fillStyle = zoneGradient;
+        ctx.fillRect(previewZoneX, previewZoneY, previewZoneW, previewZoneH);
+
+        ctx.strokeStyle = "rgba(126,239,255,0.26)";
+        ctx.lineWidth = 1.4;
+        ctx.strokeRect(previewZoneX, previewZoneY, previewZoneW, previewZoneH);
 
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
         ctx.font = `${Math.max(18, Math.round(bgDrawH * 0.028))}px "Orbitron","Trebuchet MS",sans-serif`;
-        ctx.fillStyle = "#CFFFFF";
-        ctx.fillText("Continue", previewX + 18, previewY + 14);
+        ctx.fillStyle = "rgba(210,253,255,0.95)";
+        ctx.fillText("Last save", previewZoneX + insetPad, previewZoneY + insetPad * 0.65);
 
-        const snapX = previewX + 18;
-        const snapY = previewY + 46;
-        const snapW = previewW - 36;
-        const snapH = previewH * 0.5;
+        const snapX = previewZoneX + insetPad;
+        const snapY = previewZoneY + insetPad + Math.max(24, Math.round(bgDrawH * 0.028));
+        const snapW = previewZoneW - insetPad * 2;
+        const snapH = previewZoneH * 0.56;
+
+        const snapBack = ctx.createLinearGradient(snapX, snapY, snapX + snapW, snapY + snapH);
+        snapBack.addColorStop(0, "rgba(10,38,51,0.88)");
+        snapBack.addColorStop(1, "rgba(6,24,36,0.9)");
+        ctx.fillStyle = snapBack;
+        ctx.fillRect(snapX, snapY, snapW, snapH);
+
         if (saveSlot.snapshotDataUrl){
           const snapImg = getSaveSnapshotImage();
           if (snapImg && snapImg.complete && snapImg.naturalWidth > 0){
             ctx.drawImage(snapImg, snapX, snapY, snapW, snapH);
-          } else {
-            ctx.fillStyle = "rgba(15,49,64,0.92)";
-            ctx.fillRect(snapX, snapY, snapW, snapH);
           }
-        } else {
-          ctx.fillStyle = "rgba(15,49,64,0.92)";
-          ctx.fillRect(snapX, snapY, snapW, snapH);
         }
-        ctx.strokeStyle = "rgba(120,222,240,0.48)";
+
+        ctx.strokeStyle = "rgba(145,233,246,0.52)";
+        ctx.lineWidth = 1.6;
         ctx.strokeRect(snapX, snapY, snapW, snapH);
 
-        const infoY = snapY + snapH + 12;
-        ctx.font = `${Math.max(15, Math.round(bgDrawH * 0.024))}px "Trebuchet MS",sans-serif`;
-        ctx.fillStyle = "#BEEFFC";
+        const infoY = snapY + snapH + Math.max(12, Math.round(bgDrawH * 0.014));
+        const infoLineH = Math.max(21, Math.round(bgDrawH * 0.03));
+        ctx.font = `${Math.max(16, Math.round(bgDrawH * 0.024))}px "Trebuchet MS",sans-serif`;
+        ctx.fillStyle = "rgba(200,242,252,0.95)";
         ctx.fillText(saveSlot.levelName || saveSlot.levelKey || "Unknown level", snapX, infoY);
-        ctx.fillText(`Saved: ${formatSavedTimestamp(saveSlot.savedAtMs)}`, snapX, infoY + 24);
-        ctx.fillText(`Session: ${formatSessionDuration(saveSlot.sessionDurationSec)}`, snapX, infoY + 48);
-        ctx.restore();
+        ctx.fillStyle = "rgba(176,226,238,0.92)";
+        ctx.fillText(`Saved: ${formatSavedTimestamp(saveSlot.savedAtMs)}`, snapX, infoY + infoLineH);
+        ctx.fillText(`Session: ${formatSessionDuration(saveSlot.sessionDurationSec)}`, snapX, infoY + infoLineH * 2);
       }
+      ctx.restore();
 
       ctx.save();
       ctx.textAlign = "left";
