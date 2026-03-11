@@ -757,7 +757,7 @@ dctx.restore();
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.font = "28px monospace";
-      ctx.fillText("PAUSED - press P or click to resume", this.w/2, this.h/2);
+      ctx.fillText("PAUSED - P/click: resume • S: save & exit", this.w/2, this.h/2);
       ctx.restore();
     }
   }

@@ -123,6 +123,7 @@
     current: null
   };
   const SETTINGS_STORAGE_KEY = "lumo.settings.audio.v1";
+  const SAVE_STORAGE_KEY = "lumo.save.slot1.v1";
   const defaultAudioSettings = Object.freeze({
     musicVolume: 0.42,
     sfxVolume: 0.6
@@ -140,11 +141,19 @@
   music.gameplay.loop = true;
   applyMusicVolume(audioSettings.musicVolume);
 
-  const menuItems = ["Begin Quest", "Settings", "Score Board", "Credits", "Fan Art"];
+  let sessionStartedAtMs = Date.now();
+  let saveSlot = loadSaveSlot();
+  let pendingNewQuestConfirm = false;
+  let saveSnapshotImage = null;
+  let saveSnapshotSrc = "";
+
+  const menuItemsBase = ["Begin Quest", "Settings", "Fan Art"];
   const menuUi = {
     beginQuestBounds: null,
     itemBounds: [],
-    selectedIndex: 0
+    selectedIndex: 0,
+    creditsBounds: null,
+    confirmBounds: []
   };
   const fanArtUi = {
     images: [],
@@ -187,6 +196,166 @@
     } catch (_err){
       return { ...defaultAudioSettings };
     }
+  }
+
+  function hasSaveSlot(){
+    return !!(saveSlot && saveSlot.levelKey);
+  }
+
+  function getMenuItems(){
+    return hasSaveSlot() ? ["Continue", ...menuItemsBase] : [...menuItemsBase];
+  }
+
+  function ensureMenuSelectionValid(){
+    const items = getMenuItems();
+    if (!items.length){
+      menuUi.selectedIndex = 0;
+      return;
+    }
+    if (menuUi.selectedIndex >= items.length) menuUi.selectedIndex = items.length - 1;
+    if (menuUi.selectedIndex < 0) menuUi.selectedIndex = 0;
+  }
+
+  function formatSavedTimestamp(ts){
+    if (!Number.isFinite(ts) || ts <= 0) return "Unknown";
+    const d = new Date(ts);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function formatSessionDuration(seconds){
+    const totalSec = Math.max(0, Math.floor(Number(seconds) || 0));
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    if (mins <= 0) return `${secs}s`;
+    if (mins < 60) return `${mins} min`;
+    const hrs = Math.floor(mins / 60);
+    const remMins = mins % 60;
+    return `${hrs}h ${remMins}m`;
+  }
+
+  function currentLevelKey(){
+    const cur = levelManager.lastLoadedLevel;
+    if (!cur || !levelManager.levels) return null;
+    for (const [key, obj] of Object.entries(levelManager.levels)){
+      if (obj === cur) return key;
+    }
+    return null;
+  }
+
+  function currentLevelName(){
+    const lvl = levelManager.lastLoadedLevel;
+    return (lvl && lvl.meta && lvl.meta.name) ? lvl.meta.name : "Unknown level";
+  }
+
+  function loadSaveSlot(){
+    try {
+      const raw = localStorage.getItem(SAVE_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object" || !parsed.levelKey) return null;
+      return parsed;
+    } catch (_err){
+      return null;
+    }
+  }
+
+  function getSaveSnapshotImage(){
+    if (!saveSlot || !saveSlot.snapshotDataUrl) return null;
+    if (saveSnapshotImage && saveSnapshotSrc === saveSlot.snapshotDataUrl) return saveSnapshotImage;
+    const img = new Image();
+    img.src = saveSlot.snapshotDataUrl;
+    saveSnapshotImage = img;
+    saveSnapshotSrc = saveSlot.snapshotDataUrl;
+    return saveSnapshotImage;
+  }
+
+  function saveRunState(){
+    const levelKey = currentLevelKey();
+    if (!levelKey) return false;
+
+    const sessionDurationSec = Math.max(0, Math.floor((Date.now() - sessionStartedAtMs) / 1000));
+    let snapshotDataUrl = "";
+    try {
+      snapshotDataUrl = canvas.toDataURL("image/jpeg", 0.72);
+    } catch (_err){
+      snapshotDataUrl = "";
+    }
+
+    const payload = {
+      version: 1,
+      levelKey,
+      levelName: currentLevelName(),
+      savedAtMs: Date.now(),
+      sessionDurationSec,
+      snapshotDataUrl,
+      player: {
+        x: Number(player.x) || 0,
+        y: Number(player.y) || 0,
+        lives: Number(player.lives) || 4,
+        flares: Number(player.flares) || 1,
+        energy: Number(player.energy) || 1,
+        checkpoint: player.checkpoint ? {
+          tx: Number(player.checkpoint.tx) || 0,
+          ty: Number(player.checkpoint.ty) || 0,
+          px: Number(player.checkpoint.px) || 0,
+          py: Number(player.checkpoint.py) || 0
+        } : null
+      }
+    };
+
+    try {
+      localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(payload));
+      saveSlot = payload;
+      if (!payload.snapshotDataUrl){
+        saveSnapshotImage = null;
+        saveSnapshotSrc = "";
+      }
+      return true;
+    } catch (_err){
+      return false;
+    }
+  }
+
+  function loadContinueFromSave(){
+    const slot = loadSaveSlot();
+    if (!slot || !slot.levelKey) return false;
+    const levelObj = levelManager.levels[slot.levelKey];
+    if (!levelObj) return false;
+
+    resetRunStateForNewGame();
+    loadLevel(levelObj);
+
+    if (slot.player && typeof slot.player === "object"){
+      player.x = Number(slot.player.x) || player.x;
+      player.y = Number(slot.player.y) || player.y;
+      player.vx = 0;
+      player.vy = 0;
+      player.lives = Math.max(1, Number(slot.player.lives) || 4);
+      player.flares = Math.max(0, Number(slot.player.flares) || 0);
+      player.setEnergy(Number(slot.player.energy) || 1);
+
+      if (slot.player.checkpoint){
+        player.checkpoint = {
+          tx: Number(slot.player.checkpoint.tx) || 0,
+          ty: Number(slot.player.checkpoint.ty) || 0,
+          px: Number(slot.player.checkpoint.px) || 0,
+          py: Number(slot.player.checkpoint.py) || 0
+        };
+        setCheckpoint(player.checkpoint.px, player.checkpoint.py);
+      }
+    }
+
+    saveSlot = slot;
+    if (!slot.snapshotDataUrl){
+      saveSnapshotImage = null;
+      saveSnapshotSrc = "";
+    }
+    sessionStartedAtMs = Date.now();
+    paused = false;
+    gameState = GameState.PLAYING;
+    hudDebug.textContent = `Continue -> ${slot.levelKey}`;
+    return true;
   }
 
   function saveAudioSettings(){
@@ -312,16 +481,32 @@
   }
 
   function activateMenuItem(index){
-    if (index === 0){
+    const items = getMenuItems();
+    const label = items[index];
+    if (!label) return;
+
+    if (label === "Continue"){
+      playUiSfx("confirm");
+      loadContinueFromSave();
+      return;
+    }
+
+    if (label === "Begin Quest"){
+      if (hasSaveSlot()){
+        pendingNewQuestConfirm = true;
+        playUiSfx("navigate");
+        return;
+      }
       playUiSfx("confirm");
       startMenuQuest();
       return;
     }
-    if (index === 1){
+
+    if (label === "Settings"){
       enterSettings();
       return;
     }
-    if (index === 4){
+    if (label === "Fan Art"){
       enterFanArt();
     }
   }
@@ -414,6 +599,7 @@
     }
 
     resetRunStateForNewGame();
+    sessionStartedAtMs = Date.now();
     loadLevel(lvl);
     paused = false;
     gameState = GameState.PLAYING;
@@ -503,6 +689,15 @@
     hudDebug.textContent = "Game Over -> main menu";
   }
 
+  function saveAndExitToMenu(){
+    const ok = saveRunState();
+    paused = false;
+    gameState = GameState.MENU;
+    pendingNewQuestConfirm = false;
+    ensureMenuSelectionValid();
+    hudDebug.textContent = ok ? "Saved & returned to menu" : "Save failed";
+  }
+
   // Klick på canvas = toggle pause / klicka på paus-knappen
   canvas.addEventListener("mousedown", (e) => {
     if (bootActive) return;
@@ -513,6 +708,38 @@
       const sy = r.h / rect.height;
       const mx = (e.clientX - rect.left) * sx;
       const my = (e.clientY - rect.top) * sy;
+
+      if (pendingNewQuestConfirm){
+        for (let i = 0; i < menuUi.confirmBounds.length; i++){
+          const b = menuUi.confirmBounds[i];
+          if (!b) continue;
+          if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
+            if (i === 0){
+              loadContinueFromSave();
+              playUiSfx("confirm");
+            } else if (i === 1){
+              pendingNewQuestConfirm = false;
+              playUiSfx("confirm");
+              startMenuQuest();
+            } else {
+              pendingNewQuestConfirm = false;
+              playUiSfx("navigate");
+            }
+            return;
+          }
+        }
+        pendingNewQuestConfirm = false;
+        return;
+      }
+
+      if (menuUi.creditsBounds){
+        const b = menuUi.creditsBounds;
+        if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
+          playUiSfx("confirm");
+          alert("Lumo — Erik Nilsson © 2026");
+          return;
+        }
+      }
 
       for (let i = 0; i < menuUi.itemBounds.length; i++){
         const b = menuUi.itemBounds[i];
@@ -588,6 +815,7 @@ const b = hudCanvas._pauseBtn;
     const my = (e.clientY - rect.top) * sy;
 
     if (gameState === GameState.MENU){
+      if (pendingNewQuestConfirm) return;
       if (!menuUi.itemBounds.length) return;
 
       for (let i = 0; i < menuUi.itemBounds.length; i++){
@@ -628,7 +856,23 @@ const b = hudCanvas._pauseBtn;
   window.addEventListener("keydown", (e) => {
     if (gameState === GameState.MENU){
       unlockMenuMusicFromInteraction();
+      const menuItems = getMenuItems();
       if (e.repeat) return;
+      if (pendingNewQuestConfirm){
+        if (e.key === "Escape"){
+          pendingNewQuestConfirm = false;
+          playUiSfx("navigate");
+          e.preventDefault();
+          return;
+        }
+        if (e.key === "Enter" || e.key === " "){
+          playUiSfx("confirm");
+          pendingNewQuestConfirm = false;
+          loadContinueFromSave();
+          e.preventDefault();
+        }
+        return;
+      }
       if (e.key === "ArrowDown"){
         menuUi.selectedIndex = (menuUi.selectedIndex + 1) % menuItems.length;
         playUiSfx("navigate");
@@ -723,6 +967,11 @@ const b = hudCanvas._pauseBtn;
     }
 
     if (e.repeat) return;
+    if (paused && (e.key === "s" || e.key === "S")){
+      saveAndExitToMenu();
+      e.preventDefault();
+      return;
+    }
     if (e.key === "p" || e.key === "P"){
       paused = !paused;
       gameState = paused ? GameState.PAUSED : GameState.PLAYING;
@@ -1153,7 +1402,10 @@ const b = hudCanvas._pauseBtn;
 
       ctx.save();
 
-      const panelX = bgDrawX + bgDrawW * 0.37;
+      const menuItems = getMenuItems();
+      ensureMenuSelectionValid();
+
+      const panelX = bgDrawX + bgDrawW * 0.29;
       const panelY = (bgDrawY + bgDrawH * 0.475) - 13;
       const textOffsetX = bgDrawW * (20 / 1920);
       const textOffsetY = bgDrawH * (-14 / 1080);
@@ -1168,6 +1420,7 @@ const b = hudCanvas._pauseBtn;
 
       menuUi.itemBounds = [];
       menuUi.beginQuestBounds = null;
+      menuUi.confirmBounds = [];
 
       for (let i = 0; i < menuItems.length; i++){
         const isActive = i === menuUi.selectedIndex;
@@ -1199,11 +1452,109 @@ const b = hudCanvas._pauseBtn;
         };
         menuUi.itemBounds.push(bounds);
 
-        if (i === 0){
+        if (label === "Begin Quest"){
           menuUi.beginQuestBounds = bounds;
         }
       }
       ctx.restore();
+
+      if (hasSaveSlot()){
+        const previewX = bgDrawX + bgDrawW * 0.56;
+        const previewY = bgDrawY + bgDrawH * 0.24;
+        const previewW = bgDrawW * 0.34;
+        const previewH = bgDrawH * 0.52;
+        ctx.save();
+        ctx.fillStyle = "rgba(3,17,26,0.72)";
+        ctx.strokeStyle = "rgba(126,239,255,0.42)";
+        ctx.lineWidth = 2;
+        ctx.fillRect(previewX, previewY, previewW, previewH);
+        ctx.strokeRect(previewX, previewY, previewW, previewH);
+
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        ctx.font = `${Math.max(18, Math.round(bgDrawH * 0.028))}px "Orbitron","Trebuchet MS",sans-serif`;
+        ctx.fillStyle = "#CFFFFF";
+        ctx.fillText("Continue", previewX + 18, previewY + 14);
+
+        const snapX = previewX + 18;
+        const snapY = previewY + 46;
+        const snapW = previewW - 36;
+        const snapH = previewH * 0.5;
+        if (saveSlot.snapshotDataUrl){
+          const snapImg = getSaveSnapshotImage();
+          if (snapImg && snapImg.complete && snapImg.naturalWidth > 0){
+            ctx.drawImage(snapImg, snapX, snapY, snapW, snapH);
+          } else {
+            ctx.fillStyle = "rgba(15,49,64,0.92)";
+            ctx.fillRect(snapX, snapY, snapW, snapH);
+          }
+        } else {
+          ctx.fillStyle = "rgba(15,49,64,0.92)";
+          ctx.fillRect(snapX, snapY, snapW, snapH);
+        }
+        ctx.strokeStyle = "rgba(120,222,240,0.48)";
+        ctx.strokeRect(snapX, snapY, snapW, snapH);
+
+        const infoY = snapY + snapH + 12;
+        ctx.font = `${Math.max(15, Math.round(bgDrawH * 0.024))}px "Trebuchet MS",sans-serif`;
+        ctx.fillStyle = "#BEEFFC";
+        ctx.fillText(saveSlot.levelName || saveSlot.levelKey || "Unknown level", snapX, infoY);
+        ctx.fillText(`Saved: ${formatSavedTimestamp(saveSlot.savedAtMs)}`, snapX, infoY + 24);
+        ctx.fillText(`Session: ${formatSessionDuration(saveSlot.sessionDurationSec)}`, snapX, infoY + 48);
+        ctx.restore();
+      }
+
+      ctx.save();
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.font = `${Math.max(11, Math.round(bgDrawH * 0.017))}px "Trebuchet MS",sans-serif`;
+      ctx.fillStyle = "rgba(185,219,228,0.78)";
+      const creditsText = "Lumo — Erik Nilsson © 2026";
+      const creditsX = bgDrawX + bgDrawW * 0.03;
+      const creditsY = bgDrawY + bgDrawH * 0.975;
+      ctx.fillText(creditsText, creditsX, creditsY);
+      const cW = ctx.measureText(creditsText).width;
+      menuUi.creditsBounds = { x: creditsX, y: creditsY - 18, w: cW, h: 22 };
+      ctx.restore();
+
+      if (pendingNewQuestConfirm){
+        const boxW = Math.min(bgDrawW * 0.42, 560);
+        const boxH = Math.min(bgDrawH * 0.34, 300);
+        const boxX = bgDrawX + (bgDrawW - boxW) * 0.5;
+        const boxY = bgDrawY + (bgDrawH - boxH) * 0.5;
+        ctx.save();
+        ctx.fillStyle = "rgba(2,9,14,0.86)";
+        ctx.fillRect(boxX, boxY, boxW, boxH);
+        ctx.strokeStyle = "rgba(132,234,255,0.58)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(boxX, boxY, boxW, boxH);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "#D8F8FF";
+        ctx.font = `${Math.max(22, Math.round(bgDrawH * 0.038))}px "Orbitron","Trebuchet MS",sans-serif`;
+        ctx.fillText("Start a new quest?", boxX + boxW * 0.5, boxY + boxH * 0.22);
+        ctx.font = `${Math.max(16, Math.round(bgDrawH * 0.026))}px "Trebuchet MS",sans-serif`;
+        ctx.fillStyle = "#AEDFEB";
+        ctx.fillText("Your current progress will be overwritten.", boxX + boxW * 0.5, boxY + boxH * 0.38);
+
+        const opts = ["Continue Quest", "Start New", "Cancel"];
+        menuUi.confirmBounds = [];
+        for (let i = 0; i < opts.length; i++){
+          const oy = boxY + boxH * (0.58 + i * 0.14);
+          ctx.fillStyle = "rgba(17,45,59,0.88)";
+          const bw = boxW * 0.58;
+          const bh = 34;
+          const bx = boxX + (boxW - bw) * 0.5;
+          ctx.fillRect(bx, oy - bh * 0.5, bw, bh);
+          ctx.strokeStyle = "rgba(130,230,248,0.52)";
+          ctx.strokeRect(bx, oy - bh * 0.5, bw, bh);
+          ctx.fillStyle = "#D7FAFF";
+          ctx.font = `${Math.max(15, Math.round(bgDrawH * 0.024))}px "Trebuchet MS",sans-serif`;
+          ctx.fillText(opts[i], boxX + boxW * 0.5, oy);
+          menuUi.confirmBounds.push({ x: bx, y: oy - bh * 0.5, w: bw, h: bh });
+        }
+        ctx.restore();
+      }
       return;
     }
 
