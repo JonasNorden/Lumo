@@ -179,11 +179,67 @@
     { x: 0.742, y: 0.214, r: 0.018, amp: 0.39, speed: 0.57, phase: 4.9 },
     { x: 0.848, y: 0.566, r: 0.017, amp: 0.37, speed: 0.43, phase: 5.4 }
   ];
-  const previewX = 73;
-  const previewY = -122;
-  const previewW = 233;
-  const previewH = 158;
-  const previewRotationRad = -1 * Math.PI / 180;
+  const previewDebug = {
+    x: 73,
+    y: -122,
+    w: 233,
+    h: 158,
+    rot: -1
+  };
+
+  function hasMenuSavePreview(){
+    return gameState === GameState.MENU && !!(saveSlot && saveSlot.snapshotDataUrl);
+  }
+
+  function applyPreviewDebugKey(e){
+    if (!hasMenuSavePreview()) return false;
+    const step = e.shiftKey ? 10 : 1;
+    const rotStep = e.shiftKey ? 5 : 1;
+
+    switch (e.key){
+      case "ArrowLeft":
+        previewDebug.x -= step;
+        return true;
+      case "ArrowRight":
+        previewDebug.x += step;
+        return true;
+      case "ArrowUp":
+        previewDebug.y -= step;
+        return true;
+      case "ArrowDown":
+        previewDebug.y += step;
+        return true;
+      case "a":
+      case "A":
+        previewDebug.w = Math.max(1, previewDebug.w - 1);
+        return true;
+      case "d":
+      case "D":
+        previewDebug.w += 1;
+        return true;
+      case "w":
+      case "W":
+        previewDebug.h += 1;
+        return true;
+      case "s":
+      case "S":
+        previewDebug.h = Math.max(1, previewDebug.h - 1);
+        return true;
+      case "q":
+      case "Q":
+        previewDebug.rot -= rotStep;
+        return true;
+      case "e":
+      case "E":
+        previewDebug.rot += rotStep;
+        return true;
+      case "Enter":
+        console.log(`[TEMP DEBUG]\nx=${previewDebug.x}\ny=${previewDebug.y}\nw=${previewDebug.w}\nh=${previewDebug.h}\nrotation=${previewDebug.rot}`);
+        return true;
+      default:
+        return false;
+    }
+  }
 
   function clamp01(v){
     return Math.max(0, Math.min(1, Number(v) || 0));
@@ -861,6 +917,10 @@ const b = hudCanvas._pauseBtn;
   window.addEventListener("keydown", (e) => {
     if (gameState === GameState.MENU){
       unlockMenuMusicFromInteraction();
+      if (applyPreviewDebugKey(e)){
+        e.preventDefault();
+        return;
+      }
       const menuItems = getMenuItems();
       if (e.repeat) return;
       if (pendingNewQuestConfirm){
@@ -1462,6 +1522,11 @@ const b = hudCanvas._pauseBtn;
         }
       }
       if (hasSaveSlot()){
+        const previewX = previewDebug.x;
+        const previewY = previewDebug.y;
+        const previewW = previewDebug.w;
+        const previewH = previewDebug.h;
+        const previewRotRad = previewDebug.rot * Math.PI / 180;
         const insetPad = Math.max(10, Math.round(bgDrawH * 0.01));
         const metadataTop = previewY + previewH + Math.max(8, bgDrawH * 0.01);
         const metadataW = Math.min(previewW + Math.max(68, Math.round(bgDrawW * 0.05)), bgDrawW * 0.255);
@@ -1495,8 +1560,7 @@ const b = hudCanvas._pauseBtn;
           if (snapImg && snapImg.complete && snapImg.naturalWidth > 0){
             ctx.save();
             ctx.translate(previewX + previewW * 0.5, previewY + previewH * 0.5);
-            // Rotate directly on the rendered image draw-call so the tilt is visible in the final menu render.
-            ctx.rotate(previewRotationRad);
+            ctx.rotate(previewRotRad);
             ctx.drawImage(snapImg, -previewW * 0.5, -previewH * 0.5, previewW, previewH);
             ctx.restore();
           }
@@ -1517,6 +1581,31 @@ const b = hudCanvas._pauseBtn;
         ctx.fillStyle = "rgba(176,226,238,0.92)";
         ctx.fillText(`Saved: ${formatSavedTimestamp(saveSlot.savedAtMs)}`, textInsetX, infoY + infoLineH);
         ctx.fillText(`Session: ${formatSessionDuration(saveSlot.sessionDurationSec)}`, textInsetX, infoY + infoLineH * 2);
+
+        if (hasMenuSavePreview()){
+          ctx.save();
+          ctx.fillStyle = "rgba(255,32,32,0.12)";
+          ctx.fillRect(previewX, previewY, previewW, previewH);
+          ctx.strokeStyle = "rgba(255,18,18,0.95)";
+          ctx.lineWidth = 2;
+          ctx.strokeRect(previewX, previewY, previewW, previewH);
+          ctx.restore();
+
+          ctx.save();
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+          ctx.font = `${Math.max(11, Math.round(bgDrawH * 0.014))}px "Trebuchet MS",sans-serif`;
+          ctx.fillStyle = "rgba(255,210,210,0.96)";
+          const debugTextX = Math.max(8, bgDrawX + 10);
+          const debugTextY = Math.max(8, bgDrawY + 10);
+          const debugLineH = Math.max(12, Math.round(bgDrawH * 0.017));
+          ctx.fillText(`x: ${previewDebug.x}`, debugTextX, debugTextY);
+          ctx.fillText(`y: ${previewDebug.y}`, debugTextX, debugTextY + debugLineH);
+          ctx.fillText(`w: ${previewDebug.w}`, debugTextX, debugTextY + debugLineH * 2);
+          ctx.fillText(`h: ${previewDebug.h}`, debugTextX, debugTextY + debugLineH * 3);
+          ctx.fillText(`rot: ${previewDebug.rot}`, debugTextX, debugTextY + debugLineH * 4);
+          ctx.restore();
+        }
       }
       ctx.restore();
 
