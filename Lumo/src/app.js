@@ -1405,9 +1405,9 @@ const b = hudCanvas._pauseBtn;
       const menuItems = getMenuItems();
       ensureMenuSelectionValid();
 
-      const panelX = bgDrawX + bgDrawW * 0.29;
+      const panelX = bgDrawX + bgDrawW * 0.255;
       const panelY = (bgDrawY + bgDrawH * 0.475) - 13;
-      const textOffsetX = bgDrawW * (20 / 1920);
+      const textOffsetX = bgDrawW * (-18 / 1920);
       const textOffsetY = bgDrawH * (-14 / 1080);
       const tilt = 0.03;
       const lineH = Math.max(30, bgDrawH * 0.056) * 0.88;
@@ -1457,12 +1457,12 @@ const b = hudCanvas._pauseBtn;
         }
       }
       if (hasSaveSlot()){
-        const previewInsetX = bgDrawW * 0.27;
-        const previewInsetY = -bgDrawH * 0.16;
-        const previewInsetW = bgDrawW * 0.27;
-        const previewInsetH = bgDrawH * 0.265;
-        const textInsetX = bgDrawW * 0.27;
-        const textInsetY = bgDrawH * 0.135;
+        const previewInsetX = bgDrawW * 0.205;
+        const previewInsetY = -bgDrawH * 0.145;
+        const previewInsetW = bgDrawW * 0.245;
+        const previewInsetH = bgDrawH * 0.25;
+        const textInsetX = bgDrawW * 0.205;
+        const textInsetY = bgDrawH * 0.116;
         const insetPad = Math.max(10, Math.round(bgDrawH * 0.01));
 
         ctx.textAlign = "left";
@@ -1498,8 +1498,8 @@ const b = hudCanvas._pauseBtn;
         ctx.strokeRect(snapX + insetPad, snapY + insetPad, snapW - insetPad * 2, snapH - insetPad * 2);
 
         const infoY = textInsetY;
-        const infoLineH = Math.max(20, Math.round(bgDrawH * 0.028));
-        ctx.font = `${Math.max(16, Math.round(bgDrawH * 0.024))}px "Trebuchet MS",sans-serif`;
+        const infoLineH = Math.max(15, Math.round(bgDrawH * 0.021));
+        ctx.font = `${Math.max(13, Math.round(bgDrawH * 0.019))}px "Trebuchet MS",sans-serif`;
         ctx.fillStyle = "rgba(200,242,252,0.95)";
         ctx.fillText(saveSlot.levelName || saveSlot.levelKey || "Unknown level", textInsetX, infoY);
         ctx.fillStyle = "rgba(176,226,238,0.92)";
