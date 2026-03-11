@@ -1,0 +1,363 @@
+Hover Void – Design Specification
+
+(Lumo Gameplay System)
+
+Core Identity
+
+Hover Void is a floating void predator that lurks in darkness and hunts in groups.
+
+Its body is normally invisible in darkness, but its glowing eyes reveal its presence once awakened.
+
+Hover Void becomes more dangerous when multiple individuals gather together, creating emergent flock behavior.
+
+Unlike Dark Creature, Hover Void is a mobile entity that reacts dynamically to the player.
+
+Behavior Overview
+Idle (Dormant State)
+
+Default state.
+
+Behavior:
+
+slow hovering motion
+
+slight drifting to feel alive
+
+no targeting behavior
+
+no follow behavior
+
+no attack behavior
+
+If the Hover Void is inside darkness:
+
+its body is hidden
+
+its eyes are not visible
+
+The creature exists as an unseen presence until awakened.
+
+Wake / Aggro
+
+Hover Void wakes when Lumo enters its aggro radius.
+
+The radius is defined by:
+
+aggroTiles
+
+When wake occurs:
+
+Hover Void becomes awake
+
+glowing eyes appear in darkness
+
+body remains hidden unless illuminated by light
+
+Wake does not automatically trigger pursuit.
+
+Follow Behavior
+
+Hover Void uses a two-stage follow system with hysteresis.
+
+Start Follow Radius
+
+Defined by:
+
+followTiles
+
+If Hover Void is awake and Lumo enters this radius:
+
+Hover Void begins actively following Lumo.
+
+Stop Follow Radius
+
+Defined by:
+
+loseSightTiles
+
+Once follow has begun:
+
+Hover Void continues following until Lumo exceeds this radius.
+
+This prevents unstable follow behavior and allows smoother pursuit.
+
+Follow Logic Summary
+
+State rules:
+
+Not Following → Following
+when:
+
+distance ≤ followTiles
+
+Following → Stop Following
+when:
+
+distance > loseSightTiles
+
+This creates stable pursuit behavior.
+
+Flock Behavior
+
+Hover Void exhibits group interaction when multiple individuals are nearby.
+
+Behavior changes depending on group size.
+
+1 Hover Void
+
+Curious follower.
+
+Behavior:
+
+cautious approach toward Lumo
+
+minimal aggression
+
+exploratory movement
+
+2 Hover Voids
+
+Competitive interaction.
+
+Behavior:
+
+subtle pushing and drifting between individuals
+
+movement feels unstable and alive
+
+3+ Hover Voids
+
+Active hunting behavior.
+
+Behavior:
+
+coordinated pressure toward Lumo
+
+more confident attacks
+
+stronger swarm cohesion
+
+Large Groups
+
+Swarm behavior emerges.
+
+Behavior:
+
+fluid group movement
+
+multiple individuals attacking in waves
+
+Attack Behavior
+
+Hover Void uses a yo-yo attack pattern.
+
+Sequence:
+
+Hover Void accelerates toward Lumo
+
+performs a short lunge attack
+
+retreats slightly
+
+prepares next attack after cooldown
+
+Attack frequency controlled by:
+
+attackCooldownMin
+attackCooldownMax
+Attack Properties
+
+Attack causes:
+
+HP damage
+
+pushback
+
+short disruption to player positioning
+
+Parameters:
+
+attackDamage
+attackPushback
+Visual System
+
+Hover Void visuals are strongly tied to the game's light system.
+
+Body Visibility
+
+The body is rendered as a soft radial gradient mass.
+
+Rules:
+
+visible only in light
+
+invisible in darkness
+
+Color determined by:
+
+colorVariant
+
+Variants allow level design variety.
+
+Eyes
+
+Eyes indicate awareness and threat.
+
+Properties:
+
+glowing white / cyan
+
+visible in darkness when awake
+
+follow movement direction
+
+Eyes are rendered after the darkness layer, allowing them to be visible through darkness.
+
+Eye States
+
+Dormant
+
+eyes hidden
+
+Awake
+
+glowing eyes visible even in darkness
+
+Angry Eyes
+
+During attack:
+
+eyes change shape
+
+filled geometry replaces normal eye glow
+
+orientation follows attack direction
+
+Darkness Interaction
+
+Hover Void interacts with the darkness system in a unique way.
+
+Element	Visibility Rule
+Body	visible only in light
+Eyes	visible through darkness when awake
+
+This creates the effect of glowing eyes appearing in darkness before the creature is revealed.
+
+Combat Interactions
+Lumo Aura
+
+Aura does not neutralize Hover Void.
+
+Hover Void remains dangerous inside the aura.
+
+Flare
+
+Flare light reveals Hover Void bodies.
+
+This makes hidden enemies visible in dark areas.
+
+Pulse
+
+Hover Void can be damaged and killed by:
+
+Lumo Pulse
+
+Pulse deals HP damage according to:
+
+maxHp
+Body Contact
+
+Touching Hover Void causes:
+
+damage
+
+pushback
+
+This makes them dangerous even outside direct attack moments.
+
+Death
+
+Hover Void dissolves into void particles.
+
+Sequence:
+
+body collapses inward
+
+dark particles spawn
+
+particles drift upward
+
+particles fade out
+
+This mirrors other void-based entities while preserving visual consistency.
+
+Level Design Role
+
+Hover Void is a pressure enemy.
+
+Its role is to create:
+
+tension in dark areas
+
+movement pressure
+
+unpredictable group threats
+
+It works especially well in:
+
+dark corridors
+
+caves
+
+areas with intermittent light sources
+
+swarm encounters
+
+Hover Void rewards careful positioning and awareness.
+
+Editor Support
+
+Hover Void exposes parameters in the level editor:
+
+aggroTiles
+followTiles
+loseSightTiles
+maxHp
+colorVariant
+attackCooldownMin
+attackCooldownMax
+attackDamage
+attackPushback
+braveGroupSize
+swarmGroupSize
+Parameter Validation
+
+Editor displays a warning if:
+
+loseSightTiles < followTiles
+
+This prevents invalid follow hysteresis configuration.
+
+Default Parameters
+
+Default values:
+
+aggroTiles: 7
+followTiles: 7
+loseSightTiles: 11
+
+If parameters are omitted in the editor, runtime fallback values are used.
+
+Design Rules
+
+Hover Void must always remain:
+
+readable through glowing eyes
+
+threatening in groups
+
+mobile but not chaotic
+
+responsive to light
+
+It should create psychological tension in darkness rather than long-range projectile threats.
