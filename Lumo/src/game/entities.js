@@ -675,6 +675,7 @@ if (this._catById){
         _bickerCd:0.2 + Math.random()*0.9,
         _targetVX:0,
         _targetVY:0,
+        _isFollowing:false,
         _recoilT:0,
         _lungeState:"idle",
         _lungeActor:false,
@@ -1345,6 +1346,7 @@ if (e.type === "lantern"){
           e.sleepBlend = Math.max(0, Math.min(1, e.sleepBlend));
 
           if (e.awake){
+            e._isFollowing = !!(player && dPlayer <= followR);
             e._blinkT -= dt;
             if (e._blinkT <= 0){
               e._blinkDur = 0.12 + Math.random()*0.07;
@@ -1357,7 +1359,7 @@ if (e.type === "lantern"){
               const groupSize = awakeList.length;
               const brave = groupSize >= e.braveGroupSize;
               const targetDist = 3 * ts;
-              const shouldFollow = !!(player && dPlayer <= followR);
+              const shouldFollow = !!e._isFollowing;
               if (shouldFollow && dPlayer > targetDist){
                 const d = Math.max(0.001, dPlayer);
                 e._targetVX += (toPlayerX / d) * 52;
@@ -1421,6 +1423,7 @@ if (e.type === "lantern"){
               }
             }
           } else {
+            e._isFollowing = false;
             e._targetVX += (Math.sin(e._t*0.7 + cy * 0.02) * 16);
             e._targetVY += (Math.cos(e._t*0.6 + cx * 0.02) * 12);
           }
@@ -2433,7 +2436,7 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
             ctx.fill();
           }
 
-          this._drawHoverVoidEyes(ctx, e, cx, cy, 1);
+          if (!e.awake) this._drawHoverVoidEyes(ctx, e, cx, cy, 1);
         }
 
         if (e.type === "darkCreature"){
@@ -2547,9 +2550,6 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
       for (const e of this.items){
         if (!e.active || e.type !== "hoverVoid") continue;
         if (!e.awake) continue;
-
-        const lit = this.isPointLitAnySource(e.x + e.w*0.5, e.y + e.h*0.5, this._lastPlayer);
-        if (lit) continue;
 
         const sx = Math.floor((e.x - cam.x) + (e._offX || 0));
         const sy = Math.floor((e.y - cam.y) + (e._offY || 0));
