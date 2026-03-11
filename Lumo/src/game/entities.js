@@ -628,11 +628,10 @@ if (this._catById){
       };
       const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
       const aggroTiles = Math.max(0, nOr(params && params.aggroTiles, 7));
-      const followTilesRaw = nOr(params && params.followTiles, null);
-      const followTiles = Math.max(0, (followTilesRaw != null) ? followTilesRaw : aggroTiles);
+      const followTiles = Math.max(0, nOr(params && params.followTiles, 7));
       const maxHp = Math.max(1, Math.floor(nOr(params && params.maxHp, 3)));
       const colorVariant = clamp(Math.floor(nOr(params && params.colorVariant, 0)), 0, 3);
-      const loseSightTiles = Math.max(aggroTiles, nOr(params && params.loseSightTiles, 11));
+      const loseSightTiles = Math.max(0, nOr(params && params.loseSightTiles, 11));
       let attackCooldownMin = Math.max(0.2, nOr(params && params.attackCooldownMin, 1));
       let attackCooldownMax = Math.max(attackCooldownMin, nOr(params && params.attackCooldownMax, 3));
       const attackDamage = Math.max(0, nOr(params && params.attackDamage, 12));
@@ -1329,9 +1328,10 @@ if (e.type === "lantern"){
           const toPlayerY = pcy - cy;
           const dPlayer = Math.hypot(toPlayerX, toPlayerY);
           const wakeR = Math.max(0, e.aggroTiles * ts);
-          const followTiles = Number.isFinite(e.followTiles) ? e.followTiles : e.aggroTiles;
+          const followTiles = Number.isFinite(e.followTiles) ? e.followTiles : 7;
           const followR = Math.max(0, followTiles * ts);
-          const loseR = Math.max(wakeR, e.loseSightTiles * ts);
+          const loseTiles = Number.isFinite(e.loseSightTiles) ? e.loseSightTiles : 11;
+          const loseR = Math.max(0, loseTiles * ts);
 
           if (!e.awake && player && dPlayer <= wakeR) e.awake = true;
           if (e.awake){
@@ -1346,7 +1346,13 @@ if (e.type === "lantern"){
           e.sleepBlend = Math.max(0, Math.min(1, e.sleepBlend));
 
           if (e.awake){
-            e._isFollowing = !!(player && dPlayer <= followR);
+            if (!player){
+              e._isFollowing = false;
+            } else if (!e._isFollowing){
+              if (dPlayer <= followR) e._isFollowing = true;
+            } else if (dPlayer > loseR){
+              e._isFollowing = false;
+            }
             e._blinkT -= dt;
             if (e._blinkT <= 0){
               e._blinkDur = 0.12 + Math.random()*0.07;
