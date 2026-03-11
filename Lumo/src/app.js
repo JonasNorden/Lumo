@@ -183,7 +183,7 @@
   const previewY = -122;
   const previewW = 233;
   const previewH = 158;
-  const previewRotationRad = -6 * Math.PI / 180;
+  const previewRotationRad = -1 * Math.PI / 180;
 
   function clamp01(v){
     return Math.max(0, Math.min(1, Number(v) || 0));
@@ -1463,9 +1463,20 @@ const b = hudCanvas._pauseBtn;
       }
       if (hasSaveSlot()){
         const insetPad = Math.max(10, Math.round(bgDrawH * 0.01));
-        const textInsetX = previewX + Math.max(2, Math.round(bgDrawW * 0.0015));
-        const titleY = previewY + previewH + Math.max(8, bgDrawH * 0.01);
+        const metadataTop = previewY + previewH + Math.max(8, bgDrawH * 0.01);
+        const metadataW = Math.min(previewW + Math.max(68, Math.round(bgDrawW * 0.05)), bgDrawW * 0.255);
+        const metadataX = previewX - Math.max(4, Math.round(bgDrawW * 0.003));
+        const metadataPadX = Math.max(10, Math.round(bgDrawW * 0.006));
+        const metadataPadY = Math.max(7, Math.round(bgDrawH * 0.006));
+        const textInsetX = metadataX + metadataPadX;
+        const titleY = metadataTop + metadataPadY;
         const infoY = titleY + Math.max(12, bgDrawH * 0.014);
+
+        ctx.fillStyle = "rgba(6,20,29,0.52)";
+        ctx.fillRect(metadataX, metadataTop, metadataW, Math.max(50, Math.round(bgDrawH * 0.095)));
+        ctx.strokeStyle = "rgba(126,214,232,0.2)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(metadataX, metadataTop, metadataW, Math.max(50, Math.round(bgDrawH * 0.095)));
 
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
@@ -1484,6 +1495,7 @@ const b = hudCanvas._pauseBtn;
           if (snapImg && snapImg.complete && snapImg.naturalWidth > 0){
             ctx.save();
             ctx.translate(previewX + previewW * 0.5, previewY + previewH * 0.5);
+            // Rotate directly on the rendered image draw-call so the tilt is visible in the final menu render.
             ctx.rotate(previewRotationRad);
             ctx.drawImage(snapImg, -previewW * 0.5, -previewH * 0.5, previewW, previewH);
             ctx.restore();
