@@ -1398,6 +1398,9 @@ const b = hudCanvas._pauseBtn;
 
     r.drawDarkness(lights);
 
+    // Render elements that must remain visible over darkness.
+    if (ents && typeof ents.drawAfterDarkness === "function") ents.drawAfterDarkness(ctx, cam);
+
     if (gameState === GameState.GAME_OVER){
       const img = gameOverImage;
       if (img && img.complete && img.naturalWidth > 0){

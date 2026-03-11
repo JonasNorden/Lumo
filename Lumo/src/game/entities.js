@@ -2433,73 +2433,7 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
             ctx.fill();
           }
 
-          const eyeK = Math.max(0, Math.min(1, e.eyeBlend || 0));
-          if (eyeK > 0.01){
-            const blink = (e._blinkDur > 0) ? 0.15 : 1;
-            const angry = (e._angryT > 0 || e._lungeState !== "idle");
-            const sEye = Math.min(e.w, e.h) / 16;
-            const facingX = (e._facingX === -1) ? -1 : 1;
-            const largeR = 2.8 * sEye;
-            const smallR = 1.9 * sEye;
-            const largeX = cx - (7 * sEye) * facingX;
-            const largeY = cy - 6 * sEye;
-            const smallX = cx + (6 * sEye) * facingX;
-            const smallY = cy - 4 * sEye;
-            const eyeAlpha = (1.0 * eyeK);
-            ctx.fillStyle = "rgba(246,250,255," + eyeAlpha.toFixed(3) + ")";
-            ctx.shadowColor = "rgba(205,240,255," + (0.95 * eyeK).toFixed(3) + ")";
-            ctx.shadowBlur = 11;
-            if (!angry){
-              ctx.beginPath();
-              ctx.ellipse(largeX, largeY, largeR, largeR * blink, 0, 0, Math.PI*2);
-              ctx.fill();
-              ctx.beginPath();
-              ctx.ellipse(smallX, smallY, smallR, smallR * blink, 0, 0, Math.PI*2);
-              ctx.fill();
-            } else {
-              const drawFilledAngryEye = (x, y, r, tilt) => {
-                ctx.save();
-                ctx.beginPath();
-                ctx.translate(x, y);
-
-                ctx.beginPath();
-                if (tilt < 0) {
-                  ctx.moveTo(-r * 1.6, -r * 0.95);
-                  ctx.lineTo(r * 1.6, -r * 0.20);
-                  ctx.lineTo(r * 1.6, r * 1.6);
-                  ctx.lineTo(-r * 1.6, r * 1.6);
-                } else {
-                  ctx.moveTo(-r * 1.6, -r * 0.20);
-                  ctx.lineTo(r * 1.6, -r * 0.95);
-                  ctx.lineTo(r * 1.6, r * 1.6);
-                  ctx.lineTo(-r * 1.6, r * 1.6);
-                }
-                ctx.closePath();
-                ctx.clip();
-
-                ctx.fillStyle = "rgba(243,240,255," + eyeAlpha.toFixed(3) + ")";
-                ctx.beginPath();
-                ctx.arc(0, 0, r, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
-              };
-              if ((e._blinkDur || 0) <= 0) {
-                drawFilledAngryEye(largeX, largeY, 3.5 * sEye, -1 * facingX);
-                drawFilledAngryEye(smallX, smallY, 2.3 * sEye, 1 * facingX);
-              } else {
-                ctx.strokeStyle = "rgba(243,240,255," + eyeAlpha.toFixed(3) + ")";
-                ctx.lineWidth = 1.8;
-                ctx.lineCap = "round";
-                ctx.beginPath();
-                ctx.moveTo(largeX - 3.2 * sEye * facingX, largeY - 2.0 * sEye);
-                ctx.lineTo(largeX + 2.8 * sEye * facingX, largeY + 0.2 * sEye);
-                ctx.moveTo(smallX - 2.0 * sEye * facingX, smallY + 0.2 * sEye);
-                ctx.lineTo(smallX + 2.2 * sEye * facingX, smallY - 2.0 * sEye);
-                ctx.stroke();
-              }
-            }
-            ctx.shadowBlur = 0;
-          }
+          this._drawHoverVoidEyes(ctx, e, cx, cy, 1);
         }
 
         if (e.type === "darkCreature"){
@@ -2533,6 +2467,95 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
             ctx.fillRect(sx, sy, e.w, e.h);
           }
         }
+      }
+    }
+
+    _drawHoverVoidEyes(ctx, e, cx, cy, alphaMul = 1){
+      const eyeK = Math.max(0, Math.min(1, e.eyeBlend || 0));
+      if (eyeK <= 0.01) return;
+
+      const blink = (e._blinkDur > 0) ? 0.15 : 1;
+      const angry = (e._angryT > 0 || e._lungeState !== "idle");
+      const sEye = Math.min(e.w, e.h) / 16;
+      const facingX = (e._facingX === -1) ? -1 : 1;
+      const largeR = 2.8 * sEye;
+      const smallR = 1.9 * sEye;
+      const largeX = cx - (7 * sEye) * facingX;
+      const largeY = cy - 6 * sEye;
+      const smallX = cx + (6 * sEye) * facingX;
+      const smallY = cy - 4 * sEye;
+      const eyeAlpha = (1.0 * eyeK) * Math.max(0, Math.min(1, alphaMul));
+      if (eyeAlpha <= 0.001) return;
+
+      ctx.fillStyle = "rgba(246,250,255," + eyeAlpha.toFixed(3) + ")";
+      ctx.shadowColor = "rgba(205,240,255," + (0.95 * eyeK * alphaMul).toFixed(3) + ")";
+      ctx.shadowBlur = 11;
+      if (!angry){
+        ctx.beginPath();
+        ctx.ellipse(largeX, largeY, largeR, largeR * blink, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(smallX, smallY, smallR, smallR * blink, 0, 0, Math.PI*2);
+        ctx.fill();
+      } else {
+        const drawFilledAngryEye = (x, y, r, tilt) => {
+          ctx.save();
+          ctx.beginPath();
+          ctx.translate(x, y);
+
+          ctx.beginPath();
+          if (tilt < 0) {
+            ctx.moveTo(-r * 1.6, -r * 0.95);
+            ctx.lineTo(r * 1.6, -r * 0.20);
+            ctx.lineTo(r * 1.6, r * 1.6);
+            ctx.lineTo(-r * 1.6, r * 1.6);
+          } else {
+            ctx.moveTo(-r * 1.6, -r * 0.20);
+            ctx.lineTo(r * 1.6, -r * 0.95);
+            ctx.lineTo(r * 1.6, r * 1.6);
+            ctx.lineTo(-r * 1.6, r * 1.6);
+          }
+          ctx.closePath();
+          ctx.clip();
+
+          ctx.fillStyle = "rgba(243,240,255," + eyeAlpha.toFixed(3) + ")";
+          ctx.beginPath();
+          ctx.arc(0, 0, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        };
+        if ((e._blinkDur || 0) <= 0) {
+          drawFilledAngryEye(largeX, largeY, 3.5 * sEye, -1 * facingX);
+          drawFilledAngryEye(smallX, smallY, 2.3 * sEye, 1 * facingX);
+        } else {
+          ctx.strokeStyle = "rgba(243,240,255," + eyeAlpha.toFixed(3) + ")";
+          ctx.lineWidth = 1.8;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(largeX - 3.2 * sEye * facingX, largeY - 2.0 * sEye);
+          ctx.lineTo(largeX + 2.8 * sEye * facingX, largeY + 0.2 * sEye);
+          ctx.moveTo(smallX - 2.0 * sEye * facingX, smallY + 0.2 * sEye);
+          ctx.lineTo(smallX + 2.2 * sEye * facingX, smallY - 2.0 * sEye);
+          ctx.stroke();
+        }
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    // Pass drawn AFTER darkness, for elements that should remain visible through darkness.
+    drawAfterDarkness(ctx, cam){
+      for (const e of this.items){
+        if (!e.active || e.type !== "hoverVoid") continue;
+        if (!e.awake) continue;
+
+        const lit = this.isPointLitAnySource(e.x + e.w*0.5, e.y + e.h*0.5, this._lastPlayer);
+        if (lit) continue;
+
+        const sx = Math.floor((e.x - cam.x) + (e._offX || 0));
+        const sy = Math.floor((e.y - cam.y) + (e._offY || 0));
+        const cx = sx + e.w * 0.5;
+        const cy = sy + e.h * 0.5;
+        this._drawHoverVoidEyes(ctx, e, cx, cy, 1);
       }
     }
 
