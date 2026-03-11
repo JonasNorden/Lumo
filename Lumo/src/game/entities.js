@@ -1378,11 +1378,14 @@ if (e.type === "lantern"){
                 const dx = ocx - cx;
                 const dy = ocy - cy;
                 const d = Math.hypot(dx, dy);
+                const sameFollowState = !!other._isFollowing === shouldFollow;
                 if (d < ts * 6){
                   neighborCount++;
-                  const socialPull = Math.max(0, 1 - d / (ts * 6));
-                  e._targetVX += (dx / Math.max(0.001, d)) * 24 * socialPull;
-                  e._targetVY += (dy / Math.max(0.001, d)) * 24 * socialPull;
+                  if (sameFollowState){
+                    const socialPull = Math.max(0, 1 - d / (ts * 6));
+                    e._targetVX += (dx / Math.max(0.001, d)) * 24 * socialPull;
+                    e._targetVY += (dy / Math.max(0.001, d)) * 24 * socialPull;
+                  }
                 }
                 const sepR = ts * 1.25;
                 if (d > 0.001 && d < sepR){
@@ -1426,6 +1429,13 @@ if (e.type === "lantern"){
             e._isFollowing = false;
             e._targetVX += (Math.sin(e._t*0.7 + cy * 0.02) * 16);
             e._targetVY += (Math.cos(e._t*0.6 + cx * 0.02) * 12);
+          }
+
+          if (!e._isFollowing && e._lungeState !== "idle"){
+            e._lungeState = "idle";
+            e._lungeActor = false;
+            e._lungeT = 0;
+            e._lungeHitDone = false;
           }
 
           if (e._lungeState !== "idle"){
