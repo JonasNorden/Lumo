@@ -180,10 +180,10 @@
     { x: 0.848, y: 0.566, r: 0.017, amp: 0.37, speed: 0.43, phase: 5.4 }
   ];
   const previewX = 73;
-  const previewY = -132;
+  const previewY = -122;
   const previewW = 233;
   const previewH = 158;
-  const previewRotationRad = -3 * Math.PI / 180;
+  const previewRotationRad = -6 * Math.PI / 180;
 
   function clamp01(v){
     return Math.max(0, Math.min(1, Number(v) || 0));
@@ -1463,13 +1463,13 @@ const b = hudCanvas._pauseBtn;
       }
       if (hasSaveSlot()){
         const insetPad = Math.max(10, Math.round(bgDrawH * 0.01));
-        const textInsetX = previewX;
-        const titleY = previewY + previewH + Math.max(20, bgDrawH * 0.024);
-        const infoY = titleY + Math.max(22, bgDrawH * 0.028);
+        const textInsetX = previewX + Math.max(2, Math.round(bgDrawW * 0.0015));
+        const titleY = previewY + previewH + Math.max(8, bgDrawH * 0.01);
+        const infoY = titleY + Math.max(12, bgDrawH * 0.014);
 
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
-        ctx.font = `${Math.max(17, Math.round(bgDrawH * 0.025))}px "Orbitron","Trebuchet MS",sans-serif`;
+        ctx.font = `${Math.max(13, Math.round(bgDrawH * 0.018))}px "Orbitron","Trebuchet MS",sans-serif`;
         ctx.fillStyle = "rgba(210,253,255,0.95)";
         ctx.fillText("Last save", textInsetX, titleY);
 
@@ -1498,8 +1498,8 @@ const b = hudCanvas._pauseBtn;
         ctx.lineWidth = 1;
         ctx.strokeRect(previewX + insetPad, previewY + insetPad, previewW - insetPad * 2, previewH - insetPad * 2);
 
-        const infoLineH = Math.max(15, Math.round(bgDrawH * 0.021));
-        ctx.font = `${Math.max(13, Math.round(bgDrawH * 0.019))}px "Trebuchet MS",sans-serif`;
+        const infoLineH = Math.max(11, Math.round(bgDrawH * 0.015));
+        ctx.font = `${Math.max(10, Math.round(bgDrawH * 0.014))}px "Trebuchet MS",sans-serif`;
         ctx.fillStyle = "rgba(200,242,252,0.95)";
         ctx.fillText(saveSlot.levelName || saveSlot.levelKey || "Unknown level", textInsetX, infoY);
         ctx.fillStyle = "rgba(176,226,238,0.92)";
