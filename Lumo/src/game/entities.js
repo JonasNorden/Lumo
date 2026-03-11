@@ -2438,17 +2438,37 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           const cy = sy + e.h * 0.5;
           const lit = this.isPointLitAnySource(e.x + e.w*0.5, e.y + e.h*0.5, this._lastPlayer);
           const palette = this._hoverVoidPalette(e.colorVariant || 0);
-          const bodyAlpha = lit ? (0.61 + (1 - (e.sleepBlend || 1)) * 0.63) : 0;
+          const bodyAlpha = lit ? (0.78 + (1 - (e.sleepBlend || 1)) * 0.52) : 0;
           if (bodyAlpha > 0.01){
             const r = Math.max(e.w, e.h) * 0.95;
-            const grad = ctx.createRadialGradient(cx, cy, r * 0.12, cx, cy, r);
-            grad.addColorStop(0.0, "rgba(" + palette.center[0] + "," + palette.center[1] + "," + palette.center[2] + "," + (bodyAlpha * 1.15).toFixed(3) + ")");
-            grad.addColorStop(0.5, "rgba(" + palette.mid[0] + "," + palette.mid[1] + "," + palette.mid[2] + "," + (bodyAlpha * 0.83).toFixed(3) + ")");
-            grad.addColorStop(1.0, "rgba(" + palette.edge[0] + "," + palette.edge[1] + "," + palette.edge[2] + ",0)");
-            ctx.fillStyle = grad;
             const bodyScale = 1.15;
+
+            const glow = ctx.createRadialGradient(cx, cy, r * 0.35, cx, cy, r * 1.22);
+            glow.addColorStop(0.0, "rgba(" + palette.mid[0] + "," + palette.mid[1] + "," + palette.mid[2] + "," + (bodyAlpha * 0.24).toFixed(3) + ")");
+            glow.addColorStop(1.0, "rgba(" + palette.edge[0] + "," + palette.edge[1] + "," + palette.edge[2] + ",0)");
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, e.w * 0.92 * bodyScale, e.h * 0.82 * bodyScale, Math.sin((e._t || 0) * 0.7) * 0.08, 0, Math.PI*2);
+            ctx.fill();
+
+            const fillCx = cx - r * 0.22;
+            const fillCy = cy - r * 0.24;
+            const body = ctx.createRadialGradient(fillCx, fillCy, r * 0.14, cx, cy, r * 0.95);
+            body.addColorStop(0.0, "rgba(" + palette.center[0] + "," + palette.center[1] + "," + palette.center[2] + "," + (bodyAlpha * 1.06).toFixed(3) + ")");
+            body.addColorStop(0.58, "rgba(" + palette.mid[0] + "," + palette.mid[1] + "," + palette.mid[2] + "," + (bodyAlpha * 0.92).toFixed(3) + ")");
+            body.addColorStop(1.0, "rgba(" + Math.floor(palette.edge[0] * 0.55) + "," + Math.floor(palette.edge[1] * 0.55) + "," + Math.floor(palette.edge[2] * 0.55) + "," + (bodyAlpha * 0.9).toFixed(3) + ")");
+            ctx.fillStyle = body;
             ctx.beginPath();
             ctx.ellipse(cx, cy, e.w * 0.85 * bodyScale, e.h * 0.75 * bodyScale, Math.sin((e._t || 0) * 0.7) * 0.08, 0, Math.PI*2);
+            ctx.fill();
+
+            const highlight = ctx.createRadialGradient(cx - r * 0.34, cy - r * 0.38, r * 0.02, cx - r * 0.34, cy - r * 0.38, r * 0.52);
+            highlight.addColorStop(0.0, "rgba(255,255,255," + (bodyAlpha * 0.2).toFixed(3) + ")");
+            highlight.addColorStop(0.45, "rgba(" + palette.edge[0] + "," + palette.edge[1] + "," + palette.edge[2] + "," + (bodyAlpha * 0.18).toFixed(3) + ")");
+            highlight.addColorStop(1.0, "rgba(" + palette.edge[0] + "," + palette.edge[1] + "," + palette.edge[2] + ",0)");
+            ctx.fillStyle = highlight;
+            ctx.beginPath();
+            ctx.ellipse(cx - r * 0.1, cy - r * 0.1, e.w * 0.58 * bodyScale, e.h * 0.48 * bodyScale, Math.sin((e._t || 0) * 0.7) * 0.08, 0, Math.PI*2);
             ctx.fill();
           }
 
