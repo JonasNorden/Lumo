@@ -187,12 +187,12 @@
     rot: -1
   };
 
-  function hasMenuSavePreview(){
+  function isPreviewDebugActive(){
     return gameState === GameState.MENU && !!(saveSlot && saveSlot.snapshotDataUrl);
   }
 
   function applyPreviewDebugKey(e){
-    if (!hasMenuSavePreview()) return false;
+    if (!isPreviewDebugActive()) return false;
     const step = e.shiftKey ? 10 : 1;
     const rotStep = e.shiftKey ? 5 : 1;
 
@@ -239,6 +239,19 @@
       default:
         return false;
     }
+  }
+
+  function getPreviewDebugRect(panelX, panelY){
+    const previewX = panelX + previewDebug.x;
+    const previewY = panelY + previewDebug.y;
+    return {
+      x: previewX,
+      y: previewY,
+      w: previewDebug.w,
+      h: previewDebug.h,
+      rotDeg: previewDebug.rot,
+      rotRad: previewDebug.rot * Math.PI / 180
+    };
   }
 
   function clamp01(v){
@@ -1525,11 +1538,12 @@ const b = hudCanvas._pauseBtn;
       ctx.restore();
 
       if (hasSaveSlot()){
-        const previewX = previewDebug.x;
-        const previewY = previewDebug.y;
-        const previewW = previewDebug.w;
-        const previewH = previewDebug.h;
-        const previewRotRad = previewDebug.rot * Math.PI / 180;
+        const previewRect = getPreviewDebugRect(panelX, panelY);
+        const previewX = previewRect.x;
+        const previewY = previewRect.y;
+        const previewW = previewRect.w;
+        const previewH = previewRect.h;
+        const previewRotRad = previewRect.rotRad;
         const insetPad = Math.max(10, Math.round(bgDrawH * 0.01));
         const metadataTop = previewY + previewH + Math.max(8, bgDrawH * 0.01);
         const metadataW = Math.min(previewW + Math.max(68, Math.round(bgDrawW * 0.05)), bgDrawW * 0.255);
@@ -1585,7 +1599,7 @@ const b = hudCanvas._pauseBtn;
         ctx.fillText(`Saved: ${formatSavedTimestamp(saveSlot.savedAtMs)}`, textInsetX, infoY + infoLineH);
         ctx.fillText(`Session: ${formatSessionDuration(saveSlot.sessionDurationSec)}`, textInsetX, infoY + infoLineH * 2);
 
-        if (hasMenuSavePreview()){
+        if (isPreviewDebugActive()){
           ctx.save();
           ctx.fillStyle = "rgba(255,32,32,0.12)";
           ctx.fillRect(previewX, previewY, previewW, previewH);
@@ -1599,8 +1613,8 @@ const b = hudCanvas._pauseBtn;
           ctx.textBaseline = "top";
           ctx.font = `${Math.max(11, Math.round(bgDrawH * 0.014))}px "Trebuchet MS",sans-serif`;
           ctx.fillStyle = "rgba(255,210,210,0.96)";
-          const debugTextX = Math.max(8, bgDrawX + 10);
-          const debugTextY = Math.max(8, bgDrawY + 10);
+          const debugTextX = previewX;
+          const debugTextY = metadataTop + Math.max(56, Math.round(bgDrawH * 0.1));
           const debugLineH = Math.max(12, Math.round(bgDrawH * 0.017));
           ctx.fillText(`x: ${previewDebug.x}`, debugTextX, debugTextY);
           ctx.fillText(`y: ${previewDebug.y}`, debugTextX, debugTextY + debugLineH);
