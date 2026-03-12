@@ -147,6 +147,7 @@
   let sessionStartedAtMs = Date.now();
   let saveSlot = loadSaveSlot();
   let pendingNewQuestConfirm = false;
+  let suppressPauseOverlayForSnapshot = false;
   let saveSnapshotImage = null;
   let saveSnapshotSrc = "";
   let saveSnapshotStatus = "idle";
@@ -485,6 +486,15 @@
 
   function captureSnapshotDataUrl(){
     if (!canvas || canvas.width <= 0 || canvas.height <= 0) return "";
+
+    if (paused && !bootActive){
+      suppressPauseOverlayForSnapshot = true;
+      try {
+        draw();
+      } finally {
+        suppressPauseOverlayForSnapshot = false;
+      }
+    }
 
     const encodePng = (srcCanvas) => {
       try {
@@ -2134,7 +2144,7 @@
       ctx.fillText("Press any key to return to main menu", r.w * 0.5, r.h * 0.9);
 
       ctx.restore();
-    } else if (paused && !bootActive){
+    } else if (paused && !bootActive && !suppressPauseOverlayForSnapshot){
       r.drawPauseOverlay();
     } else if (gameState === GameState.INTERMISSION){
       const img = intermissionImage;
