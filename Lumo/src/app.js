@@ -193,11 +193,15 @@
     { x: 0.742, y: 0.214, r: 0.018, amp: 0.39, speed: 0.57, phase: 4.9 },
     { x: 0.848, y: 0.566, r: 0.017, amp: 0.37, speed: 0.43, phase: 5.4 }
   ];
+  const menuPanelReferenceSize = {
+    w: 1920,
+    h: 1080
+  };
   const savePreviewLayout = {
-    x: 70,
-    y: -110,
-    w: 236,
-    h: 130,
+    normalizedX: 70 / menuPanelReferenceSize.w,
+    normalizedY: -110 / menuPanelReferenceSize.h,
+    normalizedW: 236 / menuPanelReferenceSize.w,
+    normalizedH: 130 / menuPanelReferenceSize.h,
     rot: 0
   };
 
@@ -283,14 +287,16 @@
     ctx.restore();
   }
 
-  function getSavePreviewRect(panelX, panelY){
-    const previewX = panelX + savePreviewLayout.x;
-    const previewY = panelY + savePreviewLayout.y;
+  function getSavePreviewRect(panelInner){
+    const previewX = panelInner.x + panelInner.w * savePreviewLayout.normalizedX;
+    const previewY = panelInner.y + panelInner.h * savePreviewLayout.normalizedY;
+    const previewW = panelInner.w * savePreviewLayout.normalizedW;
+    const previewH = panelInner.h * savePreviewLayout.normalizedH;
     return {
       x: previewX,
       y: previewY,
-      w: savePreviewLayout.w,
-      h: savePreviewLayout.h,
+      w: previewW,
+      h: previewH,
       rotDeg: savePreviewLayout.rot,
       rotRad: savePreviewLayout.rot * Math.PI / 180
     };
@@ -1746,7 +1752,14 @@
 
       ctx.restore();
 
-      const previewRect = getSavePreviewRect(panelX, panelY);
+      const panelInner = {
+        x: panelX,
+        y: panelY,
+        w: bgDrawW,
+        h: bgDrawH
+      };
+
+      const previewRect = getSavePreviewRect(panelInner);
       const previewX = previewRect.x;
       const previewY = previewRect.y;
       const previewW = previewRect.w;
