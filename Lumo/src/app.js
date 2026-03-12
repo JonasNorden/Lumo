@@ -179,7 +179,7 @@
     { x: 0.742, y: 0.214, r: 0.018, amp: 0.39, speed: 0.57, phase: 4.9 },
     { x: 0.848, y: 0.566, r: 0.017, amp: 0.37, speed: 0.43, phase: 5.4 }
   ];
-  const previewDebug = {
+  const savePreviewLayout = {
     x: 70,
     y: -110,
     w: 236,
@@ -269,107 +269,16 @@
     ctx.restore();
   }
 
-  function isPreviewDebugActive(){
-    return gameState === GameState.MENU && hasSaveSlot();
-  }
-
-  function getPreviewDebugKey(e){
-    const key = e.key || "";
-    const lower = key.toLowerCase();
-
-    if (key.startsWith("Arrow")) return key;
-    if (key === "Enter") return "Enter";
-
-    if (["a", "d", "w", "s", "q", "e"].includes(lower)) return lower;
-
-    if (e.code === "KeyA") return "a";
-    if (e.code === "KeyD") return "d";
-    if (e.code === "KeyW") return "w";
-    if (e.code === "KeyS") return "s";
-    if (e.code === "KeyQ") return "q";
-    if (e.code === "KeyE") return "e";
-
-    return key;
-  }
-
-  function applyPreviewDebugKey(e){
-    const key = getPreviewDebugKey(e);
-    console.log(`[TEMP DEBUG APPLY CHECK] key=${key} code=${e.code || ""} active=${isPreviewDebugActive()} state=${gameState}`);
-    if (!isPreviewDebugActive()){
-      return false;
-    }
-
-    const step = e.shiftKey ? 10 : 1;
-    const rotStep = e.shiftKey ? 5 : 1;
-    let handled = false;
-
-    switch (key){
-      case "ArrowLeft":
-        previewDebug.x -= step;
-        handled = true;
-        break;
-      case "ArrowRight":
-        previewDebug.x += step;
-        handled = true;
-        break;
-      case "ArrowUp":
-        previewDebug.y -= step;
-        handled = true;
-        break;
-      case "ArrowDown":
-        previewDebug.y += step;
-        handled = true;
-        break;
-      case "a":
-        previewDebug.w = Math.max(1, previewDebug.w - 1);
-        handled = true;
-        break;
-      case "d":
-        previewDebug.w += 1;
-        handled = true;
-        break;
-      case "w":
-        previewDebug.h = Math.max(1, previewDebug.h - 1);
-        handled = true;
-        break;
-      case "s":
-        previewDebug.h += 1;
-        handled = true;
-        break;
-      case "q":
-        previewDebug.rot -= rotStep;
-        handled = true;
-        break;
-      case "e":
-        previewDebug.rot += rotStep;
-        handled = true;
-        break;
-      case "Enter":
-        handled = true;
-        break;
-    }
-
-    if (!handled) return false;
-
-    console.log(`[TEMP DEBUG INPUT] key=${key} shift=${e.shiftKey} handled=${handled}`);
-    console.log(`[TEMP DEBUG STATE] x=${previewDebug.x}, y=${previewDebug.y}, w=${previewDebug.w}, h=${previewDebug.h}, rot=${previewDebug.rot}`);
-    if (key === "Enter"){
-      console.log(`[TEMP DEBUG] x=${previewDebug.x} y=${previewDebug.y} w=${previewDebug.w} h=${previewDebug.h} rot=${previewDebug.rot}`);
-    }
-
-    return true;
-  }
-
-  function getPreviewDebugRect(panelX, panelY){
-    const previewX = panelX + previewDebug.x;
-    const previewY = panelY + previewDebug.y;
+  function getSavePreviewRect(panelX, panelY){
+    const previewX = panelX + savePreviewLayout.x;
+    const previewY = panelY + savePreviewLayout.y;
     return {
       x: previewX,
       y: previewY,
-      w: previewDebug.w,
-      h: previewDebug.h,
-      rotDeg: previewDebug.rot,
-      rotRad: previewDebug.rot * Math.PI / 180
+      w: savePreviewLayout.w,
+      h: savePreviewLayout.h,
+      rotDeg: savePreviewLayout.rot,
+      rotRad: savePreviewLayout.rot * Math.PI / 180
     };
   }
 
@@ -929,7 +838,7 @@
         const b = menuUi.creditsBounds;
         if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
           playUiSfx("confirm");
-          alert("Lumo — Erik Nilsson © 2026");
+          alert("Lumo - Jonas Nordén");
           return;
         }
       }
@@ -1044,15 +953,6 @@ const b = hudCanvas._pauseBtn;
       }
     }
   });
-
-  window.addEventListener("keydown", (e) => {
-    console.log(`[TEMP DEBUG RAW KEYDOWN] key=${e.key || ""} code=${e.code || ""} shift=${e.shiftKey} state=${gameState}`);
-    if (gameState !== GameState.MENU) return;
-    if (!applyPreviewDebugKey(e)) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-  }, { capture: true, passive: false });
-  console.log("[TEMP DEBUG] preview debug keydown listener registered (window, capture=true)");
 
   // P = pause/resume
   window.addEventListener("keydown", (e) => {
@@ -1662,7 +1562,7 @@ const b = hudCanvas._pauseBtn;
       ctx.restore();
 
       if (hasSaveSlot()){
-        const previewRect = getPreviewDebugRect(panelX, panelY);
+        const previewRect = getSavePreviewRect(panelX, panelY);
         const previewX = previewRect.x;
         const previewY = previewRect.y;
         const previewW = previewRect.w;
@@ -1702,30 +1602,6 @@ const b = hudCanvas._pauseBtn;
         ctx.fillText(`Saved: ${formatSavedTimestamp(saveSlot.savedAtMs)}`, textInsetX, infoY + infoLineH);
         ctx.fillText(`Session: ${formatSessionDuration(saveSlot.sessionDurationSec)}`, textInsetX, infoY + infoLineH * 2);
 
-        if (isPreviewDebugActive()){
-          ctx.save();
-          ctx.fillStyle = "rgba(255,32,32,0.12)";
-          ctx.fillRect(previewX, previewY, previewW, previewH);
-          ctx.strokeStyle = "rgba(255,18,18,0.95)";
-          ctx.lineWidth = 2;
-          ctx.strokeRect(previewX, previewY, previewW, previewH);
-          ctx.restore();
-
-          ctx.save();
-          ctx.textAlign = "left";
-          ctx.textBaseline = "top";
-          ctx.font = `${Math.max(11, Math.round(bgDrawH * 0.014))}px "Trebuchet MS",sans-serif`;
-          ctx.fillStyle = "rgba(255,210,210,0.96)";
-          const debugTextX = previewX;
-          const debugTextY = metadataTop + Math.max(56, Math.round(bgDrawH * 0.1));
-          const debugLineH = Math.max(12, Math.round(bgDrawH * 0.017));
-          ctx.fillText(`x: ${previewDebug.x}`, debugTextX, debugTextY);
-          ctx.fillText(`y: ${previewDebug.y}`, debugTextX, debugTextY + debugLineH);
-          ctx.fillText(`w: ${previewDebug.w}`, debugTextX, debugTextY + debugLineH * 2);
-          ctx.fillText(`h: ${previewDebug.h}`, debugTextX, debugTextY + debugLineH * 3);
-          ctx.fillText(`rot: ${previewDebug.rot}`, debugTextX, debugTextY + debugLineH * 4);
-          ctx.restore();
-        }
       }
 
       ctx.save();
@@ -1733,7 +1609,7 @@ const b = hudCanvas._pauseBtn;
       ctx.textBaseline = "bottom";
       ctx.font = `${Math.max(11, Math.round(bgDrawH * 0.017))}px "Trebuchet MS",sans-serif`;
       ctx.fillStyle = "rgba(185,219,228,0.78)";
-      const creditsText = "Lumo — Erik Nilsson © 2026";
+      const creditsText = "Lumo - Jonas Nordén";
       const creditsX = bgDrawX + bgDrawW * 0.03;
       const creditsY = bgDrawY + bgDrawH * 0.975;
       ctx.fillText(creditsText, creditsX, creditsY);
