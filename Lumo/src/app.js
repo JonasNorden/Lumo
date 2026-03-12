@@ -149,6 +149,7 @@
   let pendingNewQuestConfirm = false;
   let saveSnapshotImage = null;
   let saveSnapshotSrc = "";
+  let saveSnapshotStatus = "idle";
   const previewFallbackPlaceholder = new Image();
   previewFallbackPlaceholder.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="236" height="130" viewBox="0 0 236 130">'
@@ -367,6 +368,12 @@
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== "object" || !parsed.levelKey) return null;
+      if (parsed.snapshotDataUrl && typeof parsed.snapshotDataUrl === "string"){
+        const url = parsed.snapshotDataUrl.trim();
+        parsed.snapshotDataUrl = url.startsWith("data:image/png;base64,") ? url : "";
+      } else {
+        parsed.snapshotDataUrl = "";
+      }
       return parsed;
     } catch (_err){
       return null;
@@ -375,12 +382,22 @@
 
   function getSaveSnapshotImage(){
     if (!saveSlot || !saveSlot.snapshotDataUrl) return null;
-    if (saveSnapshotImage && saveSnapshotSrc === saveSlot.snapshotDataUrl) return saveSnapshotImage;
+    if (saveSnapshotImage && saveSnapshotSrc === saveSlot.snapshotDataUrl){
+      return saveSnapshotStatus === "ready" ? saveSnapshotImage : null;
+    }
+
     const img = new Image();
+    saveSnapshotStatus = "loading";
+    img.onload = () => {
+      if (saveSnapshotSrc === img.src) saveSnapshotStatus = "ready";
+    };
+    img.onerror = () => {
+      if (saveSnapshotSrc === img.src) saveSnapshotStatus = "error";
+    };
     img.src = saveSlot.snapshotDataUrl;
     saveSnapshotImage = img;
     saveSnapshotSrc = saveSlot.snapshotDataUrl;
-    return saveSnapshotImage;
+    return null;
   }
 
   function getFallbackPreviewImage(){
@@ -394,17 +411,44 @@
     return snapshotImg || getFallbackPreviewImage();
   }
 
+  function captureSnapshotDataUrl(){
+    if (!canvas || canvas.width <= 0 || canvas.height <= 0) return "";
+
+    const encodePng = (srcCanvas) => {
+      try {
+        const encoded = srcCanvas.toDataURL("image/png");
+        return (encoded && encoded.startsWith("data:image/png;base64,")) ? encoded : "";
+      } catch (_err){
+        return "";
+      }
+    };
+
+    const scaledCapture = (() => {
+      const maxW = 472;
+      const maxH = 260;
+      const scale = Math.min(maxW / canvas.width, maxH / canvas.height, 1);
+      const w = Math.max(1, Math.round(canvas.width * scale));
+      const h = Math.max(1, Math.round(canvas.height * scale));
+      const temp = document.createElement("canvas");
+      temp.width = w;
+      temp.height = h;
+      const ctx = temp.getContext("2d", { alpha: false });
+      if (!ctx) return "";
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "medium";
+      ctx.drawImage(canvas, 0, 0, w, h);
+      return encodePng(temp);
+    })();
+
+    return scaledCapture;
+  }
+
   function saveRunState(){
     const levelKey = currentLevelKey();
     if (!levelKey) return false;
 
     const sessionDurationSec = Math.max(0, Math.floor((Date.now() - sessionStartedAtMs) / 1000));
-    let snapshotDataUrl = "";
-    try {
-      snapshotDataUrl = canvas.toDataURL("image/png");
-    } catch (_err){
-      snapshotDataUrl = "";
-    }
+    const snapshotDataUrl = captureSnapshotDataUrl();
 
     const payload = {
       version: 1,
@@ -434,6 +478,11 @@
       if (!payload.snapshotDataUrl){
         saveSnapshotImage = null;
         saveSnapshotSrc = "";
+        saveSnapshotStatus = "idle";
+      } else if (saveSnapshotSrc !== payload.snapshotDataUrl){
+        saveSnapshotImage = null;
+        saveSnapshotSrc = "";
+        saveSnapshotStatus = "idle";
       }
       return true;
     } catch (_err){
@@ -474,6 +523,11 @@
     if (!slot.snapshotDataUrl){
       saveSnapshotImage = null;
       saveSnapshotSrc = "";
+      saveSnapshotStatus = "idle";
+    } else if (saveSnapshotSrc !== slot.snapshotDataUrl){
+      saveSnapshotImage = null;
+      saveSnapshotSrc = "";
+      saveSnapshotStatus = "idle";
     }
     sessionStartedAtMs = Date.now();
     paused = false;
