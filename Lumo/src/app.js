@@ -199,23 +199,23 @@
     } = opts;
 
     const sideInset = Math.max(8, Math.round(w * 0.08));
-    const leftLift = Math.max(2, Math.round(h * 0.04));
-    const rightDrop = Math.max(6, Math.round(h * 0.12));
+    const topLeftLift = Math.max(4, Math.round(h * 0.06));
+    const topRightDrop = Math.max(1, Math.round(h * 0.015));
     const insetPad = Math.max(8, Math.round(bgDrawH * 0.008));
 
     const buildSurfacePath = (targetCtx, pad = 0) => {
       const leftX = -w * 0.5 + sideInset + pad;
       const rightX = w * 0.5 - sideInset - pad;
-      const topLeftY = -h * 0.5 - leftLift + pad;
-      const topRightY = topLeftY + rightDrop;
-      const bottomLeftY = h * 0.5 - leftLift - pad;
-      const bottomRightY = bottomLeftY + rightDrop;
+      const topBaseY = -h * 0.5 + pad;
+      const topLeftY = topBaseY - topLeftLift;
+      const topRightY = topBaseY + topRightDrop;
+      const bottomY = h * 0.5 - pad;
 
       targetCtx.beginPath();
       targetCtx.moveTo(leftX, topLeftY);
       targetCtx.lineTo(rightX, topRightY);
-      targetCtx.lineTo(rightX, bottomRightY);
-      targetCtx.lineTo(leftX, bottomLeftY);
+      targetCtx.lineTo(rightX, bottomY);
+      targetCtx.lineTo(leftX, bottomY);
       targetCtx.closePath();
     };
 
