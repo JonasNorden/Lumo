@@ -191,54 +191,90 @@
     return gameState === GameState.MENU && !!(saveSlot && saveSlot.snapshotDataUrl);
   }
 
+  function getPreviewDebugKey(e){
+    const key = e.key || "";
+    const lower = key.toLowerCase();
+
+    if (key.startsWith("Arrow")) return key;
+    if (key === "Enter") return "Enter";
+
+    if (["a", "d", "w", "s", "q", "e"].includes(lower)) return lower;
+
+    if (e.code === "KeyA") return "a";
+    if (e.code === "KeyD") return "d";
+    if (e.code === "KeyW") return "w";
+    if (e.code === "KeyS") return "s";
+    if (e.code === "KeyQ") return "q";
+    if (e.code === "KeyE") return "e";
+
+    return key;
+  }
+
   function applyPreviewDebugKey(e){
-    if (!isPreviewDebugActive()) return false;
+    const key = getPreviewDebugKey(e);
+    if (!isPreviewDebugActive()){
+      return false;
+    }
+
     const step = e.shiftKey ? 10 : 1;
     const rotStep = e.shiftKey ? 5 : 1;
+    let handled = false;
 
-    switch (e.key){
+    switch (key){
       case "ArrowLeft":
         previewDebug.x -= step;
-        return true;
+        handled = true;
+        break;
       case "ArrowRight":
         previewDebug.x += step;
-        return true;
+        handled = true;
+        break;
       case "ArrowUp":
         previewDebug.y -= step;
-        return true;
+        handled = true;
+        break;
       case "ArrowDown":
         previewDebug.y += step;
-        return true;
+        handled = true;
+        break;
       case "a":
-      case "A":
         previewDebug.w = Math.max(1, previewDebug.w - 1);
-        return true;
+        handled = true;
+        break;
       case "d":
-      case "D":
         previewDebug.w += 1;
-        return true;
+        handled = true;
+        break;
       case "w":
-      case "W":
-        previewDebug.h += 1;
-        return true;
-      case "s":
-      case "S":
         previewDebug.h = Math.max(1, previewDebug.h - 1);
-        return true;
+        handled = true;
+        break;
+      case "s":
+        previewDebug.h += 1;
+        handled = true;
+        break;
       case "q":
-      case "Q":
         previewDebug.rot -= rotStep;
-        return true;
+        handled = true;
+        break;
       case "e":
-      case "E":
         previewDebug.rot += rotStep;
-        return true;
+        handled = true;
+        break;
       case "Enter":
-        console.log(`[TEMP DEBUG]\nx=${previewDebug.x}\ny=${previewDebug.y}\nw=${previewDebug.w}\nh=${previewDebug.h}\nrotation=${previewDebug.rot}`);
-        return true;
-      default:
-        return false;
+        handled = true;
+        break;
     }
+
+    if (!handled) return false;
+
+    console.log(`[TEMP DEBUG INPUT] key=${key} shift=${e.shiftKey} handled=${handled}`);
+    console.log(`[TEMP DEBUG STATE] x=${previewDebug.x}, y=${previewDebug.y}, w=${previewDebug.w}, h=${previewDebug.h}, rot=${previewDebug.rot}`);
+    if (key === "Enter"){
+      console.log(`[TEMP DEBUG] x=${previewDebug.x} y=${previewDebug.y} w=${previewDebug.w} h=${previewDebug.h} rot=${previewDebug.rot}`);
+    }
+
+    return true;
   }
 
   function getPreviewDebugRect(panelX, panelY){
@@ -926,14 +962,17 @@ const b = hudCanvas._pauseBtn;
     }
   });
 
+  window.addEventListener("keydown", (e) => {
+    if (gameState !== GameState.MENU) return;
+    if (!applyPreviewDebugKey(e)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, { capture: true, passive: false });
+
   // P = pause/resume
   window.addEventListener("keydown", (e) => {
     if (gameState === GameState.MENU){
       unlockMenuMusicFromInteraction();
-      if (applyPreviewDebugKey(e)){
-        e.preventDefault();
-        return;
-      }
       const menuItems = getMenuItems();
       if (e.repeat) return;
       if (pendingNewQuestConfirm){
