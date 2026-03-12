@@ -1521,6 +1521,9 @@ const b = hudCanvas._pauseBtn;
           menuUi.beginQuestBounds = bounds;
         }
       }
+
+      ctx.restore();
+
       if (hasSaveSlot()){
         const previewX = previewDebug.x;
         const previewY = previewDebug.y;
@@ -1607,7 +1610,6 @@ const b = hudCanvas._pauseBtn;
           ctx.restore();
         }
       }
-      ctx.restore();
 
       ctx.save();
       ctx.textAlign = "left";
