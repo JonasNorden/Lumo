@@ -472,6 +472,7 @@
   }
 
   function openCreditsPanel(){
+    pendingNewQuestConfirm = false;
     menuUi.panelMode = "credits";
     menuUi.creditsBackBounds = null;
     playUiSfx("confirm");
@@ -1715,62 +1716,77 @@
       menuUi.itemBounds = [];
       menuUi.beginQuestBounds = null;
       menuUi.confirmBounds = [];
+      menuUi.creditsBounds = null;
 
       if (menuUi.panelMode === "credits"){
         const creditsHeading = "Credits";
         const creditsLines = [
-          "Lumo är ett stämningsdrivet",
-          "plattformsäventyr i mörker och ljus.",
+          "Lumo is an atmospheric platform adventure about light, darkness,",
+          "and the small spark of hope that exists even in the deepest shadows.",
           "",
-          "Spelet skapades av Jonas Nordén",
-          "med stöd av ChatGPT och Codex",
-          "utan traditionell programmeringsbakgrund.",
+          "The game was created by Jonas Nordén,",
+          "with the help of ChatGPT and Codex",
+          "— without any traditional programming background.",
           "",
-          "Idén växte fram som en personlig",
-          "utforskning: att bygga en hel värld",
-          "från vision, nyfikenhet och tålamod."
+          "The project began as a simple idea:",
+          "to explore whether an entire game world could be built",
+          "with curiosity, persistence, and modern AI as tools.",
+          "",
+          "Lumo is an experiment, an adventure,",
+          "and a small proof of what creativity can achieve",
+          "when technology and imagination meet."
         ];
 
-        ctx.textAlign = "left";
+        ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        const left = textOffsetX - bgDrawW * 0.085;
-        const top = textOffsetY - bgDrawH * 0.14;
-        const maxW = bgDrawW * 0.26;
+        const panelContentW = bgDrawW * 0.33;
+        const panelContentH = bgDrawH * 0.56;
+        const panelLeft = textOffsetX - panelContentW * 0.5;
+        const panelTop = textOffsetY - panelContentH * 0.5;
+        const contentPadX = Math.max(14, bgDrawW * 0.01);
+        const contentPadY = Math.max(14, bgDrawH * 0.014);
+        const textX = panelLeft + panelContentW * 0.5;
+        const textMaxW = panelContentW - contentPadX * 2;
 
         ctx.font = `${Math.max(25, Math.round(bgDrawH * 0.043))}px "Orbitron","Trebuchet MS",sans-serif`;
         ctx.fillStyle = "#CBFBFF";
         ctx.shadowColor = "rgba(89,228,245,0.45)";
         ctx.shadowBlur = 10;
-        ctx.fillText(creditsHeading, left, top);
+        const headingY = panelTop + contentPadY;
+        ctx.fillText(creditsHeading, textX, headingY, textMaxW);
 
         ctx.font = `${Math.max(13, Math.round(bgDrawH * 0.019))}px "Trebuchet MS",sans-serif`;
         ctx.fillStyle = "rgba(199,240,248,0.94)";
         ctx.shadowBlur = 0;
-        let y = top + Math.max(42, bgDrawH * 0.06);
         const lineStep = Math.max(16, bgDrawH * 0.023);
+        const bodyStartY = headingY + Math.max(40, bgDrawH * 0.054);
+        const bodyHeight = creditsLines.length * lineStep;
+        const bodyMaxTop = panelTop + panelContentH - contentPadY - bodyHeight - Math.max(36, bgDrawH * 0.04);
+        let y = Math.min(Math.max(bodyStartY, panelTop + contentPadY), bodyMaxTop);
         for (const line of creditsLines){
           if (line){
-            ctx.fillText(line, left, y, maxW);
+            ctx.fillText(line, textX, y, textMaxW);
           }
           y += lineStep;
         }
 
         const backLabel = "Back";
-        const backY = top + Math.max(250, bgDrawH * 0.36);
+        const backY = panelTop + panelContentH - Math.max(34, bgDrawH * 0.042);
         ctx.font = `${Math.max(16, Math.round(bgDrawH * 0.024))}px "Orbitron","Trebuchet MS",sans-serif`;
         ctx.fillStyle = "#A6F4FF";
-        ctx.fillText(backLabel, left, backY);
+        ctx.fillText(backLabel, textX, backY);
 
         const backW = ctx.measureText(backLabel).width;
+        const backH = Math.max(24, bgDrawH * 0.03);
         const c = Math.cos(tilt);
         const s = Math.sin(tilt);
-        const bx = panelX + (left * c - backY * s);
-        const by = panelY + (left * s + backY * c);
+        const bx = panelX + (textX * c - backY * s);
+        const by = panelY + (textX * s + backY * c);
         menuUi.creditsBackBounds = {
-          x: bx,
-          y: by,
+          x: bx - backW * 0.5,
+          y: by - backH * 0.5,
           w: backW,
-          h: Math.max(24, bgDrawH * 0.03)
+          h: backH
         };
       } else {
         menuUi.creditsBackBounds = null;
@@ -1811,6 +1827,10 @@
       }
 
       ctx.restore();
+
+      if (menuUi.panelMode === "credits"){
+        return;
+      }
 
       const panelInner = {
         x: panelX,
