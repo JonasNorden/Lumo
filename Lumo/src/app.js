@@ -150,6 +150,7 @@
   let saveSnapshotImage = null;
   let saveSnapshotSrc = "";
   let saveSnapshotStatus = "idle";
+  let lastPreviewImageSourceLogged = "";
   const previewFallbackPlaceholder = new Image();
   previewFallbackPlaceholder.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="236" height="130" viewBox="0 0 236 130">'
@@ -213,7 +214,7 @@
       h,
       rotRad,
       bgDrawH,
-      snapshotImage
+      previewImage
     } = opts;
 
     const sideInset = 0;
@@ -248,8 +249,8 @@
     buildSurfacePath(ctx);
     ctx.fill();
 
-    if (snapshotImage && snapshotImage.complete && snapshotImage.naturalWidth > 0){
-      const img = snapshotImage;
+    if (previewImage && previewImage.complete && previewImage.naturalWidth > 0){
+      const img = previewImage;
       const imgAspect = img.naturalWidth / Math.max(1, img.naturalHeight);
       const previewAspect = w / Math.max(1, h);
       let srcW = img.naturalWidth;
@@ -424,11 +425,15 @@
     saveSnapshotImage = img;
     saveSnapshotStatus = "loading";
     img.onload = () => {
-      if (saveSnapshotImage === img && saveSnapshotSrc === source) saveSnapshotStatus = "ready";
+      if (saveSnapshotImage === img && saveSnapshotSrc === source){
+        saveSnapshotStatus = "ready";
+        console.log("[PREVIEW IMAGE] snapshot load ready");
+      }
     };
     img.onerror = () => {
       if (saveSnapshotImage === img && saveSnapshotSrc === source){
         saveSnapshotStatus = "error";
+        console.log("[PREVIEW IMAGE] snapshot load error");
       }
     };
     img.src = source;
@@ -441,9 +446,28 @@
     return null;
   }
 
-  function getPreviewImageForMenu(){
-    const snapshotImg = (saveSlot && saveSlot.snapshotDataUrl) ? getSaveSnapshotImage() : null;
-    return snapshotImg || getFallbackPreviewImage();
+  function resolvePreviewImageForMenu(){
+    const hasSnapshotData = !!(saveSlot && saveSlot.snapshotDataUrl);
+    const snapshotImg = hasSnapshotData ? getSaveSnapshotImage() : null;
+
+    if (snapshotImg && snapshotImg.complete && snapshotImg.naturalWidth > 0){
+      return {
+        image: snapshotImg,
+        source: "snapshot"
+      };
+    }
+
+    return {
+      image: getFallbackPreviewImage(),
+      source: "fallback"
+    };
+  }
+
+  function logPreviewImageSource(source){
+    if (lastPreviewImageSourceLogged === source) return;
+    lastPreviewImageSourceLogged = source;
+    const hasSnapshotData = !!(saveSlot && saveSlot.snapshotDataUrl);
+    console.log(`[PREVIEW IMAGE] using ${source} (hasSnapshotDataUrl=${hasSnapshotData}, snapshotStatus=${saveSnapshotStatus})`);
   }
 
   function openCreditsPanel(){
@@ -1806,6 +1830,9 @@
       ctx.fillStyle = "rgba(210,253,255,0.95)";
       ctx.fillText(hasSaveSlot() ? "Last save" : "No save found", textInsetX, titleY);
 
+      const previewImageSelection = resolvePreviewImageForMenu();
+      logPreviewImageSource(previewImageSelection.source);
+
       drawPreviewPanelSurface(ctx, {
         x: previewX,
         y: previewY,
@@ -1813,7 +1840,7 @@
         h: previewH,
         rotRad: previewRotRad,
         bgDrawH,
-        snapshotImage: getPreviewImageForMenu()
+        previewImage: previewImageSelection.image
       });
 
       if (hasSaveSlot()){
