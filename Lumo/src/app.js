@@ -188,7 +188,7 @@
   };
 
   function isPreviewDebugActive(){
-    return gameState === GameState.MENU && !!(saveSlot && saveSlot.snapshotDataUrl);
+    return gameState === GameState.MENU && hasSaveSlot();
   }
 
   function getPreviewDebugKey(e){
@@ -212,6 +212,7 @@
 
   function applyPreviewDebugKey(e){
     const key = getPreviewDebugKey(e);
+    console.log(`[TEMP DEBUG APPLY CHECK] key=${key} code=${e.code || ""} active=${isPreviewDebugActive()} state=${gameState}`);
     if (!isPreviewDebugActive()){
       return false;
     }
@@ -963,11 +964,13 @@ const b = hudCanvas._pauseBtn;
   });
 
   window.addEventListener("keydown", (e) => {
+    console.log(`[TEMP DEBUG RAW KEYDOWN] key=${e.key || ""} code=${e.code || ""} shift=${e.shiftKey} state=${gameState}`);
     if (gameState !== GameState.MENU) return;
     if (!applyPreviewDebugKey(e)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
   }, { capture: true, passive: false });
+  console.log("[TEMP DEBUG] preview debug keydown listener registered (window, capture=true)");
 
   // P = pause/resume
   window.addEventListener("keydown", (e) => {
