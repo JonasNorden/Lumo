@@ -379,18 +379,20 @@
     return (lvl && lvl.meta && lvl.meta.name) ? lvl.meta.name : "Unknown level";
   }
 
+  function normalizeSnapshotDataUrl(value){
+    if (typeof value !== "string") return "";
+    const url = value.trim();
+    if (!url) return "";
+    return url.startsWith("data:image/png;base64,") ? url : "";
+  }
+
   function loadSaveSlot(){
     try {
       const raw = localStorage.getItem(SAVE_STORAGE_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== "object" || !parsed.levelKey) return null;
-      if (parsed.snapshotDataUrl && typeof parsed.snapshotDataUrl === "string"){
-        const url = parsed.snapshotDataUrl.trim();
-        parsed.snapshotDataUrl = url.startsWith("data:image/png;base64,") ? url : "";
-      } else {
-        parsed.snapshotDataUrl = "";
-      }
+      parsed.snapshotDataUrl = normalizeSnapshotDataUrl(parsed.snapshotDataUrl);
       return parsed;
     } catch (_err){
       return null;
@@ -399,11 +401,24 @@
 
   function getSaveSnapshotImage(){
     if (!saveSlot || !saveSlot.snapshotDataUrl) return null;
-    if (saveSnapshotImage && saveSnapshotSrc === saveSlot.snapshotDataUrl){
-      return saveSnapshotStatus === "ready" ? saveSnapshotImage : null;
+
+    const source = normalizeSnapshotDataUrl(saveSlot.snapshotDataUrl);
+    if (!source){
+      saveSlot.snapshotDataUrl = "";
+      saveSnapshotImage = null;
+      saveSnapshotSrc = "";
+      saveSnapshotStatus = "idle";
+      return null;
     }
 
-    const source = saveSlot.snapshotDataUrl;
+    if (saveSnapshotImage && saveSnapshotSrc === source){
+      if (saveSnapshotStatus === "ready") return saveSnapshotImage;
+      if (saveSnapshotStatus === "loading") return null;
+      saveSnapshotImage = null;
+      saveSnapshotSrc = "";
+      saveSnapshotStatus = "idle";
+    }
+
     const img = new Image();
     saveSnapshotSrc = source;
     saveSnapshotImage = img;
@@ -412,7 +427,9 @@
       if (saveSnapshotImage === img && saveSnapshotSrc === source) saveSnapshotStatus = "ready";
     };
     img.onerror = () => {
-      if (saveSnapshotImage === img && saveSnapshotSrc === source) saveSnapshotStatus = "error";
+      if (saveSnapshotImage === img && saveSnapshotSrc === source){
+        saveSnapshotStatus = "error";
+      }
     };
     img.src = source;
     return null;
@@ -479,7 +496,7 @@
     if (!levelKey) return false;
 
     const sessionDurationSec = Math.max(0, Math.floor((Date.now() - sessionStartedAtMs) / 1000));
-    const snapshotDataUrl = captureSnapshotDataUrl();
+    const snapshotDataUrl = normalizeSnapshotDataUrl(captureSnapshotDataUrl());
 
     const payload = {
       version: 1,
@@ -505,7 +522,7 @@
 
     try {
       localStorage.setItem(SAVE_STORAGE_KEY, JSON.stringify(payload));
-      saveSlot = payload;
+      saveSlot = loadSaveSlot() || payload;
       if (!payload.snapshotDataUrl){
         saveSnapshotImage = null;
         saveSnapshotSrc = "";
