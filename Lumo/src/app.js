@@ -292,11 +292,20 @@
     const previewY = panelInner.y + panelInner.h * savePreviewLayout.normalizedY;
     const previewW = panelInner.w * savePreviewLayout.normalizedW;
     const previewH = panelInner.h * savePreviewLayout.normalizedH;
+
+    const previewAnchorBottom = previewY + previewH;
+    const previewOffsetX = 50;
+    const previewScale = 2;
+    const adjustedPreviewW = previewW * previewScale;
+    const adjustedPreviewH = previewH * previewScale;
+    const adjustedPreviewX = previewX + previewOffsetX;
+    const adjustedPreviewY = previewAnchorBottom - adjustedPreviewH;
+
     return {
-      x: previewX,
-      y: previewY,
-      w: previewW,
-      h: previewH,
+      x: adjustedPreviewX,
+      y: adjustedPreviewY,
+      w: adjustedPreviewW,
+      h: adjustedPreviewH,
       rotDeg: savePreviewLayout.rot,
       rotRad: savePreviewLayout.rot * Math.PI / 180
     };
