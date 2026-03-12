@@ -180,12 +180,87 @@
     { x: 0.848, y: 0.566, r: 0.017, amp: 0.37, speed: 0.43, phase: 5.4 }
   ];
   const previewDebug = {
-    x: 73,
-    y: -122,
-    w: 233,
-    h: 158,
-    rot: -1
+    x: 70,
+    y: -110,
+    w: 236,
+    h: 130,
+    rot: 0
   };
+
+  function drawPreviewPanelSurface(ctx, opts){
+    const {
+      x,
+      y,
+      w,
+      h,
+      rotRad,
+      bgDrawH,
+      snapshotImage
+    } = opts;
+
+    const topInset = Math.max(8, Math.round(w * 0.08));
+    const sideSkew = Math.max(3, Math.round(w * 0.02));
+    const topLift = Math.max(2, Math.round(h * 0.06));
+    const insetPad = Math.max(8, Math.round(bgDrawH * 0.008));
+
+    const buildSurfacePath = (targetCtx, pad = 0) => {
+      targetCtx.beginPath();
+      targetCtx.moveTo(-w * 0.5 + topInset + sideSkew + pad, -h * 0.5 + topLift + pad);
+      targetCtx.lineTo(w * 0.5 - topInset + sideSkew - pad, -h * 0.5 - topLift + pad);
+      targetCtx.lineTo(w * 0.5 - sideSkew - pad, h * 0.5 - pad);
+      targetCtx.lineTo(-w * 0.5 - sideSkew + pad, h * 0.5 - pad);
+      targetCtx.closePath();
+    };
+
+    ctx.save();
+    ctx.translate(x + w * 0.5, y + h * 0.5);
+    ctx.rotate(rotRad);
+
+    const snapBack = ctx.createLinearGradient(-w * 0.5, -h * 0.5, w * 0.5, h * 0.5);
+    snapBack.addColorStop(0, "rgba(12,38,52,0.58)");
+    snapBack.addColorStop(1, "rgba(8,24,35,0.68)");
+    ctx.fillStyle = snapBack;
+    buildSurfacePath(ctx);
+    ctx.fill();
+
+    if (snapshotImage && snapshotImage.complete && snapshotImage.naturalWidth > 0){
+      const img = snapshotImage;
+      const imgAspect = img.naturalWidth / Math.max(1, img.naturalHeight);
+      const previewAspect = w / Math.max(1, h);
+      let srcW = img.naturalWidth;
+      let srcH = img.naturalHeight;
+      let srcX = 0;
+      let srcY = 0;
+
+      if (imgAspect > previewAspect){
+        srcW = img.naturalHeight * previewAspect;
+        srcX = (img.naturalWidth - srcW) * 0.5;
+      } else {
+        srcH = img.naturalWidth / previewAspect;
+        srcY = (img.naturalHeight - srcH) * 0.5;
+      }
+
+      ctx.save();
+      buildSurfacePath(ctx);
+      ctx.clip();
+      ctx.drawImage(img, srcX, srcY, srcW, srcH, -w * 0.5, -h * 0.5, w, h);
+      ctx.restore();
+    }
+
+    const edgeGlow = ctx.createLinearGradient(-w * 0.5, -h * 0.5, w * 0.5, h * 0.5);
+    edgeGlow.addColorStop(0, "rgba(168,244,255,0.38)");
+    edgeGlow.addColorStop(1, "rgba(124,208,231,0.22)");
+    ctx.strokeStyle = edgeGlow;
+    ctx.lineWidth = 1.2;
+    buildSurfacePath(ctx);
+    ctx.stroke();
+
+    ctx.strokeStyle = "rgba(150,226,245,0.16)";
+    ctx.lineWidth = 1;
+    buildSurfacePath(ctx, insetPad);
+    ctx.stroke();
+    ctx.restore();
+  }
 
   function isPreviewDebugActive(){
     return gameState === GameState.MENU && hasSaveSlot();
@@ -1586,7 +1661,6 @@ const b = hudCanvas._pauseBtn;
         const previewW = previewRect.w;
         const previewH = previewRect.h;
         const previewRotRad = previewRect.rotRad;
-        const insetPad = Math.max(10, Math.round(bgDrawH * 0.01));
         const metadataTop = previewY + previewH + Math.max(8, bgDrawH * 0.01);
         const metadataW = Math.min(previewW + Math.max(68, Math.round(bgDrawW * 0.05)), bgDrawW * 0.255);
         const metadataX = previewX - Math.max(4, Math.round(bgDrawW * 0.003));
@@ -1596,42 +1670,22 @@ const b = hudCanvas._pauseBtn;
         const titleY = metadataTop + metadataPadY;
         const infoY = titleY + Math.max(12, bgDrawH * 0.014);
 
-        ctx.fillStyle = "rgba(6,20,29,0.52)";
-        ctx.fillRect(metadataX, metadataTop, metadataW, Math.max(50, Math.round(bgDrawH * 0.095)));
-        ctx.strokeStyle = "rgba(126,214,232,0.2)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(metadataX, metadataTop, metadataW, Math.max(50, Math.round(bgDrawH * 0.095)));
-
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
         ctx.font = `${Math.max(13, Math.round(bgDrawH * 0.018))}px "Orbitron","Trebuchet MS",sans-serif`;
         ctx.fillStyle = "rgba(210,253,255,0.95)";
         ctx.fillText("Last save", textInsetX, titleY);
 
-        const snapBack = ctx.createLinearGradient(previewX, previewY, previewX + previewW, previewY + previewH);
-        snapBack.addColorStop(0, "rgba(9,31,43,0.55)");
-        snapBack.addColorStop(1, "rgba(8,24,35,0.62)");
-        ctx.fillStyle = snapBack;
-        ctx.fillRect(previewX, previewY, previewW, previewH);
-
-        if (saveSlot.snapshotDataUrl){
-          const snapImg = getSaveSnapshotImage();
-          if (snapImg && snapImg.complete && snapImg.naturalWidth > 0){
-            ctx.save();
-            ctx.translate(previewX + previewW * 0.5, previewY + previewH * 0.5);
-            ctx.rotate(previewRotRad);
-            ctx.drawImage(snapImg, -previewW * 0.5, -previewH * 0.5, previewW, previewH);
-            ctx.restore();
-          }
-        }
-
-        ctx.strokeStyle = "rgba(145,233,246,0.3)";
-        ctx.lineWidth = 1.2;
-        ctx.strokeRect(previewX, previewY, previewW, previewH);
-
-        ctx.strokeStyle = "rgba(141,224,240,0.18)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(previewX + insetPad, previewY + insetPad, previewW - insetPad * 2, previewH - insetPad * 2);
+        const snapImg = saveSlot.snapshotDataUrl ? getSaveSnapshotImage() : null;
+        drawPreviewPanelSurface(ctx, {
+          x: previewX,
+          y: previewY,
+          w: previewW,
+          h: previewH,
+          rotRad: previewRotRad,
+          bgDrawH,
+          snapshotImage: snapImg
+        });
 
         const infoLineH = Math.max(11, Math.round(bgDrawH * 0.015));
         ctx.font = `${Math.max(10, Math.round(bgDrawH * 0.014))}px "Trebuchet MS",sans-serif`;
