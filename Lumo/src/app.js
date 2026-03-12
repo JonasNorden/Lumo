@@ -1739,9 +1739,9 @@
 
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        const panelContentW = bgDrawW * 0.68;
+        const panelContentW = bgDrawW * 0.74;
         const panelContentH = bgDrawH * 0.56;
-        const creditsOffsetX = bgDrawW * (170 / 1920) - 15;
+        const creditsOffsetX = bgDrawW * (170 / 1920) - 15 + 90;
         const creditsOffsetY = bgDrawH * (42 / 1080);
         const panelLeft = textOffsetX + creditsOffsetX - panelContentW * 0.5;
         const panelTop = textOffsetY + creditsOffsetY - panelContentH * 0.5;
@@ -1757,7 +1757,7 @@
         const headingY = panelTop + contentPadY;
         ctx.fillText(creditsHeading, textX, headingY, textMaxW);
 
-        ctx.font = `${Math.max(13, Math.round(bgDrawH * 0.019))}px "Trebuchet MS",sans-serif`;
+        ctx.font = `${Math.max(12, Math.round(bgDrawH * 0.0175))}px "Trebuchet MS",sans-serif`;
         ctx.fillStyle = "rgba(199,240,248,0.94)";
         ctx.shadowBlur = 0;
         const lineStep = Math.max(16, bgDrawH * 0.023);
