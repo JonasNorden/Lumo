@@ -198,8 +198,8 @@
       snapshotImage
     } = opts;
 
-    const sideInset = Math.max(8, Math.round(w * 0.08));
-    const topLeftLift = Math.max(4, Math.round(h * 0.06));
+    const sideInset = 0;
+    const topLeftLift = Math.max(3, Math.round(h * 0.045));
     const topRightDrop = Math.max(1, Math.round(h * 0.015));
     const insetPad = Math.max(8, Math.round(bgDrawH * 0.008));
 
