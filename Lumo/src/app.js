@@ -1750,21 +1750,21 @@
         const textX = panelLeft + panelContentW * 0.5;
         const textMaxW = panelContentW - contentPadX * 2;
 
-        ctx.font = `${Math.max(25, Math.round(bgDrawH * 0.043))}px "Orbitron","Trebuchet MS",sans-serif`;
+        ctx.font = `${Math.max(24, Math.round(bgDrawH * 0.041))}px "Orbitron","Trebuchet MS",sans-serif`;
         ctx.fillStyle = "#CBFBFF";
         ctx.shadowColor = "rgba(89,228,245,0.45)";
         ctx.shadowBlur = 10;
         const headingY = panelTop + contentPadY;
         ctx.fillText(creditsHeading, textX, headingY, textMaxW);
 
-        ctx.font = `${Math.max(12, Math.round(bgDrawH * 0.0175))}px "Trebuchet MS",sans-serif`;
+        ctx.font = `${Math.max(11, Math.round(bgDrawH * 0.0165))}px "Trebuchet MS",sans-serif`;
         ctx.fillStyle = "rgba(199,240,248,0.94)";
         ctx.shadowBlur = 0;
         const lineStep = Math.max(16, bgDrawH * 0.023);
         const bodyStartY = headingY + Math.max(40, bgDrawH * 0.054);
         const bodyHeight = creditsLines.length * lineStep;
         const bodyMaxTop = panelTop + panelContentH - contentPadY - bodyHeight - Math.max(36, bgDrawH * 0.04);
-        let y = Math.min(Math.max(bodyStartY, panelTop + contentPadY), bodyMaxTop);
+        let y = Math.min(bodyStartY, bodyMaxTop);
         for (const line of creditsLines){
           if (line){
             ctx.fillText(line, textX, y, textMaxW);
@@ -1774,7 +1774,7 @@
 
         const backLabel = "Back";
         const backY = panelTop + panelContentH - Math.max(34, bgDrawH * 0.042);
-        ctx.font = `${Math.max(16, Math.round(bgDrawH * 0.024))}px "Orbitron","Trebuchet MS",sans-serif`;
+        ctx.font = `${Math.max(15, Math.round(bgDrawH * 0.0225))}px "Orbitron","Trebuchet MS",sans-serif`;
         ctx.fillStyle = "#A6F4FF";
         ctx.fillText(backLabel, textX, backY);
 
