@@ -205,10 +205,10 @@
 
     const buildSurfacePath = (targetCtx, pad = 0) => {
       targetCtx.beginPath();
-      targetCtx.moveTo(-w * 0.5 + topInset + sideSkew + pad, -h * 0.5 + topLift + pad);
-      targetCtx.lineTo(w * 0.5 - topInset + sideSkew - pad, -h * 0.5 - topLift + pad);
-      targetCtx.lineTo(w * 0.5 - sideSkew - pad, h * 0.5 - pad);
-      targetCtx.lineTo(-w * 0.5 - sideSkew + pad, h * 0.5 - pad);
+      targetCtx.moveTo(-w * 0.5 + topInset - sideSkew + pad, -h * 0.5 + topLift + pad);
+      targetCtx.lineTo(w * 0.5 - topInset - sideSkew - pad, -h * 0.5 - topLift + pad);
+      targetCtx.lineTo(w * 0.5 + sideSkew - pad, h * 0.5 - pad);
+      targetCtx.lineTo(-w * 0.5 + sideSkew + pad, h * 0.5 - pad);
       targetCtx.closePath();
     };
 
