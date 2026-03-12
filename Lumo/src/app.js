@@ -1739,9 +1739,9 @@
 
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        const panelContentW = bgDrawW * 0.33;
+        const panelContentW = bgDrawW * 0.68;
         const panelContentH = bgDrawH * 0.56;
-        const creditsOffsetX = bgDrawW * (170 / 1920);
+        const creditsOffsetX = bgDrawW * (170 / 1920) - 15;
         const creditsOffsetY = bgDrawH * (42 / 1080);
         const panelLeft = textOffsetX + creditsOffsetX - panelContentW * 0.5;
         const panelTop = textOffsetY + creditsOffsetY - panelContentH * 0.5;
