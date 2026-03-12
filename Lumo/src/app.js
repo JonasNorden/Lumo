@@ -1741,8 +1741,10 @@
         ctx.textBaseline = "top";
         const panelContentW = bgDrawW * 0.33;
         const panelContentH = bgDrawH * 0.56;
-        const panelLeft = textOffsetX - panelContentW * 0.5;
-        const panelTop = textOffsetY - panelContentH * 0.5;
+        const creditsOffsetX = bgDrawW * (80 / 1920);
+        const creditsOffsetY = bgDrawH * (30 / 1080);
+        const panelLeft = textOffsetX + creditsOffsetX - panelContentW * 0.5;
+        const panelTop = textOffsetY + creditsOffsetY - panelContentH * 0.5;
         const contentPadX = Math.max(14, bgDrawW * 0.01);
         const contentPadY = Math.max(14, bgDrawH * 0.014);
         const textX = panelLeft + panelContentW * 0.5;
