@@ -1761,7 +1761,7 @@
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.font = `${Math.max(22, Math.round(bgDrawH * 0.037))}px "Orbitron","Trebuchet MS",sans-serif`;
+        ctx.font = `${Math.max(20, Math.round(bgDrawH * 0.034))}px "Orbitron","Trebuchet MS",sans-serif`;
         ctx.fillStyle = "#CBFBFF";
         ctx.shadowColor = "rgba(89,228,245,0.45)";
         ctx.shadowBlur = 10;
@@ -1769,14 +1769,14 @@
         const headingScreen = localToScreen(textX, headingY);
         ctx.fillText(creditsHeading, headingScreen.x, headingScreen.y, textMaxW);
 
-        ctx.font = `${Math.max(12, Math.round(bgDrawH * 0.0175))}px "Trebuchet MS",sans-serif`;
+        ctx.font = `${Math.max(11, Math.round(bgDrawH * 0.0165))}px "Trebuchet MS",sans-serif`;
         ctx.fillStyle = "rgba(199,240,248,0.94)";
         ctx.shadowBlur = 0;
         const lineStep = Math.max(16, bgDrawH * 0.023);
         const bodyStartY = headingY + Math.max(34, bgDrawH * 0.048);
         const bodyHeight = creditsLines.length * lineStep;
         const bodyMaxTop = panelTop + panelContentH - contentPadY - bodyHeight - Math.max(32, bgDrawH * 0.036);
-        let y = Math.min(Math.max(bodyStartY, panelTop + contentPadY), bodyMaxTop);
+        let y = Math.min(bodyStartY, bodyMaxTop);
         for (const line of creditsLines){
           if (line){
             const lineScreen = localToScreen(textX, y);
@@ -1787,13 +1787,13 @@
 
         const backLabel = "Back";
         const backY = panelTop + panelContentH - Math.max(34, bgDrawH * 0.042);
-        ctx.font = `${Math.max(16, Math.round(bgDrawH * 0.024))}px "Orbitron","Trebuchet MS",sans-serif`;
+        ctx.font = `${Math.max(14, Math.round(bgDrawH * 0.022))}px "Orbitron","Trebuchet MS",sans-serif`;
         ctx.fillStyle = "#A6F4FF";
         const backScreen = localToScreen(textX, backY);
         ctx.fillText(backLabel, backScreen.x, backScreen.y);
         ctx.restore();
 
-        ctx.font = `${Math.max(16, Math.round(bgDrawH * 0.024))}px "Orbitron","Trebuchet MS",sans-serif`;
+        ctx.font = `${Math.max(14, Math.round(bgDrawH * 0.022))}px "Orbitron","Trebuchet MS",sans-serif`;
         const backW = ctx.measureText(backLabel).width;
         const backH = Math.max(24, bgDrawH * 0.03);
         const bx = panelX + (textX * c - backY * s);
