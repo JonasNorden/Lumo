@@ -117,6 +117,9 @@
   const menuLumoSpriteImage = new Image();
   menuLumoSpriteImage.src = "data/assets/ui/lumo_sprite.png";
 
+  const noSavePreviewImage = new Image();
+  noSavePreviewImage.src = "data/assets/ui/no_save_preview.png";
+
   const music = {
     menu: new Audio("data/assets/sfx/menu_music.mp3"),
     gameplay: new Audio("data/assets/sfx/game_play_1.mp3"),
@@ -146,6 +149,14 @@
   let pendingNewQuestConfirm = false;
   let saveSnapshotImage = null;
   let saveSnapshotSrc = "";
+  const previewFallbackPlaceholder = new Image();
+  previewFallbackPlaceholder.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="236" height="130" viewBox="0 0 236 130">'
+    + '<rect width="236" height="130" fill="#102633"/>'
+    + '<rect x="8" y="8" width="220" height="114" fill="#173646" stroke="#4fa8c2" stroke-width="1" stroke-dasharray="4 4"/>'
+    + '<text x="118" y="74" font-family="Trebuchet MS, sans-serif" font-size="14" fill="#b6dbe6" text-anchor="middle">NO SAVE PREVIEW</text>'
+    + '</svg>'
+  );
 
   const menuItemsBase = ["Begin Quest", "Settings", "Fan Art"];
   const menuUi = {
@@ -372,6 +383,17 @@
     return saveSnapshotImage;
   }
 
+  function getFallbackPreviewImage(){
+    if (noSavePreviewImage.complete && noSavePreviewImage.naturalWidth > 0) return noSavePreviewImage;
+    if (previewFallbackPlaceholder.complete && previewFallbackPlaceholder.naturalWidth > 0) return previewFallbackPlaceholder;
+    return null;
+  }
+
+  function getPreviewImageForMenu(){
+    const snapshotImg = (saveSlot && saveSlot.snapshotDataUrl) ? getSaveSnapshotImage() : null;
+    return snapshotImg || getFallbackPreviewImage();
+  }
+
   function saveRunState(){
     const levelKey = currentLevelKey();
     if (!levelKey) return false;
@@ -379,7 +401,7 @@
     const sessionDurationSec = Math.max(0, Math.floor((Date.now() - sessionStartedAtMs) / 1000));
     let snapshotDataUrl = "";
     try {
-      snapshotDataUrl = canvas.toDataURL("image/jpeg", 0.72);
+      snapshotDataUrl = canvas.toDataURL("image/png");
     } catch (_err){
       snapshotDataUrl = "";
     }
@@ -800,6 +822,11 @@
     hudDebug.textContent = ok ? "Saved & returned to menu" : "Save failed";
   }
 
+  function togglePauseState(){
+    paused = !paused;
+    gameState = paused ? GameState.PAUSED : GameState.PLAYING;
+  }
+
   // Klick på canvas = toggle pause / klicka på paus-knappen
   canvas.addEventListener("mousedown", (e) => {
     if (bootActive) return;
@@ -888,11 +915,10 @@
       return;
     }
     if (paused){
-      paused = false;
-      gameState = GameState.PLAYING;
+      togglePauseState();
       return;
     }
-const b = hudCanvas._pauseBtn;
+    const b = hudCanvas._pauseBtn;
     if (!b) return;
 
     const rect = canvas.getBoundingClientRect();
@@ -902,8 +928,7 @@ const b = hudCanvas._pauseBtn;
     const my = (e.clientY - rect.top) * sy;
 
     if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
-      paused = true;
-      gameState = GameState.PAUSED;
+      togglePauseState();
     }
   });
 
@@ -929,6 +954,14 @@ const b = hudCanvas._pauseBtn;
       }
       return;
     }
+
+    if (gameState === GameState.PLAYING){
+      const b = hudCanvas._pauseBtn;
+      hudCanvas._pauseBtnHover = !!(b && mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
+      return;
+    }
+
+    hudCanvas._pauseBtnHover = false;
 
     if (gameState !== GameState.SETTINGS) return;
 
@@ -1075,8 +1108,7 @@ const b = hudCanvas._pauseBtn;
       return;
     }
     if (e.key === "p" || e.key === "P"){
-      paused = !paused;
-      gameState = paused ? GameState.PAUSED : GameState.PLAYING;
+      togglePauseState();
       e.preventDefault();
     }
   });
@@ -1561,39 +1593,38 @@ const b = hudCanvas._pauseBtn;
 
       ctx.restore();
 
+      const previewRect = getSavePreviewRect(panelX, panelY);
+      const previewX = previewRect.x;
+      const previewY = previewRect.y;
+      const previewW = previewRect.w;
+      const previewH = previewRect.h;
+      const previewRotRad = previewRect.rotRad;
+      const metadataTop = previewY + previewH + Math.max(8, bgDrawH * 0.01);
+      const metadataW = Math.min(previewW + Math.max(68, Math.round(bgDrawW * 0.05)), bgDrawW * 0.255);
+      const metadataX = previewX - Math.max(4, Math.round(bgDrawW * 0.003));
+      const metadataPadX = Math.max(10, Math.round(bgDrawW * 0.006));
+      const metadataPadY = Math.max(7, Math.round(bgDrawH * 0.006));
+      const textInsetX = metadataX + metadataPadX;
+      const titleY = metadataTop + metadataPadY;
+      const infoY = titleY + Math.max(12, bgDrawH * 0.014);
+
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.font = `${Math.max(13, Math.round(bgDrawH * 0.018))}px "Orbitron","Trebuchet MS",sans-serif`;
+      ctx.fillStyle = "rgba(210,253,255,0.95)";
+      ctx.fillText(hasSaveSlot() ? "Last save" : "No save found", textInsetX, titleY);
+
+      drawPreviewPanelSurface(ctx, {
+        x: previewX,
+        y: previewY,
+        w: previewW,
+        h: previewH,
+        rotRad: previewRotRad,
+        bgDrawH,
+        snapshotImage: getPreviewImageForMenu()
+      });
+
       if (hasSaveSlot()){
-        const previewRect = getSavePreviewRect(panelX, panelY);
-        const previewX = previewRect.x;
-        const previewY = previewRect.y;
-        const previewW = previewRect.w;
-        const previewH = previewRect.h;
-        const previewRotRad = previewRect.rotRad;
-        const metadataTop = previewY + previewH + Math.max(8, bgDrawH * 0.01);
-        const metadataW = Math.min(previewW + Math.max(68, Math.round(bgDrawW * 0.05)), bgDrawW * 0.255);
-        const metadataX = previewX - Math.max(4, Math.round(bgDrawW * 0.003));
-        const metadataPadX = Math.max(10, Math.round(bgDrawW * 0.006));
-        const metadataPadY = Math.max(7, Math.round(bgDrawH * 0.006));
-        const textInsetX = metadataX + metadataPadX;
-        const titleY = metadataTop + metadataPadY;
-        const infoY = titleY + Math.max(12, bgDrawH * 0.014);
-
-        ctx.textAlign = "left";
-        ctx.textBaseline = "top";
-        ctx.font = `${Math.max(13, Math.round(bgDrawH * 0.018))}px "Orbitron","Trebuchet MS",sans-serif`;
-        ctx.fillStyle = "rgba(210,253,255,0.95)";
-        ctx.fillText("Last save", textInsetX, titleY);
-
-        const snapImg = saveSlot.snapshotDataUrl ? getSaveSnapshotImage() : null;
-        drawPreviewPanelSurface(ctx, {
-          x: previewX,
-          y: previewY,
-          w: previewW,
-          h: previewH,
-          rotRad: previewRotRad,
-          bgDrawH,
-          snapshotImage: snapImg
-        });
-
         const infoLineH = Math.max(11, Math.round(bgDrawH * 0.015));
         ctx.font = `${Math.max(10, Math.round(bgDrawH * 0.014))}px "Trebuchet MS",sans-serif`;
         ctx.fillStyle = "rgba(200,242,252,0.95)";
@@ -1601,7 +1632,6 @@ const b = hudCanvas._pauseBtn;
         ctx.fillStyle = "rgba(176,226,238,0.92)";
         ctx.fillText(`Saved: ${formatSavedTimestamp(saveSlot.savedAtMs)}`, textInsetX, infoY + infoLineH);
         ctx.fillText(`Session: ${formatSessionDuration(saveSlot.sessionDurationSec)}`, textInsetX, infoY + infoLineH * 2);
-
       }
 
       ctx.save();

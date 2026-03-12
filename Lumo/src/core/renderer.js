@@ -689,38 +689,32 @@ dctx.restore();
       }
 
       // ==================================================
-      // PAUSE-knapp (nedre högra hörnet) - retro pill
+      // MENU-text (nedre högra hörnet) - diskret men tydlig klickyta
       // ==================================================
 {
-  const bw = 92;
-  const bh = 26;
-  const bx = w - padX - bw;
-  const by2 = h - padY - bh;
-
-  // pill
-  this._roundRect(ctx, bx, by2, bw, bh, 14);
-  ctx.fillStyle = "rgba(0,0,0,0.28)";
-  ctx.fill();
-
-  this._roundRect(ctx, bx, by2, bw, bh, 14);
-  ctx.strokeStyle = "rgba(255,255,255,0.10)";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  this._roundRect(ctx, bx+1.5, by2+1.5, bw-3, bh-3, 13);
-  ctx.strokeStyle = "rgba(0,0,0,0.55)";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // text (diskret)
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.textAlign = "center";
+  const text = "MENU";
+  const pad = 10;
+  const by2 = h - padY - 18;
+  ctx.textAlign = "right";
   ctx.textBaseline = "middle";
   ctx.font = "13px monospace";
-  ctx.fillText("Ⅱ  PAUSE", bx + bw/2, by2 + bh/2 + 0.5);
+  const tw = ctx.measureText(text).width;
+  const tx = w - padX;
+  const hover = !!hud._pauseBtnHover;
 
-  // klickyta
-  hud._pauseBtn = { x: bx, y: by2, w: bw, h: bh };
+  ctx.fillStyle = hover ? "rgba(223,255,255,0.98)" : "rgba(255,255,255,0.82)";
+  ctx.shadowColor = hover ? "rgba(120,240,255,0.72)" : "rgba(0,0,0,0.45)";
+  ctx.shadowBlur = hover ? 10 : 4;
+  ctx.fillText(text, tx, by2);
+  ctx.shadowBlur = 0;
+
+  // Robust klickyta (större än texten), utan synlig ram
+  hud._pauseBtn = {
+    x: tx - tw - pad,
+    y: by2 - 11,
+    w: tw + pad * 2,
+    h: 22
+  };
 }
 
       // ==================================================
