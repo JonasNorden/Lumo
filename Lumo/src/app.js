@@ -199,7 +199,7 @@
   };
   const savePreviewLayout = {
     normalizedX: 70 / menuPanelReferenceSize.w,
-    normalizedY: -110 / menuPanelReferenceSize.h,
+    normalizedY: -82 / menuPanelReferenceSize.h,
     normalizedW: 236 / menuPanelReferenceSize.w,
     normalizedH: 130 / menuPanelReferenceSize.h,
     rot: 0
