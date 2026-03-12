@@ -198,17 +198,24 @@
       snapshotImage
     } = opts;
 
-    const topInset = Math.max(8, Math.round(w * 0.08));
-    const sideSkew = Math.max(3, Math.round(w * 0.02));
-    const topLift = Math.max(2, Math.round(h * 0.06));
+    const sideInset = Math.max(8, Math.round(w * 0.08));
+    const leftLift = Math.max(2, Math.round(h * 0.04));
+    const rightDrop = Math.max(6, Math.round(h * 0.12));
     const insetPad = Math.max(8, Math.round(bgDrawH * 0.008));
 
     const buildSurfacePath = (targetCtx, pad = 0) => {
+      const leftX = -w * 0.5 + sideInset + pad;
+      const rightX = w * 0.5 - sideInset - pad;
+      const topLeftY = -h * 0.5 - leftLift + pad;
+      const topRightY = topLeftY + rightDrop;
+      const bottomLeftY = h * 0.5 - leftLift - pad;
+      const bottomRightY = bottomLeftY + rightDrop;
+
       targetCtx.beginPath();
-      targetCtx.moveTo(-w * 0.5 + topInset - sideSkew + pad, -h * 0.5 + topLift + pad);
-      targetCtx.lineTo(w * 0.5 - topInset - sideSkew - pad, -h * 0.5 - topLift + pad);
-      targetCtx.lineTo(w * 0.5 + sideSkew - pad, h * 0.5 - pad);
-      targetCtx.lineTo(-w * 0.5 + sideSkew + pad, h * 0.5 - pad);
+      targetCtx.moveTo(leftX, topLeftY);
+      targetCtx.lineTo(rightX, topRightY);
+      targetCtx.lineTo(rightX, bottomRightY);
+      targetCtx.lineTo(leftX, bottomLeftY);
       targetCtx.closePath();
     };
 
