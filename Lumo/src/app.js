@@ -1739,7 +1739,7 @@
 
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        const panelContentW = bgDrawW * 0.74;
+        const panelContentW = bgDrawW * 0.78;
         const panelContentH = bgDrawH * 0.56;
         const creditsOffsetX = bgDrawW * (170 / 1920) - 15 + 90;
         const creditsOffsetY = bgDrawH * (42 / 1080);
@@ -1750,24 +1750,37 @@
         const textX = panelLeft + panelContentW * 0.5;
         const textMaxW = panelContentW - contentPadX * 2;
 
-        ctx.font = `${Math.max(25, Math.round(bgDrawH * 0.043))}px "Orbitron","Trebuchet MS",sans-serif`;
+        const c = Math.cos(tilt);
+        const s = Math.sin(tilt);
+        const localToScreen = (x, y) => ({
+          x: panelX + (x * c - y * s),
+          y: panelY + (x * s + y * c)
+        });
+
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.font = `${Math.max(22, Math.round(bgDrawH * 0.037))}px "Orbitron","Trebuchet MS",sans-serif`;
         ctx.fillStyle = "#CBFBFF";
         ctx.shadowColor = "rgba(89,228,245,0.45)";
         ctx.shadowBlur = 10;
         const headingY = panelTop + contentPadY;
-        ctx.fillText(creditsHeading, textX, headingY, textMaxW);
+        const headingScreen = localToScreen(textX, headingY);
+        ctx.fillText(creditsHeading, headingScreen.x, headingScreen.y, textMaxW);
 
         ctx.font = `${Math.max(12, Math.round(bgDrawH * 0.0175))}px "Trebuchet MS",sans-serif`;
         ctx.fillStyle = "rgba(199,240,248,0.94)";
         ctx.shadowBlur = 0;
         const lineStep = Math.max(16, bgDrawH * 0.023);
-        const bodyStartY = headingY + Math.max(40, bgDrawH * 0.054);
+        const bodyStartY = headingY + Math.max(34, bgDrawH * 0.048);
         const bodyHeight = creditsLines.length * lineStep;
-        const bodyMaxTop = panelTop + panelContentH - contentPadY - bodyHeight - Math.max(36, bgDrawH * 0.04);
+        const bodyMaxTop = panelTop + panelContentH - contentPadY - bodyHeight - Math.max(32, bgDrawH * 0.036);
         let y = Math.min(Math.max(bodyStartY, panelTop + contentPadY), bodyMaxTop);
         for (const line of creditsLines){
           if (line){
-            ctx.fillText(line, textX, y, textMaxW);
+            const lineScreen = localToScreen(textX, y);
+            ctx.fillText(line, lineScreen.x, lineScreen.y, textMaxW);
           }
           y += lineStep;
         }
@@ -1776,12 +1789,13 @@
         const backY = panelTop + panelContentH - Math.max(34, bgDrawH * 0.042);
         ctx.font = `${Math.max(16, Math.round(bgDrawH * 0.024))}px "Orbitron","Trebuchet MS",sans-serif`;
         ctx.fillStyle = "#A6F4FF";
-        ctx.fillText(backLabel, textX, backY);
+        const backScreen = localToScreen(textX, backY);
+        ctx.fillText(backLabel, backScreen.x, backScreen.y);
+        ctx.restore();
 
+        ctx.font = `${Math.max(16, Math.round(bgDrawH * 0.024))}px "Orbitron","Trebuchet MS",sans-serif`;
         const backW = ctx.measureText(backLabel).width;
         const backH = Math.max(24, bgDrawH * 0.03);
-        const c = Math.cos(tilt);
-        const s = Math.sin(tilt);
         const bx = panelX + (textX * c - backY * s);
         const by = panelY + (textX * s + backY * c);
         menuUi.creditsBackBounds = {
