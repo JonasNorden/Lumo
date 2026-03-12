@@ -165,7 +165,9 @@
     itemBounds: [],
     selectedIndex: 0,
     creditsBounds: null,
-    confirmBounds: []
+    confirmBounds: [],
+    panelMode: "menu",
+    creditsBackBounds: null
   };
   const fanArtUi = {
     images: [],
@@ -386,17 +388,18 @@
       return saveSnapshotStatus === "ready" ? saveSnapshotImage : null;
     }
 
+    const source = saveSlot.snapshotDataUrl;
     const img = new Image();
+    saveSnapshotSrc = source;
+    saveSnapshotImage = img;
     saveSnapshotStatus = "loading";
     img.onload = () => {
-      if (saveSnapshotSrc === img.src) saveSnapshotStatus = "ready";
+      if (saveSnapshotImage === img && saveSnapshotSrc === source) saveSnapshotStatus = "ready";
     };
     img.onerror = () => {
-      if (saveSnapshotSrc === img.src) saveSnapshotStatus = "error";
+      if (saveSnapshotImage === img && saveSnapshotSrc === source) saveSnapshotStatus = "error";
     };
-    img.src = saveSlot.snapshotDataUrl;
-    saveSnapshotImage = img;
-    saveSnapshotSrc = saveSlot.snapshotDataUrl;
+    img.src = source;
     return null;
   }
 
@@ -409,6 +412,19 @@
   function getPreviewImageForMenu(){
     const snapshotImg = (saveSlot && saveSlot.snapshotDataUrl) ? getSaveSnapshotImage() : null;
     return snapshotImg || getFallbackPreviewImage();
+  }
+
+  function openCreditsPanel(){
+    menuUi.panelMode = "credits";
+    menuUi.creditsBackBounds = null;
+    playUiSfx("confirm");
+  }
+
+  function closeCreditsPanel(){
+    if (menuUi.panelMode !== "credits") return;
+    menuUi.panelMode = "menu";
+    menuUi.creditsBackBounds = null;
+    playUiSfx("navigate");
   }
 
   function captureSnapshotDataUrl(){
@@ -872,6 +888,8 @@
     paused = false;
     gameState = GameState.MENU;
     pendingNewQuestConfirm = false;
+    menuUi.panelMode = "menu";
+    menuUi.creditsBackBounds = null;
     ensureMenuSelectionValid();
     hudDebug.textContent = ok ? "Saved & returned to menu" : "Save failed";
   }
@@ -915,14 +933,29 @@
         return;
       }
 
+      if (menuUi.panelMode === "credits"){
+        if (menuUi.creditsBackBounds){
+          const b = menuUi.creditsBackBounds;
+          if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
+            closeCreditsPanel();
+            return;
+          }
+        }
+      }
+
       if (menuUi.creditsBounds){
         const b = menuUi.creditsBounds;
         if (mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h){
-          playUiSfx("confirm");
-          alert("Lumo - Jonas Nordén");
+          if (menuUi.panelMode === "credits"){
+            closeCreditsPanel();
+          } else {
+            openCreditsPanel();
+          }
           return;
         }
       }
+
+      if (menuUi.panelMode === "credits") return;
 
       for (let i = 0; i < menuUi.itemBounds.length; i++){
         const b = menuUi.itemBounds[i];
@@ -1047,6 +1080,13 @@
       unlockMenuMusicFromInteraction();
       const menuItems = getMenuItems();
       if (e.repeat) return;
+      if (menuUi.panelMode === "credits"){
+        if (e.key === "Escape" || e.key === "Backspace" || e.key === "Enter" || e.key === " "){
+          closeCreditsPanel();
+          e.preventDefault();
+        }
+        return;
+      }
       if (pendingNewQuestConfirm){
         if (e.key === "Escape"){
           pendingNewQuestConfirm = false;
@@ -1610,38 +1650,97 @@
       menuUi.beginQuestBounds = null;
       menuUi.confirmBounds = [];
 
-      for (let i = 0; i < menuItems.length; i++){
-        const isActive = i === menuUi.selectedIndex;
-        const y = (i - (menuItems.length - 1) * 0.5) * lineH;
-        const textX = textOffsetX;
-        const textY = y + textOffsetY;
-        const label = menuItems[i];
+      if (menuUi.panelMode === "credits"){
+        const creditsHeading = "Credits";
+        const creditsLines = [
+          "Lumo är ett stämningsdrivet",
+          "plattformsäventyr i mörker och ljus.",
+          "",
+          "Spelet skapades av Jonas Nordén",
+          "med stöd av ChatGPT och Codex",
+          "utan traditionell programmeringsbakgrund.",
+          "",
+          "Idén växte fram som en personlig",
+          "utforskning: att bygga en hel värld",
+          "från vision, nyfikenhet och tålamod."
+        ];
 
-        ctx.shadowColor = isActive ? "rgba(108,255,255,0.68)" : "rgba(70,220,240,0.32)";
-        ctx.shadowBlur = isActive ? 13 : 6;
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = "rgba(0,32,38,0.62)";
-        ctx.strokeText(label, textX, textY);
-        ctx.fillStyle = isActive ? "#CFFFFF" : "#87EAF6";
-        ctx.fillText(label, textX, textY);
+        ctx.textAlign = "left";
+        ctx.textBaseline = "top";
+        const left = textOffsetX - bgDrawW * 0.085;
+        const top = textOffsetY - bgDrawH * 0.14;
+        const maxW = bgDrawW * 0.26;
 
-        const metrics = ctx.measureText(label);
-        const textW = metrics.width;
-        const textH = lineH * 0.74;
+        ctx.font = `${Math.max(25, Math.round(bgDrawH * 0.043))}px "Orbitron","Trebuchet MS",sans-serif`;
+        ctx.fillStyle = "#CBFBFF";
+        ctx.shadowColor = "rgba(89,228,245,0.45)";
+        ctx.shadowBlur = 10;
+        ctx.fillText(creditsHeading, left, top);
+
+        ctx.font = `${Math.max(13, Math.round(bgDrawH * 0.019))}px "Trebuchet MS",sans-serif`;
+        ctx.fillStyle = "rgba(199,240,248,0.94)";
+        ctx.shadowBlur = 0;
+        let y = top + Math.max(42, bgDrawH * 0.06);
+        const lineStep = Math.max(16, bgDrawH * 0.023);
+        for (const line of creditsLines){
+          if (line){
+            ctx.fillText(line, left, y, maxW);
+          }
+          y += lineStep;
+        }
+
+        const backLabel = "Back";
+        const backY = top + Math.max(250, bgDrawH * 0.36);
+        ctx.font = `${Math.max(16, Math.round(bgDrawH * 0.024))}px "Orbitron","Trebuchet MS",sans-serif`;
+        ctx.fillStyle = "#A6F4FF";
+        ctx.fillText(backLabel, left, backY);
+
+        const backW = ctx.measureText(backLabel).width;
         const c = Math.cos(tilt);
         const s = Math.sin(tilt);
-        const cx = panelX + (textX * c - textY * s);
-        const cy = panelY + (textX * s + textY * c);
-        const bounds = {
-          x: cx - textW * 0.5,
-          y: cy - textH * 0.5,
-          w: textW,
-          h: textH
+        const bx = panelX + (left * c - backY * s);
+        const by = panelY + (left * s + backY * c);
+        menuUi.creditsBackBounds = {
+          x: bx,
+          y: by,
+          w: backW,
+          h: Math.max(24, bgDrawH * 0.03)
         };
-        menuUi.itemBounds.push(bounds);
+      } else {
+        menuUi.creditsBackBounds = null;
+        for (let i = 0; i < menuItems.length; i++){
+          const isActive = i === menuUi.selectedIndex;
+          const y = (i - (menuItems.length - 1) * 0.5) * lineH;
+          const textX = textOffsetX;
+          const textY = y + textOffsetY;
+          const label = menuItems[i];
 
-        if (label === "Begin Quest"){
-          menuUi.beginQuestBounds = bounds;
+          ctx.shadowColor = isActive ? "rgba(108,255,255,0.68)" : "rgba(70,220,240,0.32)";
+          ctx.shadowBlur = isActive ? 13 : 6;
+          ctx.lineWidth = 4;
+          ctx.strokeStyle = "rgba(0,32,38,0.62)";
+          ctx.strokeText(label, textX, textY);
+          ctx.fillStyle = isActive ? "#CFFFFF" : "#87EAF6";
+          ctx.fillText(label, textX, textY);
+
+          const metrics = ctx.measureText(label);
+          const textW = metrics.width;
+          const textH = lineH * 0.74;
+          const c = Math.cos(tilt);
+          const s = Math.sin(tilt);
+          const cx = panelX + (textX * c - textY * s);
+          const cy = panelY + (textX * s + textY * c);
+          const bounds = {
+            x: cx - textW * 0.5,
+            y: cy - textH * 0.5,
+            w: textW,
+            h: textH
+          };
+          menuUi.itemBounds.push(bounds);
+
+          if (label === "Begin Quest"){
+            menuUi.beginQuestBounds = bounds;
+          }
         }
       }
 
@@ -1693,11 +1792,17 @@
       ctx.textBaseline = "bottom";
       ctx.font = `${Math.max(11, Math.round(bgDrawH * 0.017))}px "Trebuchet MS",sans-serif`;
       ctx.fillStyle = "rgba(185,219,228,0.78)";
-      const creditsText = "Lumo - Jonas Nordén";
+      const creditsText = "Lumo – by Jonas Nordén © 2026";
       const creditsX = bgDrawX + bgDrawW * 0.03;
       const creditsY = bgDrawY + bgDrawH * 0.975;
       ctx.fillText(creditsText, creditsX, creditsY);
       const cW = ctx.measureText(creditsText).width;
+      ctx.strokeStyle = "rgba(185,219,228,0.58)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(creditsX, creditsY + 2);
+      ctx.lineTo(creditsX + cW, creditsY + 2);
+      ctx.stroke();
       menuUi.creditsBounds = { x: creditsX, y: creditsY - 18, w: cW, h: 22 };
       ctx.restore();
 
