@@ -7,7 +7,7 @@ window.LUMO_CATALOG_ENTITIES = [
     "img": "data/assets/sprites/sound/music.png",
     "anchor": "BL",
     "defaults": {
-      "soundFile": "data/assets/audio/music/",
+      "soundFile": "data/assets/audio/music/space_loop_short.wav",
       "xStart": 0,
       "xEnd": 240,
       "volume": 0.7,
@@ -31,7 +31,7 @@ window.LUMO_CATALOG_ENTITIES = [
     "img": "data/assets/sprites/sound/spot.png",
     "anchor": "BL",
     "defaults": {
-      "soundFile": "data/assets/audio/spot/",
+      "soundFile": "data/assets/audio/spot/machinery/door_close.wav",
       "radius": 120,
       "volume": 0.8,
       "loop": true,
@@ -53,7 +53,7 @@ window.LUMO_CATALOG_ENTITIES = [
     "img": "data/assets/sprites/sound/trigger.png",
     "anchor": "BL",
     "defaults": {
-      "soundFile": "data/assets/audio/events/",
+      "soundFile": "data/assets/audio/events/creatures/void_creature.mp3",
       "triggerX": 0,
       "once": true,
       "volume": 1
