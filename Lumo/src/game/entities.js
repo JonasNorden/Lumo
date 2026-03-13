@@ -125,6 +125,16 @@
       if (p && typeof p.catch === "function") p.catch(() => {});
     }
 
+    _normalizeSoundPath(soundFile, entityType){
+      let path = String(soundFile || "").trim();
+      if (!path) return "";
+      if (path.includes("data/assets/sound/")) path = path.replace("data/assets/sound/", "data/assets/audio/");
+      if (entityType === "trigger_sound" && /data\/assets\/audio\/events\/creatures\/void_creature\.wav$/i.test(path)){
+        path = "data/assets/audio/events/creatures/void_creature.mp3";
+      }
+      return path;
+    }
+
     _readNumParam(params, key, fallback){
       const v = Number(params && params[key]);
       return Number.isFinite(v) ? v : fallback;
@@ -269,7 +279,7 @@
           if (xEnd < xStart){ const tmp = xStart; xStart = xEnd; xEnd = tmp; }
           const zone = {
             type:"musicZone",
-            soundFile: String(params.soundFile || "").trim(),
+            soundFile: this._normalizeSoundPath(params.soundFile, "music_zone"),
             xStart,
             xEnd,
             volume: Math.max(0, Math.min(1, this._readNumParam(params, "volume", 0.7))),
@@ -286,7 +296,7 @@
           const cy = ty * ts + ts * 0.5;
           const spot = {
             type:"spotSound",
-            soundFile: String(params.soundFile || "").trim(),
+            soundFile: this._normalizeSoundPath(params.soundFile, "spot_sound"),
             cx, cy,
             radius: Math.max(0, this._readNumParam(params, "radius", 120)),
             volume: Math.max(0, Math.min(1, this._readNumParam(params, "volume", 0.8))),
@@ -302,7 +312,7 @@
           const baseX = tx * ts + ts * 0.5;
           const trg = {
             type:"triggerSound",
-            soundFile: String(params.soundFile || "").trim(),
+            soundFile: this._normalizeSoundPath(params.soundFile, "trigger_sound"),
             triggerX: this._readNumParam(params, "triggerX", baseX),
             once: params.once !== false,
             volume: Math.max(0, Math.min(1, this._readNumParam(params, "volume", 1))),

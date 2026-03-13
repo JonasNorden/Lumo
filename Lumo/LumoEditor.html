@@ -1039,7 +1039,7 @@ display:none;
     tiles: new Array(500*30).fill(0),
     ents: [],
 
-    catalogs: { BG: [], TILES: [], ENT: [] },
+    catalogs: { BG: [], TILES: [], ENT: [], AUDIO: {} },
     imgCache: new Map(),
     brushBG: null,
     brushTile: null,
@@ -1257,6 +1257,7 @@ display:none;
       {src:"data/catalog_bg.js", key:"BG", winKey:"LUMO_CATALOG_BG"},
       {src:"data/catalog_tiles.js", key:"TILES", winKey:"LUMO_CATALOG_TILES"},
       {src:"data/catalog_entities.js", key:"ENT", winKey:"LUMO_CATALOG_ENTITIES"},
+      {src:"data/audio_manifest.js", key:"AUDIO", winKey:"LUMO_AUDIO_MANIFEST"},
     ];
 
     for (const s of scripts){
@@ -1268,7 +1269,11 @@ display:none;
         document.head.appendChild(tag);
       });
       const arr = window[s.winKey];
-      if (Array.isArray(arr)) state.catalogs[s.key] = arr;
+      if (s.key === "AUDIO" && arr && typeof arr === "object") {
+        state.catalogs[s.key] = arr;
+      } else if (Array.isArray(arr)) {
+        state.catalogs[s.key] = arr;
+      }
     }
 
     const all = [...state.catalogs.BG, ...state.catalogs.TILES, ...state.catalogs.ENT];
@@ -1483,7 +1488,7 @@ display:none;
   }
 
 
-  function buildParamRowFixed(field, value){
+  function buildParamRowFixed(ent, field, value){
     const row = document.createElement("div");
     row.className = "kvRow";
     row.dataset.key = field.key;
@@ -1492,10 +1497,40 @@ display:none;
     k.className = "kvKeyFixed";
     k.innerHTML = `<div class="kvKeyLabel">${field.label}</div><div class="kvKeyMeta">${field.key}</div>`;
 
-    const v = document.createElement("input");
-    v.className = "kvVal";
-    v.placeholder = field.placeholder || "";
-    v.value = (value === null) ? "null" : (typeof value === "object" ? JSON.stringify(value) : String(value ?? ""));
+    const soundOptions = (field.key === "soundFile") ? getSoundOptionsForEntity(ent && ent.id) : [];
+    const currentRaw = (value === null) ? "null" : (typeof value === "object" ? JSON.stringify(value) : String(value ?? ""));
+    const current = normalizeSoundPathForEntity(ent && ent.id, currentRaw);
+
+    let v;
+    if (field.key === "soundFile" && soundOptions.length){
+      v = document.createElement("select");
+      v.className = "kvVal";
+
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Select sound file…";
+      v.appendChild(placeholder);
+
+      for (const opt of soundOptions){
+        const o = document.createElement("option");
+        o.value = opt.path;
+        o.textContent = opt.label;
+        v.appendChild(o);
+      }
+
+      if (current && !soundOptions.some((opt) => opt.path === current)){
+        const invalid = document.createElement("option");
+        invalid.value = current;
+        invalid.textContent = `⚠ invalid: ${current}`;
+        v.appendChild(invalid);
+      }
+      v.value = current || "";
+    } else {
+      v = document.createElement("input");
+      v.className = "kvVal";
+      v.placeholder = field.placeholder || "";
+      v.value = currentRaw;
+    }
 
     const spacer = document.createElement("div");
     spacer.className = "kvSpacer";
@@ -1618,6 +1653,51 @@ function parseSmart(v){
     return s;
   }
 
+  function getSoundManifest(){
+    const m = state.catalogs && state.catalogs.AUDIO;
+    if (m && typeof m === "object" && (m.music || m.spot || m.events)) return m;
+    if (window.LUMO_AUDIO_MANIFEST && typeof window.LUMO_AUDIO_MANIFEST === "object") return window.LUMO_AUDIO_MANIFEST;
+    return {
+      music: ["data/assets/audio/music/space_loop_short.wav"],
+      spot: ["data/assets/audio/spot/machinery/door_close.wav"],
+      events: ["data/assets/audio/events/creatures/void_creature.mp3"],
+    };
+  }
+
+  function normalizeSoundPathForEntity(entId, rawPath){
+    let p = String(rawPath || "").trim();
+    if (!p) return "";
+    if (p.includes("data/assets/sound/")) p = p.replace("data/assets/sound/", "data/assets/audio/");
+    if (String(entId) === "trigger_sound" && /data\/assets\/audio\/events\/creatures\/void_creature\.wav$/i.test(p)){
+      p = "data/assets/audio/events/creatures/void_creature.mp3";
+    }
+    return p;
+  }
+
+  function getKnownSoundPathSet(){
+    const manifest = getSoundManifest();
+    const list = [
+      ...(Array.isArray(manifest.music) ? manifest.music : []),
+      ...(Array.isArray(manifest.spot) ? manifest.spot : []),
+      ...(Array.isArray(manifest.events) ? manifest.events : []),
+    ];
+    return new Set(list.map((p) => String(p || "").trim()).filter(Boolean));
+  }
+
+  function getSoundOptionsForEntity(entId){
+    const id = String(entId || "");
+    const manifest = getSoundManifest();
+    const key = (id === "music_zone") ? "music" : (id === "spot_sound" ? "spot" : (id === "trigger_sound" ? "events" : null));
+    if (!key) return [];
+    const prefix = `data/assets/audio/${key}/`;
+    const arr = Array.isArray(manifest[key]) ? manifest[key] : [];
+    return arr.map((path) => {
+      const p = String(path || "").trim();
+      const label = p.startsWith(prefix) ? p.slice(prefix.length) : p;
+      return { path: p, label };
+    });
+  }
+
   function getEntAssetById(id){
     const arr = state.catalogs?.ENT || [];
     return arr.find(a => a && a.id === id) || null;
@@ -1673,7 +1753,22 @@ function parseSmart(v){
 
   function validateEntityParamWarnings(ent, rows){
     const warnings = [];
-    if (!ent || String(ent.id) !== "hover_void_01") return warnings;
+    if (!ent) return warnings;
+
+    const soundEntity = ["music_zone", "spot_sound", "trigger_sound"].includes(String(ent.id));
+    if (soundEntity){
+      const row = rows && rows.find((r) => r.dataset && r.dataset.key === "soundFile");
+      const input = row ? row.querySelector(".kvVal") : null;
+      const val = normalizeSoundPathForEntity(ent.id, input ? String(input.value || "") : String((ent.params && ent.params.soundFile) || ""));
+      const known = getKnownSoundPathSet();
+      if (!val){
+        warnings.push("Sound: välj en ljudfil i listan.");
+      } else if (!known.has(val)){
+        warnings.push(`Sound: '${val}' finns inte i kända audio-filer.`);
+      }
+    }
+
+    if (String(ent.id) !== "hover_void_01") return warnings;
 
     const getParamNum = (key) => {
       const row = rows && rows.find((r) => r.dataset && r.dataset.key === key);
@@ -1792,7 +1887,7 @@ function parseSmart(v){
       }
       // fixed, contract-driven fields
       for (const f of schema){
-        paramKV.appendChild(buildParamRowFixed(f, obj[f.key]));
+        paramKV.appendChild(buildParamRowFixed(ent, f, obj[f.key]));
       }
       // lock add-row UI for contract-driven entities
       paramAddRow.disabled = true;
@@ -1800,8 +1895,8 @@ function parseSmart(v){
       paramAddRow.title = "Fixed parameters for this entity";
       paramStatus.textContent = "Loaded (fixed set).";
       refreshParamWarnings(ent);
-      const warningInputs = paramKV.querySelectorAll("input.kvVal");
-      warningInputs.forEach((inp) => inp.addEventListener("input", () => refreshParamWarnings(ent)));
+      const warningInputs = paramKV.querySelectorAll(".kvVal");
+      warningInputs.forEach((inp) => { inp.addEventListener("input", () => refreshParamWarnings(ent)); inp.addEventListener("change", () => refreshParamWarnings(ent)); });
     _maybeShowFogHelp(ent, a);
 
     // Live preview while editing fog params (area/look keys are enough to preview).
@@ -1883,12 +1978,13 @@ function parseSmart(v){
       for (const r of rows){
         const fixedKey = r.dataset && r.dataset.key ? String(r.dataset.key) : "";
         if (fixedKey){
-          const vIn = r.querySelector("input.kvVal") || r.querySelector("input");
+          const vIn = r.querySelector(".kvVal") || r.querySelector("input") || r.querySelector("select");
           const valRaw = vIn ? vIn.value : "";
           if (valRaw == null || String(valRaw).trim() === ""){
             continue; // empty => default
           }
-          obj[fixedKey] = parseSmart(valRaw);
+          const parsedVal = parseSmart(valRaw);
+          obj[fixedKey] = (fixedKey === "soundFile") ? normalizeSoundPathForEntity(ent.id, parsedVal) : parsedVal;
         } else {
           const ins = r.querySelectorAll("input");
           if (!ins || ins.length < 2) continue;
@@ -1896,7 +1992,17 @@ function parseSmart(v){
           const valRaw = ins[1].value;
           if (!key) continue;
           if (valRaw == null || String(valRaw).trim() === "") continue;
-          obj[key] = parseSmart(valRaw);
+          const parsedVal = parseSmart(valRaw);
+          obj[key] = (key === "soundFile") ? normalizeSoundPathForEntity(ent.id, parsedVal) : parsedVal;
+        }
+      }
+      if (["music_zone", "spot_sound", "trigger_sound"].includes(String(ent.id))){
+        const sf = String(obj.soundFile || "").trim();
+        const known = getKnownSoundPathSet();
+        if (!sf || !known.has(sf)){
+          paramStatus.textContent = "Invalid sound file path (choose from dropdown).";
+          refreshParamWarnings(ent);
+          return;
         }
       }
       state.ents[idxEnt].params = obj;
@@ -3451,14 +3557,19 @@ if (useFill){
 
     // Runtime schema: entities must live in level.layers.ents
     // Editor can also keep a copy under level.editor.ents for roundtrip/import convenience.
-    const entsOut = state.ents.map(e=>({
+    const entsOut = state.ents.map(e=>{
+      const outParams = deepClone(e.params || {});
+      if (["music_zone", "spot_sound", "trigger_sound"].includes(String(e.id))){
+        outParams.soundFile = normalizeSoundPathForEntity(e.id, outParams.soundFile);
+      }
+      return {
       id:e.id,x:e.x,y:e.y,
       w:e.w,h:e.h,
       anchor:e.anchor,
       offsetX:e.offX,offsetY:e.offY,
       aggroRadius:e.aggroRadius,
-      params:e.params||{}
-    }));
+      params:outParams
+    };});
 
     const levelObj = {
       meta:{
@@ -3590,7 +3701,15 @@ const mainArr = obj.layers && obj.layers.main;
               anchor:o.anchor||"BL",
               offX:o.offsetX||0,offY:(o.offsetY!=null?o.offsetY:4),
               aggroRadius:(nOrNull(o.aggroRadius) || 0),
-              params:o.params||{}
+              params:(() => {
+                const p = o.params || {};
+                if (["music_zone", "spot_sound", "trigger_sound"].includes(String(o.id))){
+                  const copy = deepClone(p);
+                  copy.soundFile = normalizeSoundPathForEntity(o.id, copy.soundFile);
+                  return copy;
+                }
+                return p;
+              })()
             }));
           }
         }
