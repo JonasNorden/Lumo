@@ -132,6 +132,10 @@
     sfxVolume: 0.6
   });
   const audioSettings = loadAudioSettings();
+  Lumo.getAudioSettings = () => ({
+    musicVolume: audioSettings.musicVolume,
+    sfxVolume: audioSettings.sfxVolume
+  });
   const settingsItems = ["Music Volume", "SFX Volume", "Back"];
   const settingsUi = {
     selectedIndex: 0,

@@ -1,5 +1,71 @@
 window.LUMO_CATALOG_ENTITIES = [
   {
+    "id": "music_zone",
+    "name": "MusicZone",
+    "group": "Sound",
+    "category": "sound",
+    "img": "data/assets/sprites/sound/music.png",
+    "anchor": "BL",
+    "defaults": {
+      "soundFile": "data/assets/audio/music/",
+      "xStart": 0,
+      "xEnd": 240,
+      "volume": 0.7,
+      "loop": true,
+      "fadeTiles": 4
+    },
+    "shownParams": [
+      "soundFile",
+      "xStart",
+      "xEnd",
+      "volume",
+      "loop",
+      "fadeTiles"
+    ]
+  },
+  {
+    "id": "spot_sound",
+    "name": "SpotSound",
+    "group": "Sound",
+    "category": "sound",
+    "img": "data/assets/sprites/sound/spot.png",
+    "anchor": "BL",
+    "defaults": {
+      "soundFile": "data/assets/audio/spot/",
+      "radius": 120,
+      "volume": 0.8,
+      "loop": true,
+      "fadeTiles": 2
+    },
+    "shownParams": [
+      "soundFile",
+      "radius",
+      "volume",
+      "loop",
+      "fadeTiles"
+    ]
+  },
+  {
+    "id": "trigger_sound",
+    "name": "TriggerSound",
+    "group": "Sound",
+    "category": "sound",
+    "img": "data/assets/sprites/sound/trigger.png",
+    "anchor": "BL",
+    "defaults": {
+      "soundFile": "data/assets/audio/events/",
+      "triggerX": 0,
+      "once": true,
+      "volume": 1
+    },
+    "shownParams": [
+      "soundFile",
+      "triggerX",
+      "once",
+      "volume"
+    ]
+  },
+  {
     "id": "start_01",
     "name": "Start",
     "group": "Core",

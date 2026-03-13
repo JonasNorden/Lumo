@@ -1623,6 +1623,53 @@ function parseSmart(v){
     return arr.find(a => a && a.id === id) || null;
   }
 
+  function getSoundOverlay(ent){
+    if (!ent || !ent.id) return null;
+    const p = (ent.params && typeof ent.params === "object") ? ent.params : {};
+    const ts = TS;
+
+    if (ent.id === "music_zone"){
+      const baseX = ent.x * ts;
+      let x0 = Number.isFinite(Number(p.xStart)) ? Number(p.xStart) : baseX;
+      let x1 = Number.isFinite(Number(p.xEnd)) ? Number(p.xEnd) : (baseX + ts * 8);
+      if (x1 < x0){ const t = x0; x0 = x1; x1 = t; }
+      const fadeTiles = Math.max(0, Number(p.fadeTiles) || 0);
+      const fadePx = fadeTiles * ts;
+      return { type:"music", x0, x1, fadePx };
+    }
+
+    if (ent.id === "spot_sound"){
+      const radius = Math.max(0, Number(p.radius) || 0);
+      if (radius <= 0) return null;
+      return { type:"spot", radiusPx: radius };
+    }
+
+    if (ent.id === "trigger_sound"){
+      const baseX = ent.x * ts + ts * 0.5;
+      const triggerX = Number.isFinite(Number(p.triggerX)) ? Number(p.triggerX) : baseX;
+      return { type:"trigger", triggerX };
+    }
+
+    return null;
+  }
+
+  function getEditorIconSize(asset, img){
+    const baseW = asset && Number(asset.w) > 0 ? Number(asset.w) : TS;
+    const baseH = asset && Number(asset.h) > 0 ? Number(asset.h) : TS;
+    const isSound = !!(asset && asset.group === "Sound");
+    if (!isSound) return { w: baseW, h: baseH };
+
+    const minW = 48;
+    const targetW = Math.max(minW, baseW);
+    if (img && img.naturalWidth > 0 && img.naturalHeight > 0){
+      const ratio = img.naturalHeight / img.naturalWidth;
+      return { w: targetW, h: Math.max(1, Math.round(targetW * ratio)) };
+    }
+
+    const ratio = baseH / Math.max(1, baseW);
+    return { w: targetW, h: Math.max(1, Math.round(targetW * ratio)) };
+  }
+
 
   function validateEntityParamWarnings(ent, rows){
     const warnings = [];
@@ -1979,6 +2026,16 @@ function parseSmart(v){
           if (obj && typeof obj === "object") e.params = obj;
         }catch(_){}
       }
+      if (e.id === "music_zone"){
+        if (!e.params || typeof e.params !== "object") e.params = {};
+        if (!Number.isFinite(Number(e.params.xStart))) e.params.xStart = tx * TS;
+        if (!Number.isFinite(Number(e.params.xEnd))) e.params.xEnd = (tx + 8) * TS;
+      }
+      if (e.id === "trigger_sound"){
+        if (!e.params || typeof e.params !== "object") e.params = {};
+        if (!Number.isFinite(Number(e.params.triggerX))) e.params.triggerX = tx * TS + TS * 0.5;
+      }
+
       state.ents.push(e);
       state.selectedEntIndex = state.ents.length - 1;
       updateSelectedUI();
@@ -2588,9 +2645,13 @@ function drawEntities(){
         drawY = baseY + (e.offY||0);
       }
 
+      const size = getEditorIconSize(a, img);
+      const w = size.w;
+      const h = size.h;
+      if ((e.anchor||"BL")==="BL"){
+        drawY = baseY + TS - h + (e.offY||0);
+      }
       const s = worldToScreen(drawX, drawY);
-      const w = (e.w||TS);
-      const h = (e.h||TS);
 
       if (w!==TS || h!==TS){
         const fp = worldToScreen(baseX, baseY);
@@ -2612,6 +2673,53 @@ function drawEntities(){
         ctx.fillStyle = "rgba(207,231,255,0.8)";
         ctx.font = "11px var(--mono)";
         ctx.fillText(e.id, s.x+4, s.y+14);
+      }
+
+      const soundOverlay = getSoundOverlay(e);
+      if (soundOverlay){
+        ctx.save();
+        if (soundOverlay.type === "music"){
+          const topY = 0;
+          const botY = state.h * TS;
+          const sx0 = worldToScreen(soundOverlay.x0, topY).x;
+          const sx1 = worldToScreen(soundOverlay.x1, topY).x;
+          const sy0 = worldToScreen(soundOverlay.x0, topY).y;
+          const sy1 = worldToScreen(soundOverlay.x0, botY).y;
+          const left = Math.min(sx0, sx1);
+          const right = Math.max(sx0, sx1);
+          ctx.fillStyle = "rgba(87, 190, 255, 0.10)";
+          ctx.fillRect(left, Math.min(sy0, sy1), Math.max(1, right-left), Math.abs(sy1-sy0));
+          ctx.strokeStyle = "rgba(87, 190, 255, 0.85)";
+          ctx.setLineDash([8,6]);
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(sx0, sy0); ctx.lineTo(sx0, sy1); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(sx1, sy0); ctx.lineTo(sx1, sy1); ctx.stroke();
+          if (soundOverlay.fadePx > 0){
+            const f0 = worldToScreen(soundOverlay.x0 - soundOverlay.fadePx, topY).x;
+            const f1 = worldToScreen(soundOverlay.x1 + soundOverlay.fadePx, topY).x;
+            ctx.strokeStyle = "rgba(87, 190, 255, 0.4)";
+            ctx.setLineDash([4,6]);
+            ctx.beginPath(); ctx.moveTo(f0, sy0); ctx.lineTo(f0, sy1); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(f1, sy0); ctx.lineTo(f1, sy1); ctx.stroke();
+          }
+        } else if (soundOverlay.type === "spot"){
+          const cx = baseX + TS/2;
+          const cy = baseY + TS/2;
+          const cs = worldToScreen(cx, cy);
+          ctx.strokeStyle = "rgba(122, 230, 150, 0.92)";
+          ctx.setLineDash([7,5]);
+          ctx.lineWidth = 1.8;
+          ctx.beginPath(); ctx.arc(cs.x, cs.y, soundOverlay.radiusPx, 0, Math.PI*2); ctx.stroke();
+        } else if (soundOverlay.type === "trigger"){
+          const sy0 = worldToScreen(soundOverlay.triggerX, 0).y;
+          const sy1 = worldToScreen(soundOverlay.triggerX, state.h * TS).y;
+          const sx = worldToScreen(soundOverlay.triggerX, 0).x;
+          ctx.strokeStyle = "rgba(255, 139, 72, 0.95)";
+          ctx.setLineDash([9,6]);
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(sx, sy0); ctx.lineTo(sx, sy1); ctx.stroke();
+        }
+        ctx.restore();
       }
 
       const radiusOverlay = getRadiusOverlay(e);
