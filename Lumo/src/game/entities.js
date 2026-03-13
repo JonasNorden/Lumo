@@ -21,6 +21,12 @@
       this._autoSpawnedTestDarkCreature = false; // spawn one test creature if none exists
       this._hoverVoidAttackGlobalCd = 0;
 
+      this._musicZones = [];
+      this._spotSounds = [];
+      this._triggerSounds = [];
+      this._soundHandles = new Map();
+      this._prevPlayerCenterX = null;
+
             // Sprites (HUD använder flare.png, kastad flare använder flare_2.png)
       // Runtime-sprites för entities
     this.sprites = {
@@ -72,6 +78,58 @@
 
     }
 
+    _getSfxVolume(){
+      try{
+        if (window.Lumo && typeof window.Lumo.getAudioSettings === "function"){
+          const s = window.Lumo.getAudioSettings();
+          if (s && Number.isFinite(s.sfxVolume)) return Math.max(0, Math.min(1, s.sfxVolume));
+        }
+      }catch(_){ }
+      return 1;
+    }
+
+    _getSoundHandle(path, loop){
+      const key = `${path}::${loop ? "L" : "O"}`;
+      if (this._soundHandles.has(key)) return this._soundHandles.get(key);
+      const audio = new Audio(path);
+      audio.preload = "auto";
+      audio.loop = !!loop;
+      audio.volume = 0;
+      const h = { audio, path, loop: !!loop, started:false, lastTarget:0, lastCrossSide:null, oneShotCooldown:0 };
+      this._soundHandles.set(key, h);
+      return h;
+    }
+
+    _setHandleVolume(handle, target){
+      if (!handle || !handle.audio) return;
+      const t = Math.max(0, Math.min(1, target)) * this._getSfxVolume();
+      handle.lastTarget = t;
+      handle.audio.volume = t;
+      if (t > 0.001){
+        if (handle.audio.paused){
+          const p = handle.audio.play();
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        }
+      } else if (!handle.loop){
+        try { handle.audio.pause(); handle.audio.currentTime = 0; } catch(_){ }
+      }
+    }
+
+    _playOneShot(path, volume){
+      if (!path) return;
+      const a = new Audio(path);
+      a.preload = "auto";
+      a.loop = false;
+      a.volume = Math.max(0, Math.min(1, volume)) * this._getSfxVolume();
+      const p = a.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    }
+
+    _readNumParam(params, key, fallback){
+      const v = Number(params && params[key]);
+      return Number.isFinite(v) ? v : fallback;
+    }
+
     _tryLoadImage(src){
       try{
         const img = new Image();
@@ -91,6 +149,14 @@
       this._fogFrame = 0;
       this._autoSpawnedTestDarkCreature = false;
       this._hoverVoidAttackGlobalCd = 0;
+      this._musicZones.length = 0;
+      this._spotSounds.length = 0;
+      this._triggerSounds.length = 0;
+      this._prevPlayerCenterX = null;
+      for (const h of this._soundHandles.values()){
+        try { h.audio.pause(); h.audio.currentTime = 0; } catch(_){ }
+      }
+      this._soundHandles.clear();
     }
 
     loadFromLevel(levelObj){
@@ -194,6 +260,58 @@
           return;
         }
 
+
+        if (id === "music_zone"){
+          const ts = (levelObj && levelObj.meta && levelObj.meta.tileSize) ? levelObj.meta.tileSize : (Lumo.TILE || 24);
+          const baseX = tx * ts;
+          let xStart = this._readNumParam(params, "xStart", baseX);
+          let xEnd = this._readNumParam(params, "xEnd", baseX + ts * 8);
+          if (xEnd < xStart){ const tmp = xStart; xStart = xEnd; xEnd = tmp; }
+          const zone = {
+            type:"musicZone",
+            soundFile: String(params.soundFile || "").trim(),
+            xStart,
+            xEnd,
+            volume: Math.max(0, Math.min(1, this._readNumParam(params, "volume", 0.7))),
+            loop: params.loop !== false,
+            fadeTiles: Math.max(0, this._readNumParam(params, "fadeTiles", 4)),
+          };
+          this._musicZones.push(zone);
+          return;
+        }
+
+        if (id === "spot_sound"){
+          const ts = (levelObj && levelObj.meta && levelObj.meta.tileSize) ? levelObj.meta.tileSize : (Lumo.TILE || 24);
+          const cx = tx * ts + ts * 0.5;
+          const cy = ty * ts + ts * 0.5;
+          const spot = {
+            type:"spotSound",
+            soundFile: String(params.soundFile || "").trim(),
+            cx, cy,
+            radius: Math.max(0, this._readNumParam(params, "radius", 120)),
+            volume: Math.max(0, Math.min(1, this._readNumParam(params, "volume", 0.8))),
+            loop: params.loop !== false,
+            fadeTiles: Math.max(0, this._readNumParam(params, "fadeTiles", 2)),
+          };
+          this._spotSounds.push(spot);
+          return;
+        }
+
+        if (id === "trigger_sound"){
+          const ts = (levelObj && levelObj.meta && levelObj.meta.tileSize) ? levelObj.meta.tileSize : (Lumo.TILE || 24);
+          const baseX = tx * ts + ts * 0.5;
+          const trg = {
+            type:"triggerSound",
+            soundFile: String(params.soundFile || "").trim(),
+            triggerX: this._readNumParam(params, "triggerX", baseX),
+            once: params.once !== false,
+            volume: Math.max(0, Math.min(1, this._readNumParam(params, "volume", 1))),
+            fired: false,
+            lastSide: null,
+          };
+          this._triggerSounds.push(trg);
+          return;
+        }
 
         if (id === "fog_volume"){
           // FogVolume (visual-only) — accepts both export variants:
@@ -968,6 +1086,52 @@ if (this._catById){
 
       if (this._hoverVoidAttackGlobalCd > 0) this._hoverVoidAttackGlobalCd -= dt;
       const hoverVoids = this.items.filter((it) => it && it.active && it.type === "hoverVoid");
+
+      const playerCx = player ? (player.x + player.w * 0.5) : null;
+      const playerCy = player ? (player.y + player.h * 0.5) : null;
+      const prevCx = this._prevPlayerCenterX;
+
+      for (const z of this._musicZones){
+        if (!z.soundFile) continue;
+        const handle = this._getSoundHandle(z.soundFile, z.loop);
+        const fadePx = Math.max(1, z.fadeTiles * ts);
+        let gain = 0;
+        if (playerCx != null){
+          if (playerCx >= z.xStart && playerCx <= z.xEnd) gain = 1;
+          else if (playerCx < z.xStart && playerCx >= z.xStart - fadePx) gain = (playerCx - (z.xStart - fadePx)) / fadePx;
+          else if (playerCx > z.xEnd && playerCx <= z.xEnd + fadePx) gain = ((z.xEnd + fadePx) - playerCx) / fadePx;
+        }
+        this._setHandleVolume(handle, z.volume * Math.max(0, Math.min(1, gain)));
+      }
+
+      for (const sp of this._spotSounds){
+        if (!sp.soundFile) continue;
+        const handle = this._getSoundHandle(sp.soundFile, sp.loop);
+        let gain = 0;
+        if (playerCx != null && playerCy != null && sp.radius > 0){
+          const d = Math.hypot(playerCx - sp.cx, playerCy - sp.cy);
+          if (d < sp.radius){
+            gain = 1 - (d / sp.radius);
+            gain = gain * gain;
+          }
+        }
+        this._setHandleVolume(handle, sp.volume * Math.max(0, Math.min(1, gain)));
+      }
+
+      for (const tr of this._triggerSounds){
+        if (!tr.soundFile || playerCx == null){ tr.lastSide = (playerCx==null?null:(playerCx >= tr.triggerX ? 1 : -1)); continue; }
+        const side = (playerCx >= tr.triggerX) ? 1 : -1;
+        const crossed = (prevCx != null) && ((prevCx < tr.triggerX && playerCx >= tr.triggerX) || (prevCx > tr.triggerX && playerCx <= tr.triggerX));
+        if (crossed){
+          if (!tr.once || !tr.fired){
+            this._playOneShot(tr.soundFile, tr.volume);
+            tr.fired = true;
+          }
+        }
+        tr.lastSide = side;
+      }
+
+      this._prevPlayerCenterX = playerCx;
 
             for (const e of this.items){
         if (!e.active) continue;
