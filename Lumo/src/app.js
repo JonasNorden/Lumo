@@ -121,8 +121,8 @@
   noSavePreviewImage.src = "data/assets/ui/no_save_preview.png";
 
   const music = {
-    menu: new Audio("data/assets/sfx/menu_music.mp3"),
-    gameplay: new Audio("data/assets/sfx/game_play_1.mp3"),
+    menu: new Audio("data/assets/audio/music/menu_music.mp3"),
+    gameplay: new Audio("data/assets/audio/music/game_play_1.mp3"),
     current: null
   };
   const SETTINGS_STORAGE_KEY = "lumo.settings.audio.v1";
