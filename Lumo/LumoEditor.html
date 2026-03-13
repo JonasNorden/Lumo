@@ -508,6 +508,21 @@ display:none;
       gap:8px;
       align-items:center;
     }
+    .kvValueCol{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .kvPreviewActions{
+      display:flex;
+      gap:6px;
+      align-items:center;
+    }
+    .kvPreviewActions .btn{
+      height:28px;
+      padding:0 9px;
+      font-size:11px;
+    }
     .kvRow input{
       height:34px;
       border-radius: 12px;
@@ -516,7 +531,20 @@ display:none;
       padding:0 10px;
       outline:none;
     }
+    .kvRow .kvVal{
+      height:34px;
+      border-radius: 12px;
+      border:1px solid rgba(71,215,255,.16);
+      background: rgba(2,10,18,.55);
+      padding:0 10px;
+      outline:none;
+      width:100%;
+    }
     .kvRow input:focus{
+      border-color: rgba(71,215,255,.45);
+      box-shadow: 0 0 0 3px rgba(71,215,255,.12);
+    }
+    .kvRow .kvVal:focus{
       border-color: rgba(71,215,255,.45);
       box-shadow: 0 0 0 3px rgba(71,215,255,.12);
     }
@@ -973,6 +1001,11 @@ display:none;
   const paramReset = el("paramReset");
   const paramStatus = el("paramStatus");
   const paramWarning = el("paramWarning");
+
+  const editorSoundPreview = {
+    audio: null,
+    path: "",
+  };
 
 
   const levelNameEl = el("levelName");
@@ -1502,6 +1535,7 @@ display:none;
     const current = normalizeSoundPathForEntity(ent && ent.id, currentRaw);
 
     let v;
+    let valContainer = null;
     if (field.key === "soundFile" && soundOptions.length){
       v = document.createElement("select");
       v.className = "kvVal";
@@ -1525,6 +1559,41 @@ display:none;
         v.appendChild(invalid);
       }
       v.value = current || "";
+
+      const actions = document.createElement("div");
+      actions.className = "kvPreviewActions";
+
+      const playBtn = document.createElement("button");
+      playBtn.type = "button";
+      playBtn.className = "btn sm jsSoundPreviewPlay";
+      playBtn.textContent = "Play";
+      playBtn.addEventListener("click", () => {
+        const p = String(v.value || "").trim();
+        if (!p) return;
+        playEditorSoundPreview(p);
+        refreshSoundPreviewButtons();
+      });
+
+      const stopBtn = document.createElement("button");
+      stopBtn.type = "button";
+      stopBtn.className = "btn sm ghost jsSoundPreviewStop";
+      stopBtn.textContent = "Stop";
+      stopBtn.addEventListener("click", () => {
+        stopEditorSoundPreview();
+        refreshSoundPreviewButtons();
+      });
+
+      actions.appendChild(playBtn);
+      actions.appendChild(stopBtn);
+
+      valContainer = document.createElement("div");
+      valContainer.className = "kvValueCol";
+      valContainer.appendChild(v);
+      valContainer.appendChild(actions);
+
+      v.addEventListener("change", () => {
+        refreshSoundPreviewButtons();
+      });
     } else {
       v = document.createElement("input");
       v.className = "kvVal";
@@ -1536,7 +1605,7 @@ display:none;
     spacer.className = "kvSpacer";
 
     row.appendChild(k);
-    row.appendChild(v);
+    row.appendChild(valContainer || v);
     row.appendChild(spacer);
     return row;
   }
@@ -1698,6 +1767,67 @@ function parseSmart(v){
     });
   }
 
+  function stopEditorSoundPreview(){
+    const a = editorSoundPreview.audio;
+    if (!a) return;
+    try{
+      a.pause();
+      a.currentTime = 0;
+    }catch(_){ }
+    editorSoundPreview.audio = null;
+    editorSoundPreview.path = "";
+  }
+
+  function playEditorSoundPreview(path){
+    const normalized = String(path || "").trim();
+    if (!normalized) return;
+    stopEditorSoundPreview();
+
+    const a = new Audio(normalized);
+    a.preload = "auto";
+    a.addEventListener("ended", () => {
+      if (editorSoundPreview.audio !== a) return;
+      editorSoundPreview.audio = null;
+      editorSoundPreview.path = "";
+      refreshSoundPreviewButtons();
+    });
+    a.addEventListener("error", () => {
+      if (editorSoundPreview.audio !== a) return;
+      editorSoundPreview.audio = null;
+      editorSoundPreview.path = "";
+      refreshSoundPreviewButtons();
+    });
+    editorSoundPreview.audio = a;
+    editorSoundPreview.path = normalized;
+
+    const p = a.play();
+    if (p && typeof p.catch === "function"){
+      p.catch(() => {
+        if (editorSoundPreview.audio === a){
+          editorSoundPreview.audio = null;
+          editorSoundPreview.path = "";
+          refreshSoundPreviewButtons();
+        }
+      });
+    }
+  }
+
+  function refreshSoundPreviewButtons(){
+    const rows = paramKV ? paramKV.querySelectorAll(".kvRow") : [];
+    rows.forEach((row) => {
+      const sel = row.querySelector("select.kvVal");
+      const playBtn = row.querySelector(".jsSoundPreviewPlay");
+      const stopBtn = row.querySelector(".jsSoundPreviewStop");
+      if (!sel || !playBtn || !stopBtn) return;
+      const path = String(sel.value || "").trim();
+      const hasSound = !!path;
+      const isPlayingThis = !!(editorSoundPreview.audio && editorSoundPreview.path === path);
+      playBtn.disabled = !hasSound;
+      stopBtn.disabled = !editorSoundPreview.audio;
+      playBtn.classList.toggle("on", isPlayingThis);
+    });
+  }
+
   function getEntAssetById(id){
     const arr = state.catalogs?.ENT || [];
     return arr.find(a => a && a.id === id) || null;
@@ -1831,6 +1961,7 @@ function parseSmart(v){
 
   function openParamsModal(entIndex, asset=null){
     if (entIndex < 0 || entIndex >= state.ents.length) return;
+    stopEditorSoundPreview();
     const ent = state.ents[entIndex];
     const a = asset || getEntAssetById(ent.id);
 
@@ -1897,6 +2028,7 @@ function parseSmart(v){
       refreshParamWarnings(ent);
       const warningInputs = paramKV.querySelectorAll(".kvVal");
       warningInputs.forEach((inp) => { inp.addEventListener("input", () => refreshParamWarnings(ent)); inp.addEventListener("change", () => refreshParamWarnings(ent)); });
+      refreshSoundPreviewButtons();
     _maybeShowFogHelp(ent, a);
 
     // Live preview while editing fog params (area/look keys are enough to preview).
@@ -1941,10 +2073,12 @@ function parseSmart(v){
       const first = paramKV.querySelector("input");
       if (first) first.focus();
     }, 0);
+    refreshSoundPreviewButtons();
   }
 
   function closeParamsModal(save=true){
     if (!state.modalOpen) return;
+    stopEditorSoundPreview();
     const idxEnt = state.modalEntIndex;
     if (save && idxEnt >= 0 && idxEnt < state.ents.length){
       const ent = state.ents[idxEnt];
