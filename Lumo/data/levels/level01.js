@@ -15027,30 +15027,6 @@
       },
       {
         "id": "lantern_01",
-        "x": 65,
-        "y": 17,
-        "w": 24,
-        "h": 24,
-        "anchor": "BL",
-        "offsetX": 0,
-        "offsetY": 4,
-        "aggroRadius": 0,
-        "params": {}
-      },
-      {
-        "id": "start_01",
-        "x": 5,
-        "y": 17,
-        "w": 24,
-        "h": 24,
-        "anchor": "BL",
-        "offsetX": 0,
-        "offsetY": 4,
-        "aggroRadius": 0,
-        "params": {}
-      },
-      {
-        "id": "lantern_01",
         "x": 9,
         "y": 13,
         "w": 24,
@@ -15540,6 +15516,32 @@
         "params": {}
       },
       {
+        "id": "dark_creature_01",
+        "x": 81,
+        "y": 26,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 360,
+        "params": {
+          "aggroTiles": 15
+        }
+      },
+      {
+        "id": "start_01",
+        "x": 6,
+        "y": 17,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {}
+      },
+      {
         "id": "firefly_01",
         "x": 55,
         "y": 25,
@@ -15552,9 +15554,151 @@
         "params": {
           "lightDiameter": 120,
           "flyRangeX": 25,
-          "flySpeed": 70,
-          "smooth": 0.6,
+          "flyRangeYUp": 25,
+          "aggroTiles": 6,
           "perchSearchRadius": 25
+        }
+      },
+      {
+        "id": "powercell_01",
+        "x": 95,
+        "y": 26,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {}
+      },
+      {
+        "id": "hover_void_01",
+        "x": 69,
+        "y": 20,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 30,
+          "colorVariant": 3
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 83,
+        "y": 23,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 15,
+          "colorVariant": 1
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 85,
+        "y": 23,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 15,
+          "colorVariant": 1
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 39,
+        "y": 20,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 30,
+          "followTiles": 12,
+          "colorVariant": 1,
+          "loseSightTiles": 25
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 38,
+        "y": 20,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 25,
+          "followTiles": 16,
+          "colorVariant": 0,
+          "loseSightTiles": 30
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 40,
+        "y": 20,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 25,
+          "followTiles": 16,
+          "colorVariant": 1,
+          "loseSightTiles": 30
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 39,
+        "y": 19,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 25,
+          "followTiles": 16,
+          "colorVariant": 2,
+          "loseSightTiles": 30
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 40,
+        "y": 21,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 25,
+          "followTiles": 16,
+          "colorVariant": 3,
+          "loseSightTiles": 30
         }
       }
     ]
@@ -36324,30 +36468,6 @@
       },
       {
         "id": "lantern_01",
-        "x": 65,
-        "y": 17,
-        "w": 24,
-        "h": 24,
-        "anchor": "BL",
-        "offsetX": 0,
-        "offsetY": 4,
-        "aggroRadius": 0,
-        "params": {}
-      },
-      {
-        "id": "start_01",
-        "x": 5,
-        "y": 17,
-        "w": 24,
-        "h": 24,
-        "anchor": "BL",
-        "offsetX": 0,
-        "offsetY": 4,
-        "aggroRadius": 0,
-        "params": {}
-      },
-      {
-        "id": "lantern_01",
         "x": 9,
         "y": 13,
         "w": 24,
@@ -36837,6 +36957,32 @@
         "params": {}
       },
       {
+        "id": "dark_creature_01",
+        "x": 81,
+        "y": 26,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 360,
+        "params": {
+          "aggroTiles": 15
+        }
+      },
+      {
+        "id": "start_01",
+        "x": 6,
+        "y": 17,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {}
+      },
+      {
         "id": "firefly_01",
         "x": 55,
         "y": 25,
@@ -36849,9 +36995,151 @@
         "params": {
           "lightDiameter": 120,
           "flyRangeX": 25,
-          "flySpeed": 70,
-          "smooth": 0.6,
+          "flyRangeYUp": 25,
+          "aggroTiles": 6,
           "perchSearchRadius": 25
+        }
+      },
+      {
+        "id": "powercell_01",
+        "x": 95,
+        "y": 26,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {}
+      },
+      {
+        "id": "hover_void_01",
+        "x": 69,
+        "y": 20,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 30,
+          "colorVariant": 3
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 83,
+        "y": 23,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 15,
+          "colorVariant": 1
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 85,
+        "y": 23,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 15,
+          "colorVariant": 1
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 39,
+        "y": 20,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 30,
+          "followTiles": 12,
+          "colorVariant": 1,
+          "loseSightTiles": 25
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 38,
+        "y": 20,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 25,
+          "followTiles": 16,
+          "colorVariant": 0,
+          "loseSightTiles": 30
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 40,
+        "y": 20,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 25,
+          "followTiles": 16,
+          "colorVariant": 1,
+          "loseSightTiles": 30
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 39,
+        "y": 19,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 25,
+          "followTiles": 16,
+          "colorVariant": 2,
+          "loseSightTiles": 30
+        }
+      },
+      {
+        "id": "hover_void_01",
+        "x": 40,
+        "y": 21,
+        "w": 24,
+        "h": 24,
+        "anchor": "BL",
+        "offsetX": 0,
+        "offsetY": 4,
+        "aggroRadius": 0,
+        "params": {
+          "aggroTiles": 25,
+          "followTiles": 16,
+          "colorVariant": 3,
+          "loseSightTiles": 30
         }
       }
     ]
