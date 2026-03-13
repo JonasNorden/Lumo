@@ -516,6 +516,38 @@ display:none;
       padding:0 10px;
       outline:none;
     }
+    .kvRow .kvValSoundFile{
+      height:34px;
+      border-radius:12px;
+      border:1px solid rgba(71,215,255,.18);
+      background:rgba(2,10,18,.72);
+      color:rgba(236,244,255,.96);
+      padding:0 10px;
+      outline:none;
+      transition:border-color .15s ease, box-shadow .15s ease, background .15s ease, color .15s ease;
+    }
+    .kvRow .kvValSoundFile:hover{
+      border-color:rgba(71,215,255,.32);
+      background:rgba(4,16,28,.82);
+    }
+    .kvRow .kvValSoundFile:focus{
+      border-color: rgba(71,215,255,.45);
+      box-shadow: 0 0 0 3px rgba(71,215,255,.12);
+      background:rgba(5,18,31,.88);
+    }
+    .kvRow .kvValSoundFile:disabled{
+      color:rgba(166,186,214,.7);
+      background:rgba(2,10,18,.45);
+      border-color:rgba(71,215,255,.12);
+      cursor:not-allowed;
+    }
+    .kvRow .kvValSoundFile option{
+      color:rgba(236,244,255,.96);
+      background:#0a1424;
+    }
+    .kvRow .kvValSoundFile option[value=""]{
+      color:rgba(163,186,214,.9);
+    }
     .kvRow input:focus{
       border-color: rgba(71,215,255,.45);
       box-shadow: 0 0 0 3px rgba(71,215,255,.12);
@@ -1504,7 +1536,7 @@ display:none;
     let v;
     if (field.key === "soundFile" && soundOptions.length){
       v = document.createElement("select");
-      v.className = "kvVal";
+      v.className = "kvVal kvValSoundFile";
 
       const placeholder = document.createElement("option");
       placeholder.value = "";
