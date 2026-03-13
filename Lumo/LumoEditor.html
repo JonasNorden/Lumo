@@ -1875,7 +1875,15 @@ function parseSmart(v){
     if (ent.id === "spot_sound"){
       const radius = Math.max(0, Number(p.radius) || 0);
       if (radius <= 0) return null;
-      return { type:"spot", radiusPx: radius };
+      const fadeTiles = Math.max(0, Number(p.fadeTiles) || 0);
+      const fadePx = fadeTiles * ts;
+      const innerRadiusPx = Math.max(0, radius - fadePx);
+      return {
+        type:"spot",
+        radiusPx: radius,
+        fadePx,
+        innerRadiusPx,
+      };
     }
 
     if (ent.id === "trigger_sound"){
@@ -2967,13 +2975,46 @@ function drawEntities(){
             ctx.beginPath(); ctx.moveTo(f1, sy0); ctx.lineTo(f1, sy1); ctx.stroke();
           }
         } else if (soundOverlay.type === "spot"){
+          const isSelected = (i === state.selectedEntIndex);
           const cx = baseX + TS/2;
           const cy = baseY + TS/2;
           const cs = worldToScreen(cx, cy);
-          ctx.strokeStyle = "rgba(122, 230, 150, 0.92)";
+          const outer = Math.max(0, soundOverlay.radiusPx || 0);
+          const inner = Math.max(0, Math.min(outer, soundOverlay.innerRadiusPx || 0));
+
+          // Fade zone fill (between inner full-volume and outer silence boundary)
+          if (outer > inner){
+            const fillAlpha = isSelected ? 0.20 : 0.12;
+            const ring = ctx.createRadialGradient(cs.x, cs.y, inner, cs.x, cs.y, outer);
+            ring.addColorStop(0, `rgba(122, 230, 150, ${fillAlpha})`);
+            ring.addColorStop(1, "rgba(122, 230, 150, 0.00)");
+            ctx.fillStyle = ring;
+            ctx.beginPath();
+            ctx.arc(cs.x, cs.y, outer, 0, Math.PI*2);
+            ctx.fill();
+
+            if (inner > 0){
+              ctx.globalCompositeOperation = "destination-out";
+              ctx.beginPath();
+              ctx.arc(cs.x, cs.y, inner, 0, Math.PI*2);
+              ctx.fill();
+              ctx.globalCompositeOperation = "source-over";
+            }
+          }
+
+          // Outer edge / silence boundary
+          ctx.strokeStyle = isSelected ? "rgba(122, 230, 150, 0.92)" : "rgba(122, 230, 150, 0.62)";
           ctx.setLineDash([7,5]);
-          ctx.lineWidth = 1.8;
-          ctx.beginPath(); ctx.arc(cs.x, cs.y, soundOverlay.radiusPx, 0, Math.PI*2); ctx.stroke();
+          ctx.lineWidth = isSelected ? 2.0 : 1.5;
+          ctx.beginPath(); ctx.arc(cs.x, cs.y, outer, 0, Math.PI*2); ctx.stroke();
+
+          // Inner full-volume boundary
+          if (inner > 0){
+            ctx.strokeStyle = isSelected ? "rgba(191, 255, 213, 0.96)" : "rgba(191, 255, 213, 0.78)";
+            ctx.setLineDash([]);
+            ctx.lineWidth = isSelected ? 2.2 : 1.7;
+            ctx.beginPath(); ctx.arc(cs.x, cs.y, inner, 0, Math.PI*2); ctx.stroke();
+          }
         } else if (soundOverlay.type === "trigger"){
           const sy0 = worldToScreen(soundOverlay.triggerX, 0).y;
           const sy1 = worldToScreen(soundOverlay.triggerX, state.h * TS).y;
