@@ -1364,7 +1364,7 @@
 
   function updateMusicByState(){
     if (gameState === GameState.MENU || gameState === GameState.SETTINGS || gameState === GameState.FAN_ART) return switchMusic(music.menu);
-    if (gameState === GameState.PLAYING) return switchMusic(music.gameplay);
+    if (gameState === GameState.PLAYING) return switchMusic(null);
     return switchMusic(null);
   }
 
