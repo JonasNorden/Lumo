@@ -1910,8 +1910,10 @@ function parseSmart(v){
     const textW = Math.ceil(ctx.measureText(label).width);
     const boxW = textW + padX * 2;
     const boxH = 18;
-    const left = Math.max(4, Math.min(cv.width - boxW - 4, Math.round(pos.x - boxW * 0.5)));
-    const top = Math.max(4, Math.min(cv.height - boxH - 4, Math.round(pos.y - boxH - 8)));
+    const surface = (canvas && Number.isFinite(canvas.width) && Number.isFinite(canvas.height)) ? canvas : null;
+    if (!surface) return;
+    const left = Math.max(4, Math.min(surface.width - boxW - 4, Math.round(pos.x - boxW * 0.5)));
+    const top = Math.max(4, Math.min(surface.height - boxH - 4, Math.round(pos.y - boxH - 8)));
 
     ctx.fillStyle = isSelected ? "rgba(10, 20, 30, 0.82)" : "rgba(9, 18, 28, 0.62)";
     ctx.strokeStyle = isSelected ? "rgba(112, 226, 255, 0.72)" : "rgba(112, 226, 255, 0.28)";
