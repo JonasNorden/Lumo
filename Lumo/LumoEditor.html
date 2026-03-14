@@ -1857,6 +1857,75 @@ function parseSmart(v){
     return arr.find(a => a && a.id === id) || null;
   }
 
+  function getSoundFileDisplayName(soundFile, maxLen = 22){
+    const raw = String(soundFile || "").trim();
+    if (!raw) return "";
+    const normalized = raw.replace(/\\+/g, "/");
+    const name = normalized.split("/").pop() || normalized;
+    if (name.length <= maxLen) return name;
+    return `${name.slice(0, Math.max(1, maxLen - 3))}...`;
+  }
+
+  function getSoundLabelText(ent){
+    if (!ent || !ent.params || typeof ent.params !== "object") return "";
+    if (!["music_zone", "spot_sound", "trigger_sound"].includes(String(ent.id))) return "";
+    return getSoundFileDisplayName(ent.params.soundFile);
+  }
+
+  function getSoundLabelWorldPos(ent, overlay){
+    const baseX = ent.x * TS;
+    const baseY = ent.y * TS;
+
+    if (overlay && overlay.type === "music"){
+      return {
+        x: (overlay.x0 + overlay.x1) * 0.5,
+        y: baseY - 6,
+      };
+    }
+
+    if (overlay && overlay.type === "trigger"){
+      return {
+        x: overlay.triggerX + 10,
+        y: baseY + TS * 0.5,
+      };
+    }
+
+    return {
+      x: baseX + TS * 0.5,
+      y: baseY - 6,
+    };
+  }
+
+  function drawSoundEntityLabel(ent, overlay, isSelected){
+    const label = getSoundLabelText(ent);
+    if (!label) return;
+
+    const posW = getSoundLabelWorldPos(ent, overlay);
+    const pos = worldToScreen(posW.x, posW.y);
+    const padX = 6;
+    const padY = 4;
+
+    ctx.save();
+    ctx.font = "11px var(--mono)";
+    const textW = Math.ceil(ctx.measureText(label).width);
+    const boxW = textW + padX * 2;
+    const boxH = 18;
+    const left = Math.max(4, Math.min(cv.width - boxW - 4, Math.round(pos.x - boxW * 0.5)));
+    const top = Math.max(4, Math.min(cv.height - boxH - 4, Math.round(pos.y - boxH - 8)));
+
+    ctx.fillStyle = isSelected ? "rgba(10, 20, 30, 0.82)" : "rgba(9, 18, 28, 0.62)";
+    ctx.strokeStyle = isSelected ? "rgba(112, 226, 255, 0.72)" : "rgba(112, 226, 255, 0.28)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(left + 0.5, top + 0.5, boxW - 1, boxH - 1, 5);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = isSelected ? "rgba(230, 247, 255, 0.98)" : "rgba(214, 236, 255, 0.86)";
+    ctx.fillText(label, left + padX, top + boxH - padY - 2);
+    ctx.restore();
+  }
+
   function getSoundOverlay(ent){
     if (!ent || !ent.id) return null;
     const p = (ent.params && typeof ent.params === "object") ? ent.params : {};
@@ -2947,6 +3016,7 @@ function drawEntities(){
         ctx.fillText(e.id, s.x+4, s.y+14);
       }
 
+      const isSelected = (i === state.selectedEntIndex);
       const soundOverlay = getSoundOverlay(e);
       if (soundOverlay){
         ctx.save();
@@ -2975,7 +3045,6 @@ function drawEntities(){
             ctx.beginPath(); ctx.moveTo(f1, sy0); ctx.lineTo(f1, sy1); ctx.stroke();
           }
         } else if (soundOverlay.type === "spot"){
-          const isSelected = (i === state.selectedEntIndex);
           const cx = baseX + TS/2;
           const cy = baseY + TS/2;
           const cs = worldToScreen(cx, cy);
@@ -3026,6 +3095,8 @@ function drawEntities(){
         }
         ctx.restore();
       }
+
+      drawSoundEntityLabel(e, soundOverlay, isSelected);
 
       const radiusOverlay = getRadiusOverlay(e);
       if (state.aggroOn && radiusOverlay && radiusOverlay.radiusPx > 0){
