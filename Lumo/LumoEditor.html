@@ -642,6 +642,26 @@ display:none;
     .kvWrap.hidden{ display:none; }
     .jsonWrap{ margin-top: 10px; }
     .jsonWrap.hidden{ display:none; }
+    .fogFormWrap{ margin-top:10px; border:1px solid var(--line); border-radius:12px; padding:10px; background:rgba(0,0,0,.12); }
+    .fogFormWrap.hidden{ display:none; }
+    .fogSection + .fogSection{ margin-top:10px; }
+    .fogSectionTitle{ font-weight:700; color:var(--text); margin-bottom:6px; }
+    .fogGrid{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:8px; }
+    .fogField label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; }
+    .fogField input,
+    .fogField select{
+      width:100%;
+      height:34px;
+      border-radius:10px;
+      border:1px solid rgba(255,255,255,.10);
+      background:rgba(0,0,0,.35);
+      color:rgba(230,244,255,.92);
+      padding:0 10px;
+      font:12px/1.2 var(--mono);
+      outline:none;
+    }
+    .fogField input:focus,
+    .fogField select:focus{ border-color: rgba(71,215,255,0.35); box-shadow: 0 0 0 3px rgba(71,215,255,0.08); }
     #paramJsonText{
       width: 100%;
       height: 260px;
@@ -969,6 +989,8 @@ display:none;
           <div class="small jsonHint">Tips: hålla strukturen intakt (area/look/smoothing/interaction/organic/render). Tomt = default.</div>
         </div>
 
+        <div id="paramFogWrap" class="fogFormWrap hidden"></div>
+
         <div id="paramWarning" class="paramWarning hidden"></div>
 
         <div class="modalActions">
@@ -1020,6 +1042,7 @@ display:none;
   const paramKV = el("paramKV");
   const paramKVWrap = el("paramKVWrap");
   const paramJsonWrap = el("paramJsonWrap");
+  const paramFogWrap = el("paramFogWrap");
   const paramJsonText = el("paramJsonText");
   const paramAddRow = el("paramAddRow");
   const paramReset = el("paramReset");
@@ -1731,6 +1754,108 @@ display:none;
     }
   }
 
+  const FOG_PARAM_SECTIONS = [
+    { key: "area", title: "Area", fields: ["x0", "x1", "y0", "falloff"] },
+    { key: "look", title: "Look", fields: ["density", "lift", "thickness", "layers", "noise", "drift", "color", "exposure"] },
+    { key: "smoothing", title: "Smoothing", fields: ["diffuse", "relax", "visc"] },
+    { key: "interaction", title: "Interaction", fields: ["radius", "push", "bulge", "gate"] },
+    { key: "organic", title: "Organic", fields: ["strength", "scale", "speed"] },
+    { key: "render", title: "Render", fields: ["blend", "lumoBehindFog"] },
+  ];
+
+  function _getNested(obj, path){
+    return path.split(".").reduce((acc, k) => (acc && typeof acc === "object") ? acc[k] : undefined, obj);
+  }
+
+  function _setNested(obj, path, value){
+    const parts = path.split(".");
+    let cur = obj;
+    for (let i=0; i<parts.length-1; i++){
+      const k = parts[i];
+      if (!cur[k] || typeof cur[k] !== "object" || Array.isArray(cur[k])) cur[k] = {};
+      cur = cur[k];
+    }
+    cur[parts[parts.length-1]] = value;
+  }
+
+  function _buildFogVolumeForm(ent, asset){
+    if (!paramFogWrap) return;
+    const def = (asset && asset.defaults && typeof asset.defaults === "object") ? deepClone(asset.defaults) : {};
+    const cur = (ent.params && typeof ent.params === "object") ? ent.params : {};
+    const full = deepClone(def || {});
+    for (const s of FOG_PARAM_SECTIONS){
+      const secCur = (cur && typeof cur[s.key] === "object" && cur[s.key] !== null) ? cur[s.key] : null;
+      if (secCur) full[s.key] = Object.assign({}, full[s.key] || {}, secCur);
+      else if (!full[s.key] || typeof full[s.key] !== "object") full[s.key] = {};
+    }
+
+    paramFogWrap.innerHTML = "";
+    for (const section of FOG_PARAM_SECTIONS){
+      const sec = document.createElement("div");
+      sec.className = "fogSection";
+
+      const title = document.createElement("div");
+      title.className = "fogSectionTitle";
+      title.textContent = section.title;
+      sec.appendChild(title);
+
+      const grid = document.createElement("div");
+      grid.className = "fogGrid";
+
+      for (const fieldName of section.fields){
+        const path = `${section.key}.${fieldName}`;
+        const field = document.createElement("div");
+        field.className = "fogField";
+        field.dataset.path = path;
+
+        const label = document.createElement("label");
+        label.textContent = fieldName;
+        field.appendChild(label);
+
+        const v = _getNested(full, path);
+        let input;
+        if (path === "render.lumoBehindFog"){
+          input = document.createElement("select");
+          input.className = "fogInput";
+          input.innerHTML = '<option value="true">true</option><option value="false">false</option>';
+          input.value = (String(v) === "false") ? "false" : "true";
+        } else {
+          input = document.createElement("input");
+          input.className = "fogInput";
+          input.value = (v === null) ? "null" : (typeof v === "object" ? JSON.stringify(v) : String(v ?? ""));
+        }
+
+        input.addEventListener("input", () => {
+          const next = _readFogVolumeForm();
+          ent.params = next;
+          _drawFogMiniPreview(ent, asset);
+        });
+
+        field.appendChild(input);
+        grid.appendChild(field);
+      }
+
+      sec.appendChild(grid);
+      paramFogWrap.appendChild(sec);
+    }
+  }
+
+  function _readFogVolumeForm(){
+    const out = {};
+    if (!paramFogWrap) return out;
+    const fields = paramFogWrap.querySelectorAll(".fogField");
+    fields.forEach((field) => {
+      const path = field.dataset.path;
+      if (!path) return;
+      const input = field.querySelector(".fogInput");
+      if (!input) return;
+      const raw = String(input.value ?? "").trim();
+      if (raw === "") return;
+      _setNested(out, path, parseSmart(raw));
+    });
+    return out;
+  }
+
 function parseSmart(v){
     const s = String(v ?? "").trim();
     if (s === "") return "";
@@ -2088,6 +2213,28 @@ function parseSmart(v){
     const obj = (ent.params && typeof ent.params === "object") ? ent.params : {};
     const schema = getParamSchemaFor(ent.id);
 
+    // Special: fog_volume gets structured section fields (not raw JSON textarea).
+    if (_isFogVolume(ent)){
+      if (paramWarning) {
+        paramWarning.classList.add("hidden");
+        paramWarning.textContent = "";
+      }
+      if (paramKVWrap) paramKVWrap.classList.add("hidden");
+      if (paramJsonWrap) paramJsonWrap.classList.add("hidden");
+      if (paramFogWrap) paramFogWrap.classList.remove("hidden");
+      paramAddRow.disabled = true;
+      paramAddRow.classList.add("disabled");
+      paramAddRow.title = "Fixed parameters for fog_volume";
+      _buildFogVolumeForm(ent, a);
+      paramStatus.textContent = "Loaded (fog fields).";
+      setTimeout(() => {
+        const first = paramFogWrap ? paramFogWrap.querySelector(".fogInput") : null;
+        if (first) first.focus();
+      }, 0);
+      refreshSoundPreviewButtons();
+      return;
+    }
+
     // Special: JSON-mode entities (volumes etc.)
     if (a && a.paramMode === "json"){
       if (paramWarning) {
@@ -2097,6 +2244,7 @@ function parseSmart(v){
       // show JSON editor, hide KV
       if (paramKVWrap) paramKVWrap.classList.add("hidden");
       if (paramJsonWrap) paramJsonWrap.classList.remove("hidden");
+      if (paramFogWrap) paramFogWrap.classList.add("hidden");
       paramAddRow.disabled = true;
       paramAddRow.classList.add("disabled");
       paramAddRow.title = "JSON-mode entity";
@@ -2112,6 +2260,7 @@ function parseSmart(v){
       // normal KV mode
       if (paramKVWrap) paramKVWrap.classList.remove("hidden");
       if (paramJsonWrap) paramJsonWrap.classList.add("hidden");
+      if (paramFogWrap) paramFogWrap.classList.add("hidden");
     }
 
     if (schema){
@@ -2187,8 +2336,18 @@ function parseSmart(v){
       const ent = state.ents[idxEnt];
       const a = state.modalAsset || getEntAssetById(ent.id);
 
+      // fog_volume uses structured editor but persists same nested object shape.
+      if (_isFogVolume(ent)){
+        if (paramWarning) {
+          paramWarning.classList.add("hidden");
+          paramWarning.textContent = "";
+        }
+        ent.params = _readFogVolumeForm();
+        state.guideDirty = true;
+        updateSelectedUI();
+        paramStatus.textContent = "Saved.";
       // JSON-mode entities: full object in textarea
-      if (a && a.paramMode === "json"){
+      } else if (a && a.paramMode === "json"){
       if (paramWarning) {
         paramWarning.classList.add("hidden");
         paramWarning.textContent = "";
@@ -2266,9 +2425,20 @@ function parseSmart(v){
 
     // JSON-mode: refresh textarea instead of rows
     const am = a || getEntAssetById(ent.id);
+    if (_isFogVolume(ent)){
+      if (paramKVWrap) paramKVWrap.classList.add("hidden");
+      if (paramJsonWrap) paramJsonWrap.classList.add("hidden");
+      if (paramFogWrap) paramFogWrap.classList.remove("hidden");
+      _buildFogVolumeForm(ent, am);
+      paramStatus.textContent = "Reset to default.";
+      state.guideDirty = true;
+      updateSelectedUI();
+      return;
+    }
     if (am && am.paramMode === "json"){
       if (paramKVWrap) paramKVWrap.classList.add("hidden");
       if (paramJsonWrap) paramJsonWrap.classList.remove("hidden");
+      if (paramFogWrap) paramFogWrap.classList.add("hidden");
       if (paramJsonText) paramJsonText.value = JSON.stringify(def || {}, null, 2);
       paramStatus.textContent = "Reset (JSON).";
       state.guideDirty = true;
@@ -3805,6 +3975,7 @@ if (useFill){
   paramModalBackdrop.addEventListener("click", () => closeParamsModal(true));
   paramModalClose.addEventListener("click", () => closeParamsModal(true));
   paramAddRow.addEventListener("click", () => {
+    if (paramFogWrap && !paramFogWrap.classList.contains("hidden")) return;
     paramKV.appendChild(buildParamRow("",""));
     paramStatus.textContent = "—";
   });
