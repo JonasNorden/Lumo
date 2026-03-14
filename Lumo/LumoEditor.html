@@ -1258,6 +1258,11 @@ display:none;
     path: "",
   };
 
+  const editorSoundEntityState = {
+    mutedByIndex: new Set(),
+    soloByIndex: new Set(),
+  };
+
   const editorSoundScan = {
     active: false,
     currentX: 0,
@@ -2171,6 +2176,78 @@ function parseSmart(v){
     renderAudioInspector();
   }
 
+  function sanitizeEditorAudioEntityState(){
+    const max = state.ents.length;
+    const keepValid = (set) => {
+      for (const index of Array.from(set.values())){
+        if (!Number.isInteger(index) || index < 0 || index >= max || !isSoundEntity(state.ents[index])){
+          set.delete(index);
+        }
+      }
+    };
+    keepValid(editorSoundEntityState.mutedByIndex);
+    keepValid(editorSoundEntityState.soloByIndex);
+  }
+
+  function remapEditorAudioEntityStateAfterDelete(deletedIndex){
+    const remap = (set) => {
+      const next = new Set();
+      for (const index of set.values()){
+        if (index === deletedIndex) continue;
+        next.add(index > deletedIndex ? index - 1 : index);
+      }
+      set.clear();
+      for (const value of next.values()) set.add(value);
+    };
+    remap(editorSoundEntityState.mutedByIndex);
+    remap(editorSoundEntityState.soloByIndex);
+    sanitizeEditorAudioEntityState();
+  }
+
+  function clearEditorAudioEntityState(){
+    editorSoundEntityState.mutedByIndex.clear();
+    editorSoundEntityState.soloByIndex.clear();
+  }
+
+  function isEditorEntityMuted(index){
+    return editorSoundEntityState.mutedByIndex.has(index);
+  }
+
+  function isEditorEntitySolo(index){
+    return editorSoundEntityState.soloByIndex.has(index);
+  }
+
+  function isEditorSoundEntityAudible(index, ent){
+    if (!isSoundEntity(ent)) return false;
+    if (isEditorEntityMuted(index)) return false;
+    if (editorSoundEntityState.soloByIndex.size > 0 && !isEditorEntitySolo(index)) return false;
+    return true;
+  }
+
+  function stopScanEntityAudio(index){
+    const musicAudio = editorSoundScan.musicAudioByIndex.get(index) || null;
+    if (musicAudio){
+      try{ musicAudio.pause(); musicAudio.currentTime = 0; }catch(_){ }
+      editorSoundScan.musicAudioByIndex.delete(index);
+    }
+    const spotAudio = editorSoundScan.spotAudioByIndex.get(index) || null;
+    if (spotAudio){
+      try{ spotAudio.pause(); spotAudio.currentTime = 0; }catch(_){ }
+      editorSoundScan.spotAudioByIndex.delete(index);
+    }
+    editorSoundScan.spotCooldownByIndex.delete(index);
+  }
+
+  function removeEntityAtIndex(index){
+    if (!Number.isInteger(index) || index < 0 || index >= state.ents.length) return false;
+    stopScanEntityAudio(index);
+    state.ents.splice(index, 1);
+    remapEditorAudioEntityStateAfterDelete(index);
+    if (state.selectedEntIndex === index) state.selectedEntIndex = -1;
+    else if (state.selectedEntIndex > index) state.selectedEntIndex--;
+    return true;
+  }
+
   function playEditorSoundPreview(path){
     const normalized = String(path || "").trim();
     if (!normalized) return;
@@ -2245,6 +2322,15 @@ function parseSmart(v){
     return getSoundFileDisplayName(ent.params.soundFile);
   }
 
+  function getSoundStateBadge(index){
+    const muted = isEditorEntityMuted(index);
+    const solo = isEditorEntitySolo(index);
+    if (muted && solo) return "[M][S]";
+    if (muted) return "[M]";
+    if (solo) return "[S]";
+    return "";
+  }
+
   function getSoundLabelWorldPos(ent, overlay){
     const baseX = ent.x * TS;
     const baseY = ent.y * TS;
@@ -2269,8 +2355,10 @@ function parseSmart(v){
     };
   }
 
-  function drawSoundEntityLabel(ent, overlay, isSelected, scanHighlight = null){
-    const label = getSoundLabelText(ent);
+  function drawSoundEntityLabel(index, ent, overlay, isSelected, scanHighlight = null){
+    const baseLabel = getSoundLabelText(ent);
+    const badge = getSoundStateBadge(index);
+    const label = badge ? `${baseLabel} ${badge}` : baseLabel;
     if (!label) return;
 
     const posW = getSoundLabelWorldPos(ent, overlay);
@@ -2289,10 +2377,13 @@ function parseSmart(v){
     const top = Math.max(4, Math.min(surface.height - boxH - 4, Math.round(pos.y - boxH - 8)));
 
     const hl = Math.max(0, Number(scanHighlight && scanHighlight.strength) || 0);
-    const fillA = isSelected ? (0.82 + hl * 0.08) : (0.62 + hl * 0.16);
+    const muted = isEditorEntityMuted(index);
+    const fillA = muted ? 0.76 : (isSelected ? (0.82 + hl * 0.08) : (0.62 + hl * 0.16));
     const strokeA = isSelected ? (0.72 + hl * 0.24) : (0.28 + hl * 0.52);
     const textA = isSelected ? (0.98 + hl * 0.02) : (0.86 + hl * 0.12);
-    ctx.fillStyle = `rgba(10, 20, 30, ${Math.min(0.95, fillA).toFixed(3)})`;
+    ctx.fillStyle = muted
+      ? `rgba(40, 24, 32, ${Math.min(0.95, fillA).toFixed(3)})`
+      : `rgba(10, 20, 30, ${Math.min(0.95, fillA).toFixed(3)})`;
     ctx.strokeStyle = `rgba(112, 226, 255, ${Math.min(1, strokeA).toFixed(3)})`;
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -2302,7 +2393,7 @@ function parseSmart(v){
 
     ctx.fillStyle = isSelected
       ? `rgba(230, 247, 255, ${Math.min(1, textA).toFixed(3)})`
-      : `rgba(214, 236, 255, ${Math.min(1, textA).toFixed(3)})`;
+      : (muted ? `rgba(255, 206, 218, ${Math.min(1, textA).toFixed(3)})` : `rgba(214, 236, 255, ${Math.min(1, textA).toFixed(3)})`);
     ctx.fillText(label, left + padX, top + boxH - padY - 2);
     ctx.restore();
   }
@@ -2948,6 +3039,9 @@ function parseSmart(v){
     const pitchVar = Number.isFinite(Number(params.pitchVar)) ? Number(params.pitchVar) : 0;
     const volumeVar = Number.isFinite(Number(params.volumeVar)) ? Number(params.volumeVar) : 0;
     const loop = !!params.loop;
+    const muted = isEditorEntityMuted(selected.index);
+    const solo = isEditorEntitySolo(selected.index);
+    const audible = isEditorSoundEntityAudible(selected.index, ent);
 
     const soundOptionsMarkup = ['<option value="">Select sound file…</option>']
       .concat(soundOptions.map((opt) => `<option value="${opt.path}">${opt.label}</option>`))
@@ -2968,6 +3062,11 @@ function parseSmart(v){
           <button type="button" class="btn" id="audioInspectorPlay">Play</button>
           <button type="button" class="btn danger" id="audioInspectorStop">Stop</button>
         </div>
+        <div class="row" style="margin-bottom:8px;">
+          <button type="button" class="btn ${solo ? "on" : ""}" id="audioInspectorSolo">Solo</button>
+          <button type="button" class="btn ${muted ? "on danger" : "danger"}" id="audioInspectorMute">Mute</button>
+        </div>
+        <div class="inspectorHint" style="margin-bottom:8px;">Editor audio state: ${audible ? "audible" : "suppressed"} ${muted ? "(muted)" : (editorSoundEntityState.soloByIndex.size > 0 && !solo ? "(other solo active)" : "")}</div>
         <div class="inspectorRow">
           <label>Pitch variation (%)</label>
           <input class="inspectorInput" id="audioInspectorPitchVar" type="number" step="1" value="${pitchVar}" />
@@ -3017,16 +3116,34 @@ function parseSmart(v){
 
     const playBtn = el("audioInspectorPlay");
     const stopBtn = el("audioInspectorStop");
+    const soloBtn = el("audioInspectorSolo");
+    const muteBtn = el("audioInspectorMute");
     if (playBtn){
-      playBtn.disabled = !soundFile;
+      playBtn.disabled = !soundFile || !audible;
       playBtn.addEventListener("click", () => {
-        if (!params.soundFile) return;
+        if (!params.soundFile || !isEditorSoundEntityAudible(selected.index, ent)) return;
         playEditorSoundPreview(params.soundFile);
       });
     }
     if (stopBtn){
       stopBtn.disabled = !editorSoundPreview.audio;
       stopBtn.addEventListener("click", () => stopEditorSoundPreview());
+    }
+    if (soloBtn){
+      soloBtn.addEventListener("click", () => {
+        if (editorSoundEntityState.soloByIndex.has(selected.index)) editorSoundEntityState.soloByIndex.delete(selected.index);
+        else editorSoundEntityState.soloByIndex.add(selected.index);
+        if (!isEditorSoundEntityAudible(selected.index, ent)) stopEditorSoundPreview();
+        renderAudioInspector();
+      });
+    }
+    if (muteBtn){
+      muteBtn.addEventListener("click", () => {
+        if (editorSoundEntityState.mutedByIndex.has(selected.index)) editorSoundEntityState.mutedByIndex.delete(selected.index);
+        else editorSoundEntityState.mutedByIndex.add(selected.index);
+        if (!isEditorSoundEntityAudible(selected.index, ent)) stopEditorSoundPreview();
+        renderAudioInspector();
+      });
     }
   }
 
@@ -3043,9 +3160,12 @@ function parseSmart(v){
       const ent = state.ents[i];
       if (!isSoundEntity(ent)) continue;
       const overlay = getSoundOverlay(ent);
+      const muted = isEditorEntityMuted(i);
+      const solo = isEditorEntitySolo(i);
+      const status = `editor: ${solo ? "solo" : "-"} ${muted ? "muted" : ""}`;
       if (ent.id === "music_zone"){
         const active = !!(overlay && editorSoundScan.active && editorSoundScan.currentX >= overlay.x0 && editorSoundScan.currentX <= overlay.x1);
-        parts.push(`<div class="monitorItem"><b>MusicZone #${i}</b><div>Status: <span class="monitorState ${active ? "active" : "inactive"}">${active ? "ACTIVE" : "inactive"}</span></div></div>`);
+        parts.push(`<div class="monitorItem"><b>MusicZone #${i}</b><div>Status: <span class="monitorState ${active ? "active" : "inactive"}">${active ? "ACTIVE" : "inactive"}</span></div><div>${status}</div></div>`);
         continue;
       }
       if (ent.id === "spot_sound"){
@@ -3053,11 +3173,11 @@ function parseSmart(v){
         const radius = Math.max(0, Number(overlay && overlay.radiusPx) || 0);
         const distance = editorSoundScan.active ? Math.abs(editorSoundScan.currentX - cx) : 0;
         const vol = (editorSoundScan.active && radius > 0) ? Math.max(0, 1 - clamp(distance / radius, 0, 1)) : 0;
-        parts.push(`<div class="monitorItem"><b>SpotSound #${i}</b><div>distance: ${distance.toFixed(1)} px</div><div>computed volume: ${vol.toFixed(3)}</div></div>`);
+        parts.push(`<div class="monitorItem"><b>SpotSound #${i}</b><div>distance: ${distance.toFixed(1)} px</div><div>computed volume: ${vol.toFixed(3)}</div><div>${status}</div></div>`);
         continue;
       }
       if (ent.id === "trigger_sound"){
-        parts.push(`<div class="monitorItem"><b>TriggerSound #${i}</b><div>last trigger time: ${formatSecondsAgo(editorSoundScan.lastTriggerTimeByIndex.get(i))}</div></div>`);
+        parts.push(`<div class="monitorItem"><b>TriggerSound #${i}</b><div>last trigger time: ${formatSecondsAgo(editorSoundScan.lastTriggerTimeByIndex.get(i))}</div><div>${status}</div></div>`);
       }
     }
     scanPane.innerHTML = `
@@ -3081,9 +3201,7 @@ function parseSmart(v){
     const hits = entsAtTile(tx,ty);
     if (!hits.length) return;
     const top = hits[hits.length-1];
-    state.ents.splice(top,1);
-    if (state.selectedEntIndex === top) state.selectedEntIndex=-1;
-    else if (state.selectedEntIndex > top) state.selectedEntIndex--;
+    removeEntityAtIndex(top);
     updateSelectedUI();
     state.guideDirty = true;
   }
@@ -3475,6 +3593,10 @@ function parseSmart(v){
       const id = String(ent.id);
       const soundPath = normalizeSoundPathForEntity(id, ent.params.soundFile);
       if (!soundPath) continue;
+      if (!isEditorSoundEntityAudible(i, ent)){
+        stopScanEntityAudio(i);
+        continue;
+      }
 
       if (id === "music_zone"){
         const overlay = getSoundOverlay(ent);
@@ -3974,7 +4096,7 @@ function drawEntities(){
         ctx.restore();
       }
 
-      drawSoundEntityLabel(e, soundOverlay, isSelected, scanHighlight);
+      drawSoundEntityLabel(i, e, soundOverlay, isSelected, scanHighlight);
 
       const radiusOverlay = getRadiusOverlay(e);
       if (state.aggroOn && radiusOverlay && radiusOverlay.radiusPx > 0){
@@ -4687,7 +4809,13 @@ if (useFill){
     if (!confirm("Clear current layer?")) return;
     if (state.layer==="BG"){ state.bg.fill(null); if (state.bgPlacements) state.bgPlacements = []; }
     if (state.layer==="TILES") state.tiles.fill(0);
-    if (state.layer==="ENT"){ state.ents=[]; state.selectedEntIndex=-1; updateSelectedUI(); stopEditorSoundScan(); }
+    if (state.layer==="ENT"){
+      state.ents=[];
+      state.selectedEntIndex=-1;
+      clearEditorAudioEntityState();
+      updateSelectedUI();
+      stopEditorSoundScan();
+    }
     guideRefresh();
   });
 
@@ -4701,8 +4829,7 @@ if (useFill){
 
   btnDelete.addEventListener("click", () => {
     if (state.selectedEntIndex<0) return;
-    state.ents.splice(state.selectedEntIndex,1);
-    state.selectedEntIndex=-1;
+    removeEntityAtIndex(state.selectedEntIndex);
     updateSelectedUI();
     state.guideDirty = true;
     guideRefresh();
@@ -4845,6 +4972,7 @@ if (useFill){
       const txt = await f.text();
       try{
         stopEditorSoundScan();
+        clearEditorAudioEntityState();
         window.Lumo = window.Lumo || {};
         window.Lumo.Levels = window.Lumo.Levels || {};
         eval(txt); // lokal file://, används bara här
@@ -4909,6 +5037,7 @@ const mainArr = obj.layers && obj.layers.main;
                 return p;
               })()
             }));
+            clearEditorAudioEntityState();
           }
         }
 
