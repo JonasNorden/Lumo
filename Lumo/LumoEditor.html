@@ -797,6 +797,13 @@ display:none;
           <label for="scanSpeed">Scan px/s</label>
           <input class="scanInput" id="scanSpeed" type="number" min="1" step="10" value="360" />
         </div>
+        <div class="scanCtl">
+          <label for="scanStartMode">Scan Start</label>
+          <select class="scanInput" id="scanStartMode">
+            <option value="level">Level Start</option>
+            <option value="camera">Camera</option>
+          </select>
+        </div>
         <div class="pill" id="scanStatus">Scan: idle</div>
         <div class="hint">MMB / Space+drag pan · Scroll=pan (Shift=vert) · WASD/←↑→↓ pan · Alt+click stack</div>
         <button class="btn primary" id="btnExport">Export .js</button>
@@ -1055,6 +1062,7 @@ display:none;
   const btnScanStart = el("btnScanStart");
   const btnScanStop = el("btnScanStop");
   const scanSpeedEl = el("scanSpeed");
+  const scanStartModeEl = el("scanStartMode");
   const scanStatusEl = el("scanStatus");
   const btnExport = el("btnExport");
   const btnImport = el("btnImport");
@@ -1094,6 +1102,7 @@ display:none;
     currentX: 0,
     prevX: 0,
     speed: 360,
+    startMode: "level",
     startX: 0,
     endX: 0,
     musicAudioByIndex: new Map(),
@@ -2954,6 +2963,13 @@ function parseSmart(v){
     return speed;
   }
 
+  function ensureScanStartMode(){
+    const mode = scanStartModeEl && scanStartModeEl.value === "camera" ? "camera" : "level";
+    editorSoundScan.startMode = mode;
+    if (scanStartModeEl && scanStartModeEl.value !== mode) scanStartModeEl.value = mode;
+    return mode;
+  }
+
   function setScanStatus(){
     if (!scanStatusEl) return;
     if (!editorSoundScan.active){
@@ -3002,13 +3018,17 @@ function parseSmart(v){
     stopEditorSoundPreview();
     stopEditorSoundScan();
     const speed = ensureScanSpeed();
+    const startMode = ensureScanStartMode();
     const b = getScanBounds();
+    const unclampedStartX = startMode === "camera" ? state.camX : b.startX;
+    const startX = clamp(unclampedStartX, b.startX, b.endX);
     editorSoundScan.active = true;
     editorSoundScan.speed = speed;
-    editorSoundScan.startX = b.startX;
+    editorSoundScan.startMode = startMode;
+    editorSoundScan.startX = startX;
     editorSoundScan.endX = b.endX;
-    editorSoundScan.currentX = b.startX;
-    editorSoundScan.prevX = b.startX;
+    editorSoundScan.currentX = startX;
+    editorSoundScan.prevX = startX;
     updateEditorSoundScanCameraFollow();
     setScanStatus();
   }
@@ -4201,6 +4221,9 @@ if (useFill){
   scanSpeedEl.addEventListener("change", () => {
     ensureScanSpeed();
     setScanStatus();
+  });
+  scanStartModeEl.addEventListener("change", () => {
+    ensureScanStartMode();
   });
 
   btnClear.addEventListener("click", () => {
