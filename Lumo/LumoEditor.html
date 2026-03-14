@@ -1109,6 +1109,7 @@ display:none;
     spotAudioByIndex: new Map(),
     spotCooldownByIndex: new Map(),
     triggeredByIndex: new Set(),
+    triggerPulseByIndex: new Map(),
   };
 
   const levelNameEl = el("levelName");
@@ -2077,7 +2078,7 @@ function parseSmart(v){
     };
   }
 
-  function drawSoundEntityLabel(ent, overlay, isSelected){
+  function drawSoundEntityLabel(ent, overlay, isSelected, scanHighlight = null){
     const label = getSoundLabelText(ent);
     if (!label) return;
 
@@ -2096,17 +2097,56 @@ function parseSmart(v){
     const left = Math.max(4, Math.min(surface.width - boxW - 4, Math.round(pos.x - boxW * 0.5)));
     const top = Math.max(4, Math.min(surface.height - boxH - 4, Math.round(pos.y - boxH - 8)));
 
-    ctx.fillStyle = isSelected ? "rgba(10, 20, 30, 0.82)" : "rgba(9, 18, 28, 0.62)";
-    ctx.strokeStyle = isSelected ? "rgba(112, 226, 255, 0.72)" : "rgba(112, 226, 255, 0.28)";
+    const hl = Math.max(0, Number(scanHighlight && scanHighlight.strength) || 0);
+    const fillA = isSelected ? (0.82 + hl * 0.08) : (0.62 + hl * 0.16);
+    const strokeA = isSelected ? (0.72 + hl * 0.24) : (0.28 + hl * 0.52);
+    const textA = isSelected ? (0.98 + hl * 0.02) : (0.86 + hl * 0.12);
+    ctx.fillStyle = `rgba(10, 20, 30, ${Math.min(0.95, fillA).toFixed(3)})`;
+    ctx.strokeStyle = `rgba(112, 226, 255, ${Math.min(1, strokeA).toFixed(3)})`;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.roundRect(left + 0.5, top + 0.5, boxW - 1, boxH - 1, 5);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = isSelected ? "rgba(230, 247, 255, 0.98)" : "rgba(214, 236, 255, 0.86)";
+    ctx.fillStyle = isSelected
+      ? `rgba(230, 247, 255, ${Math.min(1, textA).toFixed(3)})`
+      : `rgba(214, 236, 255, ${Math.min(1, textA).toFixed(3)})`;
     ctx.fillText(label, left + padX, top + boxH - padY - 2);
     ctx.restore();
+  }
+
+  function getEditorSoundScanHighlight(index, ent, overlay){
+    if (!ent || !overlay) return null;
+
+    if (overlay.type === "music"){
+      if (!editorSoundScan.active) return null;
+      const scanX = editorSoundScan.currentX;
+      if (scanX < overlay.x0 || scanX > overlay.x1) return null;
+      return { strength: 1 };
+    }
+
+    if (overlay.type === "spot"){
+      if (!editorSoundScan.active) return null;
+      const scanX = editorSoundScan.currentX;
+      const cx = ent.x * TS + TS * 0.5;
+      const radius = Math.max(0, Number(overlay.radiusPx) || 0);
+      if (radius <= 0) return null;
+      const focusRadius = radius + Math.max(24, (Number(overlay.fadePx) || 0) * 0.5);
+      const dist = Math.abs(scanX - cx);
+      const strength = 1 - clamp(dist / focusRadius, 0, 1);
+      if (strength <= 0) return null;
+      return { strength };
+    }
+
+    if (overlay.type === "trigger"){
+      const pulse = Math.max(0, Number(editorSoundScan.triggerPulseByIndex.get(index) || 0));
+      if (pulse <= 0) return null;
+      const maxPulse = 0.32;
+      return { strength: clamp(pulse / maxPulse, 0, 1) };
+    }
+
+    return null;
   }
 
   function getSoundOverlay(ent){
@@ -2998,6 +3038,7 @@ function parseSmart(v){
     stopScanSpot();
     editorSoundScan.triggeredByIndex.clear();
     editorSoundScan.spotCooldownByIndex.clear();
+    editorSoundScan.triggerPulseByIndex.clear();
   }
 
   function stopEditorSoundScan(){
@@ -3087,6 +3128,7 @@ function parseSmart(v){
         const crossed = (prevX < tx && scanX >= tx) || (prevX > tx && scanX <= tx);
         if (crossed && !editorSoundScan.triggeredByIndex.has(i)){
           editorSoundScan.triggeredByIndex.add(i);
+          editorSoundScan.triggerPulseByIndex.set(i, 0.32);
           const a = new Audio(soundPath);
           a.preload = "auto";
           const p = a.play();
@@ -3135,6 +3177,12 @@ function parseSmart(v){
       const next = Math.max(0, v - delta);
       if (next <= 0) editorSoundScan.spotCooldownByIndex.delete(k);
       else editorSoundScan.spotCooldownByIndex.set(k, next);
+    }
+
+    for (const [k,v] of editorSoundScan.triggerPulseByIndex.entries()){
+      const next = Math.max(0, v - delta);
+      if (next <= 0) editorSoundScan.triggerPulseByIndex.delete(k);
+      else editorSoundScan.triggerPulseByIndex.set(k, next);
     }
 
     updateScanSounds();
@@ -3461,6 +3509,7 @@ function drawEntities(){
 
       const isSelected = (i === state.selectedEntIndex);
       const soundOverlay = getSoundOverlay(e);
+      const scanHighlight = getEditorSoundScanHighlight(i, e, soundOverlay);
       if (soundOverlay){
         ctx.save();
         if (soundOverlay.type === "music"){
@@ -3472,17 +3521,18 @@ function drawEntities(){
           const sy1 = worldToScreen(soundOverlay.x0, botY).y;
           const left = Math.min(sx0, sx1);
           const right = Math.max(sx0, sx1);
-          ctx.fillStyle = "rgba(87, 190, 255, 0.10)";
+          const hl = Math.max(0, Number(scanHighlight && scanHighlight.strength) || 0);
+          ctx.fillStyle = `rgba(87, 190, 255, ${(0.10 + hl * 0.16).toFixed(3)})`;
           ctx.fillRect(left, Math.min(sy0, sy1), Math.max(1, right-left), Math.abs(sy1-sy0));
-          ctx.strokeStyle = "rgba(87, 190, 255, 0.85)";
+          ctx.strokeStyle = `rgba(87, 190, 255, ${(0.85 + hl * 0.15).toFixed(3)})`;
           ctx.setLineDash([8,6]);
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 2 + hl * 0.8;
           ctx.beginPath(); ctx.moveTo(sx0, sy0); ctx.lineTo(sx0, sy1); ctx.stroke();
           ctx.beginPath(); ctx.moveTo(sx1, sy0); ctx.lineTo(sx1, sy1); ctx.stroke();
           if (soundOverlay.fadePx > 0){
             const f0 = worldToScreen(soundOverlay.x0 - soundOverlay.fadePx, topY).x;
             const f1 = worldToScreen(soundOverlay.x1 + soundOverlay.fadePx, topY).x;
-            ctx.strokeStyle = "rgba(87, 190, 255, 0.4)";
+            ctx.strokeStyle = `rgba(87, 190, 255, ${(0.4 + hl * 0.25).toFixed(3)})`;
             ctx.setLineDash([4,6]);
             ctx.beginPath(); ctx.moveTo(f0, sy0); ctx.lineTo(f0, sy1); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(f1, sy0); ctx.lineTo(f1, sy1); ctx.stroke();
@@ -3493,10 +3543,11 @@ function drawEntities(){
           const cs = worldToScreen(cx, cy);
           const outer = Math.max(0, soundOverlay.radiusPx || 0);
           const inner = Math.max(0, Math.min(outer, soundOverlay.innerRadiusPx || 0));
+          const hl = Math.max(0, Number(scanHighlight && scanHighlight.strength) || 0);
 
           // Fade zone fill (between inner full-volume and outer silence boundary)
           if (outer > inner){
-            const fillAlpha = isSelected ? 0.20 : 0.12;
+            const fillAlpha = (isSelected ? 0.20 : 0.12) + hl * 0.16;
             const ring = ctx.createRadialGradient(cs.x, cs.y, inner, cs.x, cs.y, outer);
             ring.addColorStop(0, `rgba(122, 230, 150, ${fillAlpha})`);
             ring.addColorStop(1, "rgba(122, 230, 150, 0.00)");
@@ -3515,31 +3566,43 @@ function drawEntities(){
           }
 
           // Outer edge / silence boundary
-          ctx.strokeStyle = isSelected ? "rgba(122, 230, 150, 0.92)" : "rgba(122, 230, 150, 0.62)";
+          const outerAlpha = isSelected ? (0.92 + hl * 0.08) : (0.62 + hl * 0.32);
+          ctx.strokeStyle = `rgba(122, 230, 150, ${Math.min(1, outerAlpha).toFixed(3)})`;
           ctx.setLineDash([7,5]);
-          ctx.lineWidth = isSelected ? 2.0 : 1.5;
+          ctx.lineWidth = (isSelected ? 2.0 : 1.5) + hl * 0.8;
           ctx.beginPath(); ctx.arc(cs.x, cs.y, outer, 0, Math.PI*2); ctx.stroke();
 
           // Inner full-volume boundary
           if (inner > 0){
-            ctx.strokeStyle = isSelected ? "rgba(191, 255, 213, 0.96)" : "rgba(191, 255, 213, 0.78)";
+            const innerAlpha = isSelected ? (0.96 + hl * 0.04) : (0.78 + hl * 0.2);
+            ctx.strokeStyle = `rgba(191, 255, 213, ${Math.min(1, innerAlpha).toFixed(3)})`;
             ctx.setLineDash([]);
-            ctx.lineWidth = isSelected ? 2.2 : 1.7;
+            ctx.lineWidth = (isSelected ? 2.2 : 1.7) + hl * 0.7;
             ctx.beginPath(); ctx.arc(cs.x, cs.y, inner, 0, Math.PI*2); ctx.stroke();
           }
         } else if (soundOverlay.type === "trigger"){
           const sy0 = worldToScreen(soundOverlay.triggerX, 0).y;
           const sy1 = worldToScreen(soundOverlay.triggerX, state.h * TS).y;
           const sx = worldToScreen(soundOverlay.triggerX, 0).x;
-          ctx.strokeStyle = "rgba(255, 139, 72, 0.95)";
+          const hl = Math.max(0, Number(scanHighlight && scanHighlight.strength) || 0);
+          ctx.strokeStyle = `rgba(255, 139, 72, ${(0.95 + hl * 0.05).toFixed(3)})`;
           ctx.setLineDash([9,6]);
-          ctx.lineWidth = 2;
+          ctx.lineWidth = 2 + hl * 1.2;
           ctx.beginPath(); ctx.moveTo(sx, sy0); ctx.lineTo(sx, sy1); ctx.stroke();
+          if (hl > 0){
+            const glowW = 8 + hl * 12;
+            const glowGrad = ctx.createLinearGradient(sx - glowW, 0, sx + glowW, 0);
+            glowGrad.addColorStop(0, "rgba(255, 139, 72, 0.00)");
+            glowGrad.addColorStop(0.5, `rgba(255, 139, 72, ${(0.10 + hl * 0.16).toFixed(3)})`);
+            glowGrad.addColorStop(1, "rgba(255, 139, 72, 0.00)");
+            ctx.fillStyle = glowGrad;
+            ctx.fillRect(sx - glowW, Math.min(sy0, sy1), glowW * 2, Math.abs(sy1 - sy0));
+          }
         }
         ctx.restore();
       }
 
-      drawSoundEntityLabel(e, soundOverlay, isSelected);
+      drawSoundEntityLabel(e, soundOverlay, isSelected, scanHighlight);
 
       const radiusOverlay = getRadiusOverlay(e);
       if (state.aggroOn && radiusOverlay && radiusOverlay.radiusPx > 0){
