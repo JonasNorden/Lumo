@@ -72,13 +72,34 @@
     .brand h1{ margin:0; font-size:14px; letter-spacing:.2px; font-weight:700; line-height:1.05;}
     .brand .sub{ font-size:11px; color:var(--muted); font-family:var(--mono); margin-top:2px;}
     .top-actions{ display:flex; align-items:center; gap:8px; margin-left:auto; }
-    .hint{
-      font-size:11px; color:var(--muted); font-family:var(--mono);
-      opacity:.95; padding:6px 8px;
-      border-radius:12px;
-      border:1px solid rgba(127,166,201,.18);
-      background:rgba(3,10,20,.35);
-      white-space:nowrap;
+    .entModePill{
+      gap:8px;
+    }
+    .entModeToggle{
+      display:inline-flex;
+      align-items:center;
+      padding:2px;
+      border-radius:999px;
+      border:1px solid rgba(71,215,255,.22);
+      background:rgba(2,9,18,.55);
+      box-shadow: inset 0 0 0 1px rgba(71,215,255,.06);
+    }
+    .entModeBtn{
+      height:24px;
+      min-width:64px;
+      border:none;
+      border-radius:999px;
+      background:transparent;
+      color:var(--muted);
+      font-size:11px;
+      font-weight:700;
+      letter-spacing:.3px;
+      cursor:pointer;
+    }
+    .entModeBtn.on{
+      color:var(--text);
+      background:linear-gradient(180deg, rgba(28,126,177,.72), rgba(16,77,122,.72));
+      box-shadow: 0 0 10px rgba(71,215,255,.3);
     }
     .btn{
       height:var(--btnh);
@@ -826,6 +847,13 @@ display:none;
         <div class="pill">Layer: <b id="metaLayer">BG</b></div>
         <div class="pill">Brush: <b id="metaBrush">—</b></div>
         <div class="pill">Mode: <b id="metaMode">DRAW</b></div>
+        <div class="pill entModePill" id="entModePill" style="display:none;">
+          Entity Tool:
+          <div class="entModeToggle" role="group" aria-label="Entity tool mode">
+            <button type="button" class="entModeBtn" id="btnEntModeDraw">DRAW</button>
+            <button type="button" class="entModeBtn" id="btnEntModeEdit">EDIT</button>
+          </div>
+        </div>
       </div>
 
       <div class="palette" id="palette"></div>
@@ -858,6 +886,7 @@ display:none;
         <div class="head">
           <h2>Properties</h2>
           <div style="margin-left:auto; display:flex; gap:8px;">
+            <button class="btn primary" id="btnEditParams">Edit Params</button>
             <button class="btn danger" id="btnDelete">Delete</button>
             <button class="btn" id="btnDeselect">Deselect</button>
           </div>
@@ -1066,8 +1095,12 @@ display:none;
   const btnExport = el("btnExport");
   const btnImport = el("btnImport");
   const btnClear = el("btnClear");
+  const btnEditParams = el("btnEditParams");
   const btnDelete = el("btnDelete");
   const btnDeselect = el("btnDeselect");
+  const entModePill = el("entModePill");
+  const btnEntModeDraw = el("btnEntModeDraw");
+  const btnEntModeEdit = el("btnEntModeEdit");
   const btnGuideToggle = el("btnGuideToggle");
   const btnGuideRefresh = el("btnGuideRefresh");
   const guideBody = el("guideBody");
@@ -1180,6 +1213,7 @@ display:none;
     brushBG: null,
     brushTile: null,
     brushEnt: null,
+    entToolMode: "DRAW",
     selectedEntIndex: -1,
     stackCycleIndex: 0,
 
@@ -1439,7 +1473,18 @@ display:none;
     if (state.layer === "TILES" && state.brushTile) brush = state.brushTile.id;
     if (state.layer === "ENT" && state.brushEnt) brush = state.brushEnt.id;
     metaBrush.textContent = brush;
-    metaMode.textContent = state.eraseMode && (state.layer!=="ENT") ? "ERASE" : "DRAW";
+    metaMode.textContent = state.layer === "ENT"
+      ? state.entToolMode
+      : (state.eraseMode ? "ERASE" : "DRAW");
+    const showEntTool = state.layer === "ENT";
+    entModePill.style.display = showEntTool ? "inline-flex" : "none";
+    btnEntModeDraw.classList.toggle("on", state.entToolMode === "DRAW");
+    btnEntModeEdit.classList.toggle("on", state.entToolMode === "EDIT");
+  }
+
+  function setEntToolMode(mode){
+    state.entToolMode = (mode === "EDIT") ? "EDIT" : "DRAW";
+    updateMeta();
   }
 
   function groupBy(items){
@@ -2735,6 +2780,18 @@ function parseSmart(v){
     state.selectedEntIndex = hits[state.stackCycleIndex];
     updateSelectedUI();
     state.guideDirty = true;
+  }
+
+  function selectTopmostAt(tx,ty){
+    const hits = entsAtTile(tx,ty);
+    if (!hits.length){
+      state.selectedEntIndex = -1;
+      updateSelectedUI();
+      return false;
+    }
+    state.selectedEntIndex = hits[hits.length-1];
+    updateSelectedUI();
+    return true;
   }
 
 
@@ -4140,6 +4197,10 @@ if (useFill){
       }
 
       if (state.layer==="ENT"){
+        if (state.entToolMode === "EDIT"){
+          selectTopmostAt(state.tileX, state.tileY);
+          return;
+        }
         // Volumes are placed by dragging an interval (x0..x1) on a ground line
         if (state.brushEnt && state.brushEnt.category === "volume"){
           state.volumeDrag = { id: state.brushEnt.id, tx0: state.tileX, tx1: state.tileX, ty: state.tileY };
@@ -4294,6 +4355,14 @@ if (useFill){
     if (state.layer==="TILES") state.tiles.fill(0);
     if (state.layer==="ENT"){ state.ents=[]; state.selectedEntIndex=-1; updateSelectedUI(); stopEditorSoundScan(); }
     guideRefresh();
+  });
+
+  btnEntModeDraw.addEventListener("click", () => setEntToolMode("DRAW"));
+  btnEntModeEdit.addEventListener("click", () => setEntToolMode("EDIT"));
+
+  btnEditParams.addEventListener("click", () => {
+    if (state.selectedEntIndex < 0 || state.selectedEntIndex >= state.ents.length) return;
+    openParamsModal(state.selectedEntIndex);
   });
 
   btnDelete.addEventListener("click", () => {
