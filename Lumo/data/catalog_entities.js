@@ -232,8 +232,47 @@ window.LUMO_CATALOG_ENTITIES = [
     "id": "fog_volume",
     "name": "Fog Volume",
     "group": "Volumes",
-    "category": "decor",
-    "anchor": "TL"
+    "category": "volume",
+    "anchor": "TL",
+    "paramMode": "json",
+    "defaults": {
+      "area": {
+        "x0": 0,
+        "x1": 288,
+        "y0": 24,
+        "falloff": 0
+      },
+      "look": {
+        "density": 0.14,
+        "lift": 8,
+        "thickness": 44,
+        "layers": 28,
+        "noise": 0,
+        "drift": 0,
+        "color": "#E1EEFF",
+        "exposure": 1
+      },
+      "smoothing": {
+        "diffuse": 0.24,
+        "relax": 0.24,
+        "visc": 0.94
+      },
+      "interaction": {
+        "radius": 92,
+        "push": 2.4,
+        "bulge": 2.2,
+        "gate": 70
+      },
+      "organic": {
+        "strength": 0,
+        "scale": 1,
+        "speed": 1
+      },
+      "render": {
+        "blend": "screen",
+        "lumoBehindFog": true
+      }
+    }
   },
   {
     "id": "donkey",
