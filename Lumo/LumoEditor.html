@@ -742,6 +742,30 @@ display:none;
       color:var(--muted);
       white-space:nowrap;
     }
+    .scanCtl{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding:4px 8px;
+      border-radius:12px;
+      border:1px solid rgba(71,215,255,.22);
+      background:rgba(3,10,20,.35);
+    }
+    .scanCtl label{
+      font-size:11px;
+      color:var(--muted);
+      font-family:var(--mono);
+    }
+    .scanInput{
+      width:78px;
+      height:26px;
+      padding:0 8px;
+      border-radius:9px;
+      border:1px solid rgba(127,166,201,.24);
+      background:rgba(5,14,25,.8);
+      color:var(--text);
+      font-size:12px;
+    }
 
   </style>
 </head>
@@ -767,6 +791,13 @@ display:none;
         <button class="btn" id="btnDark">Darkness</button>
         <button class="btn" id="btnAggro">Aggro</button>
         <button class="btn" id="btnErase">Erase</button>
+        <button class="btn" id="btnScanStart">Start Scan</button>
+        <button class="btn danger" id="btnScanStop">Stop</button>
+        <div class="scanCtl">
+          <label for="scanSpeed">Scan px/s</label>
+          <input class="scanInput" id="scanSpeed" type="number" min="1" step="10" value="360" />
+        </div>
+        <div class="pill" id="scanStatus">Scan: idle</div>
         <div class="hint">MMB / Space+drag pan · Scroll=pan (Shift=vert) · WASD/←↑→↓ pan · Alt+click stack</div>
         <button class="btn primary" id="btnExport">Export .js</button>
         <button class="btn" id="btnImport">Import .js</button>
@@ -1021,6 +1052,10 @@ display:none;
   const btnDark = el("btnDark");
   const btnAggro = el("btnAggro");
   const btnErase = el("btnErase");
+  const btnScanStart = el("btnScanStart");
+  const btnScanStop = el("btnScanStop");
+  const scanSpeedEl = el("scanSpeed");
+  const scanStatusEl = el("scanStatus");
   const btnExport = el("btnExport");
   const btnImport = el("btnImport");
   const btnClear = el("btnClear");
@@ -1054,6 +1089,18 @@ display:none;
     path: "",
   };
 
+  const editorSoundScan = {
+    active: false,
+    currentX: 0,
+    prevX: 0,
+    speed: 360,
+    startX: 0,
+    endX: 0,
+    musicAudioByIndex: new Map(),
+    spotAudioByIndex: new Map(),
+    spotCooldownByIndex: new Map(),
+    triggeredByIndex: new Set(),
+  };
 
   const levelNameEl = el("levelName");
   const levelWEl = el("levelW");
@@ -2891,6 +2938,201 @@ function parseSmart(v){
   }
 
 
+
+  function getScanBounds(){
+    return {
+      startX: 0,
+      endX: Math.max(0, state.w * TS),
+    };
+  }
+
+  function ensureScanSpeed(){
+    const parsed = Number(scanSpeedEl && scanSpeedEl.value);
+    const speed = Number.isFinite(parsed) && parsed > 0 ? parsed : 360;
+    editorSoundScan.speed = speed;
+    if (scanSpeedEl && Number(scanSpeedEl.value) !== speed) scanSpeedEl.value = String(speed);
+    return speed;
+  }
+
+  function setScanStatus(){
+    if (!scanStatusEl) return;
+    if (!editorSoundScan.active){
+      scanStatusEl.textContent = "Scan: idle";
+      return;
+    }
+    scanStatusEl.textContent = `Scan: ${Math.round(editorSoundScan.currentX)} / ${Math.round(editorSoundScan.endX)} px`;
+  }
+
+  function stopScanMusic(){
+    for (const a of editorSoundScan.musicAudioByIndex.values()){
+      try{ a.pause(); a.currentTime = 0; }catch(_){ }
+    }
+    editorSoundScan.musicAudioByIndex.clear();
+  }
+
+  function stopScanSpot(){
+    for (const a of editorSoundScan.spotAudioByIndex.values()){
+      try{ a.pause(); a.currentTime = 0; }catch(_){ }
+    }
+    editorSoundScan.spotAudioByIndex.clear();
+  }
+
+  function cleanupEditorSoundScan(){
+    stopScanMusic();
+    stopScanSpot();
+    editorSoundScan.triggeredByIndex.clear();
+    editorSoundScan.spotCooldownByIndex.clear();
+  }
+
+  function stopEditorSoundScan(){
+    if (!editorSoundScan.active && editorSoundScan.musicAudioByIndex.size === 0 && editorSoundScan.spotAudioByIndex.size === 0) return;
+    editorSoundScan.active = false;
+    cleanupEditorSoundScan();
+    setScanStatus();
+  }
+
+  function startEditorSoundScan(){
+    stopEditorSoundPreview();
+    stopEditorSoundScan();
+    const speed = ensureScanSpeed();
+    const b = getScanBounds();
+    editorSoundScan.active = true;
+    editorSoundScan.speed = speed;
+    editorSoundScan.startX = b.startX;
+    editorSoundScan.endX = b.endX;
+    editorSoundScan.currentX = b.startX;
+    editorSoundScan.prevX = b.startX;
+    setScanStatus();
+  }
+
+  function getOrCreateLoopingAudio(map, key, path){
+    let a = map.get(key) || null;
+    if (!a){
+      a = new Audio(path);
+      a.preload = "auto";
+      a.loop = true;
+      a.volume = 0;
+      map.set(key, a);
+    }
+    return a;
+  }
+
+  function ensureAudioPlaying(a){
+    if (!a) return;
+    if (!a.paused) return;
+    const p = a.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  }
+
+  function updateScanSounds(){
+    if (!editorSoundScan.active) return;
+    const scanX = editorSoundScan.currentX;
+    const prevX = editorSoundScan.prevX;
+
+    for (let i=0;i<state.ents.length;i++){
+      const ent = state.ents[i];
+      if (!ent || !ent.id || !ent.params) continue;
+      const id = String(ent.id);
+      const soundPath = normalizeSoundPathForEntity(id, ent.params.soundFile);
+      if (!soundPath) continue;
+
+      if (id === "music_zone"){
+        const overlay = getSoundOverlay(ent);
+        if (!overlay || !Number.isFinite(overlay.x0) || !Number.isFinite(overlay.x1)) continue;
+        const inside = scanX >= overlay.x0 && scanX <= overlay.x1;
+        const existing = editorSoundScan.musicAudioByIndex.get(i) || null;
+        if (inside){
+          const a = getOrCreateLoopingAudio(editorSoundScan.musicAudioByIndex, i, soundPath);
+          a.volume = 1;
+          ensureAudioPlaying(a);
+        } else if (existing){
+          try{ existing.pause(); existing.currentTime = 0; }catch(_){ }
+          editorSoundScan.musicAudioByIndex.delete(i);
+        }
+        continue;
+      }
+
+      if (id === "trigger_sound"){
+        const overlay = getSoundOverlay(ent);
+        if (!overlay || !Number.isFinite(overlay.triggerX)) continue;
+        const tx = overlay.triggerX;
+        const crossed = (prevX < tx && scanX >= tx) || (prevX > tx && scanX <= tx);
+        if (crossed && !editorSoundScan.triggeredByIndex.has(i)){
+          editorSoundScan.triggeredByIndex.add(i);
+          const a = new Audio(soundPath);
+          a.preload = "auto";
+          const p = a.play();
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        }
+        continue;
+      }
+
+      if (id === "spot_sound"){
+        const overlay = getSoundOverlay(ent);
+        if (!overlay) continue;
+        const cx = ent.x * TS + TS * 0.5;
+        const radius = Math.max(0, Number(overlay.radiusPx) || 0);
+        if (radius <= 0) continue;
+        const dist = Math.abs(scanX - cx);
+        const t = 1 - clamp(dist / radius, 0, 1);
+        const vol = t > 0 ? t : 0;
+        const existing = editorSoundScan.spotAudioByIndex.get(i) || null;
+
+        if (vol > 0){
+          const a = getOrCreateLoopingAudio(editorSoundScan.spotAudioByIndex, i, soundPath);
+          a.volume = vol;
+          ensureAudioPlaying(a);
+          editorSoundScan.spotCooldownByIndex.set(i, 0.2);
+        } else if (existing){
+          const cool = Math.max(0, Number(editorSoundScan.spotCooldownByIndex.get(i) || 0));
+          if (cool <= 0){
+            try{ existing.pause(); existing.currentTime = 0; }catch(_){ }
+            editorSoundScan.spotAudioByIndex.delete(i);
+            editorSoundScan.spotCooldownByIndex.delete(i);
+          }
+        }
+      }
+    }
+  }
+
+  function updateEditorSoundScan(dt){
+    if (!editorSoundScan.active) return;
+    const delta = Math.max(0, Number(dt) || 0);
+    editorSoundScan.prevX = editorSoundScan.currentX;
+    editorSoundScan.currentX += editorSoundScan.speed * delta;
+    if (editorSoundScan.currentX > editorSoundScan.endX) editorSoundScan.currentX = editorSoundScan.endX;
+
+    for (const [k,v] of editorSoundScan.spotCooldownByIndex.entries()){
+      const next = Math.max(0, v - delta);
+      if (next <= 0) editorSoundScan.spotCooldownByIndex.delete(k);
+      else editorSoundScan.spotCooldownByIndex.set(k, next);
+    }
+
+    updateScanSounds();
+    setScanStatus();
+
+    if (editorSoundScan.currentX >= editorSoundScan.endX){
+      stopEditorSoundScan();
+    }
+  }
+
+  function drawEditorSoundScanLine(){
+    if (!editorSoundScan.active) return;
+    const topY = 0;
+    const botY = state.h * TS;
+    const s0 = worldToScreen(editorSoundScan.currentX, topY);
+    const s1 = worldToScreen(editorSoundScan.currentX, botY);
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 230, 112, 0.95)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8,6]);
+    ctx.beginPath();
+    ctx.moveTo(s0.x, s0.y);
+    ctx.lineTo(s1.x, s1.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
 function updateScrollFromLevel(){
   const el = document.getElementById("retroScroll");
   if (!el) return;
@@ -3461,12 +3703,14 @@ function drawEntities(){
     state._lastRenderT = _now;
     if (!isFinite(dt) || dt <= 0) dt = 1/60;
     dt = Math.min(0.05, dt);
+    updateEditorSoundScan(dt);
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.fillStyle = "rgba(3,10,20,0.75)";
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
     drawTileLayer();
     drawEntities();
+    drawEditorSoundScanLine();
     drawGrid();
     drawCursorPreview();
     drawDarknessOverlay();
@@ -3939,11 +4183,22 @@ if (useFill){
     updateMeta();
   });
 
+  btnScanStart.addEventListener("click", () => {
+    startEditorSoundScan();
+  });
+  btnScanStop.addEventListener("click", () => {
+    stopEditorSoundScan();
+  });
+  scanSpeedEl.addEventListener("change", () => {
+    ensureScanSpeed();
+    setScanStatus();
+  });
+
   btnClear.addEventListener("click", () => {
     if (!confirm("Clear current layer?")) return;
     if (state.layer==="BG"){ state.bg.fill(null); if (state.bgPlacements) state.bgPlacements = []; }
     if (state.layer==="TILES") state.tiles.fill(0);
-    if (state.layer==="ENT"){ state.ents=[]; state.selectedEntIndex=-1; updateSelectedUI(); }
+    if (state.layer==="ENT"){ state.ents=[]; state.selectedEntIndex=-1; updateSelectedUI(); stopEditorSoundScan(); }
     guideRefresh();
   });
 
@@ -4090,6 +4345,7 @@ if (useFill){
       if (!f) return;
       const txt = await f.text();
       try{
+        stopEditorSoundScan();
         window.Lumo = window.Lumo || {};
         window.Lumo.Levels = window.Lumo.Levels || {};
         eval(txt); // lokal file://, används bara här
@@ -4181,6 +4437,8 @@ const mainArr = obj.layers && obj.layers.main;
     setBtnOn(btnDark,false);
     setBtnOn(btnAggro,true);
     setBtnOn(btnErase,false);
+    ensureScanSpeed();
+    setScanStatus();
 
     levelWEl.value = state.w;
     levelHEl.value = state.h;
