@@ -2991,6 +2991,13 @@ function parseSmart(v){
     setScanStatus();
   }
 
+  function updateEditorSoundScanCameraFollow(){
+    if (!editorSoundScan.active) return;
+    const viewLeadPx = canvas.width * 0.15;
+    state.camX = editorSoundScan.currentX + viewLeadPx;
+    clampCamera();
+  }
+
   function startEditorSoundScan(){
     stopEditorSoundPreview();
     stopEditorSoundScan();
@@ -3002,6 +3009,7 @@ function parseSmart(v){
     editorSoundScan.endX = b.endX;
     editorSoundScan.currentX = b.startX;
     editorSoundScan.prevX = b.startX;
+    updateEditorSoundScanCameraFollow();
     setScanStatus();
   }
 
@@ -3101,6 +3109,7 @@ function parseSmart(v){
     editorSoundScan.prevX = editorSoundScan.currentX;
     editorSoundScan.currentX += editorSoundScan.speed * delta;
     if (editorSoundScan.currentX > editorSoundScan.endX) editorSoundScan.currentX = editorSoundScan.endX;
+    updateEditorSoundScanCameraFollow();
 
     for (const [k,v] of editorSoundScan.spotCooldownByIndex.entries()){
       const next = Math.max(0, v - delta);
