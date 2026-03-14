@@ -1687,6 +1687,8 @@ display:none;
           if (state.layer==="BG") state.brushBG = it;
           if (state.layer==="TILES") state.brushTile = it;
           if (state.layer==="ENT") state.brushEnt = it;
+          // Selecting brushes from the palette must never keep a stale canvas-draw state alive.
+          resetPointerPaintState();
           updateMeta();
           renderPalette();
         });
@@ -1714,6 +1716,15 @@ display:none;
     state.tileY = Math.floor(w.y / TS);
   }
   function inBounds(tx,ty){ return tx>=0 && ty>=0 && tx<state.w && ty<state.h; }
+
+  function resetPointerPaintState(){
+    state.lmbDown = false;
+    state.rmbDown = false;
+    state.draggingPan = false;
+    state.volumeDrag = null;
+    state._paintStampKey = null;
+    state._paintStampLayer = null;
+  }
 
   // --- Entity Params Modal (per-instance) ---
   function deepClone(o){
@@ -4548,6 +4559,15 @@ if (useFill){
     state.mouseY = e.clientY - rect.top;
     tileAtMouse();
 
+    // Mouse buttons can be released outside canvas; sync state so drag-paint cannot get stuck.
+    if (!(e.buttons & 1)) state.lmbDown = false;
+    if (!(e.buttons & 2)) state.rmbDown = false;
+    if (!state.lmbDown && !state.rmbDown){
+      state._paintStampKey = null;
+      state._paintStampLayer = null;
+      if (state.volumeDrag) state.volumeDrag = null;
+    }
+
     if (state.draggingPan){
       const dx = (e.clientX - state.dragStartX);
       const dy = (e.clientY - state.dragStartY);
@@ -4584,6 +4604,14 @@ if (useFill){
     }
     clampCamera();
   }, {passive:false});
+
+  window.addEventListener("mouseup", () => {
+    resetPointerPaintState();
+  });
+
+  window.addEventListener("blur", () => {
+    resetPointerPaintState();
+  });
 
   function isTypingTarget(t){
     const tag = t.tagName;
