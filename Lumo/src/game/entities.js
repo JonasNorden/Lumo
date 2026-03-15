@@ -163,10 +163,18 @@
       this._spotSounds.length = 0;
       this._triggerSounds.length = 0;
       this._prevPlayerCenterX = null;
+      this.stopGameplayAudio();
+      this._soundHandles.clear();
+    }
+
+    stopGameplayAudio(){
       for (const h of this._soundHandles.values()){
         try { h.audio.pause(); h.audio.currentTime = 0; } catch(_){ }
+        h.started = false;
+        h.lastTarget = 0;
+        h.lastCrossSide = null;
+        h.oneShotCooldown = 0;
       }
-      this._soundHandles.clear();
     }
 
     loadFromLevel(levelObj){

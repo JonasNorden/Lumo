@@ -956,6 +956,9 @@
 
   function saveAndExitToMenu(){
     const ok = saveRunState();
+    if (ents && typeof ents.stopGameplayAudio === "function"){
+      ents.stopGameplayAudio();
+    }
     paused = false;
     gameState = GameState.MENU;
     pendingNewQuestConfirm = false;
