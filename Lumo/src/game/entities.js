@@ -104,7 +104,8 @@
       if (!handle || !handle.audio) return;
       const t = Math.max(0, Math.min(1, target)) * this._getSfxVolume();
       handle.lastTarget = t;
-      handle.audio.volume = t;
+      // Avoid redundant no-op volume writes when effective target is unchanged.
+      if (Math.abs(handle.audio.volume - t) > 0.0001) handle.audio.volume = t;
       if (t > 0.001){
         if (handle.audio.paused){
           const p = handle.audio.play();
