@@ -963,6 +963,8 @@ display:none;
         <button class="btn" id="btnDark">Darkness</button>
         <button class="btn" id="btnAggro">Aggro</button>
         <button class="btn" id="btnErase">Erase</button>
+        <button class="btn" id="btnUndo" title="Ctrl+Z">Undo</button>
+        <button class="btn" id="btnRedo" title="Ctrl+Y / Ctrl+Shift+Z">Redo</button>
         <button class="btn" id="btnScanStart">Start Scan</button>
         <button class="btn danger" id="btnScanStop">Stop</button>
         <div class="scanCtl">
@@ -1253,6 +1255,8 @@ display:none;
   const btnDark = el("btnDark");
   const btnAggro = el("btnAggro");
   const btnErase = el("btnErase");
+  const btnUndo = el("btnUndo");
+  const btnRedo = el("btnRedo");
   const btnScanStart = el("btnScanStart");
   const btnScanStop = el("btnScanStop");
   const scanSpeedEl = el("scanSpeed");
@@ -1435,6 +1439,11 @@ display:none;
     soundNavigatorFilter: "all",
     soundHeatmapOn: false,
     soundNavigatorRenderKey: "",
+
+    historyPast: [],
+    historyFuture: [],
+    historyLimit: 60,
+    historyTxnActive: false,
   };
 
   function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
@@ -1611,6 +1620,7 @@ display:none;
     const W = parseIntSafe(levelWEl.value, 500);
     const H = parseIntSafe(levelHEl.value, 30);
     if (W === state.w && H === state.h) return;
+    pushHistorySnapshot();
 
     const oldW = state.w, oldH = state.h;
     state.w = W; state.h = H;
@@ -1845,6 +1855,94 @@ display:none;
     state.volumeDrag = null;
     state._paintStampKey = null;
     state._paintStampLayer = null;
+    endHistoryTransaction();
+  }
+
+  function makeHistorySnapshot(){
+    return {
+      w: state.w|0,
+      h: state.h|0,
+      bg: Array.isArray(state.bg) ? state.bg.slice(0) : [],
+      bgPlacements: Array.isArray(state.bgPlacements) ? state.bgPlacements.map((p) => ({ id: p.id, x: p.x|0, y: p.y|0 })) : [],
+      tiles: Array.isArray(state.tiles) ? state.tiles.slice(0) : [],
+      ents: deepClone(Array.isArray(state.ents) ? state.ents : []),
+      selectedEntIndex: Number.isInteger(state.selectedEntIndex) ? state.selectedEntIndex : -1,
+    };
+  }
+
+  function updateHistoryButtons(){
+    if (btnUndo) btnUndo.disabled = state.historyPast.length === 0;
+    if (btnRedo) btnRedo.disabled = state.historyFuture.length === 0;
+  }
+
+  function applyHistorySnapshot(snap){
+    if (!snap || typeof snap !== "object") return;
+    state.w = parseIntSafe(snap.w, state.w);
+    state.h = parseIntSafe(snap.h, state.h);
+    levelWEl.value = state.w;
+    levelHEl.value = state.h;
+
+    const total = state.w * state.h;
+
+    state.bg = Array.isArray(snap.bg) ? snap.bg.slice(0, total) : [];
+    if (state.bg.length < total) state.bg = state.bg.concat(new Array(total - state.bg.length).fill(null));
+
+    state.bgPlacements = Array.isArray(snap.bgPlacements)
+      ? snap.bgPlacements.map((p) => ({ id: p.id, x: p.x|0, y: p.y|0 }))
+      : [];
+
+    state.tiles = Array.isArray(snap.tiles) ? snap.tiles.slice(0, total) : [];
+    if (state.tiles.length < total) state.tiles = state.tiles.concat(new Array(total - state.tiles.length).fill(0));
+
+    state.ents = Array.isArray(snap.ents) ? deepClone(snap.ents) : [];
+    state.selectedEntIndex = Number.isInteger(snap.selectedEntIndex) ? snap.selectedEntIndex : -1;
+    if (state.selectedEntIndex >= state.ents.length) state.selectedEntIndex = state.ents.length - 1;
+
+    clearEditorAudioEntityState();
+    sanitizeEditorAudioEntityState();
+    stopEditorSoundPreview();
+    stopEditorSoundScan();
+
+    clampCamera();
+    updateSelectedUI();
+    state.guideDirty = true;
+    guideRefresh();
+    renderSoundNavigator();
+  }
+
+  function pushHistorySnapshot(){
+    if (state.historyTxnActive) return;
+    state.historyPast.push(makeHistorySnapshot());
+    if (state.historyPast.length > state.historyLimit){
+      state.historyPast.splice(0, state.historyPast.length - state.historyLimit);
+    }
+    state.historyFuture = [];
+    state.historyTxnActive = true;
+    updateHistoryButtons();
+  }
+
+  function endHistoryTransaction(){
+    state.historyTxnActive = false;
+  }
+
+  function undoHistory(){
+    if (!state.historyPast.length) return;
+    const current = makeHistorySnapshot();
+    const prev = state.historyPast.pop();
+    state.historyFuture.push(current);
+    applyHistorySnapshot(prev);
+    endHistoryTransaction();
+    updateHistoryButtons();
+  }
+
+  function redoHistory(){
+    if (!state.historyFuture.length) return;
+    const current = makeHistorySnapshot();
+    const next = state.historyFuture.pop();
+    state.historyPast.push(current);
+    applyHistorySnapshot(next);
+    endHistoryTransaction();
+    updateHistoryButtons();
   }
 
   // --- Entity Params Modal (per-instance) ---
@@ -2357,6 +2455,7 @@ function parseSmart(v){
 
   function removeEntityAtIndex(index){
     if (!Number.isInteger(index) || index < 0 || index >= state.ents.length) return false;
+    pushHistorySnapshot();
     stopScanEntityAudio(index);
     state.ents.splice(index, 1);
     remapEditorAudioEntityStateAfterDelete(index);
@@ -2839,6 +2938,7 @@ function parseSmart(v){
     stopEditorSoundPreview();
     const idxEnt = state.modalEntIndex;
     if (save && idxEnt >= 0 && idxEnt < state.ents.length){
+      pushHistorySnapshot();
       const ent = state.ents[idxEnt];
       const a = state.modalAsset || getEntAssetById(ent.id);
 
@@ -2924,6 +3024,7 @@ function parseSmart(v){
   function resetParamsToDefault(){
     const idxEnt = state.modalEntIndex;
     if (idxEnt < 0 || idxEnt >= state.ents.length) return;
+    pushHistorySnapshot();
     const ent = state.ents[idxEnt];
     const a = state.modalAsset || getEntAssetById(ent.id);
     const def = (a && a.defaults && typeof a.defaults === "object") ? deepClone(a.defaults) : {};
@@ -2970,6 +3071,7 @@ function parseSmart(v){
 
     function applyAt(tx,ty,isErase, opts){
     if (!inBounds(tx,ty)) return;
+    pushHistorySnapshot();
     const shiftKey = !!(opts && opts.shiftKey);
 
     if (state.layer === "BG"){
@@ -3068,6 +3170,7 @@ function parseSmart(v){
   function finalizeVolumeDrag(){
     const vd = state.volumeDrag;
     if (!vd) return;
+    pushHistorySnapshot();
     const asset = getEntAssetById(vd.id);
     if (!asset) return;
 
@@ -4916,6 +5019,7 @@ if (useFill){
               : (typeof state.brushTile.id === "number") ? (state.brushTile.id|0)
               : (typeof state.brushTile.value === "number") ? (state.brushTile.value|0)
               : 1;
+    pushHistorySnapshot();
     const changed = floodFillTiles(tx, ty, tid);
     if (changed > 0){
       state.guideDirty = true;
@@ -4939,6 +5043,7 @@ if (useFill){
     }
 
     // Allow fill of empty areas too (so you can fill inside a ring)
+    pushHistorySnapshot();
     const stamped = floodFillBgOrigins(ox, oy, fw, fh, state.brushBG.id, true);
     if (stamped > 0){
       state.bg = buildEditorBgArray();
@@ -5047,6 +5152,7 @@ if (useFill){
     if (e.button===1) state.draggingPan=false;
     // reset paint de-dupe when stroke ends
     if (e.button===0 || e.button===2){ state._paintStampKey = null; state._paintStampLayer = null; }
+    if (e.button===0 || e.button===2){ endHistoryTransaction(); }
 
   });
 
@@ -5119,6 +5225,19 @@ if (useFill){
     if (e.code==="Space") state.spaceDown = true;
     if (isTypingTarget(e.target)) return;
 
+    const ctrlLike = e.ctrlKey || e.metaKey;
+    if (ctrlLike && e.code === "KeyZ"){
+      e.preventDefault();
+      if (e.shiftKey) redoHistory();
+      else undoHistory();
+      return;
+    }
+    if (ctrlLike && e.code === "KeyY"){
+      e.preventDefault();
+      redoHistory();
+      return;
+    }
+
     const step = 3 * TS;
     let moved = false;
     switch(e.code){
@@ -5165,6 +5284,8 @@ if (useFill){
     setBtnOn(btnErase, state.eraseMode);
     updateMeta();
   });
+  btnUndo.addEventListener("click", () => undoHistory());
+  btnRedo.addEventListener("click", () => redoHistory());
 
   btnScanStart.addEventListener("click", () => {
     startEditorSoundScan();
@@ -5182,6 +5303,7 @@ if (useFill){
 
   btnClear.addEventListener("click", () => {
     if (!confirm("Clear current layer?")) return;
+    pushHistorySnapshot();
     if (state.layer==="BG"){ state.bg.fill(null); if (state.bgPlacements) state.bgPlacements = []; }
     if (state.layer==="TILES") state.tiles.fill(0);
     if (state.layer==="ENT"){
@@ -5421,6 +5543,10 @@ const mainArr = obj.layers && obj.layers.main;
 
         state.selectedEntIndex=-1;
         updateSelectedUI();
+        state.historyPast = [];
+        state.historyFuture = [];
+        endHistoryTransaction();
+        updateHistoryButtons();
     state.guideDirty = true;
         clampCamera();
         guideRefresh();
@@ -5443,6 +5569,7 @@ const mainArr = obj.layers && obj.layers.main;
     setBtnOn(btnDark,false);
     setBtnOn(btnAggro,true);
     setBtnOn(btnErase,false);
+    updateHistoryButtons();
     ensureScanSpeed();
     setScanStatus();
     setRightPanelTab("inspector");
