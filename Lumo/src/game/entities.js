@@ -2267,6 +2267,20 @@ if (e.type === "lantern"){
     isFlareInsideAnyDarkCreatureAggro(flare, tileSize){
       return !!this.findDarkCreatureConsumingFlare(flare, tileSize);
     }
+
+    _isNearCamera(e, cam, pad = 0){
+      if (!cam) return true;
+      const x = e.x + (e._offX || 0);
+      const y = e.y + (e._offY || 0);
+      const w = e.w || 0;
+      const h = e.h || 0;
+      const minX = cam.x - pad;
+      const minY = cam.y - pad;
+      const maxX = cam.x + cam.w + pad;
+      const maxY = cam.y + cam.h + pad;
+      return (x + w) >= minX && x <= maxX && (y + h) >= minY && y <= maxY;
+    }
+
     // Firefly trigger: ONLY reacts to Lumo / lantern / flare (NOT itself, NOT other fireflies)
     isFireflyTriggeredByAnyLight(x, y, player, aggroR, self){
       const r = (typeof aggroR === "number") ? aggroR : 0;
@@ -2323,6 +2337,11 @@ if (e.type === "lantern"){
 
       for (const e of this.items){
         if (!e.active) continue;
+
+        // First-pass conservative culling: keep nearby lights only.
+        // Radius-based pad avoids popping when a light source is just outside the viewport.
+        const lightPad = Math.max(220, (e.radius || e.lightRadius || e.radius0 || 0));
+        if (!this._isNearCamera(e, cam, lightPad)) continue;
 
         if (e.type === "lantern"){
           lights.push({
@@ -2390,6 +2409,7 @@ if (e.type === "lantern"){
     draw(ctx, cam){
       for (const e of this.items){
         if (!e.active) continue;
+        if (!this._isNearCamera(e, cam, 64)) continue;
 
         let sx, sy;
 if (e.type === "lantern"){
@@ -2827,6 +2847,7 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
       for (const e of this.items){
         if (!e.active || e.type !== "hoverVoid") continue;
         if (!e.awake) continue;
+        if (!this._isNearCamera(e, cam, 96)) continue;
 
         const sx = Math.floor((e.x - cam.x) + (e._offX || 0));
         const sy = Math.floor((e.y - cam.y) + (e._offY || 0));
