@@ -1004,6 +1004,13 @@ display:none;
         </div>
         <div class="pill" id="scanStatus">Scan: idle</div>
         <button class="btn" id="btnShortcuts" title="Shortcuts (Shift+/ or H)">?</button>
+        <div class="scanCtl">
+          <label for="exportProfile">Export</label>
+          <select class="scanInput" id="exportProfile">
+            <option value="full">Full editor package</option>
+            <option value="runtime">Runtime package</option>
+          </select>
+        </div>
         <button class="btn primary" id="btnExport">Export .js</button>
         <button class="btn" id="btnImport">Import .js</button>
       </div>
@@ -1331,6 +1338,7 @@ display:none;
   const scanSpeedEl = el("scanSpeed");
   const scanStartModeEl = el("scanStartMode");
   const scanStatusEl = el("scanStatus");
+  const exportProfileEl = el("exportProfile");
   const btnExport = el("btnExport");
   const btnImport = el("btnImport");
   const btnClear = el("btnClear");
@@ -5818,7 +5826,7 @@ if (useFill){
     t.addEventListener("click", () => setLayer(t.dataset.tab));
   }
 
-  function makeLevelObject(){
+  function makeLevelObject(profile = "full"){
     ensureLevelSize();
 
     // Runtime schema: entities must live in level.layers.ents
@@ -5837,6 +5845,27 @@ if (useFill){
       params:outParams
     };});
 
+    const editorBg = (function(){
+      const total = state.w * state.h;
+      // If we have explicit BG placements, convert them to a per-tile array for runtime.
+      if (state.bgPlacements && state.bgPlacements.length){
+        const arr = new Array(total).fill(null);
+        for (let i=0;i<state.bgPlacements.length;i++){
+          const p = state.bgPlacements[i];
+          if (!p) continue;
+          const x = (p.x|0), y = (p.y|0);
+          if (x<0||y<0||x>=state.w||y>=state.h) continue;
+          arr[idx(x,y)] = p.id;
+        }
+        return arr;
+      }
+      // Fallback: whatever finns i state.bg (t.ex. äldre levels utan placements).
+      const bg = Array.isArray(state.bg) ? state.bg : [];
+      const out = bg.slice(0, total);
+      if (out.length < total) out.push(...new Array(total - out.length).fill(null));
+      return out;
+    })();
+
     const levelObj = {
       meta:{
         name:(levelNameEl.value||"level01").trim(),
@@ -5848,31 +5877,21 @@ if (useFill){
       layers:{
         main: state.tiles.slice(0),
         ents: entsOut
-      },
-      editor:{
-        bg: (function(){
-          const total = state.w * state.h;
-          // If we have explicit BG placements, convert them to a per-tile array for runtime.
-          if (state.bgPlacements && state.bgPlacements.length){
-            const arr = new Array(total).fill(null);
-            for (let i=0;i<state.bgPlacements.length;i++){
-              const p = state.bgPlacements[i];
-              if (!p) continue;
-              const x = (p.x|0), y = (p.y|0);
-              if (x<0||y<0||x>=state.w||y>=state.h) continue;
-              arr[idx(x,y)] = p.id;
-            }
-            return arr;
-          }
-          // Fallback: whatever finns i state.bg (t.ex. äldre levels utan placements).
-          const bg = Array.isArray(state.bg) ? state.bg : [];
-          const out = bg.slice(0, total);
-          if (out.length < total) out.push(...new Array(total - out.length).fill(null));
-          return out;
-        })(),
-        bgPlacements: (state.bgPlacements && state.bgPlacements.length) ? state.bgPlacements.map(p=>({id:p.id,x:p.x|0,y:p.y|0})) : [],
-        ents: entsOut
       }
+    };
+
+    // Runtime profile strips editor-only/duplicated payload while keeping runtime-compatible shape.
+    if (profile === "runtime"){
+      levelObj.editor = {
+        bg: editorBg
+      };
+      return levelObj;
+    }
+
+    levelObj.editor = {
+      bg: editorBg,
+      bgPlacements: (state.bgPlacements && state.bgPlacements.length) ? state.bgPlacements.map(p=>({id:p.id,x:p.x|0,y:p.y|0})) : [],
+      ents: entsOut
     };
     return levelObj;
   }
@@ -5935,7 +5954,8 @@ if (useFill){
   }
 
   btnExport.addEventListener("click", () => {
-    const levelObj = makeLevelObject();
+    const exportProfile = exportProfileEl ? exportProfileEl.value : "full";
+    const levelObj = makeLevelObject(exportProfile);
     const name = (levelObj.meta.name||"level01").trim();
     const fileName = `${name}.js`;
     const js =
