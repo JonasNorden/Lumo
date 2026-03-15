@@ -1434,6 +1434,7 @@ display:none;
     rightPanelTab: "inspector",
     soundNavigatorFilter: "all",
     soundHeatmapOn: false,
+    soundNavigatorRenderKey: "",
   };
 
   function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
@@ -3256,6 +3257,21 @@ function parseSmart(v){
       rows.push({ index:i, ent, type, soundFile });
     }
 
+    const nextRenderKey = JSON.stringify({
+      filter: state.soundNavigatorFilter,
+      heatmapOn: !!state.soundHeatmapOn,
+      selectedEntIndex: state.selectedEntIndex,
+      rows: rows.map((r) => ({
+        index: r.index,
+        type: r.type,
+        soundFile: r.soundFile,
+        x: r.ent && r.ent.x,
+        y: r.ent && r.ent.y,
+      })),
+    });
+    if (state.soundNavigatorRenderKey === nextRenderKey) return;
+    state.soundNavigatorRenderKey = nextRenderKey;
+
     navigatorPane.innerHTML = `
       <div class="inspectorCard">
         <h3 class="inspectorTitle">Sound Navigator</h3>
@@ -4668,7 +4684,7 @@ function drawEntities(){
 
     hoverInfo();
     renderScanMonitor();
-    renderSoundNavigator();
+    if (state.rightPanelTab === "navigator") renderSoundNavigator();
     renderMinimap();
 
     // Live Guide: refresh only when visible and something changed
