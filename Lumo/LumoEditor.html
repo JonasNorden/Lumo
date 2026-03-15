@@ -3292,6 +3292,9 @@ function parseSmart(v){
   function onNavigatorPointerDown(ev){
     if (!navigatorPane || navigatorPane.classList.contains("hidden")) return;
 
+    const filterSelect = ev.target.closest("#soundNavigatorFilter");
+    if (filterSelect && navigatorPane.contains(filterSelect)) return;
+
     const heatmapBtn = ev.target.closest("#soundHeatmapToggle");
     if (heatmapBtn){
       ev.preventDefault();
