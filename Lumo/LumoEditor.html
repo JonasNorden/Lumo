@@ -5896,6 +5896,91 @@ if (useFill){
     return levelObj;
   }
 
+  function validateLevelForExport(levelObj){
+    // First-pass editor/export-side contract validation: warn about malformed content early so runtime fallbacks are needed less often.
+    const warnings = [];
+    if (!levelObj || typeof levelObj !== "object"){
+      warnings.push("Level payload saknas eller är ogiltig.");
+      return warnings;
+    }
+
+    const meta = levelObj.meta && typeof levelObj.meta === "object" ? levelObj.meta : {};
+    const w = Number(meta.w);
+    const h = Number(meta.h);
+    if (!Number.isInteger(w) || w <= 0 || !Number.isInteger(h) || h <= 0){
+      warnings.push(`Level-dimensioner ogiltiga i export (w=${JSON.stringify(meta.w)}, h=${JSON.stringify(meta.h)}).`);
+    }
+
+    const main = levelObj.layers && Array.isArray(levelObj.layers.main) ? levelObj.layers.main : null;
+    if (!main){
+      warnings.push("Main tile-layer saknas i export.");
+    } else if (Number.isInteger(w) && w > 0 && Number.isInteger(h) && h > 0){
+      const need = w * h;
+      if (main.length !== need){
+        warnings.push(`Main tile-layer har längd ${main.length}, förväntat ${need} för ${w}x${h}.`);
+      }
+    }
+
+    const entCatalog = new Map((state.catalogs.ENT || []).map((a) => [String(a.id || ""), a]));
+    const ents = levelObj.layers && Array.isArray(levelObj.layers.ents) ? levelObj.layers.ents : [];
+    const starts = [];
+
+    for (let i=0;i<ents.length;i++){
+      const ent = ents[i];
+      if (!ent || typeof ent !== "object"){
+        warnings.push(`Entity #${i} saknas/är ogiltig i layers.ents.`);
+        continue;
+      }
+
+      const id = String(ent.id || "").trim();
+      if (!id){
+        warnings.push(`Entity #${i} saknar id.`);
+        continue;
+      }
+
+      if (id === "start" || id === "start_01" || id.startsWith("start")) starts.push(ent);
+
+      const asset = entCatalog.get(id);
+      if (!asset){
+        warnings.push(`Entity #${i} använder okänt id '${id}'.`);
+        continue;
+      }
+
+      if (!Number.isFinite(Number(ent.x)) || !Number.isFinite(Number(ent.y))){
+        warnings.push(`Entity #${i} (${id}) har ogiltig position x/y.`);
+      }
+
+      const params = (ent.params && typeof ent.params === "object") ? ent.params : {};
+      const defaults = (asset.defaults && typeof asset.defaults === "object") ? asset.defaults : null;
+      if (defaults){
+        for (const [key, defVal] of Object.entries(defaults)){
+          if (typeof defVal !== "number") continue;
+          if (!Object.prototype.hasOwnProperty.call(params, key)) continue;
+          const raw = params[key];
+          if (!Number.isFinite(Number(raw))){
+            warnings.push(`Entity #${i} (${id}) param '${key}' är inte numerisk (${JSON.stringify(raw)}).`);
+          }
+        }
+      }
+
+      if (["music_zone", "spot_sound", "trigger_sound"].includes(id)){
+        const soundPath = normalizeSoundPathForEntity(id, params.soundFile);
+        const known = getKnownSoundPathSet();
+        if (!soundPath){
+          warnings.push(`Entity #${i} (${id}) saknar soundFile.`);
+        } else if (!known.has(soundPath)){
+          warnings.push(`Entity #${i} (${id}) har okänd soundFile '${soundPath}'.`);
+        }
+      }
+    }
+
+    if (!starts.length){
+      warnings.push("Start-entity saknas (start_01). Spawning kan falla tillbaka i runtime.");
+    }
+
+    return warnings;
+  }
+
   const EDITOR_PLAY_LEVEL_KEY = "lumo.editorPlay.level.v1";
   const EDITOR_PLAY_SPAWN_KEY = "lumo.editorPlay.spawn.v1";
 
@@ -5956,6 +6041,7 @@ if (useFill){
   btnExport.addEventListener("click", () => {
     const exportProfile = exportProfileEl ? exportProfileEl.value : "full";
     const levelObj = makeLevelObject(exportProfile);
+    const exportWarnings = validateLevelForExport(levelObj);
     const name = (levelObj.meta.name||"level01").trim();
     const fileName = `${name}.js`;
     const js =
@@ -5966,6 +6052,14 @@ if (useFill){
 
 })();`;
     downloadText(fileName, js);
+    if (exportWarnings.length){
+      const maxLines = 8;
+      const lines = exportWarnings.slice(0, maxLines).map((w, i) => `${i+1}. ${w}`);
+      if (exportWarnings.length > maxLines) lines.push(`… +${exportWarnings.length - maxLines} fler varningar.`);
+      console.warn(`[LumoEditor][export-validation] ${exportWarnings.length} warning(s)`, exportWarnings);
+      alert(`Exported: ${fileName}\nVarningar (${exportWarnings.length}):\n${lines.join("\n")}\n\nLägg filen i data/levels/ och testa i runtime.`);
+      return;
+    }
     alert(`Exported: ${fileName}\nLägg den i data/levels/ och ladda den via spelets loader.`);
   });
 
