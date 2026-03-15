@@ -374,6 +374,43 @@
     }
     .monitorState.active{ color:var(--ok); }
     .monitorState.inactive{ color:var(--muted); }
+    .navigatorToolbar{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      margin-bottom:8px;
+    }
+    .navigatorToolbar .inspectorSelect{ flex:1; }
+    .navigatorList{
+      display:flex;
+      flex-direction:column;
+      gap:6px;
+    }
+    .navigatorItem{
+      width:100%;
+      text-align:left;
+      border:1px solid rgba(127,166,201,.16);
+      border-radius:10px;
+      background:rgba(3,10,20,.25);
+      color:var(--text);
+      padding:8px 10px;
+      cursor:pointer;
+      font-size:12px;
+    }
+    .navigatorItem.on{
+      border-color: rgba(71,215,255,.55);
+      background:rgba(8,26,44,.60);
+      box-shadow: 0 0 0 1px rgba(71,215,255,.18);
+    }
+    .navigatorMeta{
+      display:flex;
+      justify-content:space-between;
+      gap:8px;
+      font-family:var(--mono);
+      font-size:11px;
+      color:var(--muted);
+      margin-top:4px;
+    }
     .canvas{ width:100%; height:100%; display:block; }
     .hud{
       position:absolute;
@@ -1000,11 +1037,13 @@ display:none;
         <button type="button" class="rightTab on" id="rightTabInspector" data-right-tab="inspector">Audio Inspector</button>
         <button type="button" class="rightTab" id="rightTabScan" data-right-tab="scan">Scan Monitor</button>
         <button type="button" class="rightTab" id="rightTabGlobalAudio" data-right-tab="global-audio">Global Audio</button>
+        <button type="button" class="rightTab" id="rightTabNavigator" data-right-tab="navigator">Sound Navigator</button>
       </div>
       <div class="rightPanelBody" id="rightPanelBody">
         <section class="inspectorPane" id="inspectorPane"></section>
         <section class="scanPane hidden" id="scanPane"></section>
         <section class="scanPane hidden" id="globalAudioPane"></section>
+        <section class="scanPane hidden" id="navigatorPane"></section>
       </div>
     </aside>
 
@@ -1239,9 +1278,11 @@ display:none;
   const rightTabInspector = el("rightTabInspector");
   const rightTabScan = el("rightTabScan");
   const rightTabGlobalAudio = el("rightTabGlobalAudio");
+  const rightTabNavigator = el("rightTabNavigator");
   const inspectorPane = el("inspectorPane");
   const scanPane = el("scanPane");
   const globalAudioPane = el("globalAudioPane");
+  const navigatorPane = el("navigatorPane");
 
   const GLOBAL_AUDIO_STATES = ["menu", "settings", "fan_art", "playing", "paused", "game_over", "intermission"];
   const GLOBAL_AUDIO_UI_STATES = ["menu", "settings", "fan_art", "game_over", "intermission"];
@@ -1391,6 +1432,8 @@ display:none;
     modalEntIndex: -1,
     modalAsset: null,
     rightPanelTab: "inspector",
+    soundNavigatorFilter: "all",
+    soundHeatmapOn: false,
   };
 
   function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
@@ -3094,14 +3137,16 @@ function parseSmart(v){
   }
 
   function setRightPanelTab(tab){
-    const next = tab === "scan" ? "scan" : (tab === "global-audio" ? "global-audio" : "inspector");
+    const next = (tab === "scan" || tab === "global-audio" || tab === "navigator") ? tab : "inspector";
     state.rightPanelTab = next;
     rightTabInspector.classList.toggle("on", next === "inspector");
     rightTabScan.classList.toggle("on", next === "scan");
     rightTabGlobalAudio.classList.toggle("on", next === "global-audio");
+    rightTabNavigator.classList.toggle("on", next === "navigator");
     inspectorPane.classList.toggle("hidden", next !== "inspector");
     scanPane.classList.toggle("hidden", next !== "scan");
     globalAudioPane.classList.toggle("hidden", next !== "global-audio");
+    navigatorPane.classList.toggle("hidden", next !== "navigator");
   }
 
   function renderGlobalAudioPanel(){
@@ -3189,6 +3234,136 @@ function parseSmart(v){
         alert(`Exported: data/${fileName}`);
       });
     }
+  }
+
+  function getSoundNavigatorTypeLabel(ent){
+    const id = String(ent && ent.id || "");
+    if (id === "music_zone") return "MusicZone";
+    if (id === "spot_sound") return "SpotSound";
+    if (id === "trigger_sound") return "TriggerSound";
+    return "";
+  }
+
+  function renderSoundNavigator(){
+    if (!navigatorPane) return;
+    const rows = [];
+    for (let i=0;i<state.ents.length;i++){
+      const ent = state.ents[i];
+      const type = getSoundNavigatorTypeLabel(ent);
+      if (!type) continue;
+      if (state.soundNavigatorFilter !== "all" && state.soundNavigatorFilter !== type) continue;
+      const soundFile = getSoundFileDisplayName(ent && ent.params && ent.params.soundFile, 26) || "(none)";
+      rows.push({ index:i, ent, type, soundFile });
+    }
+
+    navigatorPane.innerHTML = `
+      <div class="inspectorCard">
+        <h3 class="inspectorTitle">Sound Navigator</h3>
+        <div class="navigatorToolbar">
+          <select class="inspectorSelect" id="soundNavigatorFilter">
+            <option value="all">All</option>
+            <option value="MusicZone">MusicZone</option>
+            <option value="SpotSound">SpotSound</option>
+            <option value="TriggerSound">TriggerSound</option>
+          </select>
+          <button type="button" class="btn" id="soundHeatmapToggle">${state.soundHeatmapOn ? "Heatmap: ON" : "Heatmap: OFF"}</button>
+        </div>
+        <div class="inspectorHint">Click a row to jump camera + select/highlight entity.</div>
+      </div>
+      <div class="navigatorList">${rows.length ? rows.map((r) => `
+        <button type="button" class="navigatorItem ${state.selectedEntIndex === r.index ? "on" : ""}" data-nav-ent-index="${r.index}">
+          <div><b>${r.type}</b> ${r.soundFile}</div>
+          <div class="navigatorMeta"><span>index ${r.index}</span><span>@ (${r.ent.x}, ${r.ent.y})</span></div>
+        </button>
+      `).join("") : '<div class="inspectorHint">No sound entities with current filter.</div>'}</div>
+    `;
+
+    const filterEl = el("soundNavigatorFilter");
+    if (filterEl){
+      filterEl.value = state.soundNavigatorFilter;
+      filterEl.addEventListener("change", () => {
+        state.soundNavigatorFilter = filterEl.value || "all";
+        renderSoundNavigator();
+      });
+    }
+
+    const heatmapBtn = el("soundHeatmapToggle");
+    if (heatmapBtn){
+      heatmapBtn.addEventListener("click", () => {
+        state.soundHeatmapOn = !state.soundHeatmapOn;
+        renderSoundNavigator();
+      });
+    }
+
+    navigatorPane.querySelectorAll("[data-nav-ent-index]").forEach((node) => {
+      node.addEventListener("click", () => {
+        const index = Number(node.getAttribute("data-nav-ent-index"));
+        if (!Number.isInteger(index) || index < 0 || index >= state.ents.length) return;
+        const ent = state.ents[index];
+        state.selectedEntIndex = index;
+        focusWorldAtTile(ent.x, ent.y);
+        guidePingAtTile(ent.x, ent.y);
+        updateSelectedUI();
+        state.guideDirty = true;
+        renderSoundNavigator();
+      });
+    });
+  }
+
+  function drawSoundHeatmapOverlay(){
+    if (!state.soundHeatmapOn) return;
+    const cell = TS * 2;
+    const worldW = state.w * TS;
+    const worldH = state.h * TS;
+    const xStart = Math.max(0, Math.floor((state.camX - canvas.width/2) / cell) - 1);
+    const xEnd = Math.min(Math.ceil(worldW / cell), Math.ceil((state.camX + canvas.width/2) / cell) + 1);
+    const yStart = Math.max(0, Math.floor((state.camY - canvas.height/2) / cell) - 1);
+    const yEnd = Math.min(Math.ceil(worldH / cell), Math.ceil((state.camY + canvas.height/2) / cell) + 1);
+
+    const soundItems = [];
+    for (const ent of state.ents){
+      if (!ent) continue;
+      const overlay = getSoundOverlay(ent);
+      if (!overlay) continue;
+      if (overlay.type !== "spot" && overlay.type !== "music") continue;
+      soundItems.push({ ent, overlay });
+    }
+
+    ctx.save();
+    for (let gy=yStart; gy<=yEnd; gy++){
+      for (let gx=xStart; gx<=xEnd; gx++){
+        const cx = gx * cell + cell * 0.5;
+        const cy = gy * cell + cell * 0.5;
+        let intensity = 0;
+        for (const item of soundItems){
+          const ov = item.overlay;
+          if (ov.type === "music"){
+            const inside = (cx >= ov.x0 && cx <= ov.x1) ? 1 : 0;
+            if (inside > 0) intensity += 0.45;
+          } else if (ov.type === "spot"){
+            const ex = item.ent.x * TS + TS * 0.5;
+            const ey = item.ent.y * TS + TS * 0.5;
+            const r = Math.max(0, Number(ov.radiusPx) || 0);
+            if (r <= 0) continue;
+            const d = Math.hypot(cx - ex, cy - ey);
+            if (d >= r) continue;
+            intensity += (1 - (d / r)) * 0.9;
+          }
+        }
+        intensity = clamp(intensity, 0, 1);
+        if (intensity <= 0.02) continue;
+
+        let color = "rgba(80, 130, 255, 0.22)";
+        if (intensity >= 0.66) color = "rgba(255, 166, 74, 0.30)";
+        else if (intensity >= 0.33) color = "rgba(64, 238, 255, 0.26)";
+
+        const sp = worldToScreen(gx * cell, gy * cell);
+        const sp2 = worldToScreen(gx * cell + cell, gy * cell + cell);
+        ctx.fillStyle = color;
+        ctx.fillRect(Math.min(sp.x, sp2.x), Math.min(sp.y, sp2.y), Math.abs(sp2.x - sp.x), Math.abs(sp2.y - sp.y));
+      }
+    }
+    ctx.restore();
   }
 
   function renderAudioInspector(){
@@ -4471,6 +4646,7 @@ function drawEntities(){
 
     drawTileLayer();
     drawEntities();
+    drawSoundHeatmapOverlay();
     drawEditorSoundScanLine();
     drawGrid();
     drawCursorPreview();
@@ -4485,6 +4661,7 @@ function drawEntities(){
 
     hoverInfo();
     renderScanMonitor();
+    renderSoundNavigator();
     renderMinimap();
 
     // Live Guide: refresh only when visible and something changed
@@ -5026,6 +5203,7 @@ if (useFill){
   rightTabInspector.addEventListener("click", () => setRightPanelTab("inspector"));
   rightTabScan.addEventListener("click", () => setRightPanelTab("scan"));
   rightTabGlobalAudio.addEventListener("click", () => setRightPanelTab("global-audio"));
+  rightTabNavigator.addEventListener("click", () => setRightPanelTab("navigator"));
 
 
   // Modal wiring
