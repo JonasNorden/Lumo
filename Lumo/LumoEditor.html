@@ -1429,6 +1429,7 @@ display:none;
     brushEnt: null,
     entToolMode: "DRAW",
     selectedEntIndex: -1,
+    entityClipboard: null,
     stackCycleIndex: 0,
 
     guideOpen: false,
@@ -2470,6 +2471,63 @@ function parseSmart(v){
     remapEditorAudioEntityStateAfterDelete(index);
     if (state.selectedEntIndex === index) state.selectedEntIndex = -1;
     else if (state.selectedEntIndex > index) state.selectedEntIndex--;
+    return true;
+  }
+
+  function cloneEntityForClipboard(ent){
+    if (!ent || typeof ent !== "object") return null;
+    return {
+      id: ent.id,
+      x: ent.x|0,
+      y: ent.y|0,
+      w: Number.isFinite(Number(ent.w)) ? Number(ent.w) : TS,
+      h: Number.isFinite(Number(ent.h)) ? Number(ent.h) : TS,
+      anchor: ent.anchor || "BL",
+      offX: Number.isFinite(Number(ent.offX)) ? Number(ent.offX) : 0,
+      offY: Number.isFinite(Number(ent.offY)) ? Number(ent.offY) : 0,
+      aggroRadius: Number.isFinite(Number(ent.aggroRadius)) ? Number(ent.aggroRadius) : 0,
+      params: deepClone(ent.params || {}),
+    };
+  }
+
+  function copySelectedEntityToClipboard(){
+    const i = state.selectedEntIndex;
+    if (!Number.isInteger(i) || i < 0 || i >= state.ents.length) return false;
+    state.entityClipboard = cloneEntityForClipboard(state.ents[i]);
+    return !!state.entityClipboard;
+  }
+
+  function getPasteEntityTile(clipboard){
+    const mouseTx = state.tileX|0;
+    const mouseTy = state.tileY|0;
+    if (inBounds(mouseTx, mouseTy)) return { tx: mouseTx, ty: mouseTy };
+
+    const baseX = Number.isFinite(Number(clipboard && clipboard.x)) ? (clipboard.x|0) : 0;
+    const baseY = Number.isFinite(Number(clipboard && clipboard.y)) ? (clipboard.y|0) : 0;
+    return {
+      tx: clamp(baseX + 1, 0, state.w - 1),
+      ty: clamp(baseY + 1, 0, state.h - 1),
+    };
+  }
+
+  function pasteEntityFromClipboard(){
+    const clip = state.entityClipboard;
+    if (!clip || typeof clip !== "object") return false;
+    const clone = cloneEntityForClipboard(clip);
+    if (!clone) return false;
+
+    const pos = getPasteEntityTile(clone);
+    if (!inBounds(pos.tx, pos.ty)) return false;
+
+    pushHistorySnapshot();
+    clone.x = pos.tx;
+    clone.y = pos.ty;
+    clone.order = state.ents.length;
+    clone.params = deepClone(clone.params || {});
+    state.ents.push(clone);
+    state.selectedEntIndex = state.ents.length - 1;
+    updateSelectedUI();
+    state.guideDirty = true;
     return true;
   }
 
@@ -5399,6 +5457,16 @@ if (useFill){
     if (ctrlLike && e.code === "KeyY"){
       e.preventDefault();
       redoHistory();
+      return;
+    }
+    if (ctrlLike && e.code === "KeyC"){
+      e.preventDefault();
+      copySelectedEntityToClipboard();
+      return;
+    }
+    if (ctrlLike && e.code === "KeyV"){
+      e.preventDefault();
+      pasteEntityFromClipboard();
       return;
     }
 
