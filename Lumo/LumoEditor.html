@@ -999,10 +999,12 @@ display:none;
       <div class="rightTabs">
         <button type="button" class="rightTab on" id="rightTabInspector" data-right-tab="inspector">Audio Inspector</button>
         <button type="button" class="rightTab" id="rightTabScan" data-right-tab="scan">Scan Monitor</button>
+        <button type="button" class="rightTab" id="rightTabGlobalAudio" data-right-tab="global-audio">Global Audio</button>
       </div>
       <div class="rightPanelBody" id="rightPanelBody">
         <section class="inspectorPane" id="inspectorPane"></section>
         <section class="scanPane hidden" id="scanPane"></section>
+        <section class="scanPane hidden" id="globalAudioPane"></section>
       </div>
     </aside>
 
@@ -1236,8 +1238,22 @@ display:none;
   const pingDot = el("pingDot");
   const rightTabInspector = el("rightTabInspector");
   const rightTabScan = el("rightTabScan");
+  const rightTabGlobalAudio = el("rightTabGlobalAudio");
   const inspectorPane = el("inspectorPane");
   const scanPane = el("scanPane");
+  const globalAudioPane = el("globalAudioPane");
+
+  const GLOBAL_AUDIO_STATES = ["menu", "settings", "fan_art", "playing", "paused", "game_over", "intermission"];
+  const GLOBAL_AUDIO_UI_STATES = ["menu", "settings", "fan_art", "game_over", "intermission"];
+  const GLOBAL_AUDIO_LABELS = {
+    menu: "Menu Music",
+    settings: "Settings Music",
+    fan_art: "Fan Art Music",
+    playing: "Playing Music",
+    paused: "Paused Music",
+    game_over: "Game Over Music",
+    intermission: "Intermission Music",
+  };
 
   const paramModal = el("paramModal");
   const paramModalBackdrop = el("paramModalBackdrop");
@@ -1344,6 +1360,22 @@ display:none;
     ents: [],
 
     catalogs: { BG: [], TILES: [], ENT: [], AUDIO: {} },
+    globalAudioConfig: {
+      musicByState: {
+        menu: null,
+        settings: null,
+        fan_art: null,
+        playing: null,
+        paused: null,
+        game_over: null,
+        intermission: null,
+      },
+      behavior: {
+        loopDefault: true,
+        autoplayUnlockRequiredForMenu: true,
+      }
+    },
+    globalAudioPreviewState: "menu",
     imgCache: new Map(),
     brushBG: null,
     brushTile: null,
@@ -1564,6 +1596,7 @@ display:none;
       {src:"data/catalog_tiles.js", key:"TILES", winKey:"LUMO_CATALOG_TILES"},
       {src:"data/catalog_entities.js", key:"ENT", winKey:"LUMO_CATALOG_ENTITIES"},
       {src:"data/audio_manifest.js", key:"AUDIO", winKey:"LUMO_AUDIO_MANIFEST"},
+      {src:"data/audio_global_config.js", key:"AUDIO_GLOBAL", winKey:"LUMO_AUDIO_GLOBAL_CONFIG"},
     ];
 
     for (const s of scripts){
@@ -1577,6 +1610,8 @@ display:none;
       const arr = window[s.winKey];
       if (s.key === "AUDIO" && arr && typeof arr === "object") {
         state.catalogs[s.key] = arr;
+      } else if (s.key === "AUDIO_GLOBAL" && arr && typeof arr === "object") {
+        setGlobalAudioConfigFromSource(arr);
       } else if (Array.isArray(arr)) {
         state.catalogs[s.key] = arr;
       }
@@ -1591,6 +1626,43 @@ display:none;
 
     updateMeta();
     renderPalette();
+    renderGlobalAudioPanel();
+  }
+
+  function getDefaultGlobalAudioConfig(){
+    return {
+      musicByState: {
+        menu: null,
+        settings: null,
+        fan_art: null,
+        playing: null,
+        paused: null,
+        game_over: null,
+        intermission: null,
+      },
+      behavior: {
+        loopDefault: true,
+        autoplayUnlockRequiredForMenu: true,
+      }
+    };
+  }
+
+  function setGlobalAudioConfigFromSource(cfg){
+    const base = getDefaultGlobalAudioConfig();
+    const src = (cfg && typeof cfg === "object") ? cfg : {};
+    const byState = (src.musicByState && typeof src.musicByState === "object") ? src.musicByState : {};
+    const behavior = (src.behavior && typeof src.behavior === "object") ? src.behavior : {};
+
+    for (const stateKey of GLOBAL_AUDIO_STATES){
+      const raw = byState[stateKey];
+      base.musicByState[stateKey] = (typeof raw === "string" && raw.trim()) ? raw.trim() : null;
+    }
+    base.behavior.loopDefault = (typeof behavior.loopDefault === "boolean") ? behavior.loopDefault : true;
+    base.behavior.autoplayUnlockRequiredForMenu = (typeof behavior.autoplayUnlockRequiredForMenu === "boolean")
+      ? behavior.autoplayUnlockRequiredForMenu
+      : true;
+
+    state.globalAudioConfig = base;
   }
 
   function setLayer(layer){
@@ -2174,6 +2246,7 @@ function parseSmart(v){
     editorSoundPreview.audio = null;
     editorSoundPreview.path = "";
     renderAudioInspector();
+    renderGlobalAudioPanel();
   }
 
   function sanitizeEditorAudioEntityState(){
@@ -2268,6 +2341,7 @@ function parseSmart(v){
       editorSoundPreview.path = "";
       refreshSoundPreviewButtons();
       renderAudioInspector();
+      renderGlobalAudioPanel();
     });
     a.addEventListener("error", () => {
       if (editorSoundPreview.audio !== a) return;
@@ -2275,6 +2349,7 @@ function parseSmart(v){
       editorSoundPreview.path = "";
       refreshSoundPreviewButtons();
       renderAudioInspector();
+      renderGlobalAudioPanel();
     });
     editorSoundPreview.audio = a;
     editorSoundPreview.path = normalized;
@@ -2287,10 +2362,12 @@ function parseSmart(v){
           editorSoundPreview.path = "";
           refreshSoundPreviewButtons();
           renderAudioInspector();
+          renderGlobalAudioPanel();
         }
       });
     }
     renderAudioInspector();
+    renderGlobalAudioPanel();
   }
 
   function refreshSoundPreviewButtons(){
@@ -3017,12 +3094,101 @@ function parseSmart(v){
   }
 
   function setRightPanelTab(tab){
-    const next = tab === "scan" ? "scan" : "inspector";
+    const next = tab === "scan" ? "scan" : (tab === "global-audio" ? "global-audio" : "inspector");
     state.rightPanelTab = next;
     rightTabInspector.classList.toggle("on", next === "inspector");
     rightTabScan.classList.toggle("on", next === "scan");
+    rightTabGlobalAudio.classList.toggle("on", next === "global-audio");
     inspectorPane.classList.toggle("hidden", next !== "inspector");
     scanPane.classList.toggle("hidden", next !== "scan");
+    globalAudioPane.classList.toggle("hidden", next !== "global-audio");
+  }
+
+  function renderGlobalAudioPanel(){
+    if (!globalAudioPane) return;
+    const manifest = getSoundManifest();
+    const configured = GLOBAL_AUDIO_UI_STATES
+      .map((stateKey) => state.globalAudioConfig.musicByState[stateKey])
+      .filter((v) => typeof v === "string" && v.trim())
+      .map((v) => v.trim());
+    const musicOptions = Array.from(new Set([
+      ...(Array.isArray(manifest.music) ? manifest.music : []).map((p) => String(p || "").trim()).filter(Boolean),
+      ...configured,
+    ]));
+    const optionMarkup = ['<option value="">None</option>']
+      .concat(musicOptions.map((path) => `<option value="${String(path)}">${String(path)}</option>`))
+      .join("");
+
+    const rows = GLOBAL_AUDIO_UI_STATES.map((stateKey) => `
+      <div class="inspectorRow">
+        <label>${GLOBAL_AUDIO_LABELS[stateKey]}</label>
+        <select class="inspectorSelect" id="globalAudio_${stateKey}">${optionMarkup}</select>
+      </div>
+    `).join("");
+
+    const previewStateOptions = GLOBAL_AUDIO_UI_STATES.map((stateKey) => `<option value="${stateKey}">${GLOBAL_AUDIO_LABELS[stateKey]}</option>`).join("");
+
+    globalAudioPane.innerHTML = `
+      <div class="inspectorCard">
+        <h3 class="inspectorTitle">Global Audio</h3>
+        <div class="inspectorHint" style="margin-bottom:8px;">Sätt musik per globalt game-state. Exporterar till data/audio_global_config.js.</div>
+        ${rows}
+        <div class="inspectorRow">
+          <label>Preview Target</label>
+          <select class="inspectorSelect" id="globalAudioPreviewState">${previewStateOptions}</select>
+        </div>
+        <div class="row" style="margin-bottom:8px;">
+          <button type="button" class="btn" id="globalAudioPlay">Play</button>
+          <button type="button" class="btn danger" id="globalAudioStop">Stop</button>
+        </div>
+        <div class="row">
+          <button type="button" class="btn primary" id="globalAudioExport">Export audio_global_config.js</button>
+        </div>
+      </div>
+    `;
+
+    for (const stateKey of GLOBAL_AUDIO_UI_STATES){
+      const selectEl = el(`globalAudio_${stateKey}`);
+      if (!selectEl) continue;
+      selectEl.value = state.globalAudioConfig.musicByState[stateKey] || "";
+      selectEl.addEventListener("change", () => {
+        state.globalAudioConfig.musicByState[stateKey] = selectEl.value ? selectEl.value : null;
+      });
+    }
+
+    const previewStateEl = el("globalAudioPreviewState");
+    if (previewStateEl){
+      if (!GLOBAL_AUDIO_UI_STATES.includes(state.globalAudioPreviewState)) state.globalAudioPreviewState = "menu";
+      previewStateEl.value = state.globalAudioPreviewState;
+      previewStateEl.addEventListener("change", () => {
+        state.globalAudioPreviewState = previewStateEl.value;
+      });
+    }
+
+    const playBtn = el("globalAudioPlay");
+    const stopBtn = el("globalAudioStop");
+    const exportBtn = el("globalAudioExport");
+
+    if (playBtn){
+      playBtn.addEventListener("click", () => {
+        const key = state.globalAudioPreviewState;
+        const track = (state.globalAudioConfig.musicByState && state.globalAudioConfig.musicByState[key]) || "";
+        if (!track) return;
+        playEditorSoundPreview(track, 0);
+      });
+    }
+    if (stopBtn){
+      stopBtn.disabled = !editorSoundPreview.audio;
+      stopBtn.addEventListener("click", () => stopEditorSoundPreview());
+    }
+    if (exportBtn){
+      exportBtn.addEventListener("click", () => {
+        const fileName = "audio_global_config.js";
+        const js = `window.LUMO_AUDIO_GLOBAL_CONFIG = ${JSON.stringify(state.globalAudioConfig, null, 2)};\n`;
+        downloadText(fileName, js);
+        alert(`Exported: data/${fileName}`);
+      });
+    }
   }
 
   function renderAudioInspector(){
@@ -4859,6 +5025,7 @@ if (useFill){
   btnGuideRefresh.addEventListener("click", () => guideRefresh());
   rightTabInspector.addEventListener("click", () => setRightPanelTab("inspector"));
   rightTabScan.addEventListener("click", () => setRightPanelTab("scan"));
+  rightTabGlobalAudio.addEventListener("click", () => setRightPanelTab("global-audio"));
 
 
   // Modal wiring
@@ -5079,6 +5246,7 @@ const mainArr = obj.layers && obj.layers.main;
     setRightPanelTab("inspector");
     renderAudioInspector();
     renderScanMonitor();
+    renderGlobalAudioPanel();
 
     levelWEl.value = state.w;
     levelHEl.value = state.h;
