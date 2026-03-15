@@ -120,11 +120,77 @@
   const noSavePreviewImage = new Image();
   noSavePreviewImage.src = "data/assets/ui/no_save_preview.png";
 
-  const music = {
-    menu: new Audio("data/assets/audio/music/menu_music.mp3"),
-    gameplay: new Audio("data/assets/audio/music/game_play_1.mp3"),
-    current: null
-  };
+  function loadGlobalAudioConfig(){
+    const fallback = {
+      musicByState: {
+        [GameState.MENU]: "data/assets/audio/music/menu_music.mp3",
+        [GameState.SETTINGS]: "data/assets/audio/music/menu_music.mp3",
+        [GameState.FAN_ART]: "data/assets/audio/music/menu_music.mp3",
+        [GameState.PLAYING]: null,
+        [GameState.PAUSED]: null,
+        [GameState.GAME_OVER]: null,
+        [GameState.INTERMISSION]: null
+      },
+      behavior: {
+        loopDefault: true,
+        autoplayUnlockRequiredForMenu: true
+      }
+    };
+
+    const cfg = window.LUMO_AUDIO_GLOBAL_CONFIG || {};
+    const musicByStateSrc = (cfg.musicByState && typeof cfg.musicByState === "object") ? cfg.musicByState : {};
+    const behaviorSrc = (cfg.behavior && typeof cfg.behavior === "object") ? cfg.behavior : {};
+    const musicByState = {};
+
+    for (const state of Object.values(GameState)){
+      const hasConfiguredValue = Object.prototype.hasOwnProperty.call(musicByStateSrc, state);
+      const rawValue = hasConfiguredValue ? musicByStateSrc[state] : fallback.musicByState[state];
+      musicByState[state] = (typeof rawValue === "string" && rawValue) ? rawValue : null;
+    }
+
+    return {
+      musicByState,
+      behavior: {
+        loopDefault: typeof behaviorSrc.loopDefault === "boolean" ? behaviorSrc.loopDefault : fallback.behavior.loopDefault,
+        autoplayUnlockRequiredForMenu: typeof behaviorSrc.autoplayUnlockRequiredForMenu === "boolean"
+          ? behaviorSrc.autoplayUnlockRequiredForMenu
+          : fallback.behavior.autoplayUnlockRequiredForMenu
+      }
+    };
+  }
+
+  function createGlobalMusicState(config){
+    const tracksByPath = new Map();
+    const byState = {};
+
+    for (const state of Object.values(GameState)){
+      const path = config.musicByState[state];
+      if (!path){
+        byState[state] = null;
+        continue;
+      }
+
+      let track = tracksByPath.get(path);
+      if (!track){
+        track = new Audio(path);
+        track.loop = config.behavior.loopDefault;
+        tracksByPath.set(path, track);
+      }
+      byState[state] = track;
+    }
+
+    const menuTrack = byState[GameState.MENU] || null;
+    return {
+      byState,
+      tracks: Array.from(tracksByPath.values()),
+      menu: menuTrack,
+      current: null,
+      requireMenuUnlock: Boolean(config.behavior.autoplayUnlockRequiredForMenu && menuTrack)
+    };
+  }
+
+  const audioGlobalConfig = loadGlobalAudioConfig();
+  const music = createGlobalMusicState(audioGlobalConfig);
   const SETTINGS_STORAGE_KEY = "lumo.settings.audio.v1";
   const SAVE_STORAGE_KEY = "lumo.save.slot1.v1";
   const defaultAudioSettings = Object.freeze({
@@ -143,9 +209,7 @@
     sliderBounds: []
   };
   let sfxCtx = null;
-  let menuMusicUnlocked = false;
-  music.menu.loop = true;
-  music.gameplay.loop = true;
+  let menuMusicUnlocked = !music.requireMenuUnlock;
   applyMusicVolume(audioSettings.musicVolume);
 
   let sessionStartedAtMs = Date.now();
@@ -634,8 +698,9 @@
   function applyMusicVolume(v){
     const vol = clamp01(v);
     audioSettings.musicVolume = vol;
-    music.menu.volume = vol;
-    music.gameplay.volume = vol;
+    for (const track of music.tracks){
+      track.volume = vol;
+    }
   }
 
   function getSfxCtx(){
@@ -1325,7 +1390,7 @@
   function switchMusic(track){
     if (music.current === track) return;
 
-    for (const a of [music.menu, music.gameplay]){
+    for (const a of music.tracks){
       if (a !== track){
         a.pause();
         a.currentTime = 0;
@@ -1334,7 +1399,7 @@
 
     music.current = track || null;
     if (!track) return;
-    if (track === music.menu && !menuMusicUnlocked) return;
+    if (track === music.menu && music.requireMenuUnlock && !menuMusicUnlocked) return;
 
     const playP = track.play();
     if (playP && typeof playP.catch === "function"){
@@ -1345,7 +1410,9 @@
 
   function unlockMenuMusicFromInteraction(){
     if (menuMusicUnlocked) return;
+    if (!music.requireMenuUnlock) return;
     if (gameState !== GameState.MENU) return;
+    if (!music.menu) return;
 
     const probe = music.menu;
     const playP = probe.play();
@@ -1366,9 +1433,8 @@
   }
 
   function updateMusicByState(){
-    if (gameState === GameState.MENU || gameState === GameState.SETTINGS || gameState === GameState.FAN_ART) return switchMusic(music.menu);
-    if (gameState === GameState.PLAYING) return switchMusic(null);
-    return switchMusic(null);
+    const track = Object.prototype.hasOwnProperty.call(music.byState, gameState) ? music.byState[gameState] : null;
+    return switchMusic(track || null);
   }
 
   function drawTrackedText(ctx, text, x, y, spacing){
