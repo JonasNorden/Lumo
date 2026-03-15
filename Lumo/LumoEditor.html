@@ -1371,6 +1371,7 @@ display:none;
 
     // Volume placement (drag x0..x1 on a ground line)
     volumeDrag: null,
+    lineDrag: null,
 
     camX: 0,
     camY: 0,
@@ -1735,9 +1736,12 @@ display:none;
     if (state.layer === "TILES" && state.brushTile) brush = state.brushTile.id;
     if (state.layer === "ENT" && state.brushEnt) brush = state.brushEnt.id;
     metaBrush.textContent = brush;
-    metaMode.textContent = state.layer === "ENT"
+    const baseMode = state.layer === "ENT"
       ? state.entToolMode
       : (state.eraseMode ? "ERASE" : "DRAW");
+    metaMode.textContent = (state.layer === "TILES")
+      ? `${baseMode} • Shift=Line`
+      : baseMode;
     const showEntTool = state.layer === "ENT";
     entModePill.style.display = showEntTool ? "inline-flex" : "none";
     btnEntModeDraw.classList.toggle("on", state.entToolMode === "DRAW");
@@ -1849,10 +1853,12 @@ display:none;
   function inBounds(tx,ty){ return tx>=0 && ty>=0 && tx<state.w && ty<state.h; }
 
   function resetPointerPaintState(){
+    if (state.lineDrag) finalizeLineDrag();
     state.lmbDown = false;
     state.rmbDown = false;
     state.draggingPan = false;
     state.volumeDrag = null;
+    state.lineDrag = null;
     state._paintStampKey = null;
     state._paintStampLayer = null;
     endHistoryTransaction();
@@ -3166,6 +3172,59 @@ function parseSmart(v){
     }
   }
 
+
+  function getCurrentBrushTileId(){
+    if (!state.brushTile) return null;
+    if (state.brushTile.tileId != null) return state.brushTile.tileId|0;
+    if (state.brushTile.idNum != null) return state.brushTile.idNum|0;
+    return 1;
+  }
+
+  function buildTileLinePoints(x0, y0, x1, y1){
+    const points = [];
+    let cx = x0|0;
+    let cy = y0|0;
+    const tx = x1|0;
+    const ty = y1|0;
+    const dx = Math.abs(tx - cx);
+    const dy = Math.abs(ty - cy);
+    const sx = cx < tx ? 1 : -1;
+    const sy = cy < ty ? 1 : -1;
+    let err = dx - dy;
+
+    while (true){
+      points.push({x:cx, y:cy});
+      if (cx === tx && cy === ty) break;
+      const e2 = err * 2;
+      if (e2 > -dy){ err -= dy; cx += sx; }
+      if (e2 < dx){ err += dx; cy += sy; }
+    }
+    return points;
+  }
+
+  function finalizeLineDrag(){
+    const ld = state.lineDrag;
+    state.lineDrag = null;
+    if (!ld) return;
+    if (state.layer !== "TILES" || state.eraseMode) return;
+    const tid = getCurrentBrushTileId();
+    if (tid == null) return;
+
+    const points = buildTileLinePoints(ld.tx0, ld.ty0, ld.tx1, ld.ty1);
+    const toPaint = [];
+    for (const p of points){
+      if (!inBounds(p.x, p.y)) continue;
+      const i = idx(p.x, p.y);
+      if ((state.tiles[i]|0) === (tid|0)) continue;
+      toPaint.push(i);
+    }
+    if (!toPaint.length) return;
+
+    pushHistorySnapshot();
+    for (const i of toPaint) state.tiles[i] = tid|0;
+    state.guideDirty = true;
+    render();
+  }
 
   function finalizeVolumeDrag(){
     const vd = state.volumeDrag;
@@ -4631,6 +4690,21 @@ function drawEntities(){
       return;
     }
 
+    if (state.lineDrag && state.layer === "TILES"){
+      const tid = getCurrentBrushTileId();
+      if (tid != null){
+        const linePoints = buildTileLinePoints(state.lineDrag.tx0, state.lineDrag.ty0, state.lineDrag.tx1, state.lineDrag.ty1);
+        ctx.save();
+        ctx.fillStyle = "rgba(71,215,255,0.28)";
+        for (const p of linePoints){
+          if (!inBounds(p.x, p.y)) continue;
+          const ps = worldToScreen(p.x * TS, p.y * TS);
+          ctx.fillRect(ps.x + 2, ps.y + 2, TS - 4, TS - 4);
+        }
+        ctx.restore();
+      }
+    }
+
     if (state.layer==="ENT" && state.brushEnt){
       const a = state.brushEnt;
       const w = a.w||TS, h = a.h||TS;
@@ -5127,6 +5201,10 @@ if (useFill){
         }
         handlePaintFromMouse(false, e.shiftKey, e.altKey);
       } else {
+        if (state.layer === "TILES" && e.shiftKey && !e.altKey && !state.eraseMode){
+          state.lineDrag = { tx0: state.tileX, ty0: state.tileY, tx1: state.tileX, ty1: state.tileY };
+          return;
+        }
         handlePaintFromMouse(state.eraseMode, e.shiftKey, e.altKey);
       }
     }
@@ -5142,6 +5220,10 @@ if (useFill){
   });
 
   canvas.addEventListener("mouseup", (e) => {
+    if (e.button===0 && state.lineDrag){
+      finalizeLineDrag();
+    }
+
     if (e.button===0 && state.volumeDrag){
       finalizeVolumeDrag();
       state.volumeDrag = null;
@@ -5163,6 +5245,9 @@ if (useFill){
     tileAtMouse();
 
     // Mouse buttons can be released outside canvas; sync state so drag-paint cannot get stuck.
+    if (!(e.buttons & 1) && state.lmbDown && state.lineDrag){
+      finalizeLineDrag();
+    }
     if (!(e.buttons & 1)) state.lmbDown = false;
     if (!(e.buttons & 2)) state.rmbDown = false;
     if (!state.lmbDown && !state.rmbDown){
@@ -5184,6 +5269,12 @@ if (useFill){
     if (state.volumeDrag && state.lmbDown){
       state.volumeDrag.tx1 = state.tileX;
       // no painting while dragging a volume
+      return;
+    }
+
+    if (state.lineDrag && state.lmbDown){
+      state.lineDrag.tx1 = state.tileX;
+      state.lineDrag.ty1 = state.tileY;
       return;
     }
 
