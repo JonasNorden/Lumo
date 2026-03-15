@@ -758,6 +758,30 @@ display:none;
       margin-top:12px;
     }
     .modalActions .spacer{ flex:1; }
+    .shortcutGroups{ display:grid; gap:14px; }
+    .shortcutGroup{
+      border:1px solid rgba(127,166,201,.24);
+      border-radius:12px;
+      background:rgba(6,15,28,.72);
+      padding:10px 12px;
+    }
+    .shortcutGroupTitle{
+      font-family:var(--mono);
+      font-size:11px;
+      letter-spacing:.5px;
+      color:var(--accent);
+      margin-bottom:8px;
+    }
+    .shortcutRow{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      padding:4px 0;
+      border-bottom:1px dashed rgba(127,166,201,.18);
+    }
+    .shortcutRow:last-child{ border-bottom:none; }
+    .shortcutKey{ font-family:var(--mono); font-size:12px; color:#dff6ff; white-space:nowrap; }
+    .shortcutAction{ font-size:12px; color:var(--text); text-align:right; }
     .paramWarning{
       margin-top:10px;
       padding:8px 10px;
@@ -980,6 +1004,7 @@ display:none;
         </div>
         <div class="pill" id="scanStatus">Scan: idle</div>
         <button class="btn primary" id="btnPlayFromHere">Play From Here</button>
+        <button class="btn" id="btnShortcuts" title="Shortcuts (Shift+/ or H)">?</button>
         <button class="btn primary" id="btnExport">Export .js</button>
         <button class="btn" id="btnImport">Import .js</button>
       </div>
@@ -1132,6 +1157,48 @@ display:none;
   </div>
 
 
+  <div id="shortcutsModal" class="modal hidden" aria-hidden="true">
+    <div id="shortcutsModalBackdrop" class="modalBackdrop"></div>
+    <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="shortcutsTitle">
+      <div class="modalHead">
+        <div>
+          <div class="modalTitle" id="shortcutsTitle">Editor Shortcuts</div>
+          <div class="modalSub">Snabb lathund för viktigaste kontrollerna.</div>
+        </div>
+        <button id="shortcutsModalClose" class="btn sm ghost">Close</button>
+      </div>
+      <div class="modalBody">
+        <div class="shortcutGroups">
+          <section class="shortcutGroup">
+            <div class="shortcutGroupTitle">TILES / BG</div>
+            <div class="shortcutRow"><span class="shortcutKey">LMB</span><span class="shortcutAction">Paint</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">RMB</span><span class="shortcutAction">Erase</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Alt + LMB</span><span class="shortcutAction">Fill</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Shift + LMB</span><span class="shortcutAction">Line</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Ctrl + Shift + LMB</span><span class="shortcutAction">Rectangle</span></div>
+          </section>
+          <section class="shortcutGroup">
+            <div class="shortcutGroupTitle">ENTITIES</div>
+            <div class="shortcutRow"><span class="shortcutKey">DRAW / EDIT mode</span><span class="shortcutAction">Byt via Entity Tool</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">LMB</span><span class="shortcutAction">Place / Select beroende på mode</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">RMB</span><span class="shortcutAction">Delete topmost</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Alt + LMB</span><span class="shortcutAction">Cycle stack</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Shift + drag</span><span class="shortcutAction">Multi-select</span></div>
+          </section>
+          <section class="shortcutGroup">
+            <div class="shortcutGroupTitle">GENERAL</div>
+            <div class="shortcutRow"><span class="shortcutKey">Ctrl + Z</span><span class="shortcutAction">Undo</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Ctrl + Y</span><span class="shortcutAction">Redo</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Ctrl + Shift + Z</span><span class="shortcutAction">Redo</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Ctrl + C</span><span class="shortcutAction">Copy entity</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Ctrl + V</span><span class="shortcutAction">Paste entity</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Shift + P</span><span class="shortcutAction">Play From Here</span></div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Entity Params Modal -->
   <div id="paramModal" class="modal hidden" aria-hidden="true">
     <div id="paramModalBackdrop" class="modalBackdrop"></div>
@@ -1261,6 +1328,7 @@ display:none;
   const btnScanStart = el("btnScanStart");
   const btnScanStop = el("btnScanStop");
   const btnPlayFromHere = el("btnPlayFromHere");
+  const btnShortcuts = el("btnShortcuts");
   const scanSpeedEl = el("scanSpeed");
   const scanStartModeEl = el("scanStartMode");
   const scanStatusEl = el("scanStatus");
@@ -1315,6 +1383,9 @@ display:none;
   const paramReset = el("paramReset");
   const paramStatus = el("paramStatus");
   const paramWarning = el("paramWarning");
+  const shortcutsModal = el("shortcutsModal");
+  const shortcutsModalBackdrop = el("shortcutsModalBackdrop");
+  const shortcutsModalClose = el("shortcutsModalClose");
 
   const editorSoundPreview = {
     audio: null,
@@ -1442,6 +1513,7 @@ display:none;
     modalOpen: false,
     modalEntIndex: -1,
     modalAsset: null,
+    shortcutsModalOpen: false,
     rightPanelTab: "inspector",
     soundNavigatorFilter: "all",
     soundHeatmapOn: false,
@@ -5568,6 +5640,18 @@ if (useFill){
     if (e.code==="Space") state.spaceDown = true;
     if (isTypingTarget(e.target)) return;
 
+    if (!state.modalOpen && !state.shortcutsModalOpen && e.shiftKey && e.code === "KeyP"){
+      e.preventDefault();
+      launchGameFromEditor();
+      return;
+    }
+
+    if (!state.modalOpen && !state.shortcutsModalOpen && (e.code === "KeyH" || (e.shiftKey && e.code === "Slash"))){
+      e.preventDefault();
+      openShortcutsModal();
+      return;
+    }
+
     const ctrlLike = e.ctrlKey || e.metaKey;
     if (ctrlLike && e.code === "KeyZ"){
       e.preventDefault();
@@ -5717,6 +5801,11 @@ if (useFill){
   paramReset.addEventListener("click", () => resetParamsToDefault());
 
   document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && state.shortcutsModalOpen){
+      e.preventDefault();
+      closeShortcutsModal();
+      return;
+    }
     if (!state.modalOpen) return;
     if (e.key === "Escape"){
       e.preventDefault();
@@ -5822,6 +5911,18 @@ if (useFill){
     }
   }
 
+  function openShortcutsModal(){
+    state.shortcutsModalOpen = true;
+    shortcutsModal.classList.remove("hidden");
+    shortcutsModal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeShortcutsModal(){
+    state.shortcutsModalOpen = false;
+    shortcutsModal.classList.add("hidden");
+    shortcutsModal.setAttribute("aria-hidden", "true");
+  }
+
    function downloadText(filename,text){
     const blob = new Blob([text],{type:"text/javascript"});
     const url = URL.createObjectURL(blob);
@@ -5852,6 +5953,14 @@ if (useFill){
   btnPlayFromHere.addEventListener("click", () => {
     launchGameFromEditor();
   });
+
+  btnShortcuts.addEventListener("click", () => {
+    if (state.shortcutsModalOpen) closeShortcutsModal();
+    else openShortcutsModal();
+  });
+
+  shortcutsModalBackdrop.addEventListener("click", () => closeShortcutsModal());
+  shortcutsModalClose.addEventListener("click", () => closeShortcutsModal());
 
   btnImport.addEventListener("click", async () => {
     const pick = document.createElement("input");
