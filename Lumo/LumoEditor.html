@@ -979,6 +979,7 @@ display:none;
           </select>
         </div>
         <div class="pill" id="scanStatus">Scan: idle</div>
+        <button class="btn primary" id="btnPlayFromHere">Play From Here</button>
         <button class="btn primary" id="btnExport">Export .js</button>
         <button class="btn" id="btnImport">Import .js</button>
       </div>
@@ -1259,6 +1260,7 @@ display:none;
   const btnRedo = el("btnRedo");
   const btnScanStart = el("btnScanStart");
   const btnScanStop = el("btnScanStop");
+  const btnPlayFromHere = el("btnPlayFromHere");
   const scanSpeedEl = el("scanSpeed");
   const scanStartModeEl = el("scanStartMode");
   const scanStatusEl = el("scanStatus");
@@ -5787,6 +5789,39 @@ if (useFill){
     return levelObj;
   }
 
+  const EDITOR_PLAY_LEVEL_KEY = "lumo.editorPlay.level.v1";
+  const EDITOR_PLAY_SPAWN_KEY = "lumo.editorPlay.spawn.v1";
+
+  function getPlayFromHereSpawnOverride(){
+    const x = Number(state.tileX);
+    const y = Number(state.tileY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x: x|0, y: y|0 };
+  }
+
+  function launchGameFromEditor(){
+    const levelObj = makeLevelObject();
+    const spawnOverride = getPlayFromHereSpawnOverride();
+
+    try{
+      sessionStorage.setItem(EDITOR_PLAY_LEVEL_KEY, JSON.stringify(levelObj));
+      if (spawnOverride){
+        sessionStorage.setItem(EDITOR_PLAY_SPAWN_KEY, JSON.stringify(spawnOverride));
+      } else {
+        sessionStorage.removeItem(EDITOR_PLAY_SPAWN_KEY);
+      }
+    } catch (err){
+      alert(`Play From Here failed: ${err.message}`);
+      return;
+    }
+
+    const gameUrl = new URL("Lumo.html", window.location.href);
+    const win = window.open(gameUrl.href, "_blank");
+    if (!win){
+      window.location.href = gameUrl.href;
+    }
+  }
+
    function downloadText(filename,text){
     const blob = new Blob([text],{type:"text/javascript"});
     const url = URL.createObjectURL(blob);
@@ -5812,6 +5847,10 @@ if (useFill){
 })();`;
     downloadText(fileName, js);
     alert(`Exported: ${fileName}\nLägg den i data/levels/ och ladda den via spelets loader.`);
+  });
+
+  btnPlayFromHere.addEventListener("click", () => {
+    launchGameFromEditor();
   });
 
   btnImport.addEventListener("click", async () => {

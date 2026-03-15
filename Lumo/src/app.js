@@ -193,6 +193,8 @@
   const music = createGlobalMusicState(audioGlobalConfig);
   const SETTINGS_STORAGE_KEY = "lumo.settings.audio.v1";
   const SAVE_STORAGE_KEY = "lumo.save.slot1.v1";
+  const EDITOR_PLAY_LEVEL_KEY = "lumo.editorPlay.level.v1";
+  const EDITOR_PLAY_SPAWN_KEY = "lumo.editorPlay.spawn.v1";
   const defaultAudioSettings = Object.freeze({
     musicVolume: 0.42,
     sfxVolume: 0.6
@@ -639,6 +641,65 @@
     } catch (_err){
       return false;
     }
+  }
+
+  function consumeEditorPlayPayload(){
+    let levelObj = null;
+    let spawnOverride = null;
+
+    try {
+      const rawLevel = sessionStorage.getItem(EDITOR_PLAY_LEVEL_KEY);
+      if (rawLevel){
+        levelObj = JSON.parse(rawLevel);
+      }
+    } catch (_err){
+      levelObj = null;
+    }
+
+    try {
+      const rawSpawn = sessionStorage.getItem(EDITOR_PLAY_SPAWN_KEY);
+      if (rawSpawn){
+        const parsed = JSON.parse(rawSpawn);
+        const x = Number(parsed && parsed.x);
+        const y = Number(parsed && parsed.y);
+        if (Number.isFinite(x) && Number.isFinite(y)){
+          spawnOverride = { x: x|0, y: y|0 };
+        }
+      }
+    } catch (_err){
+      spawnOverride = null;
+    }
+
+    try {
+      sessionStorage.removeItem(EDITOR_PLAY_LEVEL_KEY);
+      sessionStorage.removeItem(EDITOR_PLAY_SPAWN_KEY);
+    } catch (_err){
+      // ignore storage cleanup failures
+    }
+
+    if (!levelObj || !levelObj.meta || !levelObj.layers || !Array.isArray(levelObj.layers.main)){
+      return null;
+    }
+
+    return { levelObj, spawnOverride };
+  }
+
+  function startEditorPlaySession(payload){
+    if (!payload || !payload.levelObj) return false;
+
+    const levelObj = payload.levelObj;
+    if (!levelObj.meta || typeof levelObj.meta !== "object"){
+      levelObj.meta = {};
+    }
+    levelObj.meta.tileSize = levelObj.meta.tileSize || 24;
+
+    resetRunStateForNewGame();
+    sessionStartedAtMs = Date.now();
+    loadLevel(levelObj, payload.spawnOverride || null);
+    paused = false;
+    gameState = GameState.PLAYING;
+    hudDebug.textContent = "Play From Here";
+    return true;
   }
 
   function loadContinueFromSave(){
@@ -1531,7 +1592,7 @@
   }
 
   // ✅ CHANGED: spawn fallback från editor-format (start_01 i layers.ents)
-  function loadLevel(levelObj){
+  function loadLevel(levelObj, spawnOverride){
     if (!levelObj){
       console.error("loadLevel: levelObj is falsy");
       return;
@@ -1547,7 +1608,17 @@
       : (Lumo.TILE || 24);
 
     // spawn primary
-    let spawnDef = levelObj.spawn || (levelObj.meta && levelObj.meta.spawn) || null;
+    let spawnDef = null;
+    if (spawnOverride && typeof spawnOverride === "object"){
+      const ox = Number(spawnOverride.x);
+      const oy = Number(spawnOverride.y);
+      if (Number.isFinite(ox) && Number.isFinite(oy)){
+        spawnDef = { x: ox|0, y: oy|0 };
+      }
+    }
+    if (!spawnDef){
+      spawnDef = levelObj.spawn || (levelObj.meta && levelObj.meta.spawn) || null;
+    }
 
     // spawn fallback: editor mandatory "start_01"
     if (!spawnDef && levelObj.layers && Array.isArray(levelObj.layers.ents)){
@@ -2550,6 +2621,13 @@
   player.flares = 1;
   player.refill();
   loadFanArtGallery();
+
+  const editorPlayPayload = consumeEditorPlayPayload();
+  if (editorPlayPayload && startEditorPlaySession(editorPlayPayload)){
+    requestAnimationFrame(tick);
+    return;
+  }
+
   gameState = GameState.BOOTING;
   bootStart();
   requestAnimationFrame(tick);
