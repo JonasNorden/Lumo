@@ -3287,27 +3287,31 @@ function parseSmart(v){
       });
     }
 
-    const heatmapBtn = el("soundHeatmapToggle");
+  }
+
+  function onNavigatorPointerDown(ev){
+    if (!navigatorPane || navigatorPane.classList.contains("hidden")) return;
+
+    const heatmapBtn = ev.target.closest("#soundHeatmapToggle");
     if (heatmapBtn){
-      heatmapBtn.addEventListener("click", () => {
-        state.soundHeatmapOn = !state.soundHeatmapOn;
-        renderSoundNavigator();
-      });
+      ev.preventDefault();
+      state.soundHeatmapOn = !state.soundHeatmapOn;
+      renderSoundNavigator();
+      return;
     }
 
-    navigatorPane.querySelectorAll("[data-nav-ent-index]").forEach((node) => {
-      node.addEventListener("click", () => {
-        const index = Number(node.getAttribute("data-nav-ent-index"));
-        if (!Number.isInteger(index) || index < 0 || index >= state.ents.length) return;
-        const ent = state.ents[index];
-        state.selectedEntIndex = index;
-        focusWorldAtTile(ent.x, ent.y);
-        guidePingAtTile(ent.x, ent.y);
-        updateSelectedUI();
-        state.guideDirty = true;
-        renderSoundNavigator();
-      });
-    });
+    const rowBtn = ev.target.closest("[data-nav-ent-index]");
+    if (!rowBtn || !navigatorPane.contains(rowBtn)) return;
+    ev.preventDefault();
+    const index = Number(rowBtn.getAttribute("data-nav-ent-index"));
+    if (!Number.isInteger(index) || index < 0 || index >= state.ents.length) return;
+    const ent = state.ents[index];
+    state.selectedEntIndex = index;
+    focusWorldAtTile(ent.x, ent.y);
+    guidePingAtTile(ent.x, ent.y);
+    updateSelectedUI();
+    state.guideDirty = true;
+    renderSoundNavigator();
   }
 
   function drawSoundHeatmapOverlay(){
@@ -5204,6 +5208,7 @@ if (useFill){
   rightTabScan.addEventListener("click", () => setRightPanelTab("scan"));
   rightTabGlobalAudio.addEventListener("click", () => setRightPanelTab("global-audio"));
   rightTabNavigator.addEventListener("click", () => setRightPanelTab("navigator"));
+  navigatorPane.addEventListener("pointerdown", onNavigatorPointerDown);
 
 
   // Modal wiring
