@@ -1865,7 +1865,7 @@ display:none;
       playBtn.addEventListener("click", () => {
         const p = String(v.value || "").trim();
         if (!p) return;
-        playEditorSoundPreview(p);
+        playEditorSoundPreview(p, ent && ent.params ? ent.params.pitchVar : 0);
         refreshSoundPreviewButtons();
       });
 
@@ -2248,13 +2248,20 @@ function parseSmart(v){
     return true;
   }
 
-  function playEditorSoundPreview(path){
+  function getPitchVariationPlaybackRate(pitchVar){
+    const variation = Number.isFinite(Number(pitchVar)) ? Number(pitchVar) : 0;
+    const r = (Math.random() * 2 - 1) * (variation / 100);
+    return 1 + r;
+  }
+
+  function playEditorSoundPreview(path, pitchVar = 0){
     const normalized = String(path || "").trim();
     if (!normalized) return;
     stopEditorSoundPreview();
 
     const a = new Audio(normalized);
     a.preload = "auto";
+    a.playbackRate = getPitchVariationPlaybackRate(pitchVar);
     a.addEventListener("ended", () => {
       if (editorSoundPreview.audio !== a) return;
       editorSoundPreview.audio = null;
@@ -3122,7 +3129,7 @@ function parseSmart(v){
       playBtn.disabled = !soundFile || !audible;
       playBtn.addEventListener("click", () => {
         if (!params.soundFile || !isEditorSoundEntityAudible(selected.index, ent)) return;
-        playEditorSoundPreview(params.soundFile);
+        playEditorSoundPreview(params.soundFile, params.pitchVar);
       });
     }
     if (stopBtn){
@@ -3563,13 +3570,14 @@ function parseSmart(v){
     setScanStatus();
   }
 
-  function getOrCreateLoopingAudio(map, key, path){
+  function getOrCreateLoopingAudio(map, key, path, pitchVar = 0){
     let a = map.get(key) || null;
     if (!a){
       a = new Audio(path);
       a.preload = "auto";
       a.loop = true;
       a.volume = 0;
+      a.playbackRate = getPitchVariationPlaybackRate(pitchVar);
       map.set(key, a);
     }
     return a;
@@ -3604,7 +3612,7 @@ function parseSmart(v){
         const inside = scanX >= overlay.x0 && scanX <= overlay.x1;
         const existing = editorSoundScan.musicAudioByIndex.get(i) || null;
         if (inside){
-          const a = getOrCreateLoopingAudio(editorSoundScan.musicAudioByIndex, i, soundPath);
+          const a = getOrCreateLoopingAudio(editorSoundScan.musicAudioByIndex, i, soundPath, ent.params.pitchVar);
           a.volume = 1;
           ensureAudioPlaying(a);
         } else if (existing){
@@ -3625,6 +3633,7 @@ function parseSmart(v){
           editorSoundScan.lastTriggerTimeByIndex.set(i, performance.now() * 0.001);
           const a = new Audio(soundPath);
           a.preload = "auto";
+          a.playbackRate = getPitchVariationPlaybackRate(ent.params.pitchVar);
           const p = a.play();
           if (p && typeof p.catch === "function") p.catch(() => {});
         }
@@ -3643,7 +3652,7 @@ function parseSmart(v){
         const existing = editorSoundScan.spotAudioByIndex.get(i) || null;
 
         if (vol > 0){
-          const a = getOrCreateLoopingAudio(editorSoundScan.spotAudioByIndex, i, soundPath);
+          const a = getOrCreateLoopingAudio(editorSoundScan.spotAudioByIndex, i, soundPath, ent.params.pitchVar);
           a.volume = vol;
           ensureAudioPlaying(a);
           editorSoundScan.spotCooldownByIndex.set(i, 0.2);
