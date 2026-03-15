@@ -1607,6 +1607,11 @@
       : (world && world.tileSize) ? world.tileSize
       : (Lumo.TILE || 24);
 
+    const metaId = (levelObj.meta && levelObj.meta.id) ? levelObj.meta.id : "(no-id)";
+    const metaName = (levelObj.meta && levelObj.meta.name) ? levelObj.meta.name : "";
+    const levelLabel = `${metaId}${metaName ? `:${metaName}` : ""}`;
+
+    // First-pass runtime contract diagnostics only: keep legacy spawn fallbacks while surfacing bad data.
     // spawn primary
     let spawnDef = null;
     if (spawnOverride && typeof spawnOverride === "object"){
@@ -1629,7 +1634,10 @@
     }
 
     // last fallback
-    if (!spawnDef) spawnDef = { x:0, y:0 };
+    if (!spawnDef){
+      console.warn(`[Lumo][contract] Level ${levelLabel}: no valid spawn found; using fallback {x:0,y:0}.`);
+      spawnDef = { x:0, y:0 };
+    }
 
     const sx = (typeof spawnDef.x === "number") ? spawnDef.x * ts : 0;
     const sy = (typeof spawnDef.y === "number") ? spawnDef.y * ts : 0;
@@ -1639,8 +1647,6 @@
 
     setCheckpoint(sx, sy);
 
-    const metaId = (levelObj.meta && levelObj.meta.id) ? levelObj.meta.id : "(no-id)";
-    const metaName = (levelObj.meta && levelObj.meta.name) ? levelObj.meta.name : "";
     hudDebug.textContent = `Loaded: ${metaId} ${metaName}`;
   }
 

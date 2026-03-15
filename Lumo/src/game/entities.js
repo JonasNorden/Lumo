@@ -135,9 +135,16 @@
       return path;
     }
 
-    _readNumParam(params, key, fallback){
-      const v = Number(params && params[key]);
-      return Number.isFinite(v) ? v : fallback;
+    _readNumParam(params, key, fallback, ctx){
+      const raw = params && params[key];
+      const v = Number(raw);
+      if (Number.isFinite(v)) return v;
+      if (params && Object.prototype.hasOwnProperty.call(params, key) && raw != null && raw !== ""){
+        const levelLabel = (ctx && ctx.levelLabel) ? ctx.levelLabel : "(unknown-level)";
+        const entityLabel = (ctx && ctx.entityLabel) ? ctx.entityLabel : "(unknown-entity)";
+        console.warn(`[Lumo][contract] Level ${levelLabel}: entity ${entityLabel} has invalid numeric param '${key}' (${JSON.stringify(raw)}); using fallback ${fallback}.`);
+      }
+      return fallback;
     }
 
     _tryLoadImage(src){
@@ -187,6 +194,9 @@
       const listB = (levelObj && levelObj.layers && Array.isArray(levelObj.layers.ents)) ? levelObj.layers.ents : null;
 
       const list = listA || listB || [];
+      const meta = levelObj && levelObj.meta ? levelObj.meta : {};
+      const levelLabel = ((meta.id || "(no-id)") + (meta.name ? `:${meta.name}` : ""));
+      const diag = { levelLabel, unknownEditorIds: new Set(), unknownRuntimeTypes: new Set() };
 
       if (listB && !listA){
         // If the level doesn't define spawn, derive it from start_01 (editor mandatory entity).
@@ -197,7 +207,7 @@
       }
 
       for (const e of list){
-        this.spawnFromDef(e, levelObj);
+        this.spawnFromDef(e, levelObj, diag);
       }
 
       // If we got entities (either format), do NOT inject demo objects.
@@ -214,7 +224,7 @@
       }
 }
 
-    spawnFromDef(e, levelObj){
+    spawnFromDef(e, levelObj, diag){
       if (!e) return;
 
       // Editor-export path (id-based)
@@ -225,6 +235,7 @@
         const offY = (typeof e.offsetY === "number") ? e.offsetY : 0;
         const anchor = (e.anchor === "TL") ? "TL" : "BL";
         const params = (e.params && typeof e.params === "object") ? e.params : {};
+        const paramCtx = { levelLabel: diag && diag.levelLabel, entityLabel: `${id}@${tx},${ty}` };
 
         // Helper: convert a tile-anchored BL entity into runtime pixels + optional y-offset
         const applyAnchor = (obj, w=null, h=null) => {
@@ -270,6 +281,12 @@
         }
 
         if (id === "lantern_01"){
+          if (Object.prototype.hasOwnProperty.call(params, "radius") && !Number.isFinite(Number(params.radius))){
+            console.warn(`[Lumo][contract] Level ${diag && diag.levelLabel ? diag.levelLabel : "(unknown-level)"}: entity ${id}@${tx},${ty} has invalid numeric param 'radius' (${JSON.stringify(params.radius)}); using fallback 170.`);
+          }
+          if (Object.prototype.hasOwnProperty.call(params, "strength") && !Number.isFinite(Number(params.strength))){
+            console.warn(`[Lumo][contract] Level ${diag && diag.levelLabel ? diag.levelLabel : "(unknown-level)"}: entity ${id}@${tx},${ty} has invalid numeric param 'strength' (${JSON.stringify(params.strength)}); using fallback 0.85.`);
+          }
           const radius = (typeof params.radius === "number") ? params.radius : 170;
           const strength = (typeof params.strength === "number") ? params.strength : 0.85;
           const ln = this.makeLantern(tx, ty, radius, strength);
@@ -282,17 +299,17 @@
         if (id === "music_zone"){
           const ts = (levelObj && levelObj.meta && levelObj.meta.tileSize) ? levelObj.meta.tileSize : (Lumo.TILE || 24);
           const baseX = tx * ts;
-          let xStart = this._readNumParam(params, "xStart", baseX);
-          let xEnd = this._readNumParam(params, "xEnd", baseX + ts * 8);
+          let xStart = this._readNumParam(params, "xStart", baseX, paramCtx);
+          let xEnd = this._readNumParam(params, "xEnd", baseX + ts * 8, paramCtx);
           if (xEnd < xStart){ const tmp = xStart; xStart = xEnd; xEnd = tmp; }
           const zone = {
             type:"musicZone",
             soundFile: this._normalizeSoundPath(params.soundFile, "music_zone"),
             xStart,
             xEnd,
-            volume: Math.max(0, Math.min(1, this._readNumParam(params, "volume", 0.7))),
+            volume: Math.max(0, Math.min(1, this._readNumParam(params, "volume", 0.7, paramCtx))),
             loop: params.loop !== false,
-            fadeTiles: Math.max(0, this._readNumParam(params, "fadeTiles", 4)),
+            fadeTiles: Math.max(0, this._readNumParam(params, "fadeTiles", 4, paramCtx)),
           };
           this._musicZones.push(zone);
           return;
@@ -306,10 +323,10 @@
             type:"spotSound",
             soundFile: this._normalizeSoundPath(params.soundFile, "spot_sound"),
             cx, cy,
-            radius: Math.max(0, this._readNumParam(params, "radius", 120)),
-            volume: Math.max(0, Math.min(1, this._readNumParam(params, "volume", 0.8))),
+            radius: Math.max(0, this._readNumParam(params, "radius", 120, paramCtx)),
+            volume: Math.max(0, Math.min(1, this._readNumParam(params, "volume", 0.8, paramCtx))),
             loop: params.loop !== false,
-            fadeTiles: Math.max(0, this._readNumParam(params, "fadeTiles", 2)),
+            fadeTiles: Math.max(0, this._readNumParam(params, "fadeTiles", 2, paramCtx)),
           };
           this._spotSounds.push(spot);
           return;
@@ -321,9 +338,9 @@
           const trg = {
             type:"triggerSound",
             soundFile: this._normalizeSoundPath(params.soundFile, "trigger_sound"),
-            triggerX: this._readNumParam(params, "triggerX", baseX),
+            triggerX: this._readNumParam(params, "triggerX", baseX, paramCtx),
             once: params.once !== false,
-            volume: Math.max(0, Math.min(1, this._readNumParam(params, "volume", 1))),
+            volume: Math.max(0, Math.min(1, this._readNumParam(params, "volume", 1, paramCtx))),
             fired: false,
             lastSide: null,
           };
@@ -421,6 +438,9 @@
         }
 
 if (id === "flare_pickup_01"){
+  if (Object.prototype.hasOwnProperty.call(params, "amount") && !Number.isFinite(Number(params.amount))){
+    console.warn(`[Lumo][contract] Level ${diag && diag.levelLabel ? diag.levelLabel : "(unknown-level)"}: entity ${id}@${tx},${ty} has invalid numeric param 'amount' (${JSON.stringify(params.amount)}); using fallback 1.`);
+  }
   const amount = (typeof params.amount === "number") ? params.amount : 1;
   const fp = this.makeFlarePickup(tx, ty, amount);
   applyAnchor(fp, fp.w, fp.h);
@@ -504,6 +524,10 @@ if (this._catById){
     return;
   }
 }// Unknown editor entity id -> ignore (keeps runtime robust)
+        if (diag && diag.unknownEditorIds && !diag.unknownEditorIds.has(id)){
+          diag.unknownEditorIds.add(id);
+          console.warn(`[Lumo][contract] Level ${diag.levelLabel}: unknown editor entity id '${id}' ignored.`);
+        }
         return;
       }
 
@@ -516,6 +540,13 @@ if (this._catById){
       else if (e.type === "movingPlatform") this.items.push(this.makeMovingPlatformFromDef(e, levelObj));
       else if (e.type === "darkCreature") this.items.push(this.makeDarkCreature(e.x, e.y, e));
       else if (e.type === "hoverVoid") this.items.push(this.makeHoverVoid(e.x, e.y, e));
+      else {
+        const t = String(e.type || "(missing-type)");
+        if (diag && diag.unknownRuntimeTypes && !diag.unknownRuntimeTypes.has(t)){
+          diag.unknownRuntimeTypes.add(t);
+          console.warn(`[Lumo][contract] Level ${diag.levelLabel}: unknown runtime entity type '${t}' ignored.`);
+        }
+      }
     }
 
     // tile coords in, store pixels
