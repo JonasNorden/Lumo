@@ -1003,7 +1003,6 @@ display:none;
           </select>
         </div>
         <div class="pill" id="scanStatus">Scan: idle</div>
-        <button class="btn primary" id="btnPlayFromHere">Play From Here</button>
         <button class="btn" id="btnShortcuts" title="Shortcuts (Shift+/ or H)">?</button>
         <button class="btn primary" id="btnExport">Export .js</button>
         <button class="btn" id="btnImport">Import .js</button>
@@ -5950,9 +5949,11 @@ if (useFill){
     alert(`Exported: ${fileName}\nLägg den i data/levels/ och ladda den via spelets loader.`);
   });
 
-  btnPlayFromHere.addEventListener("click", () => {
-    launchGameFromEditor();
-  });
+  if (btnPlayFromHere){
+    btnPlayFromHere.addEventListener("click", () => {
+      launchGameFromEditor();
+    });
+  }
 
   btnShortcuts.addEventListener("click", () => {
     if (state.shortcutsModalOpen) closeShortcutsModal();
