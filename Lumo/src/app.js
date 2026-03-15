@@ -1600,6 +1600,7 @@
 
     world.loadLevel(levelObj);
     ents.loadFromLevel(levelObj);
+    world._ents = ents;
     levelManager.remember(levelObj);
 
     // tileSize
