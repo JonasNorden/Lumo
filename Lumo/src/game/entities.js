@@ -2056,7 +2056,15 @@ if (e.type === "lantern"){
       // Runs only every 3rd update() call to protect frame time and input.
       this._fogFrame++;
       if ((this._fogFrame % 3) === 0 && this._fogVolumes.length){
+        const playerCenterX = player ? (player.x + player.w * 0.5) : null;
         for (const f of this._fogVolumes){
+          if (playerCenterX != null){
+            // Conservative first-pass relevance gate: keep sim active around player/camera space,
+            // skip far-off fog volumes with generous horizontal padding to avoid visible pop-in.
+            const simPadding = Math.max(480, (f.x1 - f.x0) * 0.5 + (f.radius || 0) * 2 + (f.falloff || 0));
+            if (playerCenterX < (f.x0 - simPadding) || playerCenterX > (f.x1 + simPadding)) continue;
+          }
+
           const N = f.N;
           const field = f.field;
           const vel = f.vel;
