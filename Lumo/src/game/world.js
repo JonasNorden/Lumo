@@ -70,6 +70,7 @@
 
     loadLevel(levelObj){
       const meta = levelObj && levelObj.meta ? levelObj.meta : {};
+      const levelLabel = ((meta.id || "(no-id)") + (meta.name ? `:${meta.name}` : ""));
       this.tileSize = meta.tileSize || 24;
 
       const layers = levelObj && levelObj.layers ? levelObj.layers : {};
@@ -84,14 +85,26 @@
       const h = (meta.h || (mainLayer && mainLayer.h) || 0) | 0;
 
       let W = w, H = h;
+      let guessedDims = false;
+      let usedSqrtFallback = false;
       if ((!W || !H) && Array.isArray(data) && data.length){
+        guessedDims = true;
         W = meta.width ? (meta.width|0) : 500;
         H = Math.max(1, Math.floor(data.length / W));
         if (H * W !== data.length){
           const s = Math.floor(Math.sqrt(data.length));
           W = Math.max(1, s);
           H = Math.max(1, Math.floor(data.length / W));
+          usedSqrtFallback = true;
         }
+      }
+
+      // First-pass runtime contract diagnostics only: keep legacy fallbacks, add load-time visibility.
+      if (guessedDims){
+        console.warn(`[Lumo][contract] Level ${levelLabel}: missing/invalid width/height, guessed ${W}x${H}.`);
+      }
+      if (usedSqrtFallback){
+        console.warn(`[Lumo][contract] Level ${levelLabel}: tile data length ${data.length} does not fit guessed dimensions cleanly.`);
       }
 
       this.w = W || 0;
@@ -103,8 +116,14 @@
         data = new Array(this.w * this.h).fill(0);
       } else {
         const need = this.w * this.h;
-        if (data.length < need) data = data.concat(new Array(need - data.length).fill(0));
-        else if (data.length > need) data = data.slice(0, need);
+        if (data.length < need){
+          console.warn(`[Lumo][contract] Level ${levelLabel}: main layer shorter than ${need} (${data.length}); padding with 0.`);
+          data = data.concat(new Array(need - data.length).fill(0));
+        }
+        else if (data.length > need){
+          console.warn(`[Lumo][contract] Level ${levelLabel}: main layer longer than ${need} (${data.length}); truncating extras.`);
+          data = data.slice(0, need);
+        }
         else data = data.slice(0);
       }
       this.layers.main = data;
