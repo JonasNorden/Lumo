@@ -1055,7 +1055,7 @@ display:none;
           <h2>Properties</h2>
           <div style="margin-left:auto; display:flex; gap:8px;">
             <button class="btn primary" id="btnEditParams">Edit Params</button>
-            <button class="btn danger" id="btnDelete">Delete</button>
+            <button class="btn danger" id="btnDelete">Delete Selected</button>
             <button class="btn" id="btnDeselect">Deselect</button>
           </div>
         </div>
@@ -1429,6 +1429,8 @@ display:none;
     brushEnt: null,
     entToolMode: "DRAW",
     selectedEntIndex: -1,
+    selectedEntIndices: [],
+    entSelectionDrag: null,
     entityClipboard: null,
     stackCycleIndex: 0,
 
@@ -1863,6 +1865,7 @@ display:none;
     state.volumeDrag = null;
     state.lineDrag = null;
     state.rectDrag = null;
+    state.entSelectionDrag = null;
     state._paintStampKey = null;
     state._paintStampLayer = null;
     endHistoryTransaction();
@@ -1877,6 +1880,7 @@ display:none;
       tiles: Array.isArray(state.tiles) ? state.tiles.slice(0) : [],
       ents: deepClone(Array.isArray(state.ents) ? state.ents : []),
       selectedEntIndex: Number.isInteger(state.selectedEntIndex) ? state.selectedEntIndex : -1,
+      selectedEntIndices: Array.isArray(state.selectedEntIndices) ? state.selectedEntIndices.slice(0) : [],
     };
   }
 
@@ -1906,7 +1910,15 @@ display:none;
 
     state.ents = Array.isArray(snap.ents) ? deepClone(snap.ents) : [];
     state.selectedEntIndex = Number.isInteger(snap.selectedEntIndex) ? snap.selectedEntIndex : -1;
-    if (state.selectedEntIndex >= state.ents.length) state.selectedEntIndex = state.ents.length - 1;
+    state.selectedEntIndices = Array.isArray(snap.selectedEntIndices)
+      ? snap.selectedEntIndices.filter((i) => Number.isInteger(i) && i >= 0 && i < state.ents.length)
+      : [];
+    state.selectedEntIndices = [...new Set(state.selectedEntIndices)].sort((a,b) => a-b);
+    if (!state.selectedEntIndices.length && state.selectedEntIndex >= 0 && state.selectedEntIndex < state.ents.length){
+      state.selectedEntIndices = [state.selectedEntIndex];
+    }
+    if (state.selectedEntIndices.length === 1) state.selectedEntIndex = state.selectedEntIndices[0];
+    else state.selectedEntIndex = -1;
 
     clearEditorAudioEntityState();
     sanitizeEditorAudioEntityState();
@@ -2463,15 +2475,52 @@ function parseSmart(v){
     editorSoundScan.spotCooldownByIndex.delete(index);
   }
 
-  function removeEntityAtIndex(index){
-    if (!Number.isInteger(index) || index < 0 || index >= state.ents.length) return false;
+  function normalizeSelectedEntIndices(){
+    const next = Array.isArray(state.selectedEntIndices)
+      ? state.selectedEntIndices.filter((i) => Number.isInteger(i) && i >= 0 && i < state.ents.length)
+      : [];
+    state.selectedEntIndices = [...new Set(next)].sort((a,b) => a-b);
+    if (!state.selectedEntIndices.length && state.selectedEntIndex >= 0 && state.selectedEntIndex < state.ents.length){
+      state.selectedEntIndices = [state.selectedEntIndex];
+    }
+    if (state.selectedEntIndices.length === 1) state.selectedEntIndex = state.selectedEntIndices[0];
+    else state.selectedEntIndex = -1;
+  }
+
+  function setSelectedEntIndices(indices){
+    state.selectedEntIndices = Array.isArray(indices) ? indices.slice(0) : [];
+    normalizeSelectedEntIndices();
+  }
+
+  function setSingleSelectedEntity(index){
+    if (!Number.isInteger(index) || index < 0 || index >= state.ents.length){
+      setSelectedEntIndices([]);
+      return;
+    }
+    setSelectedEntIndices([index]);
+  }
+
+  function isEntitySelected(index){
+    return Array.isArray(state.selectedEntIndices) && state.selectedEntIndices.includes(index);
+  }
+
+  function removeEntityIndices(indices){
+    const sorted = Array.isArray(indices)
+      ? [...new Set(indices.filter((i) => Number.isInteger(i) && i >= 0 && i < state.ents.length))].sort((a,b) => b-a)
+      : [];
+    if (!sorted.length) return 0;
     pushHistorySnapshot();
-    stopScanEntityAudio(index);
-    state.ents.splice(index, 1);
-    remapEditorAudioEntityStateAfterDelete(index);
-    if (state.selectedEntIndex === index) state.selectedEntIndex = -1;
-    else if (state.selectedEntIndex > index) state.selectedEntIndex--;
-    return true;
+    for (const index of sorted){
+      stopScanEntityAudio(index);
+      state.ents.splice(index, 1);
+      remapEditorAudioEntityStateAfterDelete(index);
+    }
+    setSelectedEntIndices([]);
+    return sorted.length;
+  }
+
+  function removeEntityAtIndex(index){
+    return removeEntityIndices([index]) > 0;
   }
 
   function cloneEntityForClipboard(ent){
@@ -2525,7 +2574,7 @@ function parseSmart(v){
     clone.order = state.ents.length;
     clone.params = deepClone(clone.params || {});
     state.ents.push(clone);
-    state.selectedEntIndex = state.ents.length - 1;
+    setSingleSelectedEntity(state.ents.length - 1);
     updateSelectedUI();
     state.guideDirty = true;
     return true;
@@ -3225,7 +3274,7 @@ function parseSmart(v){
       }
 
       state.ents.push(e);
-      state.selectedEntIndex = state.ents.length - 1;
+      setSingleSelectedEntity(state.ents.length - 1);
       updateSelectedUI();
       // Auto-open per-instance params on placement
       openParamsModal(state.selectedEntIndex, asset);
@@ -3361,7 +3410,7 @@ function parseSmart(v){
     if (e.params.area.falloff == null) e.params.area.falloff = 0;
 
     state.ents.push(e);
-    state.selectedEntIndex = state.ents.length - 1;
+    setSingleSelectedEntity(state.ents.length - 1);
     updateSelectedUI();
     openParamsModal(state.selectedEntIndex, asset);
     state.guideDirty = true;
@@ -3371,13 +3420,25 @@ function parseSmart(v){
 
 
   function updateSelectedUI(){
-    if (state.selectedEntIndex < 0 || state.selectedEntIndex >= state.ents.length){
+    normalizeSelectedEntIndices();
+    if (!state.selectedEntIndices.length){
       selectedInfoEl.value = "(none)";
+      if (btnEditParams) btnEditParams.disabled = true;
+      if (btnDelete) btnDelete.disabled = true;
+      renderAudioInspector();
+      return;
+    }
+    if (state.selectedEntIndices.length > 1){
+      selectedInfoEl.value = `${state.selectedEntIndices.length} entities selected`;
+      if (btnEditParams) btnEditParams.disabled = true;
+      if (btnDelete) btnDelete.disabled = false;
       renderAudioInspector();
       return;
     }
     const e = state.ents[state.selectedEntIndex];
     selectedInfoEl.value = `${e.id} @ (${e.x},${e.y})`;
+    if (btnEditParams) btnEditParams.disabled = false;
+    if (btnDelete) btnDelete.disabled = false;
     renderAudioInspector();
   }
 
@@ -3583,7 +3644,7 @@ function parseSmart(v){
     const index = Number(rowBtn.getAttribute("data-nav-ent-index"));
     if (!Number.isInteger(index) || index < 0 || index >= state.ents.length) return;
     const ent = state.ents[index];
-    state.selectedEntIndex = index;
+    setSingleSelectedEntity(index);
     focusWorldAtTile(ent.x, ent.y);
     guidePingAtTile(ent.x, ent.y);
     updateSelectedUI();
@@ -3836,9 +3897,9 @@ function parseSmart(v){
   }
   function cycleStackAt(tx,ty){
     const hits = entsAtTile(tx,ty);
-    if (!hits.length){ state.selectedEntIndex=-1; updateSelectedUI(); return; }
+    if (!hits.length){ setSelectedEntIndices([]); updateSelectedUI(); return; }
     state.stackCycleIndex = (state.stackCycleIndex+1) % hits.length;
-    state.selectedEntIndex = hits[state.stackCycleIndex];
+    setSingleSelectedEntity(hits[state.stackCycleIndex]);
     updateSelectedUI();
     state.guideDirty = true;
   }
@@ -3846,15 +3907,33 @@ function parseSmart(v){
   function selectTopmostAt(tx,ty){
     const hits = entsAtTile(tx,ty);
     if (!hits.length){
-      state.selectedEntIndex = -1;
+      setSelectedEntIndices([]);
       updateSelectedUI();
       return false;
     }
-    state.selectedEntIndex = hits[hits.length-1];
+    setSingleSelectedEntity(hits[hits.length-1]);
     updateSelectedUI();
     return true;
   }
 
+  function finalizeEntSelectionDrag(){
+    const drag = state.entSelectionDrag;
+    if (!drag) return;
+    state.entSelectionDrag = null;
+    const txMin = Math.min(drag.tx0, drag.tx1);
+    const txMax = Math.max(drag.tx0, drag.tx1);
+    const tyMin = Math.min(drag.ty0, drag.ty1);
+    const tyMax = Math.max(drag.ty0, drag.ty1);
+    const selected = [];
+    for (let i=0;i<state.ents.length;i++){
+      const e = state.ents[i];
+      if (!e) continue;
+      if (e.x >= txMin && e.x <= txMax && e.y >= tyMin && e.y <= tyMax) selected.push(i);
+    }
+    setSelectedEntIndices(selected);
+    updateSelectedUI();
+    state.guideDirty = true;
+  }
 
   function focusWorldAtTile(tx, ty){
     const cx = (tx + 0.5) * TS;
@@ -4581,7 +4660,7 @@ function drawEntities(){
         drawVolumeVisual(x0, x1, y0, falloff, false);
 
         // selection frame for volumes
-        if (i === state.selectedEntIndex){
+        if (isEntitySelected(i)){
           const sp0 = worldToScreen(x0, y0-16);
           const sp1 = worldToScreen(x1, y0+16);
           ctx.save();
@@ -4632,7 +4711,7 @@ function drawEntities(){
         ctx.fillText(e.id, s.x+4, s.y+14);
       }
 
-      const isSelected = (i === state.selectedEntIndex);
+      const isSelected = isEntitySelected(i);
       const soundOverlay = getSoundOverlay(e);
       const scanHighlight = getEditorSoundScanHighlight(i, e, soundOverlay);
       if (soundOverlay){
@@ -4817,6 +4896,28 @@ function drawEntities(){
         ctx.strokeRect(topLeft.x + 1, topLeft.y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
         ctx.restore();
       }
+    }
+
+    if (state.entSelectionDrag && state.layer === "ENT" && state.entToolMode === "EDIT"){
+      const drag = state.entSelectionDrag;
+      const x0 = Math.min(drag.tx0, drag.tx1) * TS;
+      const y0 = Math.min(drag.ty0, drag.ty1) * TS;
+      const x1 = (Math.max(drag.tx0, drag.tx1) + 1) * TS;
+      const y1 = (Math.max(drag.ty0, drag.ty1) + 1) * TS;
+      const s0 = worldToScreen(x0, y0);
+      const s1 = worldToScreen(x1, y1);
+      const rx = Math.min(s0.x, s1.x);
+      const ry = Math.min(s0.y, s1.y);
+      const rw = Math.abs(s1.x - s0.x);
+      const rh = Math.abs(s1.y - s0.y);
+      ctx.save();
+      ctx.fillStyle = "rgba(71,215,255,0.12)";
+      ctx.strokeStyle = "rgba(71,215,255,0.75)";
+      ctx.setLineDash([6,4]);
+      ctx.lineWidth = 1.5;
+      ctx.fillRect(rx, ry, rw, rh);
+      ctx.strokeRect(rx+0.5, ry+0.5, Math.max(0, rw-1), Math.max(0, rh-1));
+      ctx.restore();
     }
 
     if (state.layer==="ENT" && state.brushEnt){
@@ -5305,6 +5406,10 @@ if (useFill){
 
       if (state.layer==="ENT"){
         if (state.entToolMode === "EDIT"){
+          if (e.shiftKey && !e.altKey){
+            state.entSelectionDrag = { tx0: state.tileX, ty0: state.tileY, tx1: state.tileX, ty1: state.tileY };
+            return;
+          }
           selectTopmostAt(state.tileX, state.tileY);
           return;
         }
@@ -5351,6 +5456,10 @@ if (useFill){
       state.volumeDrag = null;
     }
 
+    if (e.button===0 && state.entSelectionDrag){
+      finalizeEntSelectionDrag();
+    }
+
     if (e.button===0) state.lmbDown=false;
     if (e.button===2) state.rmbDown=false;
     if (e.button===1) state.draggingPan=false;
@@ -5373,12 +5482,16 @@ if (useFill){
     if (!(e.buttons & 1) && state.lmbDown && state.rectDrag){
       finalizeRectDrag();
     }
+    if (!(e.buttons & 1) && state.lmbDown && state.entSelectionDrag){
+      finalizeEntSelectionDrag();
+    }
     if (!(e.buttons & 1)) state.lmbDown = false;
     if (!(e.buttons & 2)) state.rmbDown = false;
     if (!state.lmbDown && !state.rmbDown){
       state._paintStampKey = null;
       state._paintStampLayer = null;
       if (state.volumeDrag) state.volumeDrag = null;
+      if (state.entSelectionDrag) state.entSelectionDrag = null;
     }
 
     if (state.draggingPan){
@@ -5406,6 +5519,12 @@ if (useFill){
     if (state.rectDrag && state.lmbDown){
       state.rectDrag.tx1 = state.tileX;
       state.rectDrag.ty1 = state.tileY;
+      return;
+    }
+
+    if (state.entSelectionDrag && state.lmbDown){
+      state.entSelectionDrag.tx1 = state.tileX;
+      state.entSelectionDrag.ty1 = state.tileY;
       return;
     }
 
@@ -5540,7 +5659,7 @@ if (useFill){
     if (state.layer==="TILES") state.tiles.fill(0);
     if (state.layer==="ENT"){
       state.ents=[];
-      state.selectedEntIndex=-1;
+      setSelectedEntIndices([]);
       clearEditorAudioEntityState();
       updateSelectedUI();
       stopEditorSoundScan();
@@ -5552,19 +5671,20 @@ if (useFill){
   btnEntModeEdit.addEventListener("click", () => setEntToolMode("EDIT"));
 
   btnEditParams.addEventListener("click", () => {
+    if (state.selectedEntIndices.length !== 1) return;
     if (state.selectedEntIndex < 0 || state.selectedEntIndex >= state.ents.length) return;
     openParamsModal(state.selectedEntIndex);
   });
 
   btnDelete.addEventListener("click", () => {
-    if (state.selectedEntIndex<0) return;
-    removeEntityAtIndex(state.selectedEntIndex);
+    if (!state.selectedEntIndices.length) return;
+    removeEntityIndices(state.selectedEntIndices);
     updateSelectedUI();
     state.guideDirty = true;
     guideRefresh();
   });
   btnDeselect.addEventListener("click", () => {
-    state.selectedEntIndex=-1;
+    setSelectedEntIndices([]);
     updateSelectedUI();
     state.guideDirty = true;
   });
@@ -5773,7 +5893,7 @@ const mainArr = obj.layers && obj.layers.main;
           }
         }
 
-        state.selectedEntIndex=-1;
+        setSelectedEntIndices([]);
         updateSelectedUI();
         state.historyPast = [];
         state.historyFuture = [];
