@@ -3441,10 +3441,8 @@ function parseSmart(v){
         }
         state.guideDirty = true;
       } else {
-        if (!state.brushTile) return;
-        const tid = (state.brushTile.tileId != null)
-          ? (state.brushTile.tileId|0)
-          : (state.brushTile.idNum != null ? (state.brushTile.idNum|0) : 1);
+        const tid = getCurrentBrushTileId();
+        if (tid == null) return;
         state.tiles[idx(tx,ty)] = tid;
         state.guideDirty = true;
       }
@@ -5730,13 +5728,8 @@ const useFill = !!altKey && !isErase;
 
 if (useFill){
   if (state.layer === "TILES"){
-    if (!state.brushTile) return;
-    // Determine numeric tile id used by painter
-    const tid = (typeof state.brushTile.idNum === "number") ? (state.brushTile.idNum|0)
-              : (typeof state.brushTile.tileId === "number") ? (state.brushTile.tileId|0)
-              : (typeof state.brushTile.id === "number") ? (state.brushTile.id|0)
-              : (typeof state.brushTile.value === "number") ? (state.brushTile.value|0)
-              : 1;
+    const tid = getCurrentBrushTileId();
+    if (tid == null) return;
     const fp = getCurrentBrushTileFootprint();
     pushHistorySnapshot();
     const changed = (fp.w > 1 || fp.h > 1)
