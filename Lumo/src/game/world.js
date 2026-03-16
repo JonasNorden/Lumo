@@ -20,6 +20,7 @@
       // --- Tile visuals (catalog-driven PNG rendering) ---
       this._tileDefById = null;      // tileId -> catalog def
       this._tileImg = new Map();     // tileId -> Image
+      this._behaviorProfileById = null; // behaviorProfileId -> profile def
 
       // Tile defs (id -> properties)
       const fallback = {
@@ -66,6 +67,61 @@
           if (img) this._tileImg.set(tid, img);
         }
       }
+    }
+
+    _ensureBehaviorProfiles(){
+      if (this._behaviorProfileById) return;
+
+      this._behaviorProfileById = new Map();
+      const profiles = window.LUMO_TILE_BEHAVIOR_PROFILES;
+      if (!Array.isArray(profiles) || !profiles.length) return;
+
+      for (const p of profiles){
+        if (!p || !p.id) continue;
+        this._behaviorProfileById.set(p.id, p);
+      }
+    }
+
+    _getLegacyTileBehavior(id){
+      const defs = (window.Lumo && Lumo.Tileset) ? Lumo.Tileset : this.tileDefs;
+      return defs[id] || defs[1] || this.tileDefs[1];
+    }
+
+    resolveTileBehaviorById(id){
+      const tileId = id | 0;
+      const legacy = this._getLegacyTileBehavior(tileId);
+
+      // Migration-safe bridge: honor additive behaviorProfileId metadata when present,
+      // while keeping tileId/Tileset behavior as the compatibility fallback.
+      this._ensureTileCatalog();
+      this._ensureBehaviorProfiles();
+
+      const tileMeta = this._tileDefById ? this._tileDefById.get(tileId) : null;
+      const behaviorProfileId = tileMeta && tileMeta.behaviorProfileId;
+      if (!behaviorProfileId || !this._behaviorProfileById) return legacy;
+
+      const profile = this._behaviorProfileById.get(behaviorProfileId);
+      if (!profile) return legacy;
+
+      let profileBase = null;
+      if (profile.collisionType === "solid"){
+        profileBase = (profile.special === "ice")
+          ? this._getLegacyTileBehavior(4)
+          : this._getLegacyTileBehavior(1);
+      } else if (profile.collisionType === "oneWay"){
+        profileBase = this._getLegacyTileBehavior(2);
+      } else if (profile.collisionType === "hazard"){
+        profileBase = this._getLegacyTileBehavior(3);
+      }
+
+      if (!profileBase) return legacy;
+      return Object.assign({}, legacy, profileBase);
+    }
+
+    getTileBehavior(tx, ty){
+      const id = this.getTile(tx, ty) | 0;
+      if (!id) return null;
+      return this.resolveTileBehaviorById(id);
     }
 
     loadLevel(levelObj){
@@ -218,8 +274,7 @@
 
           const id = hit.id | 0;
 
-          const defs = (window.Lumo && Lumo.Tileset) ? Lumo.Tileset : this.tileDefs;
-          const def = defs[id] || defs[1] || this.tileDefs[1];
+          const def = this.resolveTileBehaviorById(id);
 
           // Default collider is 1×1 tile (24×24)
           let w = ts, h = ts, x = hit.ax * ts, y = hit.ay * ts;
