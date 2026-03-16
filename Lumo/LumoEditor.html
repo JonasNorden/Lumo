@@ -3494,6 +3494,8 @@ function parseSmart(v){
 
   function getCurrentBrushTileId(){
     if (!state.brushTile) return null;
+    if (state.brushTile.writeTileId != null) return state.brushTile.writeTileId|0;
+    if (state.brushTile.writeId != null) return state.brushTile.writeId|0;
     if (state.brushTile.tileId != null) return state.brushTile.tileId|0;
     if (state.brushTile.idNum != null) return state.brushTile.idNum|0;
     return 1;
