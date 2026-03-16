@@ -1563,6 +1563,15 @@ display:none;
   function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
   function idx(tx, ty){ return ty * state.w + tx; }
 
+  function createBrushTileSelection(catalogTile){
+    if (!catalogTile) return null;
+    return {
+      ...catalogTile,
+      catalogTile,
+      composedTiles: null,
+    };
+  }
+
   function resizeCanvas(){
     const r = main.getBoundingClientRect();
     canvas.width = Math.floor(r.width);
@@ -1794,7 +1803,7 @@ display:none;
     for (const a of all){ if (a && a.img) loadImage(a.img); }
 
     state.brushBG = state.catalogs.BG[0] || null;
-    state.brushTile = state.catalogs.TILES[0] || null;
+    state.brushTile = createBrushTileSelection(state.catalogs.TILES[0] || null);
     state.brushEnt = state.catalogs.ENT[0] || null;
 
     updateMeta();
@@ -2002,7 +2011,7 @@ display:none;
 
         cell.addEventListener("click", () => {
           if (state.layer==="BG") state.brushBG = it;
-          if (state.layer==="TILES") state.brushTile = it;
+          if (state.layer==="TILES") state.brushTile = createBrushTileSelection(it);
           if (state.layer==="ENT") state.brushEnt = it;
           // Selecting brushes from the palette must never keep a stale canvas-draw state alive.
           resetPointerPaintState();
