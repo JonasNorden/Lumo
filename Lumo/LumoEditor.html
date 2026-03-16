@@ -3406,7 +3406,26 @@ function parseSmart(v){
       }
     } else if (state.layer === "TILES"){
       if (isErase){
-        state.tiles[idx(tx,ty)] = 0;
+        const hitIdx = idx(tx,ty);
+        const hitTid = state.tiles[hitIdx]|0;
+        if (!hitTid){
+          state.tiles[hitIdx] = 0;
+        } else {
+          const fp = getTileFootprintById(hitTid);
+          if (fp.w > 1 || fp.h > 1){
+            // First multi-footprint erase rule: erase one matched placement rectangle per click.
+            const anchor = findTileErasePlacementAnchor(tx, ty, hitTid, fp);
+            if (anchor){
+              for (let yy=anchor.y; yy<anchor.y+fp.h; yy++){
+                for (let xx=anchor.x; xx<anchor.x+fp.w; xx++) state.tiles[idx(xx,yy)] = 0;
+              }
+            } else {
+              state.tiles[hitIdx] = 0;
+            }
+          } else {
+            state.tiles[hitIdx] = 0;
+          }
+        }
         state.guideDirty = true;
       } else {
         if (!state.brushTile) return;
@@ -3475,6 +3494,35 @@ function parseSmart(v){
     const w = Math.max(1, (fp && Number.isFinite(Number(fp.w))) ? (Number(fp.w)|0) : 1);
     const h = Math.max(1, (fp && Number.isFinite(Number(fp.h))) ? (Number(fp.h)|0) : 1);
     return { w, h };
+  }
+
+  function getTileFootprintById(tileId){
+    const tid = tileId|0;
+    const tile = (state.catalogs.TILES||[]).find(a => ((a.tileId|0)===tid) || ((a.id|0)===tid));
+    const fp = tile && tile.footprint;
+    const w = Math.max(1, (fp && Number.isFinite(Number(fp.w))) ? (Number(fp.w)|0) : 1);
+    const h = Math.max(1, (fp && Number.isFinite(Number(fp.h))) ? (Number(fp.h)|0) : 1);
+    return { w, h };
+  }
+
+  function findTileErasePlacementAnchor(tx, ty, tid, fp){
+    for (let ay=ty; ay>=ty-(fp.h-1); ay--){
+      for (let ax=tx; ax>=tx-(fp.w-1); ax--){
+        if (ax < 0 || ay < 0) continue;
+        if ((ax + fp.w) > state.w || (ay + fp.h) > state.h) continue;
+        let ok = true;
+        for (let yy=ay; yy<ay+fp.h && ok; yy++){
+          for (let xx=ax; xx<ax+fp.w; xx++){
+            if ((state.tiles[idx(xx,yy)]|0) !== (tid|0)){
+              ok = false;
+              break;
+            }
+          }
+        }
+        if (ok) return { x: ax, y: ay };
+      }
+    }
+    return null;
   }
 
   function buildTileLinePoints(x0, y0, x1, y1){
