@@ -1565,10 +1565,20 @@ display:none;
 
   function createBrushTileSelection(catalogTile){
     if (!catalogTile) return null;
+    const writeTileId = (catalogTile.writeTileId != null) ? (catalogTile.writeTileId|0)
+      : (catalogTile.writeId != null) ? (catalogTile.writeId|0)
+      : (catalogTile.tileId != null) ? (catalogTile.tileId|0)
+      : (catalogTile.idNum != null) ? (catalogTile.idNum|0)
+      : (catalogTile.id|0);
+    const sourceFootprint = catalogTile.footprint;
+    const footprint = {
+      w: Math.max(1, (sourceFootprint && Number.isFinite(Number(sourceFootprint.w))) ? (Number(sourceFootprint.w)|0) : 1),
+      h: Math.max(1, (sourceFootprint && Number.isFinite(Number(sourceFootprint.h))) ? (Number(sourceFootprint.h)|0) : 1),
+    };
     return {
       ...catalogTile,
       catalogTile,
-      composedTiles: null,
+      brush: { writeTileId, footprint },
     };
   }
 
@@ -3503,6 +3513,7 @@ function parseSmart(v){
 
   function getCurrentBrushTileId(){
     if (!state.brushTile) return null;
+    if (state.brushTile.brush && state.brushTile.brush.writeTileId != null) return state.brushTile.brush.writeTileId|0;
     if (state.brushTile.writeTileId != null) return state.brushTile.writeTileId|0;
     if (state.brushTile.writeId != null) return state.brushTile.writeId|0;
     if (state.brushTile.tileId != null) return state.brushTile.tileId|0;
@@ -3516,7 +3527,7 @@ function parseSmart(v){
 
   function getCurrentBrushTileFootprint(){
     const tile = state.brushTile;
-    const fp = tile && tile.footprint;
+    const fp = (tile && tile.brush && tile.brush.footprint) || (tile && tile.footprint);
     const w = Math.max(1, (fp && Number.isFinite(Number(fp.w))) ? (Number(fp.w)|0) : 1);
     const h = Math.max(1, (fp && Number.isFinite(Number(fp.h))) ? (Number(fp.h)|0) : 1);
     return { w, h };
