@@ -393,10 +393,13 @@
       if (typeof world.getTile === 'function') id = world.getTile(tx, ty) | 0;
       else if (typeof world.get === 'function') id = world.get(tx, ty) | 0;
       if (!id) return null;
+      const resolved = (typeof world.resolveTileBehaviorById === 'function')
+        ? world.resolveTileBehaviorById(id)
+        : null;
       const tsDef = (Lumo.Tileset && Lumo.Tileset[id]) ? Lumo.Tileset[id] : null;
       // Some implementations store defs in world.tileDefs instead.
       const wDef = (world.tileDefs && world.tileDefs[id]) ? world.tileDefs[id] : null;
-      return tsDef || wDef || null;
+      return resolved || tsDef || wDef || null;
     }
 
     _applySurface(world){
