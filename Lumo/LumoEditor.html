@@ -3589,6 +3589,14 @@ function parseSmart(v){
     return points;
   }
 
+  function quantizeTileAnchorToFootprint(tx, ty, anchorX, anchorY, fp){
+    if (!fp || (fp.w <= 1 && fp.h <= 1)) return { x: tx|0, y: ty|0 };
+    return {
+      x: (anchorX|0) + Math.floor(((tx|0) - (anchorX|0)) / fp.w) * fp.w,
+      y: (anchorY|0) + Math.floor(((ty|0) - (anchorY|0)) / fp.h) * fp.h,
+    };
+  }
+
   function finalizeLineDrag(){
     const ld = state.lineDrag;
     state.lineDrag = null;
@@ -3596,12 +3604,20 @@ function parseSmart(v){
     if (state.layer !== "TILES" || state.eraseMode) return;
     const tid = getCurrentBrushTileId();
     if (tid == null) return;
+    const fp = getCurrentBrushTileFootprint();
+    const useFootprintStep = fp.w > 1 || fp.h > 1;
 
     const points = buildTileLinePoints(ld.tx0, ld.ty0, ld.tx1, ld.ty1);
     const toPaint = [];
+    const seen = new Set();
     for (const p of points){
-      if (!inBounds(p.x, p.y)) continue;
-      const i = idx(p.x, p.y);
+      const q = useFootprintStep
+        ? quantizeTileAnchorToFootprint(p.x, p.y, ld.tx0, ld.ty0, fp)
+        : p;
+      if (!inBounds(q.x, q.y)) continue;
+      const i = idx(q.x, q.y);
+      if (seen.has(i)) continue;
+      seen.add(i);
       if ((state.tiles[i]|0) === (tid|0)) continue;
       toPaint.push(i);
     }
@@ -3629,13 +3645,22 @@ function parseSmart(v){
     if (state.layer !== "TILES") return;
     const tid = getCurrentBrushTileId();
     if (!rd.isErase && tid == null) return;
+    const fp = !rd.isErase ? getCurrentBrushTileFootprint() : { w: 1, h: 1 };
+    const useFootprintStep = !rd.isErase && (fp.w > 1 || fp.h > 1);
 
     const bounds = buildTileRectBounds(rd.tx0, rd.ty0, rd.tx1, rd.ty1);
     const toPaint = [];
+    const seen = new Set();
     for (let ty=bounds.minY; ty<=bounds.maxY; ty++){
       for (let tx=bounds.minX; tx<=bounds.maxX; tx++){
-        if (!inBounds(tx, ty)) continue;
-        const i = idx(tx, ty);
+        const q = useFootprintStep
+          // Keep line/rect stepping aligned with larger-footprint drag paint.
+          ? quantizeTileAnchorToFootprint(tx, ty, rd.tx0, rd.ty0, fp)
+          : { x: tx, y: ty };
+        if (!inBounds(q.x, q.y)) continue;
+        const i = idx(q.x, q.y);
+        if (seen.has(i)) continue;
+        seen.add(i);
         if (rd.isErase){
           if ((state.tiles[i]|0) === 0) continue;
         } else {
