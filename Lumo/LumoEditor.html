@@ -1199,7 +1199,7 @@ display:none;
             <div class="shortcutGroupTitle">TILES / BG</div>
             <div class="shortcutRow"><span class="shortcutKey">LMB</span><span class="shortcutAction">Paint</span></div>
             <div class="shortcutRow"><span class="shortcutKey">RMB</span><span class="shortcutAction">Erase</span></div>
-            <div class="shortcutRow"><span class="shortcutKey">Alt + LMB</span><span class="shortcutAction">Fill (large tile brushes use footprint lattice)</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Alt + LMB</span><span class="shortcutAction">Fill (large tile brushes use footprint-aware barriers)</span></div>
             <div class="shortcutRow"><span class="shortcutKey">Shift + LMB</span><span class="shortcutAction">Line</span></div>
             <div class="shortcutRow"><span class="shortcutKey">Ctrl + Shift + LMB</span><span class="shortcutAction">Rectangle</span></div>
             <div class="shortcutRow"><span class="shortcutKey">Ctrl + Shift + RMB</span><span class="shortcutAction">Erase rectangle</span></div>
@@ -5563,12 +5563,47 @@ function floodFillTileAnchors(startX, startY, newTid, fp){
   if (!arr) return 0;
   if (startX<0||startY<0||startX>=W||startY>=H) return 0;
 
+  // Larger-footprint fill stays anchor-based in storage, but derives per-cell
+  // occupancy so visually covered cells behave as logical barriers.
+  const occ = new Int32Array(W * H);
+  const owner = new Int32Array(W * H);
+  owner.fill(-1);
+  const fpCache = new Map();
+  const getFp = (tid) => {
+    const k = tid|0;
+    if (fpCache.has(k)) return fpCache.get(k);
+    const got = getTileFootprintById(k);
+    fpCache.set(k, got);
+    return got;
+  };
+  for (let ay=0; ay<H; ay++){
+    for (let ax=0; ax<W; ax++){
+      const ai = idx(ax, ay);
+      const tid = arr[ai] | 0;
+      if (!tid) continue;
+      const afp = getFp(tid);
+      const topY = ay - (afp.h - 1);
+      if (topY < 0 || (ax + afp.w) > W) continue;
+      for (let yy=topY; yy<=ay; yy++){
+        for (let xx=ax; xx<ax+afp.w; xx++){
+          const i = idx(xx,yy);
+          occ[i] = tid;
+          owner[i] = ai;
+        }
+      }
+    }
+  }
+
   const startIdx = idx(startX, startY);
-  const target = arr[startIdx] | 0;
+  const target = occ[startIdx] | 0;
   if ((target|0) === (newTid|0)) return 0;
 
-  // Larger tile bucket fill is anchor-lattice only: we step in footprint increments
-  // and leave irregular/non-lattice leftovers untouched on purpose.
+  const startOwner = owner[startIdx];
+  if (startOwner >= 0){
+    startX = startOwner % W;
+    startY = Math.floor(startOwner / W);
+  }
+
   const qx = [startX], qy = [startY];
   let qi = 0, changed = 0;
   const vis = new Set();
@@ -5580,14 +5615,37 @@ function floodFillTileAnchors(startX, startY, newTid, fp){
     vis.add(k);
 
     const i = idx(x,y);
-    if ((arr[i]|0) !== (target|0)) continue;
-    arr[i] = newTid|0;
-    changed++;
+    const at = arr[i] | 0;
+    if (target === 0){
+      if (at !== 0) continue;
+    } else {
+      if (at !== target) continue;
+    }
 
-    qx.push(x + stepX); qy.push(y);
-    qx.push(x - stepX); qy.push(y);
-    qx.push(x);         qy.push(y + stepY);
-    qx.push(x);         qy.push(y - stepY);
+    if ((arr[i]|0) !== (newTid|0)){
+      arr[i] = newTid|0;
+      changed++;
+    }
+
+    const neighbors = [
+      [x + stepX, y],
+      [x - stepX, y],
+      [x, y + stepY],
+      [x, y - stepY],
+    ];
+    for (const [sx, sy] of neighbors){
+      if (sx<0||sy<0||sx>=W||sy>=H) continue;
+      const si = idx(sx, sy);
+      if ((occ[si]|0) !== (target|0)) continue;
+      const oi = owner[si];
+      if (oi >= 0){
+        qx.push(oi % W);
+        qy.push(Math.floor(oi / W));
+      } else {
+        qx.push(sx);
+        qy.push(sy);
+      }
+    }
   }
   return changed;
 }
