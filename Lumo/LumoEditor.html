@@ -3501,6 +3501,10 @@ function parseSmart(v){
     return 1;
   }
 
+  function hasCurrentBrushTile(){
+    return getCurrentBrushTileId() != null;
+  }
+
   function getCurrentBrushTileFootprint(){
     const tile = state.brushTile;
     const fp = tile && tile.footprint;
@@ -5156,7 +5160,7 @@ function drawEntities(){
     ctx.strokeRect(s.x+1, s.y+1, TS-2, TS-2);
     ctx.restore();
 
-    if (state.layer === "TILES" && !state.eraseMode && state.brushTile){
+    if (state.layer === "TILES" && !state.eraseMode && hasCurrentBrushTile()){
       const fp = getCurrentBrushTileFootprint();
       if (fp.w > 1 || fp.h > 1){
         // Larger tile placement uses BL anchor: footprint extends up + right from hovered tile.
@@ -5787,7 +5791,7 @@ if (useFill){
 
     // First behavior step for multi-footprint tile brushes:
     // normal drag paint advances on a footprint-sized anchor lattice.
-    if (state.layer === "TILES" && !isErase && state.brushTile && !freePaint){
+    if (state.layer === "TILES" && !isErase && hasCurrentBrushTile() && !freePaint){
       const fp = getCurrentBrushTileFootprint();
       if (fp.w > 1 || fp.h > 1){
         if (!Number.isInteger(state._tileDragAnchorX) || !Number.isInteger(state._tileDragAnchorY)){
