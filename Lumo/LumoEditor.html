@@ -1199,7 +1199,7 @@ display:none;
             <div class="shortcutGroupTitle">TILES / BG</div>
             <div class="shortcutRow"><span class="shortcutKey">LMB</span><span class="shortcutAction">Paint</span></div>
             <div class="shortcutRow"><span class="shortcutKey">RMB</span><span class="shortcutAction">Erase</span></div>
-            <div class="shortcutRow"><span class="shortcutKey">Alt + LMB</span><span class="shortcutAction">Fill</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Alt + LMB</span><span class="shortcutAction">Fill (large tile brushes use footprint lattice)</span></div>
             <div class="shortcutRow"><span class="shortcutKey">Shift + LMB</span><span class="shortcutAction">Line</span></div>
             <div class="shortcutRow"><span class="shortcutKey">Ctrl + Shift + LMB</span><span class="shortcutAction">Rectangle</span></div>
             <div class="shortcutRow"><span class="shortcutKey">Ctrl + Shift + RMB</span><span class="shortcutAction">Erase rectangle</span></div>
@@ -5553,6 +5553,45 @@ function floodFillTiles(startX, startY, newTid){
   return changed;
 }
 
+function floodFillTileAnchors(startX, startY, newTid, fp){
+  const stepX = Math.max(1, (fp && fp.w) ? (fp.w|0) : 1);
+  const stepY = Math.max(1, (fp && fp.h) ? (fp.h|0) : 1);
+  if (stepX <= 1 && stepY <= 1) return floodFillTiles(startX, startY, newTid);
+
+  const W = state.w, H = state.h;
+  const arr = state.tiles;
+  if (!arr) return 0;
+  if (startX<0||startY<0||startX>=W||startY>=H) return 0;
+
+  const startIdx = idx(startX, startY);
+  const target = arr[startIdx] | 0;
+  if ((target|0) === (newTid|0)) return 0;
+
+  // Larger tile bucket fill is anchor-lattice only: we step in footprint increments
+  // and leave irregular/non-lattice leftovers untouched on purpose.
+  const qx = [startX], qy = [startY];
+  let qi = 0, changed = 0;
+  const vis = new Set();
+  while (qi < qx.length){
+    const x = qx[qi], y = qy[qi]; qi++;
+    if (x<0||y<0||x>=W||y>=H) continue;
+    const k = x + "," + y;
+    if (vis.has(k)) continue;
+    vis.add(k);
+
+    const i = idx(x,y);
+    if ((arr[i]|0) !== (target|0)) continue;
+    arr[i] = newTid|0;
+    changed++;
+
+    qx.push(x + stepX); qy.push(y);
+    qx.push(x - stepX); qy.push(y);
+    qx.push(x);         qy.push(y + stepY);
+    qx.push(x);         qy.push(y - stepY);
+  }
+  return changed;
+}
+
 function buildTopBgOriginMap(){
   const m = new Map();
   const pls = state.bgPlacements || [];
@@ -5640,8 +5679,11 @@ if (useFill){
               : (typeof state.brushTile.id === "number") ? (state.brushTile.id|0)
               : (typeof state.brushTile.value === "number") ? (state.brushTile.value|0)
               : 1;
+    const fp = getCurrentBrushTileFootprint();
     pushHistorySnapshot();
-    const changed = floodFillTiles(tx, ty, tid);
+    const changed = (fp.w > 1 || fp.h > 1)
+      ? floodFillTileAnchors(tx, ty, tid, fp)
+      : floodFillTiles(tx, ty, tid);
     if (changed > 0){
       state.guideDirty = true;
       render();
