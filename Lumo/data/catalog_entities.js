@@ -6,6 +6,9 @@ window.LUMO_CATALOG_ENTITIES = [
     "category": "sound",
     "img": "data/assets/sprites/sound/music.png",
     "anchor": "BL",
+    "behaviorProfileId": "entity.sound.music_zone.v1",
+    "visualProfileId": "visual.entity.bl",
+    "themeTags": ["tech"],
     "defaults": {
       "soundFile": "data/assets/audio/music/space_loop_short.wav",
       "xStart": 0,
@@ -120,6 +123,9 @@ window.LUMO_CATALOG_ENTITIES = [
     "category": "decor",
     "img": "data/assets/sprites/creatures/dc_idle_3.png",
     "anchor": "BL",
+    "behaviorProfileId": "entity.creature.dark_creature.v1",
+    "visualProfileId": "visual.entity.bl",
+    "themeTags": ["void", "dark"],
     "defaults": {
       "hp": 3,
       "hitCooldown": 0.6,
@@ -152,6 +158,9 @@ window.LUMO_CATALOG_ENTITIES = [
     "category": "decor",
     "img": "data/assets/sprites/creatures/void_m_04.png",
     "anchor": "BL",
+    "behaviorProfileId": "entity.creature.hover_void.v1",
+    "visualProfileId": "visual.entity.bl",
+    "themeTags": ["void", "dark"],
     "defaults": {
       "aggroTiles": 7,
       "followTiles": 7,
