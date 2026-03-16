@@ -1500,6 +1500,8 @@ display:none;
     // paint de-dupe (prevents overlap-spam while dragging)
     _paintStampKey: null,
     _paintStampLayer: null,
+    _tileDragAnchorX: null,
+    _tileDragAnchorY: null,
 
     w: 500,
     h: 30,
@@ -2043,6 +2045,8 @@ display:none;
     state.entSelectionDrag = null;
     state._paintStampKey = null;
     state._paintStampLayer = null;
+    state._tileDragAnchorX = null;
+    state._tileDragAnchorY = null;
     endHistoryTransaction();
   }
 
@@ -5567,6 +5571,26 @@ if (useFill){
       }
     }
 
+    // First behavior step for multi-footprint tile brushes:
+    // normal drag paint advances on a footprint-sized anchor lattice.
+    if (state.layer === "TILES" && !isErase && state.brushTile && !freePaint){
+      const fp = getCurrentBrushTileFootprint();
+      if (fp.w > 1 || fp.h > 1){
+        if (!Number.isInteger(state._tileDragAnchorX) || !Number.isInteger(state._tileDragAnchorY)){
+          state._tileDragAnchorX = tx;
+          state._tileDragAnchorY = ty;
+        }
+        tx = state._tileDragAnchorX + Math.floor((tx - state._tileDragAnchorX) / fp.w) * fp.w;
+        ty = state._tileDragAnchorY + Math.floor((ty - state._tileDragAnchorY) / fp.h) * fp.h;
+      } else {
+        state._tileDragAnchorX = null;
+        state._tileDragAnchorY = null;
+      }
+    } else {
+      state._tileDragAnchorX = null;
+      state._tileDragAnchorY = null;
+    }
+
     // de-dupe stamp key (layer + anchor tile + erase)
     const stampKey = `${state.layer}:${isErase?1:0}:${tx},${ty}`;
     if (!freePaint && state._paintStampKey === stampKey && state._paintStampLayer === state.layer){
@@ -5674,6 +5698,7 @@ if (useFill){
     if (e.button===1) state.draggingPan=false;
     // reset paint de-dupe when stroke ends
     if (e.button===0 || e.button===2){ state._paintStampKey = null; state._paintStampLayer = null; }
+    if (e.button===0 || e.button===2){ state._tileDragAnchorX = null; state._tileDragAnchorY = null; }
     if (e.button===0 || e.button===2){ endHistoryTransaction(); }
 
   });
@@ -5699,6 +5724,8 @@ if (useFill){
     if (!state.lmbDown && !state.rmbDown){
       state._paintStampKey = null;
       state._paintStampLayer = null;
+      state._tileDragAnchorX = null;
+      state._tileDragAnchorY = null;
       if (state.volumeDrag) state.volumeDrag = null;
       if (state.entSelectionDrag) state.entSelectionDrag = null;
     }
