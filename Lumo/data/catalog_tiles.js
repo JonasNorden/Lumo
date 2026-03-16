@@ -13,6 +13,9 @@ window.LUMO_CATALOG_TILES = [
     img: "data/assets/tiles/grass_bt.png",
     footprint: { w: 1, h: 1 },
     tileId: 6,
+    behaviorProfileId: "tile.solid.default",
+    visualProfileId: "visual.tile.24x32.bl",
+    themeTags: ["nature"],
     collisionType: "solid",
     special: null,
 
@@ -30,6 +33,9 @@ window.LUMO_CATALOG_TILES = [
     img: "data/assets/tiles/grass_bl.png",
     footprint: { w: 1, h: 1 },
     tileId: 7,
+    behaviorProfileId: "tile.solid.default",
+    visualProfileId: "visual.tile.24x32.bl",
+    themeTags: ["nature"],
     collisionType: "solid",
     special: null,
 
@@ -46,6 +52,9 @@ window.LUMO_CATALOG_TILES = [
     img: "data/assets/tiles/grass_br.png",
     footprint: { w: 1, h: 1 },
     tileId: 8,
+    behaviorProfileId: "tile.solid.default",
+    visualProfileId: "visual.tile.24x32.bl",
+    themeTags: ["nature"],
     collisionType: "solid",
     special: null,
 
@@ -64,6 +73,9 @@ window.LUMO_CATALOG_TILES = [
     img: "data/assets/tiles/soil_bc.png",
     footprint: { w: 1, h: 1 },
     tileId: 9,
+    behaviorProfileId: "tile.solid.default",
+    visualProfileId: "visual.tile.24x24.tl",
+    themeTags: ["nature"],
     collisionType: "solid",
     special: null
   },
@@ -127,6 +139,9 @@ window.LUMO_CATALOG_TILES = [
     img: "data/assets/tiles/stone_ct.png",
     footprint: { w: 2, h: 2 },
     tileId: 15,
+    behaviorProfileId: "tile.solid.default",
+    visualProfileId: "visual.tile.48x48.bl",
+    themeTags: ["cave", "stone"],
     collisionType: "solid",
     special: null,
 
@@ -149,6 +164,9 @@ window.LUMO_CATALOG_TILES = [
     img: "data/assets/tiles/ice_00.png",
     footprint: { w: 1, h: 1 },
     tileId: 16,
+    behaviorProfileId: "tile.solid.default",
+    visualProfileId: "visual.tile.24x24.tl",
+    themeTags: ["cave"],
     collisionType: "solid",
     special: null
   },
@@ -160,6 +178,9 @@ window.LUMO_CATALOG_TILES = [
     img: "data/assets/tiles/ice_01.png",
     footprint: { w: 1, h: 1 },
     tileId: 4,
+    behaviorProfileId: "tile.solid.ice",
+    visualProfileId: "visual.tile.24x24.tl",
+    themeTags: ["cave"],
     collisionType: "solid",
     special: "ice"
   }

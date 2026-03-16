@@ -4,14 +4,18 @@ window.LUMO_CATALOG_BG = [
     "name": "Void (placeholder)",
     "group": "Base",
     "img": "data/assets/tiles/bg/bg_void.png",
-    "anchor": "TL"
+    "anchor": "TL",
+    "visualProfileId": "visual.bg.tl",
+    "themeTags": ["void", "dark"]
   },
   {
     "id": "bg_rock_01",
     "name": "Cave Rock 01",
     "group": "Cave",
     "img": "data/assets/tiles/bg/bg_rock_01.png",
-    "anchor": "TL"
+    "anchor": "TL",
+    "visualProfileId": "visual.bg.tl",
+    "themeTags": ["cave", "stone"]
   },
   {
     "id": "Void_t",

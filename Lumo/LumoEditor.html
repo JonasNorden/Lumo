@@ -1732,6 +1732,7 @@ display:none;
 
   async function loadCatalogs(){
     const scripts = [
+      {src:"data/catalog_profiles.js"},
       {src:"data/catalog_bg.js", key:"BG", winKey:"LUMO_CATALOG_BG"},
       {src:"data/catalog_tiles.js", key:"TILES", winKey:"LUMO_CATALOG_TILES"},
       {src:"data/catalog_entities.js", key:"ENT", winKey:"LUMO_CATALOG_ENTITIES"},
@@ -1747,6 +1748,7 @@ display:none;
         tag.onerror = () => { console.warn("Missing catalog:", s.src); resolve(); };
         document.head.appendChild(tag);
       });
+      if (!s.winKey) continue;
       const arr = window[s.winKey];
       if (s.key === "AUDIO" && arr && typeof arr === "object") {
         state.catalogs[s.key] = arr;
