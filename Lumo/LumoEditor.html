@@ -1202,6 +1202,7 @@ display:none;
             <div class="shortcutRow"><span class="shortcutKey">Alt + LMB</span><span class="shortcutAction">Fill</span></div>
             <div class="shortcutRow"><span class="shortcutKey">Shift + LMB</span><span class="shortcutAction">Line</span></div>
             <div class="shortcutRow"><span class="shortcutKey">Ctrl + Shift + LMB</span><span class="shortcutAction">Rectangle</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Ctrl + Shift + RMB</span><span class="shortcutAction">Erase rectangle</span></div>
           </section>
           <section class="shortcutGroup">
             <div class="shortcutGroupTitle">ENTITIES</div>
@@ -3409,14 +3410,26 @@ function parseSmart(v){
         const hitIdx = idx(tx,ty);
         const hitTid = state.tiles[hitIdx]|0;
         if (!hitTid){
-          state.tiles[hitIdx] = 0;
+          const inferred = findTileErasePlacementByInference(tx, ty);
+          if (inferred){
+            const topY = inferred.y - (inferred.fp.h - 1);
+            for (let yy=topY; yy<=inferred.y; yy++){
+              for (let xx=inferred.x; xx<inferred.x+inferred.fp.w; xx++){
+                const i = idx(xx,yy);
+                if ((state.tiles[i]|0) === (inferred.tid|0)) state.tiles[i] = 0;
+              }
+            }
+          } else {
+            state.tiles[hitIdx] = 0;
+          }
         } else {
           const fp = getTileFootprintById(hitTid);
           if (fp.w > 1 || fp.h > 1){
             // First multi-footprint erase rule: erase one matched placement rectangle per click.
             const anchor = findTileErasePlacementAnchor(tx, ty, hitTid, fp);
             if (anchor){
-              for (let yy=anchor.y; yy<anchor.y+fp.h; yy++){
+              const topY = anchor.y - (fp.h - 1);
+              for (let yy=topY; yy<=anchor.y; yy++){
                 for (let xx=anchor.x; xx<anchor.x+fp.w; xx++) state.tiles[idx(xx,yy)] = 0;
               }
             } else {
@@ -3506,12 +3519,14 @@ function parseSmart(v){
   }
 
   function findTileErasePlacementAnchor(tx, ty, tid, fp){
-    for (let ay=ty; ay>=ty-(fp.h-1); ay--){
+    for (let ay=ty; ay<=ty+(fp.h-1); ay++){
       for (let ax=tx; ax>=tx-(fp.w-1); ax--){
         if (ax < 0 || ay < 0) continue;
-        if ((ax + fp.w) > state.w || (ay + fp.h) > state.h) continue;
+        if ((ax + fp.w) > state.w || ay >= state.h) continue;
+        const topY = ay - (fp.h - 1);
+        if (topY < 0) continue;
         let ok = true;
-        for (let yy=ay; yy<ay+fp.h && ok; yy++){
+        for (let yy=topY; yy<=ay && ok; yy++){
           for (let xx=ax; xx<ax+fp.w; xx++){
             if ((state.tiles[idx(xx,yy)]|0) !== (tid|0)){
               ok = false;
@@ -3523,6 +3538,33 @@ function parseSmart(v){
       }
     }
     return null;
+  }
+
+  function findTileErasePlacementByInference(tx, ty){
+    const candidates = [];
+    const seen = new Set();
+    const tiles = state.catalogs.TILES || [];
+    for (const tile of tiles){
+      const tid = (tile && tile.tileId != null) ? (tile.tileId|0) : (tile && tile.id != null ? (tile.id|0) : 0);
+      if (!tid) continue;
+      const fp = getTileFootprintById(tid);
+      if (fp.w <= 1 && fp.h <= 1) continue;
+
+      for (let ay=ty; ay<=ty+(fp.h-1); ay++){
+        for (let ax=tx; ax>=tx-(fp.w-1); ax--){
+          if (ax < 0 || ay < 0 || ax >= state.w || ay >= state.h) continue;
+          if ((state.tiles[idx(ax,ay)]|0) !== tid) continue;
+          const topY = ay - (fp.h - 1);
+          if (topY < 0 || (ax + fp.w) > state.w) continue;
+          if (tx < ax || tx >= (ax + fp.w) || ty < topY || ty > ay) continue;
+          const k = tid + ":" + ax + ":" + ay;
+          if (seen.has(k)) continue;
+          seen.add(k);
+          candidates.push({ tid, x: ax, y: ay, fp });
+        }
+      }
+    }
+    return candidates.length === 1 ? candidates[0] : null;
   }
 
   function buildTileLinePoints(x0, y0, x1, y1){
@@ -3584,9 +3626,9 @@ function parseSmart(v){
     const rd = state.rectDrag;
     state.rectDrag = null;
     if (!rd) return;
-    if (state.layer !== "TILES" || state.eraseMode) return;
+    if (state.layer !== "TILES") return;
     const tid = getCurrentBrushTileId();
-    if (tid == null) return;
+    if (!rd.isErase && tid == null) return;
 
     const bounds = buildTileRectBounds(rd.tx0, rd.ty0, rd.tx1, rd.ty1);
     const toPaint = [];
@@ -3594,14 +3636,18 @@ function parseSmart(v){
       for (let tx=bounds.minX; tx<=bounds.maxX; tx++){
         if (!inBounds(tx, ty)) continue;
         const i = idx(tx, ty);
-        if ((state.tiles[i]|0) === (tid|0)) continue;
+        if (rd.isErase){
+          if ((state.tiles[i]|0) === 0) continue;
+        } else {
+          if ((state.tiles[i]|0) === (tid|0)) continue;
+        }
         toPaint.push(i);
       }
     }
     if (!toPaint.length) return;
 
     pushHistorySnapshot();
-    for (const i of toPaint) state.tiles[i] = tid|0;
+    for (const i of toPaint) state.tiles[i] = rd.isErase ? 0 : (tid|0);
     state.guideDirty = true;
     render();
   }
@@ -5088,10 +5134,9 @@ function drawEntities(){
     if (state.layer === "TILES" && !state.eraseMode && state.brushTile){
       const fp = getCurrentBrushTileFootprint();
       if (fp.w > 1 || fp.h > 1){
-        // First visual-only step for multi-footprint tiles: keep current paint logic untouched,
-        // but show the single-cell anchor and the conceptual footprint extent from that anchor.
+        // Larger tile placement uses BL anchor: footprint extends up + right from hovered tile.
         const fpX = tx * TS;
-        const fpY = ty * TS;
+        const fpY = (ty - (fp.h - 1)) * TS;
         const fpW = fp.w * TS;
         const fpH = fp.h * TS;
         const fps = worldToScreen(fpX, fpY);
@@ -5143,15 +5188,16 @@ function drawEntities(){
 
     if (state.rectDrag && state.layer === "TILES"){
       const tid = getCurrentBrushTileId();
-      if (tid != null){
+      if (tid != null || state.rectDrag.isErase){
         const b = buildTileRectBounds(state.rectDrag.tx0, state.rectDrag.ty0, state.rectDrag.tx1, state.rectDrag.ty1);
         const topLeft = worldToScreen(b.minX * TS, b.minY * TS);
         const width = (b.maxX - b.minX + 1) * TS;
         const height = (b.maxY - b.minY + 1) * TS;
         ctx.save();
-        ctx.fillStyle = "rgba(71,215,255,0.15)";
+        const rectIsErase = !!state.rectDrag.isErase;
+        ctx.fillStyle = rectIsErase ? "rgba(255,90,90,0.15)" : "rgba(71,215,255,0.15)";
         ctx.fillRect(topLeft.x + 1, topLeft.y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
-        ctx.strokeStyle = "rgba(71,215,255,0.6)";
+        ctx.strokeStyle = rectIsErase ? "rgba(255,90,90,0.70)" : "rgba(71,215,255,0.6)";
         ctx.lineWidth = 2;
         ctx.setLineDash([5,4]);
         ctx.strokeRect(topLeft.x + 1, topLeft.y + 1, Math.max(0, width - 2), Math.max(0, height - 2));
@@ -5702,7 +5748,7 @@ if (useFill){
         handlePaintFromMouse(false, e.shiftKey, e.altKey);
       } else {
         if (state.layer === "TILES" && e.shiftKey && e.ctrlKey && !e.altKey && !state.eraseMode){
-          state.rectDrag = { tx0: state.tileX, ty0: state.tileY, tx1: state.tileX, ty1: state.tileY };
+          state.rectDrag = { tx0: state.tileX, ty0: state.tileY, tx1: state.tileX, ty1: state.tileY, isErase: false };
           return;
         }
         if (state.layer === "TILES" && e.shiftKey && !e.ctrlKey && !e.altKey && !state.eraseMode){
@@ -5718,6 +5764,10 @@ if (useFill){
       if (state.layer==="ENT"){
         deleteTopmostAt(state.tileX, state.tileY);
       } else {
+        if (state.layer === "TILES" && e.shiftKey && e.ctrlKey && !e.altKey){
+          state.rectDrag = { tx0: state.tileX, ty0: state.tileY, tx1: state.tileX, ty1: state.tileY, isErase: true };
+          return;
+        }
         handlePaintFromMouse(true, e.shiftKey, e.altKey);
       }
     }
@@ -5729,6 +5779,9 @@ if (useFill){
     }
 
     if (e.button===0 && state.rectDrag){
+      finalizeRectDrag();
+    }
+    if (e.button===2 && state.rectDrag && state.rectDrag.isErase){
       finalizeRectDrag();
     }
 
@@ -5762,6 +5815,9 @@ if (useFill){
       finalizeLineDrag();
     }
     if (!(e.buttons & 1) && state.lmbDown && state.rectDrag){
+      finalizeRectDrag();
+    }
+    if (!(e.buttons & 2) && state.rmbDown && state.rectDrag && state.rectDrag.isErase){
       finalizeRectDrag();
     }
     if (!(e.buttons & 1) && state.lmbDown && state.entSelectionDrag){
@@ -5800,7 +5856,7 @@ if (useFill){
       return;
     }
 
-    if (state.rectDrag && state.lmbDown){
+    if (state.rectDrag && (state.lmbDown || (state.rmbDown && state.rectDrag.isErase))){
       state.rectDrag.tx1 = state.tileX;
       state.rectDrag.ty1 = state.tileY;
       return;
