@@ -4,6 +4,7 @@ export const EDITOR_TOOLS = {
   ERASE: "erase",
   RECT: "rect",
   LINE: "line",
+  FILL: "fill",
 };
 
 export const TOOL_OPTIONS = [
@@ -12,6 +13,7 @@ export const TOOL_OPTIONS = [
   { value: EDITOR_TOOLS.ERASE, label: "Erase" },
   { value: EDITOR_TOOLS.RECT, label: "Rect" },
   { value: EDITOR_TOOLS.LINE, label: "Line" },
+  { value: EDITOR_TOOLS.FILL, label: "Fill" },
 ];
 
 export function isEditorTool(value) {

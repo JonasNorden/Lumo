@@ -8,6 +8,7 @@ import { resolveBrushSize, getBrushCells } from "../domain/tiles/brushSize.js";
 import { eraseSingleTile } from "../domain/tiles/eraseTile.js";
 import { EDITOR_TOOLS } from "../domain/tiles/tools.js";
 import { getLineCells } from "../domain/tiles/line.js";
+import { getFloodFillCells } from "../domain/tiles/floodFill.js";
 import {
   createTileEditEntry,
   startTileEditBatch,
@@ -147,6 +148,31 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     return changedAny;
   };
 
+
+  const applyFillTool = (draft, startCell) => {
+    const doc = draft.document.active;
+    if (!doc || !startCell) return false;
+
+    const replacementValue = resolveTileFromBrushDraft(draft.brush.activeDraft);
+    const fillCells = getFloodFillCells(doc, startCell, replacementValue);
+
+    if (fillCells.length === 0) return false;
+
+    let changedAny = false;
+
+    for (const cell of fillCells) {
+      const index = getTileIndex(doc.dimensions.width, cell.x, cell.y);
+      const previousValue = doc.tiles.base[index];
+      const changed = paintSingleTile(doc, cell, replacementValue);
+      if (!changed) continue;
+
+      const entry = createTileEditEntry(doc, cell, previousValue, replacementValue);
+      pushTileEdit(draft.history, entry);
+      changedAny = true;
+    }
+
+    return changedAny;
+  };
   const applyLineTool = (draft, startCell, endCell) => {
     const lineCells = getLineCells(startCell, endCell);
     let changedAny = false;
@@ -194,6 +220,17 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
           active: true,
           startCell: cell,
         };
+      });
+      return;
+    }
+
+    if (activeTool === EDITOR_TOOLS.FILL) {
+      event.preventDefault();
+      store.setState((draft) => {
+        draft.interaction.selectedCell = cell;
+        startTileEditBatch(draft.history, "fill-click");
+        applyFillTool(draft, cell);
+        endTileEditBatch(draft.history);
       });
       return;
     }
