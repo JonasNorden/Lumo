@@ -1,3 +1,5 @@
+import { createDefaultBrushDraft } from "../domain/tiles/brushDraft.js";
+
 export function createEditorState() {
   return {
     session: {
@@ -16,6 +18,9 @@ export function createEditorState() {
     interaction: {
       hoverCell: null,
       selectedCell: null,
+    },
+    brush: {
+      activeDraft: createDefaultBrushDraft(),
     },
     ui: {
       inspectorOpen: true,
