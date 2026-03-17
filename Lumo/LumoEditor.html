@@ -1879,6 +1879,17 @@ display:none;
     if (state.layer === "BG" && state.brushBG) brush = state.brushBG.id;
     if (state.layer === "TILES" && state.brushTile) brush = getCurrentBrushTileCatalogId();
     if (state.layer === "ENT" && state.brushEnt) brush = state.brushEnt.id;
+    if (state.layer === "TILES" && state.brushTile && state.brushTile.brush){
+      const tileBrush = state.brushTile.brush;
+      const fp = tileBrush.footprint || { w:1, h:1 };
+      const tileMeta = [
+        `write=${tileBrush.writeTileId|0}`,
+        `fp=${Math.max(1, (Number(fp.w)|0))}x${Math.max(1, (Number(fp.h)|0))}`,
+        ...(tileBrush.behaviorProfileId ? [`beh=${tileBrush.behaviorProfileId}`] : []),
+        ...(tileBrush.visualProfileId ? [`vis=${tileBrush.visualProfileId}`] : []),
+      ].join(" · ");
+      brush = `${brush} · ${tileMeta}`;
+    }
     metaBrush.textContent = brush;
     const baseMode = state.layer === "ENT"
       ? state.entToolMode
