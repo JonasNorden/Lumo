@@ -1483,6 +1483,14 @@ display:none;
 
   const TILE_BRUSH_BEHAVIORS = ["solid", "one-way", "hazard", "ice", "slow"];
   const TILE_BRUSH_SIZES = ["1x1", "2x2", "3x3"];
+  const TILE_GAMEPLAY_MAPPING_V1 = {
+    "solid|1x1": { tileId: 1, footprint: { w: 1, h: 1 } },
+    "solid|2x2": { tileId: 15, footprint: { w: 2, h: 2 } },
+    "one-way|1x1": { tileId: 2, footprint: { w: 1, h: 1 } },
+    "hazard|1x1": { tileId: 3, footprint: { w: 1, h: 1 } },
+    "ice|1x1": { tileId: 4, footprint: { w: 1, h: 1 } },
+    "slow|1x1": { tileId: 5, footprint: { w: 1, h: 1 } },
+  };
 
   const state = {
     layer: "BG",
@@ -1530,6 +1538,7 @@ display:none;
     bg: new Array(500*30).fill(null),
     bgPlacements: [], // stackable BG stamps (editor-only)
     tiles: new Array(500*30).fill(0),
+    tileSpriteOverrides: {},
     ents: [],
 
     catalogs: { BG: [], TILES: [], ENT: [], AUDIO: {} },
@@ -1558,6 +1567,7 @@ display:none;
     tileBrushBehavior: "solid",
     tileBrushSize: "1x1",
     tileBrushCatalogId: null,
+    tileBrushSpriteCatalogId: null,
     brushEnt: null,
     entToolMode: "DRAW",
     selectedEntIndex: -1,
@@ -1587,26 +1597,33 @@ display:none;
   function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
   function idx(tx, ty){ return ty * state.w + tx; }
 
-  function createBrushTileSelection(catalogTile){
-    if (!catalogTile) return null;
-    const writeTileId = (catalogTile.writeTileId != null) ? (catalogTile.writeTileId|0)
-      : (catalogTile.writeId != null) ? (catalogTile.writeId|0)
-      : (catalogTile.tileId != null) ? (catalogTile.tileId|0)
-      : (catalogTile.idNum != null) ? (catalogTile.idNum|0)
-      : (catalogTile.id|0);
-    const sourceFootprint = catalogTile.footprint;
-    const footprint = {
-      w: Math.max(1, (sourceFootprint && Number.isFinite(Number(sourceFootprint.w))) ? (Number(sourceFootprint.w)|0) : 1),
-      h: Math.max(1, (sourceFootprint && Number.isFinite(Number(sourceFootprint.h))) ? (Number(sourceFootprint.h)|0) : 1),
-    };
-    const behaviorProfileId = (catalogTile.behaviorProfileId != null) ? String(catalogTile.behaviorProfileId) : null;
-    const visualProfileId = (catalogTile.visualProfileId != null) ? String(catalogTile.visualProfileId) : null;
+  function getGameplayMappingV1(behavior, size){
+    return TILE_GAMEPLAY_MAPPING_V1[String(behavior||"") + "|" + String(size||"")] || null;
+  }
+
+  function getGameplayBrushSpec(){
+    const mapped = getGameplayMappingV1(state.tileBrushBehavior, state.tileBrushSize);
+    if (!mapped) return null;
     return {
-      ...catalogTile,
-      catalogTile,
+      writeTileId: mapped.tileId|0,
+      footprint: {
+        w: Math.max(1, (mapped.footprint && mapped.footprint.w) ? (mapped.footprint.w|0) : 1),
+        h: Math.max(1, (mapped.footprint && mapped.footprint.h) ? (mapped.footprint.h|0) : 1),
+      },
+    };
+  }
+
+  function createBrushTileSelection(catalogTile){
+    const gameplay = getGameplayBrushSpec();
+    if (!gameplay) return null;
+    const behaviorProfileId = (catalogTile && catalogTile.behaviorProfileId != null) ? String(catalogTile.behaviorProfileId) : null;
+    const visualProfileId = (catalogTile && catalogTile.visualProfileId != null) ? String(catalogTile.visualProfileId) : null;
+    return {
+      ...(catalogTile || {}),
+      catalogTile: catalogTile || null,
       brush: {
-        writeTileId,
-        footprint,
+        writeTileId: gameplay.writeTileId,
+        footprint: gameplay.footprint,
         ...(behaviorProfileId ? { behaviorProfileId } : {}),
         ...(visualProfileId ? { visualProfileId } : {}),
       },
@@ -1640,33 +1657,55 @@ display:none;
     return "solid";
   }
 
-  function isTileMatchingBehavior(catalogTile, behavior){
-    return resolveTileSurfaceKind(catalogTile) === behavior;
-  }
-
-  function getTileBuilderCandidates(){
+  function getTileSpriteCandidates(){
     const allTiles = Array.isArray(state.catalogs.TILES) ? state.catalogs.TILES : [];
     const q = (searchEl.value||"").trim().toLowerCase();
     return allTiles.filter((tile) => {
       if (!tile) return false;
-      const sizeBucket = getTileSizeBucket(tile);
-      if (sizeBucket !== state.tileBrushSize) return false;
-      if (!isTileMatchingBehavior(tile, state.tileBrushBehavior)) return false;
       if (!matchesSearch(tile, q)) return false;
       return true;
     });
   }
 
   function syncTileBuilderSelection(){
-    const candidates = getTileBuilderCandidates();
+    const candidates = getTileSpriteCandidates();
     if (!candidates.length){
+      state.tileBrushSpriteCatalogId = null;
       state.tileBrushCatalogId = null;
       state.brushTile = null;
       return;
     }
-    const selected = candidates.find((tile) => tile && tile.id === state.tileBrushCatalogId) || candidates[0];
+    const selected = candidates.find((tile) => tile && tile.id === state.tileBrushSpriteCatalogId) || candidates[0];
+    state.tileBrushSpriteCatalogId = selected.id;
     state.tileBrushCatalogId = selected.id;
     state.brushTile = createBrushTileSelection(selected);
+  }
+
+  function getTileSpriteOverrideKey(tx, ty){
+    return `${tx|0},${ty|0}`;
+  }
+
+  function getTileVisualOverrideAt(tx, ty){
+    if (!state.tileSpriteOverrides || typeof state.tileSpriteOverrides !== "object") return null;
+    return state.tileSpriteOverrides[getTileSpriteOverrideKey(tx, ty)] || null;
+  }
+
+  function setTileVisualOverrideAt(tx, ty, catalogTile){
+    if (!state.tileSpriteOverrides || typeof state.tileSpriteOverrides !== "object") state.tileSpriteOverrides = {};
+    const key = getTileSpriteOverrideKey(tx, ty);
+    if (!catalogTile || !catalogTile.id){
+      delete state.tileSpriteOverrides[key];
+      return;
+    }
+    state.tileSpriteOverrides[key] = {
+      catalogTileId: String(catalogTile.id),
+      img: catalogTile.img || null,
+      drawW: Number.isFinite(Number(catalogTile.drawW)) ? (Number(catalogTile.drawW)|0) : null,
+      drawH: Number.isFinite(Number(catalogTile.drawH)) ? (Number(catalogTile.drawH)|0) : null,
+      drawAnchor: catalogTile.drawAnchor ? String(catalogTile.drawAnchor) : null,
+      drawOffX: Number.isFinite(Number(catalogTile.drawOffX)) ? (Number(catalogTile.drawOffX)|0) : 0,
+      drawOffY: Number.isFinite(Number(catalogTile.drawOffY)) ? (Number(catalogTile.drawOffY)|0) : 0,
+    };
   }
 
   function resizeCanvas(){
@@ -1847,15 +1886,19 @@ display:none;
 
     const newBG = new Array(W*H).fill(null);
     const newTiles = new Array(W*H).fill(0);
+    const newTileSpriteOverrides = {};
 
     for (let y=0;y<Math.min(oldH,H);y++){
       for (let x=0;x<Math.min(oldW,W);x++){
         newBG[y*W+x] = state.bg[y*oldW+x];
         newTiles[y*W+x] = state.tiles[y*oldW+x];
+        const k = getTileSpriteOverrideKey(x, y);
+        if (state.tileSpriteOverrides && state.tileSpriteOverrides[k]) newTileSpriteOverrides[k] = deepClone(state.tileSpriteOverrides[k]);
       }
     }
     state.bg = newBG;
     state.tiles = newTiles;
+    state.tileSpriteOverrides = newTileSpriteOverrides;
 
     for (const e of state.ents){
       e.x = clamp(e.x, 0, W-1);
@@ -1904,10 +1947,7 @@ display:none;
 
     const firstTile = state.catalogs.TILES[0] || null;
     if (firstTile){
-      const firstBehavior = resolveTileSurfaceKind(firstTile);
-      const firstSize = getTileSizeBucket(firstTile);
-      if (firstBehavior && TILE_BRUSH_BEHAVIORS.includes(firstBehavior)) state.tileBrushBehavior = firstBehavior;
-      if (firstSize && TILE_BRUSH_SIZES.includes(firstSize)) state.tileBrushSize = firstSize;
+      state.tileBrushSpriteCatalogId = firstTile.id || null;
       state.tileBrushCatalogId = firstTile.id || null;
     }
     syncTileBuilderSelection();
@@ -1968,6 +2008,7 @@ display:none;
     if (state.layer === "BG" && state.brushBG) brush = state.brushBG.id;
     if (state.layer === "TILES" && state.brushTile) brush = getCurrentBrushTileCatalogId();
     if (state.layer === "ENT" && state.brushEnt) brush = state.brushEnt.id;
+    if (state.layer === "TILES" && !state.brushTile) brush = `Unavailable gameplay combo (${state.tileBrushBehavior} + ${state.tileBrushSize})`;
     if (state.layer === "TILES" && state.brushTile && state.brushTile.brush){
       const tileBrush = state.brushTile.brush;
       const fp = tileBrush.footprint || { w:1, h:1 };
@@ -2135,15 +2176,23 @@ display:none;
       spriteRow.className = "tileBuilderRow";
       const spriteLabel = document.createElement("div");
       spriteLabel.className = "tileBuilderLabel";
-      const candidates = getTileBuilderCandidates();
+      const gameplay = getGameplayBrushSpec();
+      const candidates = getTileSpriteCandidates();
       spriteLabel.textContent = `Sprite (${candidates.length})`;
       const spriteGrid = document.createElement("div");
       spriteGrid.className = "tileSpriteGrid";
 
+      if (!gameplay){
+        const unavailable = document.createElement("div");
+        unavailable.className = "pill";
+        unavailable.textContent = `Gameplay unavailable in v1: ${state.tileBrushBehavior} + ${state.tileBrushSize}.`;
+        builder.appendChild(unavailable);
+      }
+
       if (!candidates.length){
         const empty = document.createElement("div");
         empty.className = "pill";
-        empty.textContent = "No matching tiles for current behavior + size.";
+        empty.textContent = "No sprite visuals found in catalog.";
         spriteRow.appendChild(spriteLabel);
         spriteRow.appendChild(empty);
       } else {
@@ -2167,6 +2216,7 @@ display:none;
           cell.appendChild(nm);
 
           cell.addEventListener("click", () => {
+            state.tileBrushSpriteCatalogId = it.id;
             state.tileBrushCatalogId = it.id;
             state.brushTile = createBrushTileSelection(it);
             resetPointerPaintState();
@@ -2287,6 +2337,7 @@ display:none;
       bg: Array.isArray(state.bg) ? state.bg.slice(0) : [],
       bgPlacements: Array.isArray(state.bgPlacements) ? state.bgPlacements.map((p) => ({ id: p.id, x: p.x|0, y: p.y|0 })) : [],
       tiles: Array.isArray(state.tiles) ? state.tiles.slice(0) : [],
+      tileSpriteOverrides: (state.tileSpriteOverrides && typeof state.tileSpriteOverrides === "object") ? deepClone(state.tileSpriteOverrides) : {},
       ents: deepClone(Array.isArray(state.ents) ? state.ents : []),
       selectedEntIndex: Number.isInteger(state.selectedEntIndex) ? state.selectedEntIndex : -1,
       selectedEntIndices: Array.isArray(state.selectedEntIndices) ? state.selectedEntIndices.slice(0) : [],
@@ -2316,6 +2367,7 @@ display:none;
 
     state.tiles = Array.isArray(snap.tiles) ? snap.tiles.slice(0, total) : [];
     if (state.tiles.length < total) state.tiles = state.tiles.concat(new Array(total - state.tiles.length).fill(0));
+    state.tileSpriteOverrides = (snap.tileSpriteOverrides && typeof snap.tileSpriteOverrides === "object") ? deepClone(snap.tileSpriteOverrides) : {};
 
     state.ents = Array.isArray(snap.ents) ? deepClone(snap.ents) : [];
     state.selectedEntIndex = Number.isInteger(snap.selectedEntIndex) ? snap.selectedEntIndex : -1;
@@ -3645,11 +3697,15 @@ function parseSmart(v){
             for (let yy=topY; yy<=inferred.y; yy++){
               for (let xx=inferred.x; xx<inferred.x+inferred.fp.w; xx++){
                 const i = idx(xx,yy);
-                if ((state.tiles[i]|0) === (inferred.tid|0)) state.tiles[i] = 0;
+                if ((state.tiles[i]|0) === (inferred.tid|0)){
+                  state.tiles[i] = 0;
+                  setTileVisualOverrideAt(xx, yy, null);
+                }
               }
             }
           } else {
             state.tiles[hitIdx] = 0;
+            setTileVisualOverrideAt(tx, ty, null);
           }
         } else {
           const fp = getTileFootprintById(hitTid);
@@ -3659,13 +3715,18 @@ function parseSmart(v){
             if (anchor){
               const topY = anchor.y - (fp.h - 1);
               for (let yy=topY; yy<=anchor.y; yy++){
-                for (let xx=anchor.x; xx<anchor.x+fp.w; xx++) state.tiles[idx(xx,yy)] = 0;
+                for (let xx=anchor.x; xx<anchor.x+fp.w; xx++){
+                  state.tiles[idx(xx,yy)] = 0;
+                  setTileVisualOverrideAt(xx, yy, null);
+                }
               }
             } else {
               state.tiles[hitIdx] = 0;
+              setTileVisualOverrideAt(tx, ty, null);
             }
           } else {
             state.tiles[hitIdx] = 0;
+            setTileVisualOverrideAt(tx, ty, null);
           }
         }
         state.guideDirty = true;
@@ -3673,6 +3734,7 @@ function parseSmart(v){
         const tid = getCurrentBrushTileId();
         if (tid == null) return;
         state.tiles[idx(tx,ty)] = tid;
+        setTileVisualOverrideAt(tx, ty, state.brushTile && state.brushTile.catalogTile ? state.brushTile.catalogTile : state.brushTile);
         state.guideDirty = true;
       }
     } else if (state.layer === "ENT"){
@@ -3732,10 +3794,10 @@ function parseSmart(v){
   }
 
   function getCurrentBrushTileCatalogId(){
-    if (!state.brushTile) return null;
+    if (!state.brushTile) return state.tileBrushSpriteCatalogId || null;
     if (state.brushTile.catalogTile && state.brushTile.catalogTile.id != null) return state.brushTile.catalogTile.id;
     if (state.brushTile.id != null) return state.brushTile.id;
-    return null;
+    return state.tileBrushSpriteCatalogId || null;
   }
 
   function hasCurrentBrushTile(){
@@ -3865,7 +3927,12 @@ function parseSmart(v){
     if (!toPaint.length) return;
 
     pushHistorySnapshot();
-    for (const i of toPaint) state.tiles[i] = tid|0;
+    for (const i of toPaint){
+      state.tiles[i] = tid|0;
+      const x = i % state.w;
+      const y = Math.floor(i / state.w);
+      setTileVisualOverrideAt(x, y, state.brushTile && state.brushTile.catalogTile ? state.brushTile.catalogTile : state.brushTile);
+    }
     state.guideDirty = true;
     render();
   }
@@ -3913,7 +3980,13 @@ function parseSmart(v){
     if (!toPaint.length) return;
 
     pushHistorySnapshot();
-    for (const i of toPaint) state.tiles[i] = rd.isErase ? 0 : (tid|0);
+    for (const i of toPaint){
+      const x = i % state.w;
+      const y = Math.floor(i / state.w);
+      state.tiles[i] = rd.isErase ? 0 : (tid|0);
+      if (rd.isErase) setTileVisualOverrideAt(x, y, null);
+      else setTileVisualOverrideAt(x, y, state.brushTile && state.brushTile.catalogTile ? state.brushTile.catalogTile : state.brushTile);
+    }
     state.guideDirty = true;
     render();
   }
@@ -5107,19 +5180,29 @@ function updateScrollFromLevel(){
         const tid = state.tiles[idx(x,y)]|0;
         if (!tid) continue;
 
-        const assetT = (state.catalogs.TILES||[]).find(a => ((a.tileId|0)===tid) || ((a.id||"")===tid));
-        const imgT = assetT && assetT.img ? state.imgCache.get(assetT.img) : null;
+        const override = getTileVisualOverrideAt(x, y);
+        const overrideAsset = override && override.catalogTileId
+          ? (state.catalogs.TILES||[]).find(a => a && String(a.id) === String(override.catalogTileId))
+          : null;
+        const assetT = overrideAsset || (state.catalogs.TILES||[]).find(a => ((a.tileId|0)===tid) || ((a.id||"")===tid));
+        const imgPath = (override && override.img) || (assetT && assetT.img) || null;
+        const imgT = imgPath ? state.imgCache.get(imgPath) : null;
 
         const baseX = x*TS, baseY = y*TS;
 
         // draw size (visual)
-        const dw = (assetT && typeof assetT.drawW === "number") ? assetT.drawW : ((assetT && typeof assetT.w === "number") ? assetT.w : TS);
-        const dh = (assetT && typeof assetT.drawH === "number") ? assetT.drawH : ((assetT && typeof assetT.h === "number") ? assetT.h : TS);
+        const dw = (override && Number.isFinite(Number(override.drawW))) ? (Number(override.drawW)|0)
+          : (assetT && typeof assetT.drawW === "number") ? assetT.drawW : ((assetT && typeof assetT.w === "number") ? assetT.w : TS);
+        const dh = (override && Number.isFinite(Number(override.drawH))) ? (Number(override.drawH)|0)
+          : (assetT && typeof assetT.drawH === "number") ? assetT.drawH : ((assetT && typeof assetT.h === "number") ? assetT.h : TS);
 
         // draw anchor (visual)
-        const aAnchor = (assetT && assetT.drawAnchor) ? assetT.drawAnchor : ((assetT && assetT.anchor) ? assetT.anchor : "TL");
-        const offX = (assetT && typeof assetT.drawOffX === "number") ? assetT.drawOffX : 0;
-        const offY = (assetT && typeof assetT.drawOffY === "number") ? assetT.drawOffY : 0;
+        const aAnchor = (override && override.drawAnchor) ? override.drawAnchor
+          : (assetT && assetT.drawAnchor) ? assetT.drawAnchor : ((assetT && assetT.anchor) ? assetT.anchor : "TL");
+        const offX = (override && Number.isFinite(Number(override.drawOffX))) ? (Number(override.drawOffX)|0)
+          : (assetT && typeof assetT.drawOffX === "number") ? assetT.drawOffX : 0;
+        const offY = (override && Number.isFinite(Number(override.drawOffY))) ? (Number(override.drawOffY)|0)
+          : (assetT && typeof assetT.drawOffY === "number") ? assetT.drawOffY : 0;
 
         const dx2 = baseX + offX;
         const dy2 = (aAnchor === "BL") ? ((y+1)*TS - dh + offY) : (baseY + offY);
@@ -5785,6 +5868,7 @@ function floodFillTiles(startX, startY, newTid){
     const i = idx(x,y);
     if ((arr[i]|0) !== (target|0)) continue;
     arr[i] = newTid|0;
+    setTileVisualOverrideAt(x, y, state.brushTile && state.brushTile.catalogTile ? state.brushTile.catalogTile : state.brushTile);
     changed++;
     qx.push(x+1); qy.push(y);
     qx.push(x-1); qy.push(y);
@@ -5865,6 +5949,7 @@ function floodFillTileAnchors(startX, startY, newTid, fp){
 
     if ((arr[i]|0) !== (newTid|0)){
       arr[i] = newTid|0;
+      setTileVisualOverrideAt(x, y, state.brushTile && state.brushTile.catalogTile ? state.brushTile.catalogTile : state.brushTile);
       changed++;
     }
 
@@ -6371,7 +6456,10 @@ if (useFill){
     if (!confirm("Clear current layer?")) return;
     pushHistorySnapshot();
     if (state.layer==="BG"){ state.bg.fill(null); if (state.bgPlacements) state.bgPlacements = []; }
-    if (state.layer==="TILES") state.tiles.fill(0);
+    if (state.layer==="TILES"){
+      state.tiles.fill(0);
+      state.tileSpriteOverrides = {};
+    }
     if (state.layer==="ENT"){
       state.ents=[];
       setSelectedEntIndices([]);
@@ -6507,9 +6595,14 @@ if (useFill){
       },
       layers:{
         main: state.tiles.slice(0),
+        tileVisualOverrides: (state.tileSpriteOverrides && Object.keys(state.tileSpriteOverrides).length)
+          ? deepClone(state.tileSpriteOverrides)
+          : undefined,
         ents: entsOut
       }
     };
+
+    if (!levelObj.layers.tileVisualOverrides) delete levelObj.layers.tileVisualOverrides;
 
     // Runtime profile strips editor-only/duplicated payload while keeping runtime-compatible shape.
     if (profile === "runtime"){
@@ -6754,6 +6847,9 @@ const mainArr = obj.layers && obj.layers.main;
           if (state.tiles.length < need) state.tiles = state.tiles.concat(new Array(need-state.tiles.length).fill(0));
           if (state.tiles.length > need) state.tiles = state.tiles.slice(0,need);
         }
+        state.tileSpriteOverrides = (obj.layers && obj.layers.tileVisualOverrides && typeof obj.layers.tileVisualOverrides === "object")
+          ? deepClone(obj.layers.tileVisualOverrides)
+          : {};
 
         if (obj.editor){
           if (Array.isArray(obj.editor.bg)){
