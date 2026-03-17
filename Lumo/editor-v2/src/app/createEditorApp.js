@@ -4,6 +4,7 @@ import { getCanvasPointFromMouseEvent, getCellFromCanvasPoint } from "../render/
 import { renderInspector } from "../ui/inspectorPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
 import { resolveTileFromBrushDraft, paintSingleTile } from "../domain/tiles/paintTile.js";
+import { resolveBrushSize, getBrushCells } from "../domain/tiles/brushSize.js";
 import { eraseSingleTile } from "../domain/tiles/eraseTile.js";
 import { EDITOR_TOOLS } from "../domain/tiles/tools.js";
 import {
@@ -75,26 +76,43 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     const doc = draft.document.active;
     if (!doc) return false;
 
-    const index = getTileIndex(doc.dimensions.width, cell.x, cell.y);
-    const previousValue = doc.tiles.base[index];
+    const brushSize = resolveBrushSize(draft.brush.activeDraft);
+    const brushCells = getBrushCells(cell, brushSize);
+    const { width, height } = doc.dimensions;
+    let changedAny = false;
 
     if (draft.interaction.activeTool === EDITOR_TOOLS.PAINT) {
       const tileValue = resolveTileFromBrushDraft(draft.brush.activeDraft);
-      const changed = paintSingleTile(doc, cell, tileValue);
-      if (!changed) return false;
 
-      const entry = createTileEditEntry(doc, cell, previousValue, tileValue);
-      pushTileEdit(draft.history, entry);
-      return true;
+      for (const brushCell of brushCells) {
+        if (brushCell.x < 0 || brushCell.y < 0 || brushCell.x >= width || brushCell.y >= height) continue;
+        const index = getTileIndex(width, brushCell.x, brushCell.y);
+        const previousValue = doc.tiles.base[index];
+        const changed = paintSingleTile(doc, brushCell, tileValue);
+        if (!changed) continue;
+
+        const entry = createTileEditEntry(doc, brushCell, previousValue, tileValue);
+        pushTileEdit(draft.history, entry);
+        changedAny = true;
+      }
+
+      return changedAny;
     }
 
     if (draft.interaction.activeTool === EDITOR_TOOLS.ERASE) {
-      const changed = eraseSingleTile(doc, cell);
-      if (!changed) return false;
+      for (const brushCell of brushCells) {
+        if (brushCell.x < 0 || brushCell.y < 0 || brushCell.x >= width || brushCell.y >= height) continue;
+        const index = getTileIndex(width, brushCell.x, brushCell.y);
+        const previousValue = doc.tiles.base[index];
+        const changed = eraseSingleTile(doc, brushCell);
+        if (!changed) continue;
 
-      const entry = createTileEditEntry(doc, cell, previousValue, 0);
-      pushTileEdit(draft.history, entry);
-      return true;
+        const entry = createTileEditEntry(doc, brushCell, previousValue, 0);
+        pushTileEdit(draft.history, entry);
+        changedAny = true;
+      }
+
+      return changedAny;
     }
 
     return false;
