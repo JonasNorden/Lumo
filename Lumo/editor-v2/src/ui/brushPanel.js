@@ -226,9 +226,9 @@ export function renderBrushPanel(panel, state) {
     tools: true,
     palette: true,
     brush: true,
-    entities: true,
-    backgrounds: true,
-    workspace: true,
+    entities: false,
+    backgrounds: false,
+    workspace: false,
     file: false,
     shortcuts: false,
     ...state.ui.panelSections,
@@ -355,65 +355,6 @@ export function renderBrushPanel(panel, state) {
 
 export function bindBrushPanel(panel, store, options = {}) {
   const { onUndo, onRedo, onExport, onImport, onNew, onWorkspaceUpdate, onBackgroundUpdate, onEntityUpdate } = options;
-  let activeHoveredSection = null;
-
-  const collapseHoveredSection = (sectionElement) => {
-    if (!(sectionElement instanceof HTMLElement)) return;
-    sectionElement.classList.remove("isHoverExpanded");
-    if (activeHoveredSection === sectionElement) {
-      activeHoveredSection = null;
-    }
-  };
-
-  const openOnHover = (sectionElement) => {
-    if (!(sectionElement instanceof HTMLElement)) return;
-    if (!sectionElement.classList.contains("isCollapsed")) return;
-
-    if (activeHoveredSection && activeHoveredSection !== sectionElement) {
-      collapseHoveredSection(activeHoveredSection);
-    }
-
-    sectionElement.classList.add("isHoverExpanded");
-    activeHoveredSection = sectionElement;
-  };
-
-  const closeOnHoverExit = (sectionElement) => {
-    if (!(sectionElement instanceof HTMLElement)) return;
-    if (!sectionElement.classList.contains("isHoverExpanded")) return;
-
-    collapseHoveredSection(sectionElement);
-  };
-
-  const onMouseOver = (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-
-    const sectionElement = target.closest(".panelSection");
-    if (!(sectionElement instanceof HTMLElement)) return;
-
-    const relatedTarget = event.relatedTarget;
-    if (relatedTarget instanceof Node && sectionElement.contains(relatedTarget)) {
-      return;
-    }
-
-    openOnHover(sectionElement);
-  };
-
-  const onMouseOut = (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-
-    const sectionElement = target.closest(".panelSection");
-    if (!(sectionElement instanceof HTMLElement)) return;
-
-    const relatedTarget = event.relatedTarget;
-    if (relatedTarget instanceof Node && sectionElement.contains(relatedTarget)) {
-      return;
-    }
-
-    closeOnHoverExit(sectionElement);
-  };
-
   const onChange = (event) => {
     const target = event.target;
 
@@ -580,15 +521,9 @@ export function bindBrushPanel(panel, store, options = {}) {
 
   panel.addEventListener("change", onChange);
   panel.addEventListener("click", onClick);
-  panel.addEventListener("mouseover", onMouseOver);
-  panel.addEventListener("mouseout", onMouseOut);
 
   return () => {
     panel.removeEventListener("change", onChange);
     panel.removeEventListener("click", onClick);
-    panel.removeEventListener("mouseover", onMouseOver);
-    panel.removeEventListener("mouseout", onMouseOut);
-
-    collapseHoveredSection(activeHoveredSection);
   };
 }
