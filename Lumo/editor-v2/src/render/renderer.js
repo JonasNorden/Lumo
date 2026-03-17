@@ -3,6 +3,7 @@ import { renderTiles } from "./layers/tileLayer.js";
 import { renderBackgroundLayers } from "./layers/backgroundLayer.js";
 import { renderSelectionOverlay } from "./layers/selectionLayer.js";
 import { renderBrushPreviewOverlay } from "./layers/previewLayer.js";
+import { renderEntities } from "./layers/entityLayer.js";
 
 export function renderEditorFrame(ctx, state) {
   const canvas = ctx.canvas;
@@ -17,6 +18,7 @@ export function renderEditorFrame(ctx, state) {
   renderBackgroundLayers(ctx, doc, state.viewport);
   renderTiles(ctx, doc, state.viewport);
   renderGrid(ctx, doc, state.viewport);
+  renderEntities(ctx, doc, state.viewport, state.interaction);
   renderBrushPreviewOverlay(ctx, doc, state.viewport, state.interaction, state.brush.activeDraft);
   renderSelectionOverlay(ctx, doc, state.viewport, state.interaction);
 }

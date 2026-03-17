@@ -4,6 +4,7 @@
  * @property {{width: number, height: number, tileSize: number}} dimensions
  * @property {{base: number[]}} tiles
  * @property {{layers: {id: string, name: string, visible: boolean, color: string}[]}} backgrounds
+ * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean}[]} entities
  * @property {{notes?: string}} extra
  */
 
@@ -19,6 +20,25 @@ function normalizeBackgroundLayer(layer, index) {
     name: nextName,
     visible: nextVisible,
     color: nextColor,
+  };
+}
+
+function normalizeEntity(entity, index) {
+  const fallbackId = `entity-${index + 1}`;
+  const nextId = typeof entity?.id === "string" && entity.id.trim() ? entity.id : fallbackId;
+  const nextName = typeof entity?.name === "string" && entity.name.trim() ? entity.name : `Entity ${index + 1}`;
+  const nextType = typeof entity?.type === "string" && entity.type.trim() ? entity.type : "marker";
+  const nextX = Number.isFinite(entity?.x) ? Math.round(entity.x) : 0;
+  const nextY = Number.isFinite(entity?.y) ? Math.round(entity.y) : 0;
+  const nextVisible = typeof entity?.visible === "boolean" ? entity.visible : true;
+
+  return {
+    id: nextId,
+    name: nextName,
+    type: nextType,
+    x: nextX,
+    y: nextY,
+    visible: nextVisible,
   };
 }
 
@@ -54,6 +74,9 @@ export function validateLevelDocument(doc) {
   doc.backgrounds = {
     layers: layers.map((layer, index) => normalizeBackgroundLayer(layer, index)),
   };
+
+  const rawEntities = Array.isArray(doc.entities) ? doc.entities : [];
+  doc.entities = rawEntities.map((entity, index) => normalizeEntity(entity, index));
 
   return doc;
 }

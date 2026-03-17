@@ -514,3 +514,40 @@ kbd {
 .fieldRow.compactInline {
   margin-bottom: 0;
 }
+
+.entityList {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.entityListItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #101a2d;
+  color: #b8c9eb;
+  border: 1px solid #2a3652;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.entityListItem.isSelected {
+  color: #e2ecff;
+  border-color: #4f76d1;
+  background: #1a2c55;
+}
+
+.entityEditor {
+  margin-top: 8px;
+}
+
+.entityPositionGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
