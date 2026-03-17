@@ -201,6 +201,17 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     resize();
     draw(store.getState());
   };
+
+  const updateDocumentMeta = (field, value) => {
+    store.setState((draft) => {
+      const doc = draft.document.active;
+      if (!doc) return;
+      if (field !== "name" && field !== "id") return;
+
+      doc.meta[field] = value;
+    });
+  };
+
   const draw = (state) => {
     renderEditorFrame(ctx, state);
     minimapLayout = renderMinimap(minimapCtx, state);
@@ -712,6 +723,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
   const unsubscribe = store.subscribe(draw);
   const unbindInspectorPanel = bindInspectorPanel(inspector, store, {
     onResize: resizeDocument,
+    onMetaUpdate: updateDocumentMeta,
   });
   const unbindBrushPanel = bindBrushPanel(brushPanel, store, {
     onUndo: handleUndo,

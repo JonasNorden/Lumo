@@ -2,6 +2,8 @@ import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
 
 const MIN_LEVEL_SIZE = 8;
 const MAX_LEVEL_SIZE = 256;
+const DEFAULT_LEVEL_NAME = "Untitled Level";
+const DEFAULT_LEVEL_ID = "untitled-level";
 
 function clampLevelSize(value) {
   return Math.max(MIN_LEVEL_SIZE, Math.min(MAX_LEVEL_SIZE, value));
@@ -87,10 +89,32 @@ export function renderInspector(panel, state) {
   const paintedCount = countPaintedTiles(active.tiles.base);
 
   panel.innerHTML = `
-    <div class="infoGroup">
-      <div class="label">Level</div>
-      <div class="value">${active.meta.name}</div>
-    </div>
+    <label class="fieldRow">
+      <span class="label">Name</span>
+      <input
+        type="text"
+        value="${active.meta.name}"
+        data-meta-field="name"
+      />
+    </label>
+
+    <label class="fieldRow">
+      <span class="label">ID</span>
+      <input
+        type="text"
+        value="${active.meta.id}"
+        data-meta-field="id"
+      />
+    </label>
+
+    <label class="fieldRow">
+      <span class="label">Version</span>
+      <input
+        type="text"
+        value="${active.meta.version}"
+        readonly
+      />
+    </label>
 
     <div class="infoGroup">
       <div class="label">Size</div>
@@ -136,11 +160,40 @@ export function renderInspector(panel, state) {
 }
 
 export function bindInspectorPanel(panel, store, options = {}) {
-  const { onResize } = options;
+  const { onResize, onMetaUpdate } = options;
+
+  const sanitizeMetaValue = (field, value) => {
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+
+    if (field === "name") return DEFAULT_LEVEL_NAME;
+    if (field === "id") return DEFAULT_LEVEL_ID;
+
+    return trimmed;
+  };
+
+  const handleMetaChange = (target) => {
+    const metaField = target.dataset.metaField;
+    if (metaField !== "name" && metaField !== "id") return false;
+
+    const state = store.getState();
+    const active = state.document.active;
+    if (!active) return false;
+
+    const nextValue = sanitizeMetaValue(metaField, target.value);
+    target.value = nextValue;
+
+    if (active.meta[metaField] === nextValue) return true;
+
+    onMetaUpdate?.(metaField, nextValue);
+    return true;
+  };
 
   const onChange = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
+
+    if (handleMetaChange(target)) return;
 
     const dimensionField = target.dataset.dimensionField;
     if (dimensionField !== "width" && dimensionField !== "height") return;
@@ -162,9 +215,18 @@ export function bindInspectorPanel(panel, store, options = {}) {
     onResize?.(nextWidth, nextHeight);
   };
 
+  const onInput = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+
+    handleMetaChange(target);
+  };
+
   panel.addEventListener("change", onChange);
+  panel.addEventListener("input", onInput);
 
   return () => {
     panel.removeEventListener("change", onChange);
+    panel.removeEventListener("input", onInput);
   };
 }
