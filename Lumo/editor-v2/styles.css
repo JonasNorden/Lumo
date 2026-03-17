@@ -449,3 +449,26 @@ kbd {
   color: #8ea1c8;
   font-size: 11px;
 }
+
+.backgroundLayerList {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.backgroundLayerRow {
+  border: 1px solid #253451;
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(16, 26, 45, 0.4);
+}
+
+.backgroundLayerControls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fieldRow.compactInline {
+  margin-bottom: 0;
+}

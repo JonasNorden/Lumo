@@ -22,6 +22,16 @@ export function createNewLevelDocument() {
     tiles: {
       base: new Array(width * height).fill(0),
     },
+    backgrounds: {
+      layers: [
+        {
+          id: "bg-1",
+          name: "Background 1",
+          visible: true,
+          color: "#1b2436",
+        },
+      ],
+    },
     extra: {},
   });
 }

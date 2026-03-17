@@ -1,5 +1,6 @@
 import { renderGrid } from "./layers/gridLayer.js";
 import { renderTiles } from "./layers/tileLayer.js";
+import { renderBackgroundLayers } from "./layers/backgroundLayer.js";
 import { renderSelectionOverlay } from "./layers/selectionLayer.js";
 import { renderBrushPreviewOverlay } from "./layers/previewLayer.js";
 
@@ -13,6 +14,7 @@ export function renderEditorFrame(ctx, state) {
   const doc = state.document.active;
   if (!doc) return;
 
+  renderBackgroundLayers(ctx, doc, state.viewport);
   renderTiles(ctx, doc, state.viewport);
   renderGrid(ctx, doc, state.viewport);
   renderBrushPreviewOverlay(ctx, doc, state.viewport, state.interaction, state.brush.activeDraft);

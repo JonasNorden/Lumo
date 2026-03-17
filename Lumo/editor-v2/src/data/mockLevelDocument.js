@@ -36,6 +36,16 @@ export const mockLevelDocument = {
   tiles: {
     base,
   },
+  backgrounds: {
+    layers: [
+      {
+        id: "bg-1",
+        name: "Background 1",
+        visible: true,
+        color: "#19253a",
+      },
+    ],
+  },
   extra: {
     notes: "Read-only prototype document for V2 rendering pipeline.",
   },
