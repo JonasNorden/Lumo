@@ -16,6 +16,7 @@ export function createEditorState() {
       offsetY: 48,
     },
     interaction: {
+      activeTool: "inspect",
       hoverCell: null,
       selectedCell: null,
     },

@@ -3,6 +3,8 @@ import { loadLevelDocument } from "../data/loadLevelDocument.js";
 import { getCanvasPointFromMouseEvent, getCellFromCanvasPoint } from "../render/viewport.js";
 import { renderInspector } from "../ui/inspectorPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
+import { resolveTileFromBrushDraft, paintSingleTile } from "../domain/tiles/paintTile.js";
+import { EDITOR_TOOLS } from "../domain/tiles/tools.js";
 
 export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   const ctx = canvas.getContext("2d");
@@ -59,17 +61,23 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     });
   };
 
-  const selectCell = (event) => {
+  const handleCanvasClick = (event) => {
     const state = store.getState();
     if (!state.document.active) return;
 
     const point = getCanvasPointFromMouseEvent(canvas, event);
-    const nextSelection = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
-
-    if (!nextSelection) return;
+    const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+    if (!cell) return;
 
     store.setState((draft) => {
-      draft.interaction.selectedCell = nextSelection;
+      draft.interaction.selectedCell = cell;
+
+      if (draft.interaction.activeTool !== EDITOR_TOOLS.PAINT) {
+        return;
+      }
+
+      const tileValue = resolveTileFromBrushDraft(draft.brush.activeDraft);
+      paintSingleTile(draft.document.active, cell, tileValue);
     });
   };
 
@@ -100,7 +108,7 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   window.addEventListener("resize", resize);
   canvas.addEventListener("mousemove", updateHoveredCell);
   canvas.addEventListener("mouseleave", clearHoveredCell);
-  canvas.addEventListener("click", selectCell);
+  canvas.addEventListener("click", handleCanvasClick);
 
   resize();
   draw(store.getState());
@@ -112,6 +120,6 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     window.removeEventListener("resize", resize);
     canvas.removeEventListener("mousemove", updateHoveredCell);
     canvas.removeEventListener("mouseleave", clearHoveredCell);
-    canvas.removeEventListener("click", selectCell);
+    canvas.removeEventListener("click", handleCanvasClick);
   };
 }

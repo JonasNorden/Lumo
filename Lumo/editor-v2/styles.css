@@ -125,6 +125,30 @@ body {
   background: #2f2316;
 }
 
+
+.toolSwitch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.toolButton {
+  background: #101a2d;
+  color: #b8c9eb;
+  border: 1px solid #2a3652;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toolButton.isActive {
+  color: #e2ecff;
+  border-color: #4f76d1;
+  background: #1a2c55;
+}
+
 .fieldRow {
   display: flex;
   flex-direction: column;
