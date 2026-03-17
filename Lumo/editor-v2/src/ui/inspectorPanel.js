@@ -1,5 +1,3 @@
-import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
-
 const MIN_LEVEL_SIZE = 8;
 const MAX_LEVEL_SIZE = 256;
 const DEFAULT_LEVEL_NAME = "Untitled Level";
@@ -13,23 +11,6 @@ function clampLevelSize(value) {
 
 function countPaintedTiles(tiles) {
   return tiles.reduce((count, tile) => (tile ? count + 1 : count), 0);
-}
-
-function getInspectedCell(state) {
-  return state.interaction.selectedCell || state.interaction.hoverCell;
-}
-
-function getTileForCell(active, cell) {
-  if (!cell) return null;
-
-  const width = active.dimensions.width;
-  const tileValue = active.tiles.base[cell.y * width + cell.x];
-  const tileDefinition = TILE_DEFINITIONS[tileValue];
-
-  return {
-    value: tileValue,
-    label: tileDefinition?.label || "Unknown",
-  };
 }
 
 function captureFocusedMetaInput(panel) {
@@ -308,43 +289,6 @@ function renderWorkspaceSettings(state) {
   `;
 }
 
-function renderCellInfo(active, state) {
-  const inspectedCell = getInspectedCell(state);
-  if (!inspectedCell) {
-    return `
-      <div class="infoGroup">
-        <div class="label">Cell</div>
-        <div class="value">No cell selected.</div>
-      </div>
-    `;
-  }
-
-  const tileInfo = getTileForCell(active, inspectedCell);
-  const sourceLabel = state.interaction.selectedCell ? "Selected" : "Hover";
-
-  return `
-    <div class="infoGroup">
-      <div class="label">Cell</div>
-      <div class="value">${sourceLabel}</div>
-    </div>
-
-    <div class="infoGroup">
-      <div class="label">X</div>
-      <div class="value">${inspectedCell.x}</div>
-    </div>
-
-    <div class="infoGroup">
-      <div class="label">Y</div>
-      <div class="value">${inspectedCell.y}</div>
-    </div>
-
-    <div class="infoGroup">
-      <div class="label">Tile</div>
-      <div class="value">${tileInfo.label} (${tileInfo.value})</div>
-    </div>
-  `;
-}
-
 export function renderInspector(panel, state) {
   const active = state.document.active;
 
@@ -440,8 +384,6 @@ export function renderInspector(panel, state) {
     `, true)}
 
     ${renderInspectorSection("Grid", "grid", renderGridSettings(state), false)}
-
-    ${renderInspectorSection("Cell", "cell", renderCellInfo(active, state), false)}
   `);
 }
 
