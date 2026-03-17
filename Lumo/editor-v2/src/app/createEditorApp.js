@@ -6,6 +6,8 @@ import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
 import { resolveTileFromBrushDraft, paintSingleTile } from "../domain/tiles/paintTile.js";
 import { eraseSingleTile } from "../domain/tiles/eraseTile.js";
 import { EDITOR_TOOLS } from "../domain/tiles/tools.js";
+import { createTileEditEntry, pushTileEdit, undoTileEdit, redoTileEdit } from "../domain/tiles/history.js";
+import { getTileIndex } from "../domain/level/levelDocument.js";
 
 export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   const ctx = canvas.getContext("2d");
@@ -73,15 +75,43 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     store.setState((draft) => {
       draft.interaction.selectedCell = cell;
 
+      const doc = draft.document.active;
+      const index = getTileIndex(doc.dimensions.width, cell.x, cell.y);
+      const previousValue = doc.tiles.base[index];
+
       if (draft.interaction.activeTool === EDITOR_TOOLS.PAINT) {
         const tileValue = resolveTileFromBrushDraft(draft.brush.activeDraft);
-        paintSingleTile(draft.document.active, cell, tileValue);
+        const changed = paintSingleTile(doc, cell, tileValue);
+        if (changed) {
+          const entry = createTileEditEntry(doc, cell, previousValue, tileValue);
+          pushTileEdit(draft.history, entry);
+        }
         return;
       }
 
       if (draft.interaction.activeTool === EDITOR_TOOLS.ERASE) {
-        eraseSingleTile(draft.document.active, cell);
+        const changed = eraseSingleTile(doc, cell);
+        if (changed) {
+          const entry = createTileEditEntry(doc, cell, previousValue, 0);
+          pushTileEdit(draft.history, entry);
+        }
       }
+    });
+  };
+
+  const handleUndo = () => {
+    store.setState((draft) => {
+      const doc = draft.document.active;
+      if (!doc) return;
+      undoTileEdit(doc, draft.history);
+    });
+  };
+
+  const handleRedo = () => {
+    store.setState((draft) => {
+      const doc = draft.document.active;
+      if (!doc) return;
+      redoTileEdit(doc, draft.history);
     });
   };
 
@@ -108,7 +138,10 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   };
 
   const unsubscribe = store.subscribe(draw);
-  const unbindBrushPanel = bindBrushPanel(brushPanel, store);
+  const unbindBrushPanel = bindBrushPanel(brushPanel, store, {
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+  });
   window.addEventListener("resize", resize);
   canvas.addEventListener("mousemove", updateHoveredCell);
   canvas.addEventListener("mouseleave", clearHoveredCell);

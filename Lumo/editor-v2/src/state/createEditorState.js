@@ -23,6 +23,10 @@ export function createEditorState() {
     brush: {
       activeDraft: createDefaultBrushDraft(),
     },
+    history: {
+      undoStack: [],
+      redoStack: [],
+    },
     ui: {
       inspectorOpen: true,
     },

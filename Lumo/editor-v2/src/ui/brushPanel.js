@@ -8,6 +8,7 @@ import {
   isBrushDraftValid,
 } from "../domain/tiles/brushDraft.js";
 import { TOOL_OPTIONS, isEditorTool } from "../domain/tiles/tools.js";
+import { canUndo, canRedo } from "../domain/tiles/history.js";
 
 function renderOptions(options, selectedValue) {
   return options
@@ -29,6 +30,8 @@ function getToolLabel(toolValue) {
 }
 
 export function renderBrushPanel(panel, state) {
+  const undoEnabled = canUndo(state.history);
+  const redoEnabled = canRedo(state.history);
   const brushDraft = state.brush.activeDraft;
   const summary = getBrushDraftSummary(brushDraft);
   const valid = isBrushDraftValid(brushDraft);
@@ -41,6 +44,11 @@ export function renderBrushPanel(panel, state) {
 
     <div class="toolSwitch" role="group" aria-label="Editor tool">
       ${TOOL_OPTIONS.map((option) => renderToolButton(option, state.interaction.activeTool)).join("")}
+    </div>
+
+    <div class="historyActions" role="group" aria-label="History controls">
+      <button class="toolButton" type="button" data-history-action="undo" ${undoEnabled ? "" : "disabled"}>Undo</button>
+      <button class="toolButton" type="button" data-history-action="redo" ${redoEnabled ? "" : "disabled"}>Redo</button>
     </div>
 
     <label class="fieldRow">
@@ -76,7 +84,8 @@ export function renderBrushPanel(panel, state) {
   `;
 }
 
-export function bindBrushPanel(panel, store) {
+export function bindBrushPanel(panel, store, options = {}) {
+  const { onUndo, onRedo } = options;
   const onChange = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLSelectElement)) return;
@@ -92,6 +101,18 @@ export function bindBrushPanel(panel, store) {
   const onClick = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
+
+    const historyButton = target.closest("[data-history-action]");
+    if (historyButton instanceof HTMLButtonElement) {
+      const action = historyButton.dataset.historyAction;
+      if (action === "undo") {
+        onUndo?.();
+      }
+      if (action === "redo") {
+        onRedo?.();
+      }
+      return;
+    }
 
     const button = target.closest("[data-tool]");
     if (!(button instanceof HTMLButtonElement)) return;
