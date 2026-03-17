@@ -355,26 +355,19 @@ body {
 .brushPanel {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 
 .panelSection {
   border: 1px solid #1d263c;
   border-radius: 10px;
-  padding: 8px;
+  padding: 7px;
   background: rgba(11, 18, 33, 0.62);
-  transition: border-color 120ms ease, background-color 120ms ease;
-}
-
-.panelSection:hover,
-.panelSection.isHoverExpanded {
-  border-color: #2a3f67;
-  background: rgba(15, 24, 44, 0.72);
 }
 
 .panelSectionMicro {
-  padding: 6px 8px;
+  padding: 5px 7px;
 }
 
 .sectionTitle {
@@ -411,19 +404,15 @@ body {
 }
 
 .sectionContent {
-  margin-top: 6px;
+  margin-top: 5px;
 }
 
 .panelSection.isCollapsed .sectionContent {
   display: none;
 }
 
-.panelSection.isCollapsed.isHoverExpanded .sectionContent {
-  display: block;
-}
-
 .panelSection.panelSectionMicro .sectionContent {
-  margin-top: 4px;
+  margin-top: 3px;
 }
 
 .hintText {
