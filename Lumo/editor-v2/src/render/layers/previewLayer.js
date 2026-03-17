@@ -2,7 +2,7 @@ import { getBrushCells, resolveBrushSize } from "../../domain/tiles/brushSize.js
 import { EDITOR_TOOLS } from "../../domain/tiles/tools.js";
 
 function isPreviewTool(activeTool) {
-  return activeTool === EDITOR_TOOLS.PAINT || activeTool === EDITOR_TOOLS.ERASE;
+  return activeTool === EDITOR_TOOLS.PAINT || activeTool === EDITOR_TOOLS.ERASE || activeTool === EDITOR_TOOLS.RECT;
 }
 
 function getPreviewStyle(activeTool) {
@@ -19,12 +19,39 @@ function getPreviewStyle(activeTool) {
   };
 }
 
+function getRectBounds(startCell, endCell) {
+  return {
+    minX: Math.min(startCell.x, endCell.x),
+    maxX: Math.max(startCell.x, endCell.x),
+    minY: Math.min(startCell.y, endCell.y),
+    maxY: Math.max(startCell.y, endCell.y),
+  };
+}
+
+function getRectPreviewCells(interaction, brushDraft) {
+  const brushSize = resolveBrushSize(brushDraft);
+
+  if (interaction.activeTool !== EDITOR_TOOLS.RECT || !interaction.rectDrag?.active || !interaction.rectDrag.startCell || !interaction.hoverCell) {
+    return interaction.hoverCell ? getBrushCells(interaction.hoverCell, brushSize) : [];
+  }
+
+  const bounds = getRectBounds(interaction.rectDrag.startCell, interaction.hoverCell);
+  const cells = [];
+
+  for (let y = bounds.minY; y <= bounds.maxY; y += 1) {
+    for (let x = bounds.minX; x <= bounds.maxX; x += 1) {
+      cells.push(...getBrushCells({ x, y }, brushSize));
+    }
+  }
+
+  return cells;
+}
+
 export function renderBrushPreviewOverlay(ctx, doc, viewport, interaction, brushDraft) {
   if (!isPreviewTool(interaction.activeTool)) return;
   if (!interaction.hoverCell) return;
 
-  const brushSize = resolveBrushSize(brushDraft);
-  const brushCells = getBrushCells(interaction.hoverCell, brushSize);
+  const brushCells = getRectPreviewCells(interaction, brushDraft);
   const tileSize = doc.dimensions.tileSize;
   const { width, height } = doc.dimensions;
   const zoomedTileSize = tileSize * viewport.zoom;

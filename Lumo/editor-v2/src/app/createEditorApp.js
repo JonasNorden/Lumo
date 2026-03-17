@@ -17,6 +17,15 @@ import {
 } from "../domain/tiles/history.js";
 import { getTileIndex } from "../domain/level/levelDocument.js";
 
+function getRectBounds(startCell, endCell) {
+  return {
+    minX: Math.min(startCell.x, endCell.x),
+    maxX: Math.max(startCell.x, endCell.x),
+    minY: Math.min(startCell.y, endCell.y),
+    maxY: Math.max(startCell.y, endCell.y),
+  };
+}
+
 export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   const ctx = canvas.getContext("2d");
 
@@ -81,7 +90,7 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     const { width, height } = doc.dimensions;
     let changedAny = false;
 
-    if (draft.interaction.activeTool === EDITOR_TOOLS.PAINT) {
+    if (draft.interaction.activeTool === EDITOR_TOOLS.PAINT || draft.interaction.activeTool === EDITOR_TOOLS.RECT) {
       const tileValue = resolveTileFromBrushDraft(draft.brush.activeDraft);
 
       for (const brushCell of brushCells) {
@@ -118,19 +127,48 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     return false;
   };
 
+  const applyRectTool = (draft, startCell, endCell) => {
+    const bounds = getRectBounds(startCell, endCell);
+    let changedAny = false;
+
+    for (let y = bounds.minY; y <= bounds.maxY; y += 1) {
+      for (let x = bounds.minX; x <= bounds.maxX; x += 1) {
+        if (applyTileToolAtCell(draft, { x, y })) {
+          changedAny = true;
+        }
+      }
+    }
+
+    return changedAny;
+  };
+
   const handleCanvasMouseDown = (event) => {
     if (event.button !== 0) return;
 
     const state = store.getState();
     if (!state.document.active) return;
 
-    const activeTool = state.interaction.activeTool;
-    const drawableTool = activeTool === EDITOR_TOOLS.PAINT || activeTool === EDITOR_TOOLS.ERASE;
-    if (!drawableTool) return;
-
     const point = getCanvasPointFromMouseEvent(canvas, event);
     const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     if (!cell) return;
+
+    const activeTool = state.interaction.activeTool;
+
+    if (activeTool === EDITOR_TOOLS.RECT) {
+      event.preventDefault();
+      store.setState((draft) => {
+        draft.interaction.selectedCell = cell;
+        draft.interaction.hoverCell = cell;
+        draft.interaction.rectDrag = {
+          active: true,
+          startCell: cell,
+        };
+      });
+      return;
+    }
+
+    const drawableTool = activeTool === EDITOR_TOOLS.PAINT || activeTool === EDITOR_TOOLS.ERASE;
+    if (!drawableTool) return;
 
     event.preventDefault();
 
@@ -149,6 +187,21 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
 
     const state = store.getState();
     if (!state.document.active) return;
+
+    if (state.interaction.activeTool === EDITOR_TOOLS.RECT) {
+      if (!state.interaction.rectDrag?.active) return;
+      if ((event.buttons & 1) !== 1) return;
+
+      const point = getCanvasPointFromMouseEvent(canvas, event);
+      const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+      if (!cell) return;
+
+      store.setState((draft) => {
+        draft.interaction.selectedCell = cell;
+        draft.interaction.hoverCell = cell;
+      });
+      return;
+    }
 
     const dragActive = state.interaction.dragPaint?.active;
     const drawableTool =
@@ -171,6 +224,23 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
 
   const stopDragPaint = () => {
     const state = store.getState();
+
+    if (state.interaction.rectDrag?.active) {
+      const startCell = state.interaction.rectDrag.startCell;
+      const endCell = state.interaction.hoverCell;
+
+      store.setState((draft) => {
+        if (startCell && endCell) {
+          startTileEditBatch(draft.history, "rect-drag");
+          applyRectTool(draft, startCell, endCell);
+          endTileEditBatch(draft.history);
+        }
+
+        draft.interaction.rectDrag = null;
+      });
+      return;
+    }
+
     if (!state.interaction.dragPaint?.active) return;
 
     store.setState((draft) => {

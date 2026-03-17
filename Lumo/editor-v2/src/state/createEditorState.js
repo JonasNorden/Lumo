@@ -20,6 +20,7 @@ export function createEditorState() {
       hoverCell: null,
       selectedCell: null,
       dragPaint: null,
+      rectDrag: null,
     },
     brush: {
       activeDraft: createDefaultBrushDraft(),
