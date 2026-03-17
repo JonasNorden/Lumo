@@ -30,6 +30,20 @@ function getRectBounds(startCell, endCell) {
 
 export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   const ctx = canvas.getContext("2d");
+  const toolShortcutMap = {
+    v: EDITOR_TOOLS.INSPECT,
+    b: EDITOR_TOOLS.PAINT,
+    e: EDITOR_TOOLS.ERASE,
+    r: EDITOR_TOOLS.RECT,
+    l: EDITOR_TOOLS.LINE,
+    f: EDITOR_TOOLS.FILL,
+  };
+
+  const isShortcutTargetBlocked = (eventTarget) => {
+    if (!(eventTarget instanceof Element)) return false;
+
+    return Boolean(eventTarget.closest("input, textarea, select, button, [contenteditable='true'], [contenteditable='']"));
+  };
 
   const resize = () => {
     const dpr = window.devicePixelRatio || 1;
@@ -378,6 +392,40 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     });
   };
 
+  const setActiveTool = (tool) => {
+    store.setState((draft) => {
+      draft.interaction.activeTool = tool;
+    });
+  };
+
+  const handleGlobalKeyDown = (event) => {
+    if (event.repeat) return;
+    if (isShortcutTargetBlocked(event.target)) return;
+
+    const isHistoryShortcut = event.metaKey || event.ctrlKey;
+    if (isHistoryShortcut) {
+      const key = event.key.toLowerCase();
+      if (key !== "z") return;
+
+      event.preventDefault();
+      if (event.shiftKey) {
+        handleRedo();
+        return;
+      }
+
+      handleUndo();
+      return;
+    }
+
+    if (event.altKey || event.shiftKey) return;
+
+    const nextTool = toolShortcutMap[event.key.toLowerCase()];
+    if (!nextTool) return;
+
+    event.preventDefault();
+    setActiveTool(nextTool);
+  };
+
   const loadDocument = async () => {
     store.setState((state) => {
       state.document.status = "loading";
@@ -411,6 +459,7 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   canvas.addEventListener("mousedown", handleCanvasMouseDown);
   window.addEventListener("mouseup", stopDragPaint);
   canvas.addEventListener("click", handleCanvasClick);
+  window.addEventListener("keydown", handleGlobalKeyDown);
 
   resize();
   draw(store.getState());
@@ -425,5 +474,6 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     canvas.removeEventListener("mousedown", handleCanvasMouseDown);
     window.removeEventListener("mouseup", stopDragPaint);
     canvas.removeEventListener("click", handleCanvasClick);
+    window.removeEventListener("keydown", handleGlobalKeyDown);
   };
 }

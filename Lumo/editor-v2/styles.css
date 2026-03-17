@@ -177,3 +177,13 @@ body {
   padding: 6px 8px;
   font-size: 12px;
 }
+
+.shortcutHelp {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #1d263c;
+  display: grid;
+  gap: 3px;
+  font-size: 11px;
+  color: #7d8cac;
+}

@@ -81,6 +81,17 @@ export function renderBrushPanel(panel, state) {
       <div class="label">Tool</div>
       <div class="value">${getToolLabel(state.interaction.activeTool)}</div>
     </div>
+
+    <div class="shortcutHelp" aria-label="Keyboard shortcuts">
+      <span>V Inspect</span>
+      <span>B Paint</span>
+      <span>E Erase</span>
+      <span>R Rect</span>
+      <span>L Line</span>
+      <span>F Fill</span>
+      <span>⌘/Ctrl+Z Undo</span>
+      <span>⌘/Ctrl+Shift+Z Redo</span>
+    </div>
   `;
 }
 
