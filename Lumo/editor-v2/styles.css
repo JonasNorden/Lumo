@@ -1,0 +1,92 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: #0d1119;
+  color: #cfd6e4;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at top, #151d30 0%, #0d1119 55%);
+}
+
+.appShell {
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 48px 1fr;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid #20283c;
+  background: rgba(14, 19, 32, 0.9);
+}
+
+.brand { font-weight: 600; letter-spacing: 0.02em; }
+.version {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #2f3a56;
+  color: #9eb2e5;
+}
+
+.workspace {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+}
+
+.canvasPanel {
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+}
+
+#editorCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 10px;
+  border: 1px solid #1f2a43;
+  background: #0a0f1d;
+}
+
+.inspectorPanel {
+  border-left: 1px solid #1d263c;
+  padding: 16px;
+  background: rgba(8, 13, 24, 0.85);
+  font-size: 13px;
+}
+
+.infoGroup {
+  margin-bottom: 14px;
+}
+
+.label {
+  color: #7d8cac;
+  margin-bottom: 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.value {
+  color: #dbe5ff;
+  font-weight: 500;
+}
+
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #1a253f;
+  color: #b7ccff;
+  border: 1px solid #2f3a56;
+}
