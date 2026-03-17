@@ -1575,10 +1575,15 @@ display:none;
       w: Math.max(1, (sourceFootprint && Number.isFinite(Number(sourceFootprint.w))) ? (Number(sourceFootprint.w)|0) : 1),
       h: Math.max(1, (sourceFootprint && Number.isFinite(Number(sourceFootprint.h))) ? (Number(sourceFootprint.h)|0) : 1),
     };
+    const behaviorProfileId = (catalogTile.behaviorProfileId != null) ? String(catalogTile.behaviorProfileId) : null;
     return {
       ...catalogTile,
       catalogTile,
-      brush: { writeTileId, footprint },
+      brush: {
+        writeTileId,
+        footprint,
+        ...(behaviorProfileId ? { behaviorProfileId } : {}),
+      },
     };
   }
 
