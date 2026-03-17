@@ -4,6 +4,7 @@ const MIN_LEVEL_SIZE = 8;
 const MAX_LEVEL_SIZE = 256;
 const DEFAULT_LEVEL_NAME = "Untitled Level";
 const DEFAULT_LEVEL_ID = "untitled-level";
+const GRID_OPACITY_DRAGGING_ATTR = "gridOpacityDragging";
 
 function clampLevelSize(value) {
   return Math.max(MIN_LEVEL_SIZE, Math.min(MAX_LEVEL_SIZE, value));
@@ -161,6 +162,10 @@ export function renderInspector(panel, state) {
 
   if (!active) {
     setInspectorMarkup(panel, `<div class="value">No document loaded.</div>`);
+    return;
+  }
+
+  if (panel.dataset[GRID_OPACITY_DRAGGING_ATTR] === "true") {
     return;
   }
 
@@ -334,11 +339,32 @@ export function bindInspectorPanel(panel, store, options = {}) {
     handleGridChange(target);
   };
 
+  const onPointerDown = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (target.dataset.gridField !== "opacity") return;
+
+    panel.dataset[GRID_OPACITY_DRAGGING_ATTR] = "true";
+  };
+
+  const stopOpacityDrag = () => {
+    if (panel.dataset[GRID_OPACITY_DRAGGING_ATTR] !== "true") return;
+
+    delete panel.dataset[GRID_OPACITY_DRAGGING_ATTR];
+    renderInspector(panel, store.getState());
+  };
+
   panel.addEventListener("change", onChange);
   panel.addEventListener("input", onInput);
+  panel.addEventListener("pointerdown", onPointerDown);
+  window.addEventListener("pointerup", stopOpacityDrag);
+  window.addEventListener("pointercancel", stopOpacityDrag);
 
   return () => {
     panel.removeEventListener("change", onChange);
     panel.removeEventListener("input", onInput);
+    panel.removeEventListener("pointerdown", onPointerDown);
+    window.removeEventListener("pointerup", stopOpacityDrag);
+    window.removeEventListener("pointercancel", stopOpacityDrag);
   };
 }
