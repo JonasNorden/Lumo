@@ -34,6 +34,13 @@ export function createEditorState() {
     ui: {
       inspectorOpen: true,
       importStatus: null,
+      panelSections: {
+        tools: true,
+        file: false,
+        palette: true,
+        brush: true,
+        shortcuts: false,
+      },
     },
   };
 }
