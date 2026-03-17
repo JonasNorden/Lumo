@@ -3,6 +3,7 @@ import { loadLevelDocument } from "../data/loadLevelDocument.js";
 import { getCanvasPointFromMouseEvent, getCellFromCanvasPoint } from "../render/viewport.js";
 import { renderInspector } from "../ui/inspectorPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
+import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { resolveTileFromBrushDraft, paintSingleTile } from "../domain/tiles/paintTile.js";
 import { resolveBrushSize, getBrushCells } from "../domain/tiles/brushSize.js";
 import { eraseSingleTile } from "../domain/tiles/eraseTile.js";
@@ -392,6 +393,13 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     });
   };
 
+  const handleExport = () => {
+    const state = store.getState();
+    if (!state.document.active) return;
+
+    triggerLevelDocumentDownload(state.document.active);
+  };
+
   const setActiveTool = (tool) => {
     store.setState((draft) => {
       draft.interaction.activeTool = tool;
@@ -452,6 +460,7 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   const unbindBrushPanel = bindBrushPanel(brushPanel, store, {
     onUndo: handleUndo,
     onRedo: handleRedo,
+    onExport: handleExport,
   });
   window.addEventListener("resize", resize);
   canvas.addEventListener("mousemove", handleCanvasMouseMove);
