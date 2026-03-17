@@ -441,12 +441,6 @@ export function renderInspector(panel, state) {
 
     ${renderInspectorSection("Grid", "grid", renderGridSettings(state), false)}
 
-    ${renderInspectorSection("Workspace", "workspace", renderWorkspaceSettings(state), false)}
-
-    ${renderInspectorSection("Backgrounds", "backgrounds", renderBackgroundSettings(active), true)}
-
-    ${renderInspectorSection("Entities", "entities", renderEntitiesSettings(active, state), true)}
-
     ${renderInspectorSection("Cell", "cell", renderCellInfo(active, state), false)}
   `);
 }

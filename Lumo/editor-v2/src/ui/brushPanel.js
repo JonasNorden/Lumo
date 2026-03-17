@@ -8,6 +8,16 @@ import { getBrushDraftSummary } from "../domain/tiles/brushDraft.js";
 import { TOOL_OPTIONS, isEditorTool } from "../domain/tiles/tools.js";
 import { canUndo, canRedo } from "../domain/tiles/history.js";
 
+const WORKSPACE_BACKGROUND_PRESETS = ["#0a0f1d", "#111827", "#1a2336", "#141b2a"];
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 function renderOptions(options, selectedValue) {
   return options
     .map(
@@ -40,6 +50,140 @@ function renderPaletteItem(preset, activePresetId) {
 
 function getToolLabel(toolValue) {
   return TOOL_OPTIONS.find((option) => option.value === toolValue)?.label ?? "Inspect";
+}
+
+function renderWorkspaceSettings(state) {
+  const { workspaceBackground } = state.ui;
+
+  return `
+    <div class="infoGroup compact">
+      <div class="value">Canvas visuals</div>
+    </div>
+
+    <label class="fieldRow">
+      <span class="label">Background</span>
+      <input
+        type="color"
+        value="${workspaceBackground}"
+        data-workspace-field="background"
+      />
+    </label>
+
+    <div class="workspacePresets" role="group" aria-label="Workspace background presets">
+      ${WORKSPACE_BACKGROUND_PRESETS.map(
+        (preset) => `
+          <button
+            type="button"
+            class="workspacePreset${workspaceBackground === preset ? " isActive" : ""}"
+            data-workspace-preset="${preset}"
+            title="Set workspace background to ${preset}"
+            style="--workspace-preset-color: ${preset};"
+          ></button>
+        `,
+      ).join("")}
+    </div>
+  `;
+}
+
+function renderBackgroundSettings(active) {
+  const layers = active.backgrounds?.layers || [];
+
+  return `
+    <div class="infoGroup compact">
+      <div class="value">${layers.length} layer${layers.length === 1 ? "" : "s"}</div>
+    </div>
+
+    <button type="button" class="toolButton isSecondary" data-background-action="add">Add layer</button>
+
+    <div class="backgroundLayerList">
+      ${layers
+        .map(
+          (layer, index) => `
+            <div class="backgroundLayerRow">
+              <label class="fieldRow">
+                <span class="label">Name</span>
+                <input type="text" value="${escapeHtml(layer.name)}" data-background-field="name" data-background-index="${index}" />
+              </label>
+              <div class="backgroundLayerControls">
+                <label class="fieldRow compactInline">
+                  <span class="label">Visible</span>
+                  <input type="checkbox" data-background-field="visible" data-background-index="${index}" ${layer.visible ? "checked" : ""} />
+                </label>
+                <label class="fieldRow compactInline">
+                  <span class="label">Color</span>
+                  <input type="color" value="${layer.color}" data-background-field="color" data-background-index="${index}" />
+                </label>
+              </div>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function renderEntitiesSettings(active, state) {
+  const entities = active.entities || [];
+  const selectedEntityIndex = state.interaction.selectedEntityIndex;
+  const selected = Number.isInteger(selectedEntityIndex) ? entities[selectedEntityIndex] : null;
+
+  return `
+    <div class="infoGroup compact">
+      <div class="value">${entities.length} total</div>
+    </div>
+
+    <button type="button" class="toolButton isSecondary" data-entity-action="add">Add entity</button>
+
+    <div class="entityList" role="listbox" aria-label="Entities">
+      ${entities
+        .map(
+          (entity, index) => `
+            <button
+              type="button"
+              class="entityListItem ${index === selectedEntityIndex ? "isSelected" : ""}"
+              data-entity-action="select"
+              data-entity-index="${index}"
+            >
+              <span class="entityListName">${escapeHtml(entity.name || `Entity ${index + 1}`)}</span>
+              <span class="entityListType">${escapeHtml(entity.type || "unknown")}</span>
+            </button>
+          `,
+        )
+        .join("")}
+    </div>
+
+    ${selected
+      ? `
+      <div class="entityEditor">
+        <label class="fieldRow">
+          <span class="label">Name</span>
+          <input type="text" value="${escapeHtml(selected.name)}" data-entity-field="name" data-entity-index="${selectedEntityIndex}" />
+        </label>
+
+        <label class="fieldRow">
+          <span class="label">Type</span>
+          <input type="text" value="${escapeHtml(selected.type)}" data-entity-field="type" data-entity-index="${selectedEntityIndex}" />
+        </label>
+
+        <label class="fieldRow compactInline">
+          <span class="label">Visible</span>
+          <input type="checkbox" ${selected.visible ? "checked" : ""} data-entity-field="visible" data-entity-index="${selectedEntityIndex}" />
+        </label>
+
+        <div class="entityPositionGrid">
+          <label class="fieldRow">
+            <span class="label">X</span>
+            <input type="number" step="1" value="${selected.x}" data-entity-field="x" data-entity-index="${selectedEntityIndex}" />
+          </label>
+          <label class="fieldRow">
+            <span class="label">Y</span>
+            <input type="number" step="1" value="${selected.y}" data-entity-field="y" data-entity-index="${selectedEntityIndex}" />
+          </label>
+        </div>
+      </div>
+      `
+      : '<div class="mutedValue">Select an entity to edit it.</div>'}
+  `;
 }
 
 function renderSection(sectionId, title, isOpen, content, sectionClass = "") {
@@ -83,6 +227,9 @@ export function renderBrushPanel(panel, state) {
     file: false,
     palette: true,
     brush: true,
+    workspace: true,
+    backgrounds: true,
+    entities: true,
     shortcuts: false,
     ...state.ui.panelSections,
   };
@@ -175,6 +322,16 @@ export function renderBrushPanel(panel, state) {
       `,
     )}
 
+    ${state.document.active ? renderSection("workspace", "Workspace", panelSections.workspace, renderWorkspaceSettings(state)) : ""}
+
+    ${state.document.active
+      ? renderSection("backgrounds", "Backgrounds", panelSections.backgrounds, renderBackgroundSettings(state.document.active))
+      : ""}
+
+    ${state.document.active
+      ? renderSection("entities", "Entities", panelSections.entities, renderEntitiesSettings(state.document.active, state))
+      : ""}
+
     ${renderSection(
       "shortcuts",
       "Shortcuts",
@@ -197,7 +354,7 @@ export function renderBrushPanel(panel, state) {
 }
 
 export function bindBrushPanel(panel, store, options = {}) {
-  const { onUndo, onRedo, onExport, onImport, onNew } = options;
+  const { onUndo, onRedo, onExport, onImport, onNew, onWorkspaceUpdate, onBackgroundUpdate, onEntityUpdate } = options;
   let activeHoveredSection = null;
 
   const collapseHoveredSection = (sectionElement) => {
@@ -259,14 +416,53 @@ export function bindBrushPanel(panel, store, options = {}) {
 
   const onChange = (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLSelectElement)) return;
 
-    const field = target.dataset.brushField;
-    if (!field) return;
+    if (target instanceof HTMLSelectElement) {
+      const field = target.dataset.brushField;
+      if (!field) return;
 
-    store.setState((draft) => {
-      draft.brush.activeDraft[field] = target.value;
-    });
+      store.setState((draft) => {
+        draft.brush.activeDraft[field] = target.value;
+      });
+      return;
+    }
+
+    if (!(target instanceof HTMLInputElement)) return;
+
+    const workspaceField = target.dataset.workspaceField;
+    if (workspaceField === "background") {
+      onWorkspaceUpdate?.("background", target.value);
+      return;
+    }
+
+    const backgroundField = target.dataset.backgroundField;
+    if (backgroundField === "name" || backgroundField === "visible" || backgroundField === "color") {
+      const index = Number.parseInt(target.dataset.backgroundIndex || "", 10);
+      if (!Number.isInteger(index) || index < 0) return;
+      onBackgroundUpdate?.(index, backgroundField, backgroundField === "visible" ? target.checked : target.value);
+      return;
+    }
+
+    const entityField = target.dataset.entityField;
+    if (entityField !== "name" && entityField !== "type" && entityField !== "visible" && entityField !== "x" && entityField !== "y") return;
+
+    const index = Number.parseInt(target.dataset.entityIndex || "", 10);
+    if (!Number.isInteger(index) || index < 0) return;
+
+    if (entityField === "visible") {
+      onEntityUpdate?.(index, "visible", target.checked);
+      return;
+    }
+
+    if (entityField === "x" || entityField === "y") {
+      const parsed = Number.parseInt(target.value, 10);
+      const value = Number.isInteger(parsed) ? parsed : 0;
+      target.value = String(value);
+      onEntityUpdate?.(index, entityField, value);
+      return;
+    }
+
+    onEntityUpdate?.(index, entityField, target.value);
   };
 
   const onClick = (event) => {
@@ -297,7 +493,6 @@ export function bindBrushPanel(panel, store, options = {}) {
       return;
     }
 
-
     const documentButton = target.closest("[data-document-action]");
     if (documentButton instanceof HTMLButtonElement) {
       const action = documentButton.dataset.documentAction;
@@ -321,6 +516,39 @@ export function bindBrushPanel(panel, store, options = {}) {
       const action = importButton.dataset.importAction;
       if (action === "level-json") {
         onImport?.();
+      }
+      return;
+    }
+
+    const workspacePresetButton = target.closest("[data-workspace-preset]");
+    if (workspacePresetButton instanceof HTMLButtonElement) {
+      const preset = workspacePresetButton.dataset.workspacePreset;
+      if (preset) {
+        onWorkspaceUpdate?.("background", preset);
+      }
+      return;
+    }
+
+    const backgroundActionButton = target.closest("[data-background-action]");
+    if (backgroundActionButton instanceof HTMLButtonElement) {
+      const action = backgroundActionButton.dataset.backgroundAction;
+      if (action === "add") {
+        onBackgroundUpdate?.(-1, "add", null);
+      }
+      return;
+    }
+
+    const entityActionButton = target.closest("[data-entity-action]");
+    if (entityActionButton instanceof HTMLButtonElement) {
+      const action = entityActionButton.dataset.entityAction;
+      if (action === "add") {
+        onEntityUpdate?.(-1, "add", null);
+      }
+      if (action === "select") {
+        const index = Number.parseInt(entityActionButton.dataset.entityIndex || "", 10);
+        if (Number.isInteger(index) && index >= 0) {
+          onEntityUpdate?.(index, "select", null);
+        }
       }
       return;
     }
