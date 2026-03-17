@@ -22,3 +22,26 @@ export function getCanvasPointFromMouseEvent(canvas, event) {
     y: event.clientY - rect.top,
   };
 }
+
+export function clampViewportZoom(value, minZoom = 0.35, maxZoom = 4) {
+  return Math.max(minZoom, Math.min(maxZoom, value));
+}
+
+export function getZoomMultiplierFromWheelDelta(deltaY) {
+  return Math.exp(-deltaY * 0.0015);
+}
+
+export function zoomViewportAroundPoint(viewport, point, nextZoom) {
+  const safeCurrentZoom = Math.max(0.0001, viewport.zoom);
+  const worldX = (point.x - viewport.offsetX) / safeCurrentZoom;
+  const worldY = (point.y - viewport.offsetY) / safeCurrentZoom;
+
+  viewport.zoom = nextZoom;
+  viewport.offsetX = point.x - worldX * nextZoom;
+  viewport.offsetY = point.y - worldY * nextZoom;
+}
+
+export function panViewportByDelta(viewport, deltaX, deltaY) {
+  viewport.offsetX += deltaX;
+  viewport.offsetY += deltaY;
+}

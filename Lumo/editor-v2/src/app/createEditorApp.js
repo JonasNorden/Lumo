@@ -1,6 +1,13 @@
 import { renderEditorFrame } from "../render/renderer.js";
 import { loadLevelDocument } from "../data/loadLevelDocument.js";
-import { getCanvasPointFromMouseEvent, getCellFromCanvasPoint } from "../render/viewport.js";
+import {
+  clampViewportZoom,
+  getCanvasPointFromMouseEvent,
+  getCellFromCanvasPoint,
+  getZoomMultiplierFromWheelDelta,
+  panViewportByDelta,
+  zoomViewportAroundPoint,
+} from "../render/viewport.js";
 import { renderInspector, bindInspectorPanel } from "../ui/inspectorPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
@@ -33,6 +40,12 @@ function getRectBounds(startCell, endCell) {
 
 export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   const ctx = canvas.getContext("2d");
+  const PAN_CURSOR = "grab";
+  const PAN_ACTIVE_CURSOR = "grabbing";
+  const interactionState = {
+    panDrag: null,
+    suppressNextClick: false,
+  };
   const toolShortcutMap = {
     v: EDITOR_TOOLS.INSPECT,
     b: EDITOR_TOOLS.PAINT,
@@ -64,6 +77,79 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
 
     state.viewport.offsetX = Math.max(24, (rect.width - docWidth) * 0.5);
     state.viewport.offsetY = Math.max(24, (rect.height - docHeight) * 0.5);
+  };
+
+  const isPanGestureActive = () => Boolean(interactionState.panDrag?.active);
+
+  const isSpacePanModifierActive = () => store.getState().interaction.spacePanActive;
+
+  const syncCanvasCursor = () => {
+    canvas.style.cursor = isPanGestureActive() ? PAN_ACTIVE_CURSOR : isSpacePanModifierActive() ? PAN_CURSOR : "";
+  };
+
+  const updateSpacePanActive = (active) => {
+    const state = store.getState();
+    if (state.interaction.spacePanActive === active) return;
+
+    store.setState((draft) => {
+      draft.interaction.spacePanActive = active;
+    });
+    syncCanvasCursor();
+  };
+
+  const startPanDrag = (event, trigger) => {
+    event.preventDefault();
+    interactionState.panDrag = {
+      active: true,
+      trigger,
+      lastClientX: event.clientX,
+      lastClientY: event.clientY,
+    };
+    syncCanvasCursor();
+  };
+
+  const handleCanvasWheel = (event) => {
+    const state = store.getState();
+    if (!state.document.active) return;
+
+    event.preventDefault();
+
+    const point = getCanvasPointFromMouseEvent(canvas, event);
+    const zoomMultiplier = getZoomMultiplierFromWheelDelta(event.deltaY);
+    const nextZoom = clampViewportZoom(state.viewport.zoom * zoomMultiplier);
+
+    if (nextZoom === state.viewport.zoom) return;
+
+    store.setState((draft) => {
+      zoomViewportAroundPoint(draft.viewport, point, nextZoom);
+    });
+  };
+
+  const panFromMouseMove = (event) => {
+    const panDrag = interactionState.panDrag;
+    if (!panDrag?.active) return false;
+
+    const deltaX = event.clientX - panDrag.lastClientX;
+    const deltaY = event.clientY - panDrag.lastClientY;
+
+    if (deltaX !== 0 || deltaY !== 0) {
+      interactionState.suppressNextClick = true;
+
+      store.setState((draft) => {
+        panViewportByDelta(draft.viewport, deltaX, deltaY);
+      });
+    }
+
+    panDrag.lastClientX = event.clientX;
+    panDrag.lastClientY = event.clientY;
+    return true;
+  };
+
+  const stopPanDrag = () => {
+    if (!interactionState.panDrag?.active) return;
+
+    interactionState.panDrag = null;
+    syncCanvasCursor();
   };
 
 
@@ -245,7 +331,17 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   };
 
   const handleCanvasMouseDown = (event) => {
+    if (event.button === 1) {
+      startPanDrag(event, "middle");
+      return;
+    }
+
     if (event.button !== 0) return;
+
+    if (isSpacePanModifierActive()) {
+      startPanDrag(event, "space");
+      return;
+    }
 
     const state = store.getState();
     if (!state.document.active) return;
@@ -309,6 +405,11 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   };
 
   const handleCanvasMouseMove = (event) => {
+    if (panFromMouseMove(event)) {
+      clearHoveredCell();
+      return;
+    }
+
     updateHoveredCell(event);
 
     const state = store.getState();
@@ -364,6 +465,8 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   };
 
   const stopDragPaint = () => {
+    stopPanDrag();
+
     const state = store.getState();
 
     if (state.interaction.rectDrag?.active) {
@@ -407,6 +510,12 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   };
 
   const handleCanvasClick = (event) => {
+    if (interactionState.suppressNextClick) {
+      interactionState.suppressNextClick = false;
+      event.preventDefault();
+      return;
+    }
+
     const state = store.getState();
     if (!state.document.active) return;
     if (state.interaction.activeTool !== EDITOR_TOOLS.INSPECT) return;
@@ -509,6 +618,13 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   };
 
   const handleGlobalKeyDown = (event) => {
+    if (event.code === "Space") {
+      if (isShortcutTargetBlocked(event.target)) return;
+      event.preventDefault();
+      updateSpacePanActive(true);
+      return;
+    }
+
     if (event.repeat) return;
     if (isShortcutTargetBlocked(event.target)) return;
 
@@ -534,6 +650,15 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
 
     event.preventDefault();
     setActiveTool(nextTool);
+  };
+
+  const handleGlobalKeyUp = (event) => {
+    if (event.code !== "Space") return;
+    updateSpacePanActive(false);
+
+    if (interactionState.panDrag?.trigger === "space") {
+      stopPanDrag();
+    }
   };
 
   const loadDocument = async () => {
@@ -573,9 +698,11 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   canvas.addEventListener("mousemove", handleCanvasMouseMove);
   canvas.addEventListener("mouseleave", clearHoveredCell);
   canvas.addEventListener("mousedown", handleCanvasMouseDown);
+  canvas.addEventListener("wheel", handleCanvasWheel, { passive: false });
   window.addEventListener("mouseup", stopDragPaint);
   canvas.addEventListener("click", handleCanvasClick);
   window.addEventListener("keydown", handleGlobalKeyDown);
+  window.addEventListener("keyup", handleGlobalKeyUp);
 
   resize();
   draw(store.getState());
@@ -589,8 +716,10 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     canvas.removeEventListener("mousemove", handleCanvasMouseMove);
     canvas.removeEventListener("mouseleave", clearHoveredCell);
     canvas.removeEventListener("mousedown", handleCanvasMouseDown);
+    canvas.removeEventListener("wheel", handleCanvasWheel);
     window.removeEventListener("mouseup", stopDragPaint);
     canvas.removeEventListener("click", handleCanvasClick);
     window.removeEventListener("keydown", handleGlobalKeyDown);
+    window.removeEventListener("keyup", handleGlobalKeyUp);
   };
 }
