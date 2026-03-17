@@ -7,6 +7,7 @@ import { resolveTileFromBrushDraft, paintSingleTile } from "../domain/tiles/pain
 import { resolveBrushSize, getBrushCells } from "../domain/tiles/brushSize.js";
 import { eraseSingleTile } from "../domain/tiles/eraseTile.js";
 import { EDITOR_TOOLS } from "../domain/tiles/tools.js";
+import { getLineCells } from "../domain/tiles/line.js";
 import {
   createTileEditEntry,
   startTileEditBatch,
@@ -90,7 +91,11 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     const { width, height } = doc.dimensions;
     let changedAny = false;
 
-    if (draft.interaction.activeTool === EDITOR_TOOLS.PAINT || draft.interaction.activeTool === EDITOR_TOOLS.RECT) {
+    if (
+      draft.interaction.activeTool === EDITOR_TOOLS.PAINT ||
+      draft.interaction.activeTool === EDITOR_TOOLS.RECT ||
+      draft.interaction.activeTool === EDITOR_TOOLS.LINE
+    ) {
       const tileValue = resolveTileFromBrushDraft(draft.brush.activeDraft);
 
       for (const brushCell of brushCells) {
@@ -142,6 +147,19 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     return changedAny;
   };
 
+  const applyLineTool = (draft, startCell, endCell) => {
+    const lineCells = getLineCells(startCell, endCell);
+    let changedAny = false;
+
+    for (const cell of lineCells) {
+      if (applyTileToolAtCell(draft, cell)) {
+        changedAny = true;
+      }
+    }
+
+    return changedAny;
+  };
+
   const handleCanvasMouseDown = (event) => {
     if (event.button !== 0) return;
 
@@ -160,6 +178,19 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
         draft.interaction.selectedCell = cell;
         draft.interaction.hoverCell = cell;
         draft.interaction.rectDrag = {
+          active: true,
+          startCell: cell,
+        };
+      });
+      return;
+    }
+
+    if (activeTool === EDITOR_TOOLS.LINE) {
+      event.preventDefault();
+      store.setState((draft) => {
+        draft.interaction.selectedCell = cell;
+        draft.interaction.hoverCell = cell;
+        draft.interaction.lineDrag = {
           active: true,
           startCell: cell,
         };
@@ -190,6 +221,21 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
 
     if (state.interaction.activeTool === EDITOR_TOOLS.RECT) {
       if (!state.interaction.rectDrag?.active) return;
+      if ((event.buttons & 1) !== 1) return;
+
+      const point = getCanvasPointFromMouseEvent(canvas, event);
+      const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+      if (!cell) return;
+
+      store.setState((draft) => {
+        draft.interaction.selectedCell = cell;
+        draft.interaction.hoverCell = cell;
+      });
+      return;
+    }
+
+    if (state.interaction.activeTool === EDITOR_TOOLS.LINE) {
+      if (!state.interaction.lineDrag?.active) return;
       if ((event.buttons & 1) !== 1) return;
 
       const point = getCanvasPointFromMouseEvent(canvas, event);
@@ -237,6 +283,22 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
         }
 
         draft.interaction.rectDrag = null;
+      });
+      return;
+    }
+
+    if (state.interaction.lineDrag?.active) {
+      const startCell = state.interaction.lineDrag.startCell;
+      const endCell = state.interaction.hoverCell;
+
+      store.setState((draft) => {
+        if (startCell && endCell) {
+          startTileEditBatch(draft.history, "line-drag");
+          applyLineTool(draft, startCell, endCell);
+          endTileEditBatch(draft.history);
+        }
+
+        draft.interaction.lineDrag = null;
       });
       return;
     }
