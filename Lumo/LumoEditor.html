@@ -265,6 +265,30 @@
       opacity:.98;
       word-break:break-word;
     }
+    .tileBuilderCard{
+      border:1px solid rgba(127,166,201,.16);
+      border-radius:14px;
+      background:rgba(3,10,20,.28);
+      padding:10px;
+      margin-bottom:10px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+    }
+    .tileBuilderRow{ display:flex; flex-direction:column; gap:6px; }
+    .tileBuilderLabel{ font-size:11px; color:var(--muted); font-family:var(--mono); }
+    .tileBuilderOptions{ display:flex; gap:6px; flex-wrap:wrap; }
+    .tileBuilderOpt{
+      border-radius:999px;
+      border:1px solid rgba(127,166,201,.18);
+      background:rgba(3,10,20,.35);
+      color:var(--text);
+      font-size:11px;
+      padding:6px 10px;
+      cursor:pointer;
+    }
+    .tileBuilderOpt.on{ border-color: rgba(71,215,255,.60); box-shadow: 0 0 0 2px rgba(71,215,255,.10); }
+    .tileSpriteGrid{ display:grid; grid-template-columns: repeat(2, 1fr); gap:8px; }
 
     .main{
       grid-column:2;
@@ -1457,6 +1481,9 @@ display:none;
   const themeSelectEl = el("themeSelect");
   const themeModeEl = el("themeMode");
 
+  const TILE_BRUSH_BEHAVIORS = ["solid", "one-way", "hazard", "ice", "slow"];
+  const TILE_BRUSH_SIZES = ["1x1", "2x2", "3x3"];
+
   const state = {
     layer: "BG",
     gridOn: true,
@@ -1528,6 +1555,9 @@ display:none;
     imgCache: new Map(),
     brushBG: null,
     brushTile: null,
+    tileBrushBehavior: "solid",
+    tileBrushSize: "1x1",
+    tileBrushCatalogId: null,
     brushEnt: null,
     entToolMode: "DRAW",
     selectedEntIndex: -1,
@@ -1581,6 +1611,62 @@ display:none;
         ...(visualProfileId ? { visualProfileId } : {}),
       },
     };
+  }
+
+
+  function getTileSizeBucket(catalogTile){
+    const fp = catalogTile && catalogTile.footprint;
+    const w = Math.max(1, (fp && Number.isFinite(Number(fp.w))) ? (Number(fp.w)|0) : 1);
+    const h = Math.max(1, (fp && Number.isFinite(Number(fp.h))) ? (Number(fp.h)|0) : 1);
+    if (w === 1 && h === 1) return "1x1";
+    if (w === 2 && h === 2) return "2x2";
+    if (w === 3 && h === 3) return "3x3";
+    return null;
+  }
+
+  function resolveTileSurfaceKind(catalogTile){
+    const tid = (catalogTile && catalogTile.tileId != null) ? (catalogTile.tileId|0) : 0;
+    const behaviorId = catalogTile && catalogTile.behaviorProfileId ? String(catalogTile.behaviorProfileId) : "";
+    const collisionType = catalogTile && catalogTile.collisionType ? String(catalogTile.collisionType) : "";
+    const special = catalogTile && catalogTile.special ? String(catalogTile.special).toLowerCase() : "";
+    const tileset = (window.Lumo && Lumo.Tileset) ? Lumo.Tileset : null;
+    const legacyDef = (tileset && tileset[tid]) ? tileset[tid] : null;
+
+    if (special === "ice" || behaviorId === "tile.solid.ice" || tid === 4) return "ice";
+    if (behaviorId === "tile.solid.slow" || special === "slow" || tid === 5) return "slow";
+
+    if (collisionType === "hazard" || behaviorId.includes("hazard") || (legacyDef && legacyDef.hazard)) return "hazard";
+    if (collisionType === "oneWay" || behaviorId.includes("oneway") || behaviorId.includes("one-way") || (legacyDef && legacyDef.oneWay)) return "one-way";
+    return "solid";
+  }
+
+  function isTileMatchingBehavior(catalogTile, behavior){
+    return resolveTileSurfaceKind(catalogTile) === behavior;
+  }
+
+  function getTileBuilderCandidates(){
+    const allTiles = Array.isArray(state.catalogs.TILES) ? state.catalogs.TILES : [];
+    const q = (searchEl.value||"").trim().toLowerCase();
+    return allTiles.filter((tile) => {
+      if (!tile) return false;
+      const sizeBucket = getTileSizeBucket(tile);
+      if (sizeBucket !== state.tileBrushSize) return false;
+      if (!isTileMatchingBehavior(tile, state.tileBrushBehavior)) return false;
+      if (!matchesSearch(tile, q)) return false;
+      return true;
+    });
+  }
+
+  function syncTileBuilderSelection(){
+    const candidates = getTileBuilderCandidates();
+    if (!candidates.length){
+      state.tileBrushCatalogId = null;
+      state.brushTile = null;
+      return;
+    }
+    const selected = candidates.find((tile) => tile && tile.id === state.tileBrushCatalogId) || candidates[0];
+    state.tileBrushCatalogId = selected.id;
+    state.brushTile = createBrushTileSelection(selected);
   }
 
   function resizeCanvas(){
@@ -1814,8 +1900,17 @@ display:none;
     for (const a of all){ if (a && a.img) loadImage(a.img); }
 
     state.brushBG = state.catalogs.BG[0] || null;
-    state.brushTile = createBrushTileSelection(state.catalogs.TILES[0] || null);
     state.brushEnt = state.catalogs.ENT[0] || null;
+
+    const firstTile = state.catalogs.TILES[0] || null;
+    if (firstTile){
+      const firstBehavior = resolveTileSurfaceKind(firstTile);
+      const firstSize = getTileSizeBucket(firstTile);
+      if (firstBehavior && TILE_BRUSH_BEHAVIORS.includes(firstBehavior)) state.tileBrushBehavior = firstBehavior;
+      if (firstSize && TILE_BRUSH_SIZES.includes(firstSize)) state.tileBrushSize = firstSize;
+      state.tileBrushCatalogId = firstTile.id || null;
+    }
+    syncTileBuilderSelection();
 
     updateMeta();
     renderPalette();
@@ -1979,7 +2074,119 @@ display:none;
   function renderPalette(){
     palette.innerHTML = "";
     const q = (searchEl.value||"").trim().toLowerCase();
-    const items = state.layer === "BG" ? state.catalogs.BG : (state.layer==="TILES" ? state.catalogs.TILES : state.catalogs.ENT);
+
+    if (state.layer === "TILES"){
+      syncTileBuilderSelection();
+
+      const builder = document.createElement("div");
+      builder.className = "tileBuilderCard";
+
+      const behaviorRow = document.createElement("div");
+      behaviorRow.className = "tileBuilderRow";
+      const behaviorLabel = document.createElement("div");
+      behaviorLabel.className = "tileBuilderLabel";
+      behaviorLabel.textContent = "Behavior";
+      const behaviorOptions = document.createElement("div");
+      behaviorOptions.className = "tileBuilderOptions";
+      for (const behavior of TILE_BRUSH_BEHAVIORS){
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tileBuilderOpt";
+        btn.textContent = behavior;
+        btn.classList.toggle("on", state.tileBrushBehavior === behavior);
+        btn.addEventListener("click", () => {
+          state.tileBrushBehavior = behavior;
+          syncTileBuilderSelection();
+          resetPointerPaintState();
+          updateMeta();
+          renderPalette();
+        });
+        behaviorOptions.appendChild(btn);
+      }
+      behaviorRow.appendChild(behaviorLabel);
+      behaviorRow.appendChild(behaviorOptions);
+
+      const sizeRow = document.createElement("div");
+      sizeRow.className = "tileBuilderRow";
+      const sizeLabel = document.createElement("div");
+      sizeLabel.className = "tileBuilderLabel";
+      sizeLabel.textContent = "Size";
+      const sizeOptions = document.createElement("div");
+      sizeOptions.className = "tileBuilderOptions";
+      for (const size of TILE_BRUSH_SIZES){
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "tileBuilderOpt";
+        btn.textContent = size;
+        btn.classList.toggle("on", state.tileBrushSize === size);
+        btn.addEventListener("click", () => {
+          state.tileBrushSize = size;
+          syncTileBuilderSelection();
+          resetPointerPaintState();
+          updateMeta();
+          renderPalette();
+        });
+        sizeOptions.appendChild(btn);
+      }
+      sizeRow.appendChild(sizeLabel);
+      sizeRow.appendChild(sizeOptions);
+
+      const spriteRow = document.createElement("div");
+      spriteRow.className = "tileBuilderRow";
+      const spriteLabel = document.createElement("div");
+      spriteLabel.className = "tileBuilderLabel";
+      const candidates = getTileBuilderCandidates();
+      spriteLabel.textContent = `Sprite (${candidates.length})`;
+      const spriteGrid = document.createElement("div");
+      spriteGrid.className = "tileSpriteGrid";
+
+      if (!candidates.length){
+        const empty = document.createElement("div");
+        empty.className = "pill";
+        empty.textContent = "No matching tiles for current behavior + size.";
+        spriteRow.appendChild(spriteLabel);
+        spriteRow.appendChild(empty);
+      } else {
+        const selectedTileCatalogId = getCurrentBrushTileCatalogId();
+        for (const it of getThemeCuratedItems(candidates)){
+          const cell = document.createElement("div");
+          cell.className = "item";
+          cell.classList.toggle("on", selectedTileCatalogId != null && selectedTileCatalogId===it.id);
+
+          const th = document.createElement("div");
+          th.className = "thumb";
+          if (it.img){
+            const img = document.createElement("img");
+            img.src = it.img;
+            th.appendChild(img);
+          }
+          const nm = document.createElement("div");
+          nm.className = "iname";
+          nm.textContent = it.name ? it.name : it.id;
+          cell.appendChild(th);
+          cell.appendChild(nm);
+
+          cell.addEventListener("click", () => {
+            state.tileBrushCatalogId = it.id;
+            state.brushTile = createBrushTileSelection(it);
+            resetPointerPaintState();
+            updateMeta();
+            renderPalette();
+          });
+          spriteGrid.appendChild(cell);
+        }
+        spriteRow.appendChild(spriteLabel);
+        spriteRow.appendChild(spriteGrid);
+      }
+
+      builder.appendChild(behaviorRow);
+      builder.appendChild(sizeRow);
+      builder.appendChild(spriteRow);
+      palette.appendChild(builder);
+      return;
+    }
+
+    const items = state.layer === "BG" ? state.catalogs.BG : state.catalogs.ENT;
     const filtered = items.filter(it => matchesSearch(it,q));
     const groups = groupBy(filtered);
 
@@ -2005,10 +2212,8 @@ display:none;
       for (const it of groupItems){
         const cell = document.createElement("div");
         cell.className = "item";
-        const selectedTileCatalogId = getCurrentBrushTileCatalogId();
         const isOn =
           (state.layer==="BG" && state.brushBG && state.brushBG.id===it.id) ||
-          (state.layer==="TILES" && selectedTileCatalogId != null && selectedTileCatalogId===it.id) ||
           (state.layer==="ENT" && state.brushEnt && state.brushEnt.id===it.id);
         cell.classList.toggle("on", isOn);
 
@@ -2028,9 +2233,7 @@ display:none;
 
         cell.addEventListener("click", () => {
           if (state.layer==="BG") state.brushBG = it;
-          if (state.layer==="TILES") state.brushTile = createBrushTileSelection(it);
           if (state.layer==="ENT") state.brushEnt = it;
-          // Selecting brushes from the palette must never keep a stale canvas-draw state alive.
           resetPointerPaintState();
           updateMeta();
           renderPalette();
