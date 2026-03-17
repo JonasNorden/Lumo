@@ -7,6 +7,7 @@ import {
   getBrushDraftSummary,
   isBrushDraftValid,
 } from "../domain/tiles/brushDraft.js";
+import { EDITOR_TOOLS, TOOL_OPTIONS, isEditorTool } from "../domain/tiles/tools.js";
 
 function renderOptions(options, selectedValue) {
   return options
@@ -15,6 +16,12 @@ function renderOptions(options, selectedValue) {
         `<option value="${option.value}" ${option.value === selectedValue ? "selected" : ""}>${option.label}</option>`,
     )
     .join("");
+}
+
+function renderToolButton(option, activeTool) {
+  const isActive = option.value === activeTool;
+
+  return `<button class="toolButton ${isActive ? "isActive" : ""}" type="button" data-tool="${option.value}">${option.label}</button>`;
 }
 
 export function renderBrushPanel(panel, state) {
@@ -26,6 +33,10 @@ export function renderBrushPanel(panel, state) {
     <div class="panelHeader">
       <span class="panelTitle">Brush</span>
       <span class="badge ${valid ? "" : "badgeWarn"}">${valid ? "ready" : "invalid"}</span>
+    </div>
+
+    <div class="toolSwitch" role="group" aria-label="Editor tool">
+      ${TOOL_OPTIONS.map((option) => renderToolButton(option, state.interaction.activeTool)).join("")}
     </div>
 
     <label class="fieldRow">
@@ -53,6 +64,11 @@ export function renderBrushPanel(panel, state) {
       <div class="label">Current</div>
       <div class="value">${summary}</div>
     </div>
+
+    <div class="infoGroup compact">
+      <div class="label">Tool</div>
+      <div class="value">${state.interaction.activeTool === EDITOR_TOOLS.PAINT ? "Paint" : "Inspect"}</div>
+    </div>
   `;
 }
 
@@ -69,9 +85,26 @@ export function bindBrushPanel(panel, store) {
     });
   };
 
+  const onClick = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    const button = target.closest("[data-tool]");
+    if (!(button instanceof HTMLButtonElement)) return;
+
+    const nextTool = button.dataset.tool;
+    if (!isEditorTool(nextTool)) return;
+
+    store.setState((draft) => {
+      draft.interaction.activeTool = nextTool;
+    });
+  };
+
   panel.addEventListener("change", onChange);
+  panel.addEventListener("click", onClick);
 
   return () => {
     panel.removeEventListener("change", onChange);
+    panel.removeEventListener("click", onClick);
   };
 }
