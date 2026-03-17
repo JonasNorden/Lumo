@@ -5,6 +5,7 @@ import { renderInspector } from "../ui/inspectorPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
+import { createNewLevelDocument } from "../data/createNewLevelDocument.js";
 import { resolveTileFromBrushDraft, paintSingleTile } from "../domain/tiles/paintTile.js";
 import { resolveBrushSize, getBrushCells } from "../domain/tiles/brushSize.js";
 import { eraseSingleTile } from "../domain/tiles/eraseTile.js";
@@ -378,6 +379,33 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     });
   };
 
+
+  const resetEditorForDocument = (draft, nextDocument, statusMessage = null) => {
+    draft.document.active = nextDocument;
+    draft.document.status = "ready";
+    draft.document.error = null;
+    draft.history.undoStack = [];
+    draft.history.redoStack = [];
+    draft.history.activeBatch = null;
+    draft.interaction.dragPaint = null;
+    draft.interaction.rectDrag = null;
+    draft.interaction.lineDrag = null;
+    draft.interaction.selectedCell = null;
+    draft.interaction.hoverCell = null;
+    draft.ui.importStatus = statusMessage;
+  };
+
+  const handleNewLevel = () => {
+    const newDocument = createNewLevelDocument();
+
+    store.setState((draft) => {
+      resetEditorForDocument(draft, newDocument, "New level created");
+    });
+
+    resize();
+    draw(store.getState());
+  };
+
   const handleUndo = () => {
     store.setState((draft) => {
       const doc = draft.document.active;
@@ -416,18 +444,7 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
           const { document: importedDocument, fileName } = await importLevelDocumentFromFile(file);
 
           store.setState((draft) => {
-            draft.document.active = importedDocument;
-            draft.document.status = "ready";
-            draft.document.error = null;
-            draft.history.undoStack = [];
-            draft.history.redoStack = [];
-            draft.history.activeBatch = null;
-            draft.interaction.dragPaint = null;
-            draft.interaction.rectDrag = null;
-            draft.interaction.lineDrag = null;
-            draft.interaction.selectedCell = null;
-            draft.interaction.hoverCell = null;
-            draft.ui.importStatus = `Loaded ${fileName}`;
+            resetEditorForDocument(draft, importedDocument, `Loaded ${fileName}`);
           });
 
           resize();
@@ -506,6 +523,7 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     onRedo: handleRedo,
     onExport: handleExport,
     onImport: handleImport,
+    onNew: handleNewLevel,
   });
   window.addEventListener("resize", resize);
   canvas.addEventListener("mousemove", handleCanvasMouseMove);
