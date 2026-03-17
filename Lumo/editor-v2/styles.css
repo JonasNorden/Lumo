@@ -241,15 +241,19 @@ body {
   gap: 8px;
 }
 
-.panelHeader {
-  margin-bottom: 4px;
-}
 
 .panelSection {
   border: 1px solid #1d263c;
   border-radius: 10px;
   padding: 8px;
   background: rgba(11, 18, 33, 0.62);
+  transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.panelSection:hover,
+.panelSection.isHoverExpanded {
+  border-color: #2a3f67;
+  background: rgba(15, 24, 44, 0.72);
 }
 
 .panelSectionMicro {
@@ -295,6 +299,10 @@ body {
 
 .panelSection.isCollapsed .sectionContent {
   display: none;
+}
+
+.panelSection.isCollapsed.isHoverExpanded .sectionContent {
+  display: block;
 }
 
 .panelSection.panelSectionMicro .sectionContent {

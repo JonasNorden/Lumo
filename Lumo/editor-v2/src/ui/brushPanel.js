@@ -4,10 +4,7 @@ import {
   BRUSH_SPRITE_OPTIONS,
   BRUSH_PALETTE_PRESETS,
 } from "../domain/tiles/brushOptions.js";
-import {
-  getBrushDraftSummary,
-  isBrushDraftValid,
-} from "../domain/tiles/brushDraft.js";
+import { getBrushDraftSummary } from "../domain/tiles/brushDraft.js";
 import { TOOL_OPTIONS, isEditorTool } from "../domain/tiles/tools.js";
 import { canUndo, canRedo } from "../domain/tiles/history.js";
 
@@ -79,7 +76,6 @@ export function renderBrushPanel(panel, state) {
   const canExport = Boolean(state.document.active);
   const brushDraft = state.brush.activeDraft;
   const summary = getBrushDraftSummary(brushDraft);
-  const valid = isBrushDraftValid(brushDraft);
   const importStatus = state.ui.importStatus;
   const activePalettePresetId = getActivePalettePresetId(brushDraft);
   const panelSections = {
@@ -92,11 +88,6 @@ export function renderBrushPanel(panel, state) {
   };
 
   panel.innerHTML = `
-    <div class="panelHeader">
-      <span class="panelTitle">Editor</span>
-      <span class="badge ${valid ? "" : "badgeWarn"}">${valid ? "ready" : "invalid"}</span>
-    </div>
-
     ${renderSection(
       "tools",
       "Tools",
@@ -207,6 +198,66 @@ export function renderBrushPanel(panel, state) {
 
 export function bindBrushPanel(panel, store, options = {}) {
   const { onUndo, onRedo, onExport, onImport, onNew } = options;
+  const hoverCollapseTimers = new WeakMap();
+  const hoveredSections = new Set();
+
+  const openOnHover = (sectionElement) => {
+    if (!(sectionElement instanceof HTMLElement)) return;
+    if (!sectionElement.classList.contains("isCollapsed")) return;
+
+    const pendingTimer = hoverCollapseTimers.get(sectionElement);
+    if (pendingTimer) {
+      window.clearTimeout(pendingTimer);
+      hoverCollapseTimers.delete(sectionElement);
+    }
+
+    sectionElement.classList.add("isHoverExpanded");
+    hoveredSections.add(sectionElement);
+  };
+
+  const closeOnHoverExit = (sectionElement) => {
+    if (!(sectionElement instanceof HTMLElement)) return;
+    if (!sectionElement.classList.contains("isHoverExpanded")) return;
+
+    const timer = window.setTimeout(() => {
+      sectionElement.classList.remove("isHoverExpanded");
+      hoverCollapseTimers.delete(sectionElement);
+      hoveredSections.delete(sectionElement);
+    }, 90);
+
+    hoverCollapseTimers.set(sectionElement, timer);
+  };
+
+  const onMouseOver = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    const sectionElement = target.closest(".panelSection");
+    if (!(sectionElement instanceof HTMLElement)) return;
+
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && sectionElement.contains(relatedTarget)) {
+      return;
+    }
+
+    openOnHover(sectionElement);
+  };
+
+  const onMouseOut = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    const sectionElement = target.closest(".panelSection");
+    if (!(sectionElement instanceof HTMLElement)) return;
+
+    const relatedTarget = event.relatedTarget;
+    if (relatedTarget instanceof Node && sectionElement.contains(relatedTarget)) {
+      return;
+    }
+
+    closeOnHoverExit(sectionElement);
+  };
+
   const onChange = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLSelectElement)) return;
@@ -302,9 +353,22 @@ export function bindBrushPanel(panel, store, options = {}) {
 
   panel.addEventListener("change", onChange);
   panel.addEventListener("click", onClick);
+  panel.addEventListener("mouseover", onMouseOver);
+  panel.addEventListener("mouseout", onMouseOut);
 
   return () => {
     panel.removeEventListener("change", onChange);
     panel.removeEventListener("click", onClick);
+    panel.removeEventListener("mouseover", onMouseOver);
+    panel.removeEventListener("mouseout", onMouseOut);
+
+    hoveredSections.forEach((sectionElement) => {
+      const timer = hoverCollapseTimers.get(sectionElement);
+      if (timer) {
+        window.clearTimeout(timer);
+      }
+      sectionElement.classList.remove("isHoverExpanded");
+    });
+    hoveredSections.clear();
   };
 }
