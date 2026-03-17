@@ -4,6 +4,7 @@ import { getCanvasPointFromMouseEvent, getCellFromCanvasPoint } from "../render/
 import { renderInspector } from "../ui/inspectorPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
 import { resolveTileFromBrushDraft, paintSingleTile } from "../domain/tiles/paintTile.js";
+import { eraseSingleTile } from "../domain/tiles/eraseTile.js";
 import { EDITOR_TOOLS } from "../domain/tiles/tools.js";
 
 export function createEditorApp({ canvas, inspector, brushPanel, store }) {
@@ -72,12 +73,15 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     store.setState((draft) => {
       draft.interaction.selectedCell = cell;
 
-      if (draft.interaction.activeTool !== EDITOR_TOOLS.PAINT) {
+      if (draft.interaction.activeTool === EDITOR_TOOLS.PAINT) {
+        const tileValue = resolveTileFromBrushDraft(draft.brush.activeDraft);
+        paintSingleTile(draft.document.active, cell, tileValue);
         return;
       }
 
-      const tileValue = resolveTileFromBrushDraft(draft.brush.activeDraft);
-      paintSingleTile(draft.document.active, cell, tileValue);
+      if (draft.interaction.activeTool === EDITOR_TOOLS.ERASE) {
+        eraseSingleTile(draft.document.active, cell);
+      }
     });
   };
 

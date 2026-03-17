@@ -7,7 +7,7 @@ import {
   getBrushDraftSummary,
   isBrushDraftValid,
 } from "../domain/tiles/brushDraft.js";
-import { EDITOR_TOOLS, TOOL_OPTIONS, isEditorTool } from "../domain/tiles/tools.js";
+import { TOOL_OPTIONS, isEditorTool } from "../domain/tiles/tools.js";
 
 function renderOptions(options, selectedValue) {
   return options
@@ -22,6 +22,10 @@ function renderToolButton(option, activeTool) {
   const isActive = option.value === activeTool;
 
   return `<button class="toolButton ${isActive ? "isActive" : ""}" type="button" data-tool="${option.value}">${option.label}</button>`;
+}
+
+function getToolLabel(toolValue) {
+  return TOOL_OPTIONS.find((option) => option.value === toolValue)?.label ?? "Inspect";
 }
 
 export function renderBrushPanel(panel, state) {
@@ -67,7 +71,7 @@ export function renderBrushPanel(panel, state) {
 
     <div class="infoGroup compact">
       <div class="label">Tool</div>
-      <div class="value">${state.interaction.activeTool === EDITOR_TOOLS.PAINT ? "Paint" : "Inspect"}</div>
+      <div class="value">${getToolLabel(state.interaction.activeTool)}</div>
     </div>
   `;
 }
