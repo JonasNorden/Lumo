@@ -40,13 +40,22 @@ function captureFocusedMetaInput(panel) {
   const metaField = activeElement.dataset.metaField;
   const backgroundField = activeElement.dataset.backgroundField;
   const backgroundIndex = activeElement.dataset.backgroundIndex;
+  const entityField = activeElement.dataset.entityField;
+  const entityIndex = activeElement.dataset.entityIndex;
 
-  if (metaField !== "name" && metaField !== "id" && !(backgroundField === "name" && Number.isInteger(Number.parseInt(backgroundIndex || "", 10)))) return null;
+  const validBackground = backgroundField === "name" && Number.isInteger(Number.parseInt(backgroundIndex || "", 10));
+  const validEntity = (entityField === "name" || entityField === "type") && Number.isInteger(Number.parseInt(entityIndex || "", 10));
+
+  if (metaField !== "name" && metaField !== "id" && !validBackground && !validEntity) return null;
 
   return {
-    type: metaField === "name" || metaField === "id" ? "meta" : "background",
-    field: metaField || backgroundField,
-    index: backgroundField === "name" ? Number.parseInt(backgroundIndex || "", 10) : null,
+    type: metaField === "name" || metaField === "id" ? "meta" : validBackground ? "background" : "entity",
+    field: metaField || backgroundField || entityField,
+    index: validBackground
+      ? Number.parseInt(backgroundIndex || "", 10)
+      : validEntity
+        ? Number.parseInt(entityIndex || "", 10)
+        : null,
     selectionStart: activeElement.selectionStart,
     selectionEnd: activeElement.selectionEnd,
     selectionDirection: activeElement.selectionDirection,
@@ -58,7 +67,9 @@ function restoreFocusedMetaInput(panel, snapshot) {
 
   const replacementInput = snapshot.type === "background"
     ? panel.querySelector(`input[data-background-field="name"][data-background-index="${snapshot.index}"]`)
-    : panel.querySelector(`input[data-meta-field="${snapshot.field}"]`);
+    : snapshot.type === "entity"
+      ? panel.querySelector(`input[data-entity-field="${snapshot.field}"][data-entity-index="${snapshot.index}"]`)
+      : panel.querySelector(`input[data-meta-field="${snapshot.field}"]`);
   if (!(replacementInput instanceof HTMLInputElement)) return;
 
   replacementInput.focus({ preventScroll: true });
@@ -144,6 +155,70 @@ function renderBackgroundSettings(active) {
         )
         .join("")}
     </div>
+  `;
+}
+
+
+function renderEntitiesSettings(active, state) {
+  const entities = active.entities || [];
+  const selectedEntityIndex = state.interaction.selectedEntityIndex;
+  const selected = Number.isInteger(selectedEntityIndex) ? entities[selectedEntityIndex] : null;
+
+  return `
+    <div class="infoGroup">
+      <div class="label">Entities</div>
+      <div class="value">${entities.length} total</div>
+    </div>
+
+    <button type="button" class="toolButton" data-entity-action="add">Add entity</button>
+
+    <div class="entityList" role="listbox" aria-label="Entities">
+      ${entities
+        .map((entity, index) => `
+          <button
+            type="button"
+            class="entityListItem ${selectedEntityIndex === index ? "isSelected" : ""}"
+            data-entity-action="select"
+            data-entity-index="${index}"
+          >
+            <span>${escapeHtml(entity.name)}</span>
+            <span class="mutedValue">${escapeHtml(entity.type)}</span>
+          </button>
+        `)
+        .join("")}
+    </div>
+
+    ${selected
+      ? `
+      <div class="entityEditor">
+        <label class="fieldRow">
+          <span class="label">Name</span>
+          <input type="text" value="${escapeHtml(selected.name)}" data-entity-field="name" data-entity-index="${selectedEntityIndex}" />
+        </label>
+
+        <label class="fieldRow">
+          <span class="label">Type</span>
+          <input type="text" value="${escapeHtml(selected.type)}" data-entity-field="type" data-entity-index="${selectedEntityIndex}" />
+        </label>
+
+        <label class="fieldRow compactInline">
+          <span class="label">Visible</span>
+          <input type="checkbox" ${selected.visible ? "checked" : ""} data-entity-field="visible" data-entity-index="${selectedEntityIndex}" />
+        </label>
+
+        <div class="entityPositionGrid">
+          <label class="fieldRow">
+            <span class="label">X</span>
+            <input type="number" step="1" value="${selected.x}" data-entity-field="x" data-entity-index="${selectedEntityIndex}" />
+          </label>
+          <label class="fieldRow">
+            <span class="label">Y</span>
+            <input type="number" step="1" value="${selected.y}" data-entity-field="y" data-entity-index="${selectedEntityIndex}" />
+          </label>
+        </div>
+      </div>
+      `
+      : '<div class="mutedValue">Select an entity to edit it.</div>'}
   `;
 }
 
@@ -370,12 +445,14 @@ export function renderInspector(panel, state) {
 
     ${renderInspectorSection("Backgrounds", "backgrounds", renderBackgroundSettings(active), true)}
 
+    ${renderInspectorSection("Entities", "entities", renderEntitiesSettings(active, state), true)}
+
     ${renderInspectorSection("Cell", "cell", renderCellInfo(active, state), false)}
   `);
 }
 
 export function bindInspectorPanel(panel, store, options = {}) {
-  const { onResize, onMetaUpdate, onGridUpdate, onWorkspaceUpdate, onBackgroundUpdate } = options;
+  const { onResize, onMetaUpdate, onGridUpdate, onWorkspaceUpdate, onBackgroundUpdate, onEntityUpdate } = options;
 
   const sanitizeMetaValue = (field, value) => {
     const trimmed = value.trim();
@@ -462,6 +539,30 @@ export function bindInspectorPanel(panel, store, options = {}) {
   };
 
 
+  const handleEntityChange = (target) => {
+    const entityField = target.dataset.entityField;
+    if (entityField !== "name" && entityField !== "type" && entityField !== "visible" && entityField !== "x" && entityField !== "y") return false;
+
+    const index = Number.parseInt(target.dataset.entityIndex || "", 10);
+    if (!Number.isInteger(index) || index < 0) return false;
+
+    if (entityField === "visible") {
+      onEntityUpdate?.(index, "visible", target.checked);
+      return true;
+    }
+
+    if (entityField === "x" || entityField === "y") {
+      const parsed = Number.parseInt(target.value, 10);
+      const value = Number.isInteger(parsed) ? parsed : 0;
+      target.value = String(value);
+      onEntityUpdate?.(index, entityField, value);
+      return true;
+    }
+
+    onEntityUpdate?.(index, entityField, target.value);
+    return true;
+  };
+
   const onChange = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
@@ -470,6 +571,7 @@ export function bindInspectorPanel(panel, store, options = {}) {
     if (handleGridChange(target)) return;
     if (handleWorkspaceChange(target)) return;
     if (handleBackgroundChange(target)) return;
+    if (handleEntityChange(target)) return;
 
     const dimensionField = target.dataset.dimensionField;
     if (dimensionField !== "width" && dimensionField !== "height") return;
@@ -498,7 +600,8 @@ export function bindInspectorPanel(panel, store, options = {}) {
     if (handleMetaChange(target)) return;
     if (handleGridChange(target)) return;
     if (handleWorkspaceChange(target)) return;
-    handleBackgroundChange(target);
+    if (handleBackgroundChange(target)) return;
+    handleEntityChange(target);
   };
 
   const onClick = (event) => {
@@ -514,6 +617,20 @@ export function bindInspectorPanel(panel, store, options = {}) {
     const backgroundAction = target.dataset.backgroundAction;
     if (backgroundAction === "add") {
       onBackgroundUpdate?.(-1, "add", null);
+      return;
+    }
+
+    const entityAction = target.dataset.entityAction;
+    if (entityAction === "add") {
+      onEntityUpdate?.(-1, "add", null);
+      return;
+    }
+
+    if (entityAction === "select") {
+      const index = Number.parseInt(target.dataset.entityIndex || "", 10);
+      if (Number.isInteger(index) && index >= 0) {
+        onEntityUpdate?.(index, "select", null);
+      }
     }
   };
 

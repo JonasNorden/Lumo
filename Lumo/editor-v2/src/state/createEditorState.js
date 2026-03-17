@@ -22,6 +22,7 @@ export function createEditorState() {
       activeTool: "inspect",
       hoverCell: null,
       selectedCell: null,
+      selectedEntityIndex: null,
       dragPaint: null,
       rectDrag: null,
       lineDrag: null,

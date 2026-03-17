@@ -29,6 +29,7 @@ import {
   redoTileEdit,
 } from "../domain/tiles/history.js";
 import { getTileIndex } from "../domain/level/levelDocument.js";
+import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
 
 function getRectBounds(startCell, endCell) {
   return {
@@ -188,6 +189,11 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       doc.dimensions.height = nextHeight;
       doc.tiles.base = resizedTiles;
 
+      for (const entity of doc.entities || []) {
+        entity.x = Math.max(0, Math.min(nextWidth - 1, entity.x));
+        entity.y = Math.max(0, Math.min(nextHeight - 1, entity.y));
+      }
+
       draft.interaction.hoverCell = null;
       draft.interaction.selectedCell = null;
       draft.interaction.dragPaint = null;
@@ -271,6 +277,65 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
       if (field === "color" && typeof value === "string") {
         layer.color = value;
+      }
+    });
+  };
+
+  const clampEntityPosition = (doc, x, y) => ({
+    x: Math.max(0, Math.min(doc.dimensions.width - 1, Math.round(x))),
+    y: Math.max(0, Math.min(doc.dimensions.height - 1, Math.round(y))),
+  });
+
+  const updateEntity = (index, field, value) => {
+    store.setState((draft) => {
+      const doc = draft.document.active;
+      if (!doc) return;
+      const entities = doc.entities;
+
+      if (field === "add") {
+        const nextNumber = entities.length + 1;
+        const placement = clampEntityPosition(doc, 0, 0);
+        entities.push({
+          id: `entity-${nextNumber}`,
+          name: `Entity ${nextNumber}`,
+          type: "marker",
+          x: placement.x,
+          y: placement.y,
+          visible: true,
+        });
+        draft.interaction.selectedEntityIndex = entities.length - 1;
+        return;
+      }
+
+      if (field === "select") {
+        if (index >= 0 && index < entities.length) {
+          draft.interaction.selectedEntityIndex = index;
+        }
+        return;
+      }
+
+      const entity = entities[index];
+      if (!entity) return;
+
+      if (field === "name" || field === "type") {
+        const trimmed = String(value || "").trim();
+        entity[field] = trimmed || entity[field];
+        return;
+      }
+
+      if (field === "visible") {
+        entity.visible = Boolean(value);
+        return;
+      }
+
+      if (field === "x" || field === "y") {
+        const next = clampEntityPosition(
+          doc,
+          field === "x" ? value : entity.x,
+          field === "y" ? value : entity.y,
+        );
+        entity.x = next.x;
+        entity.y = next.y;
       }
     });
   };
@@ -621,11 +686,20 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     if (state.interaction.activeTool !== EDITOR_TOOLS.INSPECT) return;
 
     const point = getCanvasPointFromMouseEvent(canvas, event);
+    const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+    if (hitEntityIndex >= 0) {
+      store.setState((draft) => {
+        draft.interaction.selectedEntityIndex = hitEntityIndex;
+      });
+      return;
+    }
+
     const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     if (!cell) return;
 
     store.setState((draft) => {
       draft.interaction.selectedCell = cell;
+      draft.interaction.selectedEntityIndex = null;
     });
   };
 
@@ -641,6 +715,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     draft.interaction.rectDrag = null;
     draft.interaction.lineDrag = null;
     draft.interaction.selectedCell = null;
+    draft.interaction.selectedEntityIndex = null;
     draft.interaction.hoverCell = null;
     draft.ui.importStatus = statusMessage;
   };
@@ -790,6 +865,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     onGridUpdate: updateGridSettings,
     onWorkspaceUpdate: updateWorkspaceSettings,
     onBackgroundUpdate: updateBackgroundLayer,
+    onEntityUpdate: updateEntity,
   });
   const unbindBrushPanel = bindBrushPanel(brushPanel, store, {
     onUndo: handleUndo,

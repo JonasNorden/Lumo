@@ -46,6 +46,16 @@ export const mockLevelDocument = {
       },
     ],
   },
+  entities: [
+    {
+      id: "entity-1",
+      name: "Player Spawn",
+      type: "spawn",
+      x: 6,
+      y: 14,
+      visible: true,
+    },
+  ],
   extra: {
     notes: "Read-only prototype document for V2 rendering pipeline.",
   },
