@@ -1,7 +1,7 @@
 import { renderEditorFrame } from "../render/renderer.js";
 import { loadLevelDocument } from "../data/loadLevelDocument.js";
 import { getCanvasPointFromMouseEvent, getCellFromCanvasPoint } from "../render/viewport.js";
-import { renderInspector } from "../ui/inspectorPanel.js";
+import { renderInspector, bindInspectorPanel } from "../ui/inspectorPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
@@ -66,6 +66,47 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     state.viewport.offsetY = Math.max(24, (rect.height - docHeight) * 0.5);
   };
 
+
+
+  const resizeDocument = (nextWidth, nextHeight) => {
+    store.setState((draft) => {
+      const doc = draft.document.active;
+      if (!doc) return;
+
+      const currentWidth = doc.dimensions.width;
+      const currentHeight = doc.dimensions.height;
+
+      if (currentWidth === nextWidth && currentHeight === nextHeight) return;
+
+      const resizedTiles = new Array(nextWidth * nextHeight).fill(0);
+      const copyWidth = Math.min(currentWidth, nextWidth);
+      const copyHeight = Math.min(currentHeight, nextHeight);
+
+      for (let y = 0; y < copyHeight; y += 1) {
+        for (let x = 0; x < copyWidth; x += 1) {
+          const sourceIndex = getTileIndex(currentWidth, x, y);
+          const targetIndex = getTileIndex(nextWidth, x, y);
+          resizedTiles[targetIndex] = doc.tiles.base[sourceIndex];
+        }
+      }
+
+      doc.dimensions.width = nextWidth;
+      doc.dimensions.height = nextHeight;
+      doc.tiles.base = resizedTiles;
+
+      draft.interaction.hoverCell = null;
+      draft.interaction.selectedCell = null;
+      draft.interaction.dragPaint = null;
+      draft.interaction.rectDrag = null;
+      draft.interaction.lineDrag = null;
+      draft.history.undoStack = [];
+      draft.history.redoStack = [];
+      draft.history.activeBatch = null;
+    });
+
+    resize();
+    draw(store.getState());
+  };
   const draw = (state) => {
     renderEditorFrame(ctx, state);
     renderInspector(inspector, state);
@@ -518,6 +559,9 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   };
 
   const unsubscribe = store.subscribe(draw);
+  const unbindInspectorPanel = bindInspectorPanel(inspector, store, {
+    onResize: resizeDocument,
+  });
   const unbindBrushPanel = bindBrushPanel(brushPanel, store, {
     onUndo: handleUndo,
     onRedo: handleRedo,
@@ -539,6 +583,7 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
 
   return () => {
     unsubscribe();
+    unbindInspectorPanel();
     unbindBrushPanel();
     window.removeEventListener("resize", resize);
     canvas.removeEventListener("mousemove", handleCanvasMouseMove);
