@@ -863,9 +863,6 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     onResize: resizeDocument,
     onMetaUpdate: updateDocumentMeta,
     onGridUpdate: updateGridSettings,
-    onWorkspaceUpdate: updateWorkspaceSettings,
-    onBackgroundUpdate: updateBackgroundLayer,
-    onEntityUpdate: updateEntity,
   });
   const unbindBrushPanel = bindBrushPanel(brushPanel, store, {
     onUndo: handleUndo,
@@ -873,6 +870,9 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     onExport: handleExport,
     onImport: handleImport,
     onNew: handleNewLevel,
+    onWorkspaceUpdate: updateWorkspaceSettings,
+    onBackgroundUpdate: updateBackgroundLayer,
+    onEntityUpdate: updateEntity,
   });
   window.addEventListener("resize", resize);
   canvas.addEventListener("mousemove", handleCanvasMouseMove);
