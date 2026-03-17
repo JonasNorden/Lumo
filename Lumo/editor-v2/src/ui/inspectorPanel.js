@@ -38,10 +38,15 @@ function captureFocusedMetaInput(panel) {
   if (!panel.contains(activeElement)) return null;
 
   const metaField = activeElement.dataset.metaField;
-  if (metaField !== "name" && metaField !== "id") return null;
+  const backgroundField = activeElement.dataset.backgroundField;
+  const backgroundIndex = activeElement.dataset.backgroundIndex;
+
+  if (metaField !== "name" && metaField !== "id" && !(backgroundField === "name" && Number.isInteger(Number.parseInt(backgroundIndex || "", 10)))) return null;
 
   return {
-    field: metaField,
+    type: metaField === "name" || metaField === "id" ? "meta" : "background",
+    field: metaField || backgroundField,
+    index: backgroundField === "name" ? Number.parseInt(backgroundIndex || "", 10) : null,
     selectionStart: activeElement.selectionStart,
     selectionEnd: activeElement.selectionEnd,
     selectionDirection: activeElement.selectionDirection,
@@ -51,7 +56,9 @@ function captureFocusedMetaInput(panel) {
 function restoreFocusedMetaInput(panel, snapshot) {
   if (!snapshot) return;
 
-  const replacementInput = panel.querySelector(`input[data-meta-field="${snapshot.field}"]`);
+  const replacementInput = snapshot.type === "background"
+    ? panel.querySelector(`input[data-background-field="name"][data-background-index="${snapshot.index}"]`)
+    : panel.querySelector(`input[data-meta-field="${snapshot.field}"]`);
   if (!(replacementInput instanceof HTMLInputElement)) return;
 
   replacementInput.focus({ preventScroll: true });
@@ -63,9 +70,33 @@ function restoreFocusedMetaInput(panel, snapshot) {
   replacementInput.setSelectionRange(clampedStart, clampedEnd, snapshot.selectionDirection || "none");
 }
 
+function captureInspectorSectionState(panel) {
+  const sections = panel.querySelectorAll("details[data-inspector-section]");
+  if (!sections.length) return null;
+
+  const snapshot = {};
+  for (const section of sections) {
+    const key = section.dataset.inspectorSection;
+    if (!key) continue;
+    snapshot[key] = section.open;
+  }
+  return snapshot;
+}
+
+function restoreInspectorSectionState(panel, snapshot) {
+  if (!snapshot) return;
+  for (const [key, isOpen] of Object.entries(snapshot)) {
+    const section = panel.querySelector(`details[data-inspector-section="${key}"]`);
+    if (!section) continue;
+    section.open = Boolean(isOpen);
+  }
+}
+
 function setInspectorMarkup(panel, markup) {
   const focusedMetaSnapshot = captureFocusedMetaInput(panel);
+  const sectionSnapshot = captureInspectorSectionState(panel);
   panel.innerHTML = markup;
+  restoreInspectorSectionState(panel, sectionSnapshot);
   restoreFocusedMetaInput(panel, focusedMetaSnapshot);
 }
 
@@ -113,6 +144,17 @@ function renderBackgroundSettings(active) {
         )
         .join("")}
     </div>
+  `;
+}
+
+function renderInspectorSection(title, key, content, open = false) {
+  return `
+    <details class="inspectorSection" data-inspector-section="${key}" ${open ? "open" : ""}>
+      <summary>${title}</summary>
+      <div class="inspectorSectionBody">
+        ${content}
+      </div>
+    </details>
   `;
 }
 
@@ -254,6 +296,7 @@ export function renderInspector(panel, state) {
   const paintedCount = countPaintedTiles(active.tiles.base);
 
   setInspectorMarkup(panel, `
+    ${renderInspectorSection("Level", "level", `
     <label class="fieldRow">
       <span class="label">Name</span>
       <input
@@ -319,14 +362,15 @@ export function renderInspector(panel, state) {
       <div class="label">Session</div>
       <div class="badge">${state.session.mode}</div>
     </div>
+    `, true)}
 
-    ${renderGridSettings(state)}
+    ${renderInspectorSection("Grid", "grid", renderGridSettings(state), false)}
 
-    ${renderWorkspaceSettings(state)}
+    ${renderInspectorSection("Workspace", "workspace", renderWorkspaceSettings(state), false)}
 
-    ${renderBackgroundSettings(active)}
+    ${renderInspectorSection("Backgrounds", "backgrounds", renderBackgroundSettings(active), true)}
 
-    ${renderCellInfo(active, state)}
+    ${renderInspectorSection("Cell", "cell", renderCellInfo(active, state), false)}
   `);
 }
 

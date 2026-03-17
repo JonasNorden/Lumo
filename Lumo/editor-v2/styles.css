@@ -10,6 +10,7 @@
 body {
   margin: 0;
   min-height: 100vh;
+  overflow: hidden;
   background: radial-gradient(circle at top, #151d30 0%, #0d1119 55%);
 }
 
@@ -39,6 +40,7 @@ body {
 
 .workspace {
   min-height: 0;
+  height: 100%;
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr) 280px;
 }
@@ -93,6 +95,46 @@ body {
 .inspectorPanel {
   border-left: 1px solid #1d263c;
   padding: 16px;
+}
+
+
+.inspectorPanel {
+  overflow: auto;
+}
+
+.brushPanel {
+  overflow: auto;
+}
+
+.inspectorSection {
+  border: 1px solid #22314c;
+  border-radius: 8px;
+  background: rgba(12, 20, 35, 0.5);
+  margin-bottom: 8px;
+}
+
+.inspectorSection > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 7px 10px;
+  font-size: 11px;
+  color: #a8bbe6;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.inspectorSection > summary::-webkit-details-marker {
+  display: none;
+}
+
+.inspectorSectionBody {
+  padding: 0 10px 8px;
+}
+
+.inspectorSection[open] > summary {
+  border-bottom: 1px solid #22314c;
+  margin-bottom: 8px;
 }
 
 .panelHeader {
