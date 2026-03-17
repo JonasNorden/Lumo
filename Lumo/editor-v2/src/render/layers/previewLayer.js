@@ -1,8 +1,14 @@
 import { getBrushCells, resolveBrushSize } from "../../domain/tiles/brushSize.js";
 import { EDITOR_TOOLS } from "../../domain/tiles/tools.js";
+import { getLineCells } from "../../domain/tiles/line.js";
 
 function isPreviewTool(activeTool) {
-  return activeTool === EDITOR_TOOLS.PAINT || activeTool === EDITOR_TOOLS.ERASE || activeTool === EDITOR_TOOLS.RECT;
+  return (
+    activeTool === EDITOR_TOOLS.PAINT ||
+    activeTool === EDITOR_TOOLS.ERASE ||
+    activeTool === EDITOR_TOOLS.RECT ||
+    activeTool === EDITOR_TOOLS.LINE
+  );
 }
 
 function getPreviewStyle(activeTool) {
@@ -47,11 +53,30 @@ function getRectPreviewCells(interaction, brushDraft) {
   return cells;
 }
 
+function getLinePreviewCells(interaction, brushDraft) {
+  const brushSize = resolveBrushSize(brushDraft);
+
+  if (interaction.activeTool !== EDITOR_TOOLS.LINE || !interaction.lineDrag?.active || !interaction.lineDrag.startCell || !interaction.hoverCell) {
+    return interaction.hoverCell ? getBrushCells(interaction.hoverCell, brushSize) : [];
+  }
+
+  const cells = [];
+  const lineCells = getLineCells(interaction.lineDrag.startCell, interaction.hoverCell);
+
+  for (const lineCell of lineCells) {
+    cells.push(...getBrushCells(lineCell, brushSize));
+  }
+
+  return cells;
+}
+
 export function renderBrushPreviewOverlay(ctx, doc, viewport, interaction, brushDraft) {
   if (!isPreviewTool(interaction.activeTool)) return;
   if (!interaction.hoverCell) return;
 
-  const brushCells = getRectPreviewCells(interaction, brushDraft);
+  const brushCells = interaction.activeTool === EDITOR_TOOLS.LINE
+    ? getLinePreviewCells(interaction, brushDraft)
+    : getRectPreviewCells(interaction, brushDraft);
   const tileSize = doc.dimensions.tileSize;
   const { width, height } = doc.dimensions;
   const zoomedTileSize = tileSize * viewport.zoom;

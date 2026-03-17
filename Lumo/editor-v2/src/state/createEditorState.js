@@ -21,6 +21,7 @@ export function createEditorState() {
       selectedCell: null,
       dragPaint: null,
       rectDrag: null,
+      lineDrag: null,
     },
     brush: {
       activeDraft: createDefaultBrushDraft(),
