@@ -2,6 +2,7 @@ import {
   BRUSH_BEHAVIOR_OPTIONS,
   BRUSH_SIZE_OPTIONS,
   BRUSH_SPRITE_OPTIONS,
+  BRUSH_PALETTE_PRESETS,
 } from "../domain/tiles/brushOptions.js";
 import {
   getBrushDraftSummary,
@@ -25,8 +26,34 @@ function renderToolButton(option, activeTool) {
   return `<button class="toolButton ${isActive ? "isActive" : ""}" type="button" data-tool="${option.value}">${option.label}</button>`;
 }
 
+function renderPaletteItem(preset, activePresetId) {
+  const isActive = preset.id === activePresetId;
+  return `
+    <button
+      class="paletteItem ${isActive ? "isActive" : ""}"
+      type="button"
+      data-palette-item="${preset.id}"
+      aria-pressed="${isActive ? "true" : "false"}"
+    >
+      <span class="paletteSwatch" style="--palette-color: ${preset.color}"></span>
+      <span class="paletteLabel">${preset.label}</span>
+    </button>
+  `;
+}
+
 function getToolLabel(toolValue) {
   return TOOL_OPTIONS.find((option) => option.value === toolValue)?.label ?? "Inspect";
+}
+
+function getActivePalettePresetId(brushDraft) {
+  return (
+    BRUSH_PALETTE_PRESETS.find(
+      (preset) =>
+        preset.brush.behavior === brushDraft.behavior &&
+        preset.brush.size === brushDraft.size &&
+        preset.brush.sprite === brushDraft.sprite,
+    )?.id ?? null
+  );
 }
 
 export function renderBrushPanel(panel, state) {
@@ -37,6 +64,7 @@ export function renderBrushPanel(panel, state) {
   const summary = getBrushDraftSummary(brushDraft);
   const valid = isBrushDraftValid(brushDraft);
   const importStatus = state.ui.importStatus;
+  const activePalettePresetId = getActivePalettePresetId(brushDraft);
 
   panel.innerHTML = `
     <div class="panelHeader">
@@ -63,6 +91,13 @@ export function renderBrushPanel(panel, state) {
     </div>
 
     ${importStatus ? `<div class="infoGroup compact"><div class="value">${importStatus}</div></div>` : ""}
+
+    <div class="paletteGroup" role="group" aria-label="Tile palette quick select">
+      <div class="label">Palette</div>
+      <div class="paletteList">
+        ${BRUSH_PALETTE_PRESETS.map((preset) => renderPaletteItem(preset, activePalettePresetId)).join("")}
+      </div>
+    </div>
 
     <label class="fieldRow">
       <span class="label">Behavior</span>
@@ -163,6 +198,20 @@ export function bindBrushPanel(panel, store, options = {}) {
       if (action === "level-json") {
         onImport?.();
       }
+      return;
+    }
+
+    const paletteButton = target.closest("[data-palette-item]");
+    if (paletteButton instanceof HTMLButtonElement) {
+      const paletteItemId = paletteButton.dataset.paletteItem;
+      const preset = BRUSH_PALETTE_PRESETS.find((item) => item.id === paletteItemId);
+      if (!preset) return;
+
+      store.setState((draft) => {
+        draft.brush.activeDraft.behavior = preset.brush.behavior;
+        draft.brush.activeDraft.size = preset.brush.size;
+        draft.brush.activeDraft.sprite = preset.brush.sprite;
+      });
       return;
     }
 
