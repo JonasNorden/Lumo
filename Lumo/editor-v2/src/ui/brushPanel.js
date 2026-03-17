@@ -53,6 +53,10 @@ export function renderBrushPanel(panel, state) {
       <button class="toolButton" type="button" data-history-action="redo" ${redoEnabled ? "" : "disabled"}>Redo</button>
     </div>
 
+    <div class="historyActions" role="group" aria-label="Document actions">
+      <button class="toolButton" type="button" data-document-action="new-level">New Level</button>
+    </div>
+
     <div class="historyActions" role="group" aria-label="Document export controls">
       <button class="toolButton" type="button" data-export-action="level-json" ${canExport ? "" : "disabled"}>Export</button>
       <button class="toolButton" type="button" data-import-action="level-json">Import</button>
@@ -105,7 +109,7 @@ export function renderBrushPanel(panel, state) {
 }
 
 export function bindBrushPanel(panel, store, options = {}) {
-  const { onUndo, onRedo, onExport, onImport } = options;
+  const { onUndo, onRedo, onExport, onImport, onNew } = options;
   const onChange = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLSelectElement)) return;
@@ -130,6 +134,16 @@ export function bindBrushPanel(panel, store, options = {}) {
       }
       if (action === "redo") {
         onRedo?.();
+      }
+      return;
+    }
+
+
+    const documentButton = target.closest("[data-document-action]");
+    if (documentButton instanceof HTMLButtonElement) {
+      const action = documentButton.dataset.documentAction;
+      if (action === "new-level") {
+        onNew?.();
       }
       return;
     }
