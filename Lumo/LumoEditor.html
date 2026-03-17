@@ -1863,7 +1863,11 @@ display:none;
     if (state.imgCache.has(path)) return Promise.resolve(state.imgCache.get(path));
     return new Promise((resolve) => {
       const img = new Image();
-      img.onload = () => { state.imgCache.set(path, img); resolve(img); };
+      img.onload = () => {
+        state.imgCache.set(path, img);
+        state.guideDirty = true;
+        resolve(img);
+      };
       img.onerror = () => { console.warn("Image load failed:", path); resolve(null); };
       img.src = path;
     });
@@ -3699,10 +3703,10 @@ function parseSmart(v){
                 const i = idx(xx,yy);
                 if ((state.tiles[i]|0) === (inferred.tid|0)){
                   state.tiles[i] = 0;
-                  setTileVisualOverrideAt(xx, yy, null);
                 }
               }
             }
+            clearTileVisualOverridesInFootprint(inferred.x, inferred.y, inferred.fp);
           } else {
             state.tiles[hitIdx] = 0;
             setTileVisualOverrideAt(tx, ty, null);
@@ -3717,9 +3721,9 @@ function parseSmart(v){
               for (let yy=topY; yy<=anchor.y; yy++){
                 for (let xx=anchor.x; xx<anchor.x+fp.w; xx++){
                   state.tiles[idx(xx,yy)] = 0;
-                  setTileVisualOverrideAt(xx, yy, null);
                 }
               }
+              clearTileVisualOverridesInFootprint(anchor.x, anchor.y, fp);
             } else {
               state.tiles[hitIdx] = 0;
               setTileVisualOverrideAt(tx, ty, null);
@@ -3841,6 +3845,17 @@ function parseSmart(v){
       }
     }
     return null;
+  }
+
+  function clearTileVisualOverridesInFootprint(anchorX, anchorY, fp){
+    const fw = Math.max(1, (fp && fp.w) ? (fp.w|0) : 1);
+    const fh = Math.max(1, (fp && fp.h) ? (fp.h|0) : 1);
+    const topY = (anchorY|0) - (fh - 1);
+    for (let yy=topY; yy<=anchorY; yy++){
+      for (let xx=(anchorX|0); xx<(anchorX|0)+fw; xx++){
+        setTileVisualOverrideAt(xx, yy, null);
+      }
+    }
   }
 
   function findTileErasePlacementByInference(tx, ty){
@@ -5189,6 +5204,15 @@ function updateScrollFromLevel(){
         const imgT = imgPath ? state.imgCache.get(imgPath) : null;
 
         const baseX = x*TS, baseY = y*TS;
+        const fpW = Math.max(1, (assetT && assetT.footprint && Number.isFinite(Number(assetT.footprint.w))) ? (Number(assetT.footprint.w)|0) : 1);
+        const fpH = Math.max(1, (assetT && assetT.footprint && Number.isFinite(Number(assetT.footprint.h))) ? (Number(assetT.footprint.h)|0) : 1);
+
+        // Stabilization: render larger visuals once from their likely BL anchor.
+        if (!override && (fpW > 1 || fpH > 1)){
+          const hasSameBelow = inBounds(x, y+1) && ((state.tiles[idx(x, y+1)]|0) === (tid|0));
+          const hasSameLeft = inBounds(x-1, y) && ((state.tiles[idx(x-1, y)]|0) === (tid|0));
+          if (hasSameBelow || hasSameLeft) continue;
+        }
 
         // draw size (visual)
         const dw = (override && Number.isFinite(Number(override.drawW))) ? (Number(override.drawW)|0)
@@ -5208,12 +5232,14 @@ function updateScrollFromLevel(){
         const dy2 = (aAnchor === "BL") ? ((y+1)*TS - dh + offY) : (baseY + offY);
 
         const s2 = worldToScreen(dx2, dy2);
+        const drawX = Math.round(s2.x);
+        const drawY = Math.round(s2.y);
         if (imgT){
           ctx.imageSmoothingEnabled = false;
-          ctx.drawImage(imgT, s2.x, s2.y, dw, dh);
+          ctx.drawImage(imgT, drawX, drawY, dw, dh);
         } else {
           ctx.fillStyle = "rgba(255,255,255,.08)";
-          ctx.fillRect(s2.x, s2.y, TS, TS);
+          ctx.fillRect(drawX, drawY, TS, TS);
         }
 
         // footprint overlay (tile occupancy always 1×1)
