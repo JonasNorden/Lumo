@@ -14,6 +14,9 @@ export function createEditorState() {
       zoom: 1,
       offsetX: 48,
       offsetY: 48,
+      gridVisible: true,
+      gridOpacity: 0.25,
+      gridColor: "#6f85af",
     },
     interaction: {
       activeTool: "inspect",

@@ -212,6 +212,26 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     });
   };
 
+
+  const updateGridSettings = (field, value) => {
+    store.setState((draft) => {
+      if (field === "visible") {
+        draft.viewport.gridVisible = Boolean(value);
+        return;
+      }
+
+      if (field === "opacity") {
+        const nextOpacity = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : draft.viewport.gridOpacity;
+        draft.viewport.gridOpacity = nextOpacity;
+        return;
+      }
+
+      if (field === "color" && typeof value === "string") {
+        draft.viewport.gridColor = value;
+      }
+    });
+  };
+
   const draw = (state) => {
     renderEditorFrame(ctx, state);
     minimapLayout = renderMinimap(minimapCtx, state);
@@ -724,6 +744,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
   const unbindInspectorPanel = bindInspectorPanel(inspector, store, {
     onResize: resizeDocument,
     onMetaUpdate: updateDocumentMeta,
+    onGridUpdate: updateGridSettings,
   });
   const unbindBrushPanel = bindBrushPanel(brushPanel, store, {
     onUndo: handleUndo,
