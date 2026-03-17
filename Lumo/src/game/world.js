@@ -42,7 +42,10 @@
         const img = new Image();
         img.src = src;
         img._ok = false;
-        img.onload = () => { img._ok = true; };
+        img.onload = () => {
+          img._ok = true;
+          this._visualAssetEpoch = (this._visualAssetEpoch|0) + 1;
+        };
         img.onerror = () => { img._ok = false; };
         return img;
       }catch(_){
@@ -436,12 +439,24 @@
       const wx = tx * ts;
       const wy = ty * ts;
 
-      const dx = wx - cam.x + offX;
-      const dy = (anchor === "BL")
+      const dx = Math.round(wx - cam.x + offX);
+      const dy = Math.round((anchor === "BL")
         ? ((ty + 1) * ts - h - cam.y + offY)
-        : (wy - cam.y + offY);
+        : (wy - cam.y + offY));
 
       ctx.drawImage(img, dx, dy, w, h);
+      return true;
+    }
+
+    _isLikelyVisualAnchor(tx, ty, id, fp){
+      const fw = Math.max(1, (fp && fp.w) ? (fp.w|0) : 1);
+      const fh = Math.max(1, (fp && fp.h) ? (fp.h|0) : 1);
+      if (fw <= 1 && fh <= 1) return true;
+
+      // Stabilization rule: draw larger visuals from a single deterministic
+      // anchor cell (bottom-left edge in BL tile convention).
+      if ((this.getTile(tx, ty + 1)|0) === (id|0)) return false;
+      if ((this.getTile(tx - 1, ty)|0) === (id|0)) return false;
       return true;
     }
 
@@ -461,6 +476,11 @@
           const id = this.getTile(tx, ty);
           if (!id) continue;
 
+          const override = this._getTileVisualOverrideAt(tx, ty);
+          const tileDef = this._tileDefById ? this._tileDefById.get(id) : null;
+          const fp = tileDef && tileDef.footprint ? tileDef.footprint : null;
+          if (!override && !this._isLikelyVisualAnchor(tx, ty, id, fp)) continue;
+
           // 1) Tile PNG
           const drew = this._drawTilePNG(ctx, cam, tx, ty, id);
           if (drew) continue;
@@ -468,8 +488,8 @@
           // 2) Placeholder fallback
           const defs = (window.Lumo && Lumo.Tileset) ? Lumo.Tileset : this.tileDefs;
           const tdef = defs[id] || defs[1] || this.tileDefs[1];
-          const sx = tx * ts - cam.x;
-          const sy = ty * ts - cam.y;
+          const sx = Math.round(tx * ts - cam.x);
+          const sy = Math.round(ty * ts - cam.y);
 
           ctx.fillStyle = tdef.color || "#2b3646";
           ctx.fillRect(sx, sy, ts, ts);
