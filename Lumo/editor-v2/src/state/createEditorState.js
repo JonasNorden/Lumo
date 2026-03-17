@@ -1,0 +1,20 @@
+export function createEditorState() {
+  return {
+    session: {
+      mode: "read-only",
+    },
+    document: {
+      status: "idle",
+      error: null,
+      active: null,
+    },
+    viewport: {
+      zoom: 1,
+      offsetX: 48,
+      offsetY: 48,
+    },
+    ui: {
+      inspectorOpen: true,
+    },
+  };
+}

@@ -1,56 +1,27 @@
 <!doctype html>
-<html lang="sv">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>LumoEditor v2</title>
-    <link rel="stylesheet" href="./ui/editor-v2.css" />
-  </head>
-  <body>
-    <div id="app" class="editor-shell">
-      <header class="topbar">
-        <div class="brand">
-          <span class="dot"></span>
-          <div>
-            <h1>LumoEditor v2</h1>
-            <p>Read-only foundation</p>
-          </div>
-        </div>
-        <div class="topbar-meta">
-          <span class="pill" data-ui-version>v2 alpha</span>
-          <span class="pill" data-ui-tool>Tool: Inspect</span>
-        </div>
-      </header>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LumoEditor V2</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="appShell">
+    <header class="topBar">
+      <span class="brand">LumoEditor</span>
+      <span class="version">V2</span>
+    </header>
 
-      <aside class="panel panel-left">
-        <h2>Document</h2>
-        <div class="stack">
-          <span class="label">Name</span>
-          <strong data-ui-doc-name>Untitled Level</strong>
-        </div>
-        <div class="stack">
-          <span class="label">Grid</span>
-          <strong data-ui-grid-size>32 px</strong>
-        </div>
-      </aside>
+    <main class="workspace">
+      <section class="canvasPanel">
+        <canvas id="editorCanvas"></canvas>
+      </section>
 
-      <main class="workspace">
-        <canvas data-workspace-canvas width="1280" height="720" aria-label="LumoEditor v2 workspace"></canvas>
-      </main>
+      <aside class="inspectorPanel" id="inspectorPanel"></aside>
+    </main>
+  </div>
 
-      <aside class="panel panel-right">
-        <h2>Viewport</h2>
-        <div class="stack">
-          <span class="label">Zoom</span>
-          <strong data-ui-zoom>100%</strong>
-        </div>
-        <div class="stack">
-          <span class="label">Camera</span>
-          <strong data-ui-camera>0, 0</strong>
-        </div>
-      </aside>
-    </div>
-
-    <script type="module" src="./app/main.js"></script>
-  </body>
+  <script type="module" src="./src/main.js"></script>
+</body>
 </html>
