@@ -11,6 +11,7 @@
       this.pxH = 0; // pixels
 
       this.layers = { main: [] };
+      this.tileVisualOverrides = {};
 
       // Background layer (grid of ids)
       this.bg = [];
@@ -20,6 +21,7 @@
       // --- Tile visuals (catalog-driven PNG rendering) ---
       this._tileDefById = null;      // tileId -> catalog def
       this._tileImg = new Map();     // tileId -> Image
+      this._tileDefByCatalogId = null;
       this._behaviorProfileById = null; // behaviorProfileId -> profile def
 
       // Tile defs (id -> properties)
@@ -52,6 +54,7 @@
       if (this._tileDefById) return;
 
       this._tileDefById = new Map();
+      this._tileDefByCatalogId = new Map();
 
       const cat = window.LUMO_CATALOG_TILES;
       if (!Array.isArray(cat) || !cat.length) return;
@@ -61,10 +64,14 @@
         const tid = (d.tileId|0);
         if (!tid) continue;
         this._tileDefById.set(tid, d);
+        if (d.id != null) this._tileDefByCatalogId.set(String(d.id), d);
 
         if (d.img && !this._tileImg.has(tid)){
           const img = this._tryLoadImage(d.img);
-          if (img) this._tileImg.set(tid, img);
+          if (img){
+            this._tileImg.set(tid, img);
+            this._tileImg.set(d.img, img);
+          }
         }
       }
     }
@@ -183,6 +190,9 @@
         else data = data.slice(0);
       }
       this.layers.main = data;
+      this.tileVisualOverrides = (layers && layers.tileVisualOverrides && typeof layers.tileVisualOverrides === "object")
+        ? Object.assign({}, layers.tileVisualOverrides)
+        : {};
 
       // --- BG layer: exported from LumoEditor -> levelObj.editor.bg ---
       const needBG = this.w * this.h;
@@ -199,7 +209,13 @@
 
       // Reset tile catalog mapping between levels
       this._tileDefById = null;
+      this._tileDefByCatalogId = null;
       this._ensureTileCatalog();
+    }
+
+    _getTileVisualOverrideAt(tx, ty){
+      if (!this.tileVisualOverrides || typeof this.tileVisualOverrides !== "object") return null;
+      return this.tileVisualOverrides[`${tx|0},${ty|0}`] || null;
     }
 
     getTile(tx, ty){
@@ -389,23 +405,33 @@
       this._ensureTileCatalog();
       if (!this._tileDefById) return false;
 
-      const def = this._tileDefById.get(id);
+      const override = this._getTileVisualOverrideAt(tx, ty);
+      let def = null;
+      if (override && override.catalogTileId && this._tileDefByCatalogId){
+        def = this._tileDefByCatalogId.get(String(override.catalogTileId)) || null;
+      }
+      if (!def) def = this._tileDefById.get(id);
+      if (!def && override && override.img){
+        def = { img: override.img };
+      }
       if (!def || !def.img) return false;
 
-      let img = this._tileImg.get(id);
+      const imageKey = def.img;
+
+      let img = this._tileImg.get(imageKey);
       if (!img){
         img = this._tryLoadImage(def.img);
-        if (img) this._tileImg.set(id, img);
+        if (img) this._tileImg.set(imageKey, img);
       }
       if (!img || !img._ok) return false;
 
       const ts = this.tileSize;
 
-      const w = (def.drawW|0) || ts;
-      const h = (def.drawH|0) || ts;
-      const offX = (def.drawOffX|0) || 0;
-      const offY = (def.drawOffY|0) || 0;
-      const anchor = def.drawAnchor || "TL";
+      const w = (override && Number.isFinite(Number(override.drawW))) ? (Number(override.drawW)|0) : ((def.drawW|0) || ts);
+      const h = (override && Number.isFinite(Number(override.drawH))) ? (Number(override.drawH)|0) : ((def.drawH|0) || ts);
+      const offX = (override && Number.isFinite(Number(override.drawOffX))) ? (Number(override.drawOffX)|0) : ((def.drawOffX|0) || 0);
+      const offY = (override && Number.isFinite(Number(override.drawOffY))) ? (Number(override.drawOffY)|0) : ((def.drawOffY|0) || 0);
+      const anchor = (override && override.drawAnchor) ? String(override.drawAnchor) : (def.drawAnchor || "TL");
 
       const wx = tx * ts;
       const wy = ty * ts;
