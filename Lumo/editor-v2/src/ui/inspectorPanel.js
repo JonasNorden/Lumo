@@ -67,6 +67,48 @@ function setInspectorMarkup(panel, markup) {
   restoreFocusedMetaInput(panel, focusedMetaSnapshot);
 }
 
+
+function renderGridSettings(state) {
+  const { gridVisible, gridOpacity, gridColor } = state.viewport;
+
+  return `
+    <div class="infoGroup">
+      <div class="label">Grid</div>
+      <div class="value">Settings</div>
+    </div>
+
+    <label class="fieldRow">
+      <span class="label">Visible</span>
+      <input
+        type="checkbox"
+        data-grid-field="visible"
+        ${gridVisible ? "checked" : ""}
+      />
+    </label>
+
+    <label class="fieldRow">
+      <span class="label">Opacity</span>
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.01"
+        value="${gridOpacity}"
+        data-grid-field="opacity"
+      />
+    </label>
+
+    <label class="fieldRow">
+      <span class="label">Color</span>
+      <input
+        type="color"
+        value="${gridColor}"
+        data-grid-field="color"
+      />
+    </label>
+  `;
+}
+
 function renderCellInfo(active, state) {
   const inspectedCell = getInspectedCell(state);
   if (!inspectedCell) {
@@ -192,12 +234,14 @@ export function renderInspector(panel, state) {
       <div class="badge">${state.session.mode}</div>
     </div>
 
+    ${renderGridSettings(state)}
+
     ${renderCellInfo(active, state)}
   `);
 }
 
 export function bindInspectorPanel(panel, store, options = {}) {
-  const { onResize, onMetaUpdate } = options;
+  const { onResize, onMetaUpdate, onGridUpdate } = options;
 
   const sanitizeMetaValue = (field, value) => {
     const trimmed = value.trim();
@@ -226,11 +270,41 @@ export function bindInspectorPanel(panel, store, options = {}) {
     return true;
   };
 
+  const handleGridChange = (target) => {
+    const gridField = target.dataset.gridField;
+    if (gridField !== "visible" && gridField !== "opacity" && gridField !== "color") return false;
+
+    const state = store.getState();
+    const viewport = state.viewport;
+
+    if (gridField === "visible") {
+      const nextValue = target.checked;
+      if (viewport.gridVisible === nextValue) return true;
+      onGridUpdate?.("visible", nextValue);
+      return true;
+    }
+
+    if (gridField === "opacity") {
+      const parsed = Number.parseFloat(target.value);
+      const nextValue = Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : viewport.gridOpacity;
+      target.value = String(nextValue);
+      if (viewport.gridOpacity === nextValue) return true;
+      onGridUpdate?.("opacity", nextValue);
+      return true;
+    }
+
+    const nextColor = target.value;
+    if (viewport.gridColor === nextColor) return true;
+    onGridUpdate?.("color", nextColor);
+    return true;
+  };
+
   const onChange = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
 
     if (handleMetaChange(target)) return;
+    if (handleGridChange(target)) return;
 
     const dimensionField = target.dataset.dimensionField;
     if (dimensionField !== "width" && dimensionField !== "height") return;
@@ -256,7 +330,8 @@ export function bindInspectorPanel(panel, store, options = {}) {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
 
-    handleMetaChange(target);
+    if (handleMetaChange(target)) return;
+    handleGridChange(target);
   };
 
   panel.addEventListener("change", onChange);
