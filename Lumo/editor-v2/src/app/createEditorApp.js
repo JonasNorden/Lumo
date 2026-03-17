@@ -1,5 +1,6 @@
 import { renderEditorFrame } from "../render/renderer.js";
 import { loadLevelDocument } from "../data/loadLevelDocument.js";
+import { getCanvasPointFromMouseEvent, getCellFromCanvasPoint } from "../render/viewport.js";
 import { renderInspector } from "../ui/inspectorPanel.js";
 
 export function createEditorApp({ canvas, inspector, store }) {
@@ -28,6 +29,48 @@ export function createEditorApp({ canvas, inspector, store }) {
     renderInspector(inspector, state);
   };
 
+  const updateHoveredCell = (event) => {
+    const state = store.getState();
+    if (!state.document.active) return;
+
+    const point = getCanvasPointFromMouseEvent(canvas, event);
+    const nextHoverCell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+
+    const current = state.interaction.hoverCell;
+    const unchanged =
+      current?.x === nextHoverCell?.x &&
+      current?.y === nextHoverCell?.y;
+
+    if (unchanged) return;
+
+    store.setState((draft) => {
+      draft.interaction.hoverCell = nextHoverCell;
+    });
+  };
+
+  const clearHoveredCell = () => {
+    const state = store.getState();
+    if (!state.interaction.hoverCell) return;
+
+    store.setState((draft) => {
+      draft.interaction.hoverCell = null;
+    });
+  };
+
+  const selectCell = (event) => {
+    const state = store.getState();
+    if (!state.document.active) return;
+
+    const point = getCanvasPointFromMouseEvent(canvas, event);
+    const nextSelection = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+
+    if (!nextSelection) return;
+
+    store.setState((draft) => {
+      draft.interaction.selectedCell = nextSelection;
+    });
+  };
+
   const loadDocument = async () => {
     store.setState((state) => {
       state.document.status = "loading";
@@ -52,6 +95,9 @@ export function createEditorApp({ canvas, inspector, store }) {
 
   const unsubscribe = store.subscribe(draw);
   window.addEventListener("resize", resize);
+  canvas.addEventListener("mousemove", updateHoveredCell);
+  canvas.addEventListener("mouseleave", clearHoveredCell);
+  canvas.addEventListener("click", selectCell);
 
   resize();
   draw(store.getState());
@@ -60,5 +106,8 @@ export function createEditorApp({ canvas, inspector, store }) {
   return () => {
     unsubscribe();
     window.removeEventListener("resize", resize);
+    canvas.removeEventListener("mousemove", updateHoveredCell);
+    canvas.removeEventListener("mouseleave", clearHoveredCell);
+    canvas.removeEventListener("click", selectCell);
   };
 }

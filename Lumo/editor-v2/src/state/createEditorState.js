@@ -13,6 +13,10 @@ export function createEditorState() {
       offsetX: 48,
       offsetY: 48,
     },
+    interaction: {
+      hoverCell: null,
+      selectedCell: null,
+    },
     ui: {
       inspectorOpen: true,
     },
