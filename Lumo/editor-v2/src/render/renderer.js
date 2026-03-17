@@ -1,6 +1,7 @@
 import { renderGrid } from "./layers/gridLayer.js";
 import { renderTiles } from "./layers/tileLayer.js";
 import { renderSelectionOverlay } from "./layers/selectionLayer.js";
+import { renderBrushPreviewOverlay } from "./layers/previewLayer.js";
 
 export function renderEditorFrame(ctx, state) {
   const canvas = ctx.canvas;
@@ -14,5 +15,6 @@ export function renderEditorFrame(ctx, state) {
 
   renderTiles(ctx, doc, state.viewport);
   renderGrid(ctx, doc, state.viewport);
+  renderBrushPreviewOverlay(ctx, doc, state.viewport, state.interaction, state.brush.activeDraft);
   renderSelectionOverlay(ctx, doc, state.viewport, state.interaction);
 }
