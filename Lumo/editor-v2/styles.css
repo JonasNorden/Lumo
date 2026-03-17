@@ -169,7 +169,8 @@ body {
   margin-bottom: 10px;
 }
 
-.fieldRow select {
+.fieldRow select,
+.fieldRow input {
   background: #101a2d;
   color: #dbe5ff;
   border: 1px solid #2a3652;
