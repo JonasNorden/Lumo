@@ -70,6 +70,52 @@ function setInspectorMarkup(panel, markup) {
 }
 
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function renderBackgroundSettings(active) {
+  const layers = active.backgrounds?.layers || [];
+
+  return `
+    <div class="infoGroup">
+      <div class="label">Backgrounds</div>
+      <div class="value">${layers.length} layer${layers.length === 1 ? "" : "s"}</div>
+    </div>
+
+    <button type="button" class="toolButton" data-background-action="add">Add background layer</button>
+
+    <div class="backgroundLayerList">
+      ${layers
+        .map(
+          (layer, index) => `
+            <div class="backgroundLayerRow">
+              <label class="fieldRow">
+                <span class="label">Name</span>
+                <input type="text" value="${escapeHtml(layer.name)}" data-background-field="name" data-background-index="${index}" />
+              </label>
+              <div class="backgroundLayerControls">
+                <label class="fieldRow compactInline">
+                  <span class="label">Visible</span>
+                  <input type="checkbox" data-background-field="visible" data-background-index="${index}" ${layer.visible ? "checked" : ""} />
+                </label>
+                <label class="fieldRow compactInline">
+                  <span class="label">Color</span>
+                  <input type="color" value="${layer.color}" data-background-field="color" data-background-index="${index}" />
+                </label>
+              </div>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
 function renderGridSettings(state) {
   const { gridVisible, gridOpacity, gridColor } = state.viewport;
 
@@ -278,12 +324,14 @@ export function renderInspector(panel, state) {
 
     ${renderWorkspaceSettings(state)}
 
+    ${renderBackgroundSettings(active)}
+
     ${renderCellInfo(active, state)}
   `);
 }
 
 export function bindInspectorPanel(panel, store, options = {}) {
-  const { onResize, onMetaUpdate, onGridUpdate, onWorkspaceUpdate } = options;
+  const { onResize, onMetaUpdate, onGridUpdate, onWorkspaceUpdate, onBackgroundUpdate } = options;
 
   const sanitizeMetaValue = (field, value) => {
     const trimmed = value.trim();
@@ -352,6 +400,23 @@ export function bindInspectorPanel(panel, store, options = {}) {
     onWorkspaceUpdate?.("background", nextColor);
     return true;
   };
+  const handleBackgroundChange = (target) => {
+    const backgroundField = target.dataset.backgroundField;
+    if (backgroundField !== "name" && backgroundField !== "visible" && backgroundField !== "color") return false;
+
+    const index = Number.parseInt(target.dataset.backgroundIndex || "", 10);
+    if (!Number.isInteger(index) || index < 0) return false;
+
+    if (backgroundField === "visible") {
+      onBackgroundUpdate?.(index, "visible", target.checked);
+      return true;
+    }
+
+    const value = backgroundField === "name" ? target.value : target.value;
+    onBackgroundUpdate?.(index, backgroundField, value);
+    return true;
+  };
+
 
   const onChange = (event) => {
     const target = event.target;
@@ -360,6 +425,7 @@ export function bindInspectorPanel(panel, store, options = {}) {
     if (handleMetaChange(target)) return;
     if (handleGridChange(target)) return;
     if (handleWorkspaceChange(target)) return;
+    if (handleBackgroundChange(target)) return;
 
     const dimensionField = target.dataset.dimensionField;
     if (dimensionField !== "width" && dimensionField !== "height") return;
@@ -387,7 +453,8 @@ export function bindInspectorPanel(panel, store, options = {}) {
 
     if (handleMetaChange(target)) return;
     if (handleGridChange(target)) return;
-    handleWorkspaceChange(target);
+    if (handleWorkspaceChange(target)) return;
+    handleBackgroundChange(target);
   };
 
   const onClick = (event) => {
@@ -395,9 +462,15 @@ export function bindInspectorPanel(panel, store, options = {}) {
     if (!(target instanceof HTMLButtonElement)) return;
 
     const preset = target.dataset.workspacePreset;
-    if (!preset) return;
+    if (preset) {
+      onWorkspaceUpdate?.("background", preset);
+      return;
+    }
 
-    onWorkspaceUpdate?.("background", preset);
+    const backgroundAction = target.dataset.backgroundAction;
+    if (backgroundAction === "add") {
+      onBackgroundUpdate?.(-1, "add", null);
+    }
   };
 
   const onPointerDown = (event) => {

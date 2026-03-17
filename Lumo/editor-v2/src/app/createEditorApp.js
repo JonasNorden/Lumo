@@ -239,6 +239,42 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     });
   };
 
+  const updateBackgroundLayer = (index, field, value) => {
+    store.setState((draft) => {
+      const layers = draft.document.active?.backgrounds?.layers;
+      if (!layers) return;
+
+      if (field === "add") {
+        const nextNumber = layers.length + 1;
+        layers.push({
+          id: `bg-${nextNumber}`,
+          name: `Background ${nextNumber}`,
+          visible: true,
+          color: "#1b2436",
+        });
+        return;
+      }
+
+      const layer = layers[index];
+      if (!layer) return;
+
+      if (field === "visible") {
+        layer.visible = Boolean(value);
+        return;
+      }
+
+      if (field === "name") {
+        const nextName = String(value || "").trim();
+        layer.name = nextName || layer.name;
+        return;
+      }
+
+      if (field === "color" && typeof value === "string") {
+        layer.color = value;
+      }
+    });
+  };
+
   const draw = (state) => {
     renderEditorFrame(ctx, state);
     minimapLayout = renderMinimap(minimapCtx, state);
@@ -753,6 +789,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     onMetaUpdate: updateDocumentMeta,
     onGridUpdate: updateGridSettings,
     onWorkspaceUpdate: updateWorkspaceSettings,
+    onBackgroundUpdate: updateBackgroundLayer,
   });
   const unbindBrushPanel = bindBrushPanel(brushPanel, store, {
     onUndo: handleUndo,

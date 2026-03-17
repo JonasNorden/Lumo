@@ -3,8 +3,24 @@
  * @property {{id: string, name: string, version: string}} meta
  * @property {{width: number, height: number, tileSize: number}} dimensions
  * @property {{base: number[]}} tiles
+ * @property {{layers: {id: string, name: string, visible: boolean, color: string}[]}} backgrounds
  * @property {{notes?: string}} extra
  */
+
+function normalizeBackgroundLayer(layer, index) {
+  const fallbackId = `bg-${index + 1}`;
+  const nextId = typeof layer?.id === "string" && layer.id.trim() ? layer.id : fallbackId;
+  const nextName = typeof layer?.name === "string" && layer.name.trim() ? layer.name : `Background ${index + 1}`;
+  const nextVisible = typeof layer?.visible === "boolean" ? layer.visible : true;
+  const nextColor = typeof layer?.color === "string" && layer.color ? layer.color : "#1b2436";
+
+  return {
+    id: nextId,
+    name: nextName,
+    visible: nextVisible,
+    color: nextColor,
+  };
+}
 
 /**
  * @param {LevelDocument} doc
@@ -32,6 +48,12 @@ export function validateLevelDocument(doc) {
   if (!doc.tiles.base.every((tile) => Number.isInteger(tile) && tile >= 0)) {
     throw new Error("Invalid V2 tile payload (tiles must be non-negative integers)");
   }
+
+  const rawLayers = doc.backgrounds?.layers;
+  const layers = Array.isArray(rawLayers) ? rawLayers : [];
+  doc.backgrounds = {
+    layers: layers.map((layer, index) => normalizeBackgroundLayer(layer, index)),
+  };
 
   return doc;
 }
