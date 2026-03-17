@@ -30,6 +30,43 @@ function getTileForCell(active, cell) {
   };
 }
 
+function captureFocusedMetaInput(panel) {
+  const activeElement = document.activeElement;
+  if (!(activeElement instanceof HTMLInputElement)) return null;
+  if (!panel.contains(activeElement)) return null;
+
+  const metaField = activeElement.dataset.metaField;
+  if (metaField !== "name" && metaField !== "id") return null;
+
+  return {
+    field: metaField,
+    selectionStart: activeElement.selectionStart,
+    selectionEnd: activeElement.selectionEnd,
+    selectionDirection: activeElement.selectionDirection,
+  };
+}
+
+function restoreFocusedMetaInput(panel, snapshot) {
+  if (!snapshot) return;
+
+  const replacementInput = panel.querySelector(`input[data-meta-field="${snapshot.field}"]`);
+  if (!(replacementInput instanceof HTMLInputElement)) return;
+
+  replacementInput.focus({ preventScroll: true });
+
+  if (snapshot.selectionStart === null || snapshot.selectionEnd === null) return;
+
+  const clampedStart = Math.max(0, Math.min(snapshot.selectionStart, replacementInput.value.length));
+  const clampedEnd = Math.max(0, Math.min(snapshot.selectionEnd, replacementInput.value.length));
+  replacementInput.setSelectionRange(clampedStart, clampedEnd, snapshot.selectionDirection || "none");
+}
+
+function setInspectorMarkup(panel, markup) {
+  const focusedMetaSnapshot = captureFocusedMetaInput(panel);
+  panel.innerHTML = markup;
+  restoreFocusedMetaInput(panel, focusedMetaSnapshot);
+}
+
 function renderCellInfo(active, state) {
   const inspectedCell = getInspectedCell(state);
   if (!inspectedCell) {
@@ -71,24 +108,24 @@ export function renderInspector(panel, state) {
   const active = state.document.active;
 
   if (state.document.status === "loading") {
-    panel.innerHTML = `<div class="value">Loading document…</div>`;
+    setInspectorMarkup(panel, `<div class="value">Loading document…</div>`);
     return;
   }
 
   if (state.document.error) {
-    panel.innerHTML = `<div class="value">${state.document.error}</div>`;
+    setInspectorMarkup(panel, `<div class="value">${state.document.error}</div>`);
     return;
   }
 
   if (!active) {
-    panel.innerHTML = `<div class="value">No document loaded.</div>`;
+    setInspectorMarkup(panel, `<div class="value">No document loaded.</div>`);
     return;
   }
 
   const tileCount = active.dimensions.width * active.dimensions.height;
   const paintedCount = countPaintedTiles(active.tiles.base);
 
-  panel.innerHTML = `
+  setInspectorMarkup(panel, `
     <label class="fieldRow">
       <span class="label">Name</span>
       <input
@@ -156,7 +193,7 @@ export function renderInspector(panel, state) {
     </div>
 
     ${renderCellInfo(active, state)}
-  `;
+  `);
 }
 
 export function bindInspectorPanel(panel, store, options = {}) {
