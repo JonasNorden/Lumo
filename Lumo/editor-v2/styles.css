@@ -233,3 +233,128 @@ body {
 .paletteLabel {
   line-height: 1;
 }
+
+
+.brushPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.panelHeader {
+  margin-bottom: 4px;
+}
+
+.panelSection {
+  border: 1px solid #1d263c;
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(11, 18, 33, 0.62);
+}
+
+.panelSectionMicro {
+  padding: 6px 8px;
+}
+
+.sectionTitle {
+  color: #9eb2e5;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.hintText {
+  font-size: 10px;
+  color: #6f82ab;
+  margin-bottom: 6px;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.statusRow .label {
+  margin-bottom: 0;
+}
+
+.infoGroup {
+  margin-bottom: 10px;
+}
+
+.infoGroup.compact {
+  margin-bottom: 0;
+}
+
+.toolSwitch {
+  margin-bottom: 8px;
+}
+
+.toolButton {
+  padding: 5px 8px;
+}
+
+.toolButton.isSecondary {
+  background: #0f1628;
+  color: #97aacf;
+  border-color: #25314b;
+}
+
+.historyActions {
+  margin-bottom: 6px;
+}
+
+.historyActionsSingle {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.fieldRow {
+  margin-bottom: 8px;
+}
+
+.fieldRowCompact {
+  margin-bottom: 6px;
+}
+
+.shortcutHelp {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 8px;
+  font-size: 10px;
+  color: #7486ad;
+}
+
+kbd {
+  font-family: inherit;
+  font-size: 10px;
+  border: 1px solid #2a3652;
+  background: #0e1525;
+  color: #b4c5e8;
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+
+.paletteGroup {
+  margin-bottom: 0;
+}
+
+.paletteList {
+  gap: 4px;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.paletteItem {
+  padding: 5px 8px;
+}
+
+.mutedValue {
+  color: #8ea1c8;
+  font-size: 11px;
+}

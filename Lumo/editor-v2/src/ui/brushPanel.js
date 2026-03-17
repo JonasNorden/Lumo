@@ -68,78 +68,94 @@ export function renderBrushPanel(panel, state) {
 
   panel.innerHTML = `
     <div class="panelHeader">
-      <span class="panelTitle">Brush</span>
+      <span class="panelTitle">Editor</span>
       <span class="badge ${valid ? "" : "badgeWarn"}">${valid ? "ready" : "invalid"}</span>
     </div>
 
-    <div class="toolSwitch" role="group" aria-label="Editor tool">
-      ${TOOL_OPTIONS.map((option) => renderToolButton(option, state.interaction.activeTool)).join("")}
-    </div>
-
-    <div class="historyActions" role="group" aria-label="History controls">
-      <button class="toolButton" type="button" data-history-action="undo" ${undoEnabled ? "" : "disabled"}>Undo</button>
-      <button class="toolButton" type="button" data-history-action="redo" ${redoEnabled ? "" : "disabled"}>Redo</button>
-    </div>
-
-    <div class="historyActions" role="group" aria-label="Document actions">
-      <button class="toolButton" type="button" data-document-action="new-level">New Level</button>
-    </div>
-
-    <div class="historyActions" role="group" aria-label="Document export controls">
-      <button class="toolButton" type="button" data-export-action="level-json" ${canExport ? "" : "disabled"}>Export</button>
-      <button class="toolButton" type="button" data-import-action="level-json">Import</button>
-    </div>
-
-    ${importStatus ? `<div class="infoGroup compact"><div class="value">${importStatus}</div></div>` : ""}
-
-    <div class="paletteGroup" role="group" aria-label="Tile palette quick select">
-      <div class="label">Palette</div>
-      <div class="paletteList">
-        ${BRUSH_PALETTE_PRESETS.map((preset) => renderPaletteItem(preset, activePalettePresetId)).join("")}
+    <section class="panelSection" aria-label="Tools section">
+      <div class="sectionTitle">Tools</div>
+      <div class="toolSwitch" role="group" aria-label="Editor tool">
+        ${TOOL_OPTIONS.map((option) => renderToolButton(option, state.interaction.activeTool)).join("")}
       </div>
-    </div>
 
-    <label class="fieldRow">
-      <span class="label">Behavior</span>
-      <select data-brush-field="behavior">
-        ${renderOptions(BRUSH_BEHAVIOR_OPTIONS, brushDraft.behavior)}
-      </select>
-    </label>
+      <div class="statusRow">
+        <span class="label">Active</span>
+        <span class="value">${getToolLabel(state.interaction.activeTool)}</span>
+      </div>
+    </section>
 
-    <label class="fieldRow">
-      <span class="label">Size</span>
-      <select data-brush-field="size">
-        ${renderOptions(BRUSH_SIZE_OPTIONS, brushDraft.size)}
-      </select>
-    </label>
+    <section class="panelSection" aria-label="File section">
+      <div class="sectionTitle">File</div>
+      <div class="historyActions" role="group" aria-label="History controls">
+        <button class="toolButton isSecondary" type="button" data-history-action="undo" ${undoEnabled ? "" : "disabled"}>Undo</button>
+        <button class="toolButton isSecondary" type="button" data-history-action="redo" ${redoEnabled ? "" : "disabled"}>Redo</button>
+      </div>
 
-    <label class="fieldRow">
-      <span class="label">Sprite</span>
-      <select data-brush-field="sprite">
-        ${renderOptions(BRUSH_SPRITE_OPTIONS, brushDraft.sprite)}
-      </select>
-    </label>
+      <div class="historyActions historyActionsSingle" role="group" aria-label="Document actions">
+        <button class="toolButton isSecondary" type="button" data-document-action="new-level">New</button>
+      </div>
 
-    <div class="infoGroup compact">
-      <div class="label">Current</div>
-      <div class="value">${summary}</div>
-    </div>
+      <div class="historyActions" role="group" aria-label="Document export controls">
+        <button class="toolButton isSecondary" type="button" data-export-action="level-json" ${canExport ? "" : "disabled"}>Export</button>
+        <button class="toolButton isSecondary" type="button" data-import-action="level-json">Import</button>
+      </div>
 
-    <div class="infoGroup compact">
-      <div class="label">Tool</div>
-      <div class="value">${getToolLabel(state.interaction.activeTool)}</div>
-    </div>
+      ${importStatus ? `<div class="infoGroup compact"><div class="value mutedValue">${importStatus}</div></div>` : ""}
+    </section>
 
-    <div class="shortcutHelp" aria-label="Keyboard shortcuts">
-      <span>V Inspect</span>
-      <span>B Paint</span>
-      <span>E Erase</span>
-      <span>R Rect</span>
-      <span>L Line</span>
-      <span>F Fill</span>
-      <span>⌘/Ctrl+Z Undo</span>
-      <span>⌘/Ctrl+Shift+Z Redo</span>
-    </div>
+    <section class="panelSection" aria-label="Palette section">
+      <div class="sectionTitle">Palette</div>
+      <div class="hintText">Quick presets</div>
+      <div class="paletteGroup" role="group" aria-label="Tile palette quick select">
+        <div class="paletteList">
+          ${BRUSH_PALETTE_PRESETS.map((preset) => renderPaletteItem(preset, activePalettePresetId)).join("")}
+        </div>
+      </div>
+    </section>
+
+    <section class="panelSection" aria-label="Brush section">
+      <div class="sectionTitle">Brush</div>
+      <div class="hintText">Fine tuning</div>
+      <label class="fieldRow">
+        <span class="label">Mode</span>
+        <select data-brush-field="behavior">
+          ${renderOptions(BRUSH_BEHAVIOR_OPTIONS, brushDraft.behavior)}
+        </select>
+      </label>
+
+      <label class="fieldRow">
+        <span class="label">Size</span>
+        <select data-brush-field="size">
+          ${renderOptions(BRUSH_SIZE_OPTIONS, brushDraft.size)}
+        </select>
+      </label>
+
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Sprite</span>
+        <select data-brush-field="sprite">
+          ${renderOptions(BRUSH_SPRITE_OPTIONS, brushDraft.sprite)}
+        </select>
+      </label>
+
+      <div class="statusRow">
+        <span class="label">Current</span>
+        <span class="value">${summary}</span>
+      </div>
+    </section>
+
+    <section class="panelSection panelSectionMicro" aria-label="Shortcut section">
+      <div class="sectionTitle">Shortcuts</div>
+      <div class="shortcutHelp" aria-label="Keyboard shortcuts">
+        <span><kbd>V</kbd> Inspect</span>
+        <span><kbd>B</kbd> Paint</span>
+        <span><kbd>E</kbd> Erase</span>
+        <span><kbd>R</kbd> Rect</span>
+        <span><kbd>L</kbd> Line</span>
+        <span><kbd>F</kbd> Fill</span>
+        <span><kbd>Ctrl/⌘+Z</kbd> Undo</span>
+        <span><kbd>Ctrl/⌘+Shift+Z</kbd> Redo</span>
+      </div>
+    </section>
   `;
 }
 
