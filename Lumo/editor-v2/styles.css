@@ -40,7 +40,7 @@ body {
 .workspace {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: 220px minmax(0, 1fr) 280px;
 }
 
 .canvasPanel {
@@ -58,15 +58,43 @@ body {
   background: #0a0f1d;
 }
 
+.brushPanel,
 .inspectorPanel {
-  border-left: 1px solid #1d263c;
-  padding: 16px;
+  padding: 14px;
   background: rgba(8, 13, 24, 0.85);
   font-size: 13px;
 }
 
+.brushPanel {
+  border-right: 1px solid #1d263c;
+}
+
+.inspectorPanel {
+  border-left: 1px solid #1d263c;
+  padding: 16px;
+}
+
+.panelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.panelTitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #9eb2e5;
+  font-weight: 600;
+}
+
 .infoGroup {
   margin-bottom: 14px;
+}
+
+.infoGroup.compact {
+  margin-bottom: 0;
 }
 
 .label {
@@ -89,4 +117,26 @@ body {
   background: #1a253f;
   color: #b7ccff;
   border: 1px solid #2f3a56;
+}
+
+.badgeWarn {
+  color: #ffcc88;
+  border-color: #6c4f27;
+  background: #2f2316;
+}
+
+.fieldRow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.fieldRow select {
+  background: #101a2d;
+  color: #dbe5ff;
+  border: 1px solid #2a3652;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
 }

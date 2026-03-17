@@ -2,8 +2,9 @@ import { renderEditorFrame } from "../render/renderer.js";
 import { loadLevelDocument } from "../data/loadLevelDocument.js";
 import { getCanvasPointFromMouseEvent, getCellFromCanvasPoint } from "../render/viewport.js";
 import { renderInspector } from "../ui/inspectorPanel.js";
+import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
 
-export function createEditorApp({ canvas, inspector, store }) {
+export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   const ctx = canvas.getContext("2d");
 
   const resize = () => {
@@ -27,6 +28,7 @@ export function createEditorApp({ canvas, inspector, store }) {
   const draw = (state) => {
     renderEditorFrame(ctx, state);
     renderInspector(inspector, state);
+    renderBrushPanel(brushPanel, state);
   };
 
   const updateHoveredCell = (event) => {
@@ -94,6 +96,7 @@ export function createEditorApp({ canvas, inspector, store }) {
   };
 
   const unsubscribe = store.subscribe(draw);
+  const unbindBrushPanel = bindBrushPanel(brushPanel, store);
   window.addEventListener("resize", resize);
   canvas.addEventListener("mousemove", updateHoveredCell);
   canvas.addEventListener("mouseleave", clearHoveredCell);
@@ -105,6 +108,7 @@ export function createEditorApp({ canvas, inspector, store }) {
 
   return () => {
     unsubscribe();
+    unbindBrushPanel();
     window.removeEventListener("resize", resize);
     canvas.removeEventListener("mousemove", updateHoveredCell);
     canvas.removeEventListener("mouseleave", clearHoveredCell);
