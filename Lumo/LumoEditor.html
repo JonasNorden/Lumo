@@ -1576,6 +1576,7 @@ display:none;
       h: Math.max(1, (sourceFootprint && Number.isFinite(Number(sourceFootprint.h))) ? (Number(sourceFootprint.h)|0) : 1),
     };
     const behaviorProfileId = (catalogTile.behaviorProfileId != null) ? String(catalogTile.behaviorProfileId) : null;
+    const visualProfileId = (catalogTile.visualProfileId != null) ? String(catalogTile.visualProfileId) : null;
     return {
       ...catalogTile,
       catalogTile,
@@ -1583,6 +1584,7 @@ display:none;
         writeTileId,
         footprint,
         ...(behaviorProfileId ? { behaviorProfileId } : {}),
+        ...(visualProfileId ? { visualProfileId } : {}),
       },
     };
   }
