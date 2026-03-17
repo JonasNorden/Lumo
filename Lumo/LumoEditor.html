@@ -182,6 +182,13 @@
     }
     .pill b{ color:var(--text); font-weight:700; }
     .meta-row{ display:flex; gap:8px; flex-wrap:wrap; }
+    .brushMetaPill{
+      white-space:normal;
+      line-height:1.3;
+      align-items:flex-start;
+      max-width:100%;
+      flex:1 1 280px;
+    }
     .theme-row{ display:flex; gap:8px; align-items:center; }
     .theme-select{
       flex:1;
@@ -459,7 +466,7 @@
       grid-column:1 / 4;
       grid-row:3;
       display:grid;
-      grid-template-columns: 1.1fr 1.2fr 0.65fr;
+      grid-template-columns: 0.85fr 1.1fr 1.35fr;
       gap:12px;
       min-height:0;
     }
@@ -996,9 +1003,6 @@ display:none;
         <button class="btn" id="btnSnap">Snap</button>
         <button class="btn" id="btnDark">Darkness</button>
         <button class="btn" id="btnAggro">Aggro</button>
-        <button class="btn" id="btnErase">Erase</button>
-        <button class="btn" id="btnUndo" title="Ctrl+Z">Undo</button>
-        <button class="btn" id="btnRedo" title="Ctrl+Y / Ctrl+Shift+Z">Redo</button>
         <button class="btn" id="btnScanStart">Start Scan</button>
         <button class="btn danger" id="btnScanStop">Stop</button>
         <div class="scanCtl">
@@ -1014,13 +1018,6 @@ display:none;
         </div>
         <div class="pill" id="scanStatus">Scan: idle</div>
         <button class="btn" id="btnShortcuts" title="Shortcuts (Shift+/ or H)">?</button>
-        <div class="scanCtl">
-          <label for="exportProfile">Export</label>
-          <select class="scanInput" id="exportProfile">
-            <option value="full">Full editor package</option>
-            <option value="runtime">Runtime package</option>
-          </select>
-        </div>
         <button class="btn primary" id="btnExport">Export .js</button>
         <button class="btn" id="btnImport">Import .js</button>
       </div>
@@ -1050,8 +1047,7 @@ display:none;
 
       <div class="meta-row" id="metaRow">
         <div class="pill">Layer: <b id="metaLayer">BG</b></div>
-        <div class="pill">Brush: <b id="metaBrush">—</b></div>
-        <div class="pill">Mode: <b id="metaMode">DRAW</b></div>
+        <div class="pill brushMetaPill">Brush: <b id="metaBrush">—</b></div>
         <div class="pill entModePill" id="entModePill" style="display:none;">
           Entity Tool:
           <div class="entModeToggle" role="group" aria-label="Entity tool mode">
@@ -1359,7 +1355,6 @@ display:none;
   const scanSpeedEl = el("scanSpeed");
   const scanStartModeEl = el("scanStartMode");
   const scanStatusEl = el("scanStatus");
-  const exportProfileEl = el("exportProfile");
   const btnExport = el("btnExport");
   const btnImport = el("btnImport");
   const btnClear = el("btnClear");
@@ -1457,7 +1452,6 @@ display:none;
 
   const metaLayer = el("metaLayer");
   const metaBrush = el("metaBrush");
-  const metaMode = el("metaMode");
   const palette = el("palette");
   const searchEl = el("search");
   const themeSelectEl = el("themeSelect");
@@ -1891,12 +1885,6 @@ display:none;
       brush = `${brush} · ${tileMeta}`;
     }
     metaBrush.textContent = brush;
-    const baseMode = state.layer === "ENT"
-      ? state.entToolMode
-      : (state.eraseMode ? "ERASE" : "DRAW");
-    metaMode.textContent = (state.layer === "TILES")
-      ? `${baseMode} • Shift=Line, Ctrl+Shift=Rect`
-      : baseMode;
     const showEntTool = state.layer === "ENT";
     entModePill.style.display = showEntTool ? "inline-flex" : "none";
     btnEntModeDraw.classList.toggle("on", state.entToolMode === "DRAW");
@@ -6152,13 +6140,15 @@ if (useFill){
     state.aggroOn = !state.aggroOn;
     setBtnOn(btnAggro, state.aggroOn);
   });
-  btnErase.addEventListener("click", () => {
-    state.eraseMode = !state.eraseMode;
-    setBtnOn(btnErase, state.eraseMode);
-    updateMeta();
-  });
-  btnUndo.addEventListener("click", () => undoHistory());
-  btnRedo.addEventListener("click", () => redoHistory());
+  if (btnErase){
+    btnErase.addEventListener("click", () => {
+      state.eraseMode = !state.eraseMode;
+      setBtnOn(btnErase, state.eraseMode);
+      updateMeta();
+    });
+  }
+  if (btnUndo) btnUndo.addEventListener("click", () => undoHistory());
+  if (btnRedo) btnRedo.addEventListener("click", () => redoHistory());
 
   btnScanStart.addEventListener("click", () => {
     startEditorSoundScan();
@@ -6477,8 +6467,7 @@ if (useFill){
   }
 
   btnExport.addEventListener("click", () => {
-    const exportProfile = exportProfileEl ? exportProfileEl.value : "full";
-    const levelObj = makeLevelObject(exportProfile);
+    const levelObj = makeLevelObject("full");
     const exportWarnings = validateLevelForExport(levelObj);
     const name = (levelObj.meta.name||"level01").trim();
     const fileName = `${name}.js`;
@@ -6621,7 +6610,7 @@ const mainArr = obj.layers && obj.layers.main;
     setBtnOn(btnSnap,true);
     setBtnOn(btnDark,false);
     setBtnOn(btnAggro,true);
-    setBtnOn(btnErase,false);
+    if (btnErase) setBtnOn(btnErase,false);
     updateHistoryButtons();
     ensureScanSpeed();
     setScanStatus();
