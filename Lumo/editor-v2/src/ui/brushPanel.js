@@ -32,6 +32,7 @@ function getToolLabel(toolValue) {
 export function renderBrushPanel(panel, state) {
   const undoEnabled = canUndo(state.history);
   const redoEnabled = canRedo(state.history);
+  const canExport = Boolean(state.document.active);
   const brushDraft = state.brush.activeDraft;
   const summary = getBrushDraftSummary(brushDraft);
   const valid = isBrushDraftValid(brushDraft);
@@ -49,6 +50,10 @@ export function renderBrushPanel(panel, state) {
     <div class="historyActions" role="group" aria-label="History controls">
       <button class="toolButton" type="button" data-history-action="undo" ${undoEnabled ? "" : "disabled"}>Undo</button>
       <button class="toolButton" type="button" data-history-action="redo" ${redoEnabled ? "" : "disabled"}>Redo</button>
+    </div>
+
+    <div class="historyActions" role="group" aria-label="Document export controls">
+      <button class="toolButton" type="button" data-export-action="level-json" ${canExport ? "" : "disabled"}>Export</button>
     </div>
 
     <label class="fieldRow">
@@ -96,7 +101,7 @@ export function renderBrushPanel(panel, state) {
 }
 
 export function bindBrushPanel(panel, store, options = {}) {
-  const { onUndo, onRedo } = options;
+  const { onUndo, onRedo, onExport } = options;
   const onChange = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLSelectElement)) return;
@@ -121,6 +126,15 @@ export function bindBrushPanel(panel, store, options = {}) {
       }
       if (action === "redo") {
         onRedo?.();
+      }
+      return;
+    }
+
+    const exportButton = target.closest("[data-export-action]");
+    if (exportButton instanceof HTMLButtonElement) {
+      const action = exportButton.dataset.exportAction;
+      if (action === "level-json") {
+        onExport?.();
       }
       return;
     }
