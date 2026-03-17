@@ -19,6 +19,7 @@ export function createEditorState() {
       activeTool: "inspect",
       hoverCell: null,
       selectedCell: null,
+      dragPaint: null,
     },
     brush: {
       activeDraft: createDefaultBrushDraft(),
@@ -26,6 +27,7 @@ export function createEditorState() {
     history: {
       undoStack: [],
       redoStack: [],
+      activeBatch: null,
     },
     ui: {
       inspectorOpen: true,
