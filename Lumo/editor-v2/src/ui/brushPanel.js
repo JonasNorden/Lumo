@@ -198,32 +198,82 @@ export function renderBrushPanel(panel, state) {
 
 export function bindBrushPanel(panel, store, options = {}) {
   const { onUndo, onRedo, onExport, onImport, onNew } = options;
+  const HOVER_OPEN_DELAY_MS = 110;
+  const HOVER_COLLAPSE_DELAY_MS = 120;
+  const HOVER_COLLAPSE_LOCK_MS = 140;
+
   const hoverCollapseTimers = new WeakMap();
   const hoveredSections = new Set();
+  let hoverOpenTimer = null;
+  let hoverOpenCandidate = null;
+  let activeHoveredSection = null;
+  let hoverLockUntil = 0;
+
+  const clearPendingHoverOpen = () => {
+    if (hoverOpenTimer) {
+      window.clearTimeout(hoverOpenTimer);
+      hoverOpenTimer = null;
+    }
+    hoverOpenCandidate = null;
+  };
+
+  const clearHoverCollapseTimer = (sectionElement) => {
+    const pendingTimer = hoverCollapseTimers.get(sectionElement);
+    if (!pendingTimer) return;
+
+    window.clearTimeout(pendingTimer);
+    hoverCollapseTimers.delete(sectionElement);
+  };
+
+  const collapseHoveredSection = (sectionElement) => {
+    if (!(sectionElement instanceof HTMLElement)) return;
+
+    clearHoverCollapseTimer(sectionElement);
+    sectionElement.classList.remove("isHoverExpanded");
+    hoveredSections.delete(sectionElement);
+    if (activeHoveredSection === sectionElement) {
+      activeHoveredSection = null;
+    }
+  };
 
   const openOnHover = (sectionElement) => {
     if (!(sectionElement instanceof HTMLElement)) return;
     if (!sectionElement.classList.contains("isCollapsed")) return;
+    if (Date.now() < hoverLockUntil) return;
 
-    const pendingTimer = hoverCollapseTimers.get(sectionElement);
-    if (pendingTimer) {
-      window.clearTimeout(pendingTimer);
-      hoverCollapseTimers.delete(sectionElement);
-    }
+    clearHoverCollapseTimer(sectionElement);
+    clearPendingHoverOpen();
 
-    sectionElement.classList.add("isHoverExpanded");
-    hoveredSections.add(sectionElement);
+    hoverOpenCandidate = sectionElement;
+    hoverOpenTimer = window.setTimeout(() => {
+      hoverOpenTimer = null;
+      if (hoverOpenCandidate !== sectionElement) return;
+      if (Date.now() < hoverLockUntil) return;
+
+      if (activeHoveredSection && activeHoveredSection !== sectionElement) {
+        collapseHoveredSection(activeHoveredSection);
+      }
+
+      sectionElement.classList.add("isHoverExpanded");
+      hoveredSections.add(sectionElement);
+      activeHoveredSection = sectionElement;
+      hoverOpenCandidate = null;
+    }, HOVER_OPEN_DELAY_MS);
   };
 
   const closeOnHoverExit = (sectionElement) => {
     if (!(sectionElement instanceof HTMLElement)) return;
     if (!sectionElement.classList.contains("isHoverExpanded")) return;
 
+    if (hoverOpenCandidate === sectionElement) {
+      clearPendingHoverOpen();
+    }
+
+    clearHoverCollapseTimer(sectionElement);
     const timer = window.setTimeout(() => {
-      sectionElement.classList.remove("isHoverExpanded");
-      hoverCollapseTimers.delete(sectionElement);
-      hoveredSections.delete(sectionElement);
-    }, 90);
+      collapseHoveredSection(sectionElement);
+      hoverLockUntil = Date.now() + HOVER_COLLAPSE_LOCK_MS;
+    }, HOVER_COLLAPSE_DELAY_MS);
 
     hoverCollapseTimers.set(sectionElement, timer);
   };
@@ -363,12 +413,9 @@ export function bindBrushPanel(panel, store, options = {}) {
     panel.removeEventListener("mouseout", onMouseOut);
 
     hoveredSections.forEach((sectionElement) => {
-      const timer = hoverCollapseTimers.get(sectionElement);
-      if (timer) {
-        window.clearTimeout(timer);
-      }
-      sectionElement.classList.remove("isHoverExpanded");
+      collapseHoveredSection(sectionElement);
     });
     hoveredSections.clear();
+    clearPendingHoverOpen();
   };
 }
