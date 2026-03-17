@@ -8,6 +8,7 @@ import {
   panViewportByDelta,
   zoomViewportAroundPoint,
 } from "../render/viewport.js";
+import { getWorldPointFromMinimapPoint, renderMinimap } from "../render/minimap.js";
 import { renderInspector, bindInspectorPanel } from "../ui/inspectorPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
@@ -38,10 +39,12 @@ function getRectBounds(startCell, endCell) {
   };
 }
 
-export function createEditorApp({ canvas, inspector, brushPanel, store }) {
+export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, store }) {
   const ctx = canvas.getContext("2d");
+  const minimapCtx = minimapCanvas.getContext("2d");
   const PAN_CURSOR = "grab";
   const PAN_ACTIVE_CURSOR = "grabbing";
+  let minimapLayout = null;
   const interactionState = {
     panDrag: null,
     suppressNextClick: false,
@@ -67,6 +70,11 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     canvas.width = Math.max(1, Math.floor(rect.width * dpr));
     canvas.height = Math.max(1, Math.floor(rect.height * dpr));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const minimapRect = minimapCanvas.getBoundingClientRect();
+    minimapCanvas.width = Math.max(1, Math.floor(minimapRect.width * dpr));
+    minimapCanvas.height = Math.max(1, Math.floor(minimapRect.height * dpr));
+    minimapCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const state = store.getState();
     if (!state.document.active) return;
@@ -195,8 +203,26 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   };
   const draw = (state) => {
     renderEditorFrame(ctx, state);
+    minimapLayout = renderMinimap(minimapCtx, state);
     renderInspector(inspector, state);
     renderBrushPanel(brushPanel, state);
+  };
+
+  const handleMinimapClick = (event) => {
+    const state = store.getState();
+    const doc = state.document.active;
+    if (!doc || !minimapLayout) return;
+
+    const point = getCanvasPointFromMouseEvent(minimapCanvas, event);
+    const worldPoint = getWorldPointFromMinimapPoint(minimapLayout, point.x, point.y);
+    if (!worldPoint) return;
+
+    const canvasRect = canvas.getBoundingClientRect();
+
+    store.setState((draft) => {
+      draft.viewport.offsetX = canvasRect.width * 0.5 - worldPoint.x * draft.viewport.zoom;
+      draft.viewport.offsetY = canvasRect.height * 0.5 - worldPoint.y * draft.viewport.zoom;
+    });
   };
 
   const updateHoveredCell = (event) => {
@@ -701,6 +727,7 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
   canvas.addEventListener("wheel", handleCanvasWheel, { passive: false });
   window.addEventListener("mouseup", stopDragPaint);
   canvas.addEventListener("click", handleCanvasClick);
+  minimapCanvas.addEventListener("click", handleMinimapClick);
   window.addEventListener("keydown", handleGlobalKeyDown);
   window.addEventListener("keyup", handleGlobalKeyUp);
 
@@ -719,6 +746,7 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     canvas.removeEventListener("wheel", handleCanvasWheel);
     window.removeEventListener("mouseup", stopDragPaint);
     canvas.removeEventListener("click", handleCanvasClick);
+    minimapCanvas.removeEventListener("click", handleMinimapClick);
     window.removeEventListener("keydown", handleGlobalKeyDown);
     window.removeEventListener("keyup", handleGlobalKeyUp);
   };
