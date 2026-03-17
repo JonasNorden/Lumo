@@ -4,6 +4,7 @@ import { getCanvasPointFromMouseEvent, getCellFromCanvasPoint } from "../render/
 import { renderInspector } from "../ui/inspectorPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
+import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
 import { resolveTileFromBrushDraft, paintSingleTile } from "../domain/tiles/paintTile.js";
 import { resolveBrushSize, getBrushCells } from "../domain/tiles/brushSize.js";
 import { eraseSingleTile } from "../domain/tiles/eraseTile.js";
@@ -400,6 +401,49 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     triggerLevelDocumentDownload(state.document.active);
   };
 
+  const handleImport = () => {
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = ".json,application/json";
+
+    fileInput.addEventListener(
+      "change",
+      async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+
+        try {
+          const { document: importedDocument, fileName } = await importLevelDocumentFromFile(file);
+
+          store.setState((draft) => {
+            draft.document.active = importedDocument;
+            draft.document.status = "ready";
+            draft.document.error = null;
+            draft.history.undoStack = [];
+            draft.history.redoStack = [];
+            draft.history.activeBatch = null;
+            draft.interaction.dragPaint = null;
+            draft.interaction.rectDrag = null;
+            draft.interaction.lineDrag = null;
+            draft.interaction.selectedCell = null;
+            draft.interaction.hoverCell = null;
+            draft.ui.importStatus = `Loaded ${fileName}`;
+          });
+
+          resize();
+          draw(store.getState());
+        } catch {
+          store.setState((draft) => {
+            draft.ui.importStatus = "Import failed";
+          });
+        }
+      },
+      { once: true },
+    );
+
+    fileInput.click();
+  };
+
   const setActiveTool = (tool) => {
     store.setState((draft) => {
       draft.interaction.activeTool = tool;
@@ -461,6 +505,7 @@ export function createEditorApp({ canvas, inspector, brushPanel, store }) {
     onUndo: handleUndo,
     onRedo: handleRedo,
     onExport: handleExport,
+    onImport: handleImport,
   });
   window.addEventListener("resize", resize);
   canvas.addEventListener("mousemove", handleCanvasMouseMove);

@@ -33,6 +33,7 @@ export function createEditorState() {
     },
     ui: {
       inspectorOpen: true,
+      importStatus: null,
     },
   };
 }
