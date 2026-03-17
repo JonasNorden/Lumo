@@ -188,3 +188,48 @@ body {
   font-size: 11px;
   color: #7d8cac;
 }
+
+.paletteGroup {
+  margin-bottom: 10px;
+}
+
+.paletteList {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+  margin-bottom: 8px;
+}
+
+.paletteItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: #101a2d;
+  color: #b8c9eb;
+  border: 1px solid #2a3652;
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.paletteItem.isActive {
+  color: #e2ecff;
+  border-color: #4f76d1;
+  background: #1a2c55;
+}
+
+.paletteSwatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--palette-color, #637aa8);
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  flex: 0 0 auto;
+}
+
+.paletteLabel {
+  line-height: 1;
+}
