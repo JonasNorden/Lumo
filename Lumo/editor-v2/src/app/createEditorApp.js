@@ -30,6 +30,53 @@ import {
 } from "../domain/tiles/history.js";
 import { getTileIndex } from "../domain/level/levelDocument.js";
 import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
+import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
+
+
+function getInspectedCell(state) {
+  return state.interaction.selectedCell || state.interaction.hoverCell;
+}
+
+function getTileForCell(active, cell) {
+  if (!active || !cell) return null;
+
+  const width = active.dimensions.width;
+  const tileValue = active.tiles.base[cell.y * width + cell.x];
+  const tileDefinition = TILE_DEFINITIONS[tileValue];
+
+  return {
+    value: tileValue,
+    label: tileDefinition?.label || "Unknown",
+  };
+}
+
+function renderCellHud(cellHud, state) {
+  const active = state.document.active;
+  if (!active) {
+    cellHud.textContent = "";
+    cellHud.classList.remove("isVisible");
+    return;
+  }
+
+  const inspectedCell = getInspectedCell(state);
+  if (!inspectedCell) {
+    cellHud.textContent = "";
+    cellHud.classList.remove("isVisible");
+    return;
+  }
+
+  const tileInfo = getTileForCell(active, inspectedCell);
+  const sourceLabel = state.interaction.selectedCell ? "Selected" : "Hover";
+  const tileLabel = tileInfo ? `${tileInfo.label} (${tileInfo.value})` : "Unknown";
+
+  cellHud.innerHTML = `
+    <span class="cellHudBadge">${sourceLabel}</span>
+    <span>X ${inspectedCell.x}</span>
+    <span>Y ${inspectedCell.y}</span>
+    <span>Tile ${tileLabel}</span>
+  `;
+  cellHud.classList.add("isVisible");
+}
 
 function getRectBounds(startCell, endCell) {
   return {
@@ -40,7 +87,7 @@ function getRectBounds(startCell, endCell) {
   };
 }
 
-export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, store }) {
+export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, cellHud, store }) {
   const ctx = canvas.getContext("2d");
   const minimapCtx = minimapCanvas.getContext("2d");
   const PAN_CURSOR = "grab";
@@ -345,6 +392,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     minimapLayout = renderMinimap(minimapCtx, state);
     renderInspector(inspector, state);
     renderBrushPanel(brushPanel, state);
+    renderCellHud(cellHud, state);
   };
 
   const handleMinimapClick = (event) => {

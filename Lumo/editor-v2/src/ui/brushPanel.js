@@ -224,12 +224,12 @@ export function renderBrushPanel(panel, state) {
   const activePalettePresetId = getActivePalettePresetId(brushDraft);
   const panelSections = {
     tools: true,
-    file: false,
     palette: true,
     brush: true,
-    workspace: true,
-    backgrounds: true,
     entities: true,
+    backgrounds: true,
+    workspace: true,
+    file: false,
     shortcuts: false,
     ...state.ui.panelSections,
   };
@@ -250,30 +250,6 @@ export function renderBrushPanel(panel, state) {
         </div>
       `,
     )}
-
-    ${renderSection(
-      "file",
-      "File",
-      panelSections.file,
-      `
-        <div class="historyActions" role="group" aria-label="History controls">
-          <button class="toolButton isSecondary" type="button" data-history-action="undo" ${undoEnabled ? "" : "disabled"}>Undo</button>
-          <button class="toolButton isSecondary" type="button" data-history-action="redo" ${redoEnabled ? "" : "disabled"}>Redo</button>
-        </div>
-
-        <div class="historyActions historyActionsSingle" role="group" aria-label="Document actions">
-          <button class="toolButton isSecondary" type="button" data-document-action="new-level">New</button>
-        </div>
-
-        <div class="historyActions" role="group" aria-label="Document export controls">
-          <button class="toolButton isSecondary" type="button" data-export-action="level-json" ${canExport ? "" : "disabled"}>Export</button>
-          <button class="toolButton isSecondary" type="button" data-import-action="level-json">Import</button>
-        </div>
-
-        ${importStatus ? `<div class="infoGroup compact"><div class="value mutedValue">${importStatus}</div></div>` : ""}
-      `,
-    )}
-
     ${renderSection(
       "palette",
       "Palette",
@@ -322,15 +298,39 @@ export function renderBrushPanel(panel, state) {
       `,
     )}
 
-    ${state.document.active ? renderSection("workspace", "Workspace", panelSections.workspace, renderWorkspaceSettings(state)) : ""}
+    ${state.document.active
+      ? renderSection("entities", "Entities", panelSections.entities, renderEntitiesSettings(state.document.active, state))
+      : ""}
 
     ${state.document.active
       ? renderSection("backgrounds", "Backgrounds", panelSections.backgrounds, renderBackgroundSettings(state.document.active))
       : ""}
 
-    ${state.document.active
-      ? renderSection("entities", "Entities", panelSections.entities, renderEntitiesSettings(state.document.active, state))
-      : ""}
+    ${state.document.active ? renderSection("workspace", "Workspace", panelSections.workspace, renderWorkspaceSettings(state)) : ""}
+
+
+    ${renderSection(
+      "file",
+      "File",
+      panelSections.file,
+      `
+        <div class="historyActions" role="group" aria-label="History controls">
+          <button class="toolButton isSecondary" type="button" data-history-action="undo" ${undoEnabled ? "" : "disabled"}>Undo</button>
+          <button class="toolButton isSecondary" type="button" data-history-action="redo" ${redoEnabled ? "" : "disabled"}>Redo</button>
+        </div>
+
+        <div class="historyActions historyActionsSingle" role="group" aria-label="Document actions">
+          <button class="toolButton isSecondary" type="button" data-document-action="new-level">New</button>
+        </div>
+
+        <div class="historyActions" role="group" aria-label="Document export controls">
+          <button class="toolButton isSecondary" type="button" data-export-action="level-json" ${canExport ? "" : "disabled"}>Export</button>
+          <button class="toolButton isSecondary" type="button" data-import-action="level-json">Import</button>
+        </div>
+
+        ${importStatus ? `<div class="infoGroup compact"><div class="value mutedValue">${importStatus}</div></div>` : ""}
+      `,
+    )}
 
     ${renderSection(
       "shortcuts",
