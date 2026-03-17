@@ -36,6 +36,7 @@ export function renderBrushPanel(panel, state) {
   const brushDraft = state.brush.activeDraft;
   const summary = getBrushDraftSummary(brushDraft);
   const valid = isBrushDraftValid(brushDraft);
+  const importStatus = state.ui.importStatus;
 
   panel.innerHTML = `
     <div class="panelHeader">
@@ -54,7 +55,10 @@ export function renderBrushPanel(panel, state) {
 
     <div class="historyActions" role="group" aria-label="Document export controls">
       <button class="toolButton" type="button" data-export-action="level-json" ${canExport ? "" : "disabled"}>Export</button>
+      <button class="toolButton" type="button" data-import-action="level-json">Import</button>
     </div>
+
+    ${importStatus ? `<div class="infoGroup compact"><div class="value">${importStatus}</div></div>` : ""}
 
     <label class="fieldRow">
       <span class="label">Behavior</span>
@@ -101,7 +105,7 @@ export function renderBrushPanel(panel, state) {
 }
 
 export function bindBrushPanel(panel, store, options = {}) {
-  const { onUndo, onRedo, onExport } = options;
+  const { onUndo, onRedo, onExport, onImport } = options;
   const onChange = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLSelectElement)) return;
@@ -135,6 +139,15 @@ export function bindBrushPanel(panel, store, options = {}) {
       const action = exportButton.dataset.exportAction;
       if (action === "level-json") {
         onExport?.();
+      }
+      return;
+    }
+
+    const importButton = target.closest("[data-import-action]");
+    if (importButton instanceof HTMLButtonElement) {
+      const action = importButton.dataset.importAction;
+      if (action === "level-json") {
+        onImport?.();
       }
       return;
     }
