@@ -200,6 +200,32 @@ body {
   font-size: 12px;
 }
 
+.workspacePresets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.workspacePreset {
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid #2a3652;
+  background: var(--workspace-preset-color, #0a0f1d);
+  cursor: pointer;
+  transition: transform 80ms ease, border-color 120ms ease;
+}
+
+.workspacePreset:hover {
+  transform: translateY(-1px);
+  border-color: #4b628f;
+}
+
+.workspacePreset.isActive {
+  border-color: #7aa2ff;
+  box-shadow: 0 0 0 1px rgba(122, 162, 255, 0.35) inset;
+}
+
 .shortcutHelp {
   margin-top: 12px;
   padding-top: 10px;

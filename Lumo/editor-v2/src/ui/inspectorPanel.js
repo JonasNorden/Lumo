@@ -5,6 +5,7 @@ const MAX_LEVEL_SIZE = 256;
 const DEFAULT_LEVEL_NAME = "Untitled Level";
 const DEFAULT_LEVEL_ID = "untitled-level";
 const GRID_OPACITY_DRAGGING_ATTR = "gridOpacityDragging";
+const WORKSPACE_BACKGROUND_PRESETS = ["#0a0f1d", "#111827", "#1a2336", "#141b2a"];
 
 function clampLevelSize(value) {
   return Math.max(MIN_LEVEL_SIZE, Math.min(MAX_LEVEL_SIZE, value));
@@ -107,6 +108,40 @@ function renderGridSettings(state) {
         data-grid-field="color"
       />
     </label>
+  `;
+}
+
+function renderWorkspaceSettings(state) {
+  const { workspaceBackground } = state.ui;
+
+  return `
+    <div class="infoGroup">
+      <div class="label">Workspace</div>
+      <div class="value">Canvas</div>
+    </div>
+
+    <label class="fieldRow">
+      <span class="label">Background color</span>
+      <input
+        type="color"
+        value="${workspaceBackground}"
+        data-workspace-field="background"
+      />
+    </label>
+
+    <div class="workspacePresets" role="group" aria-label="Workspace background presets">
+      ${WORKSPACE_BACKGROUND_PRESETS.map(
+        (preset) => `
+          <button
+            type="button"
+            class="workspacePreset${workspaceBackground === preset ? " isActive" : ""}"
+            data-workspace-preset="${preset}"
+            title="Set workspace background to ${preset}"
+            style="--workspace-preset-color: ${preset};"
+          ></button>
+        `,
+      ).join("")}
+    </div>
   `;
 }
 
@@ -241,12 +276,14 @@ export function renderInspector(panel, state) {
 
     ${renderGridSettings(state)}
 
+    ${renderWorkspaceSettings(state)}
+
     ${renderCellInfo(active, state)}
   `);
 }
 
 export function bindInspectorPanel(panel, store, options = {}) {
-  const { onResize, onMetaUpdate, onGridUpdate } = options;
+  const { onResize, onMetaUpdate, onGridUpdate, onWorkspaceUpdate } = options;
 
   const sanitizeMetaValue = (field, value) => {
     const trimmed = value.trim();
@@ -304,12 +341,25 @@ export function bindInspectorPanel(panel, store, options = {}) {
     return true;
   };
 
+  const handleWorkspaceChange = (target) => {
+    const workspaceField = target.dataset.workspaceField;
+    if (workspaceField !== "background") return false;
+
+    const nextColor = target.value;
+    const currentColor = store.getState().ui.workspaceBackground;
+    if (currentColor === nextColor) return true;
+
+    onWorkspaceUpdate?.("background", nextColor);
+    return true;
+  };
+
   const onChange = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
 
     if (handleMetaChange(target)) return;
     if (handleGridChange(target)) return;
+    if (handleWorkspaceChange(target)) return;
 
     const dimensionField = target.dataset.dimensionField;
     if (dimensionField !== "width" && dimensionField !== "height") return;
@@ -336,7 +386,18 @@ export function bindInspectorPanel(panel, store, options = {}) {
     if (!(target instanceof HTMLInputElement)) return;
 
     if (handleMetaChange(target)) return;
-    handleGridChange(target);
+    if (handleGridChange(target)) return;
+    handleWorkspaceChange(target);
+  };
+
+  const onClick = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) return;
+
+    const preset = target.dataset.workspacePreset;
+    if (!preset) return;
+
+    onWorkspaceUpdate?.("background", preset);
   };
 
   const onPointerDown = (event) => {
@@ -356,6 +417,7 @@ export function bindInspectorPanel(panel, store, options = {}) {
 
   panel.addEventListener("change", onChange);
   panel.addEventListener("input", onInput);
+  panel.addEventListener("click", onClick);
   panel.addEventListener("pointerdown", onPointerDown);
   window.addEventListener("pointerup", stopOpacityDrag);
   window.addEventListener("pointercancel", stopOpacityDrag);
@@ -363,6 +425,7 @@ export function bindInspectorPanel(panel, store, options = {}) {
   return () => {
     panel.removeEventListener("change", onChange);
     panel.removeEventListener("input", onInput);
+    panel.removeEventListener("click", onClick);
     panel.removeEventListener("pointerdown", onPointerDown);
     window.removeEventListener("pointerup", stopOpacityDrag);
     window.removeEventListener("pointercancel", stopOpacityDrag);

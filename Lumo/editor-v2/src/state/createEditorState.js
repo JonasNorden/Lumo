@@ -38,6 +38,7 @@ export function createEditorState() {
     ui: {
       inspectorOpen: true,
       importStatus: null,
+      workspaceBackground: "#0a0f1d",
       panelSections: {
         tools: true,
         file: false,

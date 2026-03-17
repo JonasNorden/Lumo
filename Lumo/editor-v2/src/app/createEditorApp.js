@@ -232,6 +232,13 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     });
   };
 
+  const updateWorkspaceSettings = (field, value) => {
+    store.setState((draft) => {
+      if (field !== "background" || typeof value !== "string") return;
+      draft.ui.workspaceBackground = value;
+    });
+  };
+
   const draw = (state) => {
     renderEditorFrame(ctx, state);
     minimapLayout = renderMinimap(minimapCtx, state);
@@ -745,6 +752,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     onResize: resizeDocument,
     onMetaUpdate: updateDocumentMeta,
     onGridUpdate: updateGridSettings,
+    onWorkspaceUpdate: updateWorkspaceSettings,
   });
   const unbindBrushPanel = bindBrushPanel(brushPanel, store, {
     onUndo: handleUndo,
