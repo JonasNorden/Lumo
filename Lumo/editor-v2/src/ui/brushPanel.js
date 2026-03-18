@@ -11,6 +11,7 @@ import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
 import { DECOR_PRESETS } from "../domain/decor/decorPresets.js";
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
 import { getPrimarySelectedEntityIndex, getSelectedEntityIndices } from "../domain/entities/selection.js";
+import { getPrimarySelectedDecorIndex, getSelectedDecorIndices } from "../domain/decor/selection.js";
 
 const WORKSPACE_BACKGROUND_PRESETS = ["#0a0f1d", "#111827", "#1a2336", "#141b2a"];
 
@@ -54,6 +55,10 @@ function renderPaletteItem(preset, activePresetId) {
 
 function getToolLabel(toolValue) {
   return TOOL_OPTIONS.find((option) => option.value === toolValue)?.label ?? "Inspect";
+}
+
+function getCanvasSelectionModeLabel(mode) {
+  return mode === "decor" ? "Decor" : "Entities";
 }
 
 function renderWorkspaceSettings(state) {
@@ -211,8 +216,10 @@ function renderEntityParamsEditor(selected, selectedEntityIndex) {
 
 function renderDecorSettings(active, state) {
   const decorItems = active.decor || [];
-  const selectedDecorIndex = state.interaction.selectedDecorIndex;
+  const selectedDecorIndices = getSelectedDecorIndices(state.interaction);
+  const selectedDecorIndex = getPrimarySelectedDecorIndex(state.interaction);
   const selected = Number.isInteger(selectedDecorIndex) ? decorItems[selectedDecorIndex] : null;
+  const multiSelected = selectedDecorIndices.length > 1;
   const activePresetId = state.interaction.activeDecorPresetId;
   const activePreset = DECOR_PRESETS.find((preset) => preset.id === activePresetId) || null;
   const scatterSettings = state.interaction.decorScatterSettings || {};
@@ -311,7 +318,7 @@ function renderDecorSettings(active, state) {
           (decor, index) => `
             <button
               type="button"
-              class="entityListItem ${selectedDecorIndex === index ? "isSelected" : ""}"
+              class="entityListItem ${selectedDecorIndices.includes(index) ? "isSelected" : ""}"
               data-decor-action="select"
               data-decor-index="${index}"
             >
@@ -323,7 +330,25 @@ function renderDecorSettings(active, state) {
         .join("")}
     </div>
 
-    ${selected
+    ${multiSelected
+      ? `
+      <div class="entityEditor">
+        <div class="infoGroup compact">
+          <div class="label">Selection</div>
+          <div class="value">${selectedDecorIndices.length} decor items</div>
+        </div>
+
+        <div class="mutedValue">Drag in canvas moves the selected decor group together.</div>
+
+        <div class="entityActionRow">
+          <button type="button" class="toolButton isSecondary" data-decor-action="duplicate" data-decor-index="${selectedDecorIndex ?? 0}">Duplicate selected</button>
+          <button type="button" class="toolButton isSecondary" data-decor-action="delete" data-decor-index="${selectedDecorIndex ?? 0}">Delete selected</button>
+        </div>
+
+        <div class="mutedValue entityShortcutHint">Shift-click or box select adds/removes decor.</div>
+      </div>
+      `
+      : selected
       ? `
       <div class="entityEditor">
         <label class="fieldRow">
@@ -552,6 +577,29 @@ export function renderBrushPanel(panel, state) {
         <div class="statusRow">
           <span class="label">Active</span>
           <span class="value">${getToolLabel(state.interaction.activeTool)}</span>
+        </div>
+
+        <div class="hintText">Canvas selection target</div>
+        <div class="toolSwitch" role="group" aria-label="Canvas selection target">
+          <button
+            class="toolButton ${state.interaction.canvasSelectionMode === "entity" ? "isActive" : ""}"
+            type="button"
+            data-selection-mode="entity"
+          >
+            Entities
+          </button>
+          <button
+            class="toolButton ${state.interaction.canvasSelectionMode === "decor" ? "isActive" : ""}"
+            type="button"
+            data-selection-mode="decor"
+          >
+            Decor
+          </button>
+        </div>
+
+        <div class="statusRow">
+          <span class="label">Box select</span>
+          <span class="value">${getCanvasSelectionModeLabel(state.interaction.canvasSelectionMode)}</span>
         </div>
       `,
     )}
@@ -886,7 +934,7 @@ export function bindBrushPanel(panel, store, options = {}) {
       if (action === "select") {
         const index = Number.parseInt(decorActionButton.dataset.decorIndex || "", 10);
         if (Number.isInteger(index) && index >= 0) {
-          onDecorUpdate?.(index, "select", null);
+          onDecorUpdate?.(index, "select", { toggle: event.shiftKey });
         }
       }
       if (action === "duplicate" || action === "delete") {
@@ -935,6 +983,29 @@ export function bindBrushPanel(panel, store, options = {}) {
         draft.brush.activeDraft.behavior = preset.brush.behavior;
         draft.brush.activeDraft.size = preset.brush.size;
         draft.brush.activeDraft.sprite = preset.brush.sprite;
+      });
+      return;
+    }
+
+    const selectionModeButton = target.closest("[data-selection-mode]");
+    if (selectionModeButton instanceof HTMLButtonElement) {
+      const nextMode = selectionModeButton.dataset.selectionMode;
+      if (nextMode !== "entity" && nextMode !== "decor") return;
+
+      store.setState((draft) => {
+        draft.interaction.canvasSelectionMode = nextMode;
+        draft.interaction.selectedCell = null;
+        if (nextMode === "decor") {
+          draft.interaction.selectedEntityIndices = [];
+          draft.interaction.selectedEntityIndex = null;
+          draft.interaction.hoveredEntityIndex = null;
+          draft.interaction.entityDrag = null;
+        } else {
+          draft.interaction.selectedDecorIndices = [];
+          draft.interaction.selectedDecorIndex = null;
+          draft.interaction.hoveredDecorIndex = null;
+          draft.interaction.decorDrag = null;
+        }
       });
       return;
     }

@@ -23,6 +23,10 @@ export function createDecorEditEntry(mode, payload) {
   };
 }
 
+function cloneDecorEntry(decor) {
+  return decor ? { ...decor } : decor;
+}
+
 function createBatchEntry(label = "tile-drag") {
   return {
     type: "batch",
@@ -111,7 +115,13 @@ function applyUndoEntry(doc, entry) {
     }
 
     if (entry.mode === "delete") {
-      doc.decor.splice(entry.index, 0, entry.decor);
+      doc.decor.splice(entry.index, 0, cloneDecorEntry(entry.decor));
+      return true;
+    }
+
+    if (entry.mode === "update") {
+      if (entry.index < 0 || entry.index >= doc.decor.length) return false;
+      doc.decor.splice(entry.index, 1, cloneDecorEntry(entry.previousDecor));
       return true;
     }
 
@@ -138,12 +148,18 @@ function applyRedoEntry(doc, entry) {
     }
 
     if (entry.mode === "create") {
-      doc.decor.splice(entry.index, 0, entry.decor);
+      doc.decor.splice(entry.index, 0, cloneDecorEntry(entry.decor));
       return true;
     }
 
     if (entry.mode === "delete") {
       doc.decor.splice(entry.index, 1);
+      return true;
+    }
+
+    if (entry.mode === "update") {
+      if (entry.index < 0 || entry.index >= doc.decor.length) return false;
+      doc.decor.splice(entry.index, 1, cloneDecorEntry(entry.nextDecor));
       return true;
     }
 
@@ -157,17 +173,17 @@ function applyRedoEntry(doc, entry) {
 export function undoTileEdit(doc, history) {
   const entry = history.undoStack.pop();
   const changed = applyUndoEntry(doc, entry);
-  if (!changed) return false;
+  if (!changed) return null;
 
   history.redoStack.push(entry);
-  return true;
+  return entry;
 }
 
 export function redoTileEdit(doc, history) {
   const entry = history.redoStack.pop();
   const changed = applyRedoEntry(doc, entry);
-  if (!changed) return false;
+  if (!changed) return null;
 
   history.undoStack.push(entry);
-  return true;
+  return entry;
 }

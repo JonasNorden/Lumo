@@ -20,6 +20,7 @@ export function createEditorState() {
     },
     interaction: {
       activeTool: "inspect",
+      canvasSelectionMode: "entity",
       activeEntityPresetId: null,
       activeDecorPresetId: null,
       decorScatterMode: false,
@@ -34,6 +35,7 @@ export function createEditorState() {
       hoveredDecorIndex: null,
       selectedEntityIndices: [],
       selectedEntityIndex: null,
+      selectedDecorIndices: [],
       selectedDecorIndex: null,
       dragPaint: null,
       rectDrag: null,

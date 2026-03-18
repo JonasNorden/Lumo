@@ -1,4 +1,5 @@
 import { getDecorHitRadius, getDecorVisual } from '../../domain/decor/decorVisuals.js';
+import { getSelectedDecorIndices, isDecorSelected } from "../../domain/decor/selection.js";
 
 function getDecorScreenCenter(decor, tileSize, viewport) {
   return {
@@ -204,15 +205,17 @@ export function findDecorAtCanvasPoint(doc, viewport, pointX, pointY, radius = 2
 export function renderDecor(ctx, doc, viewport, interaction) {
   const decorItems = doc.decor || [];
   const tileSize = doc.dimensions.tileSize;
+  const draggedSelection = new Set(interaction.decorDrag?.active ? getSelectedDecorIndices(interaction) : []);
 
   for (let i = 0; i < decorItems.length; i += 1) {
     const decor = decorItems[i];
     if (!decor?.visible) continue;
-    if (interaction.decorDrag?.active && interaction.decorDrag.index === i) continue;
+    if (draggedSelection.has(i)) continue;
 
     drawDecorMarker(ctx, decor, viewport, tileSize, {
-      selected: interaction.selectedDecorIndex === i,
+      selected: isDecorSelected(interaction, i),
       hovered: interaction.hoveredDecorIndex === i,
+      alpha: draggedSelection.has(i) ? 0.34 : 1,
     });
   }
 }
@@ -221,20 +224,24 @@ export function renderDecorDragPreview(ctx, doc, viewport, interaction) {
   const decorDrag = interaction.decorDrag;
   if (!decorDrag?.active) return;
 
-  const decor = doc.decor?.[decorDrag.index];
-  if (!decor) return;
+  const delta = decorDrag.previewDelta || { x: 0, y: 0 };
 
-  const previewDecor = {
-    ...decor,
-    x: decorDrag.previewCell?.x ?? decor.x,
-    y: decorDrag.previewCell?.y ?? decor.y,
-  };
+  for (const origin of decorDrag.originPositions || []) {
+    const decor = doc.decor?.[origin.index];
+    if (!decor?.visible) continue;
 
-  drawDecorMarker(ctx, previewDecor, viewport, doc.dimensions.tileSize, {
-    selected: true,
-    preview: true,
-    alpha: 0.92,
-  });
+    const previewDecor = {
+      ...decor,
+      x: origin.x + delta.x,
+      y: origin.y + delta.y,
+    };
+
+    drawDecorMarker(ctx, previewDecor, viewport, doc.dimensions.tileSize, {
+      selected: true,
+      preview: true,
+      alpha: 0.92,
+    });
+  }
 }
 
 export function renderDecorPlacementPreview(ctx, doc, viewport, interaction, activePreset) {
