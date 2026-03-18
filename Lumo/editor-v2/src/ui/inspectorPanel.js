@@ -1,3 +1,5 @@
+import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
+
 const MIN_LEVEL_SIZE = 8;
 const MAX_LEVEL_SIZE = 256;
 const DEFAULT_LEVEL_NAME = "Untitled Level";
@@ -144,6 +146,8 @@ function renderEntitiesSettings(active, state) {
   const entities = active.entities || [];
   const selectedEntityIndex = state.interaction.selectedEntityIndex;
   const selected = Number.isInteger(selectedEntityIndex) ? entities[selectedEntityIndex] : null;
+  const activePresetId = state.interaction.activeEntityPresetId;
+  const activePreset = ENTITY_PRESETS.find((preset) => preset.id === activePresetId) || null;
 
   return `
     <div class="infoGroup">
@@ -151,7 +155,33 @@ function renderEntitiesSettings(active, state) {
       <div class="value">${entities.length} total</div>
     </div>
 
-    <button type="button" class="toolButton" data-entity-action="add">Add entity</button>
+    <div class="entityPresetSection">
+      <div class="hintText">Create / Presets</div>
+      <div class="entityPresetGrid" role="group" aria-label="Entity presets">
+        ${ENTITY_PRESETS
+          .map(
+            (preset) => `
+              <button
+                type="button"
+                class="toolButton entityPresetButton ${preset.id === activePresetId ? "isActive" : ""}"
+                data-entity-action="preset"
+                data-entity-preset-id="${preset.id}"
+                title="${escapeHtml(preset.type)}"
+              >
+                ${escapeHtml(preset.defaultName)}
+              </button>
+            `,
+          )
+          .join("")}
+      </div>
+      <div class="statusRow entityPresetStatus">
+        <span class="label">Placement</span>
+        <span class="value">${escapeHtml(activePreset ? activePreset.defaultName : "Off")}</span>
+      </div>
+      <button type="button" class="toolButton isSecondary" data-entity-action="clear-preset">Clear placement</button>
+    </div>
+
+    <div class="hintText">Entity list</div>
 
     <div class="entityList" role="listbox" aria-label="Entities">
       ${entities
@@ -542,28 +572,39 @@ export function bindInspectorPanel(panel, store, options = {}) {
 
   const onClick = (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLButtonElement)) return;
+    if (!(target instanceof HTMLElement)) return;
 
-    const preset = target.dataset.workspacePreset;
+    const workspaceButton = target.closest("[data-workspace-preset]");
+    const preset = workspaceButton instanceof HTMLButtonElement ? workspaceButton.dataset.workspacePreset : null;
     if (preset) {
       onWorkspaceUpdate?.("background", preset);
       return;
     }
 
-    const backgroundAction = target.dataset.backgroundAction;
+    const backgroundButton = target.closest("[data-background-action]");
+    const backgroundAction = backgroundButton instanceof HTMLButtonElement ? backgroundButton.dataset.backgroundAction : null;
     if (backgroundAction === "add") {
       onBackgroundUpdate?.(-1, "add", null);
       return;
     }
 
-    const entityAction = target.dataset.entityAction;
-    if (entityAction === "add") {
-      onEntityUpdate?.(-1, "add", null);
+    const entityButton = target.closest("[data-entity-action]");
+    const entityAction = entityButton instanceof HTMLButtonElement ? entityButton.dataset.entityAction : null;
+    if (entityAction === "preset") {
+      const presetId = entityButton.dataset.entityPresetId;
+      if (presetId) {
+        onEntityUpdate?.(-1, "preset", presetId);
+      }
+      return;
+    }
+
+    if (entityAction === "clear-preset") {
+      onEntityUpdate?.(-1, "clear-preset", null);
       return;
     }
 
     if (entityAction === "select") {
-      const index = Number.parseInt(target.dataset.entityIndex || "", 10);
+      const index = Number.parseInt(entityButton.dataset.entityIndex || "", 10);
       if (Number.isInteger(index) && index >= 0) {
         onEntityUpdate?.(index, "select", null);
       }

@@ -31,6 +31,7 @@ import {
 import { getTileIndex } from "../domain/level/levelDocument.js";
 import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
+import { DEFAULT_ENTITY_PRESET_ID, findEntityPresetById } from "../domain/entities/entityPresets.js";
 
 
 function getInspectedCell(state) {
@@ -333,13 +334,14 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     y: Math.max(0, Math.min(doc.dimensions.height - 1, Math.round(y))),
   });
 
-  const createEntityDraft = (doc, x, y, nextNumber = (doc.entities?.length || 0) + 1) => {
+  const createEntityDraft = (doc, x, y, presetId = DEFAULT_ENTITY_PRESET_ID, nextNumber = (doc.entities?.length || 0) + 1) => {
     const placement = clampEntityPosition(doc, x, y);
+    const preset = findEntityPresetById(presetId) || findEntityPresetById(DEFAULT_ENTITY_PRESET_ID);
 
     return {
       id: `entity-${nextNumber}`,
-      name: "Entity",
-      type: "generic",
+      name: preset?.defaultName || "Generic",
+      type: preset?.type || "generic",
       x: placement.x,
       y: placement.y,
       visible: true,
@@ -362,12 +364,12 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     return changed;
   };
 
-  const createEntityAtCell = (draft, cell) => {
+  const createEntityAtCell = (draft, cell, presetId = draft.interaction.activeEntityPresetId || DEFAULT_ENTITY_PRESET_ID) => {
     const doc = draft.document.active;
     if (!doc || !cell) return null;
 
     const entities = doc.entities;
-    const entity = createEntityDraft(doc, cell.x, cell.y, entities.length + 1);
+    const entity = createEntityDraft(doc, cell.x, cell.y, presetId, entities.length + 1);
     entities.push(entity);
     const createdIndex = entities.length - 1;
     draft.interaction.selectedEntityIndex = createdIndex;
@@ -384,6 +386,19 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
       if (field === "add") {
         createEntityAtCell(draft, { x: 0, y: 0 });
+        return;
+      }
+
+      if (field === "preset") {
+        const nextPresetId = typeof value === "string" ? value : null;
+        draft.interaction.activeEntityPresetId =
+          draft.interaction.activeEntityPresetId === nextPresetId ? null : nextPresetId;
+        draft.interaction.activeTool = EDITOR_TOOLS.INSPECT;
+        return;
+      }
+
+      if (field === "clear-preset") {
+        draft.interaction.activeEntityPresetId = null;
         return;
       }
 
@@ -584,12 +599,13 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
   const handleInspectCanvasMouseDown = (event, state, cell, point) => {
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+    const activePresetId = state.interaction.activeEntityPresetId;
 
     if (event.shiftKey) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
-        createEntityAtCell(draft, cell);
+        createEntityAtCell(draft, cell, activePresetId || DEFAULT_ENTITY_PRESET_ID);
       });
       return true;
     }
@@ -606,6 +622,16 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
           active: true,
           index: hitEntityIndex,
         };
+      });
+      return true;
+    }
+
+    if (activePresetId) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        createEntityAtCell(draft, cell, activePresetId);
+        draft.interaction.hoverCell = cell;
       });
       return true;
     }
@@ -870,6 +896,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     draft.interaction.rectDrag = null;
     draft.interaction.lineDrag = null;
     draft.interaction.entityDrag = null;
+    draft.interaction.activeEntityPresetId = null;
     draft.interaction.selectedCell = null;
     draft.interaction.hoveredEntityIndex = null;
     draft.interaction.selectedEntityIndex = null;
@@ -1007,6 +1034,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
         state.interaction.hoveredEntityIndex = null;
         state.interaction.selectedEntityIndex = null;
         state.interaction.entityDrag = null;
+        state.interaction.activeEntityPresetId = null;
       });
       resize();
       draw(store.getState());
