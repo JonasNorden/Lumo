@@ -1127,6 +1127,7 @@ display:none;
           <h2>Properties</h2>
           <div style="margin-left:auto; display:flex; gap:8px;">
             <button class="btn primary" id="btnEditParams">Edit Params</button>
+            <button class="btn" id="btnDuplicate">Duplicate Selected</button>
             <button class="btn danger" id="btnDelete">Delete Selected</button>
             <button class="btn" id="btnDeselect">Deselect</button>
           </div>
@@ -1239,6 +1240,8 @@ display:none;
             <div class="shortcutRow"><span class="shortcutKey">Ctrl + Shift + Z</span><span class="shortcutAction">Redo</span></div>
             <div class="shortcutRow"><span class="shortcutKey">Ctrl + C</span><span class="shortcutAction">Copy entity</span></div>
             <div class="shortcutRow"><span class="shortcutKey">Ctrl + V</span><span class="shortcutAction">Paste entity</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Ctrl/Cmd + D</span><span class="shortcutAction">Duplicate selected entity</span></div>
+            <div class="shortcutRow"><span class="shortcutKey">Delete / Backspace</span><span class="shortcutAction">Delete selected entity</span></div>
             <div class="shortcutRow"><span class="shortcutKey">Shift + P</span><span class="shortcutAction">Play From Here</span></div>
           </section>
         </div>
@@ -1383,6 +1386,7 @@ display:none;
   const btnImport = el("btnImport");
   const btnClear = el("btnClear");
   const btnEditParams = el("btnEditParams");
+  const btnDuplicate = el("btnDuplicate");
   const btnDelete = el("btnDelete");
   const btnDeselect = el("btnDeselect");
   const entModePill = el("entModePill");
@@ -2988,9 +2992,17 @@ function parseSmart(v){
     return removeEntityIndices([index]) > 0;
   }
 
-  function cloneEntityForClipboard(ent){
+  function createEntityInstanceId(){
+    const used = new Set(state.ents.map((ent) => String(ent && ent.instanceId || "")).filter(Boolean));
+    let n = Math.max(1, state.ents.length + 1);
+    while (used.has(`ent_${n}`)) n += 1;
+    return `ent_${n}`;
+  }
+
+  function cloneEntityForClipboard(ent, options = {}){
     if (!ent || typeof ent !== "object") return null;
-    return {
+    const clone = {
+      ...deepClone(ent),
       id: ent.id,
       x: ent.x|0,
       y: ent.y|0,
@@ -3002,12 +3014,14 @@ function parseSmart(v){
       aggroRadius: Number.isFinite(Number(ent.aggroRadius)) ? Number(ent.aggroRadius) : 0,
       params: deepClone(ent.params || {}),
     };
+    clone.instanceId = options.preserveInstanceId ? (ent.instanceId || createEntityInstanceId()) : createEntityInstanceId();
+    return clone;
   }
 
   function copySelectedEntityToClipboard(){
     const i = state.selectedEntIndex;
     if (!Number.isInteger(i) || i < 0 || i >= state.ents.length) return false;
-    state.entityClipboard = cloneEntityForClipboard(state.ents[i]);
+    state.entityClipboard = cloneEntityForClipboard(state.ents[i], { preserveInstanceId: true });
     return !!state.entityClipboard;
   }
 
@@ -3042,6 +3056,41 @@ function parseSmart(v){
     setSingleSelectedEntity(state.ents.length - 1);
     updateSelectedUI();
     state.guideDirty = true;
+    return true;
+  }
+
+  function getDuplicateEntityTile(ent){
+    const baseX = Number.isFinite(Number(ent && ent.x)) ? (ent.x|0) : 0;
+    const baseY = Number.isFinite(Number(ent && ent.y)) ? (ent.y|0) : 0;
+    const nextX = Math.min(state.w - 1, baseX + 1);
+    const nextY = nextX === baseX ? Math.min(state.h - 1, baseY + 1) : baseY;
+    return {
+      tx: clamp(nextX, 0, state.w - 1),
+      ty: clamp(nextY, 0, state.h - 1),
+    };
+  }
+
+  function duplicateSelectedEntity(){
+    if (state.selectedEntIndices.length !== 1) return false;
+    const sourceIndex = state.selectedEntIndex;
+    if (!Number.isInteger(sourceIndex) || sourceIndex < 0 || sourceIndex >= state.ents.length) return false;
+    const source = state.ents[sourceIndex];
+    const clone = cloneEntityForClipboard(source);
+    if (!clone) return false;
+
+    const pos = getDuplicateEntityTile(source);
+    if (!inBounds(pos.tx, pos.ty)) return false;
+
+    pushHistorySnapshot();
+    clone.x = pos.tx;
+    clone.y = pos.ty;
+    clone.order = state.ents.length;
+    clone.params = deepClone(clone.params || {});
+    state.ents.push(clone);
+    setSingleSelectedEntity(state.ents.length - 1);
+    updateSelectedUI();
+    state.guideDirty = true;
+    guideRefresh();
     return true;
   }
 
@@ -3746,6 +3795,7 @@ function parseSmart(v){
       if (!state.brushEnt) return;
       const asset = state.brushEnt;
       const e = {
+        instanceId: createEntityInstanceId(),
         id: asset.id,
         x: tx,
         y: ty,
@@ -4021,6 +4071,7 @@ function parseSmart(v){
     const w = (tx1 - tx0 + 1) * TS;
 
     const e = {
+      instanceId: createEntityInstanceId(),
       id: asset.id,
       x: tx0,
       y: ty,
@@ -4059,6 +4110,7 @@ function parseSmart(v){
     if (!state.selectedEntIndices.length){
       selectedInfoEl.value = "(none)";
       if (btnEditParams) btnEditParams.disabled = true;
+      if (btnDuplicate) btnDuplicate.disabled = true;
       if (btnDelete) btnDelete.disabled = true;
       renderAudioInspector();
       return;
@@ -4066,6 +4118,7 @@ function parseSmart(v){
     if (state.selectedEntIndices.length > 1){
       selectedInfoEl.value = `${state.selectedEntIndices.length} entities selected`;
       if (btnEditParams) btnEditParams.disabled = true;
+      if (btnDuplicate) btnDuplicate.disabled = true;
       if (btnDelete) btnDelete.disabled = false;
       renderAudioInspector();
       return;
@@ -4073,6 +4126,7 @@ function parseSmart(v){
     const e = state.ents[state.selectedEntIndex];
     selectedInfoEl.value = `${e.id} @ (${e.x},${e.y})`;
     if (btnEditParams) btnEditParams.disabled = false;
+    if (btnDuplicate) btnDuplicate.disabled = false;
     if (btnDelete) btnDelete.disabled = false;
     renderAudioInspector();
   }
@@ -6407,9 +6461,23 @@ if (useFill){
       copySelectedEntityToClipboard();
       return;
     }
-    if (ctrlLike && e.code === "KeyV"){
+    if (!state.modalOpen && !state.shortcutsModalOpen && ctrlLike && e.code === "KeyV"){
       e.preventDefault();
       pasteEntityFromClipboard();
+      return;
+    }
+    if (!state.modalOpen && !state.shortcutsModalOpen && ctrlLike && e.code === "KeyD"){
+      e.preventDefault();
+      duplicateSelectedEntity();
+      return;
+    }
+    if (!state.modalOpen && !state.shortcutsModalOpen && (e.code === "Delete" || e.code === "Backspace")){
+      if (!state.selectedEntIndices.length) return;
+      e.preventDefault();
+      removeEntityIndices(state.selectedEntIndices);
+      updateSelectedUI();
+      state.guideDirty = true;
+      guideRefresh();
       return;
     }
 
@@ -6499,6 +6567,10 @@ if (useFill){
   btnEntModeDraw.addEventListener("click", () => setEntToolMode("DRAW"));
   btnEntModeEdit.addEventListener("click", () => setEntToolMode("EDIT"));
 
+  btnDuplicate.addEventListener("click", () => {
+    duplicateSelectedEntity();
+  });
+
   btnEditParams.addEventListener("click", () => {
     if (state.selectedEntIndices.length !== 1) return;
     if (state.selectedEntIndex < 0 || state.selectedEntIndex >= state.ents.length) return;
@@ -6582,6 +6654,7 @@ if (useFill){
         outParams.soundFile = normalizeSoundPathForEntity(e.id, outParams.soundFile);
       }
       return {
+      instanceId: e.instanceId || createEntityInstanceId(),
       id:e.id,x:e.x,y:e.y,
       w:e.w,h:e.h,
       anchor:e.anchor,
@@ -6889,6 +6962,7 @@ const mainArr = obj.layers && obj.layers.main;
                         : (Array.isArray(obj.editor.ents) ? obj.editor.ents : null);
           if (entsArr){
             state.ents = entsArr.map(o=>({
+              instanceId: o.instanceId || createEntityInstanceId(),
               id:o.id,x:o.x|0,y:o.y|0,
               w:o.w||TS,h:o.h||TS,
               anchor:o.anchor||"BL",
