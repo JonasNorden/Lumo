@@ -163,6 +163,23 @@ function drawDecorMarker(ctx, decor, viewport, tileSize, options = {}) {
   ctx.restore();
 }
 
+function getScatterBoundsRect(doc, viewport, startCell, endCell) {
+  if (!startCell || !endCell) return null;
+
+  const tileSize = doc.dimensions.tileSize * viewport.zoom;
+  const minX = Math.min(startCell.x, endCell.x);
+  const maxX = Math.max(startCell.x, endCell.x);
+  const minY = Math.min(startCell.y, endCell.y);
+  const maxY = Math.max(startCell.y, endCell.y);
+
+  return {
+    x: viewport.offsetX + minX * tileSize,
+    y: viewport.offsetY + minY * tileSize,
+    width: (maxX - minX + 1) * tileSize,
+    height: (maxY - minY + 1) * tileSize,
+  };
+}
+
 export function findDecorAtCanvasPoint(doc, viewport, pointX, pointY, radius = 2) {
   const decorItems = doc.decor || [];
   const tileSize = doc.dimensions.tileSize;
@@ -222,6 +239,7 @@ export function renderDecorDragPreview(ctx, doc, viewport, interaction) {
 
 export function renderDecorPlacementPreview(ctx, doc, viewport, interaction, activePreset) {
   if (interaction.activeTool !== "inspect") return;
+  if (interaction.decorScatterMode) return;
   if (!interaction.hoverCell || !activePreset) return;
 
   const previewDecor = {
@@ -234,4 +252,35 @@ export function renderDecorPlacementPreview(ctx, doc, viewport, interaction, act
     preview: true,
     alpha: 0.88,
   });
+}
+
+export function renderDecorScatterPreview(ctx, doc, viewport, interaction) {
+  const scatterDrag = interaction.decorScatterDrag;
+  if (!scatterDrag?.active) return;
+
+  const rect = getScatterBoundsRect(doc, viewport, scatterDrag.startCell, scatterDrag.currentCell || scatterDrag.startCell);
+  if (!rect) return;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 184, 76, 0.16)';
+  ctx.strokeStyle = 'rgba(255, 196, 110, 0.9)';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([8, 6]);
+  ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+  ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+  ctx.setLineDash([]);
+
+  const scatterCount = Math.max(1, Math.round(interaction.decorScatterSettings?.count || 1));
+  const label = `Scatter · ${scatterCount}`;
+  ctx.font = '12px Inter, system-ui, sans-serif';
+  const textWidth = ctx.measureText(label).width;
+  const badgeX = rect.x + 8;
+  const badgeY = rect.y + 8;
+  ctx.fillStyle = 'rgba(12, 18, 31, 0.88)';
+  ctx.fillRect(badgeX, badgeY, textWidth + 14, 22);
+  ctx.strokeStyle = 'rgba(255, 196, 110, 0.65)';
+  ctx.strokeRect(badgeX, badgeY, textWidth + 14, 22);
+  ctx.fillStyle = '#f6d69a';
+  ctx.fillText(label, badgeX + 7, badgeY + 15);
+  ctx.restore();
 }

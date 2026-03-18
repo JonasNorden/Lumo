@@ -215,6 +215,14 @@ function renderDecorSettings(active, state) {
   const selected = Number.isInteger(selectedDecorIndex) ? decorItems[selectedDecorIndex] : null;
   const activePresetId = state.interaction.activeDecorPresetId;
   const activePreset = DECOR_PRESETS.find((preset) => preset.id === activePresetId) || null;
+  const scatterSettings = state.interaction.decorScatterSettings || {};
+  const scatterCount = Number.isFinite(scatterSettings.count) ? Math.max(1, Math.round(scatterSettings.count)) : 12;
+  const scatterRandomness = Number.isFinite(scatterSettings.randomness)
+    ? Math.max(0, Math.min(1, scatterSettings.randomness))
+    : 0.6;
+  const scatterVariantMode = scatterSettings.variantMode === "random" ? "random" : "fixed";
+  const scatterModeActive = Boolean(state.interaction.decorScatterMode);
+  const scatterReady = scatterModeActive && activePreset;
 
   return `
     <div class="infoGroup compact">
@@ -242,9 +250,57 @@ function renderDecorSettings(active, state) {
       </div>
       <div class="statusRow entityPresetStatus">
         <span class="label">Placement</span>
-        <span class="value">${escapeHtml(activePreset ? `${activePreset.defaultName} · click canvas` : "Off")}</span>
+        <span class="value">${escapeHtml(activePreset ? `${activePreset.defaultName} · ${scatterModeActive ? "drag scatter" : "click canvas"}` : "Off")}</span>
       </div>
       <button type="button" class="toolButton isSecondary" data-decor-action="clear-preset">Clear placement</button>
+    </div>
+
+    <div class="entityPresetSection decorScatterSection">
+      <div class="decorScatterHeader">
+        <div class="hintText">Scatter</div>
+        <button
+          type="button"
+          class="toolButton isSecondary decorScatterToggle ${scatterModeActive ? "isActive" : ""}"
+          data-decor-action="toggle-scatter"
+          aria-pressed="${scatterModeActive ? "true" : "false"}"
+        >
+          Scatter mode
+        </button>
+      </div>
+
+      <div class="decorScatterGrid">
+        <label class="fieldRow">
+          <span class="label">Count</span>
+          <input type="number" min="1" max="512" step="1" value="${scatterCount}" data-decor-setting="count" />
+        </label>
+
+        <label class="fieldRow">
+          <span class="label">Randomness</span>
+          <div class="decorScatterRandomnessControl">
+            <input type="range" min="0" max="100" step="1" value="${Math.round(scatterRandomness * 100)}" data-decor-setting="randomness" />
+            <span class="decorScatterRandomnessValue">${Math.round(scatterRandomness * 100)}%</span>
+          </div>
+        </label>
+
+        <label class="fieldRow">
+          <span class="label">Variants</span>
+          <select data-decor-setting="variantMode">
+            <option value="fixed" ${scatterVariantMode === "fixed" ? "selected" : ""}>Fixed</option>
+            <option value="random" ${scatterVariantMode === "random" ? "selected" : ""}>Random</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="statusRow entityPresetStatus">
+        <span class="label">Status</span>
+        <span class="value">${escapeHtml(
+          !activePreset
+            ? "Pick a preset first"
+            : scatterReady
+              ? `Ready · drag area for ${scatterCount}`
+              : "Off",
+        )}</span>
+      </div>
     </div>
 
     <div class="hintText">Decor list</div>
@@ -614,6 +670,12 @@ export function bindBrushPanel(panel, store, options = {}) {
     const target = event.target;
 
     if (target instanceof HTMLSelectElement) {
+      const decorSetting = target.dataset.decorSetting;
+      if (decorSetting === "variantMode") {
+        onDecorUpdate?.(-1, "scatter-setting", { field: "variantMode", value: target.value });
+        return;
+      }
+
       const field = target.dataset.brushField;
       if (!field) return;
 
@@ -663,6 +725,22 @@ export function bindBrushPanel(panel, store, options = {}) {
       }
 
       onDecorUpdate?.(index, decorField, target.value);
+      return;
+    }
+
+    const decorSetting = target.dataset.decorSetting;
+    if (decorSetting === "count" || decorSetting === "randomness") {
+      if (decorSetting === "count") {
+        const parsed = Number.parseInt(target.value, 10);
+        const value = Number.isInteger(parsed) ? Math.max(1, parsed) : 1;
+        target.value = String(value);
+        onDecorUpdate?.(-1, "scatter-setting", { field: "count", value });
+        return;
+      }
+
+      const sliderValue = Number.parseFloat(target.value);
+      const value = Number.isFinite(sliderValue) ? Math.max(0, Math.min(1, sliderValue / 100)) : 0;
+      onDecorUpdate?.(-1, "scatter-setting", { field: "randomness", value });
       return;
     }
 
@@ -801,6 +879,9 @@ export function bindBrushPanel(panel, store, options = {}) {
       }
       if (action === "clear-preset") {
         onDecorUpdate?.(-1, "clear-preset", null);
+      }
+      if (action === "toggle-scatter") {
+        onDecorUpdate?.(-1, "toggle-scatter", null);
       }
       if (action === "select") {
         const index = Number.parseInt(decorActionButton.dataset.decorIndex || "", 10);

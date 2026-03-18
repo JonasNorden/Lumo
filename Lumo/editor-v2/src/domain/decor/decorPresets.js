@@ -4,30 +4,35 @@ export const DECOR_PRESETS = [
     type: 'grass',
     defaultName: 'Grass',
     defaultVariant: 'a',
+    variants: ['a'],
   },
   {
     id: 'bush',
     type: 'bush',
     defaultName: 'Bush',
     defaultVariant: 'a',
+    variants: ['a'],
   },
   {
     id: 'rock',
     type: 'rock',
     defaultName: 'Rock',
     defaultVariant: 'a',
+    variants: ['a'],
   },
   {
     id: 'flower',
     type: 'flower',
     defaultName: 'Flower',
     defaultVariant: 'a',
+    variants: ['a'],
   },
   {
     id: 'sign',
     type: 'sign',
     defaultName: 'Sign',
     defaultVariant: 'a',
+    variants: ['a'],
   },
 ];
 

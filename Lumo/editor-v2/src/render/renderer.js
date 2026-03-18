@@ -4,7 +4,7 @@ import { renderBackgroundLayers } from "./layers/backgroundLayer.js";
 import { renderSelectionOverlay } from "./layers/selectionLayer.js";
 import { renderBrushPreviewOverlay } from "./layers/previewLayer.js";
 import { renderEntities, renderEntityDragPreview } from "./layers/entityLayer.js";
-import { renderDecor, renderDecorDragPreview, renderDecorPlacementPreview } from "./layers/decorLayer.js";
+import { renderDecor, renderDecorDragPreview, renderDecorPlacementPreview, renderDecorScatterPreview } from "./layers/decorLayer.js";
 import { findDecorPresetById } from "../domain/decor/decorPresets.js";
 
 export function renderEditorFrame(ctx, state) {
@@ -25,6 +25,7 @@ export function renderEditorFrame(ctx, state) {
   renderDecorDragPreview(ctx, doc, state.viewport, state.interaction);
   renderEntityDragPreview(ctx, doc, state.viewport, state.interaction);
   renderBrushPreviewOverlay(ctx, doc, state.viewport, state.interaction, state.brush.activeDraft);
+  renderDecorScatterPreview(ctx, doc, state.viewport, state.interaction);
   renderDecorPlacementPreview(ctx, doc, state.viewport, state.interaction, findDecorPresetById(state.interaction.activeDecorPresetId));
   renderSelectionOverlay(ctx, doc, state.viewport, state.interaction);
 }

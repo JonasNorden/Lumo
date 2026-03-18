@@ -22,6 +22,12 @@ export function createEditorState() {
       activeTool: "inspect",
       activeEntityPresetId: null,
       activeDecorPresetId: null,
+      decorScatterMode: false,
+      decorScatterSettings: {
+        count: 12,
+        randomness: 0.6,
+        variantMode: "fixed",
+      },
       hoverCell: null,
       selectedCell: null,
       hoveredEntityIndex: null,
@@ -35,6 +41,7 @@ export function createEditorState() {
       boxSelection: null,
       entityDrag: null,
       decorDrag: null,
+      decorScatterDrag: null,
       spacePanActive: false,
     },
     brush: {

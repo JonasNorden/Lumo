@@ -603,6 +603,48 @@ kbd {
   padding: 0 2px;
 }
 
+.decorScatterSection {
+  padding-top: 2px;
+}
+
+.decorScatterHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.decorScatterHeader .hintText {
+  margin: 0;
+}
+
+.decorScatterToggle {
+  white-space: nowrap;
+}
+
+.decorScatterGrid {
+  display: grid;
+  gap: 8px;
+}
+
+.decorScatterRandomnessControl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.decorScatterRandomnessControl input[type="range"] {
+  width: 100%;
+}
+
+.decorScatterRandomnessValue {
+  min-width: 40px;
+  text-align: right;
+  color: #dbe5ff;
+  font-variant-numeric: tabular-nums;
+}
+
 .entityListItem {
   width: 100%;
   display: flex;
