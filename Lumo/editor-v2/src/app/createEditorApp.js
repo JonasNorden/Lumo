@@ -333,6 +333,49 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     y: Math.max(0, Math.min(doc.dimensions.height - 1, Math.round(y))),
   });
 
+  const createEntityDraft = (doc, x, y, nextNumber = (doc.entities?.length || 0) + 1) => {
+    const placement = clampEntityPosition(doc, x, y);
+
+    return {
+      id: `entity-${nextNumber}`,
+      name: "Entity",
+      type: "generic",
+      x: placement.x,
+      y: placement.y,
+      visible: true,
+    };
+  };
+
+  const moveEntityToCell = (draft, index, cell) => {
+    const doc = draft.document.active;
+    if (!doc) return false;
+
+    const entity = doc.entities?.[index];
+    if (!entity || !cell) return false;
+
+    const next = clampEntityPosition(doc, cell.x, cell.y);
+    const changed = entity.x !== next.x || entity.y !== next.y;
+    entity.x = next.x;
+    entity.y = next.y;
+    draft.interaction.selectedEntityIndex = index;
+    draft.interaction.selectedCell = { x: next.x, y: next.y };
+    return changed;
+  };
+
+  const createEntityAtCell = (draft, cell) => {
+    const doc = draft.document.active;
+    if (!doc || !cell) return null;
+
+    const entities = doc.entities;
+    const entity = createEntityDraft(doc, cell.x, cell.y, entities.length + 1);
+    entities.push(entity);
+    const createdIndex = entities.length - 1;
+    draft.interaction.selectedEntityIndex = createdIndex;
+    draft.interaction.hoveredEntityIndex = createdIndex;
+    draft.interaction.selectedCell = { x: entity.x, y: entity.y };
+    return createdIndex;
+  };
+
   const updateEntity = (index, field, value) => {
     store.setState((draft) => {
       const doc = draft.document.active;
@@ -340,23 +383,15 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       const entities = doc.entities;
 
       if (field === "add") {
-        const nextNumber = entities.length + 1;
-        const placement = clampEntityPosition(doc, 0, 0);
-        entities.push({
-          id: `entity-${nextNumber}`,
-          name: `Entity ${nextNumber}`,
-          type: "marker",
-          x: placement.x,
-          y: placement.y,
-          visible: true,
-        });
-        draft.interaction.selectedEntityIndex = entities.length - 1;
+        createEntityAtCell(draft, { x: 0, y: 0 });
         return;
       }
 
       if (field === "select") {
         if (index >= 0 && index < entities.length) {
+          const entity = entities[index];
           draft.interaction.selectedEntityIndex = index;
+          draft.interaction.selectedCell = entity ? { x: entity.x, y: entity.y } : draft.interaction.selectedCell;
         }
         return;
       }
@@ -383,6 +418,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
         );
         entity.x = next.x;
         entity.y = next.y;
+        draft.interaction.selectedCell = { x: next.x, y: next.y };
       }
     });
   };
@@ -412,31 +448,34 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     });
   };
 
-  const updateHoveredCell = (event) => {
+  const updateHoveredCanvasState = (event) => {
     const state = store.getState();
     if (!state.document.active) return;
 
     const point = getCanvasPointFromMouseEvent(canvas, event);
     const nextHoverCell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+    const nextHoveredEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+    const currentCell = state.interaction.hoverCell;
+    const currentHoveredEntityIndex = state.interaction.hoveredEntityIndex;
+    const cellUnchanged = currentCell?.x === nextHoverCell?.x && currentCell?.y === nextHoverCell?.y;
 
-    const current = state.interaction.hoverCell;
-    const unchanged =
-      current?.x === nextHoverCell?.x &&
-      current?.y === nextHoverCell?.y;
-
-    if (unchanged) return;
+    if (cellUnchanged && currentHoveredEntityIndex === (nextHoveredEntityIndex >= 0 ? nextHoveredEntityIndex : null)) {
+      return;
+    }
 
     store.setState((draft) => {
       draft.interaction.hoverCell = nextHoverCell;
+      draft.interaction.hoveredEntityIndex = nextHoveredEntityIndex >= 0 ? nextHoveredEntityIndex : null;
     });
   };
 
-  const clearHoveredCell = () => {
+  const clearHoveredCanvasState = () => {
     const state = store.getState();
-    if (!state.interaction.hoverCell) return;
+    if (!state.interaction.hoverCell && state.interaction.hoveredEntityIndex === null) return;
 
     store.setState((draft) => {
       draft.interaction.hoverCell = null;
+      draft.interaction.hoveredEntityIndex = null;
     });
   };
 
@@ -543,6 +582,47 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     return changedAny;
   };
 
+  const handleInspectCanvasMouseDown = (event, state, cell, point) => {
+    const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+
+    if (event.shiftKey) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        createEntityAtCell(draft, cell);
+      });
+      return true;
+    }
+
+    if (hitEntityIndex >= 0) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        const entity = draft.document.active?.entities?.[hitEntityIndex];
+        draft.interaction.selectedEntityIndex = hitEntityIndex;
+        draft.interaction.hoveredEntityIndex = hitEntityIndex;
+        draft.interaction.selectedCell = entity ? { x: entity.x, y: entity.y } : draft.interaction.selectedCell;
+        draft.interaction.entityDrag = {
+          active: true,
+          index: hitEntityIndex,
+        };
+      });
+      return true;
+    }
+
+    if (Number.isInteger(state.interaction.selectedEntityIndex)) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        moveEntityToCell(draft, state.interaction.selectedEntityIndex, cell);
+        draft.interaction.hoverCell = cell;
+      });
+      return true;
+    }
+
+    return false;
+  };
+
   const handleCanvasMouseDown = (event) => {
     if (event.button === 1) {
       startPanDrag(event, "middle");
@@ -564,6 +644,9 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     if (!cell) return;
 
     const activeTool = state.interaction.activeTool;
+    if (activeTool === EDITOR_TOOLS.INSPECT && handleInspectCanvasMouseDown(event, state, cell, point)) {
+      return;
+    }
 
     if (activeTool === EDITOR_TOOLS.RECT) {
       event.preventDefault();
@@ -619,14 +702,29 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
   const handleCanvasMouseMove = (event) => {
     if (panFromMouseMove(event)) {
-      clearHoveredCell();
+      clearHoveredCanvasState();
       return;
     }
 
-    updateHoveredCell(event);
+    updateHoveredCanvasState(event);
 
     const state = store.getState();
     if (!state.document.active) return;
+
+    if (state.interaction.entityDrag?.active) {
+      if ((event.buttons & 1) !== 1) return;
+
+      const point = getCanvasPointFromMouseEvent(canvas, event);
+      const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+      if (!cell) return;
+
+      store.setState((draft) => {
+        moveEntityToCell(draft, draft.interaction.entityDrag.index, cell);
+        draft.interaction.hoverCell = cell;
+        draft.interaction.hoveredEntityIndex = draft.interaction.entityDrag.index;
+      });
+      return;
+    }
 
     if (state.interaction.activeTool === EDITOR_TOOLS.RECT) {
       if (!state.interaction.rectDrag?.active) return;
@@ -677,10 +775,17 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     });
   };
 
-  const stopDragPaint = () => {
+  const stopCanvasInteraction = () => {
     stopPanDrag();
 
     const state = store.getState();
+
+    if (state.interaction.entityDrag?.active) {
+      store.setState((draft) => {
+        draft.interaction.entityDrag = null;
+      });
+      return;
+    }
 
     if (state.interaction.rectDrag?.active) {
       const startCell = state.interaction.rectDrag.startCell;
@@ -737,7 +842,9 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     if (hitEntityIndex >= 0) {
       store.setState((draft) => {
+        const entity = draft.document.active?.entities?.[hitEntityIndex];
         draft.interaction.selectedEntityIndex = hitEntityIndex;
+        draft.interaction.selectedCell = entity ? { x: entity.x, y: entity.y } : draft.interaction.selectedCell;
       });
       return;
     }
@@ -762,7 +869,9 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     draft.interaction.dragPaint = null;
     draft.interaction.rectDrag = null;
     draft.interaction.lineDrag = null;
+    draft.interaction.entityDrag = null;
     draft.interaction.selectedCell = null;
+    draft.interaction.hoveredEntityIndex = null;
     draft.interaction.selectedEntityIndex = null;
     draft.interaction.hoverCell = null;
     draft.ui.importStatus = statusMessage;
@@ -895,6 +1004,9 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       store.setState((state) => {
         state.document.active = doc;
         state.document.status = "ready";
+        state.interaction.hoveredEntityIndex = null;
+        state.interaction.selectedEntityIndex = null;
+        state.interaction.entityDrag = null;
       });
       resize();
       draw(store.getState());
@@ -911,6 +1023,9 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     onResize: resizeDocument,
     onMetaUpdate: updateDocumentMeta,
     onGridUpdate: updateGridSettings,
+    onWorkspaceUpdate: updateWorkspaceSettings,
+    onBackgroundUpdate: updateBackgroundLayer,
+    onEntityUpdate: updateEntity,
   });
   const unbindBrushPanel = bindBrushPanel(brushPanel, store, {
     onUndo: handleUndo,
@@ -924,10 +1039,10 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
   });
   window.addEventListener("resize", resize);
   canvas.addEventListener("mousemove", handleCanvasMouseMove);
-  canvas.addEventListener("mouseleave", clearHoveredCell);
+  canvas.addEventListener("mouseleave", clearHoveredCanvasState);
   canvas.addEventListener("mousedown", handleCanvasMouseDown);
   canvas.addEventListener("wheel", handleCanvasWheel, { passive: false });
-  window.addEventListener("mouseup", stopDragPaint);
+  window.addEventListener("mouseup", stopCanvasInteraction);
   canvas.addEventListener("click", handleCanvasClick);
   minimapCanvas.addEventListener("click", handleMinimapClick);
   window.addEventListener("keydown", handleGlobalKeyDown);
@@ -943,10 +1058,10 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     unbindBrushPanel();
     window.removeEventListener("resize", resize);
     canvas.removeEventListener("mousemove", handleCanvasMouseMove);
-    canvas.removeEventListener("mouseleave", clearHoveredCell);
+    canvas.removeEventListener("mouseleave", clearHoveredCanvasState);
     canvas.removeEventListener("mousedown", handleCanvasMouseDown);
     canvas.removeEventListener("wheel", handleCanvasWheel);
-    window.removeEventListener("mouseup", stopDragPaint);
+    window.removeEventListener("mouseup", stopCanvasInteraction);
     canvas.removeEventListener("click", handleCanvasClick);
     minimapCanvas.removeEventListener("click", handleMinimapClick);
     window.removeEventListener("keydown", handleGlobalKeyDown);
