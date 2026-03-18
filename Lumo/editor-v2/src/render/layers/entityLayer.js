@@ -1,4 +1,5 @@
 import { getEntityHitRadius, getEntityVisual } from "../../domain/entities/entityVisuals.js";
+import { getSelectedEntityIndices, isEntitySelected } from "../../domain/entities/selection.js";
 
 function getEntityCenter(entity, tileSize) {
   return {
@@ -190,6 +191,60 @@ function drawFocusRing(ctx, x, y, radius, fillStyle, strokeStyle, lineWidth) {
   ctx.stroke();
 }
 
+function drawEntityMarker(ctx, entity, x, y, zoomScale, { isSelected, isHovered, alpha = 1, preview = false } = {}) {
+  const visual = getEntityVisual(entity.type);
+  const shapeRadius = getShapeRadius(isSelected);
+  const outlineWidth = (preview ? 2.1 : isSelected ? 2.2 : isHovered ? 1.8 : 1.5) * zoomScale;
+  const focusWidth = (isSelected ? 1.4 : 1.1) * zoomScale;
+
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+
+  if (isHovered && !preview) {
+    drawFocusRing(
+      ctx,
+      x,
+      y,
+      shapeRadius + 4.2,
+      "rgba(125, 231, 255, 0.14)",
+      "rgba(125, 231, 255, 0.48)",
+      focusWidth,
+    );
+  }
+
+  if (isSelected) {
+    drawFocusRing(
+      ctx,
+      x,
+      y,
+      shapeRadius + 5.8,
+      preview ? "rgba(255, 179, 71, 0.10)" : "rgba(255, 179, 71, 0.20)",
+      preview ? "rgba(255, 214, 138, 0.78)" : "rgba(255, 179, 71, 0.72)",
+      focusWidth,
+    );
+  }
+
+  drawEntityShape(ctx, visual, x, y, shapeRadius);
+  ctx.fillStyle = preview ? "rgba(248, 250, 255, 0.24)" : visual.fill;
+  ctx.fill();
+  ctx.strokeStyle = preview ? "#ffd68a" : isSelected ? "#ffb347" : isHovered ? "#7de7ff" : visual.stroke;
+  ctx.lineWidth = outlineWidth;
+  if (preview) ctx.setLineDash([3 * zoomScale, 2 * zoomScale]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (visual.key === "lantern") {
+    ctx.beginPath();
+    ctx.arc(x, y, shapeRadius + 2.6, 0, Math.PI * 2);
+    ctx.strokeStyle = preview ? "rgba(255, 223, 141, 0.34)" : "rgba(255, 209, 102, 0.32)";
+    ctx.lineWidth = 1.1 * zoomScale;
+    ctx.stroke();
+  }
+
+  drawEntitySymbol(ctx, visual, x, y, zoomScale);
+  ctx.restore();
+}
+
 export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 3) {
   const entities = doc.entities || [];
   const tileSize = doc.dimensions.tileSize;
@@ -215,6 +270,7 @@ export function renderEntities(ctx, doc, viewport, interaction) {
   const entities = doc.entities || [];
   const tileSize = doc.dimensions.tileSize;
   const zoomScale = 1 / Math.max(0.001, viewport.zoom);
+  const draggedSelection = new Set(interaction.entityDrag?.active ? getSelectedEntityIndices(interaction) : []);
 
   ctx.save();
   ctx.translate(viewport.offsetX, viewport.offsetY);
@@ -225,53 +281,40 @@ export function renderEntities(ctx, doc, viewport, interaction) {
     if (!entity.visible) continue;
 
     const { x, y } = getEntityCenter(entity, tileSize);
-    const isSelected = interaction.selectedEntityIndex === i;
+    const isSelected = isEntitySelected(interaction, i);
     const isHovered = interaction.hoveredEntityIndex === i;
-    const visual = getEntityVisual(entity.type);
-    const shapeRadius = getShapeRadius(isSelected);
-    const outlineWidth = (isSelected ? 2.2 : isHovered ? 1.8 : 1.5) * zoomScale;
-    const focusWidth = (isSelected ? 1.4 : 1.1) * zoomScale;
+    drawEntityMarker(ctx, entity, x, y, zoomScale, {
+      isSelected,
+      isHovered,
+      alpha: draggedSelection.has(i) ? 0.34 : 1,
+    });
+  }
 
-    if (isHovered) {
-      drawFocusRing(
-        ctx,
-        x,
-        y,
-        shapeRadius + 4.2,
-        "rgba(125, 231, 255, 0.14)",
-        "rgba(125, 231, 255, 0.48)",
-        focusWidth,
-      );
-    }
+  ctx.restore();
+}
 
-    if (isSelected) {
-      drawFocusRing(
-        ctx,
-        x,
-        y,
-        shapeRadius + 5.8,
-        "rgba(255, 179, 71, 0.20)",
-        "rgba(255, 179, 71, 0.72)",
-        focusWidth,
-      );
-    }
+export function renderEntityDragPreview(ctx, doc, viewport, interaction) {
+  const entityDrag = interaction.entityDrag;
+  if (!entityDrag?.active) return;
 
-    drawEntityShape(ctx, visual, x, y, shapeRadius);
-    ctx.fillStyle = visual.fill;
-    ctx.fill();
-    ctx.strokeStyle = isSelected ? "#ffb347" : isHovered ? "#7de7ff" : visual.stroke;
-    ctx.lineWidth = outlineWidth;
-    ctx.stroke();
+  const tileSize = doc.dimensions.tileSize;
+  const zoomScale = 1 / Math.max(0.001, viewport.zoom);
+  const delta = entityDrag.previewDelta || { x: 0, y: 0 };
 
-    if (visual.key === "lantern") {
-      ctx.beginPath();
-      ctx.arc(x, y, shapeRadius + 2.6, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(255, 209, 102, 0.32)";
-      ctx.lineWidth = 1.1 * zoomScale;
-      ctx.stroke();
-    }
+  ctx.save();
+  ctx.translate(viewport.offsetX, viewport.offsetY);
+  ctx.scale(viewport.zoom, viewport.zoom);
 
-    drawEntitySymbol(ctx, visual, x, y, zoomScale);
+  for (const origin of entityDrag.originPositions || []) {
+    const entity = doc.entities?.[origin.index];
+    if (!entity?.visible) continue;
+
+    const previewEntity = { ...entity, x: origin.x + delta.x, y: origin.y + delta.y };
+    const { x, y } = getEntityCenter(previewEntity, tileSize);
+    drawEntityMarker(ctx, previewEntity, x, y, zoomScale, {
+      isSelected: true,
+      preview: true,
+    });
   }
 
   ctx.restore();
