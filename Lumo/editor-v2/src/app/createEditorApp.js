@@ -31,7 +31,8 @@ import {
 import { getTileIndex } from "../domain/level/levelDocument.js";
 import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
-import { DEFAULT_ENTITY_PRESET_ID, findEntityPresetById } from "../domain/entities/entityPresets.js";
+import { DEFAULT_ENTITY_PRESET_ID, findEntityPresetById, getEntityPresetDefaultParams } from "../domain/entities/entityPresets.js";
+import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
 
 
 function getInspectedCell(state) {
@@ -361,6 +362,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       x: placement.x,
       y: placement.y,
       visible: true,
+      params: getEntityPresetDefaultParams(preset?.id || DEFAULT_ENTITY_PRESET_ID),
     };
   };
 
@@ -421,6 +423,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       id: getNextEntityStringId(doc.entities, "id", "entity"),
       x: offset.x,
       y: offset.y,
+      params: cloneEntityParams(source.params),
     };
 
     if (typeof source.instanceId === "string" && source.instanceId.trim()) {
@@ -496,6 +499,18 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
       const entity = entities[index];
       if (!entity) return;
+
+      if (field === "param") {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return;
+
+        const key = typeof value.key === "string" ? value.key.trim() : "";
+        if (!key) return;
+        if (!isSupportedEntityParamValue(value.value)) return;
+
+        entity.params = cloneEntityParams(entity.params);
+        entity.params[key] = value.value;
+        return;
+      }
 
       if (field === "name" || field === "type") {
         const trimmed = String(value || "").trim();

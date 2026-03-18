@@ -590,6 +590,33 @@ kbd {
   gap: 8px;
 }
 
+.entityParamsSection {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(47, 58, 86, 0.7);
+}
+
+.entityParamsGrid {
+  display: grid;
+  gap: 8px;
+}
+
+.entityParamBooleanRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.entityParamBooleanRow input {
+  width: auto;
+}
+
+.entityParamsEmpty {
+  margin-top: 4px;
+}
+
 .entityActionRow {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
