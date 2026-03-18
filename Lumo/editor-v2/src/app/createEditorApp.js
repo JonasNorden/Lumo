@@ -334,6 +334,22 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     y: Math.max(0, Math.min(doc.dimensions.height - 1, Math.round(y))),
   });
 
+  const getNextEntityStringId = (entities, field, fallbackPrefix) => {
+    const takenIds = new Set(
+      entities
+        .map((entity) => entity?.[field])
+        .filter((value) => typeof value === "string" && value.trim()),
+    );
+    const prefix = typeof fallbackPrefix === "string" && fallbackPrefix.trim() ? fallbackPrefix.trim() : field;
+    let nextNumber = entities.length + 1;
+
+    while (takenIds.has(`${prefix}-${nextNumber}`)) {
+      nextNumber += 1;
+    }
+
+    return `${prefix}-${nextNumber}`;
+  };
+
   const createEntityDraft = (doc, x, y, presetId = DEFAULT_ENTITY_PRESET_ID, nextNumber = (doc.entities?.length || 0) + 1) => {
     const placement = clampEntityPosition(doc, x, y);
     const preset = findEntityPresetById(presetId) || findEntityPresetById(DEFAULT_ENTITY_PRESET_ID);
@@ -362,6 +378,63 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     draft.interaction.selectedEntityIndex = index;
     draft.interaction.selectedCell = { x: next.x, y: next.y };
     return changed;
+  };
+
+  const deleteSelectedEntity = (draft) => {
+    const doc = draft.document.active;
+    if (!doc) return false;
+
+    const selectedIndex = draft.interaction.selectedEntityIndex;
+    if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= doc.entities.length) {
+      return false;
+    }
+
+    doc.entities.splice(selectedIndex, 1);
+
+    const hoveredIndex = draft.interaction.hoveredEntityIndex;
+    draft.interaction.selectedEntityIndex = null;
+    draft.interaction.selectedCell = null;
+    draft.interaction.entityDrag = null;
+    draft.interaction.hoveredEntityIndex =
+      Number.isInteger(hoveredIndex)
+        ? hoveredIndex === selectedIndex
+          ? null
+          : hoveredIndex > selectedIndex
+            ? hoveredIndex - 1
+            : hoveredIndex
+        : null;
+
+    return true;
+  };
+
+  const duplicateSelectedEntity = (draft) => {
+    const doc = draft.document.active;
+    if (!doc) return false;
+
+    const selectedIndex = draft.interaction.selectedEntityIndex;
+    const source = Number.isInteger(selectedIndex) ? doc.entities?.[selectedIndex] : null;
+    if (!source) return false;
+
+    const offset = clampEntityPosition(doc, source.x + 1, source.y + 1);
+    const duplicate = {
+      ...source,
+      id: getNextEntityStringId(doc.entities, "id", "entity"),
+      x: offset.x,
+      y: offset.y,
+    };
+
+    if (typeof source.instanceId === "string" && source.instanceId.trim()) {
+      duplicate.instanceId = getNextEntityStringId(doc.entities, "instanceId", "instance");
+    }
+
+    doc.entities.splice(selectedIndex + 1, 0, duplicate);
+    const duplicateIndex = selectedIndex + 1;
+    draft.interaction.selectedEntityIndex = duplicateIndex;
+    draft.interaction.hoveredEntityIndex = duplicateIndex;
+    draft.interaction.selectedCell = { x: duplicate.x, y: duplicate.y };
+    draft.interaction.entityDrag = null;
+
+    return true;
   };
 
   const createEntityAtCell = (draft, cell, presetId = draft.interaction.activeEntityPresetId || DEFAULT_ENTITY_PRESET_ID) => {
@@ -399,6 +472,16 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
       if (field === "clear-preset") {
         draft.interaction.activeEntityPresetId = null;
+        return;
+      }
+
+      if (field === "delete") {
+        deleteSelectedEntity(draft);
+        return;
+      }
+
+      if (field === "duplicate") {
+        duplicateSelectedEntity(draft);
         return;
       }
 
@@ -990,6 +1073,17 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     const isHistoryShortcut = event.metaKey || event.ctrlKey;
     if (isHistoryShortcut) {
       const key = event.key.toLowerCase();
+      if (key === "d") {
+        let duplicated = false;
+        store.setState((draft) => {
+          duplicated = duplicateSelectedEntity(draft);
+        });
+        if (duplicated) {
+          event.preventDefault();
+        }
+        return;
+      }
+
       if (key !== "z") return;
 
       event.preventDefault();
@@ -999,6 +1093,17 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       }
 
       handleUndo();
+      return;
+    }
+
+    if ((event.key === "Delete" || event.key === "Backspace")) {
+      const state = store.getState();
+      if (!Number.isInteger(state.interaction.selectedEntityIndex)) return;
+
+      event.preventDefault();
+      store.setState((draft) => {
+        deleteSelectedEntity(draft);
+      });
       return;
     }
 
