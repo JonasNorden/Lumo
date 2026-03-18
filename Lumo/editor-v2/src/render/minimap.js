@@ -1,4 +1,6 @@
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
+import { getDecorVisual } from "../domain/decor/decorVisuals.js";
+import { getEntityVisual } from "../domain/entities/entityVisuals.js";
 
 const EMPTY_CELL_COLOR = "rgba(17, 24, 40, 0.45)";
 const VIEWPORT_STROKE_COLOR = "#b2c7ff";
@@ -37,6 +39,30 @@ export function renderMinimap(ctx, state) {
         Math.ceil(contentScale),
       );
     }
+  }
+
+  for (const decor of doc.decor || []) {
+    if (!decor?.visible) continue;
+    const visual = getDecorVisual(decor.type);
+    ctx.fillStyle = visual.stroke;
+    ctx.fillRect(
+      Math.floor(originX + decor.x * contentScale),
+      Math.floor(originY + decor.y * contentScale),
+      Math.max(2, Math.ceil(contentScale)),
+      Math.max(2, Math.ceil(contentScale)),
+    );
+  }
+
+  for (const entity of doc.entities || []) {
+    if (!entity?.visible) continue;
+    const visual = getEntityVisual(entity.type);
+    ctx.fillStyle = visual.stroke;
+    ctx.fillRect(
+      Math.floor(originX + entity.x * contentScale),
+      Math.floor(originY + entity.y * contentScale),
+      Math.max(2, Math.ceil(contentScale)),
+      Math.max(2, Math.ceil(contentScale)),
+    );
   }
 
   ctx.strokeStyle = FRAME_COLOR;

@@ -8,6 +8,7 @@ import { getBrushDraftSummary } from "../domain/tiles/brushDraft.js";
 import { TOOL_OPTIONS, isEditorTool } from "../domain/tiles/tools.js";
 import { canUndo, canRedo } from "../domain/tiles/history.js";
 import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
+import { DECOR_PRESETS } from "../domain/decor/decorPresets.js";
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
 import { getPrimarySelectedEntityIndex, getSelectedEntityIndices } from "../domain/entities/selection.js";
 
@@ -208,6 +209,110 @@ function renderEntityParamsEditor(selected, selectedEntityIndex) {
   `;
 }
 
+function renderDecorSettings(active, state) {
+  const decorItems = active.decor || [];
+  const selectedDecorIndex = state.interaction.selectedDecorIndex;
+  const selected = Number.isInteger(selectedDecorIndex) ? decorItems[selectedDecorIndex] : null;
+  const activePresetId = state.interaction.activeDecorPresetId;
+  const activePreset = DECOR_PRESETS.find((preset) => preset.id === activePresetId) || null;
+
+  return `
+    <div class="infoGroup compact">
+      <div class="value">${decorItems.length} total</div>
+    </div>
+
+    <div class="entityPresetSection decorPresetSection">
+      <div class="hintText">World-building presets</div>
+      <div class="entityPresetGrid" role="group" aria-label="Decor presets">
+        ${DECOR_PRESETS
+          .map(
+            (preset) => `
+              <button
+                type="button"
+                class="toolButton entityPresetButton ${preset.id === activePresetId ? "isActive" : ""}"
+                data-decor-action="preset"
+                data-decor-preset-id="${preset.id}"
+                title="${escapeHtml(preset.type)}"
+              >
+                ${escapeHtml(preset.defaultName)}
+              </button>
+            `,
+          )
+          .join("")}
+      </div>
+      <div class="statusRow entityPresetStatus">
+        <span class="label">Placement</span>
+        <span class="value">${escapeHtml(activePreset ? `${activePreset.defaultName} · click canvas` : "Off")}</span>
+      </div>
+      <button type="button" class="toolButton isSecondary" data-decor-action="clear-preset">Clear placement</button>
+    </div>
+
+    <div class="hintText">Decor list</div>
+
+    <div class="entityList" role="listbox" aria-label="Decor items">
+      ${decorItems
+        .map(
+          (decor, index) => `
+            <button
+              type="button"
+              class="entityListItem ${selectedDecorIndex === index ? "isSelected" : ""}"
+              data-decor-action="select"
+              data-decor-index="${index}"
+            >
+              <span class="entityListName">${escapeHtml(decor.name || `Decor ${index + 1}`)}</span>
+              <span class="entityListType">${escapeHtml(decor.type || "unknown")}</span>
+            </button>
+          `,
+        )
+        .join("")}
+    </div>
+
+    ${selected
+      ? `
+      <div class="entityEditor">
+        <label class="fieldRow">
+          <span class="label">Name</span>
+          <input type="text" value="${escapeHtml(selected.name)}" data-decor-field="name" data-decor-index="${selectedDecorIndex}" />
+        </label>
+
+        <label class="fieldRow">
+          <span class="label">Type</span>
+          <input type="text" value="${escapeHtml(selected.type)}" data-decor-field="type" data-decor-index="${selectedDecorIndex}" />
+        </label>
+
+        <label class="fieldRow">
+          <span class="label">Variant</span>
+          <input type="text" value="${escapeHtml(selected.variant)}" data-decor-field="variant" data-decor-index="${selectedDecorIndex}" />
+        </label>
+
+        <label class="fieldRow compactInline">
+          <span class="label">Visible</span>
+          <input type="checkbox" ${selected.visible ? "checked" : ""} data-decor-field="visible" data-decor-index="${selectedDecorIndex}" />
+        </label>
+
+        <div class="entityPositionGrid">
+          <label class="fieldRow">
+            <span class="label">X</span>
+            <input type="number" step="1" value="${selected.x}" data-decor-field="x" data-decor-index="${selectedDecorIndex}" />
+          </label>
+          <label class="fieldRow">
+            <span class="label">Y</span>
+            <input type="number" step="1" value="${selected.y}" data-decor-field="y" data-decor-index="${selectedDecorIndex}" />
+          </label>
+        </div>
+
+        <div class="entityActionRow">
+          <button type="button" class="toolButton isSecondary" data-decor-action="duplicate" data-decor-index="${selectedDecorIndex}">Duplicate</button>
+          <button type="button" class="toolButton isSecondary" data-decor-action="delete" data-decor-index="${selectedDecorIndex}">Delete</button>
+        </div>
+
+        <div class="mutedValue entityShortcutHint">Decor stays separate from gameplay entities. Drag directly in canvas to reposition.</div>
+      </div>
+      `
+      : '<div class="mutedValue">Select a decor item to edit it.</div>'}
+  `;
+}
+
 function renderEntitiesSettings(active, state) {
   const entities = active.entities || [];
   const selectedEntityIndices = getSelectedEntityIndices(state.interaction);
@@ -369,6 +474,7 @@ export function renderBrushPanel(panel, state) {
     tools: true,
     palette: true,
     brush: true,
+    decor: true,
     entities: false,
     backgrounds: false,
     workspace: false,
@@ -442,6 +548,10 @@ export function renderBrushPanel(panel, state) {
     )}
 
     ${state.document.active
+      ? renderSection("decor", "Decor", panelSections.decor, renderDecorSettings(state.document.active, state))
+      : ""}
+
+    ${state.document.active
       ? renderSection("entities", "Entities", panelSections.entities, renderEntitiesSettings(state.document.active, state))
       : ""}
 
@@ -489,8 +599,8 @@ export function renderBrushPanel(panel, state) {
           <span><kbd>F</kbd> Fill</span>
           <span><kbd>Ctrl/⌘+Z</kbd> Undo</span>
           <span><kbd>Ctrl/⌘+Shift+Z</kbd> Redo</span>
-          <span><kbd>Delete</kbd>/<kbd>Backspace</kbd> Remove entity</span>
-          <span><kbd>Ctrl/⌘+D</kbd> Duplicate entity</span>
+          <span><kbd>Delete</kbd>/<kbd>Backspace</kbd> Remove selected entity/decor</span>
+          <span><kbd>Ctrl/⌘+D</kbd> Duplicate selected entity/decor</span>
         </div>
       `,
       "panelSectionMicro",
@@ -499,7 +609,7 @@ export function renderBrushPanel(panel, state) {
 }
 
 export function bindBrushPanel(panel, store, options = {}) {
-  const { onUndo, onRedo, onExport, onImport, onNew, onWorkspaceUpdate, onBackgroundUpdate, onEntityUpdate } = options;
+  const { onUndo, onRedo, onExport, onImport, onNew, onWorkspaceUpdate, onBackgroundUpdate, onEntityUpdate, onDecorUpdate } = options;
   const onChange = (event) => {
     const target = event.target;
 
@@ -531,6 +641,28 @@ export function bindBrushPanel(panel, store, options = {}) {
           ? Number.parseFloat(target.value)
           : target.value;
       onBackgroundUpdate?.(index, backgroundField, value);
+      return;
+    }
+
+    const decorField = target.dataset.decorField;
+    if (decorField === "name" || decorField === "type" || decorField === "variant" || decorField === "visible" || decorField === "x" || decorField === "y") {
+      const index = Number.parseInt(target.dataset.decorIndex || "", 10);
+      if (!Number.isInteger(index) || index < 0) return;
+
+      if (decorField === "visible") {
+        onDecorUpdate?.(index, "visible", target.checked);
+        return;
+      }
+
+      if (decorField === "x" || decorField === "y") {
+        const parsed = Number.parseInt(target.value, 10);
+        const value = Number.isInteger(parsed) ? parsed : 0;
+        target.value = String(value);
+        onDecorUpdate?.(index, decorField, value);
+        return;
+      }
+
+      onDecorUpdate?.(index, decorField, target.value);
       return;
     }
 
@@ -653,6 +785,33 @@ export function bindBrushPanel(panel, store, options = {}) {
         const index = Number.parseInt(backgroundActionButton.dataset.backgroundIndex || "", 10);
         if (Number.isInteger(index) && index >= 0) {
           onBackgroundUpdate?.(index, "remove", null);
+        }
+      }
+      return;
+    }
+
+    const decorActionButton = target.closest("[data-decor-action]");
+    if (decorActionButton instanceof HTMLButtonElement) {
+      const action = decorActionButton.dataset.decorAction;
+      if (action === "preset") {
+        const presetId = decorActionButton.dataset.decorPresetId;
+        if (presetId) {
+          onDecorUpdate?.(-1, "preset", presetId);
+        }
+      }
+      if (action === "clear-preset") {
+        onDecorUpdate?.(-1, "clear-preset", null);
+      }
+      if (action === "select") {
+        const index = Number.parseInt(decorActionButton.dataset.decorIndex || "", 10);
+        if (Number.isInteger(index) && index >= 0) {
+          onDecorUpdate?.(index, "select", null);
+        }
+      }
+      if (action === "duplicate" || action === "delete") {
+        const index = Number.parseInt(decorActionButton.dataset.decorIndex || "", 10);
+        if (Number.isInteger(index) && index >= 0) {
+          onDecorUpdate?.(index, action, null);
         }
       }
       return;
