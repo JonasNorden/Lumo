@@ -50,7 +50,7 @@ export const mockLevelDocument = {
     {
       id: "entity-1",
       name: "Player Spawn",
-      type: "spawn",
+      type: "player-spawn",
       x: 6,
       y: 14,
       visible: true,
@@ -67,6 +67,38 @@ export const mockLevelDocument = {
         lightRadius: 6,
         flicker: true,
       },
+    },
+    {
+      id: "entity-3",
+      name: "Trigger",
+      type: "trigger",
+      x: 19,
+      y: 14,
+      visible: true,
+      params: {
+        event: "open-door",
+        radius: 2,
+      },
+    },
+    {
+      id: "entity-4",
+      name: "Checkpoint",
+      type: "checkpoint",
+      x: 29,
+      y: 8,
+      visible: true,
+      params: {
+        respawnId: "cp-1",
+      },
+    },
+    {
+      id: "entity-5",
+      name: "Generic",
+      type: "generic",
+      x: 34,
+      y: 17,
+      visible: true,
+      params: {},
     },
   ],
   extra: {
