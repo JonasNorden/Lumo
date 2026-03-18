@@ -1,10 +1,12 @@
+import { cloneEntityParams } from "../entities/entityParams.js";
+
 /**
  * @typedef LevelDocument
  * @property {{id: string, name: string, version: string}} meta
  * @property {{width: number, height: number, tileSize: number}} dimensions
  * @property {{base: number[]}} tiles
  * @property {{layers: {id: string, name: string, visible: boolean, color: string}[]}} backgrounds
- * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean}[]} entities
+ * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} entities
  * @property {{notes?: string}} extra
  */
 
@@ -31,6 +33,7 @@ function normalizeEntity(entity, index) {
   const nextX = Number.isFinite(entity?.x) ? Math.round(entity.x) : 0;
   const nextY = Number.isFinite(entity?.y) ? Math.round(entity.y) : 0;
   const nextVisible = typeof entity?.visible === "boolean" ? entity.visible : true;
+  const nextParams = cloneEntityParams(entity?.params);
 
   return {
     id: nextId,
@@ -39,6 +42,7 @@ function normalizeEntity(entity, index) {
     x: nextX,
     y: nextY,
     visible: nextVisible,
+    params: nextParams,
   };
 }
 

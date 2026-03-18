@@ -8,6 +8,7 @@ import { getBrushDraftSummary } from "../domain/tiles/brushDraft.js";
 import { TOOL_OPTIONS, isEditorTool } from "../domain/tiles/tools.js";
 import { canUndo, canRedo } from "../domain/tiles/history.js";
 import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
+import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
 
 const WORKSPACE_BACKGROUND_PRESETS = ["#0a0f1d", "#111827", "#1a2336", "#141b2a"];
 
@@ -123,6 +124,65 @@ function renderBackgroundSettings(active) {
   `;
 }
 
+
+function formatEntityParamLabel(key) {
+  return String(key)
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/^./, (char) => char.toUpperCase());
+}
+
+function renderEntityParamField(paramKey, paramValue, selectedEntityIndex) {
+  const inputType = getEntityParamInputType(paramValue);
+  const escapedKey = escapeHtml(paramKey);
+  const label = escapeHtml(formatEntityParamLabel(paramKey));
+
+  if (inputType === "boolean") {
+    return `
+      <label class="fieldRow compactInline entityParamBooleanRow">
+        <span class="label">${label}</span>
+        <input
+          type="checkbox"
+          ${paramValue ? "checked" : ""}
+          data-entity-param-key="${escapedKey}"
+          data-entity-param-type="boolean"
+          data-entity-index="${selectedEntityIndex}"
+        />
+      </label>
+    `;
+  }
+
+  return `
+    <label class="fieldRow">
+      <span class="label">${label}</span>
+      <input
+        type="${inputType === "number" ? "number" : "text"}"
+        ${inputType === "number" ? 'step="any"' : ""}
+        value="${escapeHtml(paramValue)}"
+        data-entity-param-key="${escapedKey}"
+        data-entity-param-type="${inputType}"
+        data-entity-index="${selectedEntityIndex}"
+      />
+    </label>
+  `;
+}
+
+function renderEntityParamsEditor(selected, selectedEntityIndex) {
+  const params = cloneEntityParams(selected?.params);
+  const entries = Object.entries(params);
+
+  return `
+    <div class="entityParamsSection">
+      <div class="hintText">Parameters</div>
+      ${entries.length
+        ? `<div class="entityParamsGrid">${entries
+            .map(([paramKey, paramValue]) => renderEntityParamField(paramKey, paramValue, selectedEntityIndex))
+            .join("")}</div>`
+        : '<div class="mutedValue entityParamsEmpty">No parameters for this entity.</div>'}
+    </div>
+  `;
+}
+
 function renderEntitiesSettings(active, state) {
   const entities = active.entities || [];
   const selectedEntityIndex = state.interaction.selectedEntityIndex;
@@ -209,6 +269,8 @@ function renderEntitiesSettings(active, state) {
             <input type="number" step="1" value="${selected.y}" data-entity-field="y" data-entity-index="${selectedEntityIndex}" />
           </label>
         </div>
+
+        ${renderEntityParamsEditor(selected, selectedEntityIndex)}
 
         <div class="entityActionRow">
           <button type="button" class="toolButton isSecondary" data-entity-action="duplicate" data-entity-index="${selectedEntityIndex}">Duplicate</button>
@@ -419,6 +481,29 @@ export function bindBrushPanel(panel, store, options = {}) {
       const index = Number.parseInt(target.dataset.backgroundIndex || "", 10);
       if (!Number.isInteger(index) || index < 0) return;
       onBackgroundUpdate?.(index, backgroundField, backgroundField === "visible" ? target.checked : target.value);
+      return;
+    }
+
+    const entityParamKey = target.dataset.entityParamKey;
+    if (entityParamKey) {
+      const index = Number.parseInt(target.dataset.entityIndex || "", 10);
+      if (!Number.isInteger(index) || index < 0) return;
+
+      const paramType = target.dataset.entityParamType;
+      if (paramType === "boolean") {
+        onEntityUpdate?.(index, "param", { key: entityParamKey, value: target.checked });
+        return;
+      }
+
+      if (paramType === "number") {
+        const parsed = Number.parseFloat(target.value);
+        const value = Number.isFinite(parsed) ? parsed : 0;
+        target.value = String(value);
+        onEntityUpdate?.(index, "param", { key: entityParamKey, value });
+        return;
+      }
+
+      onEntityUpdate?.(index, "param", { key: entityParamKey, value: target.value });
       return;
     }
 

@@ -54,6 +54,19 @@ export const mockLevelDocument = {
       x: 6,
       y: 14,
       visible: true,
+      params: {},
+    },
+    {
+      id: "entity-2",
+      name: "Lantern",
+      type: "lantern",
+      x: 15,
+      y: 11,
+      visible: true,
+      params: {
+        lightRadius: 6,
+        flicker: true,
+      },
     },
   ],
   extra: {
