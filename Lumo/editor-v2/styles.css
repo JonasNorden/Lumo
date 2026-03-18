@@ -509,6 +509,12 @@ kbd {
   font-size: 11px;
 }
 
+.backgroundLayerActionRow {
+  display: flex;
+  justify-content: flex-start;
+  margin-bottom: 10px;
+}
+
 .backgroundLayerList {
   display: grid;
   gap: 8px;
@@ -520,12 +526,50 @@ kbd {
   border-radius: 8px;
   padding: 8px;
   background: rgba(16, 26, 45, 0.4);
+  display: grid;
+  gap: 8px;
+}
+
+.backgroundLayerRowHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.backgroundLayerBadge {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9eb2e5;
 }
 
 .backgroundLayerControls {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.backgroundLayerDepthField {
+  margin-bottom: 0;
+}
+
+.backgroundLayerDepthControl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.backgroundLayerDepthValue {
+  min-width: 36px;
+  text-align: right;
+  color: #dbe5ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.backgroundLayerRemoveButton {
+  white-space: nowrap;
 }
 
 .fieldRow.compactInline {

@@ -1,28 +1,47 @@
 import { cloneEntityParams } from "../entities/entityParams.js";
 
+const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
+const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
+
 /**
  * @typedef LevelDocument
  * @property {{id: string, name: string, version: string}} meta
  * @property {{width: number, height: number, tileSize: number}} dimensions
  * @property {{base: number[]}} tiles
- * @property {{layers: {id: string, name: string, visible: boolean, color: string}[]}} backgrounds
+ * @property {{layers: {id: string, name: string, type: string, depth: number, visible: boolean, color: string}[]}} backgrounds
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} entities
  * @property {{notes?: string}} extra
  */
 
-function normalizeBackgroundLayer(layer, index) {
+function clampBackgroundDepth(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+export function createDefaultBackgroundLayer(index = 0, overrides = {}) {
   const fallbackId = `bg-${index + 1}`;
-  const nextId = typeof layer?.id === "string" && layer.id.trim() ? layer.id : fallbackId;
-  const nextName = typeof layer?.name === "string" && layer.name.trim() ? layer.name : `Background ${index + 1}`;
-  const nextVisible = typeof layer?.visible === "boolean" ? layer.visible : true;
-  const nextColor = typeof layer?.color === "string" && layer.color ? layer.color : "#1b2436";
+  const nextId = typeof overrides?.id === "string" && overrides.id.trim() ? overrides.id.trim() : fallbackId;
 
   return {
     id: nextId,
-    name: nextName,
-    visible: nextVisible,
-    color: nextColor,
+    name:
+      typeof overrides?.name === "string" && overrides.name.trim()
+        ? overrides.name.trim()
+        : index === 0
+          ? "Sky"
+          : `Background ${index + 1}`,
+    type:
+      typeof overrides?.type === "string" && SUPPORTED_BACKGROUND_LAYER_TYPES.has(overrides.type)
+        ? overrides.type
+        : "color",
+    depth: clampBackgroundDepth(overrides?.depth),
+    visible: typeof overrides?.visible === "boolean" ? overrides.visible : true,
+    color: typeof overrides?.color === "string" && overrides.color ? overrides.color : DEFAULT_BACKGROUND_LAYER_COLOR,
   };
+}
+
+function normalizeBackgroundLayer(layer, index) {
+  return createDefaultBackgroundLayer(index, layer);
 }
 
 function normalizeEntity(entity, index) {
@@ -76,7 +95,9 @@ export function validateLevelDocument(doc) {
   const rawLayers = doc.backgrounds?.layers;
   const layers = Array.isArray(rawLayers) ? rawLayers : [];
   doc.backgrounds = {
-    layers: layers.map((layer, index) => normalizeBackgroundLayer(layer, index)),
+    layers: (layers.length ? layers : [createDefaultBackgroundLayer()])
+      .map((layer, index) => normalizeBackgroundLayer(layer, index))
+      .sort((left, right) => left.depth - right.depth),
   };
 
   const rawEntities = Array.isArray(doc.entities) ? doc.entities : [];

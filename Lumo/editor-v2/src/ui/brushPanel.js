@@ -89,24 +89,40 @@ function renderWorkspaceSettings(state) {
 }
 
 function renderBackgroundSettings(active) {
-  const layers = active.backgrounds?.layers || [];
+  const layers = [...(active.backgrounds?.layers || [])].sort((left, right) => (left.depth ?? 0) - (right.depth ?? 0));
 
   return `
     <div class="infoGroup compact">
       <div class="value">${layers.length} layer${layers.length === 1 ? "" : "s"}</div>
     </div>
 
-    <button type="button" class="toolButton isSecondary" data-background-action="add">Add layer</button>
+    <div class="backgroundLayerActionRow">
+      <button type="button" class="toolButton isSecondary" data-background-action="add">Add layer</button>
+    </div>
 
     <div class="backgroundLayerList">
       ${layers
         .map(
           (layer, index) => `
             <div class="backgroundLayerRow">
+              <div class="backgroundLayerRowHeader">
+                <span class="backgroundLayerBadge">Depth ${Number(layer.depth || 0).toFixed(2)}</span>
+                <button
+                  type="button"
+                  class="toolButton isSecondary backgroundLayerRemoveButton"
+                  data-background-action="remove"
+                  data-background-index="${index}"
+                  ${layers.length <= 1 ? "disabled" : ""}
+                >
+                  Remove
+                </button>
+              </div>
+
               <label class="fieldRow">
                 <span class="label">Name</span>
                 <input type="text" value="${escapeHtml(layer.name)}" data-background-field="name" data-background-index="${index}" />
               </label>
+
               <div class="backgroundLayerControls">
                 <label class="fieldRow compactInline">
                   <span class="label">Visible</span>
@@ -117,6 +133,14 @@ function renderBackgroundSettings(active) {
                   <input type="color" value="${layer.color}" data-background-field="color" data-background-index="${index}" />
                 </label>
               </div>
+
+              <label class="fieldRow backgroundLayerDepthField">
+                <span class="label">Depth</span>
+                <div class="backgroundLayerDepthControl">
+                  <input type="range" min="0" max="1" step="0.01" value="${Number(layer.depth || 0).toFixed(2)}" data-background-field="depth" data-background-index="${index}" />
+                  <span class="backgroundLayerDepthValue">${Number(layer.depth || 0).toFixed(2)}</span>
+                </div>
+              </label>
             </div>
           `,
         )
@@ -498,10 +522,15 @@ export function bindBrushPanel(panel, store, options = {}) {
     }
 
     const backgroundField = target.dataset.backgroundField;
-    if (backgroundField === "name" || backgroundField === "visible" || backgroundField === "color") {
+    if (backgroundField === "name" || backgroundField === "visible" || backgroundField === "color" || backgroundField === "depth") {
       const index = Number.parseInt(target.dataset.backgroundIndex || "", 10);
       if (!Number.isInteger(index) || index < 0) return;
-      onBackgroundUpdate?.(index, backgroundField, backgroundField === "visible" ? target.checked : target.value);
+      const value = backgroundField === "visible"
+        ? target.checked
+        : backgroundField === "depth"
+          ? Number.parseFloat(target.value)
+          : target.value;
+      onBackgroundUpdate?.(index, backgroundField, value);
       return;
     }
 
@@ -619,6 +648,12 @@ export function bindBrushPanel(panel, store, options = {}) {
       const action = backgroundActionButton.dataset.backgroundAction;
       if (action === "add") {
         onBackgroundUpdate?.(-1, "add", null);
+      }
+      if (action === "remove") {
+        const index = Number.parseInt(backgroundActionButton.dataset.backgroundIndex || "", 10);
+        if (Number.isInteger(index) && index >= 0) {
+          onBackgroundUpdate?.(index, "remove", null);
+        }
       }
       return;
     }

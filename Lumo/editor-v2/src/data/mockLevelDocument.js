@@ -39,10 +39,28 @@ export const mockLevelDocument = {
   backgrounds: {
     layers: [
       {
-        id: "bg-1",
-        name: "Background 1",
+        id: "sky",
+        name: "Sky",
+        type: "color",
+        depth: 0,
         visible: true,
         color: "#19253a",
+      },
+      {
+        id: "mountains",
+        name: "Mountains",
+        type: "color",
+        depth: 0.3,
+        visible: true,
+        color: "#243047",
+      },
+      {
+        id: "hills",
+        name: "Hills",
+        type: "color",
+        depth: 0.55,
+        visible: true,
+        color: "#2f3d5d",
       },
     ],
   },

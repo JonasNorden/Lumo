@@ -28,7 +28,7 @@ import {
   undoTileEdit,
   redoTileEdit,
 } from "../domain/tiles/history.js";
-import { getTileIndex } from "../domain/level/levelDocument.js";
+import { createDefaultBackgroundLayer, getTileIndex } from "../domain/level/levelDocument.js";
 import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
 import { DEFAULT_ENTITY_PRESET_ID, findEntityPresetById, getEntityPresetDefaultParams } from "../domain/entities/entityPresets.js";
@@ -311,12 +311,21 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
       if (field === "add") {
         const nextNumber = layers.length + 1;
-        layers.push({
-          id: `bg-${nextNumber}`,
-          name: `Background ${nextNumber}`,
-          visible: true,
-          color: "#1b2436",
-        });
+        layers.push(
+          createDefaultBackgroundLayer(layers.length, {
+            id: `bg-${nextNumber}`,
+            name: `Layer ${nextNumber}`,
+            depth: Math.min(1, Number((layers.length * 0.15).toFixed(2))),
+            color: nextNumber % 2 === 0 ? "#243047" : "#1b2436",
+          }),
+        );
+        layers.sort((left, right) => left.depth - right.depth);
+        return;
+      }
+
+      if (field === "remove") {
+        if (layers.length <= 1 || index < 0 || index >= layers.length) return;
+        layers.splice(index, 1);
         return;
       }
 
@@ -336,6 +345,13 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
       if (field === "color" && typeof value === "string") {
         layer.color = value;
+        return;
+      }
+
+      if (field === "depth") {
+        const nextDepth = Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : layer.depth;
+        layer.depth = Number(nextDepth.toFixed(2));
+        layers.sort((left, right) => left.depth - right.depth);
       }
     });
   };
