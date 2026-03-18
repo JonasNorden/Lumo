@@ -33,6 +33,14 @@ import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
 import { DEFAULT_ENTITY_PRESET_ID, findEntityPresetById, getEntityPresetDefaultParams } from "../domain/entities/entityPresets.js";
 import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
+import {
+  clearEntitySelection,
+  getPrimarySelectedEntityIndex,
+  getSelectedEntityIndices,
+  pruneEntitySelection,
+  setEntitySelection,
+  toggleEntitySelection,
+} from "../domain/entities/selection.js";
 
 
 function getInspectedCell(state) {
@@ -243,11 +251,13 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
         entity.y = Math.max(0, Math.min(nextHeight - 1, entity.y));
       }
 
+      pruneEntitySelection(draft.interaction, doc.entities?.length || 0);
+      updateEntitySelectionCell(draft);
       draft.interaction.hoverCell = null;
-      draft.interaction.selectedCell = null;
       draft.interaction.dragPaint = null;
       draft.interaction.rectDrag = null;
       draft.interaction.lineDrag = null;
+      draft.interaction.boxSelection = null;
       draft.history.undoStack = [];
       draft.history.redoStack = [];
       draft.history.activeBatch = null;
@@ -366,6 +376,56 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     };
   };
 
+  const getEntitySelectionIndices = (interaction, entities) =>
+    getSelectedEntityIndices(interaction).filter((index) => index >= 0 && index < entities.length);
+
+  const getSelectedEntities = (interaction, entities) =>
+    getEntitySelectionIndices(interaction, entities).map((index) => ({ index, entity: entities[index] })).filter((entry) => entry.entity);
+
+  const getClampedGroupDragDelta = (doc, originPositions, deltaX, deltaY) => {
+    let minDeltaX = -Infinity;
+    let maxDeltaX = Infinity;
+    let minDeltaY = -Infinity;
+    let maxDeltaY = Infinity;
+
+    for (const origin of originPositions) {
+      minDeltaX = Math.max(minDeltaX, -origin.x);
+      maxDeltaX = Math.min(maxDeltaX, doc.dimensions.width - 1 - origin.x);
+      minDeltaY = Math.max(minDeltaY, -origin.y);
+      maxDeltaY = Math.min(maxDeltaY, doc.dimensions.height - 1 - origin.y);
+    }
+
+    return {
+      x: Math.max(minDeltaX, Math.min(maxDeltaX, deltaX)),
+      y: Math.max(minDeltaY, Math.min(maxDeltaY, deltaY)),
+    };
+  };
+
+  const getEntityIndicesInCanvasRect = (doc, viewport, startPoint, endPoint) => {
+    if (!startPoint || !endPoint) return [];
+
+    const minX = Math.min(startPoint.x, endPoint.x);
+    const maxX = Math.max(startPoint.x, endPoint.x);
+    const minY = Math.min(startPoint.y, endPoint.y);
+    const maxY = Math.max(startPoint.y, endPoint.y);
+    const tileSize = doc.dimensions.tileSize;
+
+    return (doc.entities || [])
+      .map((entity, index) => ({ entity, index }))
+      .filter(({ entity }) => entity?.visible)
+      .filter(({ entity }) => {
+        const centerX = viewport.offsetX + (entity.x + 0.5) * tileSize * viewport.zoom;
+        const centerY = viewport.offsetY + (entity.y + 0.5) * tileSize * viewport.zoom;
+        return centerX >= minX && centerX <= maxX && centerY >= minY && centerY <= maxY;
+      })
+      .map(({ index }) => index);
+  };
+
+  const updateEntitySelectionCell = (draft, primaryIndex = draft.interaction.selectedEntityIndex) => {
+    const entity = Number.isInteger(primaryIndex) ? draft.document.active?.entities?.[primaryIndex] : null;
+    draft.interaction.selectedCell = entity ? { x: entity.x, y: entity.y } : null;
+  };
+
   const moveEntityToCell = (draft, index, cell) => {
     const doc = draft.document.active;
     if (!doc) return false;
@@ -377,8 +437,8 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     const changed = entity.x !== next.x || entity.y !== next.y;
     entity.x = next.x;
     entity.y = next.y;
-    draft.interaction.selectedEntityIndex = index;
-    draft.interaction.selectedCell = { x: next.x, y: next.y };
+    setEntitySelection(draft.interaction, [index], index);
+    updateEntitySelectionCell(draft, index);
     return changed;
   };
 
@@ -386,24 +446,23 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     const doc = draft.document.active;
     if (!doc) return false;
 
-    const selectedIndex = draft.interaction.selectedEntityIndex;
-    if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= doc.entities.length) {
+    const selectedIndices = getEntitySelectionIndices(draft.interaction, doc.entities);
+    if (!selectedIndices.length) {
       return false;
     }
 
-    doc.entities.splice(selectedIndex, 1);
+    const deletedSet = new Set(selectedIndices);
+    doc.entities = doc.entities.filter((_, index) => !deletedSet.has(index));
 
     const hoveredIndex = draft.interaction.hoveredEntityIndex;
-    draft.interaction.selectedEntityIndex = null;
+    clearEntitySelection(draft.interaction);
     draft.interaction.selectedCell = null;
     draft.interaction.entityDrag = null;
     draft.interaction.hoveredEntityIndex =
       Number.isInteger(hoveredIndex)
-        ? hoveredIndex === selectedIndex
+        ? deletedSet.has(hoveredIndex)
           ? null
-          : hoveredIndex > selectedIndex
-            ? hoveredIndex - 1
-            : hoveredIndex
+          : hoveredIndex - selectedIndices.filter((index) => index < hoveredIndex).length
         : null;
 
     return true;
@@ -413,28 +472,35 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     const doc = draft.document.active;
     if (!doc) return false;
 
-    const selectedIndex = draft.interaction.selectedEntityIndex;
-    const source = Number.isInteger(selectedIndex) ? doc.entities?.[selectedIndex] : null;
-    if (!source) return false;
+    const selectedEntries = getSelectedEntities(draft.interaction, doc.entities);
+    if (!selectedEntries.length) return false;
 
-    const offset = clampEntityPosition(doc, source.x + 1, source.y + 1);
-    const duplicate = {
-      ...source,
-      id: getNextEntityStringId(doc.entities, "id", "entity"),
-      x: offset.x,
-      y: offset.y,
-      params: cloneEntityParams(source.params),
-    };
+    let insertIndex = selectedEntries[selectedEntries.length - 1].index + 1;
+    const duplicatedIndices = [];
 
-    if (typeof source.instanceId === "string" && source.instanceId.trim()) {
-      duplicate.instanceId = getNextEntityStringId(doc.entities, "instanceId", "instance");
+    for (const { entity: source } of selectedEntries) {
+      const offset = clampEntityPosition(doc, source.x + 1, source.y + 1);
+      const duplicate = {
+        ...source,
+        id: getNextEntityStringId(doc.entities, "id", "entity"),
+        x: offset.x,
+        y: offset.y,
+        params: cloneEntityParams(source.params),
+      };
+
+      if (typeof source.instanceId === "string" && source.instanceId.trim()) {
+        duplicate.instanceId = getNextEntityStringId(doc.entities, "instanceId", "instance");
+      }
+
+      doc.entities.splice(insertIndex, 0, duplicate);
+      duplicatedIndices.push(insertIndex);
+      insertIndex += 1;
     }
 
-    doc.entities.splice(selectedIndex + 1, 0, duplicate);
-    const duplicateIndex = selectedIndex + 1;
-    draft.interaction.selectedEntityIndex = duplicateIndex;
-    draft.interaction.hoveredEntityIndex = duplicateIndex;
-    draft.interaction.selectedCell = { x: duplicate.x, y: duplicate.y };
+    const primaryIndex = duplicatedIndices[duplicatedIndices.length - 1] ?? null;
+    setEntitySelection(draft.interaction, duplicatedIndices, primaryIndex);
+    draft.interaction.hoveredEntityIndex = primaryIndex;
+    updateEntitySelectionCell(draft, primaryIndex);
     draft.interaction.entityDrag = null;
 
     return true;
@@ -448,9 +514,9 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     const entity = createEntityDraft(doc, cell.x, cell.y, presetId, entities.length + 1);
     entities.push(entity);
     const createdIndex = entities.length - 1;
-    draft.interaction.selectedEntityIndex = createdIndex;
+    setEntitySelection(draft.interaction, [createdIndex], createdIndex);
     draft.interaction.hoveredEntityIndex = createdIndex;
-    draft.interaction.selectedCell = { x: entity.x, y: entity.y };
+    updateEntitySelectionCell(draft, createdIndex);
     return createdIndex;
   };
 
@@ -490,9 +556,13 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
       if (field === "select") {
         if (index >= 0 && index < entities.length) {
-          const entity = entities[index];
-          draft.interaction.selectedEntityIndex = index;
-          draft.interaction.selectedCell = entity ? { x: entity.x, y: entity.y } : draft.interaction.selectedCell;
+          const toggleSelection = Boolean(value?.toggle);
+          if (toggleSelection) {
+            toggleEntitySelection(draft.interaction, index);
+          } else {
+            setEntitySelection(draft.interaction, [index], index);
+          }
+          updateEntitySelectionCell(draft);
         }
         return;
       }
@@ -531,7 +601,8 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
         );
         entity.x = next.x;
         entity.y = next.y;
-        draft.interaction.selectedCell = { x: next.x, y: next.y };
+        setEntitySelection(draft.interaction, [index], index);
+        updateEntitySelectionCell(draft, index);
       }
     });
   };
@@ -699,26 +770,35 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const activePresetId = state.interaction.activeEntityPresetId;
 
-    if (event.shiftKey) {
-      interactionState.suppressNextClick = true;
-      event.preventDefault();
-      store.setState((draft) => {
-        createEntityAtCell(draft, cell, activePresetId || DEFAULT_ENTITY_PRESET_ID);
-      });
-      return true;
-    }
-
     if (hitEntityIndex >= 0) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
         const entity = draft.document.active?.entities?.[hitEntityIndex];
-        draft.interaction.selectedEntityIndex = hitEntityIndex;
+        if (event.shiftKey) {
+          toggleEntitySelection(draft.interaction, hitEntityIndex);
+          updateEntitySelectionCell(draft);
+          return;
+        }
+
+        const selectedIndices = getSelectedEntityIndices(draft.interaction);
+        const dragSelection = selectedIndices.includes(hitEntityIndex) ? selectedIndices : [hitEntityIndex];
+        setEntitySelection(draft.interaction, dragSelection, hitEntityIndex);
         draft.interaction.hoveredEntityIndex = hitEntityIndex;
-        draft.interaction.selectedCell = entity ? { x: entity.x, y: entity.y } : draft.interaction.selectedCell;
+        updateEntitySelectionCell(draft, hitEntityIndex);
         draft.interaction.entityDrag = {
           active: true,
-          index: hitEntityIndex,
+          leadIndex: hitEntityIndex,
+          anchorCell: entity ? { x: entity.x, y: entity.y } : cell,
+          originPositions: getEntitySelectionIndices(draft.interaction, draft.document.active?.entities || []).map((index) => {
+            const selectedEntity = draft.document.active?.entities?.[index];
+            return {
+              index,
+              x: selectedEntity?.x ?? 0,
+              y: selectedEntity?.y ?? 0,
+            };
+          }),
+          previewDelta: { x: 0, y: 0 },
         };
       });
       return true;
@@ -734,17 +814,21 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       return true;
     }
 
-    if (Number.isInteger(state.interaction.selectedEntityIndex)) {
-      interactionState.suppressNextClick = true;
-      event.preventDefault();
-      store.setState((draft) => {
-        moveEntityToCell(draft, state.interaction.selectedEntityIndex, cell);
-        draft.interaction.hoverCell = cell;
-      });
-      return true;
-    }
-
-    return false;
+    interactionState.suppressNextClick = true;
+    event.preventDefault();
+    store.setState((draft) => {
+      draft.interaction.selectedCell = cell;
+      draft.interaction.boxSelection = {
+        active: true,
+        additive: event.shiftKey,
+        startPoint: point,
+        currentPoint: point,
+      };
+      if (!event.shiftKey) {
+        clearEntitySelection(draft.interaction);
+      }
+    });
+    return true;
   };
 
   const handleCanvasMouseDown = (event) => {
@@ -843,9 +927,32 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       if (!cell) return;
 
       store.setState((draft) => {
-        moveEntityToCell(draft, draft.interaction.entityDrag.index, cell);
+        const entityDrag = draft.interaction.entityDrag;
+        if (!entityDrag?.active) return;
+        const requestedDeltaX = cell.x - entityDrag.anchorCell.x;
+        const requestedDeltaY = cell.y - entityDrag.anchorCell.y;
+        entityDrag.previewDelta = getClampedGroupDragDelta(
+          draft.document.active,
+          entityDrag.originPositions,
+          requestedDeltaX,
+          requestedDeltaY,
+        );
         draft.interaction.hoverCell = cell;
-        draft.interaction.hoveredEntityIndex = draft.interaction.entityDrag.index;
+        draft.interaction.hoveredEntityIndex = entityDrag.leadIndex;
+      });
+      return;
+    }
+
+    if (state.interaction.boxSelection?.active) {
+      if ((event.buttons & 1) !== 1) return;
+
+      const point = getCanvasPointFromMouseEvent(canvas, event);
+      const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+
+      store.setState((draft) => {
+        if (!draft.interaction.boxSelection) return;
+        draft.interaction.boxSelection.currentPoint = point;
+        draft.interaction.hoverCell = cell;
       });
       return;
     }
@@ -906,7 +1013,42 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
     if (state.interaction.entityDrag?.active) {
       store.setState((draft) => {
+        const entityDrag = draft.interaction.entityDrag;
+        const doc = draft.document.active;
+        if (!entityDrag || !doc) return;
+
+        const delta = entityDrag.previewDelta || { x: 0, y: 0 };
+        for (const origin of entityDrag.originPositions) {
+          const entity = doc.entities?.[origin.index];
+          if (!entity) continue;
+          entity.x = origin.x + delta.x;
+          entity.y = origin.y + delta.y;
+        }
+
         draft.interaction.entityDrag = null;
+        updateEntitySelectionCell(draft, entityDrag.leadIndex);
+      });
+      return;
+    }
+
+    if (state.interaction.boxSelection?.active) {
+      const boxSelection = state.interaction.boxSelection;
+      const nextSelection = getEntityIndicesInCanvasRect(
+        state.document.active,
+        state.viewport,
+        boxSelection.startPoint,
+        boxSelection.currentPoint,
+      );
+
+      store.setState((draft) => {
+        const baseSelection = boxSelection.additive ? getSelectedEntityIndices(draft.interaction) : [];
+        setEntitySelection(
+          draft.interaction,
+          boxSelection.additive ? [...baseSelection, ...nextSelection] : nextSelection,
+          nextSelection[nextSelection.length - 1] ?? getPrimarySelectedEntityIndex(draft.interaction),
+        );
+        draft.interaction.boxSelection = null;
+        updateEntitySelectionCell(draft);
       });
       return;
     }
@@ -966,9 +1108,12 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     if (hitEntityIndex >= 0) {
       store.setState((draft) => {
-        const entity = draft.document.active?.entities?.[hitEntityIndex];
-        draft.interaction.selectedEntityIndex = hitEntityIndex;
-        draft.interaction.selectedCell = entity ? { x: entity.x, y: entity.y } : draft.interaction.selectedCell;
+        if (event.shiftKey) {
+          toggleEntitySelection(draft.interaction, hitEntityIndex);
+        } else {
+          setEntitySelection(draft.interaction, [hitEntityIndex], hitEntityIndex);
+        }
+        updateEntitySelectionCell(draft, getPrimarySelectedEntityIndex(draft.interaction));
       });
       return;
     }
@@ -978,7 +1123,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
     store.setState((draft) => {
       draft.interaction.selectedCell = cell;
-      draft.interaction.selectedEntityIndex = null;
+      clearEntitySelection(draft.interaction);
     });
   };
 
@@ -993,11 +1138,12 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     draft.interaction.dragPaint = null;
     draft.interaction.rectDrag = null;
     draft.interaction.lineDrag = null;
+    draft.interaction.boxSelection = null;
     draft.interaction.entityDrag = null;
     draft.interaction.activeEntityPresetId = null;
     draft.interaction.selectedCell = null;
     draft.interaction.hoveredEntityIndex = null;
-    draft.interaction.selectedEntityIndex = null;
+    clearEntitySelection(draft.interaction);
     draft.interaction.hoverCell = null;
     draft.ui.importStatus = statusMessage;
   };
@@ -1113,7 +1259,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
     if ((event.key === "Delete" || event.key === "Backspace")) {
       const state = store.getState();
-      if (!Number.isInteger(state.interaction.selectedEntityIndex)) return;
+      if (!getSelectedEntityIndices(state.interaction).length) return;
 
       event.preventDefault();
       store.setState((draft) => {
@@ -1152,7 +1298,8 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
         state.document.active = doc;
         state.document.status = "ready";
         state.interaction.hoveredEntityIndex = null;
-        state.interaction.selectedEntityIndex = null;
+        clearEntitySelection(state.interaction);
+        state.interaction.boxSelection = null;
         state.interaction.entityDrag = null;
         state.interaction.activeEntityPresetId = null;
       });

@@ -9,6 +9,7 @@ import { TOOL_OPTIONS, isEditorTool } from "../domain/tiles/tools.js";
 import { canUndo, canRedo } from "../domain/tiles/history.js";
 import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
+import { getPrimarySelectedEntityIndex, getSelectedEntityIndices } from "../domain/entities/selection.js";
 
 const WORKSPACE_BACKGROUND_PRESETS = ["#0a0f1d", "#111827", "#1a2336", "#141b2a"];
 
@@ -185,8 +186,10 @@ function renderEntityParamsEditor(selected, selectedEntityIndex) {
 
 function renderEntitiesSettings(active, state) {
   const entities = active.entities || [];
-  const selectedEntityIndex = state.interaction.selectedEntityIndex;
+  const selectedEntityIndices = getSelectedEntityIndices(state.interaction);
+  const selectedEntityIndex = getPrimarySelectedEntityIndex(state.interaction);
   const selected = Number.isInteger(selectedEntityIndex) ? entities[selectedEntityIndex] : null;
+  const multiSelected = selectedEntityIndices.length > 1;
   const activePresetId = state.interaction.activeEntityPresetId;
   const activePreset = ENTITY_PRESETS.find((preset) => preset.id === activePresetId) || null;
 
@@ -223,13 +226,13 @@ function renderEntitiesSettings(active, state) {
 
     <div class="hintText">Entity list</div>
 
-    <div class="entityList" role="listbox" aria-label="Entities">
+    <div class="entityList" role="listbox" aria-label="Entities" aria-multiselectable="true">
       ${entities
         .map(
           (entity, index) => `
             <button
               type="button"
-              class="entityListItem ${index === selectedEntityIndex ? "isSelected" : ""}"
+              class="entityListItem ${selectedEntityIndices.includes(index) ? "isSelected" : ""}"
               data-entity-action="select"
               data-entity-index="${index}"
             >
@@ -241,7 +244,25 @@ function renderEntitiesSettings(active, state) {
         .join("")}
     </div>
 
-    ${selected
+    ${multiSelected
+      ? `
+      <div class="entityEditor">
+        <div class="infoGroup compact">
+          <div class="label">Selection</div>
+          <div class="value">${selectedEntityIndices.length} entities</div>
+        </div>
+
+        <div class="mutedValue">Batch actions keep the current selection and preserve each entity's relative offset.</div>
+
+        <div class="entityActionRow">
+          <button type="button" class="toolButton isSecondary" data-entity-action="duplicate" data-entity-index="${selectedEntityIndex ?? 0}">Duplicate selected</button>
+          <button type="button" class="toolButton isSecondary" data-entity-action="delete" data-entity-index="${selectedEntityIndex ?? 0}">Delete selected</button>
+        </div>
+
+        <div class="mutedValue entityShortcutHint">Shift-click adds/removes. Drag on canvas moves the full group.</div>
+      </div>
+      `
+      : selected
       ? `
       <div class="entityEditor">
         <label class="fieldRow">
@@ -617,7 +638,7 @@ export function bindBrushPanel(panel, store, options = {}) {
       if (action === "select") {
         const index = Number.parseInt(entityActionButton.dataset.entityIndex || "", 10);
         if (Number.isInteger(index) && index >= 0) {
-          onEntityUpdate?.(index, "select", null);
+          onEntityUpdate?.(index, "select", { toggle: event.shiftKey });
         }
       }
       if (action === "duplicate" || action === "delete") {
