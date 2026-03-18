@@ -590,6 +590,17 @@ kbd {
   gap: 8px;
 }
 
+.entityActionRow {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.entityShortcutHint {
+  margin-top: 8px;
+}
+
 
 .backgroundLayerRow,
 .entityListItem,

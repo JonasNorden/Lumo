@@ -209,6 +209,13 @@ function renderEntitiesSettings(active, state) {
             <input type="number" step="1" value="${selected.y}" data-entity-field="y" data-entity-index="${selectedEntityIndex}" />
           </label>
         </div>
+
+        <div class="entityActionRow">
+          <button type="button" class="toolButton isSecondary" data-entity-action="duplicate" data-entity-index="${selectedEntityIndex}">Duplicate</button>
+          <button type="button" class="toolButton isSecondary" data-entity-action="delete" data-entity-index="${selectedEntityIndex}">Delete</button>
+        </div>
+
+        <div class="mutedValue entityShortcutHint">Shortcuts: Delete / Backspace, Ctrl/⌘ + D</div>
       </div>
       `
       : '<div class="mutedValue">Select an entity to edit it.</div>'}
@@ -375,6 +382,8 @@ export function renderBrushPanel(panel, state) {
           <span><kbd>F</kbd> Fill</span>
           <span><kbd>Ctrl/⌘+Z</kbd> Undo</span>
           <span><kbd>Ctrl/⌘+Shift+Z</kbd> Redo</span>
+          <span><kbd>Delete</kbd>/<kbd>Backspace</kbd> Remove entity</span>
+          <span><kbd>Ctrl/⌘+D</kbd> Duplicate entity</span>
         </div>
       `,
       "panelSectionMicro",
@@ -524,6 +533,12 @@ export function bindBrushPanel(panel, store, options = {}) {
         const index = Number.parseInt(entityActionButton.dataset.entityIndex || "", 10);
         if (Number.isInteger(index) && index >= 0) {
           onEntityUpdate?.(index, "select", null);
+        }
+      }
+      if (action === "duplicate" || action === "delete") {
+        const index = Number.parseInt(entityActionButton.dataset.entityIndex || "", 10);
+        if (Number.isInteger(index) && index >= 0) {
+          onEntityUpdate?.(index, action, null);
         }
       }
       return;
