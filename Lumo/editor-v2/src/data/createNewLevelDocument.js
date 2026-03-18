@@ -1,4 +1,4 @@
-import { validateLevelDocument } from "../domain/level/levelDocument.js";
+import { createDefaultBackgroundLayer, validateLevelDocument } from "../domain/level/levelDocument.js";
 
 const DEFAULT_WIDTH = 32;
 const DEFAULT_HEIGHT = 18;
@@ -24,12 +24,12 @@ export function createNewLevelDocument() {
     },
     backgrounds: {
       layers: [
-        {
-          id: "bg-1",
-          name: "Background 1",
-          visible: true,
-          color: "#1b2436",
-        },
+        createDefaultBackgroundLayer(0, {
+          id: "sky",
+          name: "Sky",
+          color: "#1a1f2b",
+          depth: 0,
+        }),
       ],
     },
     entities: [],
