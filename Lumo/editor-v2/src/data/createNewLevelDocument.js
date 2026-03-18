@@ -32,6 +32,7 @@ export function createNewLevelDocument() {
         }),
       ],
     },
+    decor: [],
     entities: [],
     extra: {},
   });

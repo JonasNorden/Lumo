@@ -2,6 +2,7 @@ import { cloneEntityParams } from "../entities/entityParams.js";
 
 const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
 const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
+const DEFAULT_DECOR_VARIANT = "a";
 
 /**
  * @typedef LevelDocument
@@ -9,6 +10,7 @@ const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
  * @property {{width: number, height: number, tileSize: number}} dimensions
  * @property {{base: number[]}} tiles
  * @property {{layers: {id: string, name: string, type: string, depth: number, visible: boolean, color: string}[]}} backgrounds
+ * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, variant: string}[]} decor
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} entities
  * @property {{notes?: string}} extra
  */
@@ -42,6 +44,28 @@ export function createDefaultBackgroundLayer(index = 0, overrides = {}) {
 
 function normalizeBackgroundLayer(layer, index) {
   return createDefaultBackgroundLayer(index, layer);
+}
+
+
+function normalizeDecor(decor, index) {
+  const fallbackId = `decor-${index + 1}`;
+  const nextId = typeof decor?.id === "string" && decor.id.trim() ? decor.id.trim() : fallbackId;
+  const nextName = typeof decor?.name === "string" && decor.name.trim() ? decor.name.trim() : `Decor ${index + 1}`;
+  const nextType = typeof decor?.type === "string" && decor.type.trim() ? decor.type.trim() : "grass";
+  const nextX = Number.isFinite(decor?.x) ? Math.round(decor.x) : 0;
+  const nextY = Number.isFinite(decor?.y) ? Math.round(decor.y) : 0;
+  const nextVisible = typeof decor?.visible === "boolean" ? decor.visible : true;
+  const nextVariant = typeof decor?.variant === "string" && decor.variant.trim() ? decor.variant.trim() : DEFAULT_DECOR_VARIANT;
+
+  return {
+    id: nextId,
+    name: nextName,
+    type: nextType,
+    x: nextX,
+    y: nextY,
+    visible: nextVisible,
+    variant: nextVariant,
+  };
 }
 
 function normalizeEntity(entity, index) {
@@ -99,6 +123,9 @@ export function validateLevelDocument(doc) {
       .map((layer, index) => normalizeBackgroundLayer(layer, index))
       .sort((left, right) => left.depth - right.depth),
   };
+
+  const rawDecor = Array.isArray(doc.decor) ? doc.decor : [];
+  doc.decor = rawDecor.map((decor, index) => normalizeDecor(decor, index));
 
   const rawEntities = Array.isArray(doc.entities) ? doc.entities : [];
   doc.entities = rawEntities.map((entity, index) => normalizeEntity(entity, index));
