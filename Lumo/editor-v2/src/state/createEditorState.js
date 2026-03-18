@@ -22,10 +22,12 @@ export function createEditorState() {
       activeTool: "inspect",
       hoverCell: null,
       selectedCell: null,
+      hoveredEntityIndex: null,
       selectedEntityIndex: null,
       dragPaint: null,
       rectDrag: null,
       lineDrag: null,
+      entityDrag: null,
       spacePanActive: false,
     },
     brush: {

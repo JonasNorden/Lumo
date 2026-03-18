@@ -27,7 +27,7 @@ function normalizeEntity(entity, index) {
   const fallbackId = `entity-${index + 1}`;
   const nextId = typeof entity?.id === "string" && entity.id.trim() ? entity.id : fallbackId;
   const nextName = typeof entity?.name === "string" && entity.name.trim() ? entity.name : `Entity ${index + 1}`;
-  const nextType = typeof entity?.type === "string" && entity.type.trim() ? entity.type : "marker";
+  const nextType = typeof entity?.type === "string" && entity.type.trim() ? entity.type : "generic";
   const nextX = Number.isFinite(entity?.x) ? Math.round(entity.x) : 0;
   const nextY = Number.isFinite(entity?.y) ? Math.round(entity.y) : 0;
   const nextVisible = typeof entity?.visible === "boolean" ? entity.visible : true;

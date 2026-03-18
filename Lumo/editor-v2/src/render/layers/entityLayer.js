@@ -5,6 +5,14 @@ function getEntityCenter(entity, tileSize) {
   };
 }
 
+function getEntityScreenCenter(entity, tileSize, viewport) {
+  const center = getEntityCenter(entity, tileSize);
+  return {
+    x: viewport.offsetX + center.x * viewport.zoom,
+    y: viewport.offsetY + center.y * viewport.zoom,
+  };
+}
+
 export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 9) {
   const entities = doc.entities || [];
   const tileSize = doc.dimensions.tileSize;
@@ -14,11 +22,9 @@ export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 
     const entity = entities[i];
     if (!entity.visible) continue;
 
-    const center = getEntityCenter(entity, tileSize);
-    const screenX = viewport.offsetX + center.x * viewport.zoom;
-    const screenY = viewport.offsetY + center.y * viewport.zoom;
-    const dx = pointX - screenX;
-    const dy = pointY - screenY;
+    const center = getEntityScreenCenter(entity, tileSize, viewport);
+    const dx = pointX - center.x;
+    const dy = pointY - center.y;
 
     if (dx * dx + dy * dy <= scaledRadius * scaledRadius) {
       return i;
@@ -42,16 +48,34 @@ export function renderEntities(ctx, doc, viewport, interaction) {
 
     const { x, y } = getEntityCenter(entity, tileSize);
     const isSelected = interaction.selectedEntityIndex === i;
-    const radius = isSelected ? 6 : 4;
+    const isHovered = interaction.hoveredEntityIndex === i;
+    const markerRadius = isSelected ? 6 : 5;
+    const outlineWidth = (isSelected ? 2 : 1.5) / Math.max(0.001, viewport.zoom);
+
+    if (isSelected || isHovered) {
+      ctx.beginPath();
+      ctx.arc(x, y, markerRadius + (isSelected ? 4.5 : 3.5), 0, Math.PI * 2);
+      ctx.fillStyle = isSelected ? "rgba(255, 176, 64, 0.28)" : "rgba(101, 217, 255, 0.20)";
+      ctx.fill();
+    }
 
     ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = isSelected ? "#ffe084" : "#65d9ff";
+    ctx.arc(x, y, markerRadius, 0, Math.PI * 2);
+    ctx.fillStyle = isSelected ? "#ffe084" : isHovered ? "#b6f1ff" : "#65d9ff";
     ctx.fill();
 
-    ctx.strokeStyle = isSelected ? "#ff9f40" : "#153047";
-    ctx.lineWidth = 1.5 / Math.max(0.001, viewport.zoom);
+    ctx.strokeStyle = isSelected ? "#ff9f40" : isHovered ? "#7de7ff" : "#153047";
+    ctx.lineWidth = outlineWidth;
     ctx.stroke();
+
+    if (isSelected || isHovered) {
+      ctx.beginPath();
+      ctx.moveTo(x, y - markerRadius - 6);
+      ctx.lineTo(x, y - markerRadius - 12);
+      ctx.strokeStyle = isSelected ? "rgba(255, 176, 64, 0.95)" : "rgba(125, 231, 255, 0.95)";
+      ctx.lineWidth = 1.5 / Math.max(0.001, viewport.zoom);
+      ctx.stroke();
+    }
   }
 
   ctx.restore();
