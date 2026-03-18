@@ -4,6 +4,7 @@ export function createTileEditEntry(doc, cell, previousValue, nextValue) {
   const index = getTileIndex(doc.dimensions.width, cell.x, cell.y);
 
   return {
+    kind: "tile",
     index,
     cell: {
       x: cell.x,
@@ -14,26 +15,36 @@ export function createTileEditEntry(doc, cell, previousValue, nextValue) {
   };
 }
 
+export function createDecorEditEntry(mode, payload) {
+  return {
+    kind: "decor",
+    mode,
+    ...payload,
+  };
+}
+
 function createBatchEntry(label = "tile-drag") {
   return {
     type: "batch",
     label,
     edits: [],
-    seenIndices: new Set(),
+    seenKeys: new Set(),
   };
 }
 
-export function startTileEditBatch(history, label) {
+export function startHistoryBatch(history, label) {
   history.activeBatch = createBatchEntry(label);
 }
 
-export function pushTileEdit(history, editEntry) {
+export function pushHistoryEntry(history, editEntry, dedupeKey = null) {
   const batch = history.activeBatch;
   if (batch) {
-    if (batch.seenIndices.has(editEntry.index)) {
+    if (dedupeKey && batch.seenKeys.has(dedupeKey)) {
       return;
     }
-    batch.seenIndices.add(editEntry.index);
+    if (dedupeKey) {
+      batch.seenKeys.add(dedupeKey);
+    }
     batch.edits.push(editEntry);
     return;
   }
@@ -42,7 +53,7 @@ export function pushTileEdit(history, editEntry) {
   history.redoStack.length = 0;
 }
 
-export function endTileEditBatch(history) {
+export function endHistoryBatch(history) {
   const batch = history.activeBatch;
   history.activeBatch = null;
   if (!batch || batch.edits.length === 0) {
@@ -58,6 +69,18 @@ export function endTileEditBatch(history) {
   return true;
 }
 
+export function startTileEditBatch(history, label) {
+  startHistoryBatch(history, label);
+}
+
+export function pushTileEdit(history, editEntry) {
+  pushHistoryEntry(history, editEntry, `tile:${editEntry.index}`);
+}
+
+export function endTileEditBatch(history) {
+  return endHistoryBatch(history);
+}
+
 export function canUndo(history) {
   return history.undoStack.length > 0;
 }
@@ -70,12 +93,31 @@ function applyUndoEntry(doc, entry) {
   if (entry?.type === "batch") {
     for (let i = entry.edits.length - 1; i >= 0; i -= 1) {
       const edit = entry.edits[i];
-      doc.tiles.base[edit.index] = edit.previousValue;
+      applyUndoEntry(doc, edit);
     }
     return true;
   }
 
   if (!entry) return false;
+
+  if (entry.kind === "decor") {
+    if (!Array.isArray(doc.decor)) {
+      doc.decor = [];
+    }
+
+    if (entry.mode === "create") {
+      doc.decor.splice(entry.index, 1);
+      return true;
+    }
+
+    if (entry.mode === "delete") {
+      doc.decor.splice(entry.index, 0, entry.decor);
+      return true;
+    }
+
+    return false;
+  }
+
   doc.tiles.base[entry.index] = entry.previousValue;
   return true;
 }
@@ -83,12 +125,31 @@ function applyUndoEntry(doc, entry) {
 function applyRedoEntry(doc, entry) {
   if (entry?.type === "batch") {
     for (const edit of entry.edits) {
-      doc.tiles.base[edit.index] = edit.nextValue;
+      applyRedoEntry(doc, edit);
     }
     return true;
   }
 
   if (!entry) return false;
+
+  if (entry.kind === "decor") {
+    if (!Array.isArray(doc.decor)) {
+      doc.decor = [];
+    }
+
+    if (entry.mode === "create") {
+      doc.decor.splice(entry.index, 0, entry.decor);
+      return true;
+    }
+
+    if (entry.mode === "delete") {
+      doc.decor.splice(entry.index, 1);
+      return true;
+    }
+
+    return false;
+  }
+
   doc.tiles.base[entry.index] = entry.nextValue;
   return true;
 }

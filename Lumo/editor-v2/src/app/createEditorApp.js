@@ -21,8 +21,11 @@ import { EDITOR_TOOLS } from "../domain/tiles/tools.js";
 import { getLineCells } from "../domain/tiles/line.js";
 import { getFloodFillCells } from "../domain/tiles/floodFill.js";
 import {
+  createDecorEditEntry,
   createTileEditEntry,
   startTileEditBatch,
+  startHistoryBatch,
+  pushHistoryEntry,
   pushTileEdit,
   endTileEditBatch,
   undoTileEdit,
@@ -97,6 +100,15 @@ function getRectBounds(startCell, endCell) {
     minY: Math.min(startCell.y, endCell.y),
     maxY: Math.max(startCell.y, endCell.y),
   };
+}
+
+function clampScatterRandomness(value) {
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+}
+
+function getScatterTargetCount(value) {
+  if (!Number.isFinite(value)) return 1;
+  return Math.max(1, Math.round(value));
 }
 
 export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, cellHud, store }) {
@@ -272,6 +284,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       draft.interaction.rectDrag = null;
       draft.interaction.lineDrag = null;
       draft.interaction.boxSelection = null;
+      clearDecorScatterDrag(draft);
       draft.history.undoStack = [];
       draft.history.redoStack = [];
       draft.history.activeBatch = null;
@@ -400,24 +413,122 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     draft.interaction.selectedDecorIndex = null;
   };
 
+  const clearDecorScatterDrag = (draft) => {
+    draft.interaction.decorScatterDrag = null;
+  };
+
+  const getDecorScatterSettings = (interaction) => ({
+    count: getScatterTargetCount(interaction.decorScatterSettings?.count || 1),
+    randomness: clampScatterRandomness(interaction.decorScatterSettings?.randomness),
+    variantMode: interaction.decorScatterSettings?.variantMode === "random" ? "random" : "fixed",
+  });
+
   const updateDecorSelectionCell = (draft, decorIndex = draft.interaction.selectedDecorIndex) => {
     const decor = Number.isInteger(decorIndex) ? draft.document.active?.decor?.[decorIndex] : null;
     draft.interaction.selectedCell = decor ? { x: decor.x, y: decor.y } : null;
   };
 
-  const createDecorDraft = (doc, x, y, presetId = DEFAULT_DECOR_PRESET_ID, nextNumber = (doc.decor?.length || 0) + 1) => {
+  const resolveDecorVariant = (preset, variantMode = "fixed") => {
+    const variants = Array.isArray(preset?.variants) && preset.variants.length ? preset.variants : [preset?.defaultVariant || "a"];
+    if (variantMode === "random" && variants.length > 1) {
+      return variants[Math.floor(Math.random() * variants.length)] || preset?.defaultVariant || "a";
+    }
+    return preset?.defaultVariant || variants[0] || "a";
+  };
+
+  const createDecorDraft = (
+    doc,
+    x,
+    y,
+    presetId = DEFAULT_DECOR_PRESET_ID,
+    nextNumber = (doc.decor?.length || 0) + 1,
+    options = {},
+  ) => {
     const placement = clampDecorPosition(doc, x, y);
     const preset = findDecorPresetById(presetId) || findDecorPresetById(DEFAULT_DECOR_PRESET_ID);
 
     return {
-      id: `decor-${nextNumber}`,
+      id: options.id || `decor-${nextNumber}`,
       name: preset?.defaultName || 'Decor',
       type: preset?.type || 'grass',
       x: placement.x,
       y: placement.y,
       visible: true,
-      variant: preset?.defaultVariant || 'a',
+      variant: options.variant || resolveDecorVariant(preset, options.variantMode),
     };
+  };
+
+  const createScatterDecorEntries = (doc, startCell, endCell, presetId, settings) => {
+    if (!doc || !startCell || !endCell) return [];
+
+    const bounds = getRectBounds(startCell, endCell);
+    const areaWidth = bounds.maxX - bounds.minX + 1;
+    const areaHeight = bounds.maxY - bounds.minY + 1;
+    const cellCapacity = areaWidth * areaHeight;
+    const placementCount = Math.min(getScatterTargetCount(settings.count), cellCapacity);
+    if (placementCount <= 0) return [];
+
+    const randomness = clampScatterRandomness(settings.randomness);
+    const aspect = areaWidth / Math.max(1, areaHeight);
+    const approxColumns = Math.max(1, Math.round(Math.sqrt(placementCount * aspect)));
+    const columns = Math.min(areaWidth, approxColumns);
+    const rows = Math.max(1, Math.ceil(placementCount / columns));
+    const stepX = areaWidth / columns;
+    const stepY = areaHeight / rows;
+    const usedCells = new Set((doc.decor || []).map((decor) => `${decor.x}:${decor.y}`));
+    const usedIds = new Set((doc.decor || []).map((decor) => decor?.id).filter((id) => typeof id === "string" && id.trim()));
+    const entries = [];
+    let nextIdNumber = (doc.decor?.length || 0) + 1;
+
+    const reserveNearestFreeCell = (candidateX, candidateY) => {
+      const clamped = clampDecorPosition(doc, candidateX, candidateY);
+      const directKey = `${clamped.x}:${clamped.y}`;
+      if (!usedCells.has(directKey)) {
+        usedCells.add(directKey);
+        return clamped;
+      }
+
+      const maxRadius = Math.max(areaWidth, areaHeight);
+      for (let radius = 1; radius <= maxRadius; radius += 1) {
+        for (let y = Math.max(bounds.minY, clamped.y - radius); y <= Math.min(bounds.maxY, clamped.y + radius); y += 1) {
+          for (let x = Math.max(bounds.minX, clamped.x - radius); x <= Math.min(bounds.maxX, clamped.x + radius); x += 1) {
+            const key = `${x}:${y}`;
+            if (usedCells.has(key)) continue;
+            usedCells.add(key);
+            return { x, y };
+          }
+        }
+      }
+
+      return null;
+    };
+
+    for (let index = 0; index < placementCount; index += 1) {
+      const column = columns === 1 ? 0 : index % columns;
+      const row = Math.floor(index / columns);
+      const baseX = bounds.minX + Math.min(areaWidth - 1, (column + 0.5) * stepX - 0.5);
+      const baseY = bounds.minY + Math.min(areaHeight - 1, (row + 0.5) * stepY - 0.5);
+      const jitterX = (Math.random() - 0.5) * stepX * randomness;
+      const jitterY = (Math.random() - 0.5) * stepY * randomness;
+      const placement = reserveNearestFreeCell(baseX + jitterX, baseY + jitterY);
+      if (!placement) continue;
+
+      let nextId = `decor-${nextIdNumber}`;
+      while (usedIds.has(nextId)) {
+        nextIdNumber += 1;
+        nextId = `decor-${nextIdNumber}`;
+      }
+      usedIds.add(nextId);
+
+      const decor = createDecorDraft(doc, placement.x, placement.y, presetId, nextIdNumber, {
+        id: nextId,
+        variantMode: settings.variantMode,
+      });
+      entries.push(decor);
+      nextIdNumber += 1;
+    }
+
+    return entries;
   };
 
   const createEntityDraft = (doc, x, y, presetId = DEFAULT_ENTITY_PRESET_ID, nextNumber = (doc.entities?.length || 0) + 1) => {
@@ -556,6 +667,55 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     draft.interaction.hoveredEntityIndex = null;
     draft.interaction.entityDrag = null;
     return createdIndex;
+  };
+
+  const applyDecorScatter = (draft, startCell, endCell, presetId = draft.interaction.activeDecorPresetId || DEFAULT_DECOR_PRESET_ID) => {
+    const doc = draft.document.active;
+    if (!doc || !startCell || !endCell || !presetId) return 0;
+
+    const settings = getDecorScatterSettings(draft.interaction);
+    const scatterDecor = createScatterDecorEntries(doc, startCell, endCell, presetId, settings);
+    if (!scatterDecor.length) return 0;
+
+    startHistoryBatch(draft.history, "decor-scatter");
+    for (const decor of scatterDecor) {
+      const nextIndex = doc.decor.length;
+      doc.decor.push(decor);
+      pushHistoryEntry(
+        draft.history,
+        createDecorEditEntry("create", {
+          index: nextIndex,
+          decor: { ...decor },
+        }),
+      );
+    }
+    endHistoryBatch(draft.history);
+
+    const selectedIndex = doc.decor.length - 1;
+    draft.interaction.selectedDecorIndex = selectedIndex;
+    draft.interaction.hoveredDecorIndex = selectedIndex;
+    draft.interaction.selectedCell = { x: doc.decor[selectedIndex].x, y: doc.decor[selectedIndex].y };
+    clearEntitySelection(draft.interaction);
+    draft.interaction.entityDrag = null;
+    return scatterDecor.length;
+  };
+
+  const syncInteractionAfterHistoryChange = (draft) => {
+    const doc = draft.document.active;
+    if (!doc) return;
+
+    const decorCount = doc.decor?.length || 0;
+    if (Number.isInteger(draft.interaction.selectedDecorIndex) && draft.interaction.selectedDecorIndex >= decorCount) {
+      draft.interaction.selectedDecorIndex = decorCount ? decorCount - 1 : null;
+    }
+    if (Number.isInteger(draft.interaction.hoveredDecorIndex) && draft.interaction.hoveredDecorIndex >= decorCount) {
+      draft.interaction.hoveredDecorIndex = decorCount ? decorCount - 1 : null;
+    }
+    if (draft.interaction.selectedDecorIndex !== null) {
+      updateDecorSelectionCell(draft);
+    } else if (!getSelectedEntityIndices(draft.interaction).length) {
+      draft.interaction.selectedCell = null;
+    }
   };
 
   const moveDecorToCell = (draft, index, cell) => {
@@ -757,11 +917,43 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
           draft.interaction.activeDecorPresetId === nextPresetId ? null : nextPresetId;
         draft.interaction.activeEntityPresetId = null;
         draft.interaction.activeTool = EDITOR_TOOLS.INSPECT;
+        clearDecorScatterDrag(draft);
         return;
       }
 
       if (field === 'clear-preset') {
         draft.interaction.activeDecorPresetId = null;
+        draft.interaction.decorScatterMode = false;
+        clearDecorScatterDrag(draft);
+        return;
+      }
+
+      if (field === "toggle-scatter") {
+        draft.interaction.decorScatterMode = !draft.interaction.decorScatterMode;
+        draft.interaction.activeTool = EDITOR_TOOLS.INSPECT;
+        if (!draft.interaction.decorScatterMode) {
+          clearDecorScatterDrag(draft);
+        }
+        return;
+      }
+
+      if (field === "scatter-setting") {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return;
+
+        const settingField = value.field;
+        if (settingField === "count") {
+          draft.interaction.decorScatterSettings.count = getScatterTargetCount(value.value);
+          return;
+        }
+
+        if (settingField === "randomness") {
+          draft.interaction.decorScatterSettings.randomness = clampScatterRandomness(value.value);
+          return;
+        }
+
+        if (settingField === "variantMode") {
+          draft.interaction.decorScatterSettings.variantMode = value.value === "random" ? "random" : "fixed";
+        }
         return;
       }
 
@@ -976,6 +1168,11 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     return changedAny;
   };
 
+  const isDecorScatterReady = (interaction) =>
+    interaction.activeTool === EDITOR_TOOLS.INSPECT &&
+    interaction.decorScatterMode &&
+    Boolean(interaction.activeDecorPresetId);
+
   const handleInspectCanvasMouseDown = (event, state, cell, point) => {
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitDecorIndex = findDecorAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
@@ -1098,6 +1295,26 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     if (!cell) return;
 
     const activeTool = state.interaction.activeTool;
+    if (isDecorScatterReady(state.interaction)) {
+      event.preventDefault();
+      interactionState.suppressNextClick = true;
+      store.setState((draft) => {
+        draft.interaction.selectedCell = cell;
+        draft.interaction.hoverCell = cell;
+        draft.interaction.decorScatterDrag = {
+          active: true,
+          startCell: cell,
+          currentCell: cell,
+          startPoint: point,
+          currentPoint: point,
+        };
+        clearEntitySelection(draft.interaction);
+        clearDecorSelection(draft);
+        draft.interaction.decorDrag = null;
+      });
+      return;
+    }
+
     if (activeTool === EDITOR_TOOLS.INSPECT && handleInspectCanvasMouseDown(event, state, cell, point)) {
       return;
     }
@@ -1206,6 +1423,23 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       return;
     }
 
+    if (state.interaction.decorScatterDrag?.active) {
+      if ((event.buttons & 1) !== 1) return;
+
+      const point = getCanvasPointFromMouseEvent(canvas, event);
+      const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+      if (!cell) return;
+
+      store.setState((draft) => {
+        const scatterDrag = draft.interaction.decorScatterDrag;
+        if (!scatterDrag?.active) return;
+        scatterDrag.currentCell = cell;
+        scatterDrag.currentPoint = point;
+        draft.interaction.hoverCell = cell;
+      });
+      return;
+    }
+
     if (state.interaction.boxSelection?.active) {
       if ((event.buttons & 1) !== 1) return;
 
@@ -1300,6 +1534,22 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
         if (!decorDrag?.active) return;
         moveDecorToCell(draft, decorDrag.index, decorDrag.previewCell || decorDrag.originCell);
         draft.interaction.decorDrag = null;
+      });
+      return;
+    }
+
+    if (state.interaction.decorScatterDrag?.active) {
+      store.setState((draft) => {
+        const scatterDrag = draft.interaction.decorScatterDrag;
+        if (!scatterDrag?.active) return;
+
+        applyDecorScatter(
+          draft,
+          scatterDrag.startCell,
+          scatterDrag.currentCell || scatterDrag.startCell,
+          draft.interaction.activeDecorPresetId,
+        );
+        clearDecorScatterDrag(draft);
       });
       return;
     }
@@ -1428,6 +1678,13 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     draft.interaction.boxSelection = null;
     draft.interaction.entityDrag = null;
     draft.interaction.decorDrag = null;
+    draft.interaction.decorScatterMode = false;
+    draft.interaction.decorScatterSettings = {
+      count: 12,
+      randomness: 0.6,
+      variantMode: "fixed",
+    };
+    draft.interaction.decorScatterDrag = null;
     draft.interaction.activeEntityPresetId = null;
     draft.interaction.activeDecorPresetId = null;
     draft.interaction.selectedCell = null;
@@ -1455,6 +1712,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       const doc = draft.document.active;
       if (!doc) return;
       undoTileEdit(doc, draft.history);
+      syncInteractionAfterHistoryChange(draft);
     });
   };
 
@@ -1463,6 +1721,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       const doc = draft.document.active;
       if (!doc) return;
       redoTileEdit(doc, draft.history);
+      syncInteractionAfterHistoryChange(draft);
     });
   };
 
@@ -1599,6 +1858,8 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
         state.interaction.boxSelection = null;
         state.interaction.entityDrag = null;
         state.interaction.decorDrag = null;
+        state.interaction.decorScatterMode = false;
+        state.interaction.decorScatterDrag = null;
         state.interaction.activeEntityPresetId = null;
         state.interaction.activeDecorPresetId = null;
       });
