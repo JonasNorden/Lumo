@@ -20,6 +20,7 @@ export function createEditorState() {
     },
     interaction: {
       activeTool: "inspect",
+      activeEntityPresetId: null,
       hoverCell: null,
       selectedCell: null,
       hoveredEntityIndex: null,

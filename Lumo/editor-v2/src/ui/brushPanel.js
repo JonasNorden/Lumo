@@ -7,6 +7,7 @@ import {
 import { getBrushDraftSummary } from "../domain/tiles/brushDraft.js";
 import { TOOL_OPTIONS, isEditorTool } from "../domain/tiles/tools.js";
 import { canUndo, canRedo } from "../domain/tiles/history.js";
+import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
 
 const WORKSPACE_BACKGROUND_PRESETS = ["#0a0f1d", "#111827", "#1a2336", "#141b2a"];
 
@@ -126,13 +127,41 @@ function renderEntitiesSettings(active, state) {
   const entities = active.entities || [];
   const selectedEntityIndex = state.interaction.selectedEntityIndex;
   const selected = Number.isInteger(selectedEntityIndex) ? entities[selectedEntityIndex] : null;
+  const activePresetId = state.interaction.activeEntityPresetId;
+  const activePreset = ENTITY_PRESETS.find((preset) => preset.id === activePresetId) || null;
 
   return `
     <div class="infoGroup compact">
       <div class="value">${entities.length} total</div>
     </div>
 
-    <button type="button" class="toolButton isSecondary" data-entity-action="add">Add entity</button>
+    <div class="entityPresetSection">
+      <div class="hintText">Create / Presets</div>
+      <div class="entityPresetGrid" role="group" aria-label="Entity presets">
+        ${ENTITY_PRESETS
+          .map(
+            (preset) => `
+              <button
+                type="button"
+                class="toolButton entityPresetButton ${preset.id === activePresetId ? "isActive" : ""}"
+                data-entity-action="preset"
+                data-entity-preset-id="${preset.id}"
+                title="${escapeHtml(preset.type)}"
+              >
+                ${escapeHtml(preset.defaultName)}
+              </button>
+            `,
+          )
+          .join("")}
+      </div>
+      <div class="statusRow entityPresetStatus">
+        <span class="label">Placement</span>
+        <span class="value">${escapeHtml(activePreset ? activePreset.defaultName : "Off")}</span>
+      </div>
+      <button type="button" class="toolButton isSecondary" data-entity-action="clear-preset">Clear placement</button>
+    </div>
+
+    <div class="hintText">Entity list</div>
 
     <div class="entityList" role="listbox" aria-label="Entities">
       ${entities
@@ -482,8 +511,14 @@ export function bindBrushPanel(panel, store, options = {}) {
     const entityActionButton = target.closest("[data-entity-action]");
     if (entityActionButton instanceof HTMLButtonElement) {
       const action = entityActionButton.dataset.entityAction;
-      if (action === "add") {
-        onEntityUpdate?.(-1, "add", null);
+      if (action === "preset") {
+        const presetId = entityActionButton.dataset.entityPresetId;
+        if (presetId) {
+          onEntityUpdate?.(-1, "preset", presetId);
+        }
+      }
+      if (action === "clear-preset") {
+        onEntityUpdate?.(-1, "clear-preset", null);
       }
       if (action === "select") {
         const index = Number.parseInt(entityActionButton.dataset.entityIndex || "", 10);
