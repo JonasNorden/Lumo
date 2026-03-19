@@ -20,6 +20,7 @@ import { eraseSingleTile } from "../src/domain/tiles/eraseTile.js";
 import { renderBrushPanel } from "../src/ui/brushPanel.js";
 import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
 import { serializeLevelDocument } from "../src/data/exportLevelDocument.js";
+import { getScanActivity, getScanRange } from "../src/domain/scan/scanSystem.js";
 
 function createHistoryState() {
   return {
@@ -247,6 +248,51 @@ function runSoundRegressionChecks() {
   assert.equal(exported.sounds[1].type, "ambientZone", "sound export should retain ambient zones as a normal authoring type");
 }
 
+
+function runScanRegressionChecks() {
+  const doc = createDoc();
+  doc.dimensions.width = 20;
+  doc.sounds = [
+    {
+      id: "spot-1",
+      name: "Spot",
+      type: "spot",
+      x: 4,
+      y: 0,
+      visible: true,
+      params: { spatial: true, radius: 2 },
+    },
+    {
+      id: "trigger-1",
+      name: "Trigger",
+      type: "trigger",
+      x: 8,
+      y: 0,
+      visible: true,
+      params: {},
+    },
+    {
+      id: "zone-1",
+      name: "Ambient",
+      type: "ambientZone",
+      x: 10,
+      y: 0,
+      visible: true,
+      params: { width: 3, height: 2 },
+    },
+  ];
+
+  assert.deepEqual(getScanRange({ startX: 12, endX: 3 }, doc), { startX: 3, endX: 12 }, "scan range should normalize reversed start/end values");
+
+  const firstPass = getScanActivity(doc, 0, 5, []);
+  assert.equal(firstPass.activeSoundIds.includes("spot-1"), true, "scan activity should keep spot sounds active while the scan line is inside their radius");
+  assert.equal(firstPass.triggeredEvents.some((event) => event.soundId === "spot-1"), true, "scan activity should emit spot sound intersections");
+
+  const secondPass = getScanActivity(doc, 7.5, 10.5, []);
+  assert.equal(secondPass.triggeredEvents.some((event) => event.soundId === "trigger-1"), true, "scan activity should emit trigger intersections when crossing their X position");
+  assert.equal(secondPass.activeSoundIds.includes("zone-1"), true, "scan activity should activate ambient zones while the scan line overlaps them");
+}
+
 function runUiRegressionChecks() {
   const panel = { innerHTML: "" };
   const baseState = {
@@ -280,6 +326,8 @@ function runUiRegressionChecks() {
 
   renderBrushPanel(panel, baseState);
   assert.equal(panel.innerHTML.includes("Alt/Option + Click places"), true, "entity placement hint should mention Alt/Option + Click");
+  assert.equal(panel.innerHTML.includes('data-scan-action="play"'), true, "scan controls should expose a play button");
+  assert.equal(panel.innerHTML.includes('data-scan-field="speed"'), true, "scan controls should expose a speed field");
   assert.equal(panel.innerHTML.includes("Spot Sound"), true, "sound selector should expose spot sounds");
   assert.equal(panel.innerHTML.includes("Trigger Sound"), true, "sound selector should expose trigger sounds");
   assert.equal(panel.innerHTML.includes("Ambient Zone"), true, "sound selector should expose ambient zones");
@@ -361,6 +409,7 @@ runTileRegressionChecks();
 runEntityRegressionChecks();
 runDecorRegressionChecks();
 runSoundRegressionChecks();
+runScanRegressionChecks();
 runUiRegressionChecks();
 runSourceRegressionChecks();
 
