@@ -26,7 +26,7 @@ export function createEditorState() {
       activeDecorPresetId: null,
       decorScatterMode: false,
       decorScatterSettings: {
-        count: 12,
+        density: 0.3,
         randomness: 0.6,
         variantMode: "fixed",
       },

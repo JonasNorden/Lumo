@@ -136,9 +136,14 @@ function clampScatterRandomness(value) {
   return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
 }
 
-function getScatterTargetCount(value) {
-  if (!Number.isFinite(value)) return 1;
-  return Math.max(1, Math.round(value));
+function clampScatterDensity(value) {
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+}
+
+function getScatterTargetCount(cellCapacity, density) {
+  const normalizedDensity = clampScatterDensity(density);
+  if (cellCapacity <= 0 || normalizedDensity <= 0) return 0;
+  return Math.max(1, Math.min(cellCapacity, Math.round(cellCapacity * normalizedDensity)));
 }
 
 const PANEL_LAYERS = {
@@ -681,7 +686,7 @@ export function createEditorApp({
   };
 
   const getDecorScatterSettings = (interaction) => ({
-    count: getScatterTargetCount(interaction.decorScatterSettings?.count || 1),
+    density: clampScatterDensity(interaction.decorScatterSettings?.density),
     randomness: clampScatterRandomness(interaction.decorScatterSettings?.randomness),
     variantMode: interaction.decorScatterSettings?.variantMode === "random" ? "random" : "fixed",
   });
@@ -728,7 +733,7 @@ export function createEditorApp({
     const areaWidth = bounds.maxX - bounds.minX + 1;
     const areaHeight = bounds.maxY - bounds.minY + 1;
     const cellCapacity = areaWidth * areaHeight;
-    const placementCount = Math.min(getScatterTargetCount(settings.count), cellCapacity);
+    const placementCount = getScatterTargetCount(cellCapacity, settings.density);
     if (placementCount <= 0) return [];
 
     const randomness = clampScatterRandomness(settings.randomness);
@@ -1337,8 +1342,8 @@ export function createEditorApp({
         if (!value || typeof value !== "object" || Array.isArray(value)) return;
 
         const settingField = value.field;
-        if (settingField === "count") {
-          draft.interaction.decorScatterSettings.count = getScatterTargetCount(value.value);
+        if (settingField === "density") {
+          draft.interaction.decorScatterSettings.density = clampScatterDensity(value.value);
           return;
         }
 
@@ -2155,7 +2160,7 @@ export function createEditorApp({
     draft.interaction.canvasSelectionMode = "entity";
     draft.interaction.decorScatterMode = false;
     draft.interaction.decorScatterSettings = {
-      count: 12,
+      density: 0.3,
       randomness: 0.6,
       variantMode: "fixed",
     };
