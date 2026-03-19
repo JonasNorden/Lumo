@@ -1,5 +1,6 @@
 import { cloneEntityParams } from "../entities/entityParams.js";
-import { DEFAULT_SOUND_PRESET_ID, getSoundPresetDefaultParams } from "../sound/soundPresets.js";
+import { DEFAULT_SOUND_PRESET_ID, getSoundPresetDefaultParams, getSoundPresetForType } from "../sound/soundPresets.js";
+import { normalizeSoundType } from "../sound/soundVisuals.js";
 
 const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
 const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
@@ -94,14 +95,15 @@ function normalizeEntity(entity, index) {
 
 function normalizeSound(sound, index) {
   const fallbackId = `sound-${index + 1}`;
+  const preset = getSoundPresetForType(sound?.type);
+  const nextType = normalizeSoundType(preset?.type || sound?.type || DEFAULT_SOUND_PRESET_ID);
   const nextId = typeof sound?.id === "string" && sound.id.trim() ? sound.id.trim() : fallbackId;
-  const nextType = typeof sound?.type === "string" && sound.type.trim() ? sound.type.trim() : DEFAULT_SOUND_PRESET_ID;
-  const nextName = typeof sound?.name === "string" && sound.name.trim() ? sound.name.trim() : `Sound ${index + 1}`;
+  const nextName = typeof sound?.name === "string" && sound.name.trim() ? sound.name.trim() : preset?.defaultName || `Sound ${index + 1}`;
   const nextX = Number.isFinite(sound?.x) ? Math.round(sound.x) : 0;
   const nextY = Number.isFinite(sound?.y) ? Math.round(sound.y) : 0;
   const nextVisible = typeof sound?.visible === "boolean" ? sound.visible : true;
   const nextParams = {
-    ...getSoundPresetDefaultParams(nextType === "ambientZone" ? "ambient-zone" : nextType === "musicZone" ? "music-zone" : DEFAULT_SOUND_PRESET_ID),
+    ...getSoundPresetDefaultParams(preset?.id || DEFAULT_SOUND_PRESET_ID),
     ...cloneEntityParams(sound?.params),
   };
 

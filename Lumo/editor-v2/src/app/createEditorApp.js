@@ -43,7 +43,8 @@ import { findSoundAtCanvasPoint } from "../render/layers/soundLayer.js";
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
 import { DEFAULT_ENTITY_PRESET_ID, findEntityPresetById, getEntityPresetDefaultParams } from "../domain/entities/entityPresets.js";
 import { DEFAULT_DECOR_PRESET_ID, findDecorPresetById } from "../domain/decor/decorPresets.js";
-import { DEFAULT_SOUND_PRESET_ID, findSoundPresetById, getSoundPresetDefaultParams } from "../domain/sound/soundPresets.js";
+import { DEFAULT_SOUND_PRESET_ID, findSoundPresetById, getSoundPresetDefaultParams, getSoundPresetForType } from "../domain/sound/soundPresets.js";
+import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
 import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
 import {
   clearDecorSelection,
@@ -1586,14 +1587,15 @@ export function createEditorApp({
 
       if (field === "name" || field === "type") {
         const trimmed = String(value || "").trim();
-        const nextValue = trimmed || sound[field];
+        const preset = field === "type" ? getSoundPresetForType(trimmed || sound[field]) : null;
+        const nextValue = field === "type" ? normalizeSoundType(preset?.type || trimmed || sound[field]) : trimmed || sound[field];
         if (sound[field] === nextValue) return;
         const previousSound = { ...sound, params: cloneEntityParams(sound.params) };
         const nextSound = {
           ...sound,
           [field]: nextValue,
           params: field === "type"
-            ? { ...getSoundPresetDefaultParams(nextValue === "ambientZone" ? "ambient-zone" : nextValue === "musicZone" ? "music-zone" : DEFAULT_SOUND_PRESET_ID), ...cloneEntityParams(sound.params) }
+            ? { ...getSoundPresetDefaultParams(preset?.id || DEFAULT_SOUND_PRESET_ID), ...cloneEntityParams(sound.params) }
             : cloneEntityParams(sound.params),
         };
         doc.sounds.splice(index, 1, nextSound);
