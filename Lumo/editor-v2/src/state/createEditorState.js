@@ -20,6 +20,7 @@ export function createEditorState() {
     },
     interaction: {
       activeTool: "inspect",
+      activeLayer: "tiles",
       canvasSelectionMode: "entity",
       activeEntityPresetId: null,
       activeDecorPresetId: null,
@@ -61,10 +62,11 @@ export function createEditorState() {
       topBarMenu: null,
       panelSections: {
         tools: true,
-        canvasTarget: true,
-        brush: true,
+        layer: true,
+        tiles: true,
         entities: true,
         decor: true,
+        sound: false,
       },
     },
   };

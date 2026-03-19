@@ -8,6 +8,15 @@ import { TOOL_OPTIONS, EDITOR_TOOLS, isEditorTool } from "../domain/tiles/tools.
 import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
 import { DECOR_PRESETS } from "../domain/decor/decorPresets.js";
 
+const PANEL_LAYERS = {
+  TOOLS: "tools",
+  TILES: "tiles",
+  ENTITIES: "entities",
+  DECOR: "decor",
+  // Reserved for the future SOUND section.
+  SOUND: "sound",
+};
+
 const VISIBLE_TOOL_OPTIONS = TOOL_OPTIONS.filter((option) => (
   option.value === EDITOR_TOOLS.INSPECT
   || option.value === EDITOR_TOOLS.PAINT
@@ -47,44 +56,36 @@ function renderSection(sectionId, title, isOpen, content, sectionClass = "") {
         data-section-toggle="${sectionId}"
         aria-expanded="${isOpen ? "true" : "false"}"
       >
-        <span class="sectionTitle">${title}</span>
-        <span class="sectionChevron" aria-hidden="true">${isOpen ? "▾" : "▸"}</span>
+        <span class="sectionEyebrow">Section</span>
+        <span class="sectionTitleRow">
+          <span class="sectionTitle">${title}</span>
+          <span class="sectionChevron" aria-hidden="true">${isOpen ? "▾" : "▸"}</span>
+        </span>
       </button>
       <div class="sectionContent">${content}</div>
     </section>
   `;
 }
 
-function getToolLabel(toolValue) {
-  return TOOL_OPTIONS.find((option) => option.value === toolValue)?.label ?? "Inspect";
+function getActiveLayerLabel(layerValue) {
+  if (layerValue === PANEL_LAYERS.DECOR) return "Decor";
+  if (layerValue === PANEL_LAYERS.ENTITIES) return "Entities";
+  return "Tiles";
 }
 
-function getCanvasSelectionModeLabel(mode) {
-  return mode === "decor" ? "Decor" : "Entities";
-}
+function renderLayerSection(state) {
+  const activeLayer = state.interaction.activeLayer || PANEL_LAYERS.TILES;
 
-function renderCanvasTargetSection(state) {
   return `
-    <div class="toolSwitch toolSwitchCompact" role="group" aria-label="Canvas selection target">
-      <button
-        class="toolButton ${state.interaction.canvasSelectionMode === "entity" ? "isActive" : ""}"
-        type="button"
-        data-selection-mode="entity"
-      >
-        Entities
-      </button>
-      <button
-        class="toolButton ${state.interaction.canvasSelectionMode === "decor" ? "isActive" : ""}"
-        type="button"
-        data-selection-mode="decor"
-      >
-        Decor
-      </button>
+    <div class="toolSwitch layerSwitch" role="group" aria-label="Active layer">
+      <button class="toolButton ${activeLayer === PANEL_LAYERS.TILES ? "isActive" : ""}" type="button" data-layer="tiles">Tiles</button>
+      <button class="toolButton ${activeLayer === PANEL_LAYERS.ENTITIES ? "isActive" : ""}" type="button" data-layer="entities">Entities</button>
+      <button class="toolButton ${activeLayer === PANEL_LAYERS.DECOR ? "isActive" : ""}" type="button" data-layer="decor">Decor</button>
     </div>
 
     <div class="statusRow compactStatusRow">
       <span class="label">Current</span>
-      <span class="value">${getCanvasSelectionModeLabel(state.interaction.canvasSelectionMode)}</span>
+      <span class="value">${getActiveLayerLabel(activeLayer)}</span>
     </div>
   `;
 }
@@ -125,9 +126,9 @@ function renderDecorSettings(state) {
   return `
     ${renderSelectorField("Select Decor", "decor-preset-select", DECOR_PRESETS, activePresetId, "No decor selected")}
 
-    <div class="statusRow compactStatusRow">
-      <span class="label">Placement</span>
-      <span class="value">${escapeHtml(placementLabel)}</span>
+    <div class="statusCard">
+      <span class="statusCardLabel">Placement</span>
+      <span class="statusCardValue">${escapeHtml(placementLabel)}</span>
     </div>
 
     <div class="compactActionRow compactActionRowSingle">
@@ -149,12 +150,12 @@ function renderDecorSettings(state) {
 
       <div class="compactFieldGrid decorScatterCompactGrid">
         <label class="fieldRow fieldRowCompact">
-          <span class="label">Density</span>
+          <span class="label">Count</span>
           <input type="number" min="1" max="512" step="1" value="${scatterCount}" data-decor-setting="count" />
         </label>
 
         <label class="fieldRow fieldRowCompact">
-          <span class="label">Spread</span>
+          <span class="label">Randomness</span>
           <div class="rangeField">
             <input type="range" min="0" max="100" step="1" value="${Math.round(scatterRandomness * 100)}" data-decor-setting="randomness" />
             <span class="rangeValue">${Math.round(scatterRandomness * 100)}%</span>
@@ -186,9 +187,9 @@ function renderEntitiesSettings(state) {
   return `
     ${renderSelectorField("Select Entity", "entity-preset-select", PLACEABLE_ENTITY_PRESETS, activePresetId, "No entity selected")}
 
-    <div class="statusRow compactStatusRow">
-      <span class="label">Placement</span>
-      <span class="value">${escapeHtml(placementLabel)}</span>
+    <div class="statusCard">
+      <span class="statusCardLabel">Placement</span>
+      <span class="statusCardValue">${escapeHtml(placementLabel)}</span>
     </div>
 
     <div class="compactActionRow compactActionRowSingle">
@@ -202,41 +203,37 @@ export function renderBrushPanel(panel, state) {
   const summary = getBrushDraftSummary(brushDraft);
   const panelSections = {
     tools: true,
-    canvasTarget: true,
-    brush: true,
+    layer: true,
+    tiles: true,
     decor: true,
     entities: true,
+    sound: false,
     ...state.ui.panelSections,
   };
 
   panel.innerHTML = `
     ${renderSection(
       "tools",
-      "Tools",
+      "TOOLS",
       panelSections.tools,
       `
         <div class="toolSwitch toolSwitchCompact" role="group" aria-label="Editor tool">
           ${VISIBLE_TOOL_OPTIONS.map((option) => renderToolButton(option, state.interaction.activeTool)).join("")}
         </div>
-
-        <div class="statusRow compactStatusRow">
-          <span class="label">Active</span>
-          <span class="value">${getToolLabel(state.interaction.activeTool)}</span>
-        </div>
       `,
     )}
 
     ${renderSection(
-      "canvasTarget",
-      "Canvas Target",
-      panelSections.canvasTarget,
-      renderCanvasTargetSection(state),
+      "layer",
+      "LAYER",
+      panelSections.layer,
+      renderLayerSection(state),
     )}
 
     ${renderSection(
-      "brush",
-      "Brush",
-      panelSections.brush,
+      "tiles",
+      "TILES",
+      panelSections.tiles,
       `
         <label class="fieldRow fieldRowCompact">
           <span class="label">Mode</span>
@@ -267,17 +264,17 @@ export function renderBrushPanel(panel, state) {
     )}
 
     ${state.document.active
-      ? renderSection("decor", "Decor", panelSections.decor, renderDecorSettings(state))
+      ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state))
       : ""}
 
     ${state.document.active
-      ? renderSection("entities", "Entities", panelSections.entities, renderEntitiesSettings(state))
+      ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state))
       : ""}
   `;
 }
 
 export function bindBrushPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onCanvasTargetChange } = options;
+  const { onEntityUpdate, onDecorUpdate, onCanvasTargetChange, onLayerChange } = options;
 
   const onChange = (event) => {
     const target = event.target;
@@ -285,12 +282,14 @@ export function bindBrushPanel(panel, store, options = {}) {
     if (target instanceof HTMLSelectElement) {
       const decorSetting = target.dataset.decorSetting;
       if (decorSetting === "variantMode") {
+        onLayerChange?.(PANEL_LAYERS.DECOR);
         onDecorUpdate?.(-1, "scatter-setting", { field: "variantMode", value: target.value });
         return;
       }
 
       const decorPresetId = target.dataset.decorPresetSelect;
       if (typeof decorPresetId === "string") {
+        onLayerChange?.(PANEL_LAYERS.DECOR);
         if (target.value) {
           onDecorUpdate?.(-1, "preset", target.value);
         } else {
@@ -301,6 +300,7 @@ export function bindBrushPanel(panel, store, options = {}) {
 
       const entityPresetId = target.dataset.entityPresetSelect;
       if (typeof entityPresetId === "string") {
+        onLayerChange?.(PANEL_LAYERS.ENTITIES);
         if (target.value) {
           onEntityUpdate?.(-1, "preset", target.value);
         } else {
@@ -313,6 +313,8 @@ export function bindBrushPanel(panel, store, options = {}) {
       if (!field) return;
 
       store.setState((draft) => {
+        draft.interaction.activeLayer = PANEL_LAYERS.TILES;
+        draft.ui.panelSections.tiles = true;
         draft.brush.activeDraft[field] = target.value;
       });
       return;
@@ -322,6 +324,7 @@ export function bindBrushPanel(panel, store, options = {}) {
 
     const decorSetting = target.dataset.decorSetting;
     if (decorSetting === "count" || decorSetting === "randomness") {
+      onLayerChange?.(PANEL_LAYERS.DECOR);
       if (decorSetting === "count") {
         const parsed = Number.parseInt(target.value, 10);
         const value = Number.isInteger(parsed) ? Math.max(1, parsed) : 1;
@@ -356,6 +359,7 @@ export function bindBrushPanel(panel, store, options = {}) {
     const decorActionButton = target.closest("[data-decor-action]");
     if (decorActionButton instanceof HTMLButtonElement) {
       const action = decorActionButton.dataset.decorAction;
+      onLayerChange?.(PANEL_LAYERS.DECOR);
       if (action === "clear-preset") {
         onDecorUpdate?.(-1, "clear-preset", null);
       }
@@ -368,17 +372,21 @@ export function bindBrushPanel(panel, store, options = {}) {
     const entityActionButton = target.closest("[data-entity-action]");
     if (entityActionButton instanceof HTMLButtonElement) {
       const action = entityActionButton.dataset.entityAction;
+      onLayerChange?.(PANEL_LAYERS.ENTITIES);
       if (action === "clear-preset") {
         onEntityUpdate?.(-1, "clear-preset", null);
       }
       return;
     }
 
-    const selectionModeButton = target.closest("[data-selection-mode]");
-    if (selectionModeButton instanceof HTMLButtonElement) {
-      const nextMode = selectionModeButton.dataset.selectionMode;
-      if (nextMode !== "entity" && nextMode !== "decor") return;
-      onCanvasTargetChange?.(nextMode);
+    const layerButton = target.closest("[data-layer]");
+    if (layerButton instanceof HTMLButtonElement) {
+      const nextLayer = layerButton.dataset.layer;
+      if (nextLayer !== PANEL_LAYERS.TILES && nextLayer !== PANEL_LAYERS.ENTITIES && nextLayer !== PANEL_LAYERS.DECOR) return;
+      onLayerChange?.(nextLayer);
+      if (nextLayer === PANEL_LAYERS.ENTITIES || nextLayer === PANEL_LAYERS.DECOR) {
+        onCanvasTargetChange?.(nextLayer === PANEL_LAYERS.DECOR ? "decor" : "entity");
+      }
       return;
     }
 
@@ -389,6 +397,10 @@ export function bindBrushPanel(panel, store, options = {}) {
     if (!isEditorTool(nextTool)) return;
 
     store.setState((draft) => {
+      if (nextTool !== EDITOR_TOOLS.INSPECT) {
+        draft.interaction.activeLayer = PANEL_LAYERS.TILES;
+        draft.ui.panelSections.tiles = true;
+      }
       draft.interaction.activeTool = nextTool;
     });
   };

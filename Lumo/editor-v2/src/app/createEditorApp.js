@@ -84,12 +84,19 @@ function renderCellHud(cellHud, state) {
   }
 
   const inspectedCell = getInspectedCell(state);
-  const activeTargetLabel = getSelectionMode(state.interaction) === "decor" ? "Decor" : "Entities";
+  const activeLayer = getActiveLayer(state.interaction);
+  const activeTargetLabel = activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : "Tiles";
   const targetSelectionCount =
-    getSelectionMode(state.interaction) === "decor"
+    activeLayer === PANEL_LAYERS.DECOR
       ? getSelectedDecorIndices(state.interaction).length
-      : getSelectedEntityIndices(state.interaction).length;
-  const targetSelectionLabel = targetSelectionCount > 0 ? `${targetSelectionCount} selected` : "No selection";
+      : activeLayer === PANEL_LAYERS.ENTITIES
+        ? getSelectedEntityIndices(state.interaction).length
+        : 0;
+  const targetSelectionLabel = activeLayer === PANEL_LAYERS.TILES
+    ? "Tile editing"
+    : targetSelectionCount > 0
+      ? `${targetSelectionCount} selected`
+      : "No selection";
   if (!inspectedCell) {
     cellHud.innerHTML = `
       <span class="cellHudBadge">Active target</span>
@@ -132,6 +139,18 @@ function clampScatterRandomness(value) {
 function getScatterTargetCount(value) {
   if (!Number.isFinite(value)) return 1;
   return Math.max(1, Math.round(value));
+}
+
+const PANEL_LAYERS = {
+  TILES: "tiles",
+  ENTITIES: "entities",
+  DECOR: "decor",
+};
+
+function getActiveLayer(interaction) {
+  if (interaction.activeLayer === PANEL_LAYERS.DECOR) return PANEL_LAYERS.DECOR;
+  if (interaction.activeLayer === PANEL_LAYERS.ENTITIES) return PANEL_LAYERS.ENTITIES;
+  return PANEL_LAYERS.TILES;
 }
 
 function getSelectionMode(interaction) {
@@ -553,16 +572,35 @@ export function createEditorApp({
     draft.interaction.canvasSelectionMode = mode === "decor" ? "decor" : "entity";
   };
 
+  const openLayerSection = (draft, layer) => {
+    if (!draft.ui.panelSections) return;
+    if (layer === PANEL_LAYERS.TILES) draft.ui.panelSections.tiles = true;
+    if (layer === PANEL_LAYERS.ENTITIES) draft.ui.panelSections.entities = true;
+    if (layer === PANEL_LAYERS.DECOR) draft.ui.panelSections.decor = true;
+    draft.ui.panelSections.layer = true;
+  };
+
+  const setActiveLayer = (draft, layer) => {
+    draft.interaction.activeLayer = layer === PANEL_LAYERS.DECOR
+      ? PANEL_LAYERS.DECOR
+      : layer === PANEL_LAYERS.ENTITIES
+        ? PANEL_LAYERS.ENTITIES
+        : PANEL_LAYERS.TILES;
+    openLayerSection(draft, draft.interaction.activeLayer);
+  };
+
   const renderTopBar = (state) => {
-    const activeMode = getSelectionMode(state.interaction);
-    const selectedCount = activeMode === "decor"
+    const activeLayer = getActiveLayer(state.interaction);
+    const selectedCount = activeLayer === PANEL_LAYERS.DECOR
       ? getSelectedDecorIndices(state.interaction).length
-      : getSelectedEntityIndices(state.interaction).length;
-    const activeSelectionLabel = activeMode === "decor" ? "Decor" : "Entities";
-    const statusLabel = state.ui.importStatus || `Target: ${activeSelectionLabel} · ${selectedCount || 0} selected`;
+      : activeLayer === PANEL_LAYERS.ENTITIES
+        ? getSelectedEntityIndices(state.interaction).length
+        : 0;
+    const activeSelectionLabel = activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : "Tiles";
+    const statusLabel = state.ui.importStatus || `Layer: ${activeSelectionLabel} · ${selectedCount || 0} selected`;
 
     topBarStatus.textContent = statusLabel;
-    topBarStatus.dataset.target = activeMode;
+    topBarStatus.dataset.target = activeLayer;
 
     const undoEnabled = canUndo(state.history);
     const redoEnabled = canRedo(state.history);
@@ -595,6 +633,7 @@ export function createEditorApp({
   const applyCanvasTarget = (draft, mode) => {
     const nextMode = mode === "decor" ? "decor" : "entity";
     setCanvasSelectionMode(draft, nextMode);
+    setActiveLayer(draft, nextMode === "decor" ? PANEL_LAYERS.DECOR : PANEL_LAYERS.ENTITIES);
     draft.interaction.boxSelection = null;
     draft.interaction.entityDrag = null;
     draft.interaction.decorDrag = null;
@@ -619,6 +658,16 @@ export function createEditorApp({
   };
 
   const clearActiveSelection = (draft, nextMode = getSelectionMode(draft.interaction)) => {
+    if (getActiveLayer(draft.interaction) === PANEL_LAYERS.TILES) {
+      clearEntitySelection(draft.interaction);
+      clearDecorSelection(draft.interaction);
+      draft.interaction.hoveredEntityIndex = null;
+      draft.interaction.hoveredDecorIndex = null;
+      draft.interaction.entityDrag = null;
+      draft.interaction.decorDrag = null;
+      return;
+    }
+
     if (nextMode === "decor") {
       clearEntitySelection(draft.interaction);
       draft.interaction.hoveredEntityIndex = null;
@@ -1175,7 +1224,7 @@ export function createEditorApp({
           draft.interaction.activeEntityPresetId === nextPresetId ? null : nextPresetId;
         draft.interaction.activeDecorPresetId = null;
         draft.interaction.activeTool = EDITOR_TOOLS.INSPECT;
-        setCanvasSelectionMode(draft, "entity");
+        applyCanvasTarget(draft, "entity");
         return;
       }
 
@@ -1263,7 +1312,7 @@ export function createEditorApp({
           draft.interaction.activeDecorPresetId === nextPresetId ? null : nextPresetId;
         draft.interaction.activeEntityPresetId = null;
         draft.interaction.activeTool = EDITOR_TOOLS.INSPECT;
-        setCanvasSelectionMode(draft, "decor");
+        applyCanvasTarget(draft, "decor");
         clearDecorScatterDrag(draft);
         return;
       }
@@ -1325,7 +1374,7 @@ export function createEditorApp({
           clearEntitySelection(draft.interaction);
           draft.interaction.hoveredEntityIndex = null;
           draft.interaction.entityDrag = null;
-          setCanvasSelectionMode(draft, "decor");
+          applyCanvasTarget(draft, "decor");
           updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction));
         }
         return;
@@ -1371,7 +1420,7 @@ export function createEditorApp({
     renderBrushPanel(brushPanel, state);
     renderCellHud(cellHud, state);
     renderTopBar(state);
-    bottomPanel.dataset.selectionTarget = getSelectionMode(state.interaction);
+    bottomPanel.dataset.selectionTarget = getActiveLayer(state.interaction);
   };
 
   const handleMinimapClick = (event) => {
@@ -1534,18 +1583,20 @@ export function createEditorApp({
   };
 
   const isDecorScatterReady = (interaction) =>
+    getActiveLayer(interaction) === PANEL_LAYERS.DECOR &&
     interaction.activeTool === EDITOR_TOOLS.INSPECT &&
     interaction.decorScatterMode &&
     Boolean(interaction.activeDecorPresetId);
 
   const handleInspectCanvasMouseDown = (event, state, cell, point) => {
+    const activeLayer = getActiveLayer(state.interaction);
     const selectionMode = getSelectionMode(state.interaction);
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitDecorIndex = findDecorAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const activeEntityPresetId = state.interaction.activeEntityPresetId;
     const activeDecorPresetId = state.interaction.activeDecorPresetId;
 
-    if (selectionMode === "entity" && hitEntityIndex >= 0) {
+    if (activeLayer === PANEL_LAYERS.ENTITIES && selectionMode === "entity" && hitEntityIndex >= 0) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
@@ -1580,7 +1631,7 @@ export function createEditorApp({
       return true;
     }
 
-    if (activeEntityPresetId) {
+    if (activeLayer === PANEL_LAYERS.ENTITIES && activeEntityPresetId) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
@@ -1590,7 +1641,7 @@ export function createEditorApp({
       return true;
     }
 
-    if (activeDecorPresetId) {
+    if (activeLayer === PANEL_LAYERS.DECOR && activeDecorPresetId) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
@@ -1600,7 +1651,7 @@ export function createEditorApp({
       return true;
     }
 
-    if (selectionMode === "decor" && hitDecorIndex >= 0) {
+    if (activeLayer === PANEL_LAYERS.DECOR && selectionMode === "decor" && hitDecorIndex >= 0) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
@@ -1635,6 +1686,10 @@ export function createEditorApp({
         };
       });
       return true;
+    }
+
+    if (activeLayer === PANEL_LAYERS.TILES) {
+      return false;
     }
 
     interactionState.suppressNextClick = true;
@@ -1697,7 +1752,7 @@ export function createEditorApp({
         clearEntitySelection(draft.interaction);
         clearDecorSelection(draft.interaction);
         draft.interaction.decorDrag = null;
-        setCanvasSelectionMode(draft, "decor");
+        applyCanvasTarget(draft, "decor");
       });
       return;
     }
@@ -2041,9 +2096,10 @@ export function createEditorApp({
     if (state.interaction.activeTool !== EDITOR_TOOLS.INSPECT) return;
 
     const point = getCanvasPointFromMouseEvent(canvas, event);
+    const activeLayer = getActiveLayer(state.interaction);
     const selectionMode = getSelectionMode(state.interaction);
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
-    if (selectionMode === "entity" && hitEntityIndex >= 0) {
+    if (activeLayer === PANEL_LAYERS.ENTITIES && selectionMode === "entity" && hitEntityIndex >= 0) {
       store.setState((draft) => {
         applyCanvasTarget(draft, "entity");
         if (event.shiftKey) {
@@ -2057,7 +2113,7 @@ export function createEditorApp({
     }
 
     const hitDecorIndex = findDecorAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
-    if (selectionMode === "decor" && hitDecorIndex >= 0) {
+    if (activeLayer === PANEL_LAYERS.DECOR && selectionMode === "decor" && hitDecorIndex >= 0) {
       store.setState((draft) => {
         applyCanvasTarget(draft, "decor");
         if (event.shiftKey) {
@@ -2095,6 +2151,7 @@ export function createEditorApp({
     draft.interaction.boxSelection = null;
     draft.interaction.entityDrag = null;
     draft.interaction.decorDrag = null;
+    draft.interaction.activeLayer = PANEL_LAYERS.TILES;
     draft.interaction.canvasSelectionMode = "entity";
     draft.interaction.decorScatterMode = false;
     draft.interaction.decorScatterSettings = {
@@ -2195,12 +2252,42 @@ export function createEditorApp({
   const setActiveTool = (tool) => {
     store.setState((draft) => {
       draft.interaction.activeTool = tool;
+      if (tool !== EDITOR_TOOLS.INSPECT) {
+        setActiveLayer(draft, PANEL_LAYERS.TILES);
+      }
     });
   };
 
   const setActiveCanvasTarget = (mode) => {
     store.setState((draft) => {
       applyCanvasTarget(draft, mode);
+    });
+  };
+
+  const setActiveLayerFromPanel = (layer) => {
+    store.setState((draft) => {
+      if (layer === PANEL_LAYERS.DECOR) {
+        applyCanvasTarget(draft, "decor");
+        return;
+      }
+
+      if (layer === PANEL_LAYERS.ENTITIES) {
+        applyCanvasTarget(draft, "entity");
+        return;
+      }
+
+      setActiveLayer(draft, PANEL_LAYERS.TILES);
+      draft.interaction.activeEntityPresetId = null;
+      draft.interaction.activeDecorPresetId = null;
+      draft.interaction.decorScatterMode = false;
+      draft.interaction.boxSelection = null;
+      draft.interaction.entityDrag = null;
+      draft.interaction.decorDrag = null;
+      draft.interaction.hoveredEntityIndex = null;
+      draft.interaction.hoveredDecorIndex = null;
+      clearDecorScatterDrag(draft);
+      clearEntitySelection(draft.interaction);
+      clearDecorSelection(draft.interaction);
     });
   };
 
@@ -2221,8 +2308,12 @@ export function createEditorApp({
       if (key === "d") {
         let duplicated = false;
         store.setState((draft) => {
-          duplicated =
-            getSelectionMode(draft.interaction) === "decor" ? duplicateSelectedDecor(draft) : duplicateSelectedEntity(draft);
+          const activeLayer = getActiveLayer(draft.interaction);
+          duplicated = activeLayer === PANEL_LAYERS.DECOR
+            ? duplicateSelectedDecor(draft)
+            : activeLayer === PANEL_LAYERS.ENTITIES
+              ? duplicateSelectedEntity(draft)
+              : false;
         });
         if (duplicated) {
           event.preventDefault();
@@ -2244,19 +2335,25 @@ export function createEditorApp({
 
     if ((event.key === "Delete" || event.key === "Backspace")) {
       const state = store.getState();
+      const activeLayer = getActiveLayer(state.interaction);
       const hasSelection =
-        getSelectionMode(state.interaction) === "decor"
+        activeLayer === PANEL_LAYERS.DECOR
           ? getSelectedDecorIndices(state.interaction).length
-          : getSelectedEntityIndices(state.interaction).length;
+          : activeLayer === PANEL_LAYERS.ENTITIES
+            ? getSelectedEntityIndices(state.interaction).length
+            : 0;
       if (!hasSelection) return;
 
       event.preventDefault();
       store.setState((draft) => {
-        if (getSelectionMode(draft.interaction) === "decor") {
+        const activeLayer = getActiveLayer(draft.interaction);
+        if (activeLayer === PANEL_LAYERS.DECOR) {
           deleteSelectedDecor(draft);
           return;
         }
-        deleteSelectedEntity(draft);
+        if (activeLayer === PANEL_LAYERS.ENTITIES) {
+          deleteSelectedEntity(draft);
+        }
       });
       return;
     }
@@ -2383,6 +2480,7 @@ export function createEditorApp({
         state.document.status = "ready";
         state.interaction.hoveredEntityIndex = null;
         state.interaction.hoveredDecorIndex = null;
+        state.interaction.activeLayer = PANEL_LAYERS.TILES;
         state.interaction.canvasSelectionMode = "entity";
         clearDecorSelection(state.interaction);
         state.interaction.selectedCell = null;
@@ -2418,6 +2516,7 @@ export function createEditorApp({
     onEntityUpdate: updateEntity,
     onDecorUpdate: updateDecor,
     onCanvasTargetChange: setActiveCanvasTarget,
+    onLayerChange: setActiveLayerFromPanel,
   });
   window.addEventListener("resize", resize);
   canvas.addEventListener("mousemove", handleCanvasMouseMove);
