@@ -1,12 +1,12 @@
-import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
 import { getPrimarySelectedEntityIndex, getSelectedEntityIndices } from "../domain/entities/selection.js";
+import { getPrimarySelectedDecorIndex, getSelectedDecorIndices } from "../domain/decor/selection.js";
+import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
 
 const MIN_LEVEL_SIZE = 8;
 const MAX_LEVEL_SIZE = 256;
 const DEFAULT_LEVEL_NAME = "Untitled Level";
 const DEFAULT_LEVEL_ID = "untitled-level";
 const GRID_OPACITY_DRAGGING_ATTR = "gridOpacityDragging";
-const WORKSPACE_BACKGROUND_PRESETS = ["#0a0f1d", "#111827", "#1a2336", "#141b2a"];
 
 function clampLevelSize(value) {
   return Math.max(MIN_LEVEL_SIZE, Math.min(MAX_LEVEL_SIZE, value));
@@ -16,44 +16,61 @@ function countPaintedTiles(tiles) {
   return tiles.reduce((count, tile) => (tile ? count + 1 : count), 0);
 }
 
-function captureFocusedMetaInput(panel) {
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function captureFocusedInput(panel) {
   const activeElement = document.activeElement;
   if (!(activeElement instanceof HTMLInputElement)) return null;
   if (!panel.contains(activeElement)) return null;
 
-  const metaField = activeElement.dataset.metaField;
-  const backgroundField = activeElement.dataset.backgroundField;
-  const backgroundIndex = activeElement.dataset.backgroundIndex;
-  const entityField = activeElement.dataset.entityField;
-  const entityIndex = activeElement.dataset.entityIndex;
+  const datasetKeys = [
+    "metaField",
+    "dimensionField",
+    "gridField",
+    "entityField",
+    "entityIndex",
+    "entityParamKey",
+    "entityParamType",
+    "decorField",
+    "decorIndex",
+  ];
 
-  const validBackground = backgroundField === "name" && Number.isInteger(Number.parseInt(backgroundIndex || "", 10));
-  const validEntity = (entityField === "name" || entityField === "type") && Number.isInteger(Number.parseInt(entityIndex || "", 10));
+  const dataset = {};
+  let hasDataset = false;
+  for (const key of datasetKeys) {
+    const value = activeElement.dataset[key];
+    if (typeof value === "string") {
+      dataset[key] = value;
+      hasDataset = true;
+    }
+  }
 
-  if (metaField !== "name" && metaField !== "id" && !validBackground && !validEntity) return null;
+  if (!hasDataset) return null;
 
   return {
-    type: metaField === "name" || metaField === "id" ? "meta" : validBackground ? "background" : "entity",
-    field: metaField || backgroundField || entityField,
-    index: validBackground
-      ? Number.parseInt(backgroundIndex || "", 10)
-      : validEntity
-        ? Number.parseInt(entityIndex || "", 10)
-        : null,
+    dataset,
     selectionStart: activeElement.selectionStart,
     selectionEnd: activeElement.selectionEnd,
     selectionDirection: activeElement.selectionDirection,
   };
 }
 
-function restoreFocusedMetaInput(panel, snapshot) {
+function restoreFocusedInput(panel, snapshot) {
   if (!snapshot) return;
 
-  const replacementInput = snapshot.type === "background"
-    ? panel.querySelector(`input[data-background-field="name"][data-background-index="${snapshot.index}"]`)
-    : snapshot.type === "entity"
-      ? panel.querySelector(`input[data-entity-field="${snapshot.field}"][data-entity-index="${snapshot.index}"]`)
-      : panel.querySelector(`input[data-meta-field="${snapshot.field}"]`);
+  const selector = Object.entries(snapshot.dataset)
+    .map(([key, value]) => `[data-${key.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`)}="${CSS.escape(value)}"]`)
+    .join("");
+
+  if (!selector) return;
+
+  const replacementInput = panel.querySelector(selector);
   if (!(replacementInput instanceof HTMLInputElement)) return;
 
   replacementInput.focus({ preventScroll: true });
@@ -88,175 +105,11 @@ function restoreInspectorSectionState(panel, snapshot) {
 }
 
 function setInspectorMarkup(panel, markup) {
-  const focusedMetaSnapshot = captureFocusedMetaInput(panel);
+  const focusedInputSnapshot = captureFocusedInput(panel);
   const sectionSnapshot = captureInspectorSectionState(panel);
   panel.innerHTML = markup;
   restoreInspectorSectionState(panel, sectionSnapshot);
-  restoreFocusedMetaInput(panel, focusedMetaSnapshot);
-}
-
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function renderBackgroundSettings(active) {
-  const layers = active.backgrounds?.layers || [];
-
-  return `
-    <div class="infoGroup">
-      <div class="label">Backgrounds</div>
-      <div class="value">${layers.length} layer${layers.length === 1 ? "" : "s"}</div>
-    </div>
-
-    <button type="button" class="toolButton" data-background-action="add">Add background layer</button>
-
-    <div class="backgroundLayerList">
-      ${layers
-        .map(
-          (layer, index) => `
-            <div class="backgroundLayerRow">
-              <label class="fieldRow">
-                <span class="label">Name</span>
-                <input type="text" value="${escapeHtml(layer.name)}" data-background-field="name" data-background-index="${index}" />
-              </label>
-              <div class="backgroundLayerControls">
-                <label class="fieldRow compactInline">
-                  <span class="label">Visible</span>
-                  <input type="checkbox" data-background-field="visible" data-background-index="${index}" ${layer.visible ? "checked" : ""} />
-                </label>
-                <label class="fieldRow compactInline">
-                  <span class="label">Color</span>
-                  <input type="color" value="${layer.color}" data-background-field="color" data-background-index="${index}" />
-                </label>
-              </div>
-            </div>
-          `,
-        )
-        .join("")}
-    </div>
-  `;
-}
-
-
-function renderEntitiesSettings(active, state) {
-  const entities = active.entities || [];
-  const selectedEntityIndices = getSelectedEntityIndices(state.interaction);
-  const selectedEntityIndex = getPrimarySelectedEntityIndex(state.interaction);
-  const selected = Number.isInteger(selectedEntityIndex) ? entities[selectedEntityIndex] : null;
-  const multiSelected = selectedEntityIndices.length > 1;
-  const activePresetId = state.interaction.activeEntityPresetId;
-  const activePreset = ENTITY_PRESETS.find((preset) => preset.id === activePresetId) || null;
-
-  return `
-    <div class="infoGroup">
-      <div class="label">Entities</div>
-      <div class="value">${entities.length} total</div>
-    </div>
-
-    <div class="entityPresetSection">
-      <div class="hintText">Create / Presets</div>
-      <div class="entityPresetGrid" role="group" aria-label="Entity presets">
-        ${ENTITY_PRESETS
-          .map(
-            (preset) => `
-              <button
-                type="button"
-                class="toolButton entityPresetButton ${preset.id === activePresetId ? "isActive" : ""}"
-                data-entity-action="preset"
-                data-entity-preset-id="${preset.id}"
-                title="${escapeHtml(preset.type)}"
-              >
-                ${escapeHtml(preset.defaultName)}
-              </button>
-            `,
-          )
-          .join("")}
-      </div>
-      <div class="statusRow entityPresetStatus">
-        <span class="label">Placement</span>
-        <span class="value">${escapeHtml(activePreset ? activePreset.defaultName : "Off")}</span>
-      </div>
-      <button type="button" class="toolButton isSecondary" data-entity-action="clear-preset">Clear placement</button>
-    </div>
-
-    <div class="hintText">Entity list</div>
-
-    <div class="entityList" role="listbox" aria-label="Entities" aria-multiselectable="true">
-      ${entities
-        .map((entity, index) => `
-          <button
-            type="button"
-            class="entityListItem ${selectedEntityIndices.includes(index) ? "isSelected" : ""}"
-            data-entity-action="select"
-            data-entity-index="${index}"
-          >
-            <span>${escapeHtml(entity.name)}</span>
-            <span class="mutedValue">${escapeHtml(entity.type)}</span>
-          </button>
-        `)
-        .join("")}
-    </div>
-
-    ${multiSelected
-      ? `
-      <div class="entityEditor">
-        <div class="infoGroup">
-          <div class="label">Selection</div>
-          <div class="value">${selectedEntityIndices.length} entities</div>
-        </div>
-
-        <div class="mutedValue">Use batch duplicate/delete here, or drag the group directly in canvas.</div>
-
-        <div class="entityActionRow">
-          <button type="button" class="toolButton isSecondary" data-entity-action="duplicate" data-entity-index="${selectedEntityIndex ?? 0}">Duplicate selected</button>
-          <button type="button" class="toolButton isSecondary" data-entity-action="delete" data-entity-index="${selectedEntityIndex ?? 0}">Delete selected</button>
-        </div>
-      </div>
-      `
-      : selected
-      ? `
-      <div class="entityEditor">
-        <label class="fieldRow">
-          <span class="label">Name</span>
-          <input type="text" value="${escapeHtml(selected.name)}" data-entity-field="name" data-entity-index="${selectedEntityIndex}" />
-        </label>
-
-        <label class="fieldRow">
-          <span class="label">Type</span>
-          <input type="text" value="${escapeHtml(selected.type)}" data-entity-field="type" data-entity-index="${selectedEntityIndex}" />
-        </label>
-
-        <label class="fieldRow compactInline">
-          <span class="label">Visible</span>
-          <input type="checkbox" ${selected.visible ? "checked" : ""} data-entity-field="visible" data-entity-index="${selectedEntityIndex}" />
-        </label>
-
-        <div class="entityPositionGrid">
-          <label class="fieldRow">
-            <span class="label">X</span>
-            <input type="number" step="1" value="${selected.x}" data-entity-field="x" data-entity-index="${selectedEntityIndex}" />
-          </label>
-          <label class="fieldRow">
-            <span class="label">Y</span>
-            <input type="number" step="1" value="${selected.y}" data-entity-field="y" data-entity-index="${selectedEntityIndex}" />
-          </label>
-        </div>
-
-        <div class="entityActionRow">
-          <button type="button" class="toolButton isSecondary" data-entity-action="duplicate" data-entity-index="${selectedEntityIndex}">Duplicate</button>
-          <button type="button" class="toolButton isSecondary" data-entity-action="delete" data-entity-index="${selectedEntityIndex}">Delete</button>
-        </div>
-
-        <div class="mutedValue entityShortcutHint">Shortcuts: Delete / Backspace, Ctrl/⌘ + D</div>
-      </div>
-      `
-      : '<div class="mutedValue">Select an entity to edit it.</div>'}
-  `;
+  restoreFocusedInput(panel, focusedInputSnapshot);
 }
 
 function renderInspectorSection(title, key, content, open = false) {
@@ -274,73 +127,322 @@ function renderGridSettings(state) {
   const { gridVisible, gridOpacity, gridColor } = state.viewport;
 
   return `
-    <div class="infoGroup">
-      <div class="label">Grid</div>
-      <div class="value">Settings</div>
+    <div class="inspectorGroupGrid">
+      <label class="fieldRow compactInline">
+        <span class="label">Visible</span>
+        <input
+          type="checkbox"
+          data-grid-field="visible"
+          ${gridVisible ? "checked" : ""}
+        />
+      </label>
+
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Opacity</span>
+        <div class="rangeField">
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.01"
+            value="${gridOpacity}"
+            data-grid-field="opacity"
+          />
+          <span class="rangeValue">${Math.round(gridOpacity * 100)}%</span>
+        </div>
+      </label>
+
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Color</span>
+        <input
+          type="color"
+          value="${gridColor}"
+          data-grid-field="color"
+        />
+      </label>
     </div>
+  `;
+}
 
-    <label class="fieldRow">
-      <span class="label">Visible</span>
-      <input
-        type="checkbox"
-        data-grid-field="visible"
-        ${gridVisible ? "checked" : ""}
-      />
-    </label>
+function formatEntityParamLabel(key) {
+  return String(key)
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/^./, (char) => char.toUpperCase());
+}
 
-    <label class="fieldRow">
-      <span class="label">Opacity</span>
-      <input
-        type="range"
-        min="0"
-        max="1"
-        step="0.01"
-        value="${gridOpacity}"
-        data-grid-field="opacity"
-      />
-    </label>
+function renderEntityParamField(paramKey, paramValue, selectedEntityIndex) {
+  const inputType = getEntityParamInputType(paramValue);
+  const escapedKey = escapeHtml(paramKey);
+  const label = escapeHtml(formatEntityParamLabel(paramKey));
 
-    <label class="fieldRow">
-      <span class="label">Color</span>
+  if (inputType === "boolean") {
+    return `
+      <label class="fieldRow compactInline entityParamBooleanRow">
+        <span class="label">${label}</span>
+        <input
+          type="checkbox"
+          ${paramValue ? "checked" : ""}
+          data-entity-param-key="${escapedKey}"
+          data-entity-param-type="boolean"
+          data-entity-index="${selectedEntityIndex}"
+        />
+      </label>
+    `;
+  }
+
+  return `
+    <label class="fieldRow fieldRowCompact">
+      <span class="label">${label}</span>
       <input
-        type="color"
-        value="${gridColor}"
-        data-grid-field="color"
+        type="${inputType === "number" ? "number" : "text"}"
+        ${inputType === "number" ? 'step="any"' : ""}
+        value="${escapeHtml(paramValue)}"
+        data-entity-param-key="${escapedKey}"
+        data-entity-param-type="${inputType}"
+        data-entity-index="${selectedEntityIndex}"
       />
     </label>
   `;
 }
 
-function renderWorkspaceSettings(state) {
-  const { workspaceBackground } = state.ui;
+function renderEntityEditor(entity, selectedEntityIndex) {
+  const params = cloneEntityParams(entity?.params);
+  const entries = Object.entries(params);
 
   return `
-    <div class="infoGroup">
-      <div class="label">Workspace</div>
-      <div class="value">Canvas</div>
+    <div class="selectionInspectorCard">
+      <div class="selectionInspectorHeader">
+        <div>
+          <div class="label">Selected Entity</div>
+          <div class="value">${escapeHtml(entity.name || "Unnamed Entity")}</div>
+        </div>
+        <div class="badge">${escapeHtml(entity.type || "unknown")}</div>
+      </div>
+
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Name</span>
+        <input type="text" value="${escapeHtml(entity.name)}" data-entity-field="name" data-entity-index="${selectedEntityIndex}" />
+      </label>
+
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Type</span>
+        <input type="text" value="${escapeHtml(entity.type)}" data-entity-field="type" data-entity-index="${selectedEntityIndex}" />
+      </label>
+
+      <label class="fieldRow compactInline">
+        <span class="label">Visible</span>
+        <input type="checkbox" ${entity.visible ? "checked" : ""} data-entity-field="visible" data-entity-index="${selectedEntityIndex}" />
+      </label>
+
+      <div class="entityPositionGrid">
+        <label class="fieldRow fieldRowCompact">
+          <span class="label">X</span>
+          <input type="number" step="1" value="${entity.x}" data-entity-field="x" data-entity-index="${selectedEntityIndex}" />
+        </label>
+        <label class="fieldRow fieldRowCompact">
+          <span class="label">Y</span>
+          <input type="number" step="1" value="${entity.y}" data-entity-field="y" data-entity-index="${selectedEntityIndex}" />
+        </label>
+      </div>
+
+      <div class="entityParamsSection">
+        <div class="label">Params</div>
+        ${entries.length
+          ? `<div class="entityParamsGrid">${entries
+              .map(([paramKey, paramValue]) => renderEntityParamField(paramKey, paramValue, selectedEntityIndex))
+              .join("")}</div>`
+          : '<div class="mutedValue">No parameters for this entity.</div>'}
+      </div>
+    </div>
+  `;
+}
+
+function renderDecorEditor(decor, selectedDecorIndex) {
+  return `
+    <div class="selectionInspectorCard">
+      <div class="selectionInspectorHeader">
+        <div>
+          <div class="label">Selected Decor</div>
+          <div class="value">${escapeHtml(decor.name || `Decor ${selectedDecorIndex + 1}`)}</div>
+        </div>
+        <div class="badge">${escapeHtml(decor.type || "unknown")}</div>
+      </div>
+
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Name</span>
+        <input type="text" value="${escapeHtml(decor.name)}" data-decor-field="name" data-decor-index="${selectedDecorIndex}" />
+      </label>
+
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Type</span>
+        <input type="text" value="${escapeHtml(decor.type)}" data-decor-field="type" data-decor-index="${selectedDecorIndex}" />
+      </label>
+
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Variant</span>
+        <input type="text" value="${escapeHtml(decor.variant)}" data-decor-field="variant" data-decor-index="${selectedDecorIndex}" />
+      </label>
+
+      <label class="fieldRow compactInline">
+        <span class="label">Visible</span>
+        <input type="checkbox" ${decor.visible ? "checked" : ""} data-decor-field="visible" data-decor-index="${selectedDecorIndex}" />
+      </label>
+
+      <div class="entityPositionGrid">
+        <label class="fieldRow fieldRowCompact">
+          <span class="label">X</span>
+          <input type="number" step="1" value="${decor.x}" data-decor-field="x" data-decor-index="${selectedDecorIndex}" />
+        </label>
+        <label class="fieldRow fieldRowCompact">
+          <span class="label">Y</span>
+          <input type="number" step="1" value="${decor.y}" data-decor-field="y" data-decor-index="${selectedDecorIndex}" />
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function renderSelectionSummary(state) {
+  const active = state.document.active;
+  const selectedEntityIndices = getSelectedEntityIndices(state.interaction);
+  const selectedDecorIndices = getSelectedDecorIndices(state.interaction);
+  const selectedEntityIndex = getPrimarySelectedEntityIndex(state.interaction);
+  const selectedDecorIndex = getPrimarySelectedDecorIndex(state.interaction);
+  const selectedEntity = Number.isInteger(selectedEntityIndex) ? active.entities?.[selectedEntityIndex] : null;
+  const selectedDecor = Number.isInteger(selectedDecorIndex) ? active.decor?.[selectedDecorIndex] : null;
+
+  if (selectedEntityIndices.length > 1) {
+    return `
+      <div class="selectionSummaryGrid">
+        <div class="infoGroup compact">
+          <div class="label">Selection</div>
+          <div class="value">${selectedEntityIndices.length} entities</div>
+        </div>
+        <div class="infoGroup compact">
+          <div class="label">Primary</div>
+          <div class="value">${escapeHtml(selectedEntity?.name || "Entity")}</div>
+        </div>
+      </div>
+      <div class="mutedValue">Multi-select is active. Drag, duplicate, and delete continue to work from canvas and shortcuts.</div>
+    `;
+  }
+
+  if (selectedDecorIndices.length > 1) {
+    return `
+      <div class="selectionSummaryGrid">
+        <div class="infoGroup compact">
+          <div class="label">Selection</div>
+          <div class="value">${selectedDecorIndices.length} decor items</div>
+        </div>
+        <div class="infoGroup compact">
+          <div class="label">Primary</div>
+          <div class="value">${escapeHtml(selectedDecor?.name || "Decor")}</div>
+        </div>
+      </div>
+      <div class="mutedValue">Multi-select is active. Drag, duplicate, and delete continue to work from canvas and shortcuts.</div>
+    `;
+  }
+
+  if (selectedEntity) {
+    return renderEntityEditor(selectedEntity, selectedEntityIndex);
+  }
+
+  if (selectedDecor) {
+    return renderDecorEditor(selectedDecor, selectedDecorIndex);
+  }
+
+  return `
+    <div class="selectionSummaryGrid">
+      <div class="infoGroup compact">
+        <div class="label">Selected</div>
+        <div class="value">Nothing selected</div>
+      </div>
+      <div class="infoGroup compact">
+        <div class="label">Canvas Target</div>
+        <div class="value">${state.interaction.canvasSelectionMode === "decor" ? "Decor" : "Entities"}</div>
+      </div>
+    </div>
+    <div class="mutedValue">Inspect objects from canvas to edit them here.</div>
+  `;
+}
+
+function renderLevelSection(state) {
+  const active = state.document.active;
+  const tileCount = active.dimensions.width * active.dimensions.height;
+  const paintedCount = countPaintedTiles(active.tiles.base);
+  const backgroundLayerCount = active.backgrounds?.layers?.length || 0;
+
+  return `
+    <div class="selectionSummaryGrid selectionSummaryGridDouble">
+      <div class="infoGroup compact">
+        <div class="label">Name</div>
+        <div class="value">${escapeHtml(active.meta.name)}</div>
+      </div>
+      <div class="infoGroup compact">
+        <div class="label">ID</div>
+        <div class="value">${escapeHtml(active.meta.id)}</div>
+      </div>
     </div>
 
-    <label class="fieldRow">
-      <span class="label">Background color</span>
-      <input
-        type="color"
-        value="${workspaceBackground}"
-        data-workspace-field="background"
-      />
+    <label class="fieldRow fieldRowCompact">
+      <span class="label">Name</span>
+      <input type="text" value="${escapeHtml(active.meta.name)}" data-meta-field="name" />
     </label>
 
-    <div class="workspacePresets" role="group" aria-label="Workspace background presets">
-      ${WORKSPACE_BACKGROUND_PRESETS.map(
-        (preset) => `
-          <button
-            type="button"
-            class="workspacePreset${workspaceBackground === preset ? " isActive" : ""}"
-            data-workspace-preset="${preset}"
-            title="Set workspace background to ${preset}"
-            style="--workspace-preset-color: ${preset};"
-          ></button>
-        `,
-      ).join("")}
+    <label class="fieldRow fieldRowCompact">
+      <span class="label">ID</span>
+      <input type="text" value="${escapeHtml(active.meta.id)}" data-meta-field="id" />
+    </label>
+
+    <div class="selectionSummaryGrid selectionSummaryGridDouble">
+      <div class="infoGroup compact">
+        <div class="label">Tiles</div>
+        <div class="value">${paintedCount} / ${tileCount}</div>
+      </div>
+      <div class="infoGroup compact">
+        <div class="label">Backgrounds</div>
+        <div class="value">${backgroundLayerCount}</div>
+      </div>
+      <div class="infoGroup compact">
+        <div class="label">Entities</div>
+        <div class="value">${active.entities?.length || 0}</div>
+      </div>
+      <div class="infoGroup compact">
+        <div class="label">Decor</div>
+        <div class="value">${active.decor?.length || 0}</div>
+      </div>
+    </div>
+
+    <div class="entityPositionGrid">
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Width</span>
+        <input
+          type="number"
+          min="${MIN_LEVEL_SIZE}"
+          max="${MAX_LEVEL_SIZE}"
+          step="1"
+          value="${active.dimensions.width}"
+          data-dimension-field="width"
+        />
+      </label>
+
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Height</span>
+        <input
+          type="number"
+          min="${MIN_LEVEL_SIZE}"
+          max="${MAX_LEVEL_SIZE}"
+          step="1"
+          value="${active.dimensions.height}"
+          data-dimension-field="height"
+        />
+      </label>
+    </div>
+
+    <div class="infoGroup compact">
+      <div class="label">Session</div>
+      <div class="badge">${state.session.mode}</div>
     </div>
   `;
 }
@@ -367,84 +469,15 @@ export function renderInspector(panel, state) {
     return;
   }
 
-  const tileCount = active.dimensions.width * active.dimensions.height;
-  const paintedCount = countPaintedTiles(active.tiles.base);
-
   setInspectorMarkup(panel, `
-    ${renderInspectorSection("Level", "level", `
-    <label class="fieldRow">
-      <span class="label">Name</span>
-      <input
-        type="text"
-        value="${active.meta.name}"
-        data-meta-field="name"
-      />
-    </label>
-
-    <label class="fieldRow">
-      <span class="label">ID</span>
-      <input
-        type="text"
-        value="${active.meta.id}"
-        data-meta-field="id"
-      />
-    </label>
-
-    <label class="fieldRow">
-      <span class="label">Version</span>
-      <input
-        type="text"
-        value="${active.meta.version}"
-        readonly
-      />
-    </label>
-
-    <div class="infoGroup">
-      <div class="label">Size</div>
-      <div class="value">${active.dimensions.width} × ${active.dimensions.height}</div>
-    </div>
-
-    <label class="fieldRow">
-      <span class="label">Width</span>
-      <input
-        type="number"
-        min="${MIN_LEVEL_SIZE}"
-        max="${MAX_LEVEL_SIZE}"
-        step="1"
-        value="${active.dimensions.width}"
-        data-dimension-field="width"
-      />
-    </label>
-
-    <label class="fieldRow">
-      <span class="label">Height</span>
-      <input
-        type="number"
-        min="${MIN_LEVEL_SIZE}"
-        max="${MAX_LEVEL_SIZE}"
-        step="1"
-        value="${active.dimensions.height}"
-        data-dimension-field="height"
-      />
-    </label>
-
-    <div class="infoGroup">
-      <div class="label">Tiles</div>
-      <div class="value">${paintedCount} / ${tileCount}</div>
-    </div>
-
-    <div class="infoGroup">
-      <div class="label">Session</div>
-      <div class="badge">${state.session.mode}</div>
-    </div>
-    `, true)}
-
+    ${renderInspectorSection("Inspect", "inspect", renderSelectionSummary(state), true)}
+    ${renderInspectorSection("Level", "level", renderLevelSection(state), true)}
     ${renderInspectorSection("Grid", "grid", renderGridSettings(state), false)}
   `);
 }
 
 export function bindInspectorPanel(panel, store, options = {}) {
-  const { onResize, onMetaUpdate, onGridUpdate, onWorkspaceUpdate, onBackgroundUpdate, onEntityUpdate } = options;
+  const { onResize, onMetaUpdate, onGridUpdate, onEntityUpdate, onDecorUpdate } = options;
 
   const sanitizeMetaValue = (field, value) => {
     const trimmed = value.trim();
@@ -502,36 +535,30 @@ export function bindInspectorPanel(panel, store, options = {}) {
     return true;
   };
 
-  const handleWorkspaceChange = (target) => {
-    const workspaceField = target.dataset.workspaceField;
-    if (workspaceField !== "background") return false;
+  const handleEntityChange = (target) => {
+    const entityParamKey = target.dataset.entityParamKey;
+    if (entityParamKey) {
+      const index = Number.parseInt(target.dataset.entityIndex || "", 10);
+      if (!Number.isInteger(index) || index < 0) return false;
 
-    const nextColor = target.value;
-    const currentColor = store.getState().ui.workspaceBackground;
-    if (currentColor === nextColor) return true;
+      const paramType = target.dataset.entityParamType;
+      if (paramType === "boolean") {
+        onEntityUpdate?.(index, "param", { key: entityParamKey, value: target.checked });
+        return true;
+      }
 
-    onWorkspaceUpdate?.("background", nextColor);
-    return true;
-  };
-  const handleBackgroundChange = (target) => {
-    const backgroundField = target.dataset.backgroundField;
-    if (backgroundField !== "name" && backgroundField !== "visible" && backgroundField !== "color") return false;
+      if (paramType === "number") {
+        const parsed = Number.parseFloat(target.value);
+        const value = Number.isFinite(parsed) ? parsed : 0;
+        target.value = String(value);
+        onEntityUpdate?.(index, "param", { key: entityParamKey, value });
+        return true;
+      }
 
-    const index = Number.parseInt(target.dataset.backgroundIndex || "", 10);
-    if (!Number.isInteger(index) || index < 0) return false;
-
-    if (backgroundField === "visible") {
-      onBackgroundUpdate?.(index, "visible", target.checked);
+      onEntityUpdate?.(index, "param", { key: entityParamKey, value: target.value });
       return true;
     }
 
-    const value = backgroundField === "name" ? target.value : target.value;
-    onBackgroundUpdate?.(index, backgroundField, value);
-    return true;
-  };
-
-
-  const handleEntityChange = (target) => {
     const entityField = target.dataset.entityField;
     if (entityField !== "name" && entityField !== "type" && entityField !== "visible" && entityField !== "x" && entityField !== "y") return false;
 
@@ -555,15 +582,38 @@ export function bindInspectorPanel(panel, store, options = {}) {
     return true;
   };
 
+  const handleDecorChange = (target) => {
+    const decorField = target.dataset.decorField;
+    if (decorField !== "name" && decorField !== "type" && decorField !== "variant" && decorField !== "visible" && decorField !== "x" && decorField !== "y") return false;
+
+    const index = Number.parseInt(target.dataset.decorIndex || "", 10);
+    if (!Number.isInteger(index) || index < 0) return false;
+
+    if (decorField === "visible") {
+      onDecorUpdate?.(index, "visible", target.checked);
+      return true;
+    }
+
+    if (decorField === "x" || decorField === "y") {
+      const parsed = Number.parseInt(target.value, 10);
+      const value = Number.isInteger(parsed) ? parsed : 0;
+      target.value = String(value);
+      onDecorUpdate?.(index, decorField, value);
+      return true;
+    }
+
+    onDecorUpdate?.(index, decorField, target.value);
+    return true;
+  };
+
   const onChange = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
 
     if (handleMetaChange(target)) return;
     if (handleGridChange(target)) return;
-    if (handleWorkspaceChange(target)) return;
-    if (handleBackgroundChange(target)) return;
     if (handleEntityChange(target)) return;
+    if (handleDecorChange(target)) return;
 
     const dimensionField = target.dataset.dimensionField;
     if (dimensionField !== "width" && dimensionField !== "height") return;
@@ -591,58 +641,8 @@ export function bindInspectorPanel(panel, store, options = {}) {
 
     if (handleMetaChange(target)) return;
     if (handleGridChange(target)) return;
-    if (handleWorkspaceChange(target)) return;
-    if (handleBackgroundChange(target)) return;
-    handleEntityChange(target);
-  };
-
-  const onClick = (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-
-    const workspaceButton = target.closest("[data-workspace-preset]");
-    const preset = workspaceButton instanceof HTMLButtonElement ? workspaceButton.dataset.workspacePreset : null;
-    if (preset) {
-      onWorkspaceUpdate?.("background", preset);
-      return;
-    }
-
-    const backgroundButton = target.closest("[data-background-action]");
-    const backgroundAction = backgroundButton instanceof HTMLButtonElement ? backgroundButton.dataset.backgroundAction : null;
-    if (backgroundAction === "add") {
-      onBackgroundUpdate?.(-1, "add", null);
-      return;
-    }
-
-    const entityButton = target.closest("[data-entity-action]");
-    const entityAction = entityButton instanceof HTMLButtonElement ? entityButton.dataset.entityAction : null;
-    if (entityAction === "preset") {
-      const presetId = entityButton.dataset.entityPresetId;
-      if (presetId) {
-        onEntityUpdate?.(-1, "preset", presetId);
-      }
-      return;
-    }
-
-    if (entityAction === "clear-preset") {
-      onEntityUpdate?.(-1, "clear-preset", null);
-      return;
-    }
-
-    if (entityAction === "select") {
-      const index = Number.parseInt(entityButton.dataset.entityIndex || "", 10);
-      if (Number.isInteger(index) && index >= 0) {
-        onEntityUpdate?.(index, "select", { toggle: event.shiftKey });
-      }
-      return;
-    }
-
-    if (entityAction === "duplicate" || entityAction === "delete") {
-      const index = Number.parseInt(entityButton.dataset.entityIndex || "", 10);
-      if (Number.isInteger(index) && index >= 0) {
-        onEntityUpdate?.(index, entityAction, null);
-      }
-    }
+    if (handleEntityChange(target)) return;
+    handleDecorChange(target);
   };
 
   const onPointerDown = (event) => {
@@ -662,7 +662,6 @@ export function bindInspectorPanel(panel, store, options = {}) {
 
   panel.addEventListener("change", onChange);
   panel.addEventListener("input", onInput);
-  panel.addEventListener("click", onClick);
   panel.addEventListener("pointerdown", onPointerDown);
   window.addEventListener("pointerup", stopOpacityDrag);
   window.addEventListener("pointercancel", stopOpacityDrag);
@@ -670,7 +669,6 @@ export function bindInspectorPanel(panel, store, options = {}) {
   return () => {
     panel.removeEventListener("change", onChange);
     panel.removeEventListener("input", onInput);
-    panel.removeEventListener("click", onClick);
     panel.removeEventListener("pointerdown", onPointerDown);
     window.removeEventListener("pointerup", stopOpacityDrag);
     window.removeEventListener("pointercancel", stopOpacityDrag);
