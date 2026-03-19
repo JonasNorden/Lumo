@@ -25,6 +25,59 @@ export function getScanResetPosition(scan, doc) {
   return getScanRange(scan, doc).startX;
 }
 
+export function captureScanViewport(viewport) {
+  return {
+    offsetX: Number.isFinite(viewport?.offsetX) ? viewport.offsetX : 0,
+    offsetY: Number.isFinite(viewport?.offsetY) ? viewport.offsetY : 0,
+  };
+}
+
+export function restoreScanViewport(scan, viewport) {
+  if (!scan?.viewportSnapshot || !viewport) return false;
+  viewport.offsetX = scan.viewportSnapshot.offsetX;
+  viewport.offsetY = scan.viewportSnapshot.offsetY;
+  return true;
+}
+
+export function syncScanPlaybackState(scan, doc, options = {}) {
+  const { preserveLog = false } = options;
+
+  scan.positionX = getScanResetPosition(scan, doc);
+  scan.isPlaying = false;
+  scan.activeSoundIds = [];
+  scan.lastFrameTime = null;
+  scan.viewportSnapshot = null;
+
+  if (!preserveLog) {
+    scan.eventLog = [];
+    scan.lastEventSummary = null;
+  }
+}
+
+export function startScanPlaybackState(scan, viewport, doc) {
+  scan.positionX = getScanResetPosition(scan, doc);
+  scan.activeSoundIds = [];
+  scan.lastFrameTime = null;
+  scan.viewportSnapshot = captureScanViewport(viewport);
+  scan.isPlaying = true;
+}
+
+export function stopScanPlaybackState(scan, viewport, doc, options = {}) {
+  const { preserveLog = true } = options;
+
+  restoreScanViewport(scan, viewport);
+  scan.positionX = getScanResetPosition(scan, doc);
+  scan.isPlaying = false;
+  scan.activeSoundIds = [];
+  scan.lastFrameTime = null;
+  scan.viewportSnapshot = null;
+
+  if (!preserveLog) {
+    scan.eventLog = [];
+    scan.lastEventSummary = null;
+  }
+}
+
 function clampPositiveValue(value, fallback) {
   const parsed = Number.parseFloat(value);
   if (!Number.isFinite(parsed)) return fallback;

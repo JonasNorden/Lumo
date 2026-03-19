@@ -70,6 +70,7 @@ export function createEditorState() {
       eventLog: [],
       lastEventSummary: null,
       lastFrameTime: null,
+      viewportSnapshot: null,
     },
     ui: {
       inspectorOpen: true,
