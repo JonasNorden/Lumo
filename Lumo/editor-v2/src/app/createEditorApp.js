@@ -2224,7 +2224,10 @@ export function createEditorApp({
     return changedAny;
   };
 
-  const isDecorScatterReady = (interaction) =>
+  const isMomentaryPlacementTrigger = (event) => event.altKey;
+
+  const isDecorScatterReady = (interaction, event) =>
+    isMomentaryPlacementTrigger(event) &&
     getActiveLayer(interaction) === PANEL_LAYERS.DECOR &&
     interaction.activeTool === EDITOR_TOOLS.INSPECT &&
     interaction.decorScatterMode &&
@@ -2239,6 +2242,36 @@ export function createEditorApp({
     const activeEntityPresetId = state.interaction.activeEntityPresetId;
     const activeDecorPresetId = state.interaction.activeDecorPresetId;
     const activeSoundPresetId = state.interaction.activeSoundPresetId;
+
+    if (activeLayer === PANEL_LAYERS.ENTITIES && activeEntityPresetId && isMomentaryPlacementTrigger(event)) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        createEntityAtCell(draft, cell, activeEntityPresetId);
+        draft.interaction.hoverCell = cell;
+      });
+      return true;
+    }
+
+    if (activeLayer === PANEL_LAYERS.DECOR && activeDecorPresetId && isMomentaryPlacementTrigger(event)) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        createDecorAtCell(draft, cell, activeDecorPresetId);
+        draft.interaction.hoverCell = cell;
+      });
+      return true;
+    }
+
+    if (activeLayer === PANEL_LAYERS.SOUND && activeSoundPresetId && isMomentaryPlacementTrigger(event)) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        createSoundAtCell(draft, cell, activeSoundPresetId);
+        draft.interaction.hoverCell = cell;
+      });
+      return true;
+    }
 
     if (activeLayer === PANEL_LAYERS.ENTITIES && selectionMode === "entity" && hitEntityIndex >= 0) {
       interactionState.suppressNextClick = true;
@@ -2271,36 +2304,6 @@ export function createEditorApp({
           }),
           previewDelta: { x: 0, y: 0 },
         };
-      });
-      return true;
-    }
-
-    if (activeLayer === PANEL_LAYERS.ENTITIES && activeEntityPresetId) {
-      interactionState.suppressNextClick = true;
-      event.preventDefault();
-      store.setState((draft) => {
-        createEntityAtCell(draft, cell, activeEntityPresetId);
-        draft.interaction.hoverCell = cell;
-      });
-      return true;
-    }
-
-    if (activeLayer === PANEL_LAYERS.DECOR && activeDecorPresetId) {
-      interactionState.suppressNextClick = true;
-      event.preventDefault();
-      store.setState((draft) => {
-        createDecorAtCell(draft, cell, activeDecorPresetId);
-        draft.interaction.hoverCell = cell;
-      });
-      return true;
-    }
-
-    if (activeLayer === PANEL_LAYERS.SOUND && activeSoundPresetId) {
-      interactionState.suppressNextClick = true;
-      event.preventDefault();
-      store.setState((draft) => {
-        createSoundAtCell(draft, cell, activeSoundPresetId);
-        draft.interaction.hoverCell = cell;
       });
       return true;
     }
@@ -2429,7 +2432,7 @@ export function createEditorApp({
     if (!cell) return;
 
     const activeTool = state.interaction.activeTool;
-    if (isDecorScatterReady(state.interaction)) {
+    if (isDecorScatterReady(state.interaction, event)) {
       event.preventDefault();
       interactionState.suppressNextClick = true;
       store.setState((draft) => {

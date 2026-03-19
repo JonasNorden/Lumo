@@ -548,6 +548,11 @@ select {
   font-weight: 700;
 }
 
+.statusCardMeta {
+  color: #8fa5d3;
+  font-size: 11px;
+}
+
 .compactActionRow {
   display: grid;
   gap: 8px;

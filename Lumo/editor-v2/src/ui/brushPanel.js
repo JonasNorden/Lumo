@@ -108,11 +108,12 @@ function renderSelectorField(label, dataField, options, selectedValue, placehold
   `;
 }
 
-function renderPlacementBlock(label) {
+function renderPlacementBlock(label, hint = "") {
   return `
     <div class="statusCard">
       <span class="statusCardLabel">Placement</span>
       <span class="statusCardValue">${escapeHtml(label)}</span>
+      ${hint ? `<span class="statusCardMeta">${escapeHtml(hint)}</span>` : ""}
     </div>
   `;
 }
@@ -121,10 +122,11 @@ function renderEntitiesSettings(state) {
   const activePresetId = state.interaction.activeEntityPresetId;
   const activePreset = ENTITY_PRESETS.find((preset) => preset.id === activePresetId) || null;
   const placementLabel = activePreset ? `Placing: ${activePreset.defaultName}` : "No placement";
+  const placementHint = activePreset ? "Alt/Option + Click places" : "Select a preset to arm placement";
 
   return `
     ${renderSelectorField("Select Entity", "entity-preset-select", PLACEABLE_ENTITY_PRESETS, activePresetId, "No entity selected")}
-    ${renderPlacementBlock(placementLabel)}
+    ${renderPlacementBlock(placementLabel, placementHint)}
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton isSecondary" data-entity-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
     </div>
@@ -140,15 +142,20 @@ function renderDecorSettings(state) {
   const scatterVariantMode = scatterSettings.variantMode === "random" ? "random" : "fixed";
   const scatterModeActive = Boolean(state.interaction.decorScatterMode);
   const placementLabel = activePreset ? `Placing: ${activePreset.defaultName}` : "No placement";
+  const placementHint = !activePreset
+    ? "Select a preset to arm placement"
+    : scatterModeActive
+      ? "Alt/Option + Drag scatters"
+      : "Alt/Option + Click places";
   const scatterStatus = !activePreset
     ? "Select Decor first"
     : scatterModeActive
-      ? `Scatter ${Math.round(scatterDensity * 100)}% density · ${Math.round(scatterRandomness * 100)}% randomness`
-      : "Single placement";
+      ? `Alt/Option + Drag · ${Math.round(scatterDensity * 100)}% density · ${Math.round(scatterRandomness * 100)}% randomness`
+      : "Alt/Option + Click places one";
 
   return `
     ${renderSelectorField("Select Decor", "decor-preset-select", DECOR_PRESETS, activePresetId, "No decor selected")}
-    ${renderPlacementBlock(placementLabel)}
+    ${renderPlacementBlock(placementLabel, placementHint)}
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton isSecondary" data-decor-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
     </div>
@@ -204,10 +211,11 @@ function renderSoundSettings(state) {
   const activePresetId = state.interaction.activeSoundPresetId;
   const activePreset = SOUND_PRESETS.find((preset) => preset.id === activePresetId) || null;
   const placementLabel = activePreset ? `Placing: ${activePreset.defaultName}` : "No placement";
+  const placementHint = activePreset ? "Alt/Option + Click places" : "Select a preset to arm placement";
 
   return `
     ${renderSelectorField("Select Sound", "sound-preset-select", SOUND_PRESETS, activePresetId, "No sound selected")}
-    ${renderPlacementBlock(placementLabel)}
+    ${renderPlacementBlock(placementLabel, placementHint)}
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton isSecondary" data-sound-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
     </div>
