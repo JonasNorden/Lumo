@@ -60,6 +60,17 @@ export function createEditorState() {
       redoStack: [],
       activeBatch: null,
     },
+    scan: {
+      isPlaying: false,
+      speed: 6,
+      startX: null,
+      endX: null,
+      positionX: 0,
+      activeSoundIds: [],
+      eventLog: [],
+      lastEventSummary: null,
+      lastFrameTime: null,
+    },
     ui: {
       inspectorOpen: true,
       importStatus: null,
@@ -72,6 +83,7 @@ export function createEditorState() {
         entities: true,
         decor: true,
         sound: true,
+        scan: true,
       },
     },
   };

@@ -15,6 +15,7 @@ const PANEL_LAYERS = {
   ENTITIES: "entities",
   DECOR: "decor",
   SOUND: "sound",
+  SCAN: "scan",
 };
 
 const VISIBLE_TOOL_OPTIONS = TOOL_OPTIONS.filter((option) => (
@@ -222,6 +223,63 @@ function renderSoundSettings(state) {
   `;
 }
 
+function formatScanValue(value, fallback = "Auto") {
+  return Number.isFinite(value) ? value.toFixed(2).replace(/\.00$/, "") : fallback;
+}
+
+function renderScanSettings(state) {
+  const scan = state.scan || {};
+  const docWidth = Number(state.document.active?.dimensions?.width) || 0;
+  const startLabel = Number.isFinite(scan.startX) ? scan.startX : 0;
+  const endLabel = Number.isFinite(scan.endX) ? scan.endX : docWidth;
+  const speed = Number.isFinite(scan.speed) ? scan.speed : 6;
+  const lastEventSummary = scan.lastEventSummary || "No intersections yet";
+  const eventLog = Array.isArray(scan.eventLog) ? scan.eventLog.slice(0, 4) : [];
+
+  return `
+    <div class="compactFieldGrid scanFieldGrid">
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Start X</span>
+        <input type="number" min="0" max="${docWidth}" step="0.25" value="${Number.isFinite(scan.startX) ? scan.startX : ""}" placeholder="0" data-scan-field="startX" />
+      </label>
+
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">End X</span>
+        <input type="number" min="0" max="${docWidth}" step="0.25" value="${Number.isFinite(scan.endX) ? scan.endX : ""}" placeholder="${docWidth}" data-scan-field="endX" />
+      </label>
+
+      <label class="fieldRow fieldRowCompact scanFieldGridFull">
+        <span class="label">Speed</span>
+        <input type="number" min="0.25" step="0.25" value="${speed}" data-scan-field="speed" />
+      </label>
+    </div>
+
+    <div class="compactActionRow compactActionRowDouble">
+      <button type="button" class="toolButton ${scan.isPlaying ? "isActive" : ""}" data-scan-action="play">Play</button>
+      <button type="button" class="toolButton isSecondary" data-scan-action="stop">Stop</button>
+    </div>
+
+    <div class="statusCard">
+      <span class="statusCardLabel">Scan</span>
+      <span class="statusCardValue">${scan.isPlaying ? "Running" : "Stopped"}</span>
+      <span class="statusCardMeta">Range ${escapeHtml(String(startLabel))} → ${escapeHtml(String(endLabel))} · Position ${escapeHtml(formatScanValue(scan.positionX, "0"))}</span>
+      <span class="statusCardMeta">Last event: ${escapeHtml(lastEventSummary)}</span>
+    </div>
+
+    <div class="compactSubsection">
+      <div class="compactSubsectionHeader">
+        <span class="label">Debug Feed</span>
+        <button type="button" class="toolButton isSecondary compactToggleButton" data-scan-action="clear-log" ${eventLog.length ? "" : "disabled"}>Clear</button>
+      </div>
+      <div class="scanDebugList">
+        ${eventLog.length
+          ? eventLog.map((entry) => `<div class="scanDebugItem"><span class="scanDebugTitle">${escapeHtml(entry.soundName || entry.soundId || "Sound")}</span><span class="scanDebugMeta">${escapeHtml(entry.intersectionType || entry.soundType || "intersection")} · x ${escapeHtml(String(entry.atX || "0"))}</span></div>`).join("")
+          : '<div class="scanDebugEmpty">Waiting for scan intersections.</div>'}
+      </div>
+    </div>
+  `;
+}
+
 export function renderBrushPanel(panel, state) {
   const brushDraft = state.brush.activeDraft;
   const summary = getBrushDraftSummary(brushDraft);
@@ -232,6 +290,7 @@ export function renderBrushPanel(panel, state) {
     decor: true,
     entities: true,
     sound: true,
+    scan: true,
     ...state.ui.panelSections,
   };
 
@@ -275,11 +334,12 @@ export function renderBrushPanel(panel, state) {
     ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
     ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
     ${state.document.active ? renderSection("sound", "SOUND", panelSections.sound, renderSoundSettings(state)) : ""}
+    ${state.document.active ? renderSection("scan", "SCAN", panelSections.scan, renderScanSettings(state)) : ""}
   `;
 }
 
 export function bindBrushPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onCanvasTargetChange, onLayerChange } = options;
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onCanvasTargetChange, onLayerChange, onScanUpdate } = options;
 
   const onChange = (event) => {
     const target = event.target;
@@ -329,6 +389,12 @@ export function bindBrushPanel(panel, store, options = {}) {
       const sliderValue = Number.parseFloat(target.value);
       const value = Number.isFinite(sliderValue) ? Math.max(0, Math.min(1, sliderValue / 100)) : 0;
       onDecorUpdate?.(-1, "scatter-setting", { field: decorSetting, value });
+      return;
+    }
+
+    const scanField = target.dataset.scanField;
+    if (scanField === "startX" || scanField === "endX" || scanField === "speed") {
+      onScanUpdate?.(scanField, target.value);
     }
   };
 
@@ -368,6 +434,13 @@ export function bindBrushPanel(panel, store, options = {}) {
     if (soundActionButton instanceof HTMLButtonElement) {
       onLayerChange?.(PANEL_LAYERS.SOUND);
       if (soundActionButton.dataset.soundAction === "clear-preset") onSoundUpdate?.(-1, "clear-preset", null);
+      return;
+    }
+
+    const scanActionButton = target.closest("[data-scan-action]");
+    if (scanActionButton instanceof HTMLButtonElement) {
+      const action = scanActionButton.dataset.scanAction;
+      if (action) onScanUpdate?.(action, null);
       return;
     }
 
