@@ -17,6 +17,7 @@ import {
 } from "../src/domain/tiles/history.js";
 import { paintSingleTile } from "../src/domain/tiles/paintTile.js";
 import { eraseSingleTile } from "../src/domain/tiles/eraseTile.js";
+import { renderBrushPanel } from "../src/ui/brushPanel.js";
 
 function createHistoryState() {
   return {
@@ -202,6 +203,54 @@ function runSoundRegressionChecks() {
   assert.equal(doc.sounds.length, 0, "redo should reapply sound deletion");
 }
 
+function runUiRegressionChecks() {
+  const panel = { innerHTML: "" };
+  const baseState = {
+    brush: {
+      activeDraft: {
+        behavior: "replace",
+        size: "single",
+        sprite: "solid",
+      },
+    },
+    document: {
+      active: createDoc(),
+    },
+    interaction: {
+      activeTool: "inspect",
+      activeLayer: "entities",
+      activeEntityPresetId: "lantern",
+      activeDecorPresetId: null,
+      activeSoundPresetId: null,
+      decorScatterMode: false,
+      decorScatterSettings: {
+        density: 0.3,
+        randomness: 0.6,
+        variantMode: "fixed",
+      },
+    },
+    ui: {
+      panelSections: {},
+    },
+  };
+
+  renderBrushPanel(panel, baseState);
+  assert.equal(panel.innerHTML.includes("Alt/Option + Click places"), true, "entity placement hint should mention Alt/Option + Click");
+
+  const decorState = {
+    ...baseState,
+    interaction: {
+      ...baseState.interaction,
+      activeLayer: "decor",
+      activeEntityPresetId: null,
+      activeDecorPresetId: "grass",
+      decorScatterMode: true,
+    },
+  };
+  renderBrushPanel(panel, decorState);
+  assert.equal(panel.innerHTML.includes("Alt/Option + Drag scatters"), true, "decor scatter hint should mention Alt/Option + Drag");
+}
+
 function runSourceRegressionChecks() {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const source = fs.readFileSync(path.join(repoRoot, "src/app/createEditorApp.js"), "utf8");
@@ -221,12 +270,50 @@ function runSourceRegressionChecks() {
     false,
     "layer switching should not force inspect mode",
   );
+
+  assert.equal(
+    source.includes("const isMomentaryPlacementTrigger = (event) => event.altKey;"),
+    true,
+    "momentary placement should use Alt/Option",
+  );
+  assert.equal(
+    source.includes('activeEntityPresetId && isMomentaryPlacementTrigger(event)'),
+    true,
+    "armed entities should only place with the Alt/Option modifier",
+  );
+  assert.equal(
+    source.includes('activeDecorPresetId && isMomentaryPlacementTrigger(event)'),
+    true,
+    "armed decor should only place with the Alt/Option modifier",
+  );
+  assert.equal(
+    source.includes('activeSoundPresetId && isMomentaryPlacementTrigger(event)'),
+    true,
+    "armed sounds should only place with the Alt/Option modifier",
+  );
+  assert.equal(
+    source.includes("if (isDecorScatterReady(state.interaction, event)) {"),
+    true,
+    "decor scatter should use the Alt/Option-gated placement flow",
+  );
+  assert.equal(
+    source.includes(`if (event.shiftKey) {
+          toggleEntitySelection(draft.interaction, hitEntityIndex);`),
+    true,
+    "shift-click entity selection should stay enabled",
+  );
+  assert.equal(
+    source.includes("additive: event.shiftKey,"),
+    true,
+    "shift-drag box selection should stay additive",
+  );
 }
 
 runTileRegressionChecks();
 runEntityRegressionChecks();
 runDecorRegressionChecks();
 runSoundRegressionChecks();
+runUiRegressionChecks();
 runSourceRegressionChecks();
 
 console.log("editor-v2 regression checks passed");
