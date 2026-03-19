@@ -41,18 +41,20 @@
     <main class="workspace">
       <aside class="brushPanel" id="brushPanel"></aside>
 
-      <section class="canvasPanel">
-        <canvas id="editorCanvas"></canvas>
-        <div class="cellHud" id="cellHud" aria-live="polite"></div>
-        <div class="minimapShell">
-          <canvas id="minimapCanvas" aria-label="Level minimap"></canvas>
-        </div>
+      <section class="centerWorkspace">
+        <section class="canvasPanel">
+          <canvas id="editorCanvas"></canvas>
+          <div class="cellHud" id="cellHud" aria-live="polite"></div>
+          <div class="minimapShell">
+            <canvas id="minimapCanvas" aria-label="Level minimap"></canvas>
+          </div>
+        </section>
+
+        <section class="bottomPanel" id="bottomPanel" aria-label="Parameter panel"></section>
       </section>
 
       <aside class="inspectorPanel" id="inspectorPanel"></aside>
     </main>
-
-    <section class="bottomPanel" id="bottomPanel" aria-label="Parameter panel"></section>
   </div>
 
   <script type="module" src="./src/main.js"></script>
