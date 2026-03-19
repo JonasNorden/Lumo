@@ -30,6 +30,8 @@ import {
   endTileEditBatch,
   undoTileEdit,
   redoTileEdit,
+  canUndo,
+  canRedo,
 } from "../domain/tiles/history.js";
 import { createDefaultBackgroundLayer, getTileIndex } from "../domain/level/levelDocument.js";
 import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
@@ -145,7 +147,109 @@ function historyEntryContainsDecor(entry) {
   return false;
 }
 
-export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, cellHud, canvasTargetControls, canvasTargetStatus, store }) {
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function renderSettingsMenu(state) {
+  const active = state.document.active;
+  const layers = [...(active?.backgrounds?.layers || [])].sort((left, right) => (left.depth ?? 0) - (right.depth ?? 0));
+
+  return `
+    <div class="topBarMenuSection">
+      <div class="topBarMenuTitle">Workspace</div>
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Background</span>
+        <input type="color" value="${state.ui.workspaceBackground}" data-workspace-field="background" />
+      </label>
+    </div>
+
+    <div class="topBarMenuSection">
+      <div class="topBarMenuTitle">Background Layers</div>
+      <div class="topBarMenuMeta">${layers.length} layer${layers.length === 1 ? "" : "s"}</div>
+      <div class="compactActionRow compactActionRowSingle topBarMenuActionRow">
+        <button type="button" class="toolButton isSecondary" data-background-action="add">Add layer</button>
+      </div>
+      <div class="topBarLayerList">
+        ${layers.map((layer, index) => `
+          <div class="topBarLayerRow">
+            <div class="topBarLayerHeader">
+              <span class="badge">${escapeHtml(layer.name || `Layer ${index + 1}`)}</span>
+              <button
+                type="button"
+                class="toolButton isSecondary topBarLayerRemoveButton"
+                data-background-action="remove"
+                data-background-index="${index}"
+                ${layers.length <= 1 ? "disabled" : ""}
+              >
+                Remove
+              </button>
+            </div>
+            <div class="compactFieldGrid topBarLayerFields">
+              <label class="fieldRow fieldRowCompact">
+                <span class="label">Name</span>
+                <input type="text" value="${escapeHtml(layer.name)}" data-background-field="name" data-background-index="${index}" />
+              </label>
+              <label class="fieldRow fieldRowCompact">
+                <span class="label">Color</span>
+                <input type="color" value="${layer.color}" data-background-field="color" data-background-index="${index}" />
+              </label>
+              <label class="fieldRow compactInline">
+                <span class="label">Visible</span>
+                <input type="checkbox" ${layer.visible ? "checked" : ""} data-background-field="visible" data-background-index="${index}" />
+              </label>
+              <label class="fieldRow fieldRowCompact">
+                <span class="label">Depth</span>
+                <div class="rangeField">
+                  <input type="range" min="0" max="1" step="0.01" value="${Number(layer.depth || 0).toFixed(2)}" data-background-field="depth" data-background-index="${index}" />
+                  <span class="rangeValue">${Number(layer.depth || 0).toFixed(2)}</span>
+                </div>
+              </label>
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderHelpMenu() {
+  return `
+    <div class="topBarMenuSection">
+      <div class="topBarMenuTitle">Shortcuts</div>
+      <div class="topBarShortcutGrid">
+        <span><kbd>V</kbd> Inspect</span>
+        <span><kbd>B</kbd> Paint</span>
+        <span><kbd>E</kbd> Erase</span>
+        <span><kbd>R</kbd> Rect</span>
+        <span><kbd>L</kbd> Line</span>
+        <span><kbd>F</kbd> Fill</span>
+        <span><kbd>Ctrl/⌘+Z</kbd> Undo</span>
+        <span><kbd>Ctrl/⌘+Shift+Z</kbd> Redo</span>
+        <span><kbd>Delete</kbd>/<kbd>Backspace</kbd> Delete selection</span>
+        <span><kbd>Ctrl/⌘+D</kbd> Duplicate selection</span>
+      </div>
+    </div>
+  `;
+}
+
+export function createEditorApp({
+  canvas,
+  minimapCanvas,
+  inspector,
+  brushPanel,
+  cellHud,
+  topBar,
+  topBarStatus,
+  topBarSettingsMenu,
+  topBarHelpMenu,
+  bottomPanel,
+  store,
+}) {
   const ctx = canvas.getContext("2d");
   const minimapCtx = minimapCanvas.getContext("2d");
   const PAN_CURSOR = "grab";
@@ -449,20 +553,43 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     draft.interaction.canvasSelectionMode = mode === "decor" ? "decor" : "entity";
   };
 
-  const syncCanvasTargetUi = (state) => {
+  const renderTopBar = (state) => {
     const activeMode = getSelectionMode(state.interaction);
-    const activeLabel = activeMode === "decor" ? "Decor" : "Entities";
+    const selectedCount = activeMode === "decor"
+      ? getSelectedDecorIndices(state.interaction).length
+      : getSelectedEntityIndices(state.interaction).length;
+    const activeSelectionLabel = activeMode === "decor" ? "Decor" : "Entities";
+    const statusLabel = state.ui.importStatus || `Target: ${activeSelectionLabel} · ${selectedCount || 0} selected`;
 
-    canvasTargetStatus.textContent = `Active target: ${activeLabel}`;
-    canvasTargetStatus.dataset.target = activeMode;
+    topBarStatus.textContent = statusLabel;
+    topBarStatus.dataset.target = activeMode;
 
-    const buttons = canvasTargetControls.querySelectorAll("[data-canvas-target]");
-    buttons.forEach((button) => {
+    const undoEnabled = canUndo(state.history);
+    const redoEnabled = canRedo(state.history);
+    const exportEnabled = Boolean(state.document.active);
+
+    const actionButtons = topBar.querySelectorAll("[data-topbar-action]");
+    actionButtons.forEach((button) => {
       if (!(button instanceof HTMLButtonElement)) return;
-      const isActive = button.dataset.canvasTarget === activeMode;
-      button.classList.toggle("isActive", isActive);
-      button.setAttribute("aria-pressed", isActive ? "true" : "false");
+      const action = button.dataset.topbarAction;
+      if (action === "undo") button.disabled = !undoEnabled;
+      if (action === "redo") button.disabled = !redoEnabled;
+      if (action === "export") button.disabled = !exportEnabled;
     });
+
+    topBarSettingsMenu.innerHTML = renderSettingsMenu(state);
+    topBarHelpMenu.innerHTML = renderHelpMenu();
+
+    const activeMenu = state.ui.topBarMenu;
+    topBar.querySelectorAll("[data-topbar-menu-toggle]").forEach((toggle) => {
+      if (!(toggle instanceof HTMLButtonElement)) return;
+      const isOpen = toggle.dataset.topbarMenuToggle === activeMenu;
+      toggle.classList.toggle("isActive", isOpen);
+      toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    });
+
+    topBarSettingsMenu.classList.toggle("isOpen", activeMenu === "settings");
+    topBarHelpMenu.classList.toggle("isOpen", activeMenu === "help");
   };
 
   const applyCanvasTarget = (draft, mode) => {
@@ -1243,7 +1370,8 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     renderInspector(inspector, state);
     renderBrushPanel(brushPanel, state);
     renderCellHud(cellHud, state);
-    syncCanvasTargetUi(state);
+    renderTopBar(state);
+    bottomPanel.dataset.selectionTarget = getSelectionMode(state.interaction);
   };
 
   const handleMinimapClick = (event) => {
@@ -2151,6 +2279,97 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     }
   };
 
+  const toggleTopBarMenu = (menuName) => {
+    store.setState((draft) => {
+      draft.ui.topBarMenu = draft.ui.topBarMenu === menuName ? null : menuName;
+    });
+  };
+
+  const closeTopBarMenu = () => {
+    store.setState((draft) => {
+      draft.ui.topBarMenu = null;
+    });
+  };
+
+  const handleTopBarClick = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    const toggleButton = target.closest("[data-topbar-menu-toggle]");
+    if (toggleButton instanceof HTMLButtonElement) {
+      const menuName = toggleButton.dataset.topbarMenuToggle;
+      if (menuName === "settings" || menuName === "help") {
+        toggleTopBarMenu(menuName);
+      }
+      return;
+    }
+
+    const actionButton = target.closest("[data-topbar-action]");
+    if (actionButton instanceof HTMLButtonElement) {
+      const action = actionButton.dataset.topbarAction;
+      if (action === "new") handleNewLevel();
+      if (action === "import") handleImport();
+      if (action === "export") handleExport();
+      if (action === "undo") handleUndo();
+      if (action === "redo") handleRedo();
+      return;
+    }
+
+    const workspacePresetButton = target.closest("[data-workspace-preset]");
+    if (workspacePresetButton instanceof HTMLButtonElement) {
+      const preset = workspacePresetButton.dataset.workspacePreset;
+      if (preset) {
+        updateWorkspaceSettings("background", preset);
+      }
+      return;
+    }
+
+    const backgroundActionButton = target.closest("[data-background-action]");
+    if (backgroundActionButton instanceof HTMLButtonElement) {
+      const action = backgroundActionButton.dataset.backgroundAction;
+      if (action === "add") {
+        updateBackgroundLayer(-1, "add", null);
+      }
+      if (action === "remove") {
+        const index = Number.parseInt(backgroundActionButton.dataset.backgroundIndex || "", 10);
+        if (Number.isInteger(index) && index >= 0) {
+          updateBackgroundLayer(index, "remove", null);
+        }
+      }
+    }
+  };
+
+  const handleTopBarChange = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+
+    const workspaceField = target.dataset.workspaceField;
+    if (workspaceField === "background") {
+      updateWorkspaceSettings("background", target.value);
+      return;
+    }
+
+    const backgroundField = target.dataset.backgroundField;
+    if (backgroundField === "name" || backgroundField === "visible" || backgroundField === "color" || backgroundField === "depth") {
+      const index = Number.parseInt(target.dataset.backgroundIndex || "", 10);
+      if (!Number.isInteger(index) || index < 0) return;
+      const value = backgroundField === "visible"
+        ? target.checked
+        : backgroundField === "depth"
+          ? Number.parseFloat(target.value)
+          : target.value;
+      updateBackgroundLayer(index, backgroundField, value);
+    }
+  };
+
+  const handleDocumentPointerDown = (event) => {
+    if (!(event.target instanceof Element)) return;
+    if (topBar.contains(event.target)) return;
+    if (store.getState().ui.topBarMenu) {
+      closeTopBarMenu();
+    }
+  };
+
   const loadDocument = async () => {
     store.setState((state) => {
       state.document.status = "loading";
@@ -2192,30 +2411,14 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     onResize: resizeDocument,
     onMetaUpdate: updateDocumentMeta,
     onGridUpdate: updateGridSettings,
-    onWorkspaceUpdate: updateWorkspaceSettings,
-    onBackgroundUpdate: updateBackgroundLayer,
     onEntityUpdate: updateEntity,
     onDecorUpdate: updateDecor,
   });
   const unbindBrushPanel = bindBrushPanel(brushPanel, store, {
-    onUndo: handleUndo,
-    onRedo: handleRedo,
-    onExport: handleExport,
-    onImport: handleImport,
-    onNew: handleNewLevel,
-    onWorkspaceUpdate: updateWorkspaceSettings,
-    onBackgroundUpdate: updateBackgroundLayer,
     onEntityUpdate: updateEntity,
     onDecorUpdate: updateDecor,
     onCanvasTargetChange: setActiveCanvasTarget,
   });
-  const handleCanvasTargetClick = (event) => {
-    const button = event.target instanceof HTMLElement ? event.target.closest("[data-canvas-target]") : null;
-    if (!(button instanceof HTMLButtonElement)) return;
-    const nextMode = button.dataset.canvasTarget;
-    if (nextMode !== "entity" && nextMode !== "decor") return;
-    setActiveCanvasTarget(nextMode);
-  };
   window.addEventListener("resize", resize);
   canvas.addEventListener("mousemove", handleCanvasMouseMove);
   canvas.addEventListener("mouseleave", clearHoveredCanvasState);
@@ -2226,7 +2429,9 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
   minimapCanvas.addEventListener("click", handleMinimapClick);
   window.addEventListener("keydown", handleGlobalKeyDown);
   window.addEventListener("keyup", handleGlobalKeyUp);
-  canvasTargetControls.addEventListener("click", handleCanvasTargetClick);
+  topBar.addEventListener("click", handleTopBarClick);
+  topBar.addEventListener("change", handleTopBarChange);
+  document.addEventListener("pointerdown", handleDocumentPointerDown);
 
   resize();
   draw(store.getState());
@@ -2246,6 +2451,8 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     minimapCanvas.removeEventListener("click", handleMinimapClick);
     window.removeEventListener("keydown", handleGlobalKeyDown);
     window.removeEventListener("keyup", handleGlobalKeyUp);
-    canvasTargetControls.removeEventListener("click", handleCanvasTargetClick);
+    topBar.removeEventListener("click", handleTopBarClick);
+    topBar.removeEventListener("change", handleTopBarChange);
+    document.removeEventListener("pointerdown", handleDocumentPointerDown);
   };
 }

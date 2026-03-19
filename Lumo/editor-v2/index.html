@@ -8,17 +8,31 @@
 </head>
 <body>
   <div class="appShell">
-    <header class="topBar">
+    <header class="topBar" id="topBar">
       <div class="topBarBrand">
         <span class="brand">LumoEditor</span>
         <span class="version">V2</span>
       </div>
-      <div class="topBarTarget" id="canvasTargetControls" role="group" aria-label="Canvas target">
-        <span class="topBarLabel">Canvas Target</span>
-        <button type="button" class="topBarTargetButton isActive" data-canvas-target="entity">Entities</button>
-        <button type="button" class="topBarTargetButton" data-canvas-target="decor">Decor</button>
+
+      <div class="topBarActions" role="toolbar" aria-label="Editor actions">
+        <button type="button" class="topBarButton" data-topbar-action="new">New</button>
+        <button type="button" class="topBarButton" data-topbar-action="import">Import</button>
+        <button type="button" class="topBarButton" data-topbar-action="export">Export</button>
+        <button type="button" class="topBarButton" data-topbar-action="undo">Undo</button>
+        <button type="button" class="topBarButton" data-topbar-action="redo">Redo</button>
+
+        <div class="topBarMenuShell">
+          <button type="button" class="topBarIconButton" data-topbar-menu-toggle="settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false">⚙</button>
+          <div class="topBarMenu" id="topBarSettingsMenu"></div>
+        </div>
+
+        <div class="topBarMenuShell">
+          <button type="button" class="topBarIconButton" data-topbar-menu-toggle="help" aria-label="Help" aria-haspopup="true" aria-expanded="false">?</button>
+          <div class="topBarMenu" id="topBarHelpMenu"></div>
+        </div>
       </div>
-      <div class="topBarStatus" id="canvasTargetStatus" aria-live="polite">Active target: Entities</div>
+
+      <div class="topBarStatus" id="topBarStatus" aria-live="polite"></div>
     </header>
 
     <main class="workspace">
@@ -34,6 +48,8 @@
 
       <aside class="inspectorPanel" id="inspectorPanel"></aside>
     </main>
+
+    <section class="bottomPanel" id="bottomPanel" aria-label="Future bottom panel"></section>
   </div>
 
   <script type="module" src="./src/main.js"></script>

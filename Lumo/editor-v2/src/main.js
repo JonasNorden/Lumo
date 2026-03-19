@@ -7,12 +7,27 @@ const minimapCanvas = document.getElementById("minimapCanvas");
 const inspector = document.getElementById("inspectorPanel");
 const brushPanel = document.getElementById("brushPanel");
 const cellHud = document.getElementById("cellHud");
-const canvasTargetControls = document.getElementById("canvasTargetControls");
-const canvasTargetStatus = document.getElementById("canvasTargetStatus");
+const topBar = document.getElementById("topBar");
+const topBarStatus = document.getElementById("topBarStatus");
+const topBarSettingsMenu = document.getElementById("topBarSettingsMenu");
+const topBarHelpMenu = document.getElementById("topBarHelpMenu");
+const bottomPanel = document.getElementById("bottomPanel");
 
-if (!canvas || !minimapCanvas || !inspector || !brushPanel || !cellHud || !canvasTargetControls || !canvasTargetStatus) {
+if (!canvas || !minimapCanvas || !inspector || !brushPanel || !cellHud || !topBar || !topBarStatus || !topBarSettingsMenu || !topBarHelpMenu || !bottomPanel) {
   throw new Error("LumoEditor V2 shell is missing required DOM nodes");
 }
 
 const store = createStore(createEditorState());
-createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, cellHud, canvasTargetControls, canvasTargetStatus, store });
+createEditorApp({
+  canvas,
+  minimapCanvas,
+  inspector,
+  brushPanel,
+  cellHud,
+  topBar,
+  topBarStatus,
+  topBarSettingsMenu,
+  topBarHelpMenu,
+  bottomPanel,
+  store,
+});
