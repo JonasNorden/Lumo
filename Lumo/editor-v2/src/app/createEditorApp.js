@@ -46,6 +46,7 @@ import { DEFAULT_DECOR_PRESET_ID, findDecorPresetById } from "../domain/decor/de
 import { DEFAULT_SOUND_PRESET_ID, findSoundPresetById, getSoundPresetDefaultParams, getSoundPresetForType } from "../domain/sound/soundPresets.js";
 import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
 import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
+import { getScanActivity, getScanRange, getScanResetPosition, sanitizeOptionalScanCoordinate } from "../domain/scan/scanSystem.js";
 import {
   clearDecorSelection,
   getPrimarySelectedDecorIndex,
@@ -160,6 +161,17 @@ function getScatterTargetCount(cellCapacity, density) {
   const normalizedDensity = clampScatterDensity(density);
   if (cellCapacity <= 0 || normalizedDensity <= 0) return 0;
   return Math.max(1, Math.min(cellCapacity, Math.round(cellCapacity * normalizedDensity)));
+}
+
+function clampScanSpeed(value, fallback = 6) {
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0.25, parsed);
+}
+
+function formatScanEventSummary(event) {
+  if (!event) return null;
+  return `${event.soundName} · ${event.intersectionType} · x ${event.atX}`;
 }
 
 const PANEL_LAYERS = {
@@ -393,6 +405,91 @@ export function createEditorApp({
     l: EDITOR_TOOLS.LINE,
     f: EDITOR_TOOLS.FILL,
   };
+  let scanAnimationFrame = 0;
+
+  const syncScanWithDocument = (draft, options = {}) => {
+    const { preserveRange = true, preserveLog = false } = options;
+    const doc = draft.document.active;
+    if (!doc) return;
+
+    const width = Number(doc.dimensions?.width) || 0;
+    draft.scan.startX = preserveRange ? sanitizeOptionalScanCoordinate(draft.scan.startX, width) : null;
+    draft.scan.endX = preserveRange ? sanitizeOptionalScanCoordinate(draft.scan.endX, width) : null;
+    draft.scan.positionX = getScanResetPosition(draft.scan, doc);
+    draft.scan.isPlaying = false;
+    draft.scan.activeSoundIds = [];
+    draft.scan.lastFrameTime = null;
+    if (!preserveLog) {
+      draft.scan.eventLog = [];
+      draft.scan.lastEventSummary = null;
+    }
+  };
+
+  const stopScanPlayback = (draft, preserveLog = true) => {
+    if (!draft.document.active) return;
+    draft.scan.isPlaying = false;
+    draft.scan.positionX = getScanResetPosition(draft.scan, draft.document.active);
+    draft.scan.activeSoundIds = [];
+    draft.scan.lastFrameTime = null;
+    if (!preserveLog) {
+      draft.scan.eventLog = [];
+      draft.scan.lastEventSummary = null;
+    }
+  };
+
+  const scheduleScanFrame = () => {
+    if (scanAnimationFrame) return;
+    scanAnimationFrame = window.requestAnimationFrame((timestamp) => {
+      scanAnimationFrame = 0;
+      const state = store.getState();
+      const doc = state.document.active;
+      if (!doc || !state.scan.isPlaying) return;
+
+      let triggeredEvents = [];
+      store.setState((draft) => {
+        const activeDoc = draft.document.active;
+        if (!activeDoc || !draft.scan.isPlaying) return;
+
+        const { startX, endX } = getScanRange(draft.scan, activeDoc);
+        const previousX = Number.isFinite(draft.scan.positionX) ? draft.scan.positionX : startX;
+        const previousFrameTime = draft.scan.lastFrameTime ?? timestamp;
+        const deltaSeconds = Math.max(0, Math.min(0.1, (timestamp - previousFrameTime) / 1000));
+        const speed = clampScanSpeed(draft.scan.speed);
+        const nextX = Math.min(endX, previousX + speed * deltaSeconds);
+        const activity = getScanActivity(activeDoc, previousX, nextX, draft.scan.activeSoundIds);
+        triggeredEvents = activity.triggeredEvents;
+
+        draft.scan.positionX = nextX;
+        draft.scan.speed = speed;
+        draft.scan.activeSoundIds = activity.activeSoundIds;
+        draft.scan.lastFrameTime = timestamp;
+        if (triggeredEvents.length) {
+          draft.scan.eventLog = [...triggeredEvents.slice().reverse(), ...(draft.scan.eventLog || [])].slice(0, 8);
+          draft.scan.lastEventSummary = formatScanEventSummary(triggeredEvents[triggeredEvents.length - 1]);
+        }
+
+        const rect = canvas.getBoundingClientRect();
+        const targetOffsetX = rect.width * 0.5 - nextX * activeDoc.dimensions.tileSize * draft.viewport.zoom;
+        const deltaX = targetOffsetX - draft.viewport.offsetX;
+        const followAlpha = deltaSeconds > 0 ? Math.min(1, deltaSeconds * 8) : 0.2;
+        panViewportByDelta(draft.viewport, deltaX * followAlpha, 0);
+
+        if (nextX >= endX) {
+          draft.scan.isPlaying = false;
+          draft.scan.activeSoundIds = [];
+          draft.scan.lastFrameTime = null;
+        }
+      });
+
+      for (const event of triggeredEvents) {
+        console.info(`[scan] ${event.soundName} (${event.soundType}) ${event.intersectionType} at x ${event.atX}`);
+      }
+
+      if (store.getState().scan.isPlaying) {
+        scheduleScanFrame();
+      }
+    });
+  };
 
   const isShortcutTargetBlocked = (eventTarget) => {
     if (!(eventTarget instanceof Element)) return false;
@@ -560,6 +657,7 @@ export function createEditorApp({
       draft.history.undoStack = [];
       draft.history.redoStack = [];
       draft.history.activeBatch = null;
+      syncScanWithDocument(draft, { preserveRange: true, preserveLog: false });
     });
 
     resize();
@@ -2051,6 +2149,52 @@ export function createEditorApp({
     });
   };
 
+  const updateScanControl = (field, rawValue) => {
+    store.setState((draft) => {
+      const doc = draft.document.active;
+      if (!doc) return;
+
+      if (field === "play") {
+        draft.scan.positionX = getScanResetPosition(draft.scan, doc);
+        draft.scan.activeSoundIds = [];
+        draft.scan.lastFrameTime = null;
+        draft.scan.isPlaying = true;
+        return;
+      }
+
+      if (field === "stop") {
+        stopScanPlayback(draft, true);
+        return;
+      }
+
+      if (field === "clear-log") {
+        draft.scan.eventLog = [];
+        draft.scan.lastEventSummary = null;
+        return;
+      }
+
+      if (field === "speed") {
+        draft.scan.speed = clampScanSpeed(rawValue, draft.scan.speed);
+        return;
+      }
+
+      if (field === "startX" || field === "endX") {
+        const width = Number(doc.dimensions?.width) || 0;
+        draft.scan[field] = rawValue === "" ? null : sanitizeOptionalScanCoordinate(rawValue, width);
+        const { startX, endX } = getScanRange(draft.scan, doc);
+        if (draft.scan.positionX < startX || draft.scan.positionX > endX || !draft.scan.isPlaying) {
+          draft.scan.positionX = startX;
+        }
+        draft.scan.activeSoundIds = [];
+        draft.scan.lastFrameTime = null;
+      }
+    });
+
+    if (field === "play" && store.getState().scan.isPlaying) {
+      scheduleScanFrame();
+    }
+  };
+
   const draw = (state) => {
     renderEditorFrame(ctx, state);
     minimapLayout = renderMinimap(minimapCtx, state);
@@ -2930,6 +3074,7 @@ export function createEditorApp({
     clearSoundSelection(draft.interaction);
     draft.interaction.hoverCell = null;
     draft.ui.importStatus = statusMessage;
+    syncScanWithDocument(draft, { preserveRange: false, preserveLog: false });
   };
 
   const handleNewLevel = () => {
@@ -3343,6 +3488,7 @@ export function createEditorApp({
         state.interaction.activeEntityPresetId = null;
         state.interaction.activeDecorPresetId = null;
         state.interaction.activeSoundPresetId = null;
+        syncScanWithDocument(state, { preserveRange: false, preserveLog: false });
       });
       resize();
       draw(store.getState());
@@ -3368,6 +3514,7 @@ export function createEditorApp({
     onSoundUpdate: updateSound,
     onCanvasTargetChange: setActiveCanvasTarget,
     onLayerChange: setActiveLayerFromPanel,
+    onScanUpdate: updateScanControl,
   });
   window.addEventListener("resize", resize);
   canvas.addEventListener("mousemove", handleCanvasMouseMove);
@@ -3388,6 +3535,10 @@ export function createEditorApp({
   void loadDocument();
 
   return () => {
+    if (scanAnimationFrame) {
+      window.cancelAnimationFrame(scanAnimationFrame);
+      scanAnimationFrame = 0;
+    }
     unsubscribe();
     unbindInspectorPanel();
     unbindBottomPanel();
