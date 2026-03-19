@@ -1,4 +1,5 @@
 import { cloneEntityParams } from "../entities/entityParams.js";
+import { DEFAULT_SOUND_PRESET_ID, getSoundPresetDefaultParams } from "../sound/soundPresets.js";
 
 const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
 const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
@@ -12,6 +13,7 @@ const DEFAULT_DECOR_VARIANT = "a";
  * @property {{layers: {id: string, name: string, type: string, depth: number, visible: boolean, color: string}[]}} backgrounds
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, variant: string, params: Record<string, string | number | boolean>}[]} decor
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} entities
+ * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} sounds
  * @property {{notes?: string}} extra
  */
 
@@ -46,7 +48,6 @@ function normalizeBackgroundLayer(layer, index) {
   return createDefaultBackgroundLayer(index, layer);
 }
 
-
 function normalizeDecor(decor, index) {
   const fallbackId = `decor-${index + 1}`;
   const nextId = typeof decor?.id === "string" && decor.id.trim() ? decor.id.trim() : fallbackId;
@@ -79,6 +80,30 @@ function normalizeEntity(entity, index) {
   const nextY = Number.isFinite(entity?.y) ? Math.round(entity.y) : 0;
   const nextVisible = typeof entity?.visible === "boolean" ? entity.visible : true;
   const nextParams = cloneEntityParams(entity?.params);
+
+  return {
+    id: nextId,
+    name: nextName,
+    type: nextType,
+    x: nextX,
+    y: nextY,
+    visible: nextVisible,
+    params: nextParams,
+  };
+}
+
+function normalizeSound(sound, index) {
+  const fallbackId = `sound-${index + 1}`;
+  const nextId = typeof sound?.id === "string" && sound.id.trim() ? sound.id.trim() : fallbackId;
+  const nextType = typeof sound?.type === "string" && sound.type.trim() ? sound.type.trim() : DEFAULT_SOUND_PRESET_ID;
+  const nextName = typeof sound?.name === "string" && sound.name.trim() ? sound.name.trim() : `Sound ${index + 1}`;
+  const nextX = Number.isFinite(sound?.x) ? Math.round(sound.x) : 0;
+  const nextY = Number.isFinite(sound?.y) ? Math.round(sound.y) : 0;
+  const nextVisible = typeof sound?.visible === "boolean" ? sound.visible : true;
+  const nextParams = {
+    ...getSoundPresetDefaultParams(nextType === "ambientZone" ? "ambient-zone" : nextType === "musicZone" ? "music-zone" : DEFAULT_SOUND_PRESET_ID),
+    ...cloneEntityParams(sound?.params),
+  };
 
   return {
     id: nextId,
@@ -131,6 +156,9 @@ export function validateLevelDocument(doc) {
 
   const rawEntities = Array.isArray(doc.entities) ? doc.entities : [];
   doc.entities = rawEntities.map((entity, index) => normalizeEntity(entity, index));
+
+  const rawSounds = Array.isArray(doc.sounds) ? doc.sounds : [];
+  doc.sounds = rawSounds.map((sound, index) => normalizeSound(sound, index));
 
   return doc;
 }

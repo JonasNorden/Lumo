@@ -1,5 +1,6 @@
 import { getPrimarySelectedEntityIndex, getSelectedEntityIndices } from "../domain/entities/selection.js";
 import { getPrimarySelectedDecorIndex, getSelectedDecorIndices } from "../domain/decor/selection.js";
+import { getPrimarySelectedSoundIndex, getSelectedSoundIndices } from "../domain/sound/selection.js";
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
 
 function escapeHtml(value) {
@@ -24,6 +25,10 @@ function captureFocusedInput(panel) {
     "decorIndex",
     "decorParamKey",
     "decorParamType",
+    "soundField",
+    "soundIndex",
+    "soundParamKey",
+    "soundParamType",
   ];
 
   const dataset = {};
@@ -161,20 +166,18 @@ function renderSelectionFields(fieldMarkup) {
 }
 
 function renderEntityEditor(entity, selectedEntityIndex) {
-  const fieldMarkup = [
+  return renderSelectionFields([
     renderTextField("entity", "name", "Name", entity.name, selectedEntityIndex, "selectionFieldName"),
     renderTextField("entity", "type", "Type", entity.type, selectedEntityIndex, "selectionFieldType"),
     renderNumberField("entity", "x", "X", entity.x, selectedEntityIndex),
     renderNumberField("entity", "y", "Y", entity.y, selectedEntityIndex),
     renderCheckboxField("entity", "visible", "Visible", entity.visible, selectedEntityIndex, "selectionFieldToggle"),
     renderParamFields("entity", entity?.params, selectedEntityIndex),
-  ].join("");
-
-  return renderSelectionFields(fieldMarkup);
+  ].join(""));
 }
 
 function renderDecorEditor(decor, selectedDecorIndex) {
-  const fieldMarkup = [
+  return renderSelectionFields([
     renderTextField("decor", "name", "Name", decor.name, selectedDecorIndex, "selectionFieldName"),
     renderTextField("decor", "type", "Type", decor.type, selectedDecorIndex, "selectionFieldType"),
     renderNumberField("decor", "x", "X", decor.x, selectedDecorIndex),
@@ -182,13 +185,29 @@ function renderDecorEditor(decor, selectedDecorIndex) {
     renderCheckboxField("decor", "visible", "Visible", decor.visible, selectedDecorIndex, "selectionFieldToggle"),
     renderTextField("decor", "variant", "Variant", decor.variant, selectedDecorIndex, "selectionFieldVariant selectionParamField"),
     renderParamFields("decor", decor?.params, selectedDecorIndex),
-  ].join("");
+  ].join(""));
+}
 
-  return renderSelectionFields(fieldMarkup);
+function renderSoundEditor(sound, selectedSoundIndex) {
+  return renderSelectionFields([
+    renderTextField("sound", "name", "Name", sound.name, selectedSoundIndex, "selectionFieldName"),
+    renderTextField("sound", "type", "Type", sound.type, selectedSoundIndex, "selectionFieldType"),
+    renderNumberField("sound", "x", "X", sound.x, selectedSoundIndex),
+    renderNumberField("sound", "y", "Y", sound.y, selectedSoundIndex),
+    renderCheckboxField("sound", "visible", "Visible", sound.visible, selectedSoundIndex, "selectionFieldToggle"),
+    renderParamFields("sound", sound?.params, selectedSoundIndex),
+  ].join(""));
 }
 
 function renderMultiSelectionState(kind, count, primaryName) {
-  const noun = kind === "decor" ? (count === 1 ? "decor item" : "decor items") : count === 1 ? "entity" : "entities";
+  const noun = kind === "decor"
+    ? (count === 1 ? "decor item" : "decor items")
+    : kind === "sound"
+      ? (count === 1 ? "sound object" : "sound objects")
+      : count === 1
+        ? "entity"
+        : "entities";
+
   return `
     <div class="selectionInspectorCard compactSelectionCard">
       <div class="selectionEditorPlaceholder">
@@ -204,37 +223,36 @@ function renderSelectionEditor(state, emptyMessage) {
   const active = state.document.active;
   const selectedEntityIndices = getSelectedEntityIndices(state.interaction);
   const selectedDecorIndices = getSelectedDecorIndices(state.interaction);
+  const selectedSoundIndices = getSelectedSoundIndices(state.interaction);
   const selectedEntityIndex = getPrimarySelectedEntityIndex(state.interaction);
   const selectedDecorIndex = getPrimarySelectedDecorIndex(state.interaction);
+  const selectedSoundIndex = getPrimarySelectedSoundIndex(state.interaction);
   const selectedEntity = Number.isInteger(selectedEntityIndex) ? active.entities?.[selectedEntityIndex] : null;
   const selectedDecor = Number.isInteger(selectedDecorIndex) ? active.decor?.[selectedDecorIndex] : null;
+  const selectedSound = Number.isInteger(selectedSoundIndex) ? active.sounds?.[selectedSoundIndex] : null;
 
   if (selectedEntityIndices.length > 1) {
-    return {
-      markup: renderMultiSelectionState("entity", selectedEntityIndices.length, selectedEntity?.name || "Entity"),
-      isEmpty: false,
-    };
+    return { markup: renderMultiSelectionState("entity", selectedEntityIndices.length, selectedEntity?.name || "Entity"), isEmpty: false };
   }
 
   if (selectedDecorIndices.length > 1) {
-    return {
-      markup: renderMultiSelectionState("decor", selectedDecorIndices.length, selectedDecor?.name || "Decor"),
-      isEmpty: false,
-    };
+    return { markup: renderMultiSelectionState("decor", selectedDecorIndices.length, selectedDecor?.name || "Decor"), isEmpty: false };
+  }
+
+  if (selectedSoundIndices.length > 1) {
+    return { markup: renderMultiSelectionState("sound", selectedSoundIndices.length, selectedSound?.name || "Sound"), isEmpty: false };
   }
 
   if (selectedEntity) {
-    return {
-      markup: renderEntityEditor(selectedEntity, selectedEntityIndex),
-      isEmpty: false,
-    };
+    return { markup: renderEntityEditor(selectedEntity, selectedEntityIndex), isEmpty: false };
   }
 
   if (selectedDecor) {
-    return {
-      markup: renderDecorEditor(selectedDecor, selectedDecorIndex),
-      isEmpty: false,
-    };
+    return { markup: renderDecorEditor(selectedDecor, selectedDecorIndex), isEmpty: false };
+  }
+
+  if (selectedSound) {
+    return { markup: renderSoundEditor(selectedSound, selectedSoundIndex), isEmpty: false };
   }
 
   return {
@@ -291,57 +309,31 @@ export function renderSelectionEditorPanel(panel, state, options = {}) {
 }
 
 export function bindSelectionEditorPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate } = options;
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate } = options;
 
-  const handleEntityChange = (target) => {
-    if (applyParamChange(target, "entity", onEntityUpdate)) return true;
+  const handleChange = (target, prefix, allowedFields, onUpdate) => {
+    if (applyParamChange(target, prefix, onUpdate)) return true;
 
-    const entityField = target.dataset.entityField;
-    if (entityField !== "name" && entityField !== "type" && entityField !== "visible" && entityField !== "x" && entityField !== "y") return false;
+    const field = target.dataset[`${prefix}Field`];
+    if (!allowedFields.includes(field)) return false;
 
-    const index = Number.parseInt(target.dataset.entityIndex || "", 10);
+    const index = Number.parseInt(target.dataset[`${prefix}Index`] || "", 10);
     if (!Number.isInteger(index) || index < 0) return false;
 
-    if (entityField === "visible") {
-      onEntityUpdate?.(index, "visible", target.checked);
+    if (field === "visible") {
+      onUpdate?.(index, "visible", target.checked);
       return true;
     }
 
-    if (entityField === "x" || entityField === "y") {
+    if (field === "x" || field === "y") {
       const parsed = Number.parseInt(target.value, 10);
       const value = Number.isInteger(parsed) ? parsed : 0;
       target.value = String(value);
-      onEntityUpdate?.(index, entityField, value);
+      onUpdate?.(index, field, value);
       return true;
     }
 
-    onEntityUpdate?.(index, entityField, target.value);
-    return true;
-  };
-
-  const handleDecorChange = (target) => {
-    if (applyParamChange(target, "decor", onDecorUpdate)) return true;
-
-    const decorField = target.dataset.decorField;
-    if (decorField !== "name" && decorField !== "type" && decorField !== "variant" && decorField !== "visible" && decorField !== "x" && decorField !== "y") return false;
-
-    const index = Number.parseInt(target.dataset.decorIndex || "", 10);
-    if (!Number.isInteger(index) || index < 0) return false;
-
-    if (decorField === "visible") {
-      onDecorUpdate?.(index, "visible", target.checked);
-      return true;
-    }
-
-    if (decorField === "x" || decorField === "y") {
-      const parsed = Number.parseInt(target.value, 10);
-      const value = Number.isInteger(parsed) ? parsed : 0;
-      target.value = String(value);
-      onDecorUpdate?.(index, decorField, value);
-      return true;
-    }
-
-    onDecorUpdate?.(index, decorField, target.value);
+    onUpdate?.(index, field, target.value);
     return true;
   };
 
@@ -349,16 +341,18 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
 
-    if (handleEntityChange(target)) return;
-    handleDecorChange(target);
+    if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) return;
+    if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) return;
+    handleChange(target, "sound", ["name", "type", "visible", "x", "y"], onSoundUpdate);
   };
 
   const onInput = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
 
-    if (handleEntityChange(target)) return;
-    handleDecorChange(target);
+    if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) return;
+    if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) return;
+    handleChange(target, "sound", ["name", "type", "visible", "x", "y"], onSoundUpdate);
   };
 
   panel.addEventListener("change", onChange);

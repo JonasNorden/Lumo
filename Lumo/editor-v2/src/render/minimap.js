@@ -1,6 +1,7 @@
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
 import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 import { getEntityVisual } from "../domain/entities/entityVisuals.js";
+import { getSoundVisual } from "../domain/sound/soundVisuals.js";
 
 const EMPTY_CELL_COLOR = "rgba(17, 24, 40, 0.45)";
 const VIEWPORT_STROKE_COLOR = "#b2c7ff";
@@ -63,6 +64,29 @@ export function renderMinimap(ctx, state) {
       Math.max(2, Math.ceil(contentScale)),
       Math.max(2, Math.ceil(contentScale)),
     );
+  }
+
+  for (const sound of doc.sounds || []) {
+    if (!sound?.visible) continue;
+    const visual = getSoundVisual(sound.type);
+    const widthScale = Math.max(1, Math.ceil((Number(sound?.params?.width) || 1) * contentScale));
+    const heightScale = Math.max(1, Math.ceil((Number(sound?.params?.height) || 1) * contentScale));
+    ctx.fillStyle = visual.stroke;
+    if (sound.type === "ambientZone" || sound.type === "musicZone") {
+      ctx.fillRect(
+        Math.floor(originX + sound.x * contentScale),
+        Math.floor(originY + sound.y * contentScale),
+        widthScale,
+        heightScale,
+      );
+    } else {
+      ctx.fillRect(
+        Math.floor(originX + sound.x * contentScale),
+        Math.floor(originY + sound.y * contentScale),
+        Math.max(2, Math.ceil(contentScale)),
+        Math.max(2, Math.ceil(contentScale)),
+      );
+    }
   }
 
   ctx.strokeStyle = FRAME_COLOR;

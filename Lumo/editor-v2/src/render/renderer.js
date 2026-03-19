@@ -5,7 +5,9 @@ import { renderSelectionOverlay } from "./layers/selectionLayer.js";
 import { renderBrushPreviewOverlay } from "./layers/previewLayer.js";
 import { renderEntities, renderEntityDragPreview } from "./layers/entityLayer.js";
 import { renderDecor, renderDecorDragPreview, renderDecorPlacementPreview, renderDecorScatterPreview } from "./layers/decorLayer.js";
+import { renderSounds, renderSoundDragPreview, renderSoundPlacementPreview } from "./layers/soundLayer.js";
 import { findDecorPresetById } from "../domain/decor/decorPresets.js";
+import { findSoundPresetById } from "../domain/sound/soundPresets.js";
 
 export function renderEditorFrame(ctx, state) {
   const canvas = ctx.canvas;
@@ -20,12 +22,15 @@ export function renderEditorFrame(ctx, state) {
   renderBackgroundLayers(ctx, doc, state.viewport);
   renderTiles(ctx, doc, state.viewport);
   renderDecor(ctx, doc, state.viewport, state.interaction);
+  renderSounds(ctx, doc, state.viewport, state.interaction);
   renderEntities(ctx, doc, state.viewport, state.interaction);
   renderGrid(ctx, doc, state.viewport);
   renderDecorDragPreview(ctx, doc, state.viewport, state.interaction);
+  renderSoundDragPreview(ctx, doc, state.viewport, state.interaction);
   renderEntityDragPreview(ctx, doc, state.viewport, state.interaction);
   renderBrushPreviewOverlay(ctx, doc, state.viewport, state.interaction, state.brush.activeDraft);
   renderDecorScatterPreview(ctx, doc, state.viewport, state.interaction);
   renderDecorPlacementPreview(ctx, doc, state.viewport, state.interaction, findDecorPresetById(state.interaction.activeDecorPresetId));
+  renderSoundPlacementPreview(ctx, doc, state.viewport, state.interaction, findSoundPresetById(state.interaction.activeSoundPresetId));
   renderSelectionOverlay(ctx, doc, state.viewport, state.interaction);
 }
