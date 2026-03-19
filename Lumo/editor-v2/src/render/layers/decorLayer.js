@@ -277,8 +277,10 @@ export function renderDecorScatterPreview(ctx, doc, viewport, interaction) {
   ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
   ctx.setLineDash([]);
 
-  const scatterCount = Math.max(1, Math.round(interaction.decorScatterSettings?.count || 1));
-  const label = `Scatter · ${scatterCount}`;
+  const scatterDensity = Number.isFinite(interaction.decorScatterSettings?.density)
+    ? Math.max(0, Math.min(1, interaction.decorScatterSettings.density))
+    : 0.3;
+  const label = `Scatter · ${Math.round(scatterDensity * 100)}% density`;
   ctx.font = '12px Inter, system-ui, sans-serif';
   const textWidth = ctx.measureText(label).width;
   const badgeX = rect.x + 8;

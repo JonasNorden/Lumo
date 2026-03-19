@@ -110,7 +110,9 @@ function renderDecorSettings(state) {
   const activePresetId = state.interaction.activeDecorPresetId;
   const activePreset = DECOR_PRESETS.find((preset) => preset.id === activePresetId) || null;
   const scatterSettings = state.interaction.decorScatterSettings || {};
-  const scatterCount = Number.isFinite(scatterSettings.count) ? Math.max(1, Math.round(scatterSettings.count)) : 12;
+  const scatterDensity = Number.isFinite(scatterSettings.density)
+    ? Math.max(0, Math.min(1, scatterSettings.density))
+    : 0.3;
   const scatterRandomness = Number.isFinite(scatterSettings.randomness)
     ? Math.max(0, Math.min(1, scatterSettings.randomness))
     : 0.6;
@@ -120,7 +122,7 @@ function renderDecorSettings(state) {
   const scatterStatus = !activePreset
     ? "Select Decor first"
     : scatterModeActive
-      ? `Scatter ${scatterCount} · ${Math.round(scatterRandomness * 100)}%`
+      ? `Scatter ${Math.round(scatterDensity * 100)}% density · ${Math.round(scatterRandomness * 100)}% randomness`
       : "Single placement";
 
   return `
@@ -150,8 +152,11 @@ function renderDecorSettings(state) {
 
       <div class="compactFieldGrid decorScatterCompactGrid">
         <label class="fieldRow fieldRowCompact">
-          <span class="label">Count</span>
-          <input type="number" min="1" max="512" step="1" value="${scatterCount}" data-decor-setting="count" />
+          <span class="label">Density</span>
+          <div class="rangeField">
+            <input type="range" min="0" max="100" step="1" value="${Math.round(scatterDensity * 100)}" data-decor-setting="density" />
+            <span class="rangeValue">${Math.round(scatterDensity * 100)}%</span>
+          </div>
         </label>
 
         <label class="fieldRow fieldRowCompact">
@@ -323,13 +328,12 @@ export function bindBrushPanel(panel, store, options = {}) {
     if (!(target instanceof HTMLInputElement)) return;
 
     const decorSetting = target.dataset.decorSetting;
-    if (decorSetting === "count" || decorSetting === "randomness") {
+    if (decorSetting === "density" || decorSetting === "randomness") {
       onLayerChange?.(PANEL_LAYERS.DECOR);
-      if (decorSetting === "count") {
-        const parsed = Number.parseInt(target.value, 10);
-        const value = Number.isInteger(parsed) ? Math.max(1, parsed) : 1;
-        target.value = String(value);
-        onDecorUpdate?.(-1, "scatter-setting", { field: "count", value });
+      if (decorSetting === "density") {
+        const sliderValue = Number.parseFloat(target.value);
+        const value = Number.isFinite(sliderValue) ? Math.max(0, Math.min(1, sliderValue / 100)) : 0;
+        onDecorUpdate?.(-1, "scatter-setting", { field: "density", value });
         return;
       }
 

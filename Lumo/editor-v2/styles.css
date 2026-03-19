@@ -379,7 +379,7 @@ select {
 }
 
 .sectionTitle {
-  color: #e6efff;
+  color: #d8b56a;
   font-size: 13px;
   letter-spacing: 0.12em;
 }
@@ -550,10 +550,6 @@ select {
 .decorScatterCompactGrid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: end;
-}
-
-.decorScatterCompactGrid .fieldRow:last-child {
-  grid-column: 1 / -1;
 }
 
 .rangeField {
