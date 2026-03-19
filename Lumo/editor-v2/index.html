@@ -17,7 +17,10 @@
       <div class="topBarActions" role="toolbar" aria-label="Editor actions">
         <button type="button" class="topBarButton" data-topbar-action="new">New</button>
         <button type="button" class="topBarButton" data-topbar-action="import">Import</button>
-        <button type="button" class="topBarButton" data-topbar-action="export">Export</button>
+        <div class="topBarMenuShell">
+          <button type="button" class="topBarButton" data-topbar-menu-toggle="export" aria-haspopup="true" aria-expanded="false">Export</button>
+          <div class="topBarMenu topBarExportMenu" id="topBarExportMenu"></div>
+        </div>
         <button type="button" class="topBarButton" data-topbar-action="undo">Undo</button>
         <button type="button" class="topBarButton" data-topbar-action="redo">Redo</button>
 
