@@ -46,7 +46,14 @@ import { DEFAULT_DECOR_PRESET_ID, findDecorPresetById } from "../domain/decor/de
 import { DEFAULT_SOUND_PRESET_ID, findSoundPresetById, getSoundPresetDefaultParams, getSoundPresetForType } from "../domain/sound/soundPresets.js";
 import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
 import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
-import { getScanActivity, getScanRange, getScanResetPosition, sanitizeOptionalScanCoordinate } from "../domain/scan/scanSystem.js";
+import {
+  getScanActivity,
+  getScanRange,
+  sanitizeOptionalScanCoordinate,
+  startScanPlaybackState,
+  stopScanPlaybackState,
+  syncScanPlaybackState,
+} from "../domain/scan/scanSystem.js";
 import {
   clearDecorSelection,
   getPrimarySelectedDecorIndex,
@@ -428,36 +435,19 @@ export function createEditorApp({
     const width = Number(doc.dimensions?.width) || 0;
     draft.scan.startX = preserveRange ? sanitizeOptionalScanCoordinate(draft.scan.startX, width) : null;
     draft.scan.endX = preserveRange ? sanitizeOptionalScanCoordinate(draft.scan.endX, width) : null;
-    draft.scan.positionX = getScanResetPosition(draft.scan, doc);
-    draft.scan.isPlaying = false;
-    draft.scan.activeSoundIds = [];
-    draft.scan.lastFrameTime = null;
-    if (!preserveLog) {
-      draft.scan.eventLog = [];
-      draft.scan.lastEventSummary = null;
-    }
+    syncScanPlaybackState(draft.scan, doc, { preserveLog });
   };
 
   const stopScanPlayback = (draft, preserveLog = true) => {
     if (!draft.document.active) return;
     invalidateScanPlayback();
-    draft.scan.isPlaying = false;
-    draft.scan.positionX = getScanResetPosition(draft.scan, draft.document.active);
-    draft.scan.activeSoundIds = [];
-    draft.scan.lastFrameTime = null;
-    if (!preserveLog) {
-      draft.scan.eventLog = [];
-      draft.scan.lastEventSummary = null;
-    }
+    stopScanPlaybackState(draft.scan, draft.viewport, draft.document.active, { preserveLog });
   };
 
   const startScanPlayback = (draft) => {
     if (!draft.document.active) return;
     invalidateScanPlayback();
-    draft.scan.positionX = getScanResetPosition(draft.scan, draft.document.active);
-    draft.scan.activeSoundIds = [];
-    draft.scan.lastFrameTime = null;
-    draft.scan.isPlaying = true;
+    startScanPlaybackState(draft.scan, draft.viewport, draft.document.active);
   };
 
   const scheduleScanFrame = (playbackToken = scanPlaybackToken) => {
@@ -503,6 +493,7 @@ export function createEditorApp({
           draft.scan.isPlaying = false;
           draft.scan.activeSoundIds = [];
           draft.scan.lastFrameTime = null;
+          draft.scan.viewportSnapshot = null;
         }
 
         shouldContinue = draft.scan.isPlaying;
@@ -2212,6 +2203,9 @@ export function createEditorApp({
         }
         draft.scan.activeSoundIds = [];
         draft.scan.lastFrameTime = null;
+        if (!draft.scan.isPlaying) {
+          draft.scan.viewportSnapshot = null;
+        }
       }
     });
 

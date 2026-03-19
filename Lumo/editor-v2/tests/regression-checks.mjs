@@ -20,7 +20,13 @@ import { eraseSingleTile } from "../src/domain/tiles/eraseTile.js";
 import { renderBrushPanel } from "../src/ui/brushPanel.js";
 import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
 import { serializeLevelDocument } from "../src/data/exportLevelDocument.js";
-import { getScanActivity, getScanRange } from "../src/domain/scan/scanSystem.js";
+import {
+  getScanActivity,
+  getScanRange,
+  startScanPlaybackState,
+  stopScanPlaybackState,
+  syncScanPlaybackState,
+} from "../src/domain/scan/scanSystem.js";
 
 function createHistoryState() {
   return {
@@ -291,6 +297,58 @@ function runScanRegressionChecks() {
   const secondPass = getScanActivity(doc, 7.5, 10.5, []);
   assert.equal(secondPass.triggeredEvents.some((event) => event.soundId === "trigger-1"), true, "scan activity should emit trigger intersections when crossing their X position");
   assert.equal(secondPass.activeSoundIds.includes("zone-1"), true, "scan activity should activate ambient zones while the scan line overlaps them");
+
+  const viewport = { offsetX: 120, offsetY: 32 };
+  const scan = {
+    isPlaying: false,
+    speed: 6,
+    startX: 2,
+    endX: 9,
+    positionX: 0,
+    activeSoundIds: ["spot-1"],
+    eventLog: [{ soundId: "spot-1" }],
+    lastEventSummary: "spot-1",
+    lastFrameTime: 1000,
+    viewportSnapshot: null,
+  };
+
+  startScanPlaybackState(scan, viewport, doc);
+  assert.equal(scan.isPlaying, true, "starting scan playback should mark the scan as running");
+  assert.equal(scan.positionX, 2, "starting scan playback should reset the scan head to the range start");
+  assert.deepEqual(scan.viewportSnapshot, { offsetX: 120, offsetY: 32 }, "starting scan playback should snapshot the pre-follow viewport");
+
+  viewport.offsetX = 468;
+  viewport.offsetY = 76;
+  scan.positionX = 6.5;
+  scan.lastFrameTime = 1300;
+  scan.activeSoundIds = ["zone-1"];
+
+  stopScanPlaybackState(scan, viewport, doc, { preserveLog: true });
+  assert.equal(scan.isPlaying, false, "stopping scan playback should clear the running flag");
+  assert.equal(scan.positionX, 2, "stopping scan playback should reset the scan head to the range start");
+  assert.equal(scan.lastFrameTime, null, "stopping scan playback should clear frame timing state");
+  assert.deepEqual(scan.activeSoundIds, [], "stopping scan playback should clear active sound state");
+  assert.deepEqual(viewport, { offsetX: 120, offsetY: 32 }, "stopping scan playback should restore the pre-follow viewport");
+  assert.equal(scan.viewportSnapshot, null, "stopping scan playback should clear the stored viewport snapshot");
+  assert.deepEqual(scan.eventLog, [{ soundId: "spot-1" }], "stopping scan playback should preserve scan logs when requested");
+
+  viewport.offsetX = 210;
+  viewport.offsetY = 64;
+  startScanPlaybackState(scan, viewport, doc);
+  assert.deepEqual(scan.viewportSnapshot, { offsetX: 210, offsetY: 64 }, "restarting scan playback should capture a fresh viewport snapshot for the next cycle");
+  viewport.offsetX = 430;
+  viewport.offsetY = 80;
+  stopScanPlaybackState(scan, viewport, doc, { preserveLog: true });
+  assert.deepEqual(viewport, { offsetX: 210, offsetY: 64 }, "repeated play-stop cycles should restore the matching viewport snapshot each time");
+
+  scan.eventLog = [{ soundId: "zone-1" }];
+  scan.lastEventSummary = "zone-1";
+  scan.viewportSnapshot = { offsetX: 300, offsetY: 48 };
+  syncScanPlaybackState(scan, doc, { preserveLog: false });
+  assert.equal(scan.positionX, 2, "syncing scan playback should reset the scan head to the range start");
+  assert.deepEqual(scan.eventLog, [], "syncing scan playback should clear scan logs when preserveLog is false");
+  assert.equal(scan.lastEventSummary, null, "syncing scan playback should clear the last event summary when preserveLog is false");
+  assert.equal(scan.viewportSnapshot, null, "syncing scan playback should discard any stale viewport snapshot");
 }
 
 function runUiRegressionChecks() {
@@ -411,6 +469,11 @@ function runSourceRegressionChecks() {
     true,
     "stopScanPlayback should invalidate queued scan frames before resetting state",
   );
+  assert.equal(
+    stopScanPlaybackSection[0].includes("stopScanPlaybackState(draft.scan, draft.viewport, draft.document.active"),
+    true,
+    "stopScanPlayback should restore the saved scan-follow viewport through the shared stop helper",
+  );
 
   const scheduleScanFrameSection = source.match(/const scheduleScanFrame = \(playbackToken = scanPlaybackToken\) => \{[\s\S]*?\n  \};/);
   assert.ok(scheduleScanFrameSection, "scheduleScanFrame should exist");
@@ -418,6 +481,11 @@ function runSourceRegressionChecks() {
     scheduleScanFrameSection[0].includes("if (playbackToken !== scanPlaybackToken) return;"),
     true,
     "scheduleScanFrame should ignore stale scan playback callbacks",
+  );
+  assert.equal(
+    scheduleScanFrameSection[0].includes("draft.scan.viewportSnapshot = null;"),
+    true,
+    "scheduleScanFrame should clear scan follow snapshots when playback finishes naturally",
   );
 }
 
