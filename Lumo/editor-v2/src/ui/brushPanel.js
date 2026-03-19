@@ -61,6 +61,10 @@ function getCanvasSelectionModeLabel(mode) {
   return mode === "decor" ? "Decor" : "Entities";
 }
 
+function getCanvasTargetUsageLabel(mode) {
+  return mode === "decor" ? "Box select, delete, and drag act on decor." : "Box select, delete, and drag act on entities.";
+}
+
 function renderWorkspaceSettings(state) {
   const { workspaceBackground } = state.ui;
 
@@ -598,9 +602,11 @@ export function renderBrushPanel(panel, state) {
         </div>
 
         <div class="statusRow">
-          <span class="label">Box select</span>
+          <span class="label">Active target</span>
           <span class="value">${getCanvasSelectionModeLabel(state.interaction.canvasSelectionMode)}</span>
         </div>
+
+        <div class="mutedValue">${getCanvasTargetUsageLabel(state.interaction.canvasSelectionMode)}</div>
       `,
     )}
     ${renderSection(
@@ -713,7 +719,7 @@ export function renderBrushPanel(panel, state) {
 }
 
 export function bindBrushPanel(panel, store, options = {}) {
-  const { onUndo, onRedo, onExport, onImport, onNew, onWorkspaceUpdate, onBackgroundUpdate, onEntityUpdate, onDecorUpdate } = options;
+  const { onUndo, onRedo, onExport, onImport, onNew, onWorkspaceUpdate, onBackgroundUpdate, onEntityUpdate, onDecorUpdate, onCanvasTargetChange } = options;
   const onChange = (event) => {
     const target = event.target;
 
@@ -991,22 +997,7 @@ export function bindBrushPanel(panel, store, options = {}) {
     if (selectionModeButton instanceof HTMLButtonElement) {
       const nextMode = selectionModeButton.dataset.selectionMode;
       if (nextMode !== "entity" && nextMode !== "decor") return;
-
-      store.setState((draft) => {
-        draft.interaction.canvasSelectionMode = nextMode;
-        draft.interaction.selectedCell = null;
-        if (nextMode === "decor") {
-          draft.interaction.selectedEntityIndices = [];
-          draft.interaction.selectedEntityIndex = null;
-          draft.interaction.hoveredEntityIndex = null;
-          draft.interaction.entityDrag = null;
-        } else {
-          draft.interaction.selectedDecorIndices = [];
-          draft.interaction.selectedDecorIndex = null;
-          draft.interaction.hoveredDecorIndex = null;
-          draft.interaction.decorDrag = null;
-        }
-      });
+      onCanvasTargetChange?.(nextMode);
       return;
     }
 

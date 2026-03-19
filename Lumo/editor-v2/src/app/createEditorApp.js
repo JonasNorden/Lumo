@@ -82,9 +82,19 @@ function renderCellHud(cellHud, state) {
   }
 
   const inspectedCell = getInspectedCell(state);
+  const activeTargetLabel = getSelectionMode(state.interaction) === "decor" ? "Decor" : "Entities";
+  const targetSelectionCount =
+    getSelectionMode(state.interaction) === "decor"
+      ? getSelectedDecorIndices(state.interaction).length
+      : getSelectedEntityIndices(state.interaction).length;
+  const targetSelectionLabel = targetSelectionCount > 0 ? `${targetSelectionCount} selected` : "No selection";
   if (!inspectedCell) {
-    cellHud.textContent = "";
-    cellHud.classList.remove("isVisible");
+    cellHud.innerHTML = `
+      <span class="cellHudBadge">Active target</span>
+      <span>${activeTargetLabel}</span>
+      <span>${targetSelectionLabel}</span>
+    `;
+    cellHud.classList.add("isVisible");
     return;
   }
 
@@ -93,6 +103,9 @@ function renderCellHud(cellHud, state) {
   const tileLabel = tileInfo ? `${tileInfo.label} (${tileInfo.value})` : "Unknown";
 
   cellHud.innerHTML = `
+    <span class="cellHudBadge">Active target</span>
+    <span>${activeTargetLabel}</span>
+    <span>${targetSelectionLabel}</span>
     <span class="cellHudBadge">${sourceLabel}</span>
     <span>X ${inspectedCell.x}</span>
     <span>Y ${inspectedCell.y}</span>
@@ -132,7 +145,7 @@ function historyEntryContainsDecor(entry) {
   return false;
 }
 
-export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, cellHud, store }) {
+export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, cellHud, canvasTargetControls, canvasTargetStatus, store }) {
   const ctx = canvas.getContext("2d");
   const minimapCtx = minimapCanvas.getContext("2d");
   const PAN_CURSOR = "grab";
@@ -434,6 +447,48 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
   const setCanvasSelectionMode = (draft, mode) => {
     draft.interaction.canvasSelectionMode = mode === "decor" ? "decor" : "entity";
+  };
+
+  const syncCanvasTargetUi = (state) => {
+    const activeMode = getSelectionMode(state.interaction);
+    const activeLabel = activeMode === "decor" ? "Decor" : "Entities";
+
+    canvasTargetStatus.textContent = `Active target: ${activeLabel}`;
+    canvasTargetStatus.dataset.target = activeMode;
+
+    const buttons = canvasTargetControls.querySelectorAll("[data-canvas-target]");
+    buttons.forEach((button) => {
+      if (!(button instanceof HTMLButtonElement)) return;
+      const isActive = button.dataset.canvasTarget === activeMode;
+      button.classList.toggle("isActive", isActive);
+      button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+  };
+
+  const applyCanvasTarget = (draft, mode) => {
+    const nextMode = mode === "decor" ? "decor" : "entity";
+    setCanvasSelectionMode(draft, nextMode);
+    draft.interaction.boxSelection = null;
+    draft.interaction.entityDrag = null;
+    draft.interaction.decorDrag = null;
+    clearDecorScatterDrag(draft);
+
+    if (nextMode === "decor") {
+      clearEntitySelection(draft.interaction);
+      draft.interaction.hoveredEntityIndex = null;
+      updateDecorSelectionCell(draft);
+      if (!getSelectedDecorIndices(draft.interaction).length) {
+        draft.interaction.selectedCell = null;
+      }
+      return;
+    }
+
+    clearDecorSelection(draft.interaction);
+    draft.interaction.hoveredDecorIndex = null;
+    updateEntitySelectionCell(draft);
+    if (!getSelectedEntityIndices(draft.interaction).length) {
+      draft.interaction.selectedCell = null;
+    }
   };
 
   const clearActiveSelection = (draft, nextMode = getSelectionMode(draft.interaction)) => {
@@ -1188,6 +1243,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     renderInspector(inspector, state);
     renderBrushPanel(brushPanel, state);
     renderCellHud(cellHud, state);
+    syncCanvasTargetUi(state);
   };
 
   const handleMinimapClick = (event) => {
@@ -1355,20 +1411,18 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     Boolean(interaction.activeDecorPresetId);
 
   const handleInspectCanvasMouseDown = (event, state, cell, point) => {
+    const selectionMode = getSelectionMode(state.interaction);
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitDecorIndex = findDecorAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const activeEntityPresetId = state.interaction.activeEntityPresetId;
     const activeDecorPresetId = state.interaction.activeDecorPresetId;
 
-    if (hitEntityIndex >= 0) {
+    if (selectionMode === "entity" && hitEntityIndex >= 0) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
         const entity = draft.document.active?.entities?.[hitEntityIndex];
-        clearDecorSelection(draft.interaction);
-        draft.interaction.hoveredDecorIndex = null;
-        draft.interaction.decorDrag = null;
-        setCanvasSelectionMode(draft, "entity");
+        applyCanvasTarget(draft, "entity");
         if (event.shiftKey) {
           toggleEntitySelection(draft.interaction, hitEntityIndex);
           updateEntitySelectionCell(draft);
@@ -1418,16 +1472,13 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       return true;
     }
 
-    if (hitDecorIndex >= 0) {
+    if (selectionMode === "decor" && hitDecorIndex >= 0) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
         const decor = draft.document.active?.decor?.[hitDecorIndex];
-        setCanvasSelectionMode(draft, "decor");
+        applyCanvasTarget(draft, "decor");
         draft.interaction.hoveredDecorIndex = hitDecorIndex;
-        clearEntitySelection(draft.interaction);
-        draft.interaction.hoveredEntityIndex = null;
-        draft.interaction.entityDrag = null;
         if (event.shiftKey) {
           toggleDecorSelection(draft.interaction, hitDecorIndex);
           updateDecorSelectionCell(draft);
@@ -1788,27 +1839,21 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       store.setState((draft) => {
         if (boxSelection.mode === "decor") {
           const baseSelection = boxSelection.additive ? getSelectedDecorIndices(draft.interaction) : [];
+          applyCanvasTarget(draft, "decor");
           setDecorSelection(
             draft.interaction,
             boxSelection.additive ? [...baseSelection, ...nextSelection] : nextSelection,
             nextSelection[nextSelection.length - 1] ?? getPrimarySelectedDecorIndex(draft.interaction),
           );
-          clearEntitySelection(draft.interaction);
-          draft.interaction.hoveredEntityIndex = null;
-          draft.interaction.entityDrag = null;
-          setCanvasSelectionMode(draft, "decor");
           updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction));
         } else {
           const baseSelection = boxSelection.additive ? getSelectedEntityIndices(draft.interaction) : [];
+          applyCanvasTarget(draft, "entity");
           setEntitySelection(
             draft.interaction,
             boxSelection.additive ? [...baseSelection, ...nextSelection] : nextSelection,
             nextSelection[nextSelection.length - 1] ?? getPrimarySelectedEntityIndex(draft.interaction),
           );
-          clearDecorSelection(draft.interaction);
-          draft.interaction.hoveredDecorIndex = null;
-          draft.interaction.decorDrag = null;
-          setCanvasSelectionMode(draft, "entity");
           updateEntitySelectionCell(draft);
         }
         draft.interaction.boxSelection = null;
@@ -1868,13 +1913,11 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     if (state.interaction.activeTool !== EDITOR_TOOLS.INSPECT) return;
 
     const point = getCanvasPointFromMouseEvent(canvas, event);
+    const selectionMode = getSelectionMode(state.interaction);
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
-    if (hitEntityIndex >= 0) {
+    if (selectionMode === "entity" && hitEntityIndex >= 0) {
       store.setState((draft) => {
-        clearDecorSelection(draft.interaction);
-        draft.interaction.hoveredDecorIndex = null;
-        draft.interaction.decorDrag = null;
-        setCanvasSelectionMode(draft, "entity");
+        applyCanvasTarget(draft, "entity");
         if (event.shiftKey) {
           toggleEntitySelection(draft.interaction, hitEntityIndex);
         } else {
@@ -1886,17 +1929,15 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     }
 
     const hitDecorIndex = findDecorAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
-    if (hitDecorIndex >= 0) {
+    if (selectionMode === "decor" && hitDecorIndex >= 0) {
       store.setState((draft) => {
-        clearEntitySelection(draft.interaction);
-        draft.interaction.hoveredEntityIndex = null;
+        applyCanvasTarget(draft, "decor");
         if (event.shiftKey) {
           toggleDecorSelection(draft.interaction, hitDecorIndex);
         } else {
           setDecorSelection(draft.interaction, [hitDecorIndex], hitDecorIndex);
         }
         draft.interaction.hoveredDecorIndex = hitDecorIndex;
-        setCanvasSelectionMode(draft, "decor");
         updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction));
       });
       return;
@@ -2029,6 +2070,12 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     });
   };
 
+  const setActiveCanvasTarget = (mode) => {
+    store.setState((draft) => {
+      applyCanvasTarget(draft, mode);
+    });
+  };
+
   const handleGlobalKeyDown = (event) => {
     if (event.code === "Space") {
       if (isShortcutTargetBlocked(event.target)) return;
@@ -2046,7 +2093,8 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
       if (key === "d") {
         let duplicated = false;
         store.setState((draft) => {
-          duplicated = duplicateSelectedEntity(draft) || duplicateSelectedDecor(draft);
+          duplicated =
+            getSelectionMode(draft.interaction) === "decor" ? duplicateSelectedDecor(draft) : duplicateSelectedEntity(draft);
         });
         if (duplicated) {
           event.preventDefault();
@@ -2068,13 +2116,19 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
 
     if ((event.key === "Delete" || event.key === "Backspace")) {
       const state = store.getState();
-      if (!getSelectedEntityIndices(state.interaction).length && !getSelectedDecorIndices(state.interaction).length) return;
+      const hasSelection =
+        getSelectionMode(state.interaction) === "decor"
+          ? getSelectedDecorIndices(state.interaction).length
+          : getSelectedEntityIndices(state.interaction).length;
+      if (!hasSelection) return;
 
       event.preventDefault();
       store.setState((draft) => {
-        if (!deleteSelectedEntity(draft)) {
+        if (getSelectionMode(draft.interaction) === "decor") {
           deleteSelectedDecor(draft);
+          return;
         }
+        deleteSelectedEntity(draft);
       });
       return;
     }
@@ -2153,7 +2207,15 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     onBackgroundUpdate: updateBackgroundLayer,
     onEntityUpdate: updateEntity,
     onDecorUpdate: updateDecor,
+    onCanvasTargetChange: setActiveCanvasTarget,
   });
+  const handleCanvasTargetClick = (event) => {
+    const button = event.target instanceof HTMLElement ? event.target.closest("[data-canvas-target]") : null;
+    if (!(button instanceof HTMLButtonElement)) return;
+    const nextMode = button.dataset.canvasTarget;
+    if (nextMode !== "entity" && nextMode !== "decor") return;
+    setActiveCanvasTarget(nextMode);
+  };
   window.addEventListener("resize", resize);
   canvas.addEventListener("mousemove", handleCanvasMouseMove);
   canvas.addEventListener("mouseleave", clearHoveredCanvasState);
@@ -2164,6 +2226,7 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
   minimapCanvas.addEventListener("click", handleMinimapClick);
   window.addEventListener("keydown", handleGlobalKeyDown);
   window.addEventListener("keyup", handleGlobalKeyUp);
+  canvasTargetControls.addEventListener("click", handleCanvasTargetClick);
 
   resize();
   draw(store.getState());
@@ -2183,5 +2246,6 @@ export function createEditorApp({ canvas, minimapCanvas, inspector, brushPanel, 
     minimapCanvas.removeEventListener("click", handleMinimapClick);
     window.removeEventListener("keydown", handleGlobalKeyDown);
     window.removeEventListener("keyup", handleGlobalKeyUp);
+    canvasTargetControls.removeEventListener("click", handleCanvasTargetClick);
   };
 }

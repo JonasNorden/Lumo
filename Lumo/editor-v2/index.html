@@ -9,8 +9,16 @@
 <body>
   <div class="appShell">
     <header class="topBar">
-      <span class="brand">LumoEditor</span>
-      <span class="version">V2</span>
+      <div class="topBarBrand">
+        <span class="brand">LumoEditor</span>
+        <span class="version">V2</span>
+      </div>
+      <div class="topBarTarget" id="canvasTargetControls" role="group" aria-label="Canvas target">
+        <span class="topBarLabel">Canvas Target</span>
+        <button type="button" class="topBarTargetButton isActive" data-canvas-target="entity">Entities</button>
+        <button type="button" class="topBarTargetButton" data-canvas-target="decor">Decor</button>
+      </div>
+      <div class="topBarStatus" id="canvasTargetStatus" aria-live="polite">Active target: Entities</div>
     </header>
 
     <main class="workspace">
