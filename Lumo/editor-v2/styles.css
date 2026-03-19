@@ -644,12 +644,7 @@ select {
   align-content: start;
 }
 
-.selectionEditorRows {
-  display: grid;
-  gap: 4px;
-}
-
-.selectionEditorRow,
+.selectionEditorFlow,
 .entityPositionGrid,
 .inspectorGroupGrid {
   display: flex;
@@ -660,11 +655,7 @@ select {
   min-width: 0;
 }
 
-.selectionEditorBaseRow {
-  row-gap: 4px;
-}
-
-.selectionEditorParamsRow {
+.selectionEditorFlow {
   row-gap: 4px;
 }
 
@@ -832,9 +823,29 @@ kbd {
   line-height: 1.4;
 }
 
+.selectionEditorPlaceholder {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  color: #a9badf;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.selectionEditorPlaceholderCount {
+  color: #d8e5ff;
+  font-weight: 600;
+}
+
+.selectionEditorPlaceholderDetail {
+  color: #8ea1c8;
+}
+
 .selectionEditorEmptyState {
   color: #8ea1c8;
   font-size: 12px;
+  line-height: 1.2;
 }
 
 .backgroundLayerRow,
@@ -862,7 +873,7 @@ kbd {
 }
 
 @media (max-width: 900px) {
-  .selectionEditorRow {
+  .selectionEditorFlow {
     gap: 4px 8px;
   }
 }
