@@ -22,6 +22,7 @@ import { EDITOR_TOOLS } from "../domain/tiles/tools.js";
 import { getLineCells } from "../domain/tiles/line.js";
 import { getFloodFillCells } from "../domain/tiles/floodFill.js";
 import {
+  createEntityEditEntry,
   createDecorEditEntry,
   createSoundEditEntry,
   createTileEditEntry,
@@ -185,6 +186,15 @@ function historyEntryContainsDecor(entry) {
   if (entry.kind === "decor") return true;
   if (entry.type === "batch") {
     return entry.edits?.some((edit) => historyEntryContainsDecor(edit)) ?? false;
+  }
+  return false;
+}
+
+function historyEntryContainsEntity(entry) {
+  if (!entry) return false;
+  if (entry.kind === "entity") return true;
+  if (entry.type === "batch") {
+    return entry.edits?.some((edit) => historyEntryContainsEntity(edit)) ?? false;
   }
   return false;
 }
@@ -1105,6 +1115,18 @@ export function createEditorApp({
     );
   };
 
+  const pushEntityUpdateHistory = (history, index, previousEntity, nextEntity) => {
+    if (!previousEntity || !nextEntity) return;
+    pushHistoryEntry(
+      history,
+      createEntityEditEntry("update", {
+        index,
+        previousEntity: { ...previousEntity, params: cloneEntityParams(previousEntity.params) },
+        nextEntity: { ...nextEntity, params: cloneEntityParams(nextEntity.params) },
+      }),
+    );
+  };
+
 
   const pushSoundUpdateHistory = (history, index, previousSound, nextSound) => {
     if (!previousSound || !nextSound) return;
@@ -1175,6 +1197,34 @@ export function createEditorApp({
     return changed;
   };
 
+  const moveEntitySelectionByDelta = (draft, originPositions, delta) => {
+    const doc = draft.document.active;
+    if (!doc) return false;
+
+    let changed = false;
+    startHistoryBatch(draft.history, "entity-move");
+    for (const origin of originPositions) {
+      const entity = doc.entities?.[origin.index];
+      if (!entity) continue;
+
+      const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
+      const nextEntity = {
+        ...entity,
+        x: origin.x + delta.x,
+        y: origin.y + delta.y,
+      };
+
+      if (previousEntity.x === nextEntity.x && previousEntity.y === nextEntity.y) continue;
+      doc.entities.splice(origin.index, 1, nextEntity);
+      pushEntityUpdateHistory(draft.history, origin.index, previousEntity, nextEntity);
+      changed = true;
+    }
+    endHistoryBatch(draft.history);
+
+    updateEntitySelectionCell(draft, getPrimarySelectedEntityIndex(draft.interaction));
+    return changed;
+  };
+
   const moveEntityToCell = (draft, index, cell) => {
     const doc = draft.document.active;
     if (!doc) return false;
@@ -1184,8 +1234,12 @@ export function createEditorApp({
 
     const next = clampEntityPosition(doc, cell.x, cell.y);
     const changed = entity.x !== next.x || entity.y !== next.y;
-    entity.x = next.x;
-    entity.y = next.y;
+    if (changed) {
+      const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
+      const nextEntity = { ...entity, x: next.x, y: next.y };
+      doc.entities.splice(index, 1, nextEntity);
+      pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
+    }
     setEntitySelection(draft.interaction, [index], index);
     updateEntitySelectionCell(draft, index);
     return changed;
@@ -1570,6 +1624,12 @@ export function createEditorApp({
     const doc = draft.document.active;
     if (!doc) return;
 
+    const entityCount = doc.entities?.length || 0;
+    pruneEntitySelection(draft.interaction, entityCount);
+    if (Number.isInteger(draft.interaction.hoveredEntityIndex) && draft.interaction.hoveredEntityIndex >= entityCount) {
+      draft.interaction.hoveredEntityIndex = entityCount ? entityCount - 1 : null;
+    }
+
     const decorCount = doc.decor?.length || 0;
     pruneDecorSelection(draft.interaction, decorCount);
     if (Number.isInteger(draft.interaction.hoveredDecorIndex) && draft.interaction.hoveredDecorIndex >= decorCount) {
@@ -1582,7 +1642,9 @@ export function createEditorApp({
       draft.interaction.hoveredSoundIndex = soundCount ? soundCount - 1 : null;
     }
 
-    if (getSelectedDecorIndices(draft.interaction).length) {
+    if (getSelectedEntityIndices(draft.interaction).length) {
+      updateEntitySelectionCell(draft);
+    } else if (getSelectedDecorIndices(draft.interaction).length) {
       updateDecorSelectionCell(draft);
     } else if (getSelectedSoundIndices(draft.interaction).length) {
       updateSoundSelectionCell(draft);
@@ -1630,14 +1692,25 @@ export function createEditorApp({
     const doc = draft.document.active;
     if (!doc) return false;
 
-    const selectedIndices = getEntitySelectionIndices(draft.interaction, doc.entities);
-    if (!selectedIndices.length) {
+    const selectedEntries = getSelectedEntities(draft.interaction, doc.entities);
+    if (!selectedEntries.length) {
       return false;
     }
 
-    const deletedSet = new Set(selectedIndices);
-    doc.entities = doc.entities.filter((_, index) => !deletedSet.has(index));
+    startHistoryBatch(draft.history, "entity-delete");
+    for (const { index, entity } of [...selectedEntries].sort((left, right) => right.index - left.index)) {
+      doc.entities.splice(index, 1);
+      pushHistoryEntry(
+        draft.history,
+        createEntityEditEntry("delete", {
+          index,
+          entity: { ...entity, params: cloneEntityParams(entity.params) },
+        }),
+      );
+    }
+    endHistoryBatch(draft.history);
 
+    const deletedSet = new Set(selectedEntries.map(({ index }) => index));
     const hoveredIndex = draft.interaction.hoveredEntityIndex;
     clearEntitySelection(draft.interaction);
     draft.interaction.selectedCell = null;
@@ -1646,7 +1719,7 @@ export function createEditorApp({
       Number.isInteger(hoveredIndex)
         ? deletedSet.has(hoveredIndex)
           ? null
-          : hoveredIndex - selectedIndices.filter((index) => index < hoveredIndex).length
+          : hoveredIndex - selectedEntries.filter((entry) => entry.index < hoveredIndex).length
         : null;
 
     return true;
@@ -1662,6 +1735,7 @@ export function createEditorApp({
     let insertIndex = selectedEntries[selectedEntries.length - 1].index + 1;
     const duplicatedIndices = [];
 
+    startHistoryBatch(draft.history, "entity-duplicate");
     for (const { entity: source } of selectedEntries) {
       const offset = clampEntityPosition(doc, source.x + 1, source.y + 1);
       const duplicate = {
@@ -1678,8 +1752,16 @@ export function createEditorApp({
 
       doc.entities.splice(insertIndex, 0, duplicate);
       duplicatedIndices.push(insertIndex);
+      pushHistoryEntry(
+        draft.history,
+        createEntityEditEntry("create", {
+          index: insertIndex,
+          entity: { ...duplicate, params: cloneEntityParams(duplicate.params) },
+        }),
+      );
       insertIndex += 1;
     }
+    endHistoryBatch(draft.history);
 
     const primaryIndex = duplicatedIndices[duplicatedIndices.length - 1] ?? null;
     setEntitySelection(draft.interaction, duplicatedIndices, primaryIndex);
@@ -1698,6 +1780,13 @@ export function createEditorApp({
     const entity = createEntityDraft(doc, cell.x, cell.y, presetId, entities.length + 1);
     entities.push(entity);
     const createdIndex = entities.length - 1;
+    pushHistoryEntry(
+      draft.history,
+      createEntityEditEntry("create", {
+        index: createdIndex,
+        entity: { ...entity, params: cloneEntityParams(entity.params) },
+      }),
+    );
     setEntitySelection(draft.interaction, [createdIndex], createdIndex);
     draft.interaction.hoveredEntityIndex = createdIndex;
     draft.interaction.hoveredDecorIndex = null;
@@ -1778,19 +1867,37 @@ export function createEditorApp({
         if (!key) return;
         if (!isSupportedEntityParamValue(value.value)) return;
 
-        entity.params = cloneEntityParams(entity.params);
-        entity.params[key] = value.value;
+        const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
+        const nextEntity = {
+          ...entity,
+          params: {
+            ...cloneEntityParams(entity.params),
+            [key]: value.value,
+          },
+        };
+        doc.entities.splice(index, 1, nextEntity);
+        pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
         return;
       }
 
       if (field === "name" || field === "type") {
         const trimmed = String(value || "").trim();
-        entity[field] = trimmed || entity[field];
+        const nextValue = trimmed || entity[field];
+        if (entity[field] === nextValue) return;
+        const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
+        const nextEntity = { ...entity, [field]: nextValue };
+        doc.entities.splice(index, 1, nextEntity);
+        pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
         return;
       }
 
       if (field === "visible") {
-        entity.visible = Boolean(value);
+        const nextVisible = Boolean(value);
+        if (entity.visible === nextVisible) return;
+        const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
+        const nextEntity = { ...entity, visible: nextVisible };
+        doc.entities.splice(index, 1, nextEntity);
+        pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
         return;
       }
 
@@ -1800,10 +1907,7 @@ export function createEditorApp({
           field === "x" ? value : entity.x,
           field === "y" ? value : entity.y,
         );
-        entity.x = next.x;
-        entity.y = next.y;
-        setEntitySelection(draft.interaction, [index], index);
-        updateEntitySelectionCell(draft, index);
+        moveEntityToCell(draft, index, next);
       }
     });
   };
@@ -2013,6 +2117,7 @@ export function createEditorApp({
       draft.interaction.hoverCell = null;
       draft.interaction.hoveredEntityIndex = null;
       draft.interaction.hoveredDecorIndex = null;
+      draft.interaction.hoveredSoundIndex = null;
     });
   };
 
@@ -2320,21 +2425,6 @@ export function createEditorApp({
     if (!state.document.active) return;
 
     const point = getCanvasPointFromMouseEvent(canvas, event);
-    const hitSoundIndex = findSoundAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
-    if (activeLayer === PANEL_LAYERS.SOUND && selectionMode === "sound" && hitSoundIndex >= 0) {
-      store.setState((draft) => {
-        applyCanvasTarget(draft, "sound");
-        if (event.shiftKey) {
-          toggleSoundSelection(draft.interaction, hitSoundIndex);
-        } else {
-          setSoundSelection(draft.interaction, [hitSoundIndex], hitSoundIndex);
-        }
-        draft.interaction.hoveredSoundIndex = hitSoundIndex;
-        updateSoundSelectionCell(draft, getPrimarySelectedSoundIndex(draft.interaction));
-      });
-      return;
-    }
-
     const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     if (!cell) return;
 
@@ -2589,17 +2679,8 @@ export function createEditorApp({
     if (state.interaction.entityDrag?.active) {
       store.setState((draft) => {
         const entityDrag = draft.interaction.entityDrag;
-        const doc = draft.document.active;
-        if (!entityDrag || !doc) return;
-
-        const delta = entityDrag.previewDelta || { x: 0, y: 0 };
-        for (const origin of entityDrag.originPositions) {
-          const entity = doc.entities?.[origin.index];
-          if (!entity) continue;
-          entity.x = origin.x + delta.x;
-          entity.y = origin.y + delta.y;
-        }
-
+        if (!entityDrag?.active) return;
+        moveEntitySelectionByDelta(draft, entityDrag.originPositions, entityDrag.previewDelta || { x: 0, y: 0 });
         draft.interaction.entityDrag = null;
         updateEntitySelectionCell(draft, entityDrag.leadIndex);
       });
@@ -2862,6 +2943,11 @@ export function createEditorApp({
       const doc = draft.document.active;
       if (!doc) return;
       const entry = undoTileEdit(doc, draft.history);
+      if (historyEntryContainsEntity(entry)) {
+        clearEntitySelection(draft.interaction);
+        draft.interaction.hoveredEntityIndex = null;
+        draft.interaction.entityDrag = null;
+      }
       if (historyEntryContainsDecor(entry)) {
         clearDecorSelection(draft.interaction);
         draft.interaction.hoveredDecorIndex = null;
@@ -2881,6 +2967,11 @@ export function createEditorApp({
       const doc = draft.document.active;
       if (!doc) return;
       const entry = redoTileEdit(doc, draft.history);
+      if (historyEntryContainsEntity(entry)) {
+        clearEntitySelection(draft.interaction);
+        draft.interaction.hoveredEntityIndex = null;
+        draft.interaction.entityDrag = null;
+      }
       if (historyEntryContainsDecor(entry)) {
         clearDecorSelection(draft.interaction);
         draft.interaction.hoveredDecorIndex = null;

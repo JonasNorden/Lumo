@@ -24,6 +24,14 @@ export function createDecorEditEntry(mode, payload) {
   };
 }
 
+export function createEntityEditEntry(mode, payload) {
+  return {
+    kind: "entity",
+    mode,
+    ...payload,
+  };
+}
+
 export function createSoundEditEntry(mode, payload) {
   return {
     kind: "sound",
@@ -34,6 +42,10 @@ export function createSoundEditEntry(mode, payload) {
 
 function cloneDecorEntry(decor) {
   return decor ? { ...decor, params: cloneEntityParams(decor.params) } : decor;
+}
+
+function cloneEntityEntry(entity) {
+  return entity ? { ...entity, params: cloneEntityParams(entity.params) } : entity;
 }
 
 function cloneSoundEntry(sound) {
@@ -117,6 +129,30 @@ function applyUndoEntry(doc, entry) {
 
   if (!entry) return false;
 
+  if (entry.kind === "entity") {
+    if (!Array.isArray(doc.entities)) {
+      doc.entities = [];
+    }
+
+    if (entry.mode === "create") {
+      doc.entities.splice(entry.index, 1);
+      return true;
+    }
+
+    if (entry.mode === "delete") {
+      doc.entities.splice(entry.index, 0, cloneEntityEntry(entry.entity));
+      return true;
+    }
+
+    if (entry.mode === "update") {
+      if (entry.index < 0 || entry.index >= doc.entities.length) return false;
+      doc.entities.splice(entry.index, 1, cloneEntityEntry(entry.previousEntity));
+      return true;
+    }
+
+    return false;
+  }
+
   if (entry.kind === "decor") {
     if (!Array.isArray(doc.decor)) {
       doc.decor = [];
@@ -178,6 +214,30 @@ function applyRedoEntry(doc, entry) {
   }
 
   if (!entry) return false;
+
+  if (entry.kind === "entity") {
+    if (!Array.isArray(doc.entities)) {
+      doc.entities = [];
+    }
+
+    if (entry.mode === "create") {
+      doc.entities.splice(entry.index, 0, cloneEntityEntry(entry.entity));
+      return true;
+    }
+
+    if (entry.mode === "delete") {
+      doc.entities.splice(entry.index, 1);
+      return true;
+    }
+
+    if (entry.mode === "update") {
+      if (entry.index < 0 || entry.index >= doc.entities.length) return false;
+      doc.entities.splice(entry.index, 1, cloneEntityEntry(entry.nextEntity));
+      return true;
+    }
+
+    return false;
+  }
 
   if (entry.kind === "decor") {
     if (!Array.isArray(doc.decor)) {
