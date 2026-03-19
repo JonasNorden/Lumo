@@ -2,20 +2,6 @@ import { getPrimarySelectedEntityIndex, getSelectedEntityIndices } from "../doma
 import { getPrimarySelectedDecorIndex, getSelectedDecorIndices } from "../domain/decor/selection.js";
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
 
-const MIN_LEVEL_SIZE = 8;
-const MAX_LEVEL_SIZE = 256;
-const DEFAULT_LEVEL_NAME = "Untitled Level";
-const DEFAULT_LEVEL_ID = "untitled-level";
-const GRID_OPACITY_DRAGGING_ATTR = "gridOpacityDragging";
-
-function clampLevelSize(value) {
-  return Math.max(MIN_LEVEL_SIZE, Math.min(MAX_LEVEL_SIZE, value));
-}
-
-function countPaintedTiles(tiles) {
-  return tiles.reduce((count, tile) => (tile ? count + 1 : count), 0);
-}
-
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -30,9 +16,6 @@ function captureFocusedInput(panel) {
   if (!panel.contains(activeElement)) return null;
 
   const datasetKeys = [
-    "metaField",
-    "dimensionField",
-    "gridField",
     "entityField",
     "entityIndex",
     "entityParamKey",
@@ -82,86 +65,11 @@ function restoreFocusedInput(panel, snapshot) {
   replacementInput.setSelectionRange(clampedStart, clampedEnd, snapshot.selectionDirection || "none");
 }
 
-function captureInspectorSectionState(panel) {
-  const sections = panel.querySelectorAll("details[data-inspector-section]");
-  if (!sections.length) return null;
-
-  const snapshot = {};
-  for (const section of sections) {
-    const key = section.dataset.inspectorSection;
-    if (!key) continue;
-    snapshot[key] = section.open;
-  }
-  return snapshot;
-}
-
-function restoreInspectorSectionState(panel, snapshot) {
-  if (!snapshot) return;
-  for (const [key, isOpen] of Object.entries(snapshot)) {
-    const section = panel.querySelector(`details[data-inspector-section="${key}"]`);
-    if (!section) continue;
-    section.open = Boolean(isOpen);
-  }
-}
-
-function setInspectorMarkup(panel, markup) {
+function setPanelMarkup(panel, markup, isEmpty = false) {
   const focusedInputSnapshot = captureFocusedInput(panel);
-  const sectionSnapshot = captureInspectorSectionState(panel);
   panel.innerHTML = markup;
-  restoreInspectorSectionState(panel, sectionSnapshot);
+  panel.classList.toggle("isEmpty", isEmpty);
   restoreFocusedInput(panel, focusedInputSnapshot);
-}
-
-function renderInspectorSection(title, key, content, open = false) {
-  return `
-    <details class="inspectorSection" data-inspector-section="${key}" ${open ? "open" : ""}>
-      <summary>${title}</summary>
-      <div class="inspectorSectionBody">
-        ${content}
-      </div>
-    </details>
-  `;
-}
-
-function renderGridSettings(state) {
-  const { gridVisible, gridOpacity, gridColor } = state.viewport;
-
-  return `
-    <div class="inspectorGroupGrid">
-      <label class="fieldRow compactInline">
-        <span class="label">Visible</span>
-        <input
-          type="checkbox"
-          data-grid-field="visible"
-          ${gridVisible ? "checked" : ""}
-        />
-      </label>
-
-      <label class="fieldRow fieldRowCompact">
-        <span class="label">Opacity</span>
-        <div class="rangeField">
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value="${gridOpacity}"
-            data-grid-field="opacity"
-          />
-          <span class="rangeValue">${Math.round(gridOpacity * 100)}%</span>
-        </div>
-      </label>
-
-      <label class="fieldRow fieldRowCompact">
-        <span class="label">Color</span>
-        <input
-          type="color"
-          value="${gridColor}"
-          data-grid-field="color"
-        />
-      </label>
-    </div>
-  `;
 }
 
 function formatEntityParamLabel(key) {
@@ -303,7 +211,7 @@ function renderDecorEditor(decor, selectedDecorIndex) {
   `;
 }
 
-function renderSelectionSummary(state) {
+function renderSelectionEditor(state) {
   const active = state.document.active;
   const selectedEntityIndices = getSelectedEntityIndices(state.interaction);
   const selectedDecorIndices = getSelectedDecorIndices(state.interaction);
@@ -314,226 +222,68 @@ function renderSelectionSummary(state) {
 
   if (selectedEntityIndices.length > 1) {
     return `
-      <div class="selectionSummaryGrid">
-        <div class="infoGroup compact">
-          <div class="label">Selection</div>
-          <div class="value">${selectedEntityIndices.length} entities</div>
+      <div class="selectionInspectorCard">
+        <div class="selectionSummaryGrid">
+          <div class="infoGroup compact">
+            <div class="label">Selection</div>
+            <div class="value">${selectedEntityIndices.length} entities</div>
+          </div>
+          <div class="infoGroup compact">
+            <div class="label">Primary</div>
+            <div class="value">${escapeHtml(selectedEntity?.name || "Entity")}</div>
+          </div>
         </div>
-        <div class="infoGroup compact">
-          <div class="label">Primary</div>
-          <div class="value">${escapeHtml(selectedEntity?.name || "Entity")}</div>
-        </div>
+        <div class="mutedValue">Multi-select is active. Drag, duplicate, and delete continue to work from canvas and shortcuts.</div>
       </div>
-      <div class="mutedValue">Multi-select is active. Drag, duplicate, and delete continue to work from canvas and shortcuts.</div>
     `;
   }
 
   if (selectedDecorIndices.length > 1) {
     return `
-      <div class="selectionSummaryGrid">
-        <div class="infoGroup compact">
-          <div class="label">Selection</div>
-          <div class="value">${selectedDecorIndices.length} decor items</div>
+      <div class="selectionInspectorCard">
+        <div class="selectionSummaryGrid">
+          <div class="infoGroup compact">
+            <div class="label">Selection</div>
+            <div class="value">${selectedDecorIndices.length} decor items</div>
+          </div>
+          <div class="infoGroup compact">
+            <div class="label">Primary</div>
+            <div class="value">${escapeHtml(selectedDecor?.name || "Decor")}</div>
+          </div>
         </div>
-        <div class="infoGroup compact">
-          <div class="label">Primary</div>
-          <div class="value">${escapeHtml(selectedDecor?.name || "Decor")}</div>
-        </div>
+        <div class="mutedValue">Multi-select is active. Drag, duplicate, and delete continue to work from canvas and shortcuts.</div>
       </div>
-      <div class="mutedValue">Multi-select is active. Drag, duplicate, and delete continue to work from canvas and shortcuts.</div>
     `;
   }
 
-  if (selectedEntity) {
-    return renderEntityEditor(selectedEntity, selectedEntityIndex);
-  }
+  if (selectedEntity) return renderEntityEditor(selectedEntity, selectedEntityIndex);
+  if (selectedDecor) return renderDecorEditor(selectedDecor, selectedDecorIndex);
 
-  if (selectedDecor) {
-    return renderDecorEditor(selectedDecor, selectedDecorIndex);
-  }
-
-  return `
-    <div class="selectionSummaryGrid">
-      <div class="infoGroup compact">
-        <div class="label">Selected</div>
-        <div class="value">Nothing selected</div>
-      </div>
-      <div class="infoGroup compact">
-        <div class="label">Canvas Target</div>
-        <div class="value">${state.interaction.canvasSelectionMode === "decor" ? "Decor" : "Entities"}</div>
-      </div>
-    </div>
-    <div class="mutedValue">Inspect objects from canvas to edit them here.</div>
-  `;
-}
-
-function renderLevelSection(state) {
-  const active = state.document.active;
-  const tileCount = active.dimensions.width * active.dimensions.height;
-  const paintedCount = countPaintedTiles(active.tiles.base);
-  const backgroundLayerCount = active.backgrounds?.layers?.length || 0;
-
-  return `
-    <div class="selectionSummaryGrid selectionSummaryGridDouble">
-      <div class="infoGroup compact">
-        <div class="label">Name</div>
-        <div class="value">${escapeHtml(active.meta.name)}</div>
-      </div>
-      <div class="infoGroup compact">
-        <div class="label">ID</div>
-        <div class="value">${escapeHtml(active.meta.id)}</div>
-      </div>
-    </div>
-
-    <label class="fieldRow fieldRowCompact">
-      <span class="label">Name</span>
-      <input type="text" value="${escapeHtml(active.meta.name)}" data-meta-field="name" />
-    </label>
-
-    <label class="fieldRow fieldRowCompact">
-      <span class="label">ID</span>
-      <input type="text" value="${escapeHtml(active.meta.id)}" data-meta-field="id" />
-    </label>
-
-    <div class="selectionSummaryGrid selectionSummaryGridDouble">
-      <div class="infoGroup compact">
-        <div class="label">Tiles</div>
-        <div class="value">${paintedCount} / ${tileCount}</div>
-      </div>
-      <div class="infoGroup compact">
-        <div class="label">Backgrounds</div>
-        <div class="value">${backgroundLayerCount}</div>
-      </div>
-      <div class="infoGroup compact">
-        <div class="label">Entities</div>
-        <div class="value">${active.entities?.length || 0}</div>
-      </div>
-      <div class="infoGroup compact">
-        <div class="label">Decor</div>
-        <div class="value">${active.decor?.length || 0}</div>
-      </div>
-    </div>
-
-    <div class="entityPositionGrid">
-      <label class="fieldRow fieldRowCompact">
-        <span class="label">Width</span>
-        <input
-          type="number"
-          min="${MIN_LEVEL_SIZE}"
-          max="${MAX_LEVEL_SIZE}"
-          step="1"
-          value="${active.dimensions.width}"
-          data-dimension-field="width"
-        />
-      </label>
-
-      <label class="fieldRow fieldRowCompact">
-        <span class="label">Height</span>
-        <input
-          type="number"
-          min="${MIN_LEVEL_SIZE}"
-          max="${MAX_LEVEL_SIZE}"
-          step="1"
-          value="${active.dimensions.height}"
-          data-dimension-field="height"
-        />
-      </label>
-    </div>
-
-    <div class="infoGroup compact">
-      <div class="label">Session</div>
-      <div class="badge">${state.session.mode}</div>
-    </div>
-  `;
+  return "";
 }
 
 export function renderInspector(panel, state) {
-  const active = state.document.active;
-
   if (state.document.status === "loading") {
-    setInspectorMarkup(panel, `<div class="value">Loading document…</div>`);
+    setPanelMarkup(panel, `<div class="value">Loading document…</div>`);
     return;
   }
 
   if (state.document.error) {
-    setInspectorMarkup(panel, `<div class="value">${state.document.error}</div>`);
+    setPanelMarkup(panel, `<div class="value">${state.document.error}</div>`);
     return;
   }
 
-  if (!active) {
-    setInspectorMarkup(panel, `<div class="value">No document loaded.</div>`);
+  if (!state.document.active) {
+    setPanelMarkup(panel, `<div class="value">No document loaded.</div>`);
     return;
   }
 
-  if (panel.dataset[GRID_OPACITY_DRAGGING_ATTR] === "true") {
-    return;
-  }
-
-  setInspectorMarkup(panel, `
-    ${renderInspectorSection("Inspect", "inspect", renderSelectionSummary(state), true)}
-    ${renderInspectorSection("Level", "level", renderLevelSection(state), true)}
-    ${renderInspectorSection("Grid", "grid", renderGridSettings(state), false)}
-  `);
+  const markup = renderSelectionEditor(state);
+  setPanelMarkup(panel, markup, !markup);
 }
 
 export function bindInspectorPanel(panel, store, options = {}) {
-  const { onResize, onMetaUpdate, onGridUpdate, onEntityUpdate, onDecorUpdate } = options;
-
-  const sanitizeMetaValue = (field, value) => {
-    const trimmed = value.trim();
-    if (trimmed) return trimmed;
-
-    if (field === "name") return DEFAULT_LEVEL_NAME;
-    if (field === "id") return DEFAULT_LEVEL_ID;
-
-    return trimmed;
-  };
-
-  const handleMetaChange = (target) => {
-    const metaField = target.dataset.metaField;
-    if (metaField !== "name" && metaField !== "id") return false;
-
-    const state = store.getState();
-    const active = state.document.active;
-    if (!active) return false;
-
-    const nextValue = sanitizeMetaValue(metaField, target.value);
-    target.value = nextValue;
-
-    if (active.meta[metaField] === nextValue) return true;
-
-    onMetaUpdate?.(metaField, nextValue);
-    return true;
-  };
-
-  const handleGridChange = (target) => {
-    const gridField = target.dataset.gridField;
-    if (gridField !== "visible" && gridField !== "opacity" && gridField !== "color") return false;
-
-    const state = store.getState();
-    const viewport = state.viewport;
-
-    if (gridField === "visible") {
-      const nextValue = target.checked;
-      if (viewport.gridVisible === nextValue) return true;
-      onGridUpdate?.("visible", nextValue);
-      return true;
-    }
-
-    if (gridField === "opacity") {
-      const parsed = Number.parseFloat(target.value);
-      const nextValue = Number.isFinite(parsed) ? Math.max(0, Math.min(1, parsed)) : viewport.gridOpacity;
-      target.value = String(nextValue);
-      if (viewport.gridOpacity === nextValue) return true;
-      onGridUpdate?.("opacity", nextValue);
-      return true;
-    }
-
-    const nextColor = target.value;
-    if (viewport.gridColor === nextColor) return true;
-    onGridUpdate?.("color", nextColor);
-    return true;
-  };
+  const { onEntityUpdate, onDecorUpdate } = options;
 
   const handleEntityChange = (target) => {
     const entityParamKey = target.dataset.entityParamKey;
@@ -610,67 +360,23 @@ export function bindInspectorPanel(panel, store, options = {}) {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
 
-    if (handleMetaChange(target)) return;
-    if (handleGridChange(target)) return;
     if (handleEntityChange(target)) return;
-    if (handleDecorChange(target)) return;
-
-    const dimensionField = target.dataset.dimensionField;
-    if (dimensionField !== "width" && dimensionField !== "height") return;
-
-    const state = store.getState();
-    const active = state.document.active;
-    if (!active) return;
-
-    const nextValue = clampLevelSize(Number.parseInt(target.value, 10));
-    if (!Number.isInteger(nextValue)) {
-      target.value = String(active.dimensions[dimensionField]);
-      return;
-    }
-
-    const nextWidth = dimensionField === "width" ? nextValue : active.dimensions.width;
-    const nextHeight = dimensionField === "height" ? nextValue : active.dimensions.height;
-
-    target.value = String(nextValue);
-    onResize?.(nextWidth, nextHeight);
+    handleDecorChange(target);
   };
 
   const onInput = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
 
-    if (handleMetaChange(target)) return;
-    if (handleGridChange(target)) return;
     if (handleEntityChange(target)) return;
     handleDecorChange(target);
   };
 
-  const onPointerDown = (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement)) return;
-    if (target.dataset.gridField !== "opacity") return;
-
-    panel.dataset[GRID_OPACITY_DRAGGING_ATTR] = "true";
-  };
-
-  const stopOpacityDrag = () => {
-    if (panel.dataset[GRID_OPACITY_DRAGGING_ATTR] !== "true") return;
-
-    delete panel.dataset[GRID_OPACITY_DRAGGING_ATTR];
-    renderInspector(panel, store.getState());
-  };
-
   panel.addEventListener("change", onChange);
   panel.addEventListener("input", onInput);
-  panel.addEventListener("pointerdown", onPointerDown);
-  window.addEventListener("pointerup", stopOpacityDrag);
-  window.addEventListener("pointercancel", stopOpacityDrag);
 
   return () => {
     panel.removeEventListener("change", onChange);
     panel.removeEventListener("input", onInput);
-    panel.removeEventListener("pointerdown", onPointerDown);
-    window.removeEventListener("pointerup", stopOpacityDrag);
-    window.removeEventListener("pointercancel", stopOpacityDrag);
   };
 }

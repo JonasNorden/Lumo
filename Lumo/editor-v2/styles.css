@@ -219,6 +219,14 @@ select {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.topBarCompactFields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.topBarCompactFieldFull {
+  grid-column: 1 / -1;
+}
+
 .topBarLayerRemoveButton {
   white-space: nowrap;
 }
@@ -303,6 +311,10 @@ select {
 .inspectorPanel {
   padding: 16px;
   border-left: 1px solid #1d263c;
+}
+
+.inspectorPanel.isEmpty {
+  background: rgba(8, 13, 24, 0.45);
 }
 
 .brushPanel::-webkit-scrollbar,

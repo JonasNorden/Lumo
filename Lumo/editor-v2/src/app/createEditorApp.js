@@ -182,8 +182,30 @@ function escapeHtml(value) {
 function renderSettingsMenu(state) {
   const active = state.document.active;
   const layers = [...(active?.backgrounds?.layers || [])].sort((left, right) => (left.depth ?? 0) - (right.depth ?? 0));
+  const { gridVisible, gridOpacity, gridColor } = state.viewport;
 
   return `
+    <div class="topBarMenuSection">
+      <div class="topBarMenuTitle">Grid</div>
+      <div class="compactFieldGrid topBarCompactFields">
+        <label class="fieldRow compactInline">
+          <span class="label">Visible</span>
+          <input type="checkbox" data-grid-field="visible" ${gridVisible ? "checked" : ""} />
+        </label>
+        <label class="fieldRow fieldRowCompact">
+          <span class="label">Opacity</span>
+          <div class="rangeField">
+            <input type="range" min="0" max="1" step="0.01" value="${gridOpacity}" data-grid-field="opacity" />
+            <span class="rangeValue">${Math.round(gridOpacity * 100)}%</span>
+          </div>
+        </label>
+        <label class="fieldRow fieldRowCompact topBarCompactFieldFull">
+          <span class="label">Color</span>
+          <input type="color" value="${gridColor}" data-grid-field="color" />
+        </label>
+      </div>
+    </div>
+
     <div class="topBarMenuSection">
       <div class="topBarMenuTitle">Workspace</div>
       <label class="fieldRow fieldRowCompact">
@@ -241,6 +263,47 @@ function renderSettingsMenu(state) {
   `;
 }
 
+function renderExportMenu(state) {
+  const active = state.document.active;
+
+  if (!active) {
+    return `
+      <div class="topBarMenuSection">
+        <div class="topBarMenuTitle">Export</div>
+        <div class="mutedValue">Load or create a level before exporting.</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="topBarMenuSection">
+      <div class="topBarMenuTitle">Export Level</div>
+      <div class="topBarMenuMeta">Adjust metadata before downloading the JSON export.</div>
+      <div class="compactFieldGrid topBarCompactFields">
+        <label class="fieldRow fieldRowCompact topBarCompactFieldFull">
+          <span class="label">Name</span>
+          <input type="text" value="${escapeHtml(active.meta.name)}" data-export-meta-field="name" />
+        </label>
+        <label class="fieldRow fieldRowCompact topBarCompactFieldFull">
+          <span class="label">ID</span>
+          <input type="text" value="${escapeHtml(active.meta.id)}" data-export-meta-field="id" />
+        </label>
+        <label class="fieldRow fieldRowCompact">
+          <span class="label">Width</span>
+          <input type="number" min="8" max="256" step="1" value="${active.dimensions.width}" data-export-dimension-field="width" />
+        </label>
+        <label class="fieldRow fieldRowCompact">
+          <span class="label">Height</span>
+          <input type="number" min="8" max="256" step="1" value="${active.dimensions.height}" data-export-dimension-field="height" />
+        </label>
+      </div>
+      <div class="compactActionRow compactActionRowSingle topBarMenuActionRow">
+        <button type="button" class="toolButton" data-export-action="download">Download JSON</button>
+      </div>
+    </div>
+  `;
+}
+
 function renderHelpMenu() {
   return `
     <div class="topBarMenuSection">
@@ -269,6 +332,7 @@ export function createEditorApp({
   cellHud,
   topBar,
   topBarStatus,
+  topBarExportMenu,
   topBarSettingsMenu,
   topBarHelpMenu,
   bottomPanel,
@@ -617,9 +681,14 @@ export function createEditorApp({
       const action = button.dataset.topbarAction;
       if (action === "undo") button.disabled = !undoEnabled;
       if (action === "redo") button.disabled = !redoEnabled;
-      if (action === "export") button.disabled = !exportEnabled;
     });
 
+    const exportToggle = topBar.querySelector(`[data-topbar-menu-toggle="export"]`);
+    if (exportToggle instanceof HTMLButtonElement) {
+      exportToggle.disabled = !exportEnabled;
+    }
+
+    topBarExportMenu.innerHTML = renderExportMenu(state);
     topBarSettingsMenu.innerHTML = renderSettingsMenu(state);
     topBarHelpMenu.innerHTML = renderHelpMenu();
 
@@ -631,6 +700,7 @@ export function createEditorApp({
       toggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
     });
 
+    topBarExportMenu.classList.toggle("isOpen", activeMenu === "export");
     topBarSettingsMenu.classList.toggle("isOpen", activeMenu === "settings");
     topBarHelpMenu.classList.toggle("isOpen", activeMenu === "help");
   };
@@ -2215,11 +2285,12 @@ export function createEditorApp({
     });
   };
 
-  const handleExport = () => {
+  const handleExportDownload = () => {
     const state = store.getState();
     if (!state.document.active) return;
 
     triggerLevelDocumentDownload(state.document.active);
+    closeTopBarMenu();
   };
 
   const handleImport = () => {
@@ -2400,7 +2471,7 @@ export function createEditorApp({
     const toggleButton = target.closest("[data-topbar-menu-toggle]");
     if (toggleButton instanceof HTMLButtonElement) {
       const menuName = toggleButton.dataset.topbarMenuToggle;
-      if (menuName === "settings" || menuName === "help") {
+      if (menuName === "export" || menuName === "settings" || menuName === "help") {
         toggleTopBarMenu(menuName);
       }
       return;
@@ -2411,9 +2482,16 @@ export function createEditorApp({
       const action = actionButton.dataset.topbarAction;
       if (action === "new") handleNewLevel();
       if (action === "import") handleImport();
-      if (action === "export") handleExport();
       if (action === "undo") handleUndo();
       if (action === "redo") handleRedo();
+      return;
+    }
+
+    const exportActionButton = target.closest("[data-export-action]");
+    if (exportActionButton instanceof HTMLButtonElement) {
+      if (exportActionButton.dataset.exportAction === "download") {
+        handleExportDownload();
+      }
       return;
     }
 
@@ -2441,9 +2519,49 @@ export function createEditorApp({
     }
   };
 
+  const handleTopBarFieldInput = (target) => {
+    const exportMetaField = target.dataset.exportMetaField;
+    if (exportMetaField === "name" || exportMetaField === "id") {
+      const nextValue = target.value.trim() || (exportMetaField === "name" ? "Untitled Level" : "untitled-level");
+      target.value = nextValue;
+      updateDocumentMeta(exportMetaField, nextValue);
+      return true;
+    }
+
+    const exportDimensionField = target.dataset.exportDimensionField;
+    if (exportDimensionField === "width" || exportDimensionField === "height") {
+      const state = store.getState();
+      const active = state.document.active;
+      if (!active) return true;
+
+      const parsed = Number.parseInt(target.value, 10);
+      const nextValue = Number.isInteger(parsed) ? Math.max(8, Math.min(256, parsed)) : active.dimensions[exportDimensionField];
+      target.value = String(nextValue);
+      const nextWidth = exportDimensionField === "width" ? nextValue : active.dimensions.width;
+      const nextHeight = exportDimensionField === "height" ? nextValue : active.dimensions.height;
+      resizeDocument(nextWidth, nextHeight);
+      return true;
+    }
+
+    const gridField = target.dataset.gridField;
+    if (gridField === "visible" || gridField === "opacity" || gridField === "color") {
+      const value = gridField === "visible"
+        ? target.checked
+        : gridField === "opacity"
+          ? Number.parseFloat(target.value)
+          : target.value;
+      updateGridSettings(gridField, value);
+      return true;
+    }
+
+    return false;
+  };
+
   const handleTopBarChange = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
+
+    if (handleTopBarFieldInput(target)) return;
 
     const workspaceField = target.dataset.workspaceField;
     if (workspaceField === "background") {
@@ -2511,9 +2629,6 @@ export function createEditorApp({
 
   const unsubscribe = store.subscribe(draw);
   const unbindInspectorPanel = bindInspectorPanel(inspector, store, {
-    onResize: resizeDocument,
-    onMetaUpdate: updateDocumentMeta,
-    onGridUpdate: updateGridSettings,
     onEntityUpdate: updateEntity,
     onDecorUpdate: updateDecor,
   });
