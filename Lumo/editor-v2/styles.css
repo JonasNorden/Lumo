@@ -33,7 +33,7 @@ select {
 .appShell {
   height: 100vh;
   display: grid;
-  grid-template-rows: 52px minmax(0, 1fr) 0;
+  grid-template-rows: 52px minmax(0, 1fr) 240px;
 }
 
 .topBar {
@@ -703,7 +703,40 @@ kbd {
 
 .bottomPanel {
   min-height: 0;
-  border-top: 1px solid transparent;
+  padding: 14px 18px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-top: 1px solid #1d263c;
+  background: rgba(8, 13, 24, 0.94);
+}
+
+.bottomPanel.isEmpty {
+  background: rgba(8, 13, 24, 0.7);
+}
+
+.bottomPanel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.bottomPanel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.bottomPanel::-webkit-scrollbar-thumb {
+  background: rgba(92, 113, 158, 0.45);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.bottomPanel {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(92, 113, 158, 0.45) transparent;
+}
+
+.selectionEditorEmptyState {
+  color: #8ea1c8;
+  font-size: 13px;
 }
 
 .backgroundLayerRow,

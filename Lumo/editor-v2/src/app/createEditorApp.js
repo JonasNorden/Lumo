@@ -10,6 +10,7 @@ import {
 } from "../render/viewport.js";
 import { getWorldPointFromMinimapPoint, renderMinimap } from "../render/minimap.js";
 import { renderInspector, bindInspectorPanel } from "../ui/inspectorPanel.js";
+import { renderBottomPanel, bindBottomPanel } from "../ui/bottomPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
@@ -966,8 +967,8 @@ export function createEditorApp({
       history,
       createDecorEditEntry("update", {
         index,
-        previousDecor: { ...previousDecor },
-        nextDecor: { ...nextDecor },
+        previousDecor: { ...previousDecor, params: cloneEntityParams(previousDecor.params) },
+        nextDecor: { ...nextDecor, params: cloneEntityParams(nextDecor.params) },
       }),
     );
   };
@@ -1458,6 +1459,26 @@ export function createEditorApp({
       const decor = decorItems[index];
       if (!decor) return;
 
+      if (field === "param") {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return;
+
+        const key = typeof value.key === "string" ? value.key.trim() : "";
+        if (!key) return;
+        if (!isSupportedEntityParamValue(value.value)) return;
+
+        const previousDecor = { ...decor, params: cloneEntityParams(decor.params) };
+        const nextDecor = {
+          ...decor,
+          params: {
+            ...cloneEntityParams(decor.params),
+            [key]: value.value,
+          },
+        };
+        doc.decor.splice(index, 1, nextDecor);
+        pushDecorUpdateHistory(draft.history, index, previousDecor, nextDecor);
+        return;
+      }
+
       if (field === 'name' || field === 'type' || field === 'variant') {
         const trimmed = String(value || '').trim();
         const nextValue = trimmed || decor[field];
@@ -1492,6 +1513,7 @@ export function createEditorApp({
     renderEditorFrame(ctx, state);
     minimapLayout = renderMinimap(minimapCtx, state);
     renderInspector(inspector, state);
+    renderBottomPanel(bottomPanel, state);
     renderBrushPanel(brushPanel, state);
     renderCellHud(cellHud, state);
     renderTopBar(state);
@@ -2628,10 +2650,12 @@ export function createEditorApp({
   };
 
   const unsubscribe = store.subscribe(draw);
-  const unbindInspectorPanel = bindInspectorPanel(inspector, store, {
+  const panelBindingOptions = {
     onEntityUpdate: updateEntity,
     onDecorUpdate: updateDecor,
-  });
+  };
+  const unbindInspectorPanel = bindInspectorPanel(inspector, store, panelBindingOptions);
+  const unbindBottomPanel = bindBottomPanel(bottomPanel, store, panelBindingOptions);
   const unbindBrushPanel = bindBrushPanel(brushPanel, store, {
     onEntityUpdate: updateEntity,
     onDecorUpdate: updateDecor,
@@ -2659,6 +2683,7 @@ export function createEditorApp({
   return () => {
     unsubscribe();
     unbindInspectorPanel();
+    unbindBottomPanel();
     unbindBrushPanel();
     window.removeEventListener("resize", resize);
     canvas.removeEventListener("mousemove", handleCanvasMouseMove);
