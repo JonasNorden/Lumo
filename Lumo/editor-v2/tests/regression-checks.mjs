@@ -403,6 +403,22 @@ function runSourceRegressionChecks() {
     true,
     "shift-drag box selection should stay additive",
   );
+
+  const stopScanPlaybackSection = source.match(/const stopScanPlayback = \(draft, preserveLog = true\) => \{[\s\S]*?\n  \};/);
+  assert.ok(stopScanPlaybackSection, "stopScanPlayback should exist");
+  assert.equal(
+    stopScanPlaybackSection[0].includes("invalidateScanPlayback();"),
+    true,
+    "stopScanPlayback should invalidate queued scan frames before resetting state",
+  );
+
+  const scheduleScanFrameSection = source.match(/const scheduleScanFrame = \(playbackToken = scanPlaybackToken\) => \{[\s\S]*?\n  \};/);
+  assert.ok(scheduleScanFrameSection, "scheduleScanFrame should exist");
+  assert.equal(
+    scheduleScanFrameSection[0].includes("if (playbackToken !== scanPlaybackToken) return;"),
+    true,
+    "scheduleScanFrame should ignore stale scan playback callbacks",
+  );
 }
 
 runTileRegressionChecks();

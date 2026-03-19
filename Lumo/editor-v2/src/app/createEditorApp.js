@@ -406,12 +406,25 @@ export function createEditorApp({
     f: EDITOR_TOOLS.FILL,
   };
   let scanAnimationFrame = 0;
+  let scanPlaybackToken = 0;
+
+  const cancelScheduledScanFrame = () => {
+    if (!scanAnimationFrame) return;
+    window.cancelAnimationFrame(scanAnimationFrame);
+    scanAnimationFrame = 0;
+  };
+
+  const invalidateScanPlayback = () => {
+    scanPlaybackToken += 1;
+    cancelScheduledScanFrame();
+  };
 
   const syncScanWithDocument = (draft, options = {}) => {
     const { preserveRange = true, preserveLog = false } = options;
     const doc = draft.document.active;
     if (!doc) return;
 
+    invalidateScanPlayback();
     const width = Number(doc.dimensions?.width) || 0;
     draft.scan.startX = preserveRange ? sanitizeOptionalScanCoordinate(draft.scan.startX, width) : null;
     draft.scan.endX = preserveRange ? sanitizeOptionalScanCoordinate(draft.scan.endX, width) : null;
@@ -427,6 +440,7 @@ export function createEditorApp({
 
   const stopScanPlayback = (draft, preserveLog = true) => {
     if (!draft.document.active) return;
+    invalidateScanPlayback();
     draft.scan.isPlaying = false;
     draft.scan.positionX = getScanResetPosition(draft.scan, draft.document.active);
     draft.scan.activeSoundIds = [];
@@ -437,18 +451,29 @@ export function createEditorApp({
     }
   };
 
-  const scheduleScanFrame = () => {
+  const startScanPlayback = (draft) => {
+    if (!draft.document.active) return;
+    invalidateScanPlayback();
+    draft.scan.positionX = getScanResetPosition(draft.scan, draft.document.active);
+    draft.scan.activeSoundIds = [];
+    draft.scan.lastFrameTime = null;
+    draft.scan.isPlaying = true;
+  };
+
+  const scheduleScanFrame = (playbackToken = scanPlaybackToken) => {
     if (scanAnimationFrame) return;
     scanAnimationFrame = window.requestAnimationFrame((timestamp) => {
       scanAnimationFrame = 0;
+      if (playbackToken !== scanPlaybackToken) return;
       const state = store.getState();
       const doc = state.document.active;
       if (!doc || !state.scan.isPlaying) return;
 
       let triggeredEvents = [];
+      let shouldContinue = false;
       store.setState((draft) => {
         const activeDoc = draft.document.active;
-        if (!activeDoc || !draft.scan.isPlaying) return;
+        if (playbackToken !== scanPlaybackToken || !activeDoc || !draft.scan.isPlaying) return;
 
         const { startX, endX } = getScanRange(draft.scan, activeDoc);
         const previousX = Number.isFinite(draft.scan.positionX) ? draft.scan.positionX : startX;
@@ -479,14 +504,17 @@ export function createEditorApp({
           draft.scan.activeSoundIds = [];
           draft.scan.lastFrameTime = null;
         }
+
+        shouldContinue = draft.scan.isPlaying;
       });
 
+      if (playbackToken !== scanPlaybackToken) return;
       for (const event of triggeredEvents) {
         console.info(`[scan] ${event.soundName} (${event.soundType}) ${event.intersectionType} at x ${event.atX}`);
       }
 
-      if (store.getState().scan.isPlaying) {
-        scheduleScanFrame();
+      if (shouldContinue) {
+        scheduleScanFrame(playbackToken);
       }
     });
   };
@@ -2155,10 +2183,7 @@ export function createEditorApp({
       if (!doc) return;
 
       if (field === "play") {
-        draft.scan.positionX = getScanResetPosition(draft.scan, doc);
-        draft.scan.activeSoundIds = [];
-        draft.scan.lastFrameTime = null;
-        draft.scan.isPlaying = true;
+        startScanPlayback(draft);
         return;
       }
 
@@ -2191,7 +2216,7 @@ export function createEditorApp({
     });
 
     if (field === "play" && store.getState().scan.isPlaying) {
-      scheduleScanFrame();
+      scheduleScanFrame(scanPlaybackToken);
     }
   };
 
@@ -3535,10 +3560,7 @@ export function createEditorApp({
   void loadDocument();
 
   return () => {
-    if (scanAnimationFrame) {
-      window.cancelAnimationFrame(scanAnimationFrame);
-      scanAnimationFrame = 0;
-    }
+    invalidateScanPlayback();
     unsubscribe();
     unbindInspectorPanel();
     unbindBottomPanel();
