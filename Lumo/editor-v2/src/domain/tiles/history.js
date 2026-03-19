@@ -1,3 +1,4 @@
+import { cloneEntityParams } from "../entities/entityParams.js";
 import { getTileIndex } from "../level/levelDocument.js";
 
 export function createTileEditEntry(doc, cell, previousValue, nextValue) {
@@ -24,7 +25,7 @@ export function createDecorEditEntry(mode, payload) {
 }
 
 function cloneDecorEntry(decor) {
-  return decor ? { ...decor } : decor;
+  return decor ? { ...decor, params: cloneEntityParams(decor.params) } : decor;
 }
 
 function createBatchEntry(label = "tile-drag") {

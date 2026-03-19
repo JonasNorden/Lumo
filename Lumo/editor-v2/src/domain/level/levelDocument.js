@@ -10,7 +10,7 @@ const DEFAULT_DECOR_VARIANT = "a";
  * @property {{width: number, height: number, tileSize: number}} dimensions
  * @property {{base: number[]}} tiles
  * @property {{layers: {id: string, name: string, type: string, depth: number, visible: boolean, color: string}[]}} backgrounds
- * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, variant: string}[]} decor
+ * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, variant: string, params: Record<string, string | number | boolean>}[]} decor
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} entities
  * @property {{notes?: string}} extra
  */
@@ -56,6 +56,7 @@ function normalizeDecor(decor, index) {
   const nextY = Number.isFinite(decor?.y) ? Math.round(decor.y) : 0;
   const nextVisible = typeof decor?.visible === "boolean" ? decor.visible : true;
   const nextVariant = typeof decor?.variant === "string" && decor.variant.trim() ? decor.variant.trim() : DEFAULT_DECOR_VARIANT;
+  const nextParams = cloneEntityParams(decor?.params);
 
   return {
     id: nextId,
@@ -65,6 +66,7 @@ function normalizeDecor(decor, index) {
     y: nextY,
     visible: nextVisible,
     variant: nextVariant,
+    params: nextParams,
   };
 }
 
