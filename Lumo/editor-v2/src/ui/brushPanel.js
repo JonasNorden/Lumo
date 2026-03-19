@@ -7,13 +7,13 @@ import { getBrushDraftSummary } from "../domain/tiles/brushDraft.js";
 import { TOOL_OPTIONS, EDITOR_TOOLS, isEditorTool } from "../domain/tiles/tools.js";
 import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
 import { DECOR_PRESETS } from "../domain/decor/decorPresets.js";
+import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
 
 const PANEL_LAYERS = {
   TOOLS: "tools",
   TILES: "tiles",
   ENTITIES: "entities",
   DECOR: "decor",
-  // Reserved for the future SOUND section.
   SOUND: "sound",
 };
 
@@ -70,6 +70,7 @@ function renderSection(sectionId, title, isOpen, content, sectionClass = "") {
 function getActiveLayerLabel(layerValue) {
   if (layerValue === PANEL_LAYERS.DECOR) return "Decor";
   if (layerValue === PANEL_LAYERS.ENTITIES) return "Entities";
+  if (layerValue === PANEL_LAYERS.SOUND) return "Sound";
   return "Tiles";
 }
 
@@ -81,6 +82,7 @@ function renderLayerSection(state) {
       <button class="toolButton ${activeLayer === PANEL_LAYERS.TILES ? "isActive" : ""}" type="button" data-layer="tiles">Tiles</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.ENTITIES ? "isActive" : ""}" type="button" data-layer="entities">Entities</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.DECOR ? "isActive" : ""}" type="button" data-layer="decor">Decor</button>
+      <button class="toolButton ${activeLayer === PANEL_LAYERS.SOUND ? "isActive" : ""}" type="button" data-layer="sound">Sound</button>
     </div>
 
     <div class="statusRow compactStatusRow">
@@ -106,16 +108,35 @@ function renderSelectorField(label, dataField, options, selectedValue, placehold
   `;
 }
 
+function renderPlacementBlock(label) {
+  return `
+    <div class="statusCard">
+      <span class="statusCardLabel">Placement</span>
+      <span class="statusCardValue">${escapeHtml(label)}</span>
+    </div>
+  `;
+}
+
+function renderEntitiesSettings(state) {
+  const activePresetId = state.interaction.activeEntityPresetId;
+  const activePreset = ENTITY_PRESETS.find((preset) => preset.id === activePresetId) || null;
+  const placementLabel = activePreset ? `Placing: ${activePreset.defaultName}` : "No placement";
+
+  return `
+    ${renderSelectorField("Select Entity", "entity-preset-select", PLACEABLE_ENTITY_PRESETS, activePresetId, "No entity selected")}
+    ${renderPlacementBlock(placementLabel)}
+    <div class="compactActionRow compactActionRowSingle">
+      <button type="button" class="toolButton isSecondary" data-entity-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
+    </div>
+  `;
+}
+
 function renderDecorSettings(state) {
   const activePresetId = state.interaction.activeDecorPresetId;
   const activePreset = DECOR_PRESETS.find((preset) => preset.id === activePresetId) || null;
   const scatterSettings = state.interaction.decorScatterSettings || {};
-  const scatterDensity = Number.isFinite(scatterSettings.density)
-    ? Math.max(0, Math.min(1, scatterSettings.density))
-    : 0.3;
-  const scatterRandomness = Number.isFinite(scatterSettings.randomness)
-    ? Math.max(0, Math.min(1, scatterSettings.randomness))
-    : 0.6;
+  const scatterDensity = Number.isFinite(scatterSettings.density) ? Math.max(0, Math.min(1, scatterSettings.density)) : 0.3;
+  const scatterRandomness = Number.isFinite(scatterSettings.randomness) ? Math.max(0, Math.min(1, scatterSettings.randomness)) : 0.6;
   const scatterVariantMode = scatterSettings.variantMode === "random" ? "random" : "fixed";
   const scatterModeActive = Boolean(state.interaction.decorScatterMode);
   const placementLabel = activePreset ? `Placing: ${activePreset.defaultName}` : "No placement";
@@ -127,12 +148,7 @@ function renderDecorSettings(state) {
 
   return `
     ${renderSelectorField("Select Decor", "decor-preset-select", DECOR_PRESETS, activePresetId, "No decor selected")}
-
-    <div class="statusCard">
-      <span class="statusCardLabel">Placement</span>
-      <span class="statusCardValue">${escapeHtml(placementLabel)}</span>
-    </div>
-
+    ${renderPlacementBlock(placementLabel)}
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton isSecondary" data-decor-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
     </div>
@@ -184,21 +200,16 @@ function renderDecorSettings(state) {
   `;
 }
 
-function renderEntitiesSettings(state) {
-  const activePresetId = state.interaction.activeEntityPresetId;
-  const activePreset = ENTITY_PRESETS.find((preset) => preset.id === activePresetId) || null;
+function renderSoundSettings(state) {
+  const activePresetId = state.interaction.activeSoundPresetId;
+  const activePreset = SOUND_PRESETS.find((preset) => preset.id === activePresetId) || null;
   const placementLabel = activePreset ? `Placing: ${activePreset.defaultName}` : "No placement";
 
   return `
-    ${renderSelectorField("Select Entity", "entity-preset-select", PLACEABLE_ENTITY_PRESETS, activePresetId, "No entity selected")}
-
-    <div class="statusCard">
-      <span class="statusCardLabel">Placement</span>
-      <span class="statusCardValue">${escapeHtml(placementLabel)}</span>
-    </div>
-
+    ${renderSelectorField("Select Sound", "sound-preset-select", SOUND_PRESETS, activePresetId, "No sound selected")}
+    ${renderPlacementBlock(placementLabel)}
     <div class="compactActionRow compactActionRowSingle">
-      <button type="button" class="toolButton isSecondary" data-entity-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
+      <button type="button" class="toolButton isSecondary" data-sound-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
     </div>
   `;
 }
@@ -212,74 +223,55 @@ export function renderBrushPanel(panel, state) {
     tiles: true,
     decor: true,
     entities: true,
-    sound: false,
+    sound: true,
     ...state.ui.panelSections,
   };
 
   panel.innerHTML = `
-    ${renderSection(
-      "tools",
-      "TOOLS",
-      panelSections.tools,
-      `
-        <div class="toolSwitch toolSwitchCompact" role="group" aria-label="Editor tool">
-          ${VISIBLE_TOOL_OPTIONS.map((option) => renderToolButton(option, state.interaction.activeTool)).join("")}
-        </div>
-      `,
-    )}
+    ${renderSection("tools", "TOOLS", panelSections.tools, `
+      <div class="toolSwitch toolSwitchCompact" role="group" aria-label="Editor tool">
+        ${VISIBLE_TOOL_OPTIONS.map((option) => renderToolButton(option, state.interaction.activeTool)).join("")}
+      </div>
+    `)}
 
-    ${renderSection(
-      "layer",
-      "LAYER",
-      panelSections.layer,
-      renderLayerSection(state),
-    )}
+    ${renderSection("layer", "LAYER", panelSections.layer, renderLayerSection(state))}
 
-    ${renderSection(
-      "tiles",
-      "TILES",
-      panelSections.tiles,
-      `
-        <label class="fieldRow fieldRowCompact">
-          <span class="label">Mode</span>
-          <select data-brush-field="behavior">
-            ${renderOptions(BRUSH_BEHAVIOR_OPTIONS, brushDraft.behavior)}
-          </select>
-        </label>
+    ${renderSection("tiles", "TILES", panelSections.tiles, `
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Mode</span>
+        <select data-brush-field="behavior">
+          ${renderOptions(BRUSH_BEHAVIOR_OPTIONS, brushDraft.behavior)}
+        </select>
+      </label>
 
-        <label class="fieldRow fieldRowCompact">
-          <span class="label">Size</span>
-          <select data-brush-field="size">
-            ${renderOptions(BRUSH_SIZE_OPTIONS, brushDraft.size)}
-          </select>
-        </label>
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Size</span>
+        <select data-brush-field="size">
+          ${renderOptions(BRUSH_SIZE_OPTIONS, brushDraft.size)}
+        </select>
+      </label>
 
-        <label class="fieldRow fieldRowCompact">
-          <span class="label">Sprite</span>
-          <select data-brush-field="sprite">
-            ${renderOptions(BRUSH_SPRITE_OPTIONS, brushDraft.sprite)}
-          </select>
-        </label>
+      <label class="fieldRow fieldRowCompact">
+        <span class="label">Sprite</span>
+        <select data-brush-field="sprite">
+          ${renderOptions(BRUSH_SPRITE_OPTIONS, brushDraft.sprite)}
+        </select>
+      </label>
 
-        <div class="statusRow compactStatusRow">
-          <span class="label">Current</span>
-          <span class="value">${summary}</span>
-        </div>
-      `,
-    )}
+      <div class="statusRow compactStatusRow">
+        <span class="label">Current</span>
+        <span class="value">${summary}</span>
+      </div>
+    `)}
 
-    ${state.document.active
-      ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state))
-      : ""}
-
-    ${state.document.active
-      ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state))
-      : ""}
+    ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
+    ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
+    ${state.document.active ? renderSection("sound", "SOUND", panelSections.sound, renderSoundSettings(state)) : ""}
   `;
 }
 
 export function bindBrushPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onCanvasTargetChange, onLayerChange } = options;
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onCanvasTargetChange, onLayerChange } = options;
 
   const onChange = (event) => {
     const target = event.target;
@@ -292,25 +284,21 @@ export function bindBrushPanel(panel, store, options = {}) {
         return;
       }
 
-      const decorPresetId = target.dataset.decorPresetSelect;
-      if (typeof decorPresetId === "string") {
+      if (typeof target.dataset.decorPresetSelect === "string") {
         onLayerChange?.(PANEL_LAYERS.DECOR);
-        if (target.value) {
-          onDecorUpdate?.(-1, "preset", target.value);
-        } else {
-          onDecorUpdate?.(-1, "clear-preset", null);
-        }
+        onDecorUpdate?.(-1, target.value ? "preset" : "clear-preset", target.value || null);
         return;
       }
 
-      const entityPresetId = target.dataset.entityPresetSelect;
-      if (typeof entityPresetId === "string") {
+      if (typeof target.dataset.entityPresetSelect === "string") {
         onLayerChange?.(PANEL_LAYERS.ENTITIES);
-        if (target.value) {
-          onEntityUpdate?.(-1, "preset", target.value);
-        } else {
-          onEntityUpdate?.(-1, "clear-preset", null);
-        }
+        onEntityUpdate?.(-1, target.value ? "preset" : "clear-preset", target.value || null);
+        return;
+      }
+
+      if (typeof target.dataset.soundPresetSelect === "string") {
+        onLayerChange?.(PANEL_LAYERS.SOUND);
+        onSoundUpdate?.(-1, target.value ? "preset" : "clear-preset", target.value || null);
         return;
       }
 
@@ -330,17 +318,9 @@ export function bindBrushPanel(panel, store, options = {}) {
     const decorSetting = target.dataset.decorSetting;
     if (decorSetting === "density" || decorSetting === "randomness") {
       onLayerChange?.(PANEL_LAYERS.DECOR);
-      if (decorSetting === "density") {
-        const sliderValue = Number.parseFloat(target.value);
-        const value = Number.isFinite(sliderValue) ? Math.max(0, Math.min(1, sliderValue / 100)) : 0;
-        onDecorUpdate?.(-1, "scatter-setting", { field: "density", value });
-        return;
-      }
-
       const sliderValue = Number.parseFloat(target.value);
       const value = Number.isFinite(sliderValue) ? Math.max(0, Math.min(1, sliderValue / 100)) : 0;
-      onDecorUpdate?.(-1, "scatter-setting", { field: "randomness", value });
-      return;
+      onDecorUpdate?.(-1, "scatter-setting", { field: decorSetting, value });
     }
   };
 
@@ -364,32 +344,32 @@ export function bindBrushPanel(panel, store, options = {}) {
     if (decorActionButton instanceof HTMLButtonElement) {
       const action = decorActionButton.dataset.decorAction;
       onLayerChange?.(PANEL_LAYERS.DECOR);
-      if (action === "clear-preset") {
-        onDecorUpdate?.(-1, "clear-preset", null);
-      }
-      if (action === "toggle-scatter") {
-        onDecorUpdate?.(-1, "toggle-scatter", null);
-      }
+      if (action === "clear-preset") onDecorUpdate?.(-1, "clear-preset", null);
+      if (action === "toggle-scatter") onDecorUpdate?.(-1, "toggle-scatter", null);
       return;
     }
 
     const entityActionButton = target.closest("[data-entity-action]");
     if (entityActionButton instanceof HTMLButtonElement) {
-      const action = entityActionButton.dataset.entityAction;
       onLayerChange?.(PANEL_LAYERS.ENTITIES);
-      if (action === "clear-preset") {
-        onEntityUpdate?.(-1, "clear-preset", null);
-      }
+      if (entityActionButton.dataset.entityAction === "clear-preset") onEntityUpdate?.(-1, "clear-preset", null);
+      return;
+    }
+
+    const soundActionButton = target.closest("[data-sound-action]");
+    if (soundActionButton instanceof HTMLButtonElement) {
+      onLayerChange?.(PANEL_LAYERS.SOUND);
+      if (soundActionButton.dataset.soundAction === "clear-preset") onSoundUpdate?.(-1, "clear-preset", null);
       return;
     }
 
     const layerButton = target.closest("[data-layer]");
     if (layerButton instanceof HTMLButtonElement) {
       const nextLayer = layerButton.dataset.layer;
-      if (nextLayer !== PANEL_LAYERS.TILES && nextLayer !== PANEL_LAYERS.ENTITIES && nextLayer !== PANEL_LAYERS.DECOR) return;
+      if (![PANEL_LAYERS.TILES, PANEL_LAYERS.ENTITIES, PANEL_LAYERS.DECOR, PANEL_LAYERS.SOUND].includes(nextLayer)) return;
       onLayerChange?.(nextLayer);
-      if (nextLayer === PANEL_LAYERS.ENTITIES || nextLayer === PANEL_LAYERS.DECOR) {
-        onCanvasTargetChange?.(nextLayer === PANEL_LAYERS.DECOR ? "decor" : "entity");
+      if (nextLayer !== PANEL_LAYERS.TILES) {
+        onCanvasTargetChange?.(nextLayer === PANEL_LAYERS.DECOR ? "decor" : nextLayer === PANEL_LAYERS.SOUND ? "sound" : "entity");
       }
       return;
     }

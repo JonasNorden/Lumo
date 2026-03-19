@@ -24,8 +24,20 @@ export function createDecorEditEntry(mode, payload) {
   };
 }
 
+export function createSoundEditEntry(mode, payload) {
+  return {
+    kind: "sound",
+    mode,
+    ...payload,
+  };
+}
+
 function cloneDecorEntry(decor) {
   return decor ? { ...decor, params: cloneEntityParams(decor.params) } : decor;
+}
+
+function cloneSoundEntry(sound) {
+  return sound ? { ...sound, params: cloneEntityParams(sound.params) } : sound;
 }
 
 function createBatchEntry(label = "tile-drag") {
@@ -129,6 +141,30 @@ function applyUndoEntry(doc, entry) {
     return false;
   }
 
+  if (entry.kind === "sound") {
+    if (!Array.isArray(doc.sounds)) {
+      doc.sounds = [];
+    }
+
+    if (entry.mode === "create") {
+      doc.sounds.splice(entry.index, 1);
+      return true;
+    }
+
+    if (entry.mode === "delete") {
+      doc.sounds.splice(entry.index, 0, cloneSoundEntry(entry.sound));
+      return true;
+    }
+
+    if (entry.mode === "update") {
+      if (entry.index < 0 || entry.index >= doc.sounds.length) return false;
+      doc.sounds.splice(entry.index, 1, cloneSoundEntry(entry.previousSound));
+      return true;
+    }
+
+    return false;
+  }
+
   doc.tiles.base[entry.index] = entry.previousValue;
   return true;
 }
@@ -161,6 +197,30 @@ function applyRedoEntry(doc, entry) {
     if (entry.mode === "update") {
       if (entry.index < 0 || entry.index >= doc.decor.length) return false;
       doc.decor.splice(entry.index, 1, cloneDecorEntry(entry.nextDecor));
+      return true;
+    }
+
+    return false;
+  }
+
+  if (entry.kind === "sound") {
+    if (!Array.isArray(doc.sounds)) {
+      doc.sounds = [];
+    }
+
+    if (entry.mode === "create") {
+      doc.sounds.splice(entry.index, 0, cloneSoundEntry(entry.sound));
+      return true;
+    }
+
+    if (entry.mode === "delete") {
+      doc.sounds.splice(entry.index, 1);
+      return true;
+    }
+
+    if (entry.mode === "update") {
+      if (entry.index < 0 || entry.index >= doc.sounds.length) return false;
+      doc.sounds.splice(entry.index, 1, cloneSoundEntry(entry.nextSound));
       return true;
     }
 

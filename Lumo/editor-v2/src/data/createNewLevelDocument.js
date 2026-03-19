@@ -34,6 +34,7 @@ export function createNewLevelDocument() {
     },
     decor: [],
     entities: [],
+    sounds: [],
     extra: {},
   });
 }
