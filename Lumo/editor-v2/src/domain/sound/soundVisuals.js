@@ -6,6 +6,13 @@ const SOUND_VISUALS = {
     fill: "rgba(101, 214, 255, 0.20)",
     accent: "#d7f6ff",
   },
+  trigger: {
+    key: "trigger",
+    label: "Trigger",
+    stroke: "#ffb36b",
+    fill: "rgba(255, 179, 107, 0.18)",
+    accent: "#ffe6c4",
+  },
   ambientZone: {
     key: "ambientZone",
     label: "Ambient Zone",
@@ -31,6 +38,7 @@ const SOUND_VISUALS = {
 
 const SOUND_TYPE_ALIASES = new Map([
   ["spot", "spot"],
+  ["trigger", "trigger"],
   ["ambient", "ambientZone"],
   ["ambientzone", "ambientZone"],
   ["ambient_zone", "ambientZone"],
@@ -41,7 +49,7 @@ const SOUND_TYPE_ALIASES = new Map([
   ["music zone", "musicZone"],
 ]);
 
-function normalizeSoundType(type) {
+export function normalizeSoundType(type) {
   const input = String(type || "spot").trim();
   return SOUND_TYPE_ALIASES.get(input.toLowerCase()) || input || "spot";
 }

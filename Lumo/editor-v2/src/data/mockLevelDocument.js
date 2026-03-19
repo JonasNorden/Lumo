@@ -174,6 +174,21 @@ export const mockLevelDocument = {
     },
     {
       id: "sound-2",
+      name: "Bell Trigger",
+      type: "trigger",
+      x: 17,
+      y: 9,
+      visible: true,
+      params: {
+        volume: 0.9,
+        pitch: 1,
+        radius: 3,
+        loop: false,
+        spatial: true,
+      },
+    },
+    {
+      id: "sound-3",
       name: "Ruin Ambience",
       type: "ambientZone",
       x: 22,
@@ -182,12 +197,14 @@ export const mockLevelDocument = {
       params: {
         volume: 0.5,
         pitch: 1,
+        loop: true,
+        spatial: false,
         width: 7,
         height: 5,
       },
     },
     {
-      id: "sound-3",
+      id: "sound-4",
       name: "Music Lift",
       type: "musicZone",
       x: 30,
@@ -195,6 +212,9 @@ export const mockLevelDocument = {
       visible: true,
       params: {
         volume: 0.85,
+        pitch: 1,
+        loop: true,
+        spatial: false,
         width: 6,
         height: 4,
       },

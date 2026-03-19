@@ -18,6 +18,8 @@ import {
 import { paintSingleTile } from "../src/domain/tiles/paintTile.js";
 import { eraseSingleTile } from "../src/domain/tiles/eraseTile.js";
 import { renderBrushPanel } from "../src/ui/brushPanel.js";
+import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
+import { serializeLevelDocument } from "../src/data/exportLevelDocument.js";
 
 function createHistoryState() {
   return {
@@ -29,6 +31,11 @@ function createHistoryState() {
 
 function createDoc() {
   return {
+    meta: {
+      id: "test-doc",
+      name: "Test Doc",
+      version: "2.0.0",
+    },
     dimensions: {
       width: 4,
       height: 4,
@@ -36,6 +43,9 @@ function createDoc() {
     },
     tiles: {
       base: new Array(16).fill(0),
+    },
+    backgrounds: {
+      layers: [],
     },
     entities: [],
     decor: [],
@@ -201,6 +211,40 @@ function runSoundRegressionChecks() {
   assert.equal(doc.sounds[0].x, 1, "undo should restore moved sounds");
   redoTileEdit(doc, history);
   assert.equal(doc.sounds.length, 0, "redo should reapply sound deletion");
+
+  const normalized = validateLevelDocument({
+    ...createDoc(),
+    sounds: [
+      {
+        id: "sound-trigger",
+        name: "Trigger Alias",
+        type: "trigger",
+        x: 1,
+        y: 1,
+        visible: true,
+        params: { volume: 0.8 },
+      },
+      {
+        id: "sound-ambient",
+        name: "Ambient Alias",
+        type: "ambient zone",
+        x: 0,
+        y: 0,
+        visible: true,
+        params: { width: 5, height: 2 },
+      },
+    ],
+  });
+
+  assert.equal(normalized.sounds[0].type, "trigger", "validation should preserve trigger sounds as a primary sound type");
+  assert.equal(normalized.sounds[0].params.loop, false, "trigger sounds should receive loop defaults during validation");
+  assert.equal(normalized.sounds[0].params.spatial, true, "trigger sounds should preserve spatial defaults during validation");
+  assert.equal(normalized.sounds[1].type, "ambientZone", "validation should normalize ambient zone aliases");
+  assert.equal(normalized.sounds[1].params.loop, true, "ambient zones should default to looping");
+  assert.equal(normalized.sounds[1].params.spatial, false, "ambient zones should default to non-spatial playback");
+
+  const exported = JSON.parse(serializeLevelDocument(normalized));
+  assert.equal(exported.sounds[1].type, "ambientZone", "sound export should retain ambient zones as a normal authoring type");
 }
 
 function runUiRegressionChecks() {
@@ -236,6 +280,10 @@ function runUiRegressionChecks() {
 
   renderBrushPanel(panel, baseState);
   assert.equal(panel.innerHTML.includes("Alt/Option + Click places"), true, "entity placement hint should mention Alt/Option + Click");
+  assert.equal(panel.innerHTML.includes("Spot Sound"), true, "sound selector should expose spot sounds");
+  assert.equal(panel.innerHTML.includes("Trigger Sound"), true, "sound selector should expose trigger sounds");
+  assert.equal(panel.innerHTML.includes("Ambient Zone"), true, "sound selector should expose ambient zones");
+  assert.equal(panel.innerHTML.includes("Music Zone"), true, "sound selector should expose music zones");
 
   const decorState = {
     ...baseState,

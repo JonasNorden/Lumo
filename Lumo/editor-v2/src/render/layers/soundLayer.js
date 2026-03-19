@@ -1,6 +1,10 @@
 import { getSelectedSoundIndices, isSoundSelected } from "../../domain/sound/selection.js";
 import { getSoundVisual } from "../../domain/sound/soundVisuals.js";
 
+function isZoneSoundType(soundType) {
+  return soundType === "ambientZone" || soundType === "musicZone";
+}
+
 function clampZoneSize(value, fallback = 1) {
   const parsed = Number.parseFloat(value);
   if (!Number.isFinite(parsed)) return fallback;
@@ -46,12 +50,29 @@ function drawFocusFrame(ctx, rect, color, fill, lineWidth, dashed = false) {
   ctx.restore();
 }
 
+function drawRoundedRectPath(ctx, rect, radius) {
+  const nextRadius = Math.max(0, Math.min(radius, rect.width * 0.5, rect.height * 0.5));
+  ctx.beginPath();
+  ctx.moveTo(rect.x + nextRadius, rect.y);
+  ctx.lineTo(rect.x + rect.width - nextRadius, rect.y);
+  ctx.quadraticCurveTo(rect.x + rect.width, rect.y, rect.x + rect.width, rect.y + nextRadius);
+  ctx.lineTo(rect.x + rect.width, rect.y + rect.height - nextRadius);
+  ctx.quadraticCurveTo(rect.x + rect.width, rect.y + rect.height, rect.x + rect.width - nextRadius, rect.y + rect.height);
+  ctx.lineTo(rect.x + nextRadius, rect.y + rect.height);
+  ctx.quadraticCurveTo(rect.x, rect.y + rect.height, rect.x, rect.y + rect.height - nextRadius);
+  ctx.lineTo(rect.x, rect.y + nextRadius);
+  ctx.quadraticCurveTo(rect.x, rect.y, rect.x + nextRadius, rect.y);
+  ctx.closePath();
+}
+
 function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
   const rect = getSoundScreenRect(sound, tileSize, viewport);
   const visual = getSoundVisual(sound.type);
   const stroke = options.preview ? "#ffd68a" : options.isSelected ? "#ffb347" : options.isHovered ? "#7de7ff" : visual.stroke;
   const fill = options.preview ? "rgba(255, 214, 138, 0.16)" : options.isSelected ? "rgba(255, 179, 71, 0.16)" : visual.fill;
   const outlineWidth = options.preview ? 1.8 : options.isSelected ? 1.8 : 1.25;
+  const isAmbientZone = sound.type === "ambientZone";
+  const cornerRadius = isAmbientZone ? 14 : 10;
 
   if (options.isHovered && !options.preview) {
     drawFocusFrame(ctx, { x: rect.x - 3, y: rect.y - 3, width: rect.width + 6, height: rect.height + 6 }, "rgba(125, 231, 255, 0.45)", "rgba(125, 231, 255, 0.08)", 1.1);
@@ -62,12 +83,54 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
 
   ctx.save();
   ctx.globalAlpha *= options.alpha ?? 1;
-  ctx.fillStyle = fill;
+  drawRoundedRectPath(ctx, rect, cornerRadius);
+
+  if (isAmbientZone) {
+    const gradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
+    gradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.12)" : "rgba(126, 240, 199, 0.24)");
+    gradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.05)" : "rgba(126, 240, 199, 0.10)");
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    const bandCount = Math.max(2, Math.min(4, Math.floor(rect.height / 24)));
+    ctx.strokeStyle = options.preview ? "rgba(255, 225, 173, 0.55)" : "rgba(223, 255, 245, 0.42)";
+    ctx.lineWidth = 1;
+    for (let bandIndex = 0; bandIndex < bandCount; bandIndex += 1) {
+      const ratio = (bandIndex + 1) / (bandCount + 1);
+      const bandY = rect.y + rect.height * ratio;
+      ctx.beginPath();
+      ctx.moveTo(rect.x + 12, bandY);
+      ctx.bezierCurveTo(
+        rect.x + rect.width * 0.28,
+        bandY - 6,
+        rect.x + rect.width * 0.72,
+        bandY + 6,
+        rect.x + rect.width - 12,
+        bandY,
+      );
+      ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle = fill;
+    ctx.fill();
+
+    ctx.save();
+    ctx.strokeStyle = options.preview ? "rgba(255, 225, 173, 0.34)" : "rgba(243, 231, 255, 0.22)";
+    ctx.lineWidth = 1;
+    const stripeSpacing = 14;
+    ctx.beginPath();
+    for (let stripeX = rect.x - rect.height; stripeX < rect.x + rect.width; stripeX += stripeSpacing) {
+      ctx.moveTo(stripeX, rect.y + rect.height);
+      ctx.lineTo(stripeX + rect.height, rect.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   ctx.strokeStyle = stroke;
   ctx.lineWidth = outlineWidth;
   if (options.preview) ctx.setLineDash([8, 5]);
-  ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-  ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, Math.max(0, rect.width - 1), Math.max(0, rect.height - 1));
+  ctx.stroke();
   ctx.setLineDash([]);
 
   ctx.fillStyle = options.preview ? "#ffe1ad" : visual.accent;
@@ -80,6 +143,7 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
   const point = getSoundScreenPoint(sound, tileSize, viewport);
   const visual = getSoundVisual(sound.type);
   const baseRadius = 6;
+  const isTrigger = sound.type === "trigger";
   const stroke = options.preview ? "#ffd68a" : options.isSelected ? "#ffb347" : options.isHovered ? "#7de7ff" : visual.stroke;
   const fill = options.preview ? "rgba(255, 214, 138, 0.20)" : visual.fill;
   const radiusTiles = clampZoneSize(sound?.params?.radius, 0);
@@ -103,7 +167,15 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
 
   if (options.isHovered && !options.preview) {
     ctx.beginPath();
-    ctx.arc(point.x, point.y, baseRadius + 6, 0, Math.PI * 2);
+    if (isTrigger) {
+      ctx.moveTo(point.x, point.y - (baseRadius + 8));
+      ctx.lineTo(point.x + (baseRadius + 8), point.y);
+      ctx.lineTo(point.x, point.y + (baseRadius + 8));
+      ctx.lineTo(point.x - (baseRadius + 8), point.y);
+      ctx.closePath();
+    } else {
+      ctx.arc(point.x, point.y, baseRadius + 6, 0, Math.PI * 2);
+    }
     ctx.fillStyle = "rgba(125, 231, 255, 0.10)";
     ctx.fill();
     ctx.strokeStyle = "rgba(125, 231, 255, 0.44)";
@@ -113,7 +185,15 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
 
   if (options.isSelected) {
     ctx.beginPath();
-    ctx.arc(point.x, point.y, baseRadius + 8, 0, Math.PI * 2);
+    if (isTrigger) {
+      ctx.moveTo(point.x, point.y - (baseRadius + 10));
+      ctx.lineTo(point.x + (baseRadius + 10), point.y);
+      ctx.lineTo(point.x, point.y + (baseRadius + 10));
+      ctx.lineTo(point.x - (baseRadius + 10), point.y);
+      ctx.closePath();
+    } else {
+      ctx.arc(point.x, point.y, baseRadius + 8, 0, Math.PI * 2);
+    }
     ctx.fillStyle = options.preview ? "rgba(255, 214, 138, 0.10)" : "rgba(255, 179, 71, 0.14)";
     ctx.fill();
     ctx.strokeStyle = options.preview ? "rgba(255, 214, 138, 0.75)" : "rgba(255, 179, 71, 0.70)";
@@ -124,7 +204,15 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
   }
 
   ctx.beginPath();
-  ctx.arc(point.x, point.y, baseRadius, 0, Math.PI * 2);
+  if (isTrigger) {
+    ctx.moveTo(point.x, point.y - baseRadius);
+    ctx.lineTo(point.x + baseRadius, point.y);
+    ctx.lineTo(point.x, point.y + baseRadius);
+    ctx.lineTo(point.x - baseRadius, point.y);
+    ctx.closePath();
+  } else {
+    ctx.arc(point.x, point.y, baseRadius, 0, Math.PI * 2);
+  }
   ctx.fillStyle = fill;
   ctx.fill();
   ctx.strokeStyle = stroke;
@@ -134,10 +222,17 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
   ctx.setLineDash([]);
 
   ctx.beginPath();
-  ctx.moveTo(point.x - 4, point.y);
-  ctx.lineTo(point.x + 4, point.y);
-  ctx.moveTo(point.x, point.y - 4);
-  ctx.lineTo(point.x, point.y + 4);
+  if (isTrigger) {
+    ctx.moveTo(point.x - 3.5, point.y + 3.5);
+    ctx.lineTo(point.x + 3.5, point.y - 3.5);
+    ctx.moveTo(point.x - 3.5, point.y - 1);
+    ctx.lineTo(point.x + 1, point.y - 5.5);
+  } else {
+    ctx.moveTo(point.x - 4, point.y);
+    ctx.lineTo(point.x + 4, point.y);
+    ctx.moveTo(point.x, point.y - 4);
+    ctx.lineTo(point.x, point.y + 4);
+  }
   ctx.strokeStyle = options.preview ? "#ffe1ad" : visual.accent;
   ctx.lineWidth = 1.4;
   ctx.stroke();
@@ -145,7 +240,7 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
 }
 
 function drawSoundMarker(ctx, sound, viewport, tileSize, options = {}) {
-  if (sound.type === "ambientZone" || sound.type === "musicZone") {
+  if (isZoneSoundType(sound.type)) {
     drawZoneSound(ctx, sound, viewport, tileSize, options);
     return;
   }
@@ -160,7 +255,7 @@ export function findSoundAtCanvasPoint(doc, viewport, pointX, pointY, radius = 3
     const sound = sounds[i];
     if (!sound?.visible) continue;
 
-    if (sound.type === "ambientZone" || sound.type === "musicZone") {
+    if (isZoneSoundType(sound.type)) {
       const rect = getSoundScreenRect(sound, tileSize, viewport);
       if (
         pointX >= rect.x - radius &&

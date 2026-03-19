@@ -2,6 +2,7 @@ import { getPrimarySelectedEntityIndex, getSelectedEntityIndices } from "../doma
 import { getPrimarySelectedDecorIndex, getSelectedDecorIndices } from "../domain/decor/selection.js";
 import { getPrimarySelectedSoundIndex, getSelectedSoundIndices } from "../domain/sound/selection.js";
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
+import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
 
 function escapeHtml(value) {
   return String(value)
@@ -92,6 +93,20 @@ function renderTextField(prefix, fieldKey, label, value, selectedIndex, classNam
     <label class="${classes}">
       <span class="label">${escapeHtml(label)}</span>
       <input type="text" value="${escapeHtml(value)}" data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}" />
+    </label>
+  `;
+}
+
+function renderSelectField(prefix, fieldKey, label, value, selectedIndex, options, className = "") {
+  const classes = ["fieldRow", "fieldRowCompact", "selectionInlineField", className].filter(Boolean).join(" ");
+  return `
+    <label class="${classes}">
+      <span class="label">${escapeHtml(label)}</span>
+      <select data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}">
+        ${options
+          .map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(option.label)}</option>`)
+          .join("")}
+      </select>
     </label>
   `;
 }
@@ -189,9 +204,10 @@ function renderDecorEditor(decor, selectedDecorIndex) {
 }
 
 function renderSoundEditor(sound, selectedSoundIndex) {
+  const soundTypeOptions = SOUND_PRESETS.map((preset) => ({ value: preset.type, label: preset.defaultName }));
   return renderSelectionFields([
     renderTextField("sound", "name", "Name", sound.name, selectedSoundIndex, "selectionFieldName"),
-    renderTextField("sound", "type", "Type", sound.type, selectedSoundIndex, "selectionFieldType"),
+    renderSelectField("sound", "type", "Type", sound.type, selectedSoundIndex, soundTypeOptions, "selectionFieldType"),
     renderNumberField("sound", "x", "X", sound.x, selectedSoundIndex),
     renderNumberField("sound", "y", "Y", sound.y, selectedSoundIndex),
     renderCheckboxField("sound", "visible", "Visible", sound.visible, selectedSoundIndex, "selectionFieldToggle"),
@@ -339,7 +355,7 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
 
   const onChange = (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLInputElement)) return;
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
 
     if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) return;
     if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) return;
@@ -348,7 +364,7 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
 
   const onInput = (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLInputElement)) return;
+    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
 
     if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) return;
     if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) return;
