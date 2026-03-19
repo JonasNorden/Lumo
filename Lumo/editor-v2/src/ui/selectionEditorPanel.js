@@ -81,6 +81,36 @@ function formatParamLabel(key) {
     .replace(/^./, (char) => char.toUpperCase());
 }
 
+function renderTextField(prefix, fieldKey, label, value, selectedIndex, className = "") {
+  const classes = ["fieldRow", "fieldRowCompact", "selectionInlineField", className].filter(Boolean).join(" ");
+  return `
+    <label class="${classes}">
+      <span class="label">${escapeHtml(label)}</span>
+      <input type="text" value="${escapeHtml(value)}" data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}" />
+    </label>
+  `;
+}
+
+function renderNumberField(prefix, fieldKey, label, value, selectedIndex, className = "") {
+  const classes = ["fieldRow", "fieldRowCompact", "selectionInlineField", "selectionCoordField", className].filter(Boolean).join(" ");
+  return `
+    <label class="${classes}">
+      <span class="label">${escapeHtml(label)}</span>
+      <input type="number" step="1" value="${value}" data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}" />
+    </label>
+  `;
+}
+
+function renderCheckboxField(prefix, fieldKey, label, value, selectedIndex, className = "") {
+  const classes = ["fieldRow", "compactInline", "compactBooleanField", "selectionInlineField", "selectionInlineCheckbox", className].filter(Boolean).join(" ");
+  return `
+    <label class="${classes}">
+      <span class="label">${escapeHtml(label)}</span>
+      <input type="checkbox" ${value ? "checked" : ""} data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}" />
+    </label>
+  `;
+}
+
 function renderParamField(prefix, paramKey, paramValue, selectedIndex) {
   const inputType = getEntityParamInputType(paramValue);
   const escapedKey = escapeHtml(paramKey);
@@ -88,7 +118,7 @@ function renderParamField(prefix, paramKey, paramValue, selectedIndex) {
 
   if (inputType === "boolean") {
     return `
-      <label class="fieldRow compactInline entityParamBooleanRow selectionInlineField selectionInlineCheckbox selectionParamField selectionParamCheckbox">
+      <label class="fieldRow compactInline compactBooleanField selectionInlineField selectionInlineCheckbox selectionParamField selectionParamCheckbox">
         <span class="label">${label}</span>
         <input
           type="checkbox"
@@ -122,86 +152,50 @@ function renderParamFields(prefix, params, selectedIndex) {
     .join("");
 }
 
-function renderEditorRows(baseFieldsMarkup, paramFieldsMarkup) {
+function renderSelectionFields(fieldMarkup) {
   return `
-    <div class="selectionEditorRows">
-      <div class="selectionEditorRow selectionEditorBaseRow">${baseFieldsMarkup}</div>
-      ${paramFieldsMarkup ? `<div class="selectionEditorRow selectionEditorParamsRow">${paramFieldsMarkup}</div>` : ""}
+    <div class="selectionInspectorCard compactSelectionCard">
+      <div class="selectionEditorFlow">${fieldMarkup}</div>
     </div>
   `;
 }
 
 function renderEntityEditor(entity, selectedEntityIndex) {
-  const baseFieldsMarkup = `
-    <label class="fieldRow fieldRowCompact selectionFieldName selectionInlineField">
-      <span class="label">Name</span>
-      <input type="text" value="${escapeHtml(entity.name)}" data-entity-field="name" data-entity-index="${selectedEntityIndex}" />
-    </label>
+  const fieldMarkup = [
+    renderTextField("entity", "name", "Name", entity.name, selectedEntityIndex, "selectionFieldName"),
+    renderTextField("entity", "type", "Type", entity.type, selectedEntityIndex, "selectionFieldType"),
+    renderNumberField("entity", "x", "X", entity.x, selectedEntityIndex),
+    renderNumberField("entity", "y", "Y", entity.y, selectedEntityIndex),
+    renderCheckboxField("entity", "visible", "Visible", entity.visible, selectedEntityIndex, "selectionFieldToggle"),
+    renderParamFields("entity", entity?.params, selectedEntityIndex),
+  ].join("");
 
-    <label class="fieldRow fieldRowCompact selectionFieldType selectionInlineField">
-      <span class="label">Type</span>
-      <input type="text" value="${escapeHtml(entity.type)}" data-entity-field="type" data-entity-index="${selectedEntityIndex}" />
-    </label>
-
-    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
-      <span class="label">X</span>
-      <input type="number" step="1" value="${entity.x}" data-entity-field="x" data-entity-index="${selectedEntityIndex}" />
-    </label>
-
-    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
-      <span class="label">Y</span>
-      <input type="number" step="1" value="${entity.y}" data-entity-field="y" data-entity-index="${selectedEntityIndex}" />
-    </label>
-
-    <label class="fieldRow compactInline compactBooleanField selectionFieldToggle selectionInlineCheckbox">
-      <span class="label">Visible</span>
-      <input type="checkbox" ${entity.visible ? "checked" : ""} data-entity-field="visible" data-entity-index="${selectedEntityIndex}" />
-    </label>
-  `;
-
-  return `
-    <div class="selectionInspectorCard compactSelectionCard">
-      ${renderEditorRows(baseFieldsMarkup, renderParamFields("entity", entity?.params, selectedEntityIndex))}
-    </div>
-  `;
+  return renderSelectionFields(fieldMarkup);
 }
 
 function renderDecorEditor(decor, selectedDecorIndex) {
-  const baseFieldsMarkup = `
-    <label class="fieldRow fieldRowCompact selectionFieldName selectionInlineField">
-      <span class="label">Name</span>
-      <input type="text" value="${escapeHtml(decor.name)}" data-decor-field="name" data-decor-index="${selectedDecorIndex}" />
-    </label>
+  const fieldMarkup = [
+    renderTextField("decor", "name", "Name", decor.name, selectedDecorIndex, "selectionFieldName"),
+    renderTextField("decor", "type", "Type", decor.type, selectedDecorIndex, "selectionFieldType"),
+    renderNumberField("decor", "x", "X", decor.x, selectedDecorIndex),
+    renderNumberField("decor", "y", "Y", decor.y, selectedDecorIndex),
+    renderCheckboxField("decor", "visible", "Visible", decor.visible, selectedDecorIndex, "selectionFieldToggle"),
+    renderTextField("decor", "variant", "Variant", decor.variant, selectedDecorIndex, "selectionFieldVariant selectionParamField"),
+    renderParamFields("decor", decor?.params, selectedDecorIndex),
+  ].join("");
 
-    <label class="fieldRow fieldRowCompact selectionFieldType selectionInlineField">
-      <span class="label">Type</span>
-      <input type="text" value="${escapeHtml(decor.type)}" data-decor-field="type" data-decor-index="${selectedDecorIndex}" />
-    </label>
+  return renderSelectionFields(fieldMarkup);
+}
 
-    <label class="fieldRow fieldRowCompact selectionFieldVariant selectionInlineField">
-      <span class="label">Variant</span>
-      <input type="text" value="${escapeHtml(decor.variant)}" data-decor-field="variant" data-decor-index="${selectedDecorIndex}" />
-    </label>
-
-    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
-      <span class="label">X</span>
-      <input type="number" step="1" value="${decor.x}" data-decor-field="x" data-decor-index="${selectedDecorIndex}" />
-    </label>
-
-    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
-      <span class="label">Y</span>
-      <input type="number" step="1" value="${decor.y}" data-decor-field="y" data-decor-index="${selectedDecorIndex}" />
-    </label>
-
-    <label class="fieldRow compactInline compactBooleanField selectionFieldToggle selectionInlineCheckbox">
-      <span class="label">Visible</span>
-      <input type="checkbox" ${decor.visible ? "checked" : ""} data-decor-field="visible" data-decor-index="${selectedDecorIndex}" />
-    </label>
-  `;
-
+function renderMultiSelectionState(kind, count, primaryName) {
+  const noun = kind === "decor" ? (count === 1 ? "decor item" : "decor items") : count === 1 ? "entity" : "entities";
   return `
     <div class="selectionInspectorCard compactSelectionCard">
-      ${renderEditorRows(baseFieldsMarkup, renderParamFields("decor", decor?.params, selectedDecorIndex))}
+      <div class="selectionEditorPlaceholder">
+        <span class="selectionEditorPlaceholderCount">${count} ${noun} selected</span>
+        <span class="selectionEditorPlaceholderDetail">Batch editing is not available yet.</span>
+        ${primaryName ? `<span class="selectionEditorPlaceholderDetail">Primary: ${escapeHtml(primaryName)}</span>` : ""}
+      </div>
     </div>
   `;
 }
@@ -216,45 +210,37 @@ function renderSelectionEditor(state, emptyMessage) {
   const selectedDecor = Number.isInteger(selectedDecorIndex) ? active.decor?.[selectedDecorIndex] : null;
 
   if (selectedEntityIndices.length > 1) {
-    return `
-      <div class="selectionInspectorCard">
-        <div class="selectionSummaryGrid">
-          <div class="infoGroup compact">
-            <div class="label">Selection</div>
-            <div class="value">${selectedEntityIndices.length} entities</div>
-          </div>
-          <div class="infoGroup compact">
-            <div class="label">Primary</div>
-            <div class="value">${escapeHtml(selectedEntity?.name || "Entity")}</div>
-          </div>
-        </div>
-        <div class="mutedValue">Multi-select is active. Drag, duplicate, and delete continue to work from canvas and shortcuts.</div>
-      </div>
-    `;
+    return {
+      markup: renderMultiSelectionState("entity", selectedEntityIndices.length, selectedEntity?.name || "Entity"),
+      isEmpty: false,
+    };
   }
 
   if (selectedDecorIndices.length > 1) {
-    return `
-      <div class="selectionInspectorCard">
-        <div class="selectionSummaryGrid">
-          <div class="infoGroup compact">
-            <div class="label">Selection</div>
-            <div class="value">${selectedDecorIndices.length} decor items</div>
-          </div>
-          <div class="infoGroup compact">
-            <div class="label">Primary</div>
-            <div class="value">${escapeHtml(selectedDecor?.name || "Decor")}</div>
-          </div>
-        </div>
-        <div class="mutedValue">Multi-select is active. Drag, duplicate, and delete continue to work from canvas and shortcuts.</div>
-      </div>
-    `;
+    return {
+      markup: renderMultiSelectionState("decor", selectedDecorIndices.length, selectedDecor?.name || "Decor"),
+      isEmpty: false,
+    };
   }
 
-  if (selectedEntity) return renderEntityEditor(selectedEntity, selectedEntityIndex);
-  if (selectedDecor) return renderDecorEditor(selectedDecor, selectedDecorIndex);
+  if (selectedEntity) {
+    return {
+      markup: renderEntityEditor(selectedEntity, selectedEntityIndex),
+      isEmpty: false,
+    };
+  }
 
-  return emptyMessage ? `<div class="selectionEditorEmptyState">${escapeHtml(emptyMessage)}</div>` : "";
+  if (selectedDecor) {
+    return {
+      markup: renderDecorEditor(selectedDecor, selectedDecorIndex),
+      isEmpty: false,
+    };
+  }
+
+  return {
+    markup: emptyMessage ? `<div class="selectionEditorEmptyState">${escapeHtml(emptyMessage)}</div>` : "",
+    isEmpty: true,
+  };
 }
 
 function applyParamChange(target, prefix, onUpdate) {
@@ -300,8 +286,8 @@ export function renderSelectionEditorPanel(panel, state, options = {}) {
     return;
   }
 
-  const markup = renderSelectionEditor(state, emptyMessage);
-  setPanelMarkup(panel, markup, !markup);
+  const { markup, isEmpty } = renderSelectionEditor(state, emptyMessage);
+  setPanelMarkup(panel, markup, isEmpty);
 }
 
 export function bindSelectionEditorPanel(panel, store, options = {}) {
