@@ -637,7 +637,7 @@ select {
 
 .selectionInspectorCard {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .compactSelectionCard {
@@ -647,7 +647,7 @@ select {
 .compactSelectionHeader {
   align-items: start;
   gap: 8px;
-  padding-bottom: 6px;
+  padding-bottom: 4px;
   border-bottom: 1px solid rgba(47, 58, 86, 0.7);
 }
 
@@ -662,24 +662,25 @@ select {
 .inspectorGroupGrid,
 .entityParamsGrid {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .selectionEditorGrid {
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  align-items: end;
+  grid-template-columns: repeat(12, minmax(0, max-content));
+  align-items: center;
+  justify-content: start;
 }
 
 .selectionEditorGridEntity .selectionFieldName {
-  grid-column: span 4;
+  grid-column: span 3;
 }
 
 .selectionEditorGridEntity .selectionFieldType {
-  grid-column: span 3;
+  grid-column: span 2;
 }
 
 .selectionEditorGridEntity .compactPositionGrid {
-  grid-column: span 3;
+  grid-column: span 2;
 }
 
 .selectionEditorGridEntity .selectionFieldToggle {
@@ -691,7 +692,7 @@ select {
 }
 
 .selectionEditorGridDecor .selectionFieldType {
-  grid-column: span 3;
+  grid-column: span 2;
 }
 
 .selectionEditorGridDecor .selectionFieldVariant {
@@ -712,35 +713,40 @@ select {
 }
 
 .compactPositionGrid {
-  gap: 6px;
+  grid-template-columns: repeat(2, max-content);
+  gap: 4px;
+  align-items: center;
 }
 
 .entityParamsGrid {
-  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
-  gap: 6px 10px;
+  grid-template-columns: repeat(auto-fit, minmax(0, max-content));
+  gap: 4px 8px;
+  align-items: center;
+  justify-content: start;
 }
 
 .entityParamBooleanRow,
 .compactBooleanField {
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 
 .compactBooleanField {
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid #24314d;
-  border-radius: 8px;
-  background: rgba(11, 18, 31, 0.84);
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .compactSectionHeader {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 6px;
+  justify-content: flex-start;
+  gap: 6px;
+  margin-bottom: 0;
+  flex: 0 0 auto;
 }
 
 .sectionMeta {
@@ -752,8 +758,70 @@ select {
 
 .entityParamsSection {
   margin-top: 0;
-  padding-top: 6px;
+  padding-top: 4px;
   border-top: 1px solid rgba(47, 58, 86, 0.7);
+}
+
+.compactInlineSection {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.compactEmptyParams {
+  line-height: 1.2;
+  padding-top: 1px;
+}
+
+.selectionInlineField {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 0;
+  width: auto;
+  min-width: 0;
+}
+
+.selectionInlineField .label {
+  flex: 0 0 auto;
+}
+
+.selectionInlineField input,
+.selectionInlineField select {
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 4px 7px;
+  min-height: 26px;
+}
+
+.selectionFieldName input {
+  min-width: 160px;
+  max-width: 220px;
+}
+
+.selectionFieldType input,
+.selectionFieldVariant input,
+.selectionParamField input {
+  min-width: 96px;
+  max-width: 150px;
+}
+
+.selectionCoordField input {
+  width: 58px;
+  min-width: 58px;
+  max-width: 58px;
+  text-align: right;
+}
+
+.selectionInlineCheckbox {
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.selectionInlineCheckbox input[type="checkbox"] {
+  margin: 0;
 }
 
 .infoGroup {
@@ -804,7 +872,7 @@ kbd {
 
 .bottomPanel {
   min-height: 0;
-  padding: 10px 12px 12px;
+  padding: 8px 10px 10px;
   overflow-x: hidden;
   overflow-y: auto;
   border-top: 1px solid #1d263c;
@@ -867,7 +935,7 @@ kbd {
   }
 
   .selectionEditorGrid {
-    grid-template-columns: repeat(8, minmax(0, 1fr));
+    grid-template-columns: repeat(8, minmax(0, max-content));
   }
 
   .selectionEditorGridEntity .selectionFieldName,
@@ -882,10 +950,32 @@ kbd {
 
   .selectionEditorGridEntity .selectionFieldToggle,
   .selectionEditorGridDecor .selectionFieldToggle {
-    grid-column: span 8;
+    grid-column: span 2;
   }
 
   .topBarMenu {
     width: min(340px, 48vw);
+  }
+}
+
+@media (max-width: 900px) {
+  .selectionEditorGrid {
+    grid-template-columns: repeat(2, minmax(0, max-content));
+  }
+
+  .selectionEditorGridEntity .selectionFieldName,
+  .selectionEditorGridDecor .selectionFieldName,
+  .selectionEditorGridEntity .selectionFieldType,
+  .selectionEditorGridDecor .selectionFieldType,
+  .selectionEditorGridDecor .selectionFieldVariant,
+  .selectionEditorGridEntity .compactPositionGrid,
+  .selectionEditorGridDecor .compactPositionGrid,
+  .selectionEditorGridEntity .selectionFieldToggle,
+  .selectionEditorGridDecor .selectionFieldToggle {
+    grid-column: span 1;
+  }
+
+  .compactInlineSection {
+    gap: 6px;
   }
 }
