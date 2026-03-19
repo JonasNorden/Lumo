@@ -80,6 +80,9 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
   if (options.isSelected) {
     drawFocusFrame(ctx, { x: rect.x - 4, y: rect.y - 4, width: rect.width + 8, height: rect.height + 8 }, options.preview ? "rgba(255, 214, 138, 0.72)" : "rgba(255, 179, 71, 0.7)", options.preview ? "rgba(255, 214, 138, 0.10)" : "rgba(255, 179, 71, 0.10)", 1.2, options.preview);
   }
+  if (options.isScanActive && !options.preview) {
+    drawFocusFrame(ctx, { x: rect.x - 6, y: rect.y - 6, width: rect.width + 12, height: rect.height + 12 }, "rgba(136, 232, 255, 0.78)", "rgba(136, 232, 255, 0.10)", 1.35, true);
+  }
 
   ctx.save();
   ctx.globalAlpha *= options.alpha ?? 1;
@@ -183,6 +186,26 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
     ctx.stroke();
   }
 
+  if (options.isScanActive && !options.preview) {
+    ctx.beginPath();
+    if (isTrigger) {
+      ctx.moveTo(point.x, point.y - (baseRadius + 12));
+      ctx.lineTo(point.x + (baseRadius + 12), point.y);
+      ctx.lineTo(point.x, point.y + (baseRadius + 12));
+      ctx.lineTo(point.x - (baseRadius + 12), point.y);
+      ctx.closePath();
+    } else {
+      ctx.arc(point.x, point.y, baseRadius + 10, 0, Math.PI * 2);
+    }
+    ctx.fillStyle = "rgba(136, 232, 255, 0.10)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(136, 232, 255, 0.78)";
+    ctx.lineWidth = 1.3;
+    ctx.setLineDash([4, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   if (options.isSelected) {
     ctx.beginPath();
     if (isTrigger) {
@@ -280,10 +303,11 @@ export function findSoundAtCanvasPoint(doc, viewport, pointX, pointY, radius = 3
   return -1;
 }
 
-export function renderSounds(ctx, doc, viewport, interaction) {
+export function renderSounds(ctx, doc, viewport, interaction, scan = null) {
   const sounds = doc.sounds || [];
   const tileSize = doc.dimensions.tileSize;
   const draggedSelection = new Set(interaction.soundDrag?.active ? getSelectedSoundIndices(interaction) : []);
+  const activeScanIds = new Set(scan?.activeSoundIds || []);
 
   for (let i = 0; i < sounds.length; i += 1) {
     const sound = sounds[i];
@@ -294,6 +318,7 @@ export function renderSounds(ctx, doc, viewport, interaction) {
       isSelected: isSoundSelected(interaction, i),
       isHovered: interaction.hoveredSoundIndex === i,
       alpha: 1,
+      isScanActive: activeScanIds.has(sound.id),
     });
   }
 }

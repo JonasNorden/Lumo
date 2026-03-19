@@ -562,6 +562,48 @@ select {
   grid-template-columns: minmax(0, 1fr);
 }
 
+
+.compactActionRowDouble {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.scanFieldGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+}
+
+.scanFieldGridFull {
+  grid-column: 1 / -1;
+}
+
+.scanDebugList {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.scanDebugItem,
+.scanDebugEmpty {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(42, 56, 86, 0.92);
+  background: rgba(15, 23, 40, 0.72);
+}
+
+.scanDebugTitle {
+  display: block;
+  color: #e8f2ff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scanDebugMeta,
+.scanDebugEmpty {
+  display: block;
+  color: #8fa5d3;
+  font-size: 11px;
+}
+
 .compactSubsection {
   margin-top: 10px;
   padding-top: 10px;
