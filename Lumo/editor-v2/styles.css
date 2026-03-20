@@ -283,8 +283,8 @@ select {
 
 .minimapShell {
   position: absolute;
+  top: 20px;
   right: 20px;
-  bottom: 20px;
   width: 180px;
   height: 130px;
   border-radius: 10px;
@@ -875,6 +875,15 @@ select {
   align-items: center;
   gap: 4px;
   min-width: 0;
+}
+
+.selectionSoundSourceCluster {
+  gap: 4px;
+}
+
+.selectionSoundSmartActions {
+  flex-wrap: nowrap;
+  gap: 3px;
 }
 
 .selectionActionPill {

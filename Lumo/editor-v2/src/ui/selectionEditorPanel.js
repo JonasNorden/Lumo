@@ -263,14 +263,19 @@ function renderReadOnlyField(label, value, className = "") {
   `;
 }
 
+function renderSoundSmartSelectActions(selectedSoundIndex) {
+  return renderFieldActions([
+    renderSmartSelectPill(selectedSoundIndex, "same-type", "same type"),
+    renderSmartSelectPill(selectedSoundIndex, "same-source", "same source"),
+    renderSmartSelectPill(selectedSoundIndex, "same-type-source", "type + source"),
+  ], "selectionSoundSmartActions");
+}
+
 function renderSoundTypeField(sound, selectedSoundIndex) {
   const soundTypeOptions = SOUND_PRESETS.map((preset) => ({ value: preset.type, label: preset.defaultName }));
   return `
     <div class="selectionInlineCluster selectionSoundTypeCluster">
       ${renderSelectField("sound", "type", "Type", sound.type, selectedSoundIndex, soundTypeOptions, "selectionFieldType")}
-      ${renderFieldActions([
-        renderSmartSelectPill(selectedSoundIndex, "same-type", "same type"),
-      ])}
     </div>
   `;
 }
@@ -319,10 +324,7 @@ function renderSoundSourceField(sound, selectedSoundIndex) {
   return `
     <div class="selectionInlineCluster selectionSoundSourceCluster">
       ${fieldMarkup}
-      ${renderFieldActions([
-        renderSmartSelectPill(selectedSoundIndex, "same-source", "same source"),
-        renderSmartSelectPill(selectedSoundIndex, "same-type-source", "type + source"),
-      ])}
+      ${renderSoundSmartSelectActions(selectedSoundIndex)}
     </div>
   `;
 }
@@ -348,9 +350,6 @@ function renderBatchSoundTypeSummary(selectedSounds, selectedSoundIndex) {
   return `
     <div class="selectionInlineCluster selectionSoundTypeCluster">
       ${renderReadOnlyField("Type", typeLabel, "selectionFieldType")}
-      ${renderFieldActions([
-        renderSmartSelectPill(selectedSoundIndex, "same-type", "same type"),
-      ])}
     </div>
   `;
 }
@@ -413,10 +412,7 @@ function renderBatchSoundSourceField(selectedSounds, selectedSoundIndex) {
   return `
     <div class="selectionInlineCluster selectionSoundSourceCluster">
       ${fieldMarkup}
-      ${renderFieldActions([
-        renderSmartSelectPill(selectedSoundIndex, "same-source", "same source"),
-        renderSmartSelectPill(selectedSoundIndex, "same-type-source", "type + source"),
-      ])}
+      ${renderSoundSmartSelectActions(selectedSoundIndex)}
     </div>
   `;
 }
@@ -505,23 +501,6 @@ function renderSoundEditor(sound, selectedSoundIndex) {
   ].join(""));
 }
 
-function renderSoundInspectorNotice(selectedSound) {
-  const authoredSource = getAuthoredSoundSource(selectedSound);
-  const selectedAsset = findSoundAssetByPath(authoredSource);
-  const sourceLabel = selectedAsset ? `${selectedAsset.label} · ${selectedAsset.hint}` : authoredSource || "Unassigned";
-
-  return `
-    <div class="selectionInspectorCard compactSelectionCard">
-      <div class="selectionEditorPlaceholder">
-        <span class="selectionEditorPlaceholderCount">${escapeHtml(selectedSound?.name || "Sound")}</span>
-        <span class="selectionEditorPlaceholderDetail">${escapeHtml(selectedSound?.type || "spot")}</span>
-        <span class="selectionEditorPlaceholderDetail">Source: ${escapeHtml(sourceLabel)}</span>
-        <span class="selectionEditorPlaceholderDetail">Edit sound details in the bottom panel.</span>
-      </div>
-    </div>
-  `;
-}
-
 function renderMultiSelectionState(kind, count, primaryName) {
   const noun = kind === "decor"
     ? (count === 1 ? "decor item" : "decor items")
@@ -583,7 +562,7 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
 
   if (selectedSound) {
     if (soundMode === "summary") {
-      return { markup: renderSoundInspectorNotice(selectedSound), isEmpty: false };
+      return { markup: "", isEmpty: true };
     }
     return { markup: renderSoundEditor(selectedSound, selectedSoundIndex), isEmpty: false };
   }
