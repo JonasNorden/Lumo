@@ -60,18 +60,19 @@ function renderSection(sectionId, title, isOpen, content, sectionClass = "", hea
   return `
     <section class="panelSection ${sectionClass} ${isOpen ? "" : "isCollapsed"}" aria-label="${title} section">
       <div class="sectionHeaderRow">
+        <div class="sectionTitleMeta">
+          <span class="sectionTitle">${title}</span>
+          ${headerContent || ""}
+        </div>
         <button
           class="sectionToggle"
           type="button"
           data-section-toggle="${sectionId}"
           aria-expanded="${isOpen ? "true" : "false"}"
+          aria-label="${title} section ${isOpen ? "collapse" : "expand"}"
         >
-          <span class="sectionTitleRow">
-            <span class="sectionTitle">${title}</span>
-            <span class="sectionChevron" aria-hidden="true">${isOpen ? "▾" : "▸"}</span>
-          </span>
+          <span class="sectionChevron" aria-hidden="true">${isOpen ? "▾" : "▸"}</span>
         </button>
-        ${headerContent ? `<div class="sectionTitleMeta">${headerContent}</div>` : ""}
       </div>
       <div class="sectionContent">${content}</div>
     </section>
@@ -100,11 +101,12 @@ function renderLayerSection(state) {
   `;
 }
 
-function renderSelectorField(label, dataField, options, selectedValue, placeholderLabel) {
+function renderSelectorField(label, dataField, options, selectedValue, placeholderLabel, className = "", visibleLabel = true) {
+  const classes = ["fieldRow", "fieldRowCompact", className].filter(Boolean).join(" ");
   return `
-    <label class="fieldRow fieldRowCompact">
-      <span class="label">${label}</span>
-      <select data-${dataField}>
+    <label class="${classes}">
+      ${visibleLabel ? `<span class="label">${label}</span>` : ""}
+      <select data-${dataField} aria-label="${escapeHtml(label)}">
         <option value="">${placeholderLabel}</option>
         ${options
           .map(
@@ -150,16 +152,6 @@ function renderAssetPicker(groupLabel, buttonDataKey, options, activeValue, empt
           </button>
         `;
       }).join("")}
-    </div>
-  `;
-}
-
-function renderPlacementBlock(label, hint = "", className = "") {
-  return `
-    <div class="statusCard ${className}">
-      <span class="statusCardLabel">Placement</span>
-      <span class="statusCardValue">${escapeHtml(label)}</span>
-      ${hint ? `<span class="statusCardMeta">${escapeHtml(hint)}</span>` : ""}
     </div>
   `;
 }
@@ -272,15 +264,15 @@ function renderDecorSettings(state) {
   `;
 }
 
+function renderSoundHeaderControl(activePresetId) {
+  return renderSelectorField("Select Sound", "sound-preset-select", SOUND_PRESETS, activePresetId, "No sound selected", "soundHeaderSelectField", false);
+}
+
 function renderSoundSettings(state) {
   const activePresetId = state.interaction.activeSoundPresetId;
   const activePreset = SOUND_PRESETS.find((preset) => preset.id === activePresetId) || null;
-  const placementLabel = activePreset ? `Placing: ${activePreset.defaultName}` : "No placement";
-  const placementHint = activePreset ? "Alt/Option + Click places" : "Select a preset to arm placement";
 
   return `
-    ${renderSelectorField("Select Sound", "sound-preset-select", SOUND_PRESETS, activePresetId, "No sound selected")}
-    ${renderPlacementBlock(placementLabel, placementHint)}
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton isSecondary" data-sound-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
     </div>
@@ -447,7 +439,7 @@ export function renderBrushPanel(panel, state) {
 
     ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
     ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
-    ${state.document.active ? renderSection("sound", "SOUND", panelSections.sound, renderSoundSettings(state)) : ""}
+    ${state.document.active ? renderSection("sound", "SOUND", panelSections.sound, renderSoundSettings(state), "soundSection", renderSoundHeaderControl(state.interaction.activeSoundPresetId)) : ""}
     ${state.document.active ? renderSection("scan", "SCAN", panelSections.scan, renderScanSettings(state)) : ""}
   `;
 }
