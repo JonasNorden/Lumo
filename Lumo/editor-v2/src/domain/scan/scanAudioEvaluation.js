@@ -9,6 +9,16 @@ function clampUnitInterval(value) {
   return Math.max(0, Math.min(1, value));
 }
 
+function clampPanValue(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(-1, Math.min(1, value));
+}
+
+function easeInOut(value) {
+  const t = clampUnitInterval(value);
+  return t * t * (3 - 2 * t);
+}
+
 function formatScanCoordinate(value) {
   return Number.isFinite(value) ? value.toFixed(2).replace(/\.00$/, "") : "0";
 }
@@ -33,6 +43,19 @@ function getZoneSpan(sound) {
     maxX: startX + width,
     width,
   };
+}
+
+function getSpanCenter(span) {
+  return (span.minX + span.maxX) * 0.5;
+}
+
+function getSpatialPan(positionX, span, spatialEnabled) {
+  if (!spatialEnabled || !Number.isFinite(positionX) || !span) return 0;
+  const centerX = getSpanCenter(span);
+  const halfWidth = Math.max((span.maxX - span.minX) * 0.5, 0.5);
+  const offsetFromCenter = (positionX - centerX) / halfWidth;
+  const pan = clampPanValue(-offsetFromCenter);
+  return Object.is(pan, -0) ? 0 : pan;
 }
 
 function getSpotSpan(sound) {
@@ -75,6 +98,7 @@ function buildBaseSoundState(sound, previousX, nextX) {
     phase: "inactive",
     normalizedIntensity: 0,
     spatial: Boolean(params.spatial),
+    pan: 0,
     eventLike: false,
     metadata: {
       volume: Number.isFinite(Number(params.volume)) ? Number(params.volume) : 1,
@@ -94,7 +118,7 @@ function evaluateSpotSound(sound, previousX, nextX) {
   const previousActive = isWithinSpan(span, previousX);
   const active = isWithinSpan(span, nextX);
   const distanceFromCenter = Math.abs((Number.isFinite(nextX) ? nextX : span.centerX) - span.centerX);
-  const normalizedIntensity = span.radius > 0
+  const rawIntensity = span.radius > 0
     ? clampUnitInterval(1 - distanceFromCenter / span.radius)
     : active
       ? 1
@@ -104,7 +128,8 @@ function evaluateSpotSound(sound, previousX, nextX) {
   state.startedThisStep = active && !previousActive;
   state.endedThisStep = previousActive && !active;
   state.phase = active ? "insideRadius" : "inactive";
-  state.normalizedIntensity = normalizedIntensity;
+  state.normalizedIntensity = easeInOut(rawIntensity);
+  state.pan = getSpatialPan(nextX, span, state.spatial);
   state.metadata.radius = span.radius;
   state.metadata.centerX = span.centerX;
   state.metadata.span = { minX: span.minX, maxX: span.maxX };
@@ -123,6 +148,7 @@ function evaluateTriggerSound(sound, previousX, nextX) {
   state.phase = crossedThisStep ? "triggered" : "inactive";
   state.normalizedIntensity = crossedThisStep ? 1 : 0;
   state.eventLike = true;
+  state.pan = 0;
   state.metadata.triggerX = triggerX;
   state.metadata.span = { minX: triggerX, maxX: triggerX };
 
@@ -163,7 +189,9 @@ function evaluateAmbientZone(sound, previousX, nextX) {
   state.endedThisStep = previousActive && !active;
   state.phase = active ? "sustain" : "inactive";
   state.normalizedIntensity = active ? 1 : 0;
+  state.pan = getSpatialPan(nextX, span, state.spatial);
   state.metadata.span = { minX: span.minX, maxX: span.maxX, width: span.width };
+  state.metadata.centerX = getSpanCenter(span);
 
   return state;
 }
@@ -184,10 +212,10 @@ function evaluateMusicZone(sound, previousX, nextX) {
   if (active) {
     if (geometry.fadeDistance > 0 && nextX < fadeInEndX) {
       phase = "fadeIn";
-      normalizedIntensity = clampUnitInterval((nextX - startX) / geometry.fadeDistance);
+      normalizedIntensity = easeInOut((nextX - startX) / geometry.fadeDistance);
     } else if (geometry.fadeDistance > 0 && nextX > sustainEndX) {
       phase = "fadeOut";
-      normalizedIntensity = clampUnitInterval((endX - nextX) / geometry.fadeDistance);
+      normalizedIntensity = easeInOut((endX - nextX) / geometry.fadeDistance);
     } else {
       phase = "sustain";
       normalizedIntensity = 1;
@@ -198,10 +226,12 @@ function evaluateMusicZone(sound, previousX, nextX) {
   state.startedThisStep = active && !previousActive;
   state.endedThisStep = previousActive && !active;
   state.phase = phase;
-  state.normalizedIntensity = normalizedIntensity;
+  state.normalizedIntensity = clampUnitInterval(normalizedIntensity);
+  state.pan = getSpatialPan(nextX, span, state.spatial);
   state.metadata.fadeDistance = geometry.fadeDistance;
   state.metadata.sustainWidth = geometry.sustainWidth;
   state.metadata.totalWidth = geometry.totalWidth;
+  state.metadata.centerX = getSpanCenter(span);
   state.metadata.span = { minX: span.minX, maxX: span.maxX, width: geometry.totalWidth };
 
   return state;
