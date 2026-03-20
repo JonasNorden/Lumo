@@ -1,7 +1,9 @@
 import { bindSelectionEditorPanel, renderSelectionEditorPanel } from "./selectionEditorPanel.js";
 
 export function renderInspector(panel, state) {
-  renderSelectionEditorPanel(panel, state);
+  renderSelectionEditorPanel(panel, state, {
+    soundMode: "summary",
+  });
 }
 
 export function bindInspectorPanel(panel, store, options = {}) {

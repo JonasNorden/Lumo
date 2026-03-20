@@ -3,6 +3,12 @@ import { getPrimarySelectedDecorIndex, getSelectedDecorIndices } from "../domain
 import { getPrimarySelectedSoundIndex, getSelectedSoundIndices } from "../domain/sound/selection.js";
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
 import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
+import {
+  findSoundAssetByPath,
+  getSoundAssetCategoryLabel,
+  getSoundAssetOptionsForType,
+} from "../domain/sound/audioAssetCatalog.js";
+import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 
 function escapeHtml(value) {
   return String(value)
@@ -12,9 +18,17 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function isTextInputElement(value) {
+  return typeof HTMLInputElement !== "undefined" && value instanceof HTMLInputElement;
+}
+
+function isSelectElement(value) {
+  return typeof HTMLSelectElement !== "undefined" && value instanceof HTMLSelectElement;
+}
+
 function captureFocusedInput(panel) {
   const activeElement = document.activeElement;
-  if (!(activeElement instanceof HTMLInputElement)) return null;
+  if (!isTextInputElement(activeElement) && !isSelectElement(activeElement)) return null;
   if (!panel.contains(activeElement)) return null;
 
   const datasetKeys = [
@@ -46,9 +60,9 @@ function captureFocusedInput(panel) {
 
   return {
     dataset,
-    selectionStart: activeElement.selectionStart,
-    selectionEnd: activeElement.selectionEnd,
-    selectionDirection: activeElement.selectionDirection,
+    selectionStart: isTextInputElement(activeElement) ? activeElement.selectionStart : null,
+    selectionEnd: isTextInputElement(activeElement) ? activeElement.selectionEnd : null,
+    selectionDirection: isTextInputElement(activeElement) ? activeElement.selectionDirection : null,
   };
 }
 
@@ -62,10 +76,11 @@ function restoreFocusedInput(panel, snapshot) {
   if (!selector) return;
 
   const replacementInput = panel.querySelector(selector);
-  if (!(replacementInput instanceof HTMLInputElement)) return;
+  if (!isTextInputElement(replacementInput) && !isSelectElement(replacementInput)) return;
 
   replacementInput.focus({ preventScroll: true });
 
+  if (!isTextInputElement(replacementInput)) return;
   if (snapshot.selectionStart === null || snapshot.selectionEnd === null) return;
 
   const clampedStart = Math.max(0, Math.min(snapshot.selectionStart, replacementInput.value.length));
@@ -180,6 +195,58 @@ function renderSelectionFields(fieldMarkup) {
   `;
 }
 
+function renderSoundSourceField(sound, selectedSoundIndex) {
+  const authoredSource = getAuthoredSoundSource(sound) || "";
+  const selectedAsset = findSoundAssetByPath(authoredSource);
+  const assetOptions = getSoundAssetOptionsForType(sound?.type);
+
+  if (!assetOptions.length) {
+    return `
+      ${renderTextField("sound", "source", "Source", authoredSource, selectedSoundIndex, "selectionFieldVariant selectionParamField selectionSourceField")}
+      <span class="selectionInlineHint">No repo audio assets were discovered, so the raw source field remains available as a fallback.</span>
+    `;
+  }
+
+  const optionMarkup = [];
+
+  optionMarkup.push(`<option value="" ${!authoredSource ? "selected" : ""}>Unassigned</option>`);
+
+  const seenCategories = new Set();
+  for (const asset of assetOptions) {
+    if (!seenCategories.has(asset.category)) {
+      if (seenCategories.size > 0) optionMarkup.push("</optgroup>");
+      optionMarkup.push(`<optgroup label="${escapeHtml(getSoundAssetCategoryLabel(asset.category))}">`);
+      seenCategories.add(asset.category);
+    }
+
+    const optionLabel = asset.hint && asset.hint !== getSoundAssetCategoryLabel(asset.category)
+      ? `${asset.label} · ${asset.hint}`
+      : asset.label;
+    optionMarkup.push(`<option value="${escapeHtml(asset.value)}" ${asset.value === authoredSource ? "selected" : ""}>${escapeHtml(optionLabel)}</option>`);
+  }
+  if (seenCategories.size > 0) optionMarkup.push("</optgroup>");
+
+  if (authoredSource && !selectedAsset) {
+    optionMarkup.push(`<option value="${escapeHtml(authoredSource)}" selected>Custom source · ${escapeHtml(authoredSource)}</option>`);
+  }
+
+  const sourceMeta = selectedAsset
+    ? `${selectedAsset.label} · ${selectedAsset.hint}`
+    : authoredSource
+      ? authoredSource
+      : "Pick an in-repo audio asset after placing the sound.";
+
+  return `
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionSourceField selectionSourcePickerField">
+      <span class="label">Source</span>
+      <select data-sound-field="source" data-sound-index="${selectedSoundIndex}">
+        ${optionMarkup.join("")}
+      </select>
+    </label>
+    <span class="selectionInlineHint selectionSourceMeta">${escapeHtml(sourceMeta)}</span>
+  `;
+}
+
 function renderEntityEditor(entity, selectedEntityIndex) {
   return renderSelectionFields([
     renderTextField("entity", "name", "Name", entity.name, selectedEntityIndex, "selectionFieldName"),
@@ -208,12 +275,29 @@ function renderSoundEditor(sound, selectedSoundIndex) {
   return renderSelectionFields([
     renderTextField("sound", "name", "Name", sound.name, selectedSoundIndex, "selectionFieldName"),
     renderSelectField("sound", "type", "Type", sound.type, selectedSoundIndex, soundTypeOptions, "selectionFieldType"),
-    renderTextField("sound", "source", "Source", sound.source || "", selectedSoundIndex, "selectionFieldVariant selectionParamField"),
+    renderSoundSourceField(sound, selectedSoundIndex),
     renderNumberField("sound", "x", "X", sound.x, selectedSoundIndex),
     renderNumberField("sound", "y", "Y", sound.y, selectedSoundIndex),
     renderCheckboxField("sound", "visible", "Visible", sound.visible, selectedSoundIndex, "selectionFieldToggle"),
     renderParamFields("sound", sound?.params, selectedSoundIndex),
   ].join(""));
+}
+
+function renderSoundInspectorNotice(selectedSound) {
+  const authoredSource = getAuthoredSoundSource(selectedSound);
+  const selectedAsset = findSoundAssetByPath(authoredSource);
+  const sourceLabel = selectedAsset ? `${selectedAsset.label} · ${selectedAsset.hint}` : authoredSource || "Unassigned";
+
+  return `
+    <div class="selectionInspectorCard compactSelectionCard">
+      <div class="selectionEditorPlaceholder">
+        <span class="selectionEditorPlaceholderCount">${escapeHtml(selectedSound?.name || "Sound")}</span>
+        <span class="selectionEditorPlaceholderDetail">${escapeHtml(selectedSound?.type || "spot")}</span>
+        <span class="selectionEditorPlaceholderDetail">Source: ${escapeHtml(sourceLabel)}</span>
+        <span class="selectionEditorPlaceholderDetail">Edit sound details in the bottom panel.</span>
+      </div>
+    </div>
+  `;
 }
 
 function renderMultiSelectionState(kind, count, primaryName) {
@@ -236,7 +320,8 @@ function renderMultiSelectionState(kind, count, primaryName) {
   `;
 }
 
-function renderSelectionEditor(state, emptyMessage) {
+function renderSelectionEditor(state, emptyMessage, options = {}) {
+  const { soundMode = "full" } = options;
   const active = state.document.active;
   const selectedEntityIndices = getSelectedEntityIndices(state.interaction);
   const selectedDecorIndices = getSelectedDecorIndices(state.interaction);
@@ -269,6 +354,9 @@ function renderSelectionEditor(state, emptyMessage) {
   }
 
   if (selectedSound) {
+    if (soundMode === "summary") {
+      return { markup: renderSoundInspectorNotice(selectedSound), isEmpty: false };
+    }
     return { markup: renderSoundEditor(selectedSound, selectedSoundIndex), isEmpty: false };
   }
 
@@ -304,7 +392,12 @@ function applyParamChange(target, prefix, onUpdate) {
 }
 
 export function renderSelectionEditorPanel(panel, state, options = {}) {
-  const { loadingMessage = "Loading document…", documentError = state.document.error, noDocumentMessage = "No document loaded.", emptyMessage = "" } = options;
+  const {
+    loadingMessage = "Loading document…",
+    documentError = state.document.error,
+    noDocumentMessage = "No document loaded.",
+    emptyMessage = "",
+  } = options;
 
   if (state.document.status === "loading") {
     setPanelMarkup(panel, `<div class="value">${escapeHtml(loadingMessage)}</div>`);
@@ -321,7 +414,7 @@ export function renderSelectionEditorPanel(panel, state, options = {}) {
     return;
   }
 
-  const { markup, isEmpty } = renderSelectionEditor(state, emptyMessage);
+  const { markup, isEmpty } = renderSelectionEditor(state, emptyMessage, options);
   setPanelMarkup(panel, markup, isEmpty);
 }
 
@@ -356,20 +449,20 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
 
   const onChange = (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
+    if (!isTextInputElement(target) && !isSelectElement(target)) return;
 
     if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) return;
     if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) return;
-    handleChange(target, "sound", ["name", "type", "visible", "x", "y"], onSoundUpdate);
+    handleChange(target, "sound", ["name", "type", "source", "visible", "x", "y"], onSoundUpdate);
   };
 
   const onInput = (event) => {
     const target = event.target;
-    if (!(target instanceof HTMLInputElement) && !(target instanceof HTMLSelectElement)) return;
+    if (!isTextInputElement(target) && !isSelectElement(target)) return;
 
     if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) return;
     if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) return;
-    handleChange(target, "sound", ["name", "type", "visible", "x", "y"], onSoundUpdate);
+    handleChange(target, "sound", ["name", "type", "source", "visible", "x", "y"], onSoundUpdate);
   };
 
   panel.addEventListener("change", onChange);

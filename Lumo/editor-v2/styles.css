@@ -905,10 +905,33 @@ select {
 }
 
 .selectionFieldType input,
+.selectionFieldType select,
 .selectionFieldVariant input,
+.selectionSourceField input,
+.selectionSourceField select,
 .selectionParamField input {
   min-width: 78px;
   max-width: 122px;
+}
+
+.selectionSourceField select,
+.selectionSourceField input {
+  min-width: 220px;
+  max-width: 320px;
+}
+
+.selectionSourcePickerField {
+  align-items: flex-start;
+}
+
+.selectionInlineHint {
+  color: #8ea1c8;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.selectionSourceMeta {
+  max-width: 320px;
 }
 
 .selectionCoordField input {
