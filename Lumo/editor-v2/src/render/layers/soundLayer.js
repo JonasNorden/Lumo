@@ -65,6 +65,34 @@ function drawRoundedRectPath(ctx, rect, radius) {
   ctx.closePath();
 }
 
+function withAlpha(color, alpha) {
+  if (typeof color !== "string") return color;
+  if (color.startsWith("#")) {
+    const normalized = color.length === 4
+      ? `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`
+      : color;
+    const hex = normalized.slice(1);
+    if (hex.length === 6) {
+      const r = Number.parseInt(hex.slice(0, 2), 16);
+      const g = Number.parseInt(hex.slice(2, 4), 16);
+      const b = Number.parseInt(hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+  }
+  const rgbaMatch = color.match(/^rgba?\(([^)]+)\)$/i);
+  if (!rgbaMatch) return color;
+  const [r = "255", g = "255", b = "255"] = rgbaMatch[1].split(",").map((part) => part.trim());
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function fillRoundedRect(ctx, rect, radius, fillStyle) {
+  ctx.save();
+  drawRoundedRectPath(ctx, rect, radius);
+  ctx.fillStyle = fillStyle;
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
   const rect = getSoundScreenRect(sound, tileSize, viewport);
   const visual = getSoundVisual(sound.type);
@@ -72,7 +100,10 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
   const fill = options.preview ? "rgba(255, 214, 138, 0.16)" : options.isSelected ? "rgba(255, 179, 71, 0.16)" : options.isScanActive ? visual.fill.replace('0.16', '0.22') : visual.fill;
   const outlineWidth = options.preview ? 1.8 : options.isSelected ? 1.8 : options.isScanActive ? 1.5 : 1.25;
   const isAmbientZone = sound.type === "ambientZone";
+  const isMusicZone = sound.type === "musicZone";
   const cornerRadius = isAmbientZone ? 14 : 10;
+  const fadeDistanceTiles = Math.max(0, Number(sound?.params?.fadeDistance) || 0);
+  const fadeDistancePx = Math.min(rect.width * 0.48, fadeDistanceTiles * tileSize * viewport.zoom);
 
   if (options.isHovered && !options.preview) {
     drawFocusFrame(ctx, { x: rect.x - 3, y: rect.y - 3, width: rect.width + 6, height: rect.height + 6 }, "rgba(125, 231, 255, 0.45)", "rgba(125, 231, 255, 0.08)", 1.1);
@@ -90,37 +121,62 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
 
   if (isAmbientZone) {
     const gradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
-    gradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.12)" : options.isScanActive ? "rgba(126, 240, 199, 0.30)" : "rgba(126, 240, 199, 0.24)");
-    gradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.05)" : options.isScanActive ? "rgba(126, 240, 199, 0.14)" : "rgba(126, 240, 199, 0.10)");
+    gradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.12)" : options.isScanActive ? "rgba(126, 240, 199, 0.24)" : "rgba(126, 240, 199, 0.18)");
+    gradient.addColorStop(0.45, options.preview ? "rgba(255, 214, 138, 0.08)" : options.isScanActive ? "rgba(84, 193, 165, 0.16)" : "rgba(84, 193, 165, 0.12)");
+    gradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.04)" : options.isScanActive ? "rgba(126, 240, 199, 0.10)" : "rgba(126, 240, 199, 0.07)");
     ctx.fillStyle = gradient;
     ctx.fill();
 
-    const bandCount = Math.max(2, Math.min(4, Math.floor(rect.height / 24)));
-    ctx.strokeStyle = options.preview ? "rgba(255, 225, 173, 0.55)" : "rgba(223, 255, 245, 0.42)";
+    const hazeInset = 6;
+    drawRoundedRectPath(ctx, { x: rect.x + hazeInset, y: rect.y + hazeInset, width: Math.max(0, rect.width - hazeInset * 2), height: Math.max(0, rect.height - hazeInset * 2) }, Math.max(6, cornerRadius - hazeInset));
+    ctx.fillStyle = options.preview ? "rgba(255, 225, 173, 0.04)" : options.isScanActive ? "rgba(223, 255, 245, 0.08)" : "rgba(223, 255, 245, 0.05)";
+    ctx.fill();
+
+    const bandCount = Math.max(2, Math.min(5, Math.floor(rect.height / 22)));
+    ctx.strokeStyle = options.preview ? "rgba(255, 225, 173, 0.48)" : "rgba(223, 255, 245, 0.30)";
     ctx.lineWidth = 1;
     for (let bandIndex = 0; bandIndex < bandCount; bandIndex += 1) {
       const ratio = (bandIndex + 1) / (bandCount + 1);
       const bandY = rect.y + rect.height * ratio;
+      const amplitude = 4 + (bandIndex % 2) * 2;
       ctx.beginPath();
       ctx.moveTo(rect.x + 12, bandY);
       ctx.bezierCurveTo(
         rect.x + rect.width * 0.28,
-        bandY - 6,
+        bandY - amplitude,
         rect.x + rect.width * 0.72,
-        bandY + 6,
+        bandY + amplitude,
         rect.x + rect.width - 12,
         bandY,
       );
       ctx.stroke();
     }
-  } else {
-    ctx.fillStyle = fill;
+  } else if (isMusicZone) {
+    const baseGradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
+    baseGradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.14)" : options.isScanActive ? "rgba(200, 157, 255, 0.24)" : "rgba(200, 157, 255, 0.18)");
+    baseGradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.08)" : options.isScanActive ? "rgba(123, 87, 173, 0.18)" : "rgba(123, 87, 173, 0.13)");
+    ctx.fillStyle = baseGradient;
     ctx.fill();
 
+    const innerRect = { x: rect.x + 1.5, y: rect.y + 1.5, width: Math.max(0, rect.width - 3), height: Math.max(0, rect.height - 3) };
+    const sustainRect = {
+      x: innerRect.x + fadeDistancePx,
+      y: innerRect.y,
+      width: Math.max(0, innerRect.width - fadeDistancePx * 2),
+      height: innerRect.height,
+    };
+    if (fadeDistancePx > 0) {
+      fillRoundedRect(ctx, { x: innerRect.x, y: innerRect.y, width: fadeDistancePx, height: innerRect.height }, Math.max(0, cornerRadius - 2), options.preview ? "rgba(255, 225, 173, 0.06)" : "rgba(243, 231, 255, 0.10)");
+      fillRoundedRect(ctx, { x: innerRect.x + innerRect.width - fadeDistancePx, y: innerRect.y, width: fadeDistancePx, height: innerRect.height }, Math.max(0, cornerRadius - 2), options.preview ? "rgba(255, 225, 173, 0.06)" : "rgba(243, 231, 255, 0.10)");
+    }
+    if (sustainRect.width > 6) {
+      fillRoundedRect(ctx, sustainRect, Math.max(0, cornerRadius - 3), options.preview ? "rgba(255, 225, 173, 0.04)" : options.isScanActive ? "rgba(243, 231, 255, 0.10)" : "rgba(243, 231, 255, 0.07)");
+    }
+
     ctx.save();
-    ctx.strokeStyle = options.preview ? "rgba(255, 225, 173, 0.34)" : "rgba(243, 231, 255, 0.22)";
+    ctx.strokeStyle = options.preview ? "rgba(255, 225, 173, 0.34)" : "rgba(243, 231, 255, 0.18)";
     ctx.lineWidth = 1;
-    const stripeSpacing = 14;
+    const stripeSpacing = 16;
     ctx.beginPath();
     for (let stripeX = rect.x - rect.height; stripeX < rect.x + rect.width; stripeX += stripeSpacing) {
       ctx.moveTo(stripeX, rect.y + rect.height);
@@ -128,6 +184,36 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
     }
     ctx.stroke();
     ctx.restore();
+
+    ctx.save();
+    ctx.strokeStyle = options.preview ? "rgba(255, 225, 173, 0.55)" : withAlpha(visual.accent, options.isScanActive ? 0.6 : 0.4);
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 5]);
+    if (fadeDistancePx > 0) {
+      for (const boundaryX of [rect.x + fadeDistancePx, rect.x + rect.width - fadeDistancePx]) {
+        ctx.beginPath();
+        ctx.moveTo(boundaryX, rect.y + 4);
+        ctx.lineTo(boundaryX, rect.y + rect.height - 4);
+        ctx.stroke();
+      }
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    const cueY = rect.y + rect.height * 0.5;
+    ctx.save();
+    ctx.strokeStyle = options.preview ? "rgba(255, 225, 173, 0.42)" : "rgba(243, 231, 255, 0.34)";
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(rect.x + 10, cueY);
+    ctx.lineTo(rect.x + Math.min(rect.width - 10, 18), cueY);
+    ctx.moveTo(rect.x + rect.width - Math.min(rect.width - 10, 18), cueY);
+    ctx.lineTo(rect.x + rect.width - 10, cueY);
+    ctx.stroke();
+    ctx.restore();
+  } else {
+    ctx.fillStyle = fill;
+    ctx.fill();
   }
 
   if (options.isScanActive && !options.preview) {
@@ -173,7 +259,7 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
 function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
   const point = getSoundScreenPoint(sound, tileSize, viewport);
   const visual = getSoundVisual(sound.type);
-  const baseRadius = options.isScanActive && !options.preview ? 6.75 : 6;
+  const baseRadius = sound.type === "trigger" ? (options.isScanActive && !options.preview ? 7.5 : 6.75) : options.isScanActive && !options.preview ? 7 : 6;
   const isTrigger = sound.type === "trigger";
   const stroke = options.preview ? "#ffd68a" : options.isSelected ? "#ffb347" : options.isHovered ? "#7de7ff" : visual.stroke;
   const fill = options.preview ? "rgba(255, 214, 138, 0.20)" : visual.fill;
@@ -185,15 +271,53 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
   ctx.globalAlpha *= options.alpha ?? 1;
 
   if (spatial && radiusPx > 0) {
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, radiusPx, 0, Math.PI * 2);
-    ctx.fillStyle = options.preview ? "rgba(255, 214, 138, 0.06)" : "rgba(101, 214, 255, 0.05)";
-    ctx.fill();
-    ctx.strokeStyle = options.preview ? "rgba(255, 214, 138, 0.42)" : "rgba(101, 214, 255, 0.30)";
-    ctx.lineWidth = 1;
-    if (options.preview) ctx.setLineDash([8, 5]);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    if (isTrigger) {
+      const directionalWidth = Math.max(radiusPx, 24);
+      const directionalGradient = ctx.createLinearGradient(point.x, point.y, point.x + directionalWidth, point.y);
+      directionalGradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.12)" : options.isScanActive ? "rgba(255, 179, 107, 0.18)" : "rgba(255, 179, 107, 0.12)");
+      directionalGradient.addColorStop(1, "rgba(255, 179, 107, 0.00)");
+      ctx.beginPath();
+      ctx.moveTo(point.x, point.y - Math.max(12, baseRadius + 4));
+      ctx.lineTo(point.x + directionalWidth, point.y);
+      ctx.lineTo(point.x, point.y + Math.max(12, baseRadius + 4));
+      ctx.closePath();
+      ctx.fillStyle = directionalGradient;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.moveTo(point.x + 0.5, point.y - (radiusPx + 6));
+      ctx.lineTo(point.x + 0.5, point.y + (radiusPx + 6));
+      ctx.strokeStyle = options.preview ? "rgba(255, 214, 138, 0.46)" : withAlpha(visual.stroke, options.isScanActive ? 0.55 : 0.34);
+      ctx.lineWidth = 1;
+      if (options.preview) ctx.setLineDash([8, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      const outerGradient = ctx.createRadialGradient(point.x, point.y, Math.max(2, baseRadius * 0.65), point.x, point.y, radiusPx);
+      outerGradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.12)" : options.isScanActive ? "rgba(101, 214, 255, 0.16)" : "rgba(101, 214, 255, 0.12)");
+      outerGradient.addColorStop(0.55, options.preview ? "rgba(255, 214, 138, 0.06)" : "rgba(101, 214, 255, 0.05)");
+      outerGradient.addColorStop(1, "rgba(101, 214, 255, 0)");
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radiusPx, 0, Math.PI * 2);
+      ctx.fillStyle = outerGradient;
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, radiusPx, 0, Math.PI * 2);
+      ctx.strokeStyle = options.preview ? "rgba(255, 214, 138, 0.42)" : withAlpha(visual.stroke, options.isScanActive ? 0.42 : 0.26);
+      ctx.lineWidth = 1;
+      if (options.preview) ctx.setLineDash([8, 5]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (radiusPx > baseRadius * 2.8) {
+        ctx.beginPath();
+        ctx.arc(point.x, point.y, radiusPx * 0.6, 0, Math.PI * 2);
+        ctx.strokeStyle = withAlpha(visual.accent, options.isScanActive ? 0.22 : 0.14);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
   }
 
   if (options.isHovered && !options.preview) {
@@ -260,44 +384,78 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
     ctx.setLineDash([]);
   }
 
-  ctx.beginPath();
   if (isTrigger) {
-    ctx.moveTo(point.x, point.y - baseRadius);
-    ctx.lineTo(point.x + baseRadius, point.y);
-    ctx.lineTo(point.x, point.y + baseRadius);
-    ctx.lineTo(point.x - baseRadius, point.y);
-    ctx.closePath();
-  } else {
-    ctx.arc(point.x, point.y, baseRadius, 0, Math.PI * 2);
-  }
-  if (options.isScanActive && !options.preview) {
-    ctx.shadowColor = visual.stroke;
-    ctx.shadowBlur = 14;
-  }
-  ctx.fillStyle = fill;
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = stroke;
-  ctx.lineWidth = options.preview ? 1.8 : 1.6;
-  if (options.preview) ctx.setLineDash([6, 4]);
-  ctx.stroke();
-  ctx.setLineDash([]);
+    const lineTop = point.y - Math.max(radiusPx, 22);
+    const lineBottom = point.y + Math.max(radiusPx, 22);
+    ctx.beginPath();
+    ctx.moveTo(point.x + 0.5, lineTop);
+    ctx.lineTo(point.x + 0.5, lineBottom);
+    ctx.strokeStyle = withAlpha(stroke, options.isScanActive && !options.preview ? 0.9 : 0.72);
+    ctx.lineWidth = options.preview ? 1.6 : 1.3;
+    if (options.preview) ctx.setLineDash([6, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
 
-  ctx.beginPath();
-  if (isTrigger) {
-    ctx.moveTo(point.x - 3.5, point.y + 3.5);
-    ctx.lineTo(point.x + 3.5, point.y - 3.5);
-    ctx.moveTo(point.x - 3.5, point.y - 1);
-    ctx.lineTo(point.x + 1, point.y - 5.5);
+    ctx.beginPath();
+    ctx.moveTo(point.x - baseRadius * 0.9, point.y);
+    ctx.lineTo(point.x + baseRadius * 0.95, point.y - baseRadius * 0.95);
+    ctx.lineTo(point.x + baseRadius * 0.95, point.y + baseRadius * 0.95);
+    ctx.closePath();
+    if (options.isScanActive && !options.preview) {
+      ctx.shadowColor = visual.stroke;
+      ctx.shadowBlur = 12;
+    }
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = options.preview ? 1.8 : 1.6;
+    if (options.preview) ctx.setLineDash([6, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.beginPath();
+    ctx.arc(point.x - baseRadius * 0.7, point.y, 2.1, 0, Math.PI * 2);
+    ctx.fillStyle = options.preview ? "#ffe1ad" : visual.accent;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(point.x - 1.5, point.y);
+    ctx.lineTo(point.x + baseRadius * 0.45, point.y);
+    ctx.strokeStyle = options.preview ? "#ffe1ad" : visual.accent;
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
   } else {
-    ctx.moveTo(point.x - 4, point.y);
-    ctx.lineTo(point.x + 4, point.y);
-    ctx.moveTo(point.x, point.y - 4);
-    ctx.lineTo(point.x, point.y + 4);
+    const coreGradient = ctx.createRadialGradient(point.x - 1, point.y - 1, 1, point.x, point.y, baseRadius);
+    coreGradient.addColorStop(0, options.preview ? "rgba(255, 248, 227, 0.95)" : withAlpha(visual.accent, options.isScanActive ? 0.95 : 0.88));
+    coreGradient.addColorStop(0.35, options.preview ? "rgba(255, 214, 138, 0.42)" : withAlpha(visual.stroke, options.isScanActive ? 0.56 : 0.42));
+    coreGradient.addColorStop(1, fill);
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, baseRadius, 0, Math.PI * 2);
+    if (options.isScanActive && !options.preview) {
+      ctx.shadowColor = visual.stroke;
+      ctx.shadowBlur = 14;
+    }
+    ctx.fillStyle = coreGradient;
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = options.preview ? 1.8 : 1.6;
+    if (options.preview) ctx.setLineDash([6, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, Math.max(2.2, baseRadius * 0.34), 0, Math.PI * 2);
+    ctx.fillStyle = options.preview ? "rgba(255, 248, 227, 0.94)" : withAlpha(visual.accent, options.isScanActive ? 0.94 : 0.84);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, Math.max(baseRadius + 2, baseRadius * 1.45), 0, Math.PI * 2);
+    ctx.strokeStyle = withAlpha(visual.accent, options.isScanActive && !options.preview ? 0.34 : 0.18);
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
-  ctx.strokeStyle = options.preview ? "#ffe1ad" : visual.accent;
-  ctx.lineWidth = 1.4;
-  ctx.stroke();
   ctx.restore();
 }
 
