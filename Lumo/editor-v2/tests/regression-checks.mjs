@@ -40,6 +40,8 @@ import { resolveSoundPlaybackSource } from "../src/domain/sound/sourceReference.
 import { findMatchingSoundIndices } from "../src/domain/sound/selection.js";
 import { collectDarknessPreviewLights, getPreviewPlayerLight } from "../src/render/darknessPreview.js";
 import { createFogVolumeEntityFromWorldRect } from "../src/domain/entities/specialVolumeTypes.js";
+import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
+import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
 
 function createHistoryState() {
   return {
@@ -71,6 +73,33 @@ function createDoc() {
     decor: [],
     sounds: [],
   };
+}
+
+function createPreviewTestContext() {
+  const operations = [];
+  const gradient = { addColorStop() {} };
+  const ctx = {
+    canvas: { width: 320, height: 240 },
+    globalAlpha: 1,
+    fillStyle: "",
+    strokeStyle: "",
+    lineWidth: 1,
+    font: "",
+    textAlign: "left",
+    textBaseline: "top",
+    save() {},
+    restore() {},
+    createLinearGradient() { return gradient; },
+    fillRect(...args) { operations.push(["fillRect", ...args]); },
+    strokeRect(...args) { operations.push(["strokeRect", ...args]); },
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    stroke() {},
+    fillText(...args) { operations.push(["fillText", ...args]); },
+    setLineDash() {},
+  };
+  return { ctx, operations };
 }
 
 function runTileRegressionChecks() {
@@ -237,6 +266,44 @@ function runFogVolumeRegressionChecks() {
   assert.equal(dragPlaced.params.area.x1 - dragPlaced.params.area.x0, 116, "fog drag placement should preserve the dragged width");
   assert.equal(dragPlaced.params.area.y0, 80, "fog drag placement should place the fog baseline on the authored lower edge cell");
   assert.equal(dragPlaced.params.look.thickness, 56, "fog drag placement should derive initial thickness from the drag height");
+}
+
+function runFogPlacementPreviewRegressionChecks() {
+  const doc = createDoc();
+  const viewport = { offsetX: 0, offsetY: 0, zoom: 1 };
+  const fogPreset = findEntityPresetById("fog_volume");
+  assert.ok(fogPreset, "fog volume preset should exist for placement previews");
+
+  const armedOnly = createPreviewTestContext();
+  renderEntityPlacementPreview(armedOnly.ctx, doc, viewport, {
+    activeTool: "inspect",
+    activeLayer: "entities",
+    hoverCell: { x: 1, y: 1 },
+    specialVolumePlacement: null,
+  }, fogPreset);
+  assert.equal(
+    armedOnly.operations.length,
+    0,
+    "arming fog volume placement should not render a floating fog preview before drag placement begins",
+  );
+
+  const activeDrag = createPreviewTestContext();
+  renderEntityPlacementPreview(activeDrag.ctx, doc, viewport, {
+    activeTool: "inspect",
+    activeLayer: "entities",
+    hoverCell: { x: 1, y: 1 },
+    specialVolumePlacement: {
+      active: true,
+      startCell: { x: 1, y: 1 },
+      startWorld: { x: 16, y: 16 },
+      currentWorld: { x: 80, y: 56 },
+    },
+  }, fogPreset);
+  assert.equal(
+    activeDrag.operations.some(([type]) => type === "strokeRect"),
+    true,
+    "active fog drag placement should still render the fog preview",
+  );
 }
 
 function runDecorRegressionChecks() {
@@ -1455,6 +1522,7 @@ async function main() {
   runTileRegressionChecks();
   runEntityRegressionChecks();
   runFogVolumeRegressionChecks();
+  runFogPlacementPreviewRegressionChecks();
   runDecorRegressionChecks();
   runSoundRegressionChecks();
   runDarknessPreviewRegressionChecks();
