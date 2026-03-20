@@ -10,6 +10,24 @@ import { renderScanOverlay } from "./layers/scanLayer.js";
 import { findDecorPresetById } from "../domain/decor/decorPresets.js";
 import { findEntityPresetById } from "../domain/entities/entityPresets.js";
 import { findSoundPresetById } from "../domain/sound/soundPresets.js";
+import { renderDarknessPreview } from "./darknessPreview.js";
+
+let darknessRenderTarget = null;
+
+function ensureDarknessRenderTarget(width, height) {
+  if (typeof document === "undefined") return null;
+  if (!darknessRenderTarget) {
+    const canvas = document.createElement("canvas");
+    const targetCtx = canvas.getContext("2d");
+    if (!targetCtx) return null;
+    darknessRenderTarget = { canvas, ctx: targetCtx };
+  }
+
+  if (darknessRenderTarget.canvas.width !== width) darknessRenderTarget.canvas.width = width;
+  if (darknessRenderTarget.canvas.height !== height) darknessRenderTarget.canvas.height = height;
+
+  return darknessRenderTarget;
+}
 
 export function renderEditorFrame(ctx, state) {
   const canvas = ctx.canvas;
@@ -21,11 +39,24 @@ export function renderEditorFrame(ctx, state) {
   const doc = state.document.active;
   if (!doc) return;
 
-  renderBackgroundLayers(ctx, doc, state.viewport);
-  renderTiles(ctx, doc, state.viewport);
-  renderDecor(ctx, doc, state.viewport, state.interaction);
+  const darknessPreviewEnabled = Boolean(state.ui.darknessPreviewEnabled);
+  const renderTarget = darknessPreviewEnabled ? ensureDarknessRenderTarget(canvas.width, canvas.height) : null;
+  const worldCtx = renderTarget?.ctx || ctx;
+
+  worldCtx.clearRect(0, 0, canvas.width, canvas.height);
+  worldCtx.fillStyle = state.ui.workspaceBackground || "#0a0f1d";
+  worldCtx.fillRect(0, 0, canvas.width, canvas.height);
+  renderBackgroundLayers(worldCtx, doc, state.viewport);
+  renderTiles(worldCtx, doc, state.viewport);
+  renderDecor(worldCtx, doc, state.viewport, state.interaction);
+  renderEntities(worldCtx, doc, state.viewport, state.interaction);
+
+  if (renderTarget) {
+    renderDarknessPreview(worldCtx, doc, state.viewport);
+    ctx.drawImage(renderTarget.canvas, 0, 0);
+  }
+
   renderSounds(ctx, doc, state.viewport, state.interaction, state.scan);
-  renderEntities(ctx, doc, state.viewport, state.interaction);
   renderGrid(ctx, doc, state.viewport);
   renderDecorDragPreview(ctx, doc, state.viewport, state.interaction);
   renderSoundDragPreview(ctx, doc, state.viewport, state.interaction);

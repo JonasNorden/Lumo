@@ -105,6 +105,10 @@ select {
   font-weight: 600;
 }
 
+.topBarModeButton {
+  white-space: nowrap;
+}
+
 .topBarIconButton {
   width: 34px;
   padding: 0;
