@@ -34,6 +34,7 @@ import {
 } from "../src/domain/scan/scanSystem.js";
 import { evaluateScanAudio } from "../src/domain/scan/scanAudioEvaluation.js";
 import { createScanAudioPlaybackController } from "../src/domain/scan/scanAudioPlayback.js";
+import { resolveSoundPlaybackSource } from "../src/domain/sound/sourceReference.js";
 
 function createHistoryState() {
   return {
@@ -284,6 +285,16 @@ function runSoundRegressionChecks() {
   });
   assert.equal(normalizedSourceDoc.sounds[0].source, "./audio/wind.ogg", "validation should preserve and trim authored top-level sound sources");
   assert.equal(normalizedSourceDoc.sounds[1].source, "./audio/legacy.ogg", "validation should lift legacy param-based sound sources into the authored source field");
+  assert.equal(
+    resolveSoundPlaybackSource({ source: "data/assets/audio/spot/drip/waterdrip.ogg" }),
+    "../data/assets/audio/spot/drip/waterdrip.ogg",
+    "playback source resolution should map repo audio selections to the editor-v2 runtime path",
+  );
+  assert.equal(
+    resolveSoundPlaybackSource({ source: "./audio/wind.ogg" }),
+    "./audio/wind.ogg",
+    "playback source resolution should preserve custom editor-relative audio paths",
+  );
 
   const exported = JSON.parse(serializeLevelDocument(normalizedSourceDoc));
   assert.equal(exported.sounds[0].source, "./audio/wind.ogg", "sound export should retain authored sound sources");
@@ -710,6 +721,9 @@ function runScanAudioPlaybackRegressionChecks() {
 
 
 async function runScanAudioAssetFallbackChecks() {
+  const playedSources = [];
+  let oscillatorCreateCount = 0;
+  let oscillatorStopCount = 0;
   const FakeAudio = class {
     constructor(source) {
       this.source = source;
@@ -732,6 +746,10 @@ async function runScanAudioAssetFallbackChecks() {
     pause() {}
 
     play() {
+      playedSources.push(this.source);
+      if (this.source.startsWith("data/assets/")) {
+        return Promise.reject(new Error("bad-runtime-path"));
+      }
       if (this.source.includes("missing")) {
         return Promise.reject(new Error("missing"));
       }
@@ -747,12 +765,15 @@ async function runScanAudioAssetFallbackChecks() {
       currentTime: 0,
       destination: {},
       createOscillator() {
+        oscillatorCreateCount += 1;
         return {
           type: "sine",
           frequency: { value: 0 },
           connect() {},
           start() {},
-          stop() {},
+          stop() {
+            oscillatorStopCount += 1;
+          },
           onended: null,
         };
       },
@@ -771,6 +792,42 @@ async function runScanAudioAssetFallbackChecks() {
     const controller = createScanAudioPlaybackController({
       audioContext: fakeAudioContext,
     });
+
+    const selectedSourceDoc = createDoc();
+    selectedSourceDoc.sounds = [
+      {
+        id: "selected-source",
+        name: "Selected Source",
+        type: "spot",
+        x: 4,
+        y: 0,
+        visible: true,
+        source: "data/assets/audio/spot/drip/waterdrip.ogg",
+        params: { volume: 0.7, pitch: 1, radius: 2, spatial: true, loop: false },
+      },
+    ];
+    const selectedSourceEval = evaluateScanAudio(selectedSourceDoc, 1, 4.5);
+    controller.sync({
+      doc: selectedSourceDoc,
+      scan: { playbackState: "playing", isPlaying: true, audioEvaluation: selectedSourceEval },
+    });
+    await Promise.resolve();
+    assert.equal(
+      playedSources.includes("../data/assets/audio/spot/drip/waterdrip.ogg"),
+      true,
+      "selected repo audio sources should resolve to the real editor-v2 playback path",
+    );
+    assert.equal(
+      playedSources.includes("data/assets/audio/spot/drip/waterdrip.ogg"),
+      false,
+      "selected repo audio sources should not be played through the broken editor-v2-relative path",
+    );
+    assert.equal(
+      oscillatorCreateCount,
+      0,
+      "valid selected audio sources should not create placeholder fallback playback",
+    );
+    controller.stopAll();
 
     const failingDoc = createDoc();
     failingDoc.sounds = [
@@ -813,6 +870,47 @@ async function runScanAudioAssetFallbackChecks() {
       scan: { playbackState: "playing", isPlaying: true, audioEvaluation: missingSourceEval },
     });
     assert.equal(controller.getActiveInstanceIds().includes("no-source"), true, "sounds without an authored source should continue using placeholder playback");
+    controller.stopAll();
+
+    const fallbackUpgradeDoc = createDoc();
+    fallbackUpgradeDoc.sounds = [
+      {
+        id: "upgrade-source",
+        name: "Upgrade Source",
+        type: "spot",
+        x: 4,
+        y: 0,
+        visible: true,
+        params: { volume: 0.7, pitch: 1, radius: 2, spatial: true, loop: false },
+      },
+    ];
+    const activeEval = evaluateScanAudio(fallbackUpgradeDoc, 1, 4.5);
+    controller.sync({
+      doc: fallbackUpgradeDoc,
+      scan: { playbackState: "playing", isPlaying: true, audioEvaluation: activeEval },
+    });
+    assert.equal(controller.getActiveInstanceIds().includes("upgrade-source"), true, "missing sources should begin with fallback playback while the sound stays active");
+    assert.equal(oscillatorCreateCount >= 2, true, "missing sources should create placeholder fallback playback");
+
+    fallbackUpgradeDoc.sounds[0] = {
+      ...fallbackUpgradeDoc.sounds[0],
+      source: "data/assets/audio/spot/drip/waterdrip.ogg",
+    };
+    controller.sync({
+      doc: fallbackUpgradeDoc,
+      scan: { playbackState: "playing", isPlaying: true, audioEvaluation: activeEval },
+    });
+    await Promise.resolve();
+    assert.equal(
+      playedSources.filter((source) => source === "../data/assets/audio/spot/drip/waterdrip.ogg").length >= 2,
+      true,
+      "active fallback playback should be replaced when a valid selected source becomes available",
+    );
+    assert.equal(
+      oscillatorStopCount >= 1,
+      true,
+      "promoting an active fallback to a real asset should stop the fallback instance",
+    );
 
     controller.destroy();
   } finally {
