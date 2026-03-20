@@ -233,6 +233,9 @@ function renderScanSettings(state) {
   const startLabel = Number.isFinite(scan.startX) ? scan.startX : 0;
   const endLabel = Number.isFinite(scan.endX) ? scan.endX : docWidth;
   const speed = Number.isFinite(scan.speed) ? scan.speed : 6;
+  const playbackState = scan.playbackState || (scan.isPlaying ? "playing" : "idle");
+  const isPlaying = playbackState === "playing";
+  const isPaused = playbackState === "paused";
   const lastEventSummary = scan.lastEventSummary || "No intersections yet";
   const eventLog = Array.isArray(scan.eventLog) ? scan.eventLog.slice(0, 4) : [];
 
@@ -254,14 +257,15 @@ function renderScanSettings(state) {
       </label>
     </div>
 
-    <div class="compactActionRow compactActionRowDouble">
-      <button type="button" class="toolButton ${scan.isPlaying ? "isActive" : ""}" data-scan-action="play">Play</button>
-      <button type="button" class="toolButton isSecondary" data-scan-action="stop">Stop</button>
+    <div class="compactActionRow compactActionRowTriple">
+      <button type="button" class="toolButton ${isPlaying ? "isActive" : ""}" data-scan-action="play">${isPaused ? "Resume" : "Play"}</button>
+      <button type="button" class="toolButton isSecondary ${isPaused ? "isActive" : ""}" data-scan-action="pause" ${isPlaying ? "" : "disabled"}>Pause</button>
+      <button type="button" class="toolButton isSecondary" data-scan-action="stop" ${(isPlaying || isPaused) ? "" : "disabled"}>Stop</button>
     </div>
 
     <div class="statusCard">
       <span class="statusCardLabel">Scan</span>
-      <span class="statusCardValue">${scan.isPlaying ? "Running" : "Stopped"}</span>
+      <span class="statusCardValue">${isPlaying ? "Running" : isPaused ? "Paused" : "Stopped"}</span>
       <span class="statusCardMeta">Range ${escapeHtml(String(startLabel))} → ${escapeHtml(String(endLabel))} · Position ${escapeHtml(formatScanValue(scan.positionX, "0"))}</span>
       <span class="statusCardMeta">Last event: ${escapeHtml(lastEventSummary)}</span>
     </div>

@@ -567,6 +567,10 @@ select {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.compactActionRowTriple {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .scanFieldGrid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: end;

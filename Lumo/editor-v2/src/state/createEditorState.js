@@ -61,6 +61,7 @@ export function createEditorState() {
       activeBatch: null,
     },
     scan: {
+      playbackState: "idle",
       isPlaying: false,
       speed: 6,
       startX: null,

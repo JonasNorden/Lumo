@@ -1,4 +1,4 @@
-import { getScanRange } from "../../domain/scan/scanSystem.js";
+import { getScanRange, isScanPlaying } from "../../domain/scan/scanSystem.js";
 
 function getScreenX(viewport, tileSize, worldX) {
   return viewport.offsetX + worldX * tileSize * viewport.zoom;
@@ -43,14 +43,14 @@ export function renderScanOverlay(ctx, doc, viewport, scan) {
   ctx.fillStyle = gradient;
   ctx.fillRect(scanScreenX - 5, 0, 14, ctx.canvas.height);
 
-  ctx.strokeStyle = scan.isPlaying ? "rgba(144, 238, 255, 0.95)" : "rgba(144, 238, 255, 0.65)";
+  ctx.strokeStyle = isScanPlaying(scan) ? "rgba(144, 238, 255, 0.95)" : "rgba(144, 238, 255, 0.65)";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(scanScreenX + 0.5, 0);
   ctx.lineTo(scanScreenX + 0.5, ctx.canvas.height);
   ctx.stroke();
 
-  ctx.fillStyle = scan.isPlaying ? "rgba(144, 238, 255, 0.95)" : "rgba(144, 238, 255, 0.7)";
+  ctx.fillStyle = isScanPlaying(scan) ? "rgba(144, 238, 255, 0.95)" : "rgba(144, 238, 255, 0.7)";
   ctx.fillRect(scanScreenX - 3, 8, 7, 7);
 
   ctx.restore();
