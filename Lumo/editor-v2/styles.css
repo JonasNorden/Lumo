@@ -580,6 +580,112 @@ select {
   grid-column: 1 / -1;
 }
 
+.scanMonitorCard {
+  gap: 10px;
+}
+
+.scanMonitorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.scanStatePill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 76px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(82, 103, 138, 0.9);
+  background: rgba(15, 22, 36, 0.82);
+  color: #dce9ff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.scanStatePill.isRunning {
+  border-color: rgba(116, 227, 255, 0.6);
+  background: rgba(23, 52, 63, 0.86);
+  color: #bff7ff;
+}
+
+.scanStatePill.isPaused {
+  border-color: rgba(255, 191, 122, 0.58);
+  background: rgba(59, 40, 22, 0.86);
+  color: #ffd7a9;
+}
+
+.scanStatePill.isIdle {
+  color: #b4c8ef;
+}
+
+.scanMonitorMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.scanMetricCard {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(42, 56, 86, 0.92);
+  background: rgba(15, 23, 40, 0.72);
+}
+
+.scanMetricLabel {
+  color: #8fa5d3;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.scanMetricValue {
+  color: #edf4ff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.scanMonitorSummary {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(42, 56, 86, 0.9);
+  background: linear-gradient(180deg, rgba(18, 29, 48, 0.9), rgba(12, 19, 33, 0.76));
+}
+
+.scanMonitorSummaryLabel {
+  color: #8fa5d3;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.scanMonitorSummaryValue {
+  color: #ebf4ff;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.scanDebugHeader {
+  align-items: flex-start;
+}
+
+.scanDebugCaption {
+  display: block;
+  margin-top: 2px;
+  color: #7f94bf;
+  font-size: 10px;
+}
+
 .scanDebugList {
   display: grid;
   gap: 6px;
@@ -594,6 +700,30 @@ select {
   background: rgba(15, 23, 40, 0.72);
 }
 
+.scanDebugItem {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.scanDebugIndex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(93, 126, 179, 0.18);
+  color: #b8cdf1;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.scanDebugBody {
+  min-width: 0;
+}
+
 .scanDebugTitle {
   display: block;
   color: #e8f2ff;
@@ -603,9 +733,23 @@ select {
 
 .scanDebugMeta,
 .scanDebugEmpty {
-  display: block;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
   color: #8fa5d3;
   font-size: 11px;
+}
+
+.scanDebugBadge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(101, 214, 255, 0.12);
+  border: 1px solid rgba(101, 214, 255, 0.22);
+  color: #caefff;
+  text-transform: capitalize;
 }
 
 .compactSubsection {

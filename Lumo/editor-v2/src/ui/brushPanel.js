@@ -236,8 +236,11 @@ function renderScanSettings(state) {
   const playbackState = scan.playbackState || (scan.isPlaying ? "playing" : "idle");
   const isPlaying = playbackState === "playing";
   const isPaused = playbackState === "paused";
+  const activeCount = Array.isArray(scan.activeSoundIds) ? scan.activeSoundIds.length : 0;
   const lastEventSummary = scan.lastEventSummary || "No intersections yet";
   const eventLog = Array.isArray(scan.eventLog) ? scan.eventLog.slice(0, 4) : [];
+  const statusLabel = isPlaying ? "Running" : isPaused ? "Paused" : "Stopped";
+  const statusToneClass = isPlaying ? "isRunning" : isPaused ? "isPaused" : "isIdle";
 
   return `
     <div class="compactFieldGrid scanFieldGrid">
@@ -263,21 +266,47 @@ function renderScanSettings(state) {
       <button type="button" class="toolButton isSecondary" data-scan-action="stop" ${(isPlaying || isPaused) ? "" : "disabled"}>Stop</button>
     </div>
 
-    <div class="statusCard">
-      <span class="statusCardLabel">Scan</span>
-      <span class="statusCardValue">${isPlaying ? "Running" : isPaused ? "Paused" : "Stopped"}</span>
-      <span class="statusCardMeta">Range ${escapeHtml(String(startLabel))} → ${escapeHtml(String(endLabel))} · Position ${escapeHtml(formatScanValue(scan.positionX, "0"))}</span>
-      <span class="statusCardMeta">Last event: ${escapeHtml(lastEventSummary)}</span>
+    <div class="statusCard scanMonitorCard">
+      <div class="scanMonitorHeader">
+        <span class="statusCardLabel">Scan Monitor</span>
+        <span class="scanStatePill ${statusToneClass}">${statusLabel}</span>
+      </div>
+      <span class="statusCardMeta">Preserves current play / pause / stop workflow and sound-layer scan authoring context.</span>
+      <div class="scanMonitorMetrics">
+        <div class="scanMetricCard">
+          <span class="scanMetricLabel">Range</span>
+          <span class="scanMetricValue">${escapeHtml(String(startLabel))} → ${escapeHtml(String(endLabel))}</span>
+        </div>
+        <div class="scanMetricCard">
+          <span class="scanMetricLabel">Position</span>
+          <span class="scanMetricValue">${escapeHtml(formatScanValue(scan.positionX, "0"))}</span>
+        </div>
+        <div class="scanMetricCard">
+          <span class="scanMetricLabel">Speed</span>
+          <span class="scanMetricValue">${escapeHtml(formatScanValue(speed, "6"))}x</span>
+        </div>
+        <div class="scanMetricCard">
+          <span class="scanMetricLabel">Active Sounds</span>
+          <span class="scanMetricValue">${escapeHtml(String(activeCount))}</span>
+        </div>
+      </div>
+      <div class="scanMonitorSummary">
+        <span class="scanMonitorSummaryLabel">Latest event</span>
+        <span class="scanMonitorSummaryValue">${escapeHtml(lastEventSummary)}</span>
+      </div>
     </div>
 
     <div class="compactSubsection">
-      <div class="compactSubsectionHeader">
-        <span class="label">Debug Feed</span>
+      <div class="compactSubsectionHeader scanDebugHeader">
+        <div>
+          <span class="label">Event Feed</span>
+          <span class="scanDebugCaption">Recent scan intersections</span>
+        </div>
         <button type="button" class="toolButton isSecondary compactToggleButton" data-scan-action="clear-log" ${eventLog.length ? "" : "disabled"}>Clear</button>
       </div>
       <div class="scanDebugList">
         ${eventLog.length
-          ? eventLog.map((entry) => `<div class="scanDebugItem"><span class="scanDebugTitle">${escapeHtml(entry.soundName || entry.soundId || "Sound")}</span><span class="scanDebugMeta">${escapeHtml(entry.intersectionType || entry.soundType || "intersection")} · x ${escapeHtml(String(entry.atX || "0"))}</span></div>`).join("")
+          ? eventLog.map((entry, index) => `<div class="scanDebugItem"><span class="scanDebugIndex">${escapeHtml(String(index + 1))}</span><div class="scanDebugBody"><span class="scanDebugTitle">${escapeHtml(entry.soundName || entry.soundId || "Sound")}</span><span class="scanDebugMeta"><span class="scanDebugBadge">${escapeHtml(entry.intersectionType || entry.soundType || "intersection")}</span><span>x ${escapeHtml(String(entry.atX || "0"))}</span></span></div></div>`).join("")
           : '<div class="scanDebugEmpty">Waiting for scan intersections.</div>'}
       </div>
     </div>
