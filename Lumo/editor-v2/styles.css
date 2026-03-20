@@ -421,6 +421,39 @@ select {
   display: none;
 }
 
+.panelSectionInline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-block: 10px;
+}
+
+.panelSectionInline .sectionToggle {
+  width: auto;
+  flex: 0 0 auto;
+  gap: 0;
+}
+
+.panelSectionInline .sectionEyebrow {
+  display: none;
+}
+
+.panelSectionInline .sectionTitleRow {
+  gap: 6px;
+}
+
+.panelSectionInline .sectionTitle {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+.panelSectionInline .sectionContent {
+  flex: 1 1 170px;
+  min-width: 0;
+  margin-top: 0;
+}
+
 .toolSwitch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -429,7 +462,20 @@ select {
 
 .toolSwitchCompact,
 .layerSwitch {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.toolSwitchCompact .toolButton,
+.layerSwitch .toolButton {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 28px;
+  padding: 5px 8px;
+  border-radius: 9px;
+  font-size: 11px;
 }
 
 .toolButton {

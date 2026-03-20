@@ -69,13 +69,6 @@ function renderSection(sectionId, title, isOpen, content, sectionClass = "") {
   `;
 }
 
-function getActiveLayerLabel(layerValue) {
-  if (layerValue === PANEL_LAYERS.DECOR) return "Decor";
-  if (layerValue === PANEL_LAYERS.ENTITIES) return "Entities";
-  if (layerValue === PANEL_LAYERS.SOUND) return "Sound";
-  return "Tiles";
-}
-
 function renderLayerSection(state) {
   const activeLayer = state.interaction.activeLayer || PANEL_LAYERS.TILES;
 
@@ -85,11 +78,6 @@ function renderLayerSection(state) {
       <button class="toolButton ${activeLayer === PANEL_LAYERS.ENTITIES ? "isActive" : ""}" type="button" data-layer="entities">Entities</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.DECOR ? "isActive" : ""}" type="button" data-layer="decor">Decor</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.SOUND ? "isActive" : ""}" type="button" data-layer="sound">Sound</button>
-    </div>
-
-    <div class="statusRow compactStatusRow">
-      <span class="label">Current</span>
-      <span class="value">${getActiveLayerLabel(activeLayer)}</span>
     </div>
   `;
 }
@@ -402,9 +390,9 @@ export function renderBrushPanel(panel, state) {
       <div class="toolSwitch toolSwitchCompact" role="group" aria-label="Editor tool">
         ${VISIBLE_TOOL_OPTIONS.map((option) => renderToolButton(option, state.interaction.activeTool)).join("")}
       </div>
-    `)}
+    `, "panelSectionInline")}
 
-    ${renderSection("layer", "LAYER", panelSections.layer, renderLayerSection(state))}
+    ${renderSection("layer", "LAYER", panelSections.layer, renderLayerSection(state), "panelSectionInline")}
 
     ${renderSection("tiles", "TILES", panelSections.tiles, `
       <label class="fieldRow fieldRowCompact">

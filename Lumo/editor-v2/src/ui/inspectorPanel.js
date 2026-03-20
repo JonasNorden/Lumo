@@ -1,12 +1,12 @@
-import { bindSelectionEditorPanel, renderSelectionEditorPanel } from "./selectionEditorPanel.js";
-
-export function renderInspector(panel, state) {
-  renderSelectionEditorPanel(panel, state, {
-    hideEntityTypes: ["fog_volume"],
-    soundMode: "summary",
-  });
+function renderEmptyInspector(panel) {
+  panel.innerHTML = "";
+  panel.classList?.toggle?.("isEmpty", true);
 }
 
-export function bindInspectorPanel(panel, store, options = {}) {
-  return bindSelectionEditorPanel(panel, store, options);
+export function renderInspector(panel) {
+  renderEmptyInspector(panel);
+}
+
+export function bindInspectorPanel() {
+  return () => {};
 }
