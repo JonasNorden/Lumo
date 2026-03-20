@@ -1,6 +1,8 @@
 import { getSelectedSoundIndices, isSoundSelected } from "../../domain/sound/selection.js";
 import { getSoundVisual } from "../../domain/sound/soundVisuals.js";
 
+const SOUND_STATE_LOOKUP_CACHE = new WeakMap();
+
 function isZoneSoundType(soundType) {
   return soundType === "ambientZone" || soundType === "musicZone";
 }
@@ -93,10 +95,52 @@ function fillRoundedRect(ctx, rect, radius, fillStyle) {
   ctx.restore();
 }
 
-function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
+function clamp01(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function getSoundStateLookup(scan) {
+  const soundStates = Array.isArray(scan?.audioEvaluation?.soundStates) ? scan.audioEvaluation.soundStates : null;
+  if (!soundStates) return null;
+  let lookup = SOUND_STATE_LOOKUP_CACHE.get(soundStates);
+  if (!lookup) {
+    lookup = new Map();
+    for (const soundState of soundStates) {
+      if (soundState?.soundId) lookup.set(soundState.soundId, soundState);
+    }
+    SOUND_STATE_LOOKUP_CACHE.set(soundStates, lookup);
+  }
+  return lookup;
+}
+
+function getSoundEvaluation(scan, soundId) {
+  if (!soundId) return null;
+  return getSoundStateLookup(scan)?.get(soundId) || null;
+}
+
+function getSoundPresence(options = {}) {
+  const evaluation = options.soundEvaluation;
+  const intensity = clamp01(evaluation?.normalizedIntensity ?? (options.isScanActive ? 1 : 0));
+  const phase = evaluation?.phase || (options.isScanActive ? "active" : "inactive");
+  return {
+    evaluation,
+    intensity,
+    phase,
+    isTriggered: phase === "triggered",
+    isSustain: phase === "sustain",
+    isFadeIn: phase === "fadeIn",
+    isFadeOut: phase === "fadeOut",
+  };
+}
+
+function drawZoneSound(ctx, sound, viewport, tileSize, scan, options = {}) {
   const rect = getSoundScreenRect(sound, tileSize, viewport);
   const visual = getSoundVisual(sound.type);
   const stroke = options.preview ? "#ffd68a" : options.isSelected ? "#ffb347" : options.isHovered ? "#7de7ff" : visual.stroke;
+  options.soundEvaluation = options.soundEvaluation || getSoundEvaluation(scan, sound.id);
+  const presence = getSoundPresence(options);
+  const intensity = presence.intensity;
   const fill = options.preview ? "rgba(255, 214, 138, 0.16)" : options.isSelected ? "rgba(255, 179, 71, 0.16)" : options.isScanActive ? visual.fill.replace('0.16', '0.22') : visual.fill;
   const outlineWidth = options.preview ? 1.8 : options.isSelected ? 1.8 : options.isScanActive ? 1.5 : 1.25;
   const isAmbientZone = sound.type === "ambientZone";
@@ -104,6 +148,7 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
   const cornerRadius = isAmbientZone ? 14 : 10;
   const fadeDistanceTiles = Math.max(0, Number(sound?.params?.fadeDistance) || 0);
   const fadeDistancePx = Math.min(rect.width * 0.48, fadeDistanceTiles * tileSize * viewport.zoom);
+  const scanPositionX = Number.isFinite(presence.evaluation?.positionX) ? presence.evaluation.positionX : Number.isFinite(scan?.positionX) ? scan.positionX : sound.x;
 
   if (options.isHovered && !options.preview) {
     drawFocusFrame(ctx, { x: rect.x - 3, y: rect.y - 3, width: rect.width + 6, height: rect.height + 6 }, "rgba(125, 231, 255, 0.45)", "rgba(125, 231, 255, 0.08)", 1.1);
@@ -120,16 +165,19 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
   drawRoundedRectPath(ctx, rect, cornerRadius);
 
   if (isAmbientZone) {
-    const gradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
-    gradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.12)" : options.isScanActive ? "rgba(126, 240, 199, 0.24)" : "rgba(126, 240, 199, 0.18)");
-    gradient.addColorStop(0.45, options.preview ? "rgba(255, 214, 138, 0.08)" : options.isScanActive ? "rgba(84, 193, 165, 0.16)" : "rgba(84, 193, 165, 0.12)");
-    gradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.04)" : options.isScanActive ? "rgba(126, 240, 199, 0.10)" : "rgba(126, 240, 199, 0.07)");
-    ctx.fillStyle = gradient;
+    const ambientLift = options.preview ? 0 : intensity * 0.07;
+    const ambientFlow = options.preview ? 0 : ((scanPositionX - sound.x) % 1 + 1) % 1;
+    const ambientGradient = ctx.createLinearGradient(rect.x, rect.y - rect.height * ambientFlow * 0.18, rect.x, rect.y + rect.height);
+    ambientGradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.12)" : `rgba(126, 240, 199, ${0.18 + ambientLift})`);
+    ambientGradient.addColorStop(0.45, options.preview ? "rgba(255, 214, 138, 0.08)" : `rgba(84, 193, 165, ${0.12 + ambientLift * 0.75})`);
+    ambientGradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.04)" : `rgba(126, 240, 199, ${0.07 + ambientLift * 0.5})`);
+    ctx.fillStyle = ambientGradient;
     ctx.fill();
 
     const hazeInset = 6;
-    drawRoundedRectPath(ctx, { x: rect.x + hazeInset, y: rect.y + hazeInset, width: Math.max(0, rect.width - hazeInset * 2), height: Math.max(0, rect.height - hazeInset * 2) }, Math.max(6, cornerRadius - hazeInset));
-    ctx.fillStyle = options.preview ? "rgba(255, 225, 173, 0.04)" : options.isScanActive ? "rgba(223, 255, 245, 0.08)" : "rgba(223, 255, 245, 0.05)";
+    const shimmerOffset = options.preview ? 0 : (ambientFlow - 0.5) * Math.min(rect.height * 0.12, 12);
+    drawRoundedRectPath(ctx, { x: rect.x + hazeInset, y: rect.y + hazeInset + shimmerOffset, width: Math.max(0, rect.width - hazeInset * 2), height: Math.max(0, rect.height - hazeInset * 2) }, Math.max(6, cornerRadius - hazeInset));
+    ctx.fillStyle = options.preview ? "rgba(255, 225, 173, 0.04)" : `rgba(223, 255, 245, ${0.05 + intensity * 0.05})`;
     ctx.fill();
 
     const bandCount = Math.max(2, Math.min(5, Math.floor(rect.height / 22)));
@@ -137,8 +185,8 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
     ctx.lineWidth = 1;
     for (let bandIndex = 0; bandIndex < bandCount; bandIndex += 1) {
       const ratio = (bandIndex + 1) / (bandCount + 1);
-      const bandY = rect.y + rect.height * ratio;
-      const amplitude = 4 + (bandIndex % 2) * 2;
+      const bandY = rect.y + rect.height * ratio + shimmerOffset * (0.35 + ratio * 0.25);
+      const amplitude = 4 + (bandIndex % 2) * 2 + intensity * 1.6;
       ctx.beginPath();
       ctx.moveTo(rect.x + 12, bandY);
       ctx.bezierCurveTo(
@@ -152,9 +200,12 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
       ctx.stroke();
     }
   } else if (isMusicZone) {
+    const musicEnergy = options.preview ? 0 : intensity;
+    const energyBand = options.preview ? 0.5 : ((scanPositionX - sound.x) % 1 + 1) % 1;
+    const bandCenterX = rect.x + rect.width * energyBand;
     const baseGradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
-    baseGradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.14)" : options.isScanActive ? "rgba(200, 157, 255, 0.24)" : "rgba(200, 157, 255, 0.18)");
-    baseGradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.08)" : options.isScanActive ? "rgba(123, 87, 173, 0.18)" : "rgba(123, 87, 173, 0.13)");
+    baseGradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.14)" : `rgba(200, 157, 255, ${0.18 + musicEnergy * 0.1})`);
+    baseGradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.08)" : `rgba(123, 87, 173, ${0.13 + musicEnergy * 0.08})`);
     ctx.fillStyle = baseGradient;
     ctx.fill();
 
@@ -166,11 +217,25 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
       height: innerRect.height,
     };
     if (fadeDistancePx > 0) {
-      fillRoundedRect(ctx, { x: innerRect.x, y: innerRect.y, width: fadeDistancePx, height: innerRect.height }, Math.max(0, cornerRadius - 2), options.preview ? "rgba(255, 225, 173, 0.06)" : "rgba(243, 231, 255, 0.10)");
-      fillRoundedRect(ctx, { x: innerRect.x + innerRect.width - fadeDistancePx, y: innerRect.y, width: fadeDistancePx, height: innerRect.height }, Math.max(0, cornerRadius - 2), options.preview ? "rgba(255, 225, 173, 0.06)" : "rgba(243, 231, 255, 0.10)");
+      fillRoundedRect(ctx, { x: innerRect.x, y: innerRect.y, width: fadeDistancePx, height: innerRect.height }, Math.max(0, cornerRadius - 2), options.preview ? "rgba(255, 225, 173, 0.06)" : `rgba(243, 231, 255, ${0.08 + musicEnergy * 0.08})`);
+      fillRoundedRect(ctx, { x: innerRect.x + innerRect.width - fadeDistancePx, y: innerRect.y, width: fadeDistancePx, height: innerRect.height }, Math.max(0, cornerRadius - 2), options.preview ? "rgba(255, 225, 173, 0.06)" : `rgba(243, 231, 255, ${0.08 + musicEnergy * 0.08})`);
     }
     if (sustainRect.width > 6) {
-      fillRoundedRect(ctx, sustainRect, Math.max(0, cornerRadius - 3), options.preview ? "rgba(255, 225, 173, 0.04)" : options.isScanActive ? "rgba(243, 231, 255, 0.10)" : "rgba(243, 231, 255, 0.07)");
+      const sustainAlpha = presence.isSustain ? 0.1 + musicEnergy * 0.12 : 0.07 + musicEnergy * 0.05;
+      fillRoundedRect(ctx, sustainRect, Math.max(0, cornerRadius - 3), options.preview ? "rgba(255, 225, 173, 0.04)" : `rgba(243, 231, 255, ${sustainAlpha})`);
+    }
+
+    if (!options.preview && musicEnergy > 0.01) {
+      const bandHalfWidth = Math.max(22, rect.width * (presence.isSustain ? 0.16 : 0.11));
+      const energyGradient = ctx.createLinearGradient(bandCenterX - bandHalfWidth, rect.y, bandCenterX + bandHalfWidth, rect.y);
+      energyGradient.addColorStop(0, "rgba(243, 231, 255, 0)");
+      energyGradient.addColorStop(0.5, `rgba(243, 231, 255, ${0.08 + musicEnergy * (presence.isSustain ? 0.18 : 0.1)})`);
+      energyGradient.addColorStop(1, "rgba(243, 231, 255, 0)");
+      ctx.save();
+      drawRoundedRectPath(ctx, innerRect, Math.max(0, cornerRadius - 2));
+      ctx.fillStyle = energyGradient;
+      ctx.fill();
+      ctx.restore();
     }
 
     ctx.save();
@@ -186,7 +251,7 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
     ctx.restore();
 
     ctx.save();
-    ctx.strokeStyle = options.preview ? "rgba(255, 225, 173, 0.55)" : withAlpha(visual.accent, options.isScanActive ? 0.6 : 0.4);
+    ctx.strokeStyle = options.preview ? "rgba(255, 225, 173, 0.55)" : withAlpha(visual.accent, options.isScanActive ? 0.4 + musicEnergy * 0.28 : 0.4);
     ctx.lineWidth = 1;
     ctx.setLineDash([6, 5]);
     if (fadeDistancePx > 0) {
@@ -256,9 +321,13 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
   ctx.restore();
 }
 
-function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
+function drawSpotSound(ctx, sound, viewport, tileSize, scan, options = {}) {
   const point = getSoundScreenPoint(sound, tileSize, viewport);
   const visual = getSoundVisual(sound.type);
+  options.soundEvaluation = options.soundEvaluation || getSoundEvaluation(scan, sound.id);
+  const presence = getSoundPresence(options);
+  const intensity = presence.intensity;
+  const pulseScale = options.preview ? 0 : intensity;
   const baseRadius = sound.type === "trigger" ? (options.isScanActive && !options.preview ? 7.5 : 6.75) : options.isScanActive && !options.preview ? 7 : 6;
   const isTrigger = sound.type === "trigger";
   const stroke = options.preview ? "#ffd68a" : options.isSelected ? "#ffb347" : options.isHovered ? "#7de7ff" : visual.stroke;
@@ -266,6 +335,8 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
   const radiusTiles = clampZoneSize(sound?.params?.radius, 0);
   const spatial = Boolean(sound?.params?.spatial);
   const radiusPx = radiusTiles > 0 ? radiusTiles * tileSize * viewport.zoom : 0;
+  const responsiveRadius = baseRadius + (!isTrigger && !options.preview ? pulseScale * 1.25 : 0);
+  const outerAuraRadius = Math.max(responsiveRadius + 2, responsiveRadius * (1.42 + pulseScale * 0.16));
 
   ctx.save();
   ctx.globalAlpha *= options.alpha ?? 1;
@@ -293,9 +364,9 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
       ctx.stroke();
       ctx.setLineDash([]);
     } else {
-      const outerGradient = ctx.createRadialGradient(point.x, point.y, Math.max(2, baseRadius * 0.65), point.x, point.y, radiusPx);
-      outerGradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.12)" : options.isScanActive ? "rgba(101, 214, 255, 0.16)" : "rgba(101, 214, 255, 0.12)");
-      outerGradient.addColorStop(0.55, options.preview ? "rgba(255, 214, 138, 0.06)" : "rgba(101, 214, 255, 0.05)");
+      const outerGradient = ctx.createRadialGradient(point.x, point.y, Math.max(2, responsiveRadius * 0.65), point.x, point.y, radiusPx);
+      outerGradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.12)" : `rgba(101, 214, 255, ${0.12 + pulseScale * 0.08})`);
+      outerGradient.addColorStop(0.55, options.preview ? "rgba(255, 214, 138, 0.06)" : `rgba(101, 214, 255, ${0.05 + pulseScale * 0.03})`);
       outerGradient.addColorStop(1, "rgba(101, 214, 255, 0)");
       ctx.beginPath();
       ctx.arc(point.x, point.y, radiusPx, 0, Math.PI * 2);
@@ -313,7 +384,7 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
       if (radiusPx > baseRadius * 2.8) {
         ctx.beginPath();
         ctx.arc(point.x, point.y, radiusPx * 0.6, 0, Math.PI * 2);
-        ctx.strokeStyle = withAlpha(visual.accent, options.isScanActive ? 0.22 : 0.14);
+        ctx.strokeStyle = withAlpha(visual.accent, options.isScanActive ? 0.14 + pulseScale * 0.16 : 0.14);
         ctx.lineWidth = 1;
         ctx.stroke();
       }
@@ -329,7 +400,7 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
       ctx.lineTo(point.x - (baseRadius + 8), point.y);
       ctx.closePath();
     } else {
-      ctx.arc(point.x, point.y, baseRadius + 6, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, responsiveRadius + 6, 0, Math.PI * 2);
     }
     ctx.fillStyle = "rgba(125, 231, 255, 0.10)";
     ctx.fill();
@@ -347,7 +418,7 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
       ctx.lineTo(point.x - (baseRadius + 11), point.y);
       ctx.closePath();
     } else {
-      ctx.arc(point.x, point.y, baseRadius + 9, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, outerAuraRadius + 2, 0, Math.PI * 2);
     }
     ctx.fillStyle = visual.fill.replace('0.20', '0.16').replace('0.18', '0.16');
     ctx.fill();
@@ -356,7 +427,7 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
     ctx.stroke();
 
     ctx.beginPath();
-    ctx.arc(point.x, point.y, baseRadius + 3.5, 0, Math.PI * 2);
+    ctx.arc(point.x, point.y, responsiveRadius + 3.5, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(10, 16, 26, 0.42)";
     ctx.fill();
     ctx.strokeStyle = visual.accent;
@@ -373,7 +444,7 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
       ctx.lineTo(point.x - (baseRadius + 10), point.y);
       ctx.closePath();
     } else {
-      ctx.arc(point.x, point.y, baseRadius + 8, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, responsiveRadius + 8, 0, Math.PI * 2);
     }
     ctx.fillStyle = options.preview ? "rgba(255, 214, 138, 0.10)" : "rgba(255, 179, 71, 0.14)";
     ctx.fill();
@@ -403,9 +474,9 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
     ctx.closePath();
     if (options.isScanActive && !options.preview) {
       ctx.shadowColor = visual.stroke;
-      ctx.shadowBlur = 12;
+      ctx.shadowBlur = 10 + (presence.isTriggered ? 12 : 0);
     }
-    ctx.fillStyle = fill;
+    ctx.fillStyle = presence.isTriggered && !options.preview ? "rgba(255, 179, 107, 0.30)" : fill;
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.strokeStyle = stroke;
@@ -415,7 +486,7 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
     ctx.setLineDash([]);
 
     ctx.beginPath();
-    ctx.arc(point.x - baseRadius * 0.7, point.y, 2.1, 0, Math.PI * 2);
+    ctx.arc(point.x - baseRadius * 0.7, point.y, presence.isTriggered && !options.preview ? 2.8 : 2.1, 0, Math.PI * 2);
     ctx.fillStyle = options.preview ? "#ffe1ad" : visual.accent;
     ctx.fill();
 
@@ -426,15 +497,15 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
     ctx.lineWidth = 1.3;
     ctx.stroke();
   } else {
-    const coreGradient = ctx.createRadialGradient(point.x - 1, point.y - 1, 1, point.x, point.y, baseRadius);
-    coreGradient.addColorStop(0, options.preview ? "rgba(255, 248, 227, 0.95)" : withAlpha(visual.accent, options.isScanActive ? 0.95 : 0.88));
-    coreGradient.addColorStop(0.35, options.preview ? "rgba(255, 214, 138, 0.42)" : withAlpha(visual.stroke, options.isScanActive ? 0.56 : 0.42));
+    const coreGradient = ctx.createRadialGradient(point.x - 1, point.y - 1, 1, point.x, point.y, responsiveRadius);
+    coreGradient.addColorStop(0, options.preview ? "rgba(255, 248, 227, 0.95)" : withAlpha(visual.accent, options.isScanActive ? 0.88 + pulseScale * 0.07 : 0.88));
+    coreGradient.addColorStop(0.35, options.preview ? "rgba(255, 214, 138, 0.42)" : withAlpha(visual.stroke, options.isScanActive ? 0.42 + pulseScale * 0.2 : 0.42));
     coreGradient.addColorStop(1, fill);
     ctx.beginPath();
-    ctx.arc(point.x, point.y, baseRadius, 0, Math.PI * 2);
+    ctx.arc(point.x, point.y, responsiveRadius, 0, Math.PI * 2);
     if (options.isScanActive && !options.preview) {
       ctx.shadowColor = visual.stroke;
-      ctx.shadowBlur = 14;
+      ctx.shadowBlur = 12 + pulseScale * 8;
     }
     ctx.fillStyle = coreGradient;
     ctx.fill();
@@ -446,25 +517,25 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
     ctx.setLineDash([]);
 
     ctx.beginPath();
-    ctx.arc(point.x, point.y, Math.max(2.2, baseRadius * 0.34), 0, Math.PI * 2);
-    ctx.fillStyle = options.preview ? "rgba(255, 248, 227, 0.94)" : withAlpha(visual.accent, options.isScanActive ? 0.94 : 0.84);
+    ctx.arc(point.x, point.y, Math.max(2.2, responsiveRadius * 0.34), 0, Math.PI * 2);
+    ctx.fillStyle = options.preview ? "rgba(255, 248, 227, 0.94)" : withAlpha(visual.accent, options.isScanActive ? 0.84 + pulseScale * 0.1 : 0.84);
     ctx.fill();
 
     ctx.beginPath();
-    ctx.arc(point.x, point.y, Math.max(baseRadius + 2, baseRadius * 1.45), 0, Math.PI * 2);
-    ctx.strokeStyle = withAlpha(visual.accent, options.isScanActive && !options.preview ? 0.34 : 0.18);
+    ctx.arc(point.x, point.y, outerAuraRadius, 0, Math.PI * 2);
+    ctx.strokeStyle = withAlpha(visual.accent, options.isScanActive && !options.preview ? 0.18 + pulseScale * 0.16 : 0.18);
     ctx.lineWidth = 1;
     ctx.stroke();
   }
   ctx.restore();
 }
 
-function drawSoundMarker(ctx, sound, viewport, tileSize, options = {}) {
+function drawSoundMarker(ctx, sound, viewport, tileSize, scan, options = {}) {
   if (isZoneSoundType(sound.type)) {
-    drawZoneSound(ctx, sound, viewport, tileSize, options);
+    drawZoneSound(ctx, sound, viewport, tileSize, scan, options);
     return;
   }
-  drawSpotSound(ctx, sound, viewport, tileSize, options);
+  drawSpotSound(ctx, sound, viewport, tileSize, scan, options);
 }
 
 export function findSoundAtCanvasPoint(doc, viewport, pointX, pointY, radius = 3) {
@@ -505,13 +576,14 @@ export function renderSounds(ctx, doc, viewport, interaction, scan = null) {
   const tileSize = doc.dimensions.tileSize;
   const draggedSelection = new Set(interaction.soundDrag?.active ? getSelectedSoundIndices(interaction) : []);
   const activeScanIds = new Set(scan?.activeSoundIds || []);
+  getSoundStateLookup(scan);
 
   for (let i = 0; i < sounds.length; i += 1) {
     const sound = sounds[i];
     if (!sound?.visible) continue;
     if (draggedSelection.has(i)) continue;
 
-    drawSoundMarker(ctx, sound, viewport, tileSize, {
+    drawSoundMarker(ctx, sound, viewport, tileSize, scan, {
       isSelected: isSoundSelected(interaction, i),
       isHovered: interaction.hoveredSoundIndex === i,
       alpha: 1,
@@ -528,7 +600,7 @@ export function renderSoundDragPreview(ctx, doc, viewport, interaction) {
     const sound = doc.sounds?.[origin.index];
     if (!sound?.visible) continue;
 
-    drawSoundMarker(ctx, { ...sound, x: origin.x + (soundDrag.previewDelta?.x || 0), y: origin.y + (soundDrag.previewDelta?.y || 0) }, viewport, doc.dimensions.tileSize, {
+    drawSoundMarker(ctx, { ...sound, x: origin.x + (soundDrag.previewDelta?.x || 0), y: origin.y + (soundDrag.previewDelta?.y || 0) }, viewport, doc.dimensions.tileSize, null, {
       isSelected: true,
       preview: true,
       alpha: 0.92,
@@ -545,7 +617,7 @@ export function renderSoundPlacementPreview(ctx, doc, viewport, interaction, act
     x: interaction.hoverCell.x,
     y: interaction.hoverCell.y,
     params: activePreset.defaultParams,
-  }, viewport, doc.dimensions.tileSize, {
+  }, viewport, doc.dimensions.tileSize, null, {
     preview: true,
     alpha: 0.9,
   });
