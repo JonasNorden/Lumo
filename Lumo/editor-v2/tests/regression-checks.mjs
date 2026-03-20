@@ -780,7 +780,7 @@ function runUiRegressionChecks() {
   assert.equal(tilesControlMarkup.includes('class="tilesPanelControls" aria-label="Tile brush controls"'), true, "tiles controls should render inline with the section header metadata");
   assert.equal(panel.innerHTML.includes('data-section-toggle="decor"'), true, "decor section should still render a collapse toggle");
   assert.equal(panel.innerHTML.includes('data-section-toggle="entities"'), true, "entities section should still render a collapse toggle");
-  assert.equal(panel.innerHTML.includes('data-section-toggle="sound"'), true, "sound section should still render a collapse toggle");
+  assert.equal(panel.innerHTML.includes('data-section-toggle="sound"'), false, "sound section should no longer render a collapse toggle");
   assert.equal(panel.innerHTML.includes('data-section-toggle="scan"'), true, "scan section should still render a collapse toggle");
   assert.equal(panel.innerHTML.includes('sectionEyebrow'), false, "panel headers should no longer render the redundant section eyebrow label");
   assert.equal(panel.innerHTML.includes('<span class="label">Current</span>'), true, "brush panel should still expose current-state summaries outside the compact tools/layer rows");
@@ -806,10 +806,12 @@ function runUiRegressionChecks() {
   assert.equal(panel.innerHTML.includes("Ambient Zone"), true, "sound selector should expose ambient zones");
   assert.equal(panel.innerHTML.includes("Music Zone"), true, "sound selector should expose music zones");
   const soundMarkup = panel.innerHTML.match(/<section class="panelSection soundSection[^>]*" aria-label="SOUND section">[\s\S]*?<\/section>/)?.[0] || "";
+  assert.equal(soundMarkup.includes('panelSectionInline'), true, "sound panel should use the compact inline section layout");
   assert.equal(soundMarkup.includes('soundHeaderSelectField'), true, "sound panel should render the preset dropdown inline in the header row");
-  assert.equal(soundMarkup.includes('sectionHeaderControls'), true, "sound header should preserve its inline control wrapper inside the compact header layout");
+  assert.equal(soundMarkup.includes('soundPanelControls'), true, "sound panel should keep its compact inline control wrapper");
   assert.equal(soundMarkup.includes('aria-label="Select Sound"'), true, "sound header selector should keep an accessible label");
   assert.equal(soundMarkup.includes('<span class="label">Select Sound</span>'), false, "sound panel should not render a redundant visible selector label");
+  assert.equal(soundMarkup.includes('class="sectionContent"></div>'), false, "sound panel should not render an empty collapsible body");
   assert.equal(soundMarkup.includes('statusCardLabel">Placement'), false, "sound panel should not render a placement status card");
   assert.equal(soundMarkup.includes('Placing: Spot Sound'), false, "sound panel should not duplicate the selected sound type in body content");
   assert.equal(soundMarkup.includes('Alt/Option + Click places'), false, "sound panel should not render the redundant placement hint card");
