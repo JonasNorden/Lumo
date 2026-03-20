@@ -16,7 +16,6 @@ const PANEL_LAYERS = {
   ENTITIES: "entities",
   DECOR: "decor",
   SOUND: "sound",
-  SCAN: "scan",
 };
 
 const VISIBLE_TOOL_OPTIONS = TOOL_OPTIONS.filter((option) => (
@@ -31,7 +30,6 @@ const COLLAPSIBLE_PANEL_DEFAULTS = {
   tiles: true,
   decor: true,
   entities: true,
-  scan: true,
 };
 
 function escapeHtml(value) {
@@ -293,126 +291,6 @@ function renderSoundSection(activePresetId) {
   `, "soundSection");
 }
 
-function formatScanValue(value, fallback = "Auto") {
-  return Number.isFinite(value) ? value.toFixed(2).replace(/\.00$/, "") : fallback;
-}
-
-function formatAudioEvaluationLabel(soundState) {
-  if (!soundState) return "";
-  const phaseLabel = soundState.phase && soundState.phase !== "inactive" ? ` · ${soundState.phase}` : "";
-  const intensityLabel = Number.isFinite(soundState.normalizedIntensity)
-    ? ` · lvl ${soundState.normalizedIntensity.toFixed(2).replace(/\.00$/, "")}`
-    : "";
-  return `${soundState.soundName}${phaseLabel}${intensityLabel}`;
-}
-
-function renderScanDebugEvent(entry, index) {
-  return `<div class="scanDebugItem"><span class="scanDebugIndex">${escapeHtml(String(index + 1))}</span><div class="scanDebugBody"><span class="scanDebugTitle">${escapeHtml(entry.soundName || entry.soundId || "Sound")}</span><span class="scanDebugMeta"><span class="scanDebugBadge">${escapeHtml(entry.transitionKind || entry.intersectionType || entry.soundType || "event")}</span><span>${escapeHtml(entry.phase || "inactive")}</span><span>x ${escapeHtml(String(entry.atX || "0"))}</span></span></div></div>`;
-}
-
-function renderScanSettings(state) {
-  const scan = state.scan || {};
-  const docWidth = Number(state.document.active?.dimensions?.width) || 0;
-  const startLabel = Number.isFinite(scan.startX) ? scan.startX : 0;
-  const endLabel = Number.isFinite(scan.endX) ? scan.endX : docWidth;
-  const speed = Number.isFinite(scan.speed) ? scan.speed : 6;
-  const playbackState = scan.playbackState || (scan.isPlaying ? "playing" : "idle");
-  const isPlaying = playbackState === "playing";
-  const isPaused = playbackState === "paused";
-  const audioEvaluation = scan.audioEvaluation || {};
-  const activeSounds = Array.isArray(audioEvaluation.activeSounds) ? audioEvaluation.activeSounds : [];
-  const startedSounds = Array.isArray(audioEvaluation.startedSounds) ? audioEvaluation.startedSounds : [];
-  const endedSounds = Array.isArray(audioEvaluation.endedSounds) ? audioEvaluation.endedSounds : [];
-  const activeCount = Array.isArray(scan.activeSoundIds) ? scan.activeSoundIds.length : activeSounds.length;
-  const lastEventSummary = scan.lastEventSummary || "No audio transitions yet";
-  const eventLog = Array.isArray(scan.eventLog) ? scan.eventLog.slice(0, 4) : [];
-  const activePreview = activeSounds.slice(0, 3).map(formatAudioEvaluationLabel);
-  const statusLabel = isPlaying ? "Running" : isPaused ? "Paused" : "Stopped";
-  const statusToneClass = isPlaying ? "isRunning" : isPaused ? "isPaused" : "isIdle";
-
-  return `
-    <div class="compactFieldGrid scanFieldGrid">
-      <label class="fieldRow fieldRowCompact">
-        <span class="label">Start X</span>
-        <input type="number" min="0" max="${docWidth}" step="0.25" value="${Number.isFinite(scan.startX) ? scan.startX : ""}" placeholder="0" data-scan-field="startX" />
-      </label>
-
-      <label class="fieldRow fieldRowCompact">
-        <span class="label">End X</span>
-        <input type="number" min="0" max="${docWidth}" step="0.25" value="${Number.isFinite(scan.endX) ? scan.endX : ""}" placeholder="${docWidth}" data-scan-field="endX" />
-      </label>
-
-      <label class="fieldRow fieldRowCompact scanFieldGridFull">
-        <span class="label">Speed</span>
-        <input type="number" min="0.25" step="0.25" value="${speed}" data-scan-field="speed" />
-      </label>
-    </div>
-
-    <div class="compactActionRow compactActionRowTriple">
-      <button type="button" class="toolButton ${isPlaying ? "isActive" : ""}" data-scan-action="play">${isPaused ? "Resume" : "Play"}</button>
-      <button type="button" class="toolButton isSecondary ${isPaused ? "isActive" : ""}" data-scan-action="pause" ${isPlaying ? "" : "disabled"}>Pause</button>
-      <button type="button" class="toolButton isSecondary" data-scan-action="stop" ${(isPlaying || isPaused) ? "" : "disabled"}>Stop</button>
-    </div>
-
-    <div class="statusCard scanMonitorCard">
-      <div class="scanMonitorHeader">
-        <span class="statusCardLabel">Scan Monitor</span>
-        <span class="scanStatePill ${statusToneClass}">${statusLabel}</span>
-      </div>
-      <span class="statusCardMeta">Preserves current play / pause / stop workflow and sound-layer scan authoring context.</span>
-      <div class="scanMonitorMetrics">
-        <div class="scanMetricCard">
-          <span class="scanMetricLabel">Range</span>
-          <span class="scanMetricValue">${escapeHtml(String(startLabel))} → ${escapeHtml(String(endLabel))}</span>
-        </div>
-        <div class="scanMetricCard">
-          <span class="scanMetricLabel">Position</span>
-          <span class="scanMetricValue">${escapeHtml(formatScanValue(scan.positionX, "0"))}</span>
-        </div>
-        <div class="scanMetricCard">
-          <span class="scanMetricLabel">Speed</span>
-          <span class="scanMetricValue">${escapeHtml(formatScanValue(speed, "6"))}x</span>
-        </div>
-        <div class="scanMetricCard">
-          <span class="scanMetricLabel">Active Sounds</span>
-          <span class="scanMetricValue">${escapeHtml(String(activeCount))}</span>
-        </div>
-        <div class="scanMetricCard">
-          <span class="scanMetricLabel">Started</span>
-          <span class="scanMetricValue">${escapeHtml(String(startedSounds.length))}</span>
-        </div>
-        <div class="scanMetricCard">
-          <span class="scanMetricLabel">Ended</span>
-          <span class="scanMetricValue">${escapeHtml(String(endedSounds.length))}</span>
-        </div>
-      </div>
-      <div class="scanMonitorSummary">
-        <span class="scanMonitorSummaryLabel">Latest event</span>
-        <span class="scanMonitorSummaryValue">${escapeHtml(lastEventSummary)}</span>
-      </div>
-      <div class="scanMonitorSummary">
-        <span class="scanMonitorSummaryLabel">Active detail</span>
-        <span class="scanMonitorSummaryValue">${activePreview.length ? escapeHtml(activePreview.join(" • ")) : "No active sounds at the current scan position"}</span>
-      </div>
-    </div>
-
-    <div class="compactSubsection">
-      <div class="compactSubsectionHeader scanDebugHeader">
-        <div>
-          <span class="label">Event Feed</span>
-          <span class="scanDebugCaption">Recent started / ended / triggered audio transitions</span>
-        </div>
-        <button type="button" class="toolButton isSecondary compactToggleButton" data-scan-action="clear-log" ${eventLog.length ? "" : "disabled"}>Clear</button>
-      </div>
-      <div class="scanDebugList">
-        ${eventLog.length
-          ? eventLog.map(renderScanDebugEvent).join("")
-          : '<div class="scanDebugEmpty">Waiting for scan audio transitions.</div>'}
-      </div>
-    </div>
-  `;
-}
-
 export function renderBrushPanel(panel, state) {
   const brushDraft = state.brush.activeDraft;
   const summary = getBrushDraftSummary(brushDraft);
@@ -454,24 +332,11 @@ export function renderBrushPanel(panel, state) {
     ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
     ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
     ${state.document.active ? renderSoundSection(state.interaction.activeSoundPresetId) : ""}
-    ${state.document.active ? renderSection("scan", "SCAN", panelSections.scan, renderScanSettings(state)) : ""}
   `;
 }
 
 export function bindBrushPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onCanvasTargetChange, onLayerChange, onScanUpdate } = options;
-
-  const triggerScanAction = (target) => {
-    if (!(target instanceof HTMLElement)) return false;
-    const scanActionButton = target.closest("[data-scan-action]");
-    if (!(scanActionButton instanceof HTMLButtonElement)) return false;
-
-    const action = scanActionButton.dataset.scanAction;
-    if (!action || scanActionButton.disabled) return true;
-
-    onScanUpdate?.(action, null);
-    return true;
-  };
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onCanvasTargetChange, onLayerChange } = options;
 
   const onChange = (event) => {
     const target = event.target;
@@ -524,10 +389,6 @@ export function bindBrushPanel(panel, store, options = {}) {
       return;
     }
 
-    const scanField = target.dataset.scanField;
-    if (scanField === "startX" || scanField === "endX" || scanField === "speed") {
-      onScanUpdate?.(scanField, target.value);
-    }
   };
 
   const onClick = (event) => {
@@ -591,9 +452,6 @@ export function bindBrushPanel(panel, store, options = {}) {
       return;
     }
 
-    if (event.detail === 0 && triggerScanAction(target)) {
-      return;
-    }
 
     const layerButton = target.closest("[data-layer]");
     if (layerButton instanceof HTMLButtonElement) {
@@ -621,14 +479,6 @@ export function bindBrushPanel(panel, store, options = {}) {
     });
   };
 
-  const onPointerDown = (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    if (!triggerScanAction(target)) return;
-
-    event.preventDefault();
-  };
-
   const onKeyDown = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
@@ -642,13 +492,11 @@ export function bindBrushPanel(panel, store, options = {}) {
   };
 
   panel.addEventListener("change", onChange);
-  panel.addEventListener("pointerdown", onPointerDown);
   panel.addEventListener("click", onClick);
   panel.addEventListener("keydown", onKeyDown);
 
   return () => {
     panel.removeEventListener("change", onChange);
-    panel.removeEventListener("pointerdown", onPointerDown);
     panel.removeEventListener("click", onClick);
     panel.removeEventListener("keydown", onKeyDown);
   };

@@ -104,7 +104,6 @@ export function createEditorState() {
         entities: true,
         decor: true,
         sound: true,
-        scan: true,
       },
     },
   };

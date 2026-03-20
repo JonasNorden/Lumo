@@ -4077,6 +4077,7 @@ export function createEditorApp({
     onEntityUpdate: updateEntity,
     onDecorUpdate: updateDecor,
     onSoundUpdate: updateSound,
+    onScanUpdate: updateScanControl,
   };
   const unbindInspectorPanel = bindInspectorPanel(inspector, store, panelBindingOptions);
   const unbindBottomPanel = bindBottomPanel(bottomPanel, store, panelBindingOptions);
