@@ -854,6 +854,34 @@ select {
   row-gap: 4px;
 }
 
+.selectionInlineGroup {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.selectionBatchHeader {
+  gap: 2px;
+}
+
+.selectionActionGroup {
+  padding: 4px 0 2px;
+}
+
+.selectionActionLabel {
+  font-weight: 600;
+}
+
+.selectionActionRow {
+  width: 100%;
+}
+
+.selectionActionRow .toolButton {
+  min-width: 0;
+  white-space: nowrap;
+}
+
 .entityPositionGrid,
 .inspectorGroupGrid {
   gap: 6px;

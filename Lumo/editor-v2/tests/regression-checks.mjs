@@ -18,6 +18,7 @@ import {
 import { paintSingleTile } from "../src/domain/tiles/paintTile.js";
 import { eraseSingleTile } from "../src/domain/tiles/eraseTile.js";
 import { renderBrushPanel } from "../src/ui/brushPanel.js";
+import { renderBottomPanel } from "../src/ui/bottomPanel.js";
 import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
 import { serializeLevelDocument } from "../src/data/exportLevelDocument.js";
 import {
@@ -35,6 +36,7 @@ import {
 import { evaluateScanAudio } from "../src/domain/scan/scanAudioEvaluation.js";
 import { createScanAudioPlaybackController } from "../src/domain/scan/scanAudioPlayback.js";
 import { resolveSoundPlaybackSource } from "../src/domain/sound/sourceReference.js";
+import { findMatchingSoundIndices } from "../src/domain/sound/selection.js";
 
 function createHistoryState() {
   return {
@@ -558,6 +560,103 @@ function runUiRegressionChecks() {
   assert.equal(panel.innerHTML.includes("Alt/Option + Drag scatters"), true, "decor scatter hint should mention Alt/Option + Drag");
 }
 
+function runSoundBatchSelectionRegressionChecks() {
+  const sounds = [
+    { id: "sound-0", type: "ambientZone", source: "./audio/forest.ogg", params: {} },
+    { id: "sound-1", type: "ambientZone", source: "./audio/forest.ogg", params: {} },
+    { id: "sound-2", type: "ambientZone", source: "./audio/rain.ogg", params: {} },
+    { id: "sound-3", type: "trigger", source: "./audio/forest.ogg", params: {} },
+    { id: "sound-4", type: "trigger", params: {} },
+  ];
+
+  assert.deepEqual(
+    findMatchingSoundIndices(sounds, 0, { matchType: true, matchSource: false }),
+    [0, 1, 2],
+    "smart sound selection should find every sound with the same type across the whole level",
+  );
+  assert.deepEqual(
+    findMatchingSoundIndices(sounds, 0, { matchType: false, matchSource: true }),
+    [0, 1, 3],
+    "smart sound selection should find every sound with the same source across the whole level",
+  );
+  assert.deepEqual(
+    findMatchingSoundIndices(sounds, 0, { matchType: true, matchSource: true }),
+    [0, 1],
+    "smart sound selection should support combined same-type and same-source matching",
+  );
+  assert.deepEqual(
+    findMatchingSoundIndices(sounds, 4, { matchType: false, matchSource: true }),
+    [4],
+    "smart sound selection should treat unassigned sources as a matchable source state",
+  );
+}
+
+function runBottomPanelBatchSoundRegressionChecks() {
+  globalThis.document = { activeElement: null };
+
+  const panel = {
+    innerHTML: "",
+    classList: {
+      toggle() {},
+    },
+    querySelector() {
+      return null;
+    },
+  };
+
+  const state = {
+    document: {
+      status: "ready",
+      error: null,
+      active: {
+        ...createDoc(),
+        sounds: [
+          {
+            id: "sound-a",
+            name: "Forest 1",
+            type: "ambientZone",
+            x: 1,
+            y: 2,
+            visible: true,
+            source: "./audio/ambient/forest/jungle.ogg",
+            params: { volume: 0.5, pitch: 1, loop: true, spatial: false, width: 4, height: 2 },
+          },
+          {
+            id: "sound-b",
+            name: "Forest 2",
+            type: "ambientZone",
+            x: 8,
+            y: 2,
+            visible: true,
+            source: "./audio/ambient/rain/rain.wav",
+            params: { volume: 0.75, pitch: 0.9, loop: true, spatial: false, width: 5, height: 2 },
+          },
+        ],
+        entities: [],
+        decor: [],
+      },
+    },
+    interaction: {
+      selectedEntityIndices: [],
+      selectedEntityIndex: null,
+      selectedDecorIndices: [],
+      selectedDecorIndex: null,
+      selectedSoundIndices: [0, 1],
+      selectedSoundIndex: 1,
+    },
+  };
+
+  renderBottomPanel(panel, state);
+  assert.equal(panel.innerHTML.includes("Batch edit 2 sound objects"), true, "bottom panel should switch into batch sound editing when multiple sounds are selected");
+  assert.equal(panel.innerHTML.includes('data-sound-action="smart-select"'), true, "bottom panel should expose smart sound selection actions");
+  assert.equal(panel.innerHTML.includes('data-sound-field="source" data-sound-index="-1"'), true, "batch sound editing should expose a single source field that targets the whole selection");
+  assert.equal(panel.innerHTML.includes('data-sound-param-key="spatial"'), true, "batch sound editing should expose the spatial field");
+  assert.equal(panel.innerHTML.includes('data-sound-param-key="volume"'), true, "batch sound editing should expose the volume field");
+  assert.equal(panel.innerHTML.includes('data-sound-param-key="pitch"'), true, "batch sound editing should expose the pitch field");
+  assert.equal(panel.innerHTML.includes('data-sound-param-key="loop"'), true, "batch sound editing should expose the loop field");
+  assert.equal(panel.innerHTML.includes("Mixed source"), true, "batch sound editing should show mixed source state when selected sounds disagree");
+}
+
 function runScanAudioPlaybackRegressionChecks() {
   const doc = createDoc();
   doc.sounds = [
@@ -1027,6 +1126,8 @@ async function main() {
   runScanAudioPlaybackRegressionChecks();
   await runScanAudioAssetFallbackChecks();
   runUiRegressionChecks();
+  runSoundBatchSelectionRegressionChecks();
+  runBottomPanelBatchSoundRegressionChecks();
   runSourceRegressionChecks();
 
   console.log("editor-v2 regression checks passed");

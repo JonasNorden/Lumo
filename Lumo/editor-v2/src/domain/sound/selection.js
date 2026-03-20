@@ -1,3 +1,5 @@
+import { getAuthoredSoundSource } from "./sourceReference.js";
+
 export function getSelectedSoundIndices(interaction) {
   return Array.isArray(interaction?.selectedSoundIndices) ? interaction.selectedSoundIndices.filter(Number.isInteger) : [];
 }
@@ -48,4 +50,27 @@ export function pruneSoundSelection(interaction, soundCount) {
   const selectedIndices = getSelectedSoundIndices(interaction).filter((index) => index < soundCount);
   const primaryIndex = getPrimarySelectedSoundIndex(interaction);
   setSoundSelection(interaction, selectedIndices, primaryIndex !== null && primaryIndex < soundCount ? primaryIndex : null);
+}
+
+export function findMatchingSoundIndices(sounds, referenceIndex, options = {}) {
+  if (!Array.isArray(sounds) || !Number.isInteger(referenceIndex) || referenceIndex < 0 || referenceIndex >= sounds.length) {
+    return [];
+  }
+
+  const referenceSound = sounds[referenceIndex];
+  if (!referenceSound) return [];
+
+  const matchType = options.matchType !== false;
+  const matchSource = Boolean(options.matchSource);
+  const referenceSource = getAuthoredSoundSource(referenceSound) || null;
+
+  return sounds
+    .map((sound, index) => ({ sound, index }))
+    .filter(({ sound }) => Boolean(sound))
+    .filter(({ sound }) => {
+      if (matchType && sound.type !== referenceSound.type) return false;
+      if (matchSource && (getAuthoredSoundSource(sound) || null) !== referenceSource) return false;
+      return true;
+    })
+    .map(({ index }) => index);
 }
