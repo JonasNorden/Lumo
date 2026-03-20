@@ -986,21 +986,9 @@ select {
 
 .scanControlsHeader {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-
-.scanControlsTitleGroup {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.scanControlsCaption {
-  color: #90a6d0;
-  font-size: 11px;
-  line-height: 1.35;
 }
 
 .scanFieldGrid {

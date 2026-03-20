@@ -23,10 +23,7 @@ export function renderScanControls(state, options = {}) {
   return `
     <section class="${shellClass}" aria-label="Scan controls">
       <div class="scanControlsHeader">
-        <div class="scanControlsTitleGroup">
-          <span class="sectionTitle sectionTitleInline">SCAN</span>
-          <span class="scanControlsCaption">Preview transport while you stay focused on the canvas.</span>
-        </div>
+        <span class="sectionTitle sectionTitleInline">SCAN</span>
         <span class="scanStatePill ${statusToneClass}">${statusLabel}</span>
       </div>
 
