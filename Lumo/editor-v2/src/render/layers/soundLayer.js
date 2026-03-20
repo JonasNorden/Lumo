@@ -69,8 +69,8 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
   const rect = getSoundScreenRect(sound, tileSize, viewport);
   const visual = getSoundVisual(sound.type);
   const stroke = options.preview ? "#ffd68a" : options.isSelected ? "#ffb347" : options.isHovered ? "#7de7ff" : visual.stroke;
-  const fill = options.preview ? "rgba(255, 214, 138, 0.16)" : options.isSelected ? "rgba(255, 179, 71, 0.16)" : visual.fill;
-  const outlineWidth = options.preview ? 1.8 : options.isSelected ? 1.8 : 1.25;
+  const fill = options.preview ? "rgba(255, 214, 138, 0.16)" : options.isSelected ? "rgba(255, 179, 71, 0.16)" : options.isScanActive ? visual.fill.replace('0.16', '0.22') : visual.fill;
+  const outlineWidth = options.preview ? 1.8 : options.isSelected ? 1.8 : options.isScanActive ? 1.5 : 1.25;
   const isAmbientZone = sound.type === "ambientZone";
   const cornerRadius = isAmbientZone ? 14 : 10;
 
@@ -81,7 +81,7 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
     drawFocusFrame(ctx, { x: rect.x - 4, y: rect.y - 4, width: rect.width + 8, height: rect.height + 8 }, options.preview ? "rgba(255, 214, 138, 0.72)" : "rgba(255, 179, 71, 0.7)", options.preview ? "rgba(255, 214, 138, 0.10)" : "rgba(255, 179, 71, 0.10)", 1.2, options.preview);
   }
   if (options.isScanActive && !options.preview) {
-    drawFocusFrame(ctx, { x: rect.x - 6, y: rect.y - 6, width: rect.width + 12, height: rect.height + 12 }, "rgba(136, 232, 255, 0.78)", "rgba(136, 232, 255, 0.10)", 1.35, true);
+    drawFocusFrame(ctx, { x: rect.x - 5, y: rect.y - 5, width: rect.width + 10, height: rect.height + 10 }, visual.stroke, "rgba(12, 20, 35, 0.08)", 1.25, false);
   }
 
   ctx.save();
@@ -90,8 +90,8 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
 
   if (isAmbientZone) {
     const gradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
-    gradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.12)" : "rgba(126, 240, 199, 0.24)");
-    gradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.05)" : "rgba(126, 240, 199, 0.10)");
+    gradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.12)" : options.isScanActive ? "rgba(126, 240, 199, 0.30)" : "rgba(126, 240, 199, 0.24)");
+    gradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.05)" : options.isScanActive ? "rgba(126, 240, 199, 0.14)" : "rgba(126, 240, 199, 0.10)");
     ctx.fillStyle = gradient;
     ctx.fill();
 
@@ -130,6 +130,16 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
     ctx.restore();
   }
 
+  if (options.isScanActive && !options.preview) {
+    ctx.save();
+    ctx.strokeStyle = visual.accent;
+    ctx.lineWidth = 1;
+    ctx.setLineDash(isAmbientZone ? [10, 6] : [6, 5]);
+    drawRoundedRectPath(ctx, { x: rect.x + 4, y: rect.y + 4, width: Math.max(0, rect.width - 8), height: Math.max(0, rect.height - 8) }, Math.max(4, cornerRadius - 4));
+    ctx.stroke();
+    ctx.restore();
+  }
+
   ctx.strokeStyle = stroke;
   ctx.lineWidth = outlineWidth;
   if (options.preview) ctx.setLineDash([8, 5]);
@@ -139,13 +149,31 @@ function drawZoneSound(ctx, sound, viewport, tileSize, options = {}) {
   ctx.fillStyle = options.preview ? "#ffe1ad" : visual.accent;
   ctx.font = "11px Inter, system-ui, sans-serif";
   ctx.fillText(visual.label, rect.x + 8, rect.y + 16);
+
+  if (options.isScanActive && !options.preview) {
+    const badgeWidth = Math.min(rect.width - 12, 58);
+    if (badgeWidth > 18) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.roundRect(rect.x + 8, rect.y + Math.max(22, rect.height - 22), badgeWidth, 14, 7);
+      ctx.fillStyle = "rgba(10, 16, 26, 0.72)";
+      ctx.fill();
+      ctx.strokeStyle = visual.stroke;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = visual.accent;
+      ctx.font = "10px Inter, system-ui, sans-serif";
+      ctx.fillText("Active", rect.x + 16, rect.y + Math.max(32, rect.height - 12));
+      ctx.restore();
+    }
+  }
   ctx.restore();
 }
 
 function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
   const point = getSoundScreenPoint(sound, tileSize, viewport);
   const visual = getSoundVisual(sound.type);
-  const baseRadius = 6;
+  const baseRadius = options.isScanActive && !options.preview ? 6.75 : 6;
   const isTrigger = sound.type === "trigger";
   const stroke = options.preview ? "#ffd68a" : options.isSelected ? "#ffb347" : options.isHovered ? "#7de7ff" : visual.stroke;
   const fill = options.preview ? "rgba(255, 214, 138, 0.20)" : visual.fill;
@@ -189,21 +217,27 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
   if (options.isScanActive && !options.preview) {
     ctx.beginPath();
     if (isTrigger) {
-      ctx.moveTo(point.x, point.y - (baseRadius + 12));
-      ctx.lineTo(point.x + (baseRadius + 12), point.y);
-      ctx.lineTo(point.x, point.y + (baseRadius + 12));
-      ctx.lineTo(point.x - (baseRadius + 12), point.y);
+      ctx.moveTo(point.x, point.y - (baseRadius + 11));
+      ctx.lineTo(point.x + (baseRadius + 11), point.y);
+      ctx.lineTo(point.x, point.y + (baseRadius + 11));
+      ctx.lineTo(point.x - (baseRadius + 11), point.y);
       ctx.closePath();
     } else {
-      ctx.arc(point.x, point.y, baseRadius + 10, 0, Math.PI * 2);
+      ctx.arc(point.x, point.y, baseRadius + 9, 0, Math.PI * 2);
     }
-    ctx.fillStyle = "rgba(136, 232, 255, 0.10)";
+    ctx.fillStyle = visual.fill.replace('0.20', '0.16').replace('0.18', '0.16');
     ctx.fill();
-    ctx.strokeStyle = "rgba(136, 232, 255, 0.78)";
-    ctx.lineWidth = 1.3;
-    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = visual.stroke;
+    ctx.lineWidth = 1.35;
     ctx.stroke();
-    ctx.setLineDash([]);
+
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, baseRadius + 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(10, 16, 26, 0.42)";
+    ctx.fill();
+    ctx.strokeStyle = visual.accent;
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
 
   if (options.isSelected) {
@@ -236,8 +270,13 @@ function drawSpotSound(ctx, sound, viewport, tileSize, options = {}) {
   } else {
     ctx.arc(point.x, point.y, baseRadius, 0, Math.PI * 2);
   }
+  if (options.isScanActive && !options.preview) {
+    ctx.shadowColor = visual.stroke;
+    ctx.shadowBlur = 14;
+  }
   ctx.fillStyle = fill;
   ctx.fill();
+  ctx.shadowBlur = 0;
   ctx.strokeStyle = stroke;
   ctx.lineWidth = options.preview ? 1.8 : 1.6;
   if (options.preview) ctx.setLineDash([6, 4]);
