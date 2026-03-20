@@ -781,7 +781,7 @@ function runUiRegressionChecks() {
   assert.equal(panel.innerHTML.includes('data-section-toggle="decor"'), true, "decor section should still render a collapse toggle");
   assert.equal(panel.innerHTML.includes('data-section-toggle="entities"'), true, "entities section should still render a collapse toggle");
   assert.equal(panel.innerHTML.includes('data-section-toggle="sound"'), false, "sound section should no longer render a collapse toggle");
-  assert.equal(panel.innerHTML.includes('data-section-toggle="scan"'), true, "scan section should still render a collapse toggle");
+  assert.equal(panel.innerHTML.includes('data-section-toggle="scan"'), false, "scan section should no longer render in the left brush panel");
   assert.equal(panel.innerHTML.includes('sectionEyebrow'), false, "panel headers should no longer render the redundant section eyebrow label");
   assert.equal(panel.innerHTML.includes('<span class="label">Current</span>'), true, "brush panel should still expose current-state summaries outside the compact tools/layer rows");
   assert.equal(/<span class=\"label\">Current<\/span>\s*<span class=\"value\">Entities<\/span>/.test(panel.innerHTML), false, "layer panel should not render a redundant current-layer row");
@@ -797,10 +797,10 @@ function runUiRegressionChecks() {
   };
   renderBrushPanel(panel, entityInactiveState);
   assert.equal(panel.innerHTML.includes("Select an entity preset"), true, "entity status row should prompt for a preset when placement is not armed");
-  assert.equal(panel.innerHTML.includes('data-scan-action="play"'), true, "scan controls should expose a play button");
-  assert.equal(panel.innerHTML.includes('data-scan-action="pause"'), true, "scan controls should expose a pause button");
-  assert.equal(panel.innerHTML.includes('data-scan-action="stop"'), true, "scan controls should expose a stop button");
-  assert.equal(panel.innerHTML.includes('data-scan-field="speed"'), true, "scan controls should expose a speed field");
+  assert.equal(panel.innerHTML.includes('data-scan-action="play"'), false, "scan transport controls should move out of the left brush panel");
+  assert.equal(panel.innerHTML.includes('data-scan-action="pause"'), false, "scan pause controls should move out of the left brush panel");
+  assert.equal(panel.innerHTML.includes('data-scan-action="stop"'), false, "scan stop controls should move out of the left brush panel");
+  assert.equal(panel.innerHTML.includes('data-scan-field="speed"'), false, "scan fields should move out of the left brush panel");
   assert.equal(panel.innerHTML.includes("Spot Sound"), true, "sound selector should expose spot sounds");
   assert.equal(panel.innerHTML.includes("Trigger Sound"), true, "sound selector should expose trigger sounds");
   assert.equal(panel.innerHTML.includes("Ambient Zone"), true, "sound selector should expose ambient zones");
@@ -949,6 +949,17 @@ function runBottomPanelBatchSoundRegressionChecks() {
   };
 
   renderBottomPanel(panel, state);
+  assert.equal(panel.innerHTML.includes("bottomPanelScanPane"), true, "bottom panel should render a dedicated scan pane on the left");
+  assert.equal(panel.innerHTML.includes("bottomPanelEditorPane"), true, "bottom panel should keep a separate editing pane to the right");
+  assert.equal(panel.innerHTML.includes('data-scan-field="startX"'), true, "bottom panel should expose the scan start field");
+  assert.equal(panel.innerHTML.includes('data-scan-field="endX"'), true, "bottom panel should expose the scan end field");
+  assert.equal(panel.innerHTML.includes('data-scan-field="speed"'), true, "bottom panel should expose the scan speed field");
+  assert.equal(panel.innerHTML.includes('data-scan-action="play"'), true, "bottom panel should expose scan play/resume controls");
+  assert.equal(panel.innerHTML.includes('data-scan-action="pause"'), true, "bottom panel should expose scan pause controls");
+  assert.equal(panel.innerHTML.includes('data-scan-action="stop"'), true, "bottom panel should expose scan stop controls");
+  assert.equal(panel.innerHTML.includes("Scan Monitor"), false, "bottom panel should remove the large scan monitor dashboard from the permanent surface");
+  assert.equal(panel.innerHTML.includes("Event Feed"), false, "bottom panel should remove the scan event feed from the permanent surface");
+  assert.equal(panel.innerHTML.includes("Latest event"), false, "bottom panel should remove the latest-event monitor summary from the permanent surface");
   assert.equal(panel.innerHTML.includes("Batch edit 2 sound objects"), false, "bottom panel should avoid large batch explanation text");
   assert.equal(panel.innerHTML.includes('data-sound-action="smart-select"'), true, "bottom panel should expose compact smart sound selection actions");
   assert.equal(panel.innerHTML.includes('same type'), true, "batch sound editing should keep the same-type action inline");
@@ -1014,7 +1025,8 @@ function runBottomPanelFogVolumeRegressionChecks() {
   };
 
   renderBottomPanel(panel, state);
-  assert.equal(panel.innerHTML.trim(), "", "bottom panel should stay empty for hidden fog volume selections");
+  assert.equal(panel.innerHTML.includes("bottomPanelScanPane"), true, "bottom panel should keep the permanent scan pane even when the selection editor is empty");
+  assert.equal(panel.innerHTML.includes("selectionEditorEmptyState"), false, "bottom panel should keep the editor pane visually empty for hidden fog volume selections");
 }
 
 function runInspectorFogRegressionChecks() {

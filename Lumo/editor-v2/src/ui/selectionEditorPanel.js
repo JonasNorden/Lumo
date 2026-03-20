@@ -684,7 +684,7 @@ function applyParamChange(target, prefix, onUpdate, options = {}) {
   return true;
 }
 
-export function renderSelectionEditorPanel(panel, state, options = {}) {
+export function getSelectionEditorPanelContent(state, options = {}) {
   const {
     loadingMessage = "Loading document…",
     documentError = state.document.error,
@@ -693,21 +693,22 @@ export function renderSelectionEditorPanel(panel, state, options = {}) {
   } = options;
 
   if (state.document.status === "loading") {
-    setPanelMarkup(panel, `<div class="value">${escapeHtml(loadingMessage)}</div>`);
-    return;
+    return { markup: `<div class="value">${escapeHtml(loadingMessage)}</div>`, isEmpty: false };
   }
 
   if (documentError) {
-    setPanelMarkup(panel, `<div class="value">${escapeHtml(documentError)}</div>`);
-    return;
+    return { markup: `<div class="value">${escapeHtml(documentError)}</div>`, isEmpty: false };
   }
 
   if (!state.document.active) {
-    setPanelMarkup(panel, `<div class="value">${escapeHtml(noDocumentMessage)}</div>`);
-    return;
+    return { markup: `<div class="value">${escapeHtml(noDocumentMessage)}</div>`, isEmpty: false };
   }
 
-  const { markup, isEmpty } = renderSelectionEditor(state, emptyMessage, options);
+  return renderSelectionEditor(state, emptyMessage, options);
+}
+
+export function renderSelectionEditorPanel(panel, state, options = {}) {
+  const { markup, isEmpty } = getSelectionEditorPanelContent(state, options);
   setPanelMarkup(panel, markup, isEmpty);
 }
 
