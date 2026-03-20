@@ -120,7 +120,7 @@ export const mockLevelDocument = {
       y: 11,
       visible: true,
       params: {
-        lightRadius: 6,
+        lightRadius: 170,
         flicker: true,
       },
     },
