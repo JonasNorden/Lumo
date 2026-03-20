@@ -1474,6 +1474,75 @@ function runSourceRegressionChecks() {
     true,
     "shift-drag box selection should stay additive",
   );
+  assert.equal(
+    source.includes("const clearSpecialVolumePlacement = (draft) => {"),
+    true,
+    "special-volume placement cleanup helper should exist for shared interaction resets",
+  );
+
+  const setActiveToolSection = source.match(/const setActiveTool = \(tool\) => \{[\s\S]*?\n  \};/);
+  assert.ok(setActiveToolSection, "setActiveTool should exist");
+  assert.equal(
+    setActiveToolSection[0].includes("clearSpecialVolumePlacement(draft);"),
+    true,
+    "tool switching should clear stale special-volume placement state",
+  );
+
+  assert.equal(
+    setActiveLayerFromPanelSection[0].includes("clearSpecialVolumePlacement(draft);"),
+    true,
+    "panel layer switching should clear stale special-volume placement state",
+  );
+
+  const handleCanvasMouseMoveSection = source.match(/const handleCanvasMouseMove = \(event\) => \{[\s\S]*?\n  \};/);
+  assert.ok(handleCanvasMouseMoveSection, "handleCanvasMouseMove should exist");
+  assert.equal(
+    handleCanvasMouseMoveSection[0].includes("clearSpecialVolumePlacement(draft);"),
+    true,
+    "canvas mouse move should clean up stale special-volume placement when the drag button is no longer held",
+  );
+
+  const finalizeSpecialVolumePlacementSection = source.match(/const finalizeSpecialVolumePlacement = \(draft\) => \{[\s\S]*?\n  \};/);
+  assert.ok(finalizeSpecialVolumePlacementSection, "finalizeSpecialVolumePlacement should exist");
+  assert.equal(
+    finalizeSpecialVolumePlacementSection[0].includes("if (draggedWidth < 1 && draggedHeight < 1) {"),
+    true,
+    "special-volume placement should ignore zero-distance clicks instead of creating accidental fog entities",
+  );
+
+  const syncInteractionAfterHistoryChangeSection = source.match(/const syncInteractionAfterHistoryChange = \(draft\) => \{[\s\S]*?\n  \};/);
+  assert.ok(syncInteractionAfterHistoryChangeSection, "syncInteractionAfterHistoryChange should exist");
+  assert.equal(
+    syncInteractionAfterHistoryChangeSection[0].includes("clearSpecialVolumePlacement(draft);"),
+    true,
+    "history changes should clear stale special-volume placement state",
+  );
+
+  assert.equal(
+    source.includes("const handleTopBarInput = (event) => {"),
+    true,
+    "top bar should handle live input events for export metadata editing",
+  );
+  assert.equal(
+    source.includes("handleTopBarFieldInput(target, { commit: false });"),
+    true,
+    "export metadata typing should update draft state without forcing commit-time trimming",
+  );
+  assert.equal(
+    source.includes("const focusedTopBarField = captureFocusedTopBarField();"),
+    true,
+    "top bar rendering should capture the focused field before rerendering menus",
+  );
+  assert.equal(
+    source.includes("restoreFocusedTopBarField(focusedTopBarField);"),
+    true,
+    "top bar rendering should restore focused export fields after rerenders",
+  );
+  assert.equal(
+    source.includes('topBar.addEventListener("input", handleTopBarInput);'),
+    true,
+    "top bar should listen for input events so export fields stay editable during rerenders",
+  );
 
   const stopScanPlaybackSection = source.match(/const stopScanPlayback = \(draft, preserveLog = true\) => \{[\s\S]*?\n  \};/);
   assert.ok(stopScanPlaybackSection, "stopScanPlayback should exist");
