@@ -33,6 +33,7 @@ import {
   syncScanPlaybackState,
 } from "../src/domain/scan/scanSystem.js";
 import { evaluateScanAudio } from "../src/domain/scan/scanAudioEvaluation.js";
+import { createScanAudioPlaybackController } from "../src/domain/scan/scanAudioPlayback.js";
 
 function createHistoryState() {
   return {
@@ -513,6 +514,146 @@ function runUiRegressionChecks() {
   assert.equal(panel.innerHTML.includes("Alt/Option + Drag scatters"), true, "decor scatter hint should mention Alt/Option + Drag");
 }
 
+function runScanAudioPlaybackRegressionChecks() {
+  const doc = createDoc();
+  doc.sounds = [
+    {
+      id: "spot-audio",
+      name: "Spot Audio",
+      type: "spot",
+      x: 4,
+      y: 0,
+      visible: true,
+      params: { volume: 0.75, pitch: 1, radius: 2, spatial: true, loop: false },
+    },
+    {
+      id: "trigger-audio",
+      name: "Trigger Audio",
+      type: "trigger",
+      x: 8,
+      y: 0,
+      visible: true,
+      params: { volume: 0.6, pitch: 1, loop: false, spatial: true },
+    },
+    {
+      id: "ambient-audio",
+      name: "Ambient Audio",
+      type: "ambientZone",
+      x: 10,
+      y: 0,
+      visible: true,
+      params: { volume: 0.5, pitch: 1, loop: true, spatial: false, width: 4, height: 2 },
+    },
+    {
+      id: "music-audio",
+      name: "Music Audio",
+      type: "musicZone",
+      x: 16,
+      y: 0,
+      visible: true,
+      params: { volume: 0.8, pitch: 1, loop: true, spatial: false, fadeDistance: 2, sustainWidth: 3 },
+    },
+  ];
+
+  const instanceLog = [];
+  const liveInstances = new Map();
+  const controller = createScanAudioPlaybackController({
+    audioContext: null,
+    createPlaybackInstance: ({ sound, soundState, onEnded }) => {
+      const metrics = {
+        soundId: sound.id,
+        soundType: soundState.soundType,
+        playCalls: 0,
+        pauseCalls: 0,
+        resumeCalls: 0,
+        stopCalls: 0,
+        volumes: [],
+      };
+      instanceLog.push(metrics);
+      liveInstances.set(sound.id, metrics);
+
+      return {
+        play() {
+          metrics.playCalls += 1;
+        },
+        pause() {
+          metrics.pauseCalls += 1;
+        },
+        resume() {
+          metrics.resumeCalls += 1;
+        },
+        setVolume(volume) {
+          metrics.volumes.push(volume);
+        },
+        stop() {
+          metrics.stopCalls += 1;
+          liveInstances.delete(sound.id);
+          onEnded?.();
+        },
+      };
+    },
+  });
+
+  const createScanState = (playbackState, evaluation) => ({
+    playbackState,
+    isPlaying: playbackState === "playing",
+    audioEvaluation: evaluation,
+  });
+
+  const spotStart = evaluateScanAudio(doc, 1, 4.5);
+  controller.sync({ doc, scan: createScanState("playing", spotStart) });
+  assert.deepEqual(controller.getActiveInstanceIds(), ["spot-audio"], "spot sounds should start a persistent playback instance when the scan enters their radius");
+  assert.equal(instanceLog[0].playCalls, 1, "persistent spot sounds should create exactly one instance on entry");
+  assert.equal(instanceLog[0].volumes.at(-1), 0.75, "spot sounds should map normalized intensity onto authored volume");
+
+  const spotSustain = evaluateScanAudio(doc, 4.5, 5.25);
+  controller.sync({ doc, scan: createScanState("playing", spotSustain) });
+  assert.equal(instanceLog[0].playCalls, 1, "persistent spot sounds should not restart every frame while active");
+  assert.equal(instanceLog[0].volumes.at(-1) < 0.75, true, "spot sustain updates should continue to refresh volume from normalized intensity");
+
+  const triggerCrossing = evaluateScanAudio(doc, 8.2, 8.8);
+  controller.sync({ doc, scan: createScanState("playing", triggerCrossing) });
+  assert.equal(instanceLog.filter((entry) => entry.soundId === "trigger-audio").length, 1, "trigger sounds should create a single one-shot instance when crossed");
+
+  const triggerNoCrossing = evaluateScanAudio(doc, 8.8, 9.2);
+  controller.sync({ doc, scan: createScanState("playing", triggerNoCrossing) });
+  assert.equal(instanceLog.filter((entry) => entry.soundId === "trigger-audio").length, 1, "trigger sounds should not retrigger on non-crossing frames");
+
+  const ambientInside = evaluateScanAudio(doc, 9.5, 11);
+  controller.sync({ doc, scan: createScanState("playing", ambientInside) });
+  assert.equal(controller.getActiveInstanceIds().includes("ambient-audio"), true, "ambient zones should remain active while the scan stays inside the zone");
+
+  const musicFadeIn = evaluateScanAudio(doc, 15, 16.5);
+  controller.sync({ doc, scan: createScanState("playing", musicFadeIn) });
+  const musicMetrics = instanceLog.find((entry) => entry.soundId === "music-audio");
+  assert.equal(controller.getActiveInstanceIds().includes("music-audio"), true, "music zones should start playback when the scan reaches the fade-in boundary");
+  assert.equal(musicMetrics.volumes.at(-1), 0.2, "music zones should scale volume during fade-in using normalized intensity");
+
+  const musicSustain = evaluateScanAudio(doc, 17.8, 19);
+  controller.sync({ doc, scan: createScanState("playing", musicSustain) });
+  assert.equal(musicMetrics.volumes.at(-1), 0.8, "music zones should reach full authored volume during sustain");
+
+  const activeBeforePause = controller.getActiveInstanceIds();
+  controller.sync({ doc, scan: createScanState("paused", musicSustain) });
+  assert.equal(
+    activeBeforePause.every((soundId) => (liveInstances.get(soundId)?.pauseCalls || 0) >= 1),
+    true,
+    "pausing scan playback should pause every active audio instance",
+  );
+
+  controller.sync({ doc, scan: createScanState("playing", musicSustain) });
+  assert.equal(
+    activeBeforePause.every((soundId) => (liveInstances.get(soundId)?.resumeCalls || 0) >= 1),
+    true,
+    "resuming scan playback should resume active audio instances",
+  );
+
+  controller.sync({ doc, scan: createScanState("idle", musicSustain) });
+  assert.deepEqual(controller.getActiveInstanceIds(), [], "stopping scan playback should stop and clear all active audio instances");
+
+  controller.destroy();
+}
+
 function runSourceRegressionChecks() {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const source = fs.readFileSync(path.join(repoRoot, "src/app/createEditorApp.js"), "utf8");
@@ -618,6 +759,7 @@ runEntityRegressionChecks();
 runDecorRegressionChecks();
 runSoundRegressionChecks();
 runScanRegressionChecks();
+runScanAudioPlaybackRegressionChecks();
 runUiRegressionChecks();
 runSourceRegressionChecks();
 
