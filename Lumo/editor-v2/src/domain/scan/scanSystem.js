@@ -104,6 +104,16 @@ export function pauseScanPlaybackState(scan) {
   return true;
 }
 
+export function setPausedScanPosition(scan, doc, positionX) {
+  if (!isScanPaused(scan)) return false;
+
+  const { startX, endX } = getScanRange(scan, doc);
+  scan.positionX = Math.max(startX, Math.min(endX, clampScanCoordinate(positionX, endX)));
+  scan.activeSoundIds = [];
+  scan.lastFrameTime = null;
+  return true;
+}
+
 export function finishScanPlaybackState(scan) {
   scan.playbackState = "idle";
   scan.isPlaying = false;
