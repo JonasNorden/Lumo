@@ -451,12 +451,14 @@ export function createEditorApp({
   const pauseScanPlayback = (draft) => {
     if (!draft.document.active) return;
     invalidateScanPlayback();
+    applyCanvasTarget(draft, "sound");
     pauseScanPlaybackState(draft.scan);
   };
 
   const startScanPlayback = (draft) => {
     if (!draft.document.active) return;
     invalidateScanPlayback();
+    applyCanvasTarget(draft, "sound");
     startScanPlaybackState(draft.scan, draft.viewport, draft.document.active);
   };
 
