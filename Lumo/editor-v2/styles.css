@@ -861,25 +861,49 @@ select {
   min-width: 0;
 }
 
-.selectionBatchHeader {
-  gap: 2px;
-}
-
-.selectionActionGroup {
-  padding: 4px 0 2px;
-}
-
-.selectionActionLabel {
-  font-weight: 600;
-}
-
-.selectionActionRow {
-  width: 100%;
-}
-
-.selectionActionRow .toolButton {
+.selectionInlineCluster {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
   min-width: 0;
+}
+
+.selectionFieldActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.selectionActionPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid rgba(92, 113, 158, 0.45);
+  border-radius: 999px;
+  background: rgba(24, 31, 45, 0.9);
+  color: #c8d7f6;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
   white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.selectionActionPill:hover {
+  border-color: rgba(122, 146, 204, 0.7);
+  background: rgba(36, 47, 69, 0.96);
+  color: #e6efff;
+}
+
+.selectionActionPill:focus-visible {
+  outline: 2px solid rgba(110, 168, 254, 0.85);
+  outline-offset: 1px;
 }
 
 .entityPositionGrid,
@@ -927,6 +951,24 @@ select {
   min-height: 24px;
 }
 
+.selectionReadOnlyField {
+  gap: 8px;
+}
+
+.selectionValueChip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(92, 113, 158, 0.28);
+  border-radius: 6px;
+  background: rgba(24, 31, 45, 0.72);
+  color: #d8e5ff;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .selectionFieldName input {
   min-width: 132px;
   max-width: 176px;
@@ -949,17 +991,7 @@ select {
 }
 
 .selectionSourcePickerField {
-  align-items: flex-start;
-}
-
-.selectionInlineHint {
-  color: #8ea1c8;
-  font-size: 11px;
-  line-height: 1.2;
-}
-
-.selectionSourceMeta {
-  max-width: 320px;
+  align-items: center;
 }
 
 .selectionCoordField input {

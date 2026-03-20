@@ -19,6 +19,7 @@ import { paintSingleTile } from "../src/domain/tiles/paintTile.js";
 import { eraseSingleTile } from "../src/domain/tiles/eraseTile.js";
 import { renderBrushPanel } from "../src/ui/brushPanel.js";
 import { renderBottomPanel } from "../src/ui/bottomPanel.js";
+import { renderInspector } from "../src/ui/inspectorPanel.js";
 import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
 import { serializeLevelDocument } from "../src/data/exportLevelDocument.js";
 import {
@@ -647,14 +648,75 @@ function runBottomPanelBatchSoundRegressionChecks() {
   };
 
   renderBottomPanel(panel, state);
-  assert.equal(panel.innerHTML.includes("Batch edit 2 sound objects"), true, "bottom panel should switch into batch sound editing when multiple sounds are selected");
-  assert.equal(panel.innerHTML.includes('data-sound-action="smart-select"'), true, "bottom panel should expose smart sound selection actions");
+  assert.equal(panel.innerHTML.includes("Batch edit 2 sound objects"), false, "bottom panel should avoid large batch explanation text");
+  assert.equal(panel.innerHTML.includes('data-sound-action="smart-select"'), true, "bottom panel should expose compact smart sound selection actions");
+  assert.equal(panel.innerHTML.includes('same type'), true, "batch sound editing should keep the same-type action inline");
+  assert.equal(panel.innerHTML.includes('same source'), true, "batch sound editing should keep the same-source action inline");
+  assert.equal(panel.innerHTML.includes('type + source'), true, "batch sound editing should keep the type-plus-source action inline");
   assert.equal(panel.innerHTML.includes('data-sound-field="source" data-sound-index="-1"'), true, "batch sound editing should expose a single source field that targets the whole selection");
   assert.equal(panel.innerHTML.includes('data-sound-param-key="spatial"'), true, "batch sound editing should expose the spatial field");
   assert.equal(panel.innerHTML.includes('data-sound-param-key="volume"'), true, "batch sound editing should expose the volume field");
   assert.equal(panel.innerHTML.includes('data-sound-param-key="pitch"'), true, "batch sound editing should expose the pitch field");
   assert.equal(panel.innerHTML.includes('data-sound-param-key="loop"'), true, "batch sound editing should expose the loop field");
   assert.equal(panel.innerHTML.includes("Mixed source"), true, "batch sound editing should show mixed source state when selected sounds disagree");
+}
+
+function runInspectorSoundSummaryRegressionChecks() {
+  const panel = {
+    innerHTML: "",
+    classList: {
+      toggle() {},
+    },
+  };
+
+  const state = {
+    document: {
+      status: "ready",
+      error: null,
+      active: {
+        meta: { id: "doc", name: "Doc", version: "2.0.0" },
+        dimensions: { width: 16, height: 16, tileSize: 16 },
+        tiles: { base: new Array(256).fill(0) },
+        backgrounds: { layers: [] },
+        sounds: [
+          {
+            id: "sound-a",
+            name: "Forest 1",
+            type: "ambientZone",
+            x: 2,
+            y: 2,
+            visible: true,
+            source: "./audio/ambient/forest/jungle.ogg",
+            params: { volume: 0.5, pitch: 1, loop: true, spatial: false, width: 4, height: 2 },
+          },
+          {
+            id: "sound-b",
+            name: "Forest 2",
+            type: "ambientZone",
+            x: 8,
+            y: 2,
+            visible: true,
+            source: "./audio/ambient/rain/rain.wav",
+            params: { volume: 0.75, pitch: 0.9, loop: true, spatial: false, width: 5, height: 2 },
+          },
+        ],
+        entities: [],
+        decor: [],
+      },
+    },
+    interaction: {
+      selectedEntityIndices: [],
+      selectedEntityIndex: null,
+      selectedDecorIndices: [],
+      selectedDecorIndex: null,
+      selectedSoundIndices: [0, 1],
+      selectedSoundIndex: 1,
+    },
+  };
+
+  renderInspector(panel, state);
+  assert.equal(panel.innerHTML.includes('data-sound-action="smart-select"'), false, "inspector should not duplicate batch sound editing actions");
+  assert.equal(panel.innerHTML.includes('data-sound-field="source"'), false, "inspector should not duplicate batch sound editing fields");
 }
 
 function runScanAudioPlaybackRegressionChecks() {
@@ -1128,6 +1190,7 @@ async function main() {
   runUiRegressionChecks();
   runSoundBatchSelectionRegressionChecks();
   runBottomPanelBatchSoundRegressionChecks();
+  runInspectorSoundSummaryRegressionChecks();
   runSourceRegressionChecks();
 
   console.log("editor-v2 regression checks passed");
