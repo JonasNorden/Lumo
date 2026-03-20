@@ -165,47 +165,48 @@ function drawZoneSound(ctx, sound, viewport, tileSize, scan, options = {}) {
   drawRoundedRectPath(ctx, rect, cornerRadius);
 
   if (isAmbientZone) {
-    const ambientLift = options.preview ? 0 : intensity * 0.07;
+    const ambientLift = options.preview ? 0 : intensity * 0.035;
     const ambientFlow = options.preview ? 0 : ((scanPositionX - sound.x) % 1 + 1) % 1;
-    const ambientGradient = ctx.createLinearGradient(rect.x, rect.y - rect.height * ambientFlow * 0.18, rect.x, rect.y + rect.height);
-    ambientGradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.12)" : `rgba(126, 240, 199, ${0.18 + ambientLift})`);
-    ambientGradient.addColorStop(0.45, options.preview ? "rgba(255, 214, 138, 0.08)" : `rgba(84, 193, 165, ${0.12 + ambientLift * 0.75})`);
-    ambientGradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.04)" : `rgba(126, 240, 199, ${0.07 + ambientLift * 0.5})`);
+    const ambientDrift = rect.height * ambientFlow * 0.08;
+    const ambientGradient = ctx.createLinearGradient(rect.x, rect.y - ambientDrift, rect.x, rect.y + rect.height);
+    ambientGradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.12)" : `rgba(126, 240, 199, ${0.15 + ambientLift})`);
+    ambientGradient.addColorStop(0.45, options.preview ? "rgba(255, 214, 138, 0.08)" : `rgba(84, 193, 165, ${0.1 + ambientLift * 0.65})`);
+    ambientGradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.04)" : `rgba(126, 240, 199, ${0.06 + ambientLift * 0.4})`);
     ctx.fillStyle = ambientGradient;
     ctx.fill();
 
-    const hazeInset = 6;
-    const shimmerOffset = options.preview ? 0 : (ambientFlow - 0.5) * Math.min(rect.height * 0.12, 12);
+    const hazeInset = 8;
+    const shimmerOffset = options.preview ? 0 : (ambientFlow - 0.5) * Math.min(rect.height * 0.05, 5);
     drawRoundedRectPath(ctx, { x: rect.x + hazeInset, y: rect.y + hazeInset + shimmerOffset, width: Math.max(0, rect.width - hazeInset * 2), height: Math.max(0, rect.height - hazeInset * 2) }, Math.max(6, cornerRadius - hazeInset));
-    ctx.fillStyle = options.preview ? "rgba(255, 225, 173, 0.04)" : `rgba(223, 255, 245, ${0.05 + intensity * 0.05})`;
+    ctx.fillStyle = options.preview ? "rgba(255, 225, 173, 0.04)" : `rgba(223, 255, 245, ${0.035 + intensity * 0.025})`;
     ctx.fill();
 
-    const bandCount = Math.max(2, Math.min(5, Math.floor(rect.height / 22)));
-    ctx.strokeStyle = options.preview ? "rgba(255, 225, 173, 0.48)" : "rgba(223, 255, 245, 0.30)";
+    const bandCount = Math.max(2, Math.min(4, Math.floor(rect.height / 28)));
+    ctx.strokeStyle = options.preview ? "rgba(255, 225, 173, 0.48)" : "rgba(223, 255, 245, 0.18)";
     ctx.lineWidth = 1;
     for (let bandIndex = 0; bandIndex < bandCount; bandIndex += 1) {
       const ratio = (bandIndex + 1) / (bandCount + 1);
-      const bandY = rect.y + rect.height * ratio + shimmerOffset * (0.35 + ratio * 0.25);
-      const amplitude = 4 + (bandIndex % 2) * 2 + intensity * 1.6;
+      const bandY = rect.y + rect.height * ratio + shimmerOffset * (0.2 + ratio * 0.15);
+      const amplitude = 2.2 + (bandIndex % 2) * 1 + intensity * 0.7;
       ctx.beginPath();
-      ctx.moveTo(rect.x + 12, bandY);
+      ctx.moveTo(rect.x + 14, bandY);
       ctx.bezierCurveTo(
-        rect.x + rect.width * 0.28,
+        rect.x + rect.width * 0.3,
         bandY - amplitude,
-        rect.x + rect.width * 0.72,
+        rect.x + rect.width * 0.7,
         bandY + amplitude,
-        rect.x + rect.width - 12,
+        rect.x + rect.width - 14,
         bandY,
       );
       ctx.stroke();
     }
   } else if (isMusicZone) {
-    const musicEnergy = options.preview ? 0 : intensity;
+    const musicEnergy = options.preview ? 0 : intensity * 0.6;
     const energyBand = options.preview ? 0.5 : ((scanPositionX - sound.x) % 1 + 1) % 1;
     const bandCenterX = rect.x + rect.width * energyBand;
     const baseGradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
-    baseGradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.14)" : `rgba(200, 157, 255, ${0.18 + musicEnergy * 0.1})`);
-    baseGradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.08)" : `rgba(123, 87, 173, ${0.13 + musicEnergy * 0.08})`);
+    baseGradient.addColorStop(0, options.preview ? "rgba(255, 214, 138, 0.14)" : `rgba(200, 157, 255, ${0.16 + musicEnergy * 0.08})`);
+    baseGradient.addColorStop(1, options.preview ? "rgba(255, 214, 138, 0.08)" : `rgba(123, 87, 173, ${0.12 + musicEnergy * 0.06})`);
     ctx.fillStyle = baseGradient;
     ctx.fill();
 
@@ -217,19 +218,20 @@ function drawZoneSound(ctx, sound, viewport, tileSize, scan, options = {}) {
       height: innerRect.height,
     };
     if (fadeDistancePx > 0) {
-      fillRoundedRect(ctx, { x: innerRect.x, y: innerRect.y, width: fadeDistancePx, height: innerRect.height }, Math.max(0, cornerRadius - 2), options.preview ? "rgba(255, 225, 173, 0.06)" : `rgba(243, 231, 255, ${0.08 + musicEnergy * 0.08})`);
-      fillRoundedRect(ctx, { x: innerRect.x + innerRect.width - fadeDistancePx, y: innerRect.y, width: fadeDistancePx, height: innerRect.height }, Math.max(0, cornerRadius - 2), options.preview ? "rgba(255, 225, 173, 0.06)" : `rgba(243, 231, 255, ${0.08 + musicEnergy * 0.08})`);
+      const fadeEdgeAlpha = 0.065 + musicEnergy * 0.05;
+      fillRoundedRect(ctx, { x: innerRect.x, y: innerRect.y, width: fadeDistancePx, height: innerRect.height }, Math.max(0, cornerRadius - 2), options.preview ? "rgba(255, 225, 173, 0.06)" : `rgba(243, 231, 255, ${fadeEdgeAlpha})`);
+      fillRoundedRect(ctx, { x: innerRect.x + innerRect.width - fadeDistancePx, y: innerRect.y, width: fadeDistancePx, height: innerRect.height }, Math.max(0, cornerRadius - 2), options.preview ? "rgba(255, 225, 173, 0.06)" : `rgba(243, 231, 255, ${fadeEdgeAlpha})`);
     }
     if (sustainRect.width > 6) {
-      const sustainAlpha = presence.isSustain ? 0.1 + musicEnergy * 0.12 : 0.07 + musicEnergy * 0.05;
+      const sustainAlpha = presence.isSustain ? 0.085 + musicEnergy * 0.07 : 0.06 + musicEnergy * 0.035;
       fillRoundedRect(ctx, sustainRect, Math.max(0, cornerRadius - 3), options.preview ? "rgba(255, 225, 173, 0.04)" : `rgba(243, 231, 255, ${sustainAlpha})`);
     }
 
     if (!options.preview && musicEnergy > 0.01) {
-      const bandHalfWidth = Math.max(22, rect.width * (presence.isSustain ? 0.16 : 0.11));
+      const bandHalfWidth = Math.max(18, rect.width * (presence.isSustain ? 0.12 : 0.085));
       const energyGradient = ctx.createLinearGradient(bandCenterX - bandHalfWidth, rect.y, bandCenterX + bandHalfWidth, rect.y);
       energyGradient.addColorStop(0, "rgba(243, 231, 255, 0)");
-      energyGradient.addColorStop(0.5, `rgba(243, 231, 255, ${0.08 + musicEnergy * (presence.isSustain ? 0.18 : 0.1)})`);
+      energyGradient.addColorStop(0.5, `rgba(243, 231, 255, ${0.055 + musicEnergy * (presence.isSustain ? 0.11 : 0.06)})`);
       energyGradient.addColorStop(1, "rgba(243, 231, 255, 0)");
       ctx.save();
       drawRoundedRectPath(ctx, innerRect, Math.max(0, cornerRadius - 2));
