@@ -213,16 +213,14 @@ function renderDecorSettings(state) {
   const scatterRandomness = Number.isFinite(scatterSettings.randomness) ? Math.max(0, Math.min(1, scatterSettings.randomness)) : 0.6;
   const scatterVariantMode = scatterSettings.variantMode === "random" ? "random" : "fixed";
   const scatterModeActive = Boolean(state.interaction.decorScatterMode);
-  const placementLabel = activePreset ? `Placing: ${activePreset.defaultName}` : "No placement";
   const scatterStatus = !activePreset
-    ? "Select Decor first"
+    ? "Select a decor preset"
     : scatterModeActive
-      ? `Alt/Option + Drag scatters · ${Math.round(scatterDensity * 100)}% density · ${Math.round(scatterRandomness * 100)}% randomness`
-      : "Alt/Option + Click places one";
+      ? `${activePreset.defaultName} · Alt/Option + Drag · ${Math.round(scatterDensity * 100)}% density · ${Math.round(scatterRandomness * 100)}% randomness`
+      : `${activePreset.defaultName} · Alt/Option + Click`;
 
   return `
     ${renderAssetPicker("Decor presets", "decor-preset-button", DECOR_PRESETS, activePresetId, "No decor selected", "assetPickerDecorCompact")}
-    ${renderPlacementBlock(placementLabel, "", "decorPlacementCard")}
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton isSecondary" data-decor-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
     </div>

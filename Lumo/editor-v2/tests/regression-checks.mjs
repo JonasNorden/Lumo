@@ -819,7 +819,19 @@ function runUiRegressionChecks() {
     },
   };
   renderBrushPanel(panel, decorState);
-  assert.equal(panel.innerHTML.includes("Alt/Option + Drag scatters"), true, "decor scatter hint should mention Alt/Option + Drag");
+  assert.equal(panel.innerHTML.includes("decorPlacementCard"), false, "decor panel should no longer render a separate placement status card");
+  assert.equal(panel.innerHTML.includes("Grass Tuft · Alt/Option + Drag · 30% density · 60% randomness"), true, "decor status row should carry the active preset and scatter readiness summary");
+
+  const decorInactiveState = {
+    ...decorState,
+    interaction: {
+      ...decorState.interaction,
+      activeDecorPresetId: null,
+      decorScatterMode: false,
+    },
+  };
+  renderBrushPanel(panel, decorInactiveState);
+  assert.equal(panel.innerHTML.includes("Select a decor preset"), true, "decor status row should prompt for a preset when placement is not armed");
 }
 
 function runSoundBatchSelectionRegressionChecks() {
