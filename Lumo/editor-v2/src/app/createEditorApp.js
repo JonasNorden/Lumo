@@ -47,8 +47,12 @@ import { DEFAULT_SOUND_PRESET_ID, findSoundPresetById, getSoundPresetDefaultPara
 import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
 import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
 import {
+  finishScanPlaybackState,
   getScanActivity,
+  getScanPlaybackState,
   getScanRange,
+  isScanPlaying,
+  pauseScanPlaybackState,
   sanitizeOptionalScanCoordinate,
   startScanPlaybackState,
   stopScanPlaybackState,
@@ -444,6 +448,12 @@ export function createEditorApp({
     stopScanPlaybackState(draft.scan, draft.viewport, draft.document.active, { preserveLog });
   };
 
+  const pauseScanPlayback = (draft) => {
+    if (!draft.document.active) return;
+    invalidateScanPlayback();
+    pauseScanPlaybackState(draft.scan);
+  };
+
   const startScanPlayback = (draft) => {
     if (!draft.document.active) return;
     invalidateScanPlayback();
@@ -457,13 +467,13 @@ export function createEditorApp({
       if (playbackToken !== scanPlaybackToken) return;
       const state = store.getState();
       const doc = state.document.active;
-      if (!doc || !state.scan.isPlaying) return;
+      if (!doc || !isScanPlaying(state.scan)) return;
 
       let triggeredEvents = [];
       let shouldContinue = false;
       store.setState((draft) => {
         const activeDoc = draft.document.active;
-        if (playbackToken !== scanPlaybackToken || !activeDoc || !draft.scan.isPlaying) return;
+        if (playbackToken !== scanPlaybackToken || !activeDoc || !isScanPlaying(draft.scan)) return;
 
         const { startX, endX } = getScanRange(draft.scan, activeDoc);
         const previousX = Number.isFinite(draft.scan.positionX) ? draft.scan.positionX : startX;
@@ -490,13 +500,10 @@ export function createEditorApp({
         panViewportByDelta(draft.viewport, deltaX * followAlpha, 0);
 
         if (nextX >= endX) {
-          draft.scan.isPlaying = false;
-          draft.scan.activeSoundIds = [];
-          draft.scan.lastFrameTime = null;
-          draft.scan.viewportSnapshot = null;
+          finishScanPlaybackState(draft.scan);
         }
 
-        shouldContinue = draft.scan.isPlaying;
+        shouldContinue = isScanPlaying(draft.scan);
       });
 
       if (playbackToken !== scanPlaybackToken) return;
@@ -2178,6 +2185,11 @@ export function createEditorApp({
         return;
       }
 
+      if (field === "pause") {
+        pauseScanPlayback(draft);
+        return;
+      }
+
       if (field === "stop") {
         stopScanPlayback(draft, true);
         return;
@@ -2198,18 +2210,18 @@ export function createEditorApp({
         const width = Number(doc.dimensions?.width) || 0;
         draft.scan[field] = rawValue === "" ? null : sanitizeOptionalScanCoordinate(rawValue, width);
         const { startX, endX } = getScanRange(draft.scan, doc);
-        if (draft.scan.positionX < startX || draft.scan.positionX > endX || !draft.scan.isPlaying) {
+        if (draft.scan.positionX < startX || draft.scan.positionX > endX || getScanPlaybackState(draft.scan) === "idle") {
           draft.scan.positionX = startX;
         }
         draft.scan.activeSoundIds = [];
         draft.scan.lastFrameTime = null;
-        if (!draft.scan.isPlaying) {
+        if (getScanPlaybackState(draft.scan) === "idle") {
           draft.scan.viewportSnapshot = null;
         }
       }
     });
 
-    if (field === "play" && store.getState().scan.isPlaying) {
+    if (field === "play" && isScanPlaying(store.getState().scan)) {
       scheduleScanFrame(scanPlaybackToken);
     }
   };

@@ -25,6 +25,23 @@ export function getScanResetPosition(scan, doc) {
   return getScanRange(scan, doc).startX;
 }
 
+export function getScanPlaybackState(scan) {
+  return scan?.playbackState || (scan?.isPlaying ? "playing" : "idle");
+}
+
+export function isScanPlaying(scan) {
+  return getScanPlaybackState(scan) === "playing";
+}
+
+export function isScanPaused(scan) {
+  return getScanPlaybackState(scan) === "paused";
+}
+
+export function isScanSessionActive(scan) {
+  const playbackState = getScanPlaybackState(scan);
+  return playbackState === "playing" || playbackState === "paused";
+}
+
 export function captureScanViewport(viewport) {
   return {
     offsetX: Number.isFinite(viewport?.offsetX) ? viewport.offsetX : 0,
@@ -43,6 +60,7 @@ export function syncScanPlaybackState(scan, doc, options = {}) {
   const { preserveLog = false } = options;
 
   scan.positionX = getScanResetPosition(scan, doc);
+  scan.playbackState = "idle";
   scan.isPlaying = false;
   scan.activeSoundIds = [];
   scan.lastFrameTime = null;
@@ -55,11 +73,43 @@ export function syncScanPlaybackState(scan, doc, options = {}) {
 }
 
 export function startScanPlaybackState(scan, viewport, doc) {
-  scan.positionX = getScanResetPosition(scan, doc);
+  const playbackState = getScanPlaybackState(scan);
+  const isResuming = playbackState === "paused";
+  const { startX, endX } = getScanRange(scan, doc);
+
+  if (!isResuming) {
+    scan.positionX = startX;
+    scan.activeSoundIds = [];
+    scan.viewportSnapshot = captureScanViewport(viewport);
+  } else if (!scan.viewportSnapshot) {
+    scan.viewportSnapshot = captureScanViewport(viewport);
+  }
+
+  if (!Number.isFinite(scan.positionX) || scan.positionX < startX || scan.positionX > endX) {
+    scan.positionX = startX;
+  }
+
+  scan.lastFrameTime = null;
+  scan.playbackState = "playing";
+  scan.isPlaying = true;
+}
+
+export function pauseScanPlaybackState(scan) {
+  if (!isScanSessionActive(scan)) return false;
+
+  scan.playbackState = "paused";
+  scan.isPlaying = false;
   scan.activeSoundIds = [];
   scan.lastFrameTime = null;
-  scan.viewportSnapshot = captureScanViewport(viewport);
-  scan.isPlaying = true;
+  return true;
+}
+
+export function finishScanPlaybackState(scan) {
+  scan.playbackState = "idle";
+  scan.isPlaying = false;
+  scan.activeSoundIds = [];
+  scan.lastFrameTime = null;
+  scan.viewportSnapshot = null;
 }
 
 export function stopScanPlaybackState(scan, viewport, doc, options = {}) {
@@ -67,6 +117,7 @@ export function stopScanPlaybackState(scan, viewport, doc, options = {}) {
 
   restoreScanViewport(scan, viewport);
   scan.positionX = getScanResetPosition(scan, doc);
+  scan.playbackState = "idle";
   scan.isPlaying = false;
   scan.activeSoundIds = [];
   scan.lastFrameTime = null;
