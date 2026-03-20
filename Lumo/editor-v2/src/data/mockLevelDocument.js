@@ -165,6 +165,7 @@ export const mockLevelDocument = {
       x: 10,
       y: 10,
       visible: true,
+      source: "./assets/audio/drip.ogg",
       params: {
         volume: 0.7,
         pitch: 0.95,

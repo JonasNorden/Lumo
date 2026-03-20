@@ -1,5 +1,6 @@
 import { cloneEntityParams } from "../entities/entityParams.js";
 import { DEFAULT_SOUND_PRESET_ID, getSoundPresetDefaultParams, getSoundPresetForType } from "../sound/soundPresets.js";
+import { getAuthoredSoundSource } from "../sound/sourceReference.js";
 import { normalizeSoundType } from "../sound/soundVisuals.js";
 
 const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
@@ -14,7 +15,7 @@ const DEFAULT_DECOR_VARIANT = "a";
  * @property {{layers: {id: string, name: string, type: string, depth: number, visible: boolean, color: string}[]}} backgrounds
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, variant: string, params: Record<string, string | number | boolean>}[]} decor
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} entities
- * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} sounds
+ * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, source?: string, params: Record<string, string | number | boolean>}[]} sounds
  * @property {{notes?: string}} extra
  */
 
@@ -106,6 +107,7 @@ function normalizeSound(sound, index) {
     ...getSoundPresetDefaultParams(preset?.id || DEFAULT_SOUND_PRESET_ID),
     ...cloneEntityParams(sound?.params),
   };
+  const nextSource = getAuthoredSoundSource(sound);
 
   return {
     id: nextId,
@@ -114,6 +116,7 @@ function normalizeSound(sound, index) {
     x: nextX,
     y: nextY,
     visible: nextVisible,
+    ...(nextSource ? { source: nextSource } : {}),
     params: nextParams,
   };
 }

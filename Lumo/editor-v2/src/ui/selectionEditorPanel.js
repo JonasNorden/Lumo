@@ -208,6 +208,7 @@ function renderSoundEditor(sound, selectedSoundIndex) {
   return renderSelectionFields([
     renderTextField("sound", "name", "Name", sound.name, selectedSoundIndex, "selectionFieldName"),
     renderSelectField("sound", "type", "Type", sound.type, selectedSoundIndex, soundTypeOptions, "selectionFieldType"),
+    renderTextField("sound", "source", "Source", sound.source || "", selectedSoundIndex, "selectionFieldVariant selectionParamField"),
     renderNumberField("sound", "x", "X", sound.x, selectedSoundIndex),
     renderNumberField("sound", "y", "Y", sound.y, selectedSoundIndex),
     renderCheckboxField("sound", "visible", "Visible", sound.visible, selectedSoundIndex, "selectionFieldToggle"),
