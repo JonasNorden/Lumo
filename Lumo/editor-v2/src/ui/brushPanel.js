@@ -59,24 +59,42 @@ function renderToolButton(option, activeTool) {
 function renderSection(sectionId, title, isOpen, content, sectionClass = "", headerContent = "") {
   return `
     <section class="panelSection ${sectionClass} ${isOpen ? "" : "isCollapsed"}" aria-label="${title} section">
-      <div class="sectionHeaderRow">
+      <div
+        class="sectionHeaderRow"
+        role="button"
+        tabindex="0"
+        data-section-toggle="${sectionId}"
+        aria-expanded="${isOpen ? "true" : "false"}"
+        aria-label="${title} section ${isOpen ? "collapse" : "expand"}"
+      >
         <div class="sectionTitleMeta">
           <span class="sectionTitle">${title}</span>
-          ${headerContent || ""}
+          ${headerContent ? `<span class="sectionHeaderControls" data-section-header-control>${headerContent}</span>` : ""}
         </div>
-        <button
-          class="sectionToggle"
-          type="button"
-          data-section-toggle="${sectionId}"
-          aria-expanded="${isOpen ? "true" : "false"}"
-          aria-label="${title} section ${isOpen ? "collapse" : "expand"}"
-        >
-          <span class="sectionChevron" aria-hidden="true">${isOpen ? "▾" : "▸"}</span>
-        </button>
+        <span class="sectionToggle" aria-hidden="true">
+          <span class="sectionChevron">${isOpen ? "▾" : "▸"}</span>
+        </span>
       </div>
       <div class="sectionContent">${content}</div>
     </section>
   `;
+}
+
+function togglePanelSection(store, sectionId) {
+  if (!sectionId || !(sectionId in COLLAPSIBLE_PANEL_DEFAULTS)) return;
+  store.setState((draft) => {
+    const panelSections = draft.ui.panelSections || (draft.ui.panelSections = {});
+    const isOpen = typeof panelSections[sectionId] === "boolean"
+      ? panelSections[sectionId]
+      : COLLAPSIBLE_PANEL_DEFAULTS[sectionId] !== false;
+    panelSections[sectionId] = !isOpen;
+  });
+}
+
+function isInteractiveHeaderControl(target, sectionToggleTarget) {
+  if (!(target instanceof HTMLElement) || !(sectionToggleTarget instanceof HTMLElement)) return false;
+  const interactiveAncestor = target.closest("button, select, input, textarea, label, a, summary, [data-section-header-control]");
+  return interactiveAncestor instanceof HTMLElement && interactiveAncestor !== sectionToggleTarget && sectionToggleTarget.contains(interactiveAncestor);
 }
 
 function renderInlineSection(title, content) {
@@ -273,8 +291,8 @@ function renderSoundSettings(state) {
   const activePreset = SOUND_PRESETS.find((preset) => preset.id === activePresetId) || null;
 
   return `
-    <div class="compactActionRow compactActionRowSingle">
-      <button type="button" class="toolButton isSecondary" data-sound-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
+    <div class="compactActionRow compactActionRowSingle soundActionRow">
+      <button type="button" class="toolButton isSecondary soundClearButton" data-sound-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
     </div>
   `;
 }
@@ -521,16 +539,10 @@ export function bindBrushPanel(panel, store, options = {}) {
     if (!(target instanceof HTMLElement)) return;
 
     const sectionToggleButton = target.closest("[data-section-toggle]");
-    if (sectionToggleButton instanceof HTMLButtonElement) {
+    if (sectionToggleButton instanceof HTMLElement) {
+      if (isInteractiveHeaderControl(target, sectionToggleButton)) return;
       const sectionId = sectionToggleButton.dataset.sectionToggle;
-      if (!sectionId) return;
-      store.setState((draft) => {
-        const panelSections = draft.ui.panelSections || (draft.ui.panelSections = {});
-        const isOpen = typeof panelSections[sectionId] === "boolean"
-          ? panelSections[sectionId]
-          : COLLAPSIBLE_PANEL_DEFAULTS[sectionId] !== false;
-        panelSections[sectionId] = !isOpen;
-      });
+      togglePanelSection(store, sectionId);
       return;
     }
 
@@ -621,13 +633,27 @@ export function bindBrushPanel(panel, store, options = {}) {
     event.preventDefault();
   };
 
+  const onKeyDown = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const sectionToggleButton = target.closest("[data-section-toggle]");
+    if (!(sectionToggleButton instanceof HTMLElement) || sectionToggleButton !== target) return;
+    if (event.key !== "Enter" && event.key !== " ") return;
+
+    event.preventDefault();
+    const sectionId = sectionToggleButton.dataset.sectionToggle;
+    togglePanelSection(store, sectionId);
+  };
+
   panel.addEventListener("change", onChange);
   panel.addEventListener("pointerdown", onPointerDown);
   panel.addEventListener("click", onClick);
+  panel.addEventListener("keydown", onKeyDown);
 
   return () => {
     panel.removeEventListener("change", onChange);
     panel.removeEventListener("pointerdown", onPointerDown);
     panel.removeEventListener("click", onClick);
+    panel.removeEventListener("keydown", onKeyDown);
   };
 }
