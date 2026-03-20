@@ -1,4 +1,4 @@
-import { cloneEntityParams } from "./entityParams.js";
+import { cloneEntityParams, mergeEntityParams } from "./entityParams.js";
 import { normalizeEditableObjectType } from "../placeables/editableObjectBuckets.js";
 
 export const ENTITY_PRESETS = [
@@ -139,6 +139,55 @@ export const ENTITY_PRESETS = [
     hitRadius: 8.5,
   },
   {
+    id: "fog_volume",
+    type: "fog_volume",
+    defaultName: "Fog Volume",
+    defaultParams: {
+      area: {
+        x0: 0,
+        x1: 288,
+        y0: 24,
+        falloff: 0,
+      },
+      look: {
+        density: 0.14,
+        lift: 8,
+        thickness: 44,
+        layers: 28,
+        noise: 0,
+        drift: 0,
+        color: "#E1EEFF",
+        exposure: 1,
+      },
+      smoothing: {
+        diffuse: 0.24,
+        relax: 0.24,
+        visc: 0.94,
+      },
+      interaction: {
+        radius: 92,
+        push: 2.4,
+        bulge: 2.2,
+        gate: 70,
+      },
+      organic: {
+        strength: 0,
+        scale: 1,
+        speed: 1,
+      },
+      render: {
+        blend: "screen",
+        lumoBehindFog: true,
+      },
+    },
+    drawW: 24,
+    drawH: 24,
+    footprintW: 24,
+    footprintH: 24,
+    drawAnchor: "TL",
+    hitRadius: 10,
+  },
+  {
     id: "generic",
     type: "generic",
     defaultName: "Generic",
@@ -208,8 +257,5 @@ export function getEntityPresetDefaultParams(presetId) {
 export function getEntityPresetParamsForType(type, params = {}) {
   const preset = getEntityPresetForType(type);
   const normalizedParams = remapLegacyEntityParams(type, params);
-  return {
-    ...cloneEntityParams(preset?.defaultParams || {}),
-    ...normalizedParams,
-  };
+  return mergeEntityParams(cloneEntityParams(preset?.defaultParams || {}), normalizedParams);
 }

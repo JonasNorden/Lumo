@@ -1,5 +1,6 @@
 import { cloneEntityParams } from "../entities/entityParams.js";
 import { getEntityPresetParamsForType } from "../entities/entityPresets.js";
+import { isSpecialVolumeEntityType, syncFogVolumeEntityToAnchor } from "../entities/specialVolumeTypes.js";
 import { DEFAULT_SOUND_PRESET_ID, getSoundPresetDefaultParams, getSoundPresetForType } from "../sound/soundPresets.js";
 import { isEntityLikeEditableType, normalizeEditableObjectType } from "../placeables/editableObjectBuckets.js";
 import { getAuthoredSoundSource } from "../sound/sourceReference.js";
@@ -75,7 +76,7 @@ function normalizeDecor(decor, index) {
   };
 }
 
-function normalizeEntity(entity, index) {
+function normalizeEntity(entity, index, tileSize = 24) {
   const fallbackId = `entity-${index + 1}`;
   const nextId = typeof entity?.id === "string" && entity.id.trim() ? entity.id : fallbackId;
   const nextName = typeof entity?.name === "string" && entity.name.trim() ? entity.name : `Entity ${index + 1}`;
@@ -84,8 +85,7 @@ function normalizeEntity(entity, index) {
   const nextY = Number.isFinite(entity?.y) ? Math.round(entity.y) : 0;
   const nextVisible = typeof entity?.visible === "boolean" ? entity.visible : true;
   const nextParams = getEntityPresetParamsForType(nextType, entity?.params);
-
-  return {
+  const normalizedEntity = {
     id: nextId,
     name: nextName,
     type: nextType,
@@ -94,6 +94,12 @@ function normalizeEntity(entity, index) {
     visible: nextVisible,
     params: nextParams,
   };
+
+  if (isSpecialVolumeEntityType(nextType)) {
+    return syncFogVolumeEntityToAnchor(normalizedEntity, tileSize);
+  }
+
+  return normalizedEntity;
 }
 
 function normalizeSound(sound, index) {
@@ -142,6 +148,11 @@ export function validateLevelDocument(doc) {
     throw new Error("Invalid V2 document dimensions");
   }
 
+  const tileSize = Number.isInteger(doc.dimensions?.tileSize) && doc.dimensions.tileSize > 0
+    ? doc.dimensions.tileSize
+    : 24;
+  doc.dimensions.tileSize = tileSize;
+
   if (!Array.isArray(doc.tiles?.base) || doc.tiles.base.length !== expectedCount) {
     throw new Error(`Invalid V2 tile payload (expected ${expectedCount} tiles)`);
   }
@@ -162,7 +173,7 @@ export function validateLevelDocument(doc) {
   const normalizedDecor = rawDecor.map((decor, index) => normalizeDecor(decor, index));
 
   const rawEntities = Array.isArray(doc.entities) ? doc.entities : [];
-  const normalizedEntities = rawEntities.map((entity, index) => normalizeEntity(entity, index));
+  const normalizedEntities = rawEntities.map((entity, index) => normalizeEntity(entity, index, tileSize));
 
   const migratedDecorEntities = [];
   doc.decor = normalizedDecor.filter((decor) => {

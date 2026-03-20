@@ -161,6 +161,69 @@ function runEntityRegressionChecks() {
   assert.equal(doc.entities.length, 0, "redo should reapply entity create/update/delete history");
 }
 
+function runFogVolumeRegressionChecks() {
+  const normalized = validateLevelDocument({
+    ...createDoc(),
+    entities: [
+      {
+        id: "entity-fog",
+        name: "Fog Volume",
+        type: "fog_volume",
+        x: 3,
+        y: 2,
+        visible: true,
+        params: {
+          area: {
+            x0: 48,
+            x1: 144,
+            y0: 48,
+            falloff: 18,
+          },
+          look: {
+            density: 0.22,
+            thickness: 36,
+          },
+          render: {
+            blend: "screen",
+            lumoBehindFog: false,
+          },
+        },
+      },
+    ],
+  });
+
+  assert.equal(normalized.entities.length, 1, "fog volumes should stay in the entity list");
+  assert.equal(normalized.entities[0].type, "fog_volume", "fog volume validation should preserve the special type");
+  assert.deepEqual(
+    normalized.entities[0].params.area,
+    { x0: 48, x1: 144, y0: 48, falloff: 18 },
+    "fog volume validation should sync area semantics to the authored anchor while preserving nested area fields",
+  );
+  assert.equal(
+    normalized.entities[0].params.look.thickness,
+    36,
+    "fog volume validation should preserve nested look params",
+  );
+  assert.equal(
+    normalized.entities[0].params.render.lumoBehindFog,
+    false,
+    "fog volume validation should preserve nested render params",
+  );
+
+  const serialized = serializeLevelDocument(normalized);
+  const roundTrip = JSON.parse(serialized);
+  assert.deepEqual(
+    roundTrip.entities[0].params.look,
+    normalized.entities[0].params.look,
+    "fog volume export should preserve nested look params",
+  );
+  assert.deepEqual(
+    roundTrip.entities[0].params.render,
+    normalized.entities[0].params.render,
+    "fog volume export should preserve nested render params",
+  );
+}
+
 function runDecorRegressionChecks() {
   const doc = createDoc();
   const history = createHistoryState();
@@ -741,6 +804,67 @@ function runBottomPanelBatchSoundRegressionChecks() {
   assert.equal(panel.innerHTML.includes("Mixed source"), true, "batch sound editing should show mixed source state when selected sounds disagree");
 }
 
+function runBottomPanelFogVolumeRegressionChecks() {
+  globalThis.document = { activeElement: null };
+
+  const panel = {
+    innerHTML: "",
+    classList: {
+      toggle() {},
+    },
+    querySelector() {
+      return null;
+    },
+  };
+
+  const state = {
+    document: {
+      status: "ready",
+      error: null,
+      active: {
+        ...createDoc(),
+        entities: [
+          {
+            id: "entity-fog",
+            name: "Fog Volume",
+            type: "fog_volume",
+            x: 2,
+            y: 1,
+            visible: true,
+            params: {
+              area: { x0: 32, x1: 128, y0: 32, falloff: 12 },
+              look: { density: 0.22, lift: 8, thickness: 36, layers: 28, noise: 0, drift: 0, color: "#E1EEFF", exposure: 1 },
+              smoothing: { diffuse: 0.24, relax: 0.24, visc: 0.94 },
+              interaction: { radius: 92, push: 2.4, bulge: 2.2, gate: 70 },
+              organic: { strength: 0, scale: 1, speed: 1 },
+              render: { blend: "screen", lumoBehindFog: true },
+            },
+          },
+        ],
+        decor: [],
+        sounds: [],
+      },
+    },
+    interaction: {
+      selectedEntityIndices: [0],
+      selectedEntityIndex: 0,
+      selectedDecorIndices: [],
+      selectedDecorIndex: null,
+      selectedSoundIndices: [],
+      selectedSoundIndex: null,
+    },
+  };
+
+  renderBottomPanel(panel, state);
+  assert.equal(panel.innerHTML.includes("Volume"), true, "fog volume editing should expose a dedicated structured summary block");
+  assert.equal(panel.innerHTML.includes("Area"), true, "fog volume editing should expose the area section");
+  assert.equal(panel.innerHTML.includes("Look"), true, "fog volume editing should expose the look section");
+  assert.equal(panel.innerHTML.includes('data-entity-param-path="area.x0"'), true, "fog volume editing should use nested param paths for area fields");
+  assert.equal(panel.innerHTML.includes('data-entity-param-path="render.lumoBehindFog"'), true, "fog volume editing should expose nested render booleans");
+  assert.equal(panel.innerHTML.includes('data-entity-field="fogWidth"'), true, "fog volume editing should expose width controls in the bottom panel");
+  assert.equal(panel.innerHTML.includes('data-entity-field="fogHeight"'), true, "fog volume editing should expose height controls in the bottom panel");
+}
+
 function runInspectorSoundSummaryRegressionChecks() {
   const panel = {
     innerHTML: "",
@@ -1262,6 +1386,7 @@ function runSourceRegressionChecks() {
 async function main() {
   runTileRegressionChecks();
   runEntityRegressionChecks();
+  runFogVolumeRegressionChecks();
   runDecorRegressionChecks();
   runSoundRegressionChecks();
   runDarknessPreviewRegressionChecks();
@@ -1271,6 +1396,7 @@ async function main() {
   runUiRegressionChecks();
   runSoundBatchSelectionRegressionChecks();
   runBottomPanelBatchSoundRegressionChecks();
+  runBottomPanelFogVolumeRegressionChecks();
   runInspectorSoundSummaryRegressionChecks();
   runSourceRegressionChecks();
 

@@ -2,6 +2,12 @@ import { getPrimarySelectedEntityIndex, getSelectedEntityIndices } from "../doma
 import { getPrimarySelectedDecorIndex, getSelectedDecorIndices } from "../domain/decor/selection.js";
 import { getPrimarySelectedSoundIndex, getSelectedSoundIndices } from "../domain/sound/selection.js";
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
+import {
+  FOG_VOLUME_PARAM_SECTIONS,
+  getFogVolumeRect,
+  getFogVolumeParams,
+  isFogVolumeEntityType,
+} from "../domain/entities/specialVolumeTypes.js";
 import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
 import {
   getSoundAssetCatalog,
@@ -188,6 +194,21 @@ function renderParamField(prefix, paramKey, paramValue, selectedIndex) {
           ${paramValue ? "checked" : ""}
           data-${prefix}-param-key="${escapedKey}"
           data-${prefix}-param-type="boolean"
+          data-${prefix}-index="${selectedIndex}"
+        />
+      </label>
+    `;
+  }
+
+  if (inputType === "json") {
+    return `
+      <label class="fieldRow fieldRowCompact selectionInlineField selectionParamField selectionJsonParamField">
+        <span class="label">${label}</span>
+        <input
+          type="text"
+          value="${escapeHtml(JSON.stringify(paramValue))}"
+          data-${prefix}-param-key="${escapedKey}"
+          data-${prefix}-param-type="json"
           data-${prefix}-index="${selectedIndex}"
         />
       </label>
@@ -508,7 +529,11 @@ function renderBatchSoundEditor(selectedSounds, selectedSoundIndex) {
   ].join(""));
 }
 
-function renderEntityEditor(entity, selectedEntityIndex) {
+function renderEntityEditor(entity, selectedEntityIndex, tileSize = 24) {
+  if (isFogVolumeEntityType(entity?.type)) {
+    return renderFogVolumeEditor(entity, selectedEntityIndex, tileSize);
+  }
+
   return renderSelectionFields([
     renderTextField("entity", "name", "Name", entity.name, selectedEntityIndex, "selectionFieldName"),
     renderTextField("entity", "type", "Type", entity.type, selectedEntityIndex, "selectionFieldType"),
@@ -516,6 +541,84 @@ function renderEntityEditor(entity, selectedEntityIndex) {
     renderNumberField("entity", "y", "Y", entity.y, selectedEntityIndex),
     renderCheckboxField("entity", "visible", "Visible", entity.visible, selectedEntityIndex, "selectionFieldToggle"),
     renderParamFields("entity", entity?.params, selectedEntityIndex),
+  ].join(""));
+}
+
+function renderFogVolumeStructuredField(selectedEntityIndex, path, value) {
+  const inputType = getEntityParamInputType(value);
+  const escapedPath = escapeHtml(path);
+  const label = escapeHtml(formatParamLabel(path.split(".").at(-1)));
+
+  if (inputType === "boolean") {
+    return `
+      <label class="fieldRow compactInline compactBooleanField selectionInlineField selectionInlineCheckbox selectionParamField selectionParamCheckbox">
+        <span class="label">${label}</span>
+        <input
+          type="checkbox"
+          ${value ? "checked" : ""}
+          data-entity-param-path="${escapedPath}"
+          data-entity-param-type="boolean"
+          data-entity-index="${selectedEntityIndex}"
+        />
+      </label>
+    `;
+  }
+
+  return `
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionParamField">
+      <span class="label">${label}</span>
+      <input
+        type="${inputType === "number" ? "number" : "text"}"
+        ${inputType === "number" ? 'step="any"' : ""}
+        value="${escapeHtml(inputType === "json" ? JSON.stringify(value) : value)}"
+        data-entity-param-path="${escapedPath}"
+        data-entity-param-type="${inputType}"
+        data-entity-index="${selectedEntityIndex}"
+      />
+    </label>
+  `;
+}
+
+function renderFogVolumeEditor(entity, selectedEntityIndex, tileSize = 24) {
+  const params = getFogVolumeParams(entity);
+  const rect = getFogVolumeRect(entity, tileSize);
+  const structuredSections = FOG_VOLUME_PARAM_SECTIONS.map((section) => `
+    <div class="selectionInlineGroup selectionStructuredGroup">
+      <div class="selectionStructuredHeader">
+        <span class="selectionStructuredTitle">${escapeHtml(section.title)}</span>
+      </div>
+      <div class="selectionEditorFlow selectionStructuredFlow">
+        ${section.fields.map((fieldName) => renderFogVolumeStructuredField(
+          selectedEntityIndex,
+          `${section.key}.${fieldName}`,
+          params?.[section.key]?.[fieldName],
+        )).join("")}
+      </div>
+    </div>
+  `).join("");
+
+  return renderSelectionFields([
+    renderTextField("entity", "name", "Name", entity.name, selectedEntityIndex, "selectionFieldName"),
+    renderTextField("entity", "type", "Type", entity.type, selectedEntityIndex, "selectionFieldType"),
+    renderNumberField("entity", "x", "X", entity.x, selectedEntityIndex),
+    renderNumberField("entity", "y", "Y", entity.y, selectedEntityIndex),
+    renderNumberField("entity", "fogWidth", "Width", Math.round(rect.width), selectedEntityIndex, "selectionFogMetricField"),
+    renderNumberField("entity", "fogHeight", "Height", Math.round(rect.height), selectedEntityIndex, "selectionFogMetricField"),
+    renderCheckboxField("entity", "visible", "Visible", entity.visible, selectedEntityIndex, "selectionFieldToggle"),
+    `
+      <div class="selectionInlineGroup selectionStructuredGroup selectionStructuredSummary">
+        <div class="selectionStructuredHeader">
+          <span class="selectionStructuredTitle">Volume</span>
+          <span class="selectionStructuredMeta">Region footprint is driven from area + look params and stays in the bottom panel.</span>
+        </div>
+        <div class="selectionEditorFlow selectionStructuredFlow">
+          ${renderReadOnlyField("Pixel span", `${Math.round(rect.x0)} → ${Math.round(rect.x1)}`)}
+          ${renderReadOnlyField("Baseline", `${Math.round(rect.y0)}`)}
+          ${renderReadOnlyField("Falloff", `${Math.round(rect.falloff)}`)}
+        </div>
+      </div>
+    `,
+    structuredSections,
   ].join(""));
 }
 
@@ -575,6 +678,7 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   const selectedEntity = Number.isInteger(selectedEntityIndex) ? active.entities?.[selectedEntityIndex] : null;
   const selectedDecor = Number.isInteger(selectedDecorIndex) ? active.decor?.[selectedDecorIndex] : null;
   const selectedSound = Number.isInteger(selectedSoundIndex) ? active.sounds?.[selectedSoundIndex] : null;
+  const tileSize = active?.dimensions?.tileSize || 24;
   const selectedSounds = selectedSoundIndices
     .map((index) => active.sounds?.[index] || null)
     .filter(Boolean);
@@ -595,7 +699,7 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   }
 
   if (selectedEntity) {
-    return { markup: renderEntityEditor(selectedEntity, selectedEntityIndex), isEmpty: false };
+    return { markup: renderEntityEditor(selectedEntity, selectedEntityIndex, tileSize), isEmpty: false };
   }
 
   if (selectedDecor) {
@@ -617,7 +721,8 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
 
 function applyParamChange(target, prefix, onUpdate, options = {}) {
   const paramKey = target.dataset[`${prefix}ParamKey`];
-  if (!paramKey) return false;
+  const paramPath = target.dataset[`${prefix}ParamPath`];
+  if (!paramKey && !paramPath) return false;
 
   const index = Number.parseInt(target.dataset[`${prefix}Index`] || "", 10);
   const allowBatchSelection = Boolean(options.allowBatchSelection);
@@ -630,7 +735,7 @@ function applyParamChange(target, prefix, onUpdate, options = {}) {
       : target.value === "true";
     if (!isTextInputElement(target) && !isSelectElement(target)) return false;
     if (isSelectElement(target) && target.value === MIXED_FIELD_VALUE) return true;
-    onUpdate?.(index, "param", { key: paramKey, value: nextValue });
+    onUpdate?.(index, "param", { key: paramKey, path: paramPath, value: nextValue });
     return true;
   }
 
@@ -639,11 +744,22 @@ function applyParamChange(target, prefix, onUpdate, options = {}) {
     const parsed = Number.parseFloat(target.value);
     if (!Number.isFinite(parsed)) return true;
     const value = parsed;
-    onUpdate?.(index, "param", { key: paramKey, value });
+    onUpdate?.(index, "param", { key: paramKey, path: paramPath, value });
     return true;
   }
 
-  onUpdate?.(index, "param", { key: paramKey, value: target.value });
+  if (paramType === "json") {
+    if (typeof target.value !== "string" || !target.value.trim()) return true;
+    try {
+      const parsed = JSON.parse(target.value);
+      onUpdate?.(index, "param", { key: paramKey, path: paramPath, value: parsed });
+    } catch {
+      return true;
+    }
+    return true;
+  }
+
+  onUpdate?.(index, "param", { key: paramKey, path: paramPath, value: target.value });
   return true;
 }
 
@@ -709,7 +825,7 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const target = event.target;
     if (!isTextInputElement(target) && !isSelectElement(target)) return;
 
-    if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) return;
+    if (handleChange(target, "entity", ["name", "type", "visible", "x", "y", "fogWidth", "fogHeight"], onEntityUpdate)) return;
     if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) return;
     handleChange(target, "sound", ["name", "type", "source", "visible", "x", "y"], onSoundUpdate, { allowBatchSelection: true });
   };
@@ -718,7 +834,7 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const target = event.target;
     if (!isTextInputElement(target) && !isSelectElement(target)) return;
 
-    if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) return;
+    if (handleChange(target, "entity", ["name", "type", "visible", "x", "y", "fogWidth", "fogHeight"], onEntityUpdate)) return;
     if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) return;
     handleChange(target, "sound", ["name", "type", "source", "visible", "x", "y"], onSoundUpdate, { allowBatchSelection: true });
   };

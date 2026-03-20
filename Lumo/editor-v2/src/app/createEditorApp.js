@@ -58,6 +58,14 @@ import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
 import { createSoundPreviewController, getSoundPreviewKey } from "../domain/sound/soundPreviewPlayback.js";
 import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
 import {
+  applyFogVolumeParamChange,
+  getFogVolumeRect,
+  isSpecialVolumeEntityType,
+  resizeFogVolumeEntity,
+  shiftFogVolumeEntity,
+  syncFogVolumeEntityToAnchor,
+} from "../domain/entities/specialVolumeTypes.js";
+import {
   finishScanPlaybackState,
   getScanActivity,
   getScanPlaybackState,
@@ -1297,7 +1305,7 @@ export function createEditorApp({
     const placement = clampEntityPosition(doc, x, y);
     const preset = resolveEntityPlacementPreset(presetId) || findEntityPresetById(DEFAULT_ENTITY_PRESET_ID);
 
-    return {
+    const entity = {
       id: `entity-${nextNumber}`,
       name: preset?.defaultName || "Generic",
       type: preset?.type || "generic",
@@ -1306,6 +1314,10 @@ export function createEditorApp({
       visible: true,
       params: getEntityPresetParamsForType(preset?.type || DEFAULT_ENTITY_PRESET_ID, getEntityPresetDefaultParams(preset?.id || DEFAULT_ENTITY_PRESET_ID)),
     };
+
+    return isSpecialVolumeEntityType(entity.type)
+      ? syncFogVolumeEntityToAnchor(entity, doc.dimensions.tileSize)
+      : entity;
   };
 
   const createSoundDraft = (doc, x, y, presetId = DEFAULT_SOUND_PRESET_ID, nextNumber = (doc.sounds?.length || 0) + 1) => {
@@ -1373,6 +1385,15 @@ export function createEditorApp({
       .map((entity, index) => ({ entity, index }))
       .filter(({ entity }) => entity?.visible)
       .filter(({ entity }) => {
+        if (isSpecialVolumeEntityType(entity?.type)) {
+          const rect = getFogVolumeRect(entity, tileSize);
+          const rectMinX = viewport.offsetX + rect.x0 * viewport.zoom;
+          const rectMaxX = viewport.offsetX + rect.x1 * viewport.zoom;
+          const rectMinY = viewport.offsetY + rect.top * viewport.zoom;
+          const rectMaxY = viewport.offsetY + rect.bottom * viewport.zoom;
+          return rectMaxX >= minX && rectMinX <= maxX && rectMaxY >= minY && rectMinY <= maxY;
+        }
+
         const centerX = viewport.offsetX + (entity.x + 0.5) * tileSize * viewport.zoom;
         const centerY = viewport.offsetY + (entity.y + 0.5) * tileSize * viewport.zoom;
         return centerX >= minX && centerX <= maxX && centerY >= minY && centerY <= maxY;
@@ -1634,13 +1655,19 @@ export function createEditorApp({
       if (!entity) continue;
 
       const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
-      const nextEntity = {
-        ...entity,
-        x: origin.x + delta.x,
-        y: origin.y + delta.y,
-      };
+      const nextEntity = isSpecialVolumeEntityType(entity.type)
+        ? shiftFogVolumeEntity(entity, delta.x, delta.y, doc.dimensions.tileSize)
+        : {
+          ...entity,
+          x: origin.x + delta.x,
+          y: origin.y + delta.y,
+        };
 
-      if (previousEntity.x === nextEntity.x && previousEntity.y === nextEntity.y) continue;
+      if (
+        previousEntity.x === nextEntity.x
+        && previousEntity.y === nextEntity.y
+        && JSON.stringify(previousEntity.params || {}) === JSON.stringify(nextEntity.params || {})
+      ) continue;
       doc.entities.splice(origin.index, 1, nextEntity);
       pushEntityUpdateHistory(draft.history, origin.index, previousEntity, nextEntity);
       changed = true;
@@ -1659,10 +1686,14 @@ export function createEditorApp({
     if (!entity || !cell) return false;
 
     const next = clampEntityPosition(doc, cell.x, cell.y);
-    const changed = entity.x !== next.x || entity.y !== next.y;
+    const nextEntity = isSpecialVolumeEntityType(entity.type)
+      ? shiftFogVolumeEntity(entity, next.x - entity.x, next.y - entity.y, doc.dimensions.tileSize)
+      : { ...entity, x: next.x, y: next.y };
+    const changed = entity.x !== nextEntity.x
+      || entity.y !== nextEntity.y
+      || JSON.stringify(entity.params || {}) !== JSON.stringify(nextEntity.params || {});
     if (changed) {
       const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
-      const nextEntity = { ...entity, x: next.x, y: next.y };
       doc.entities.splice(index, 1, nextEntity);
       pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
     }
@@ -2343,17 +2374,20 @@ export function createEditorApp({
         if (!value || typeof value !== "object" || Array.isArray(value)) return;
 
         const key = typeof value.key === "string" ? value.key.trim() : "";
-        if (!key) return;
+        const path = typeof value.path === "string" ? value.path.trim() : "";
+        if (!key && !path) return;
         if (!isSupportedEntityParamValue(value.value)) return;
 
         const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
-        const nextEntity = {
-          ...entity,
-          params: {
-            ...cloneEntityParams(entity.params),
-            [key]: value.value,
-          },
-        };
+        const nextEntity = isSpecialVolumeEntityType(entity.type) && path
+          ? applyFogVolumeParamChange(entity, path, value.value, doc.dimensions.tileSize)
+          : {
+            ...entity,
+            params: {
+              ...cloneEntityParams(entity.params),
+              [key || path]: value.value,
+            },
+          };
         doc.entities.splice(index, 1, nextEntity);
         pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
         return;
@@ -2373,8 +2407,11 @@ export function createEditorApp({
             ? getEntityPresetParamsForType(nextValue, entity.params)
             : cloneEntityParams(entity.params),
         };
-        doc.entities.splice(index, 1, nextEntity);
-        pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
+        const normalizedNextEntity = field === "type" && isSpecialVolumeEntityType(nextValue)
+          ? syncFogVolumeEntityToAnchor(nextEntity, doc.dimensions.tileSize)
+          : nextEntity;
+        doc.entities.splice(index, 1, normalizedNextEntity);
+        pushEntityUpdateHistory(draft.history, index, previousEntity, normalizedNextEntity);
         return;
       }
 
@@ -2395,6 +2432,19 @@ export function createEditorApp({
           field === "y" ? value : entity.y,
         );
         moveEntityToCell(draft, index, next);
+        return;
+      }
+
+      if ((field === "fogWidth" || field === "fogHeight") && isSpecialVolumeEntityType(entity.type)) {
+        const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
+        const nextEntity = resizeFogVolumeEntity(
+          entity,
+          field === "fogWidth" ? "width" : "height",
+          value,
+          doc.dimensions.tileSize,
+        );
+        doc.entities.splice(index, 1, nextEntity);
+        pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
       }
     });
   };
