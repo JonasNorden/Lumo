@@ -31,7 +31,6 @@ const COLLAPSIBLE_PANEL_DEFAULTS = {
   tiles: true,
   decor: true,
   entities: true,
-  sound: true,
   scan: true,
 };
 
@@ -97,9 +96,10 @@ function isInteractiveHeaderControl(target, sectionToggleTarget) {
   return interactiveAncestor instanceof HTMLElement && interactiveAncestor !== sectionToggleTarget && sectionToggleTarget.contains(interactiveAncestor);
 }
 
-function renderInlineSection(title, content) {
+function renderInlineSection(title, content, sectionClass = "") {
+  const classes = ["panelSection", sectionClass, "panelSectionInline"].filter(Boolean).join(" ");
   return `
-    <section class="panelSection panelSectionInline" aria-label="${title} section">
+    <section class="${classes}" aria-label="${title} section">
       <div class="sectionTitle sectionTitleInline">${title}</div>
       <div class="sectionContent">${content}</div>
     </section>
@@ -282,19 +282,15 @@ function renderDecorSettings(state) {
   `;
 }
 
-function renderSoundHeaderControl(activePresetId) {
-  return renderSelectorField("Select Sound", "sound-preset-select", SOUND_PRESETS, activePresetId, "No sound selected", "soundHeaderSelectField", false);
-}
-
-function renderSoundSettings(state) {
-  const activePresetId = state.interaction.activeSoundPresetId;
+function renderSoundSection(activePresetId) {
   const activePreset = SOUND_PRESETS.find((preset) => preset.id === activePresetId) || null;
 
-  return `
-    <div class="compactActionRow compactActionRowSingle soundActionRow">
+  return renderInlineSection("SOUND", `
+    <div class="soundPanelControls" aria-label="Sound controls">
+      ${renderSelectorField("Select Sound", "sound-preset-select", SOUND_PRESETS, activePresetId, "No sound selected", "soundHeaderSelectField", false)}
       <button type="button" class="toolButton isSecondary soundClearButton" data-sound-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
     </div>
-  `;
+  `, "soundSection");
 }
 
 function formatScanValue(value, fallback = "Auto") {
@@ -457,7 +453,7 @@ export function renderBrushPanel(panel, state) {
 
     ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
     ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
-    ${state.document.active ? renderSection("sound", "SOUND", panelSections.sound, renderSoundSettings(state), "soundSection", renderSoundHeaderControl(state.interaction.activeSoundPresetId)) : ""}
+    ${state.document.active ? renderSoundSection(state.interaction.activeSoundPresetId) : ""}
     ${state.document.active ? renderSection("scan", "SCAN", panelSections.scan, renderScanSettings(state)) : ""}
   `;
 }
