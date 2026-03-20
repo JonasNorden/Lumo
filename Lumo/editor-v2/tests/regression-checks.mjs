@@ -764,10 +764,18 @@ function runUiRegressionChecks() {
   };
 
   renderBrushPanel(panel, baseState);
+  const tilesControlMarkup = panel.innerHTML.match(/<span class="tilesPanelControls"[\s\S]*?<\/span>\s*<\/div>/)?.[0] || "";
   assert.equal(panel.innerHTML.includes("panelSectionInline"), true, "tools and layer sections should use the compact inline section layout");
   assert.equal(panel.innerHTML.includes('data-section-toggle="tools"'), false, "tools section should no longer render a collapse toggle");
   assert.equal(panel.innerHTML.includes('data-section-toggle="layer"'), false, "layer section should no longer render a collapse toggle");
   assert.equal(panel.innerHTML.includes('data-section-toggle="tiles"'), true, "tiles section should still render a collapse toggle");
+  assert.equal(panel.innerHTML.includes('<span class="sectionTitle">TILES</span>'), true, "tiles section should still render its title");
+  assert.equal(panel.innerHTML.includes('class="sectionHeaderRow"'), true, "tiles section should render the compact header row wrapper");
+  assert.equal(tilesControlMarkup.includes('aria-label="Mode"'), true, "tiles controls should keep an accessible mode label");
+  assert.equal(tilesControlMarkup.includes('aria-label="Size"'), true, "tiles controls should keep an accessible size label");
+  assert.equal(tilesControlMarkup.includes('<span class="label">Mode</span>'), false, "tiles controls should no longer render a visible mode label");
+  assert.equal(tilesControlMarkup.includes('<span class="label">Size</span>'), false, "tiles controls should no longer render a visible size label");
+  assert.equal(tilesControlMarkup.includes('class="tilesPanelControls" aria-label="Tile brush controls"'), true, "tiles controls should render inline with the section header metadata");
   assert.equal(panel.innerHTML.includes('data-section-toggle="decor"'), true, "decor section should still render a collapse toggle");
   assert.equal(panel.innerHTML.includes('data-section-toggle="entities"'), true, "entities section should still render a collapse toggle");
   assert.equal(panel.innerHTML.includes('data-section-toggle="sound"'), true, "sound section should still render a collapse toggle");

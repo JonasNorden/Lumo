@@ -56,20 +56,23 @@ function renderToolButton(option, activeTool) {
   return `<button class="toolButton ${isActive ? "isActive" : ""}" type="button" data-tool="${option.value}">${option.label}</button>`;
 }
 
-function renderSection(sectionId, title, isOpen, content, sectionClass = "") {
+function renderSection(sectionId, title, isOpen, content, sectionClass = "", headerContent = "") {
   return `
     <section class="panelSection ${sectionClass} ${isOpen ? "" : "isCollapsed"}" aria-label="${title} section">
-      <button
-        class="sectionToggle"
-        type="button"
-        data-section-toggle="${sectionId}"
-        aria-expanded="${isOpen ? "true" : "false"}"
-      >
-        <span class="sectionTitleRow">
-          <span class="sectionTitle">${title}</span>
-          <span class="sectionChevron" aria-hidden="true">${isOpen ? "▾" : "▸"}</span>
-        </span>
-      </button>
+      <div class="sectionHeaderRow">
+        <button
+          class="sectionToggle"
+          type="button"
+          data-section-toggle="${sectionId}"
+          aria-expanded="${isOpen ? "true" : "false"}"
+        >
+          <span class="sectionTitleRow">
+            <span class="sectionTitle">${title}</span>
+            <span class="sectionChevron" aria-hidden="true">${isOpen ? "▾" : "▸"}</span>
+          </span>
+        </button>
+        ${headerContent ? `<div class="sectionTitleMeta">${headerContent}</div>` : ""}
+      </div>
       <div class="sectionContent">${content}</div>
     </section>
   `;
@@ -164,8 +167,7 @@ function renderPlacementBlock(label, hint = "") {
 function renderTileField(label, field, options, selectedValue) {
   return `
     <label class="fieldRow fieldRowCompact tileControlField">
-      <span class="label">${label}</span>
-      <select data-brush-field="${field}">
+      <select data-brush-field="${field}" aria-label="${escapeHtml(label)}">
         ${renderOptions(options, selectedValue)}
       </select>
     </label>
@@ -431,11 +433,6 @@ export function renderBrushPanel(panel, state) {
     ${renderInlineSection("LAYER", renderLayerSection(state))}
 
     ${renderSection("tiles", "TILES", panelSections.tiles, `
-      <div class="tilesPanelControls">
-        ${renderTileField("Mode", "behavior", BRUSH_BEHAVIOR_OPTIONS, brushDraft.behavior)}
-        ${renderTileField("Size", "size", BRUSH_SIZE_OPTIONS, brushDraft.size)}
-      </div>
-
       <div class="tilesPanelSpriteHeader">
         <span class="label">Sprite</span>
         <span class="fieldMeta">Select a tile to paint</span>
@@ -448,7 +445,12 @@ export function renderBrushPanel(panel, state) {
         <span class="value">${summary}</span>
       </div>
       ${renderTileSelectionSummary(activeTileSprite)}
-    `, "tilesSection")}
+    `, "tilesSection", `
+      <span class="tilesPanelControls" aria-label="Tile brush controls">
+        ${renderTileField("Mode", "behavior", BRUSH_BEHAVIOR_OPTIONS, brushDraft.behavior)}
+        ${renderTileField("Size", "size", BRUSH_SIZE_OPTIONS, brushDraft.size)}
+      </span>
+    `)}
 
     ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
     ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
