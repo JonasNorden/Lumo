@@ -39,6 +39,7 @@ import { createScanAudioPlaybackController } from "../src/domain/scan/scanAudioP
 import { resolveSoundPlaybackSource } from "../src/domain/sound/sourceReference.js";
 import { findMatchingSoundIndices } from "../src/domain/sound/selection.js";
 import { collectDarknessPreviewLights, getPreviewPlayerLight } from "../src/render/darknessPreview.js";
+import { createFogVolumeEntityFromWorldRect } from "../src/domain/entities/specialVolumeTypes.js";
 
 function createHistoryState() {
   return {
@@ -222,6 +223,20 @@ function runFogVolumeRegressionChecks() {
     normalized.entities[0].params.render,
     "fog volume export should preserve nested render params",
   );
+
+  const dragPlaced = createFogVolumeEntityFromWorldRect({
+    ...normalized.entities[0],
+    x: 0,
+    y: 0,
+  }, {
+    x0: 14,
+    y0: 18,
+    x1: 130,
+    y1: 74,
+  }, 16);
+  assert.equal(dragPlaced.params.area.x1 - dragPlaced.params.area.x0, 116, "fog drag placement should preserve the dragged width");
+  assert.equal(dragPlaced.params.area.y0, 80, "fog drag placement should place the fog baseline on the authored lower edge cell");
+  assert.equal(dragPlaced.params.look.thickness, 56, "fog drag placement should derive initial thickness from the drag height");
 }
 
 function runDecorRegressionChecks() {
@@ -856,13 +871,66 @@ function runBottomPanelFogVolumeRegressionChecks() {
   };
 
   renderBottomPanel(panel, state);
-  assert.equal(panel.innerHTML.includes("Volume"), true, "fog volume editing should expose a dedicated structured summary block");
-  assert.equal(panel.innerHTML.includes("Area"), true, "fog volume editing should expose the area section");
-  assert.equal(panel.innerHTML.includes("Look"), true, "fog volume editing should expose the look section");
+  assert.equal(panel.innerHTML.includes("Fog Volume"), true, "fog volume editing should expose a dedicated structured summary block");
+  assert.equal(panel.innerHTML.includes("Placement"), true, "fog volume editing should expose the placement section");
+  assert.equal(panel.innerHTML.includes("Advanced"), true, "fog volume editing should expose advanced grouping");
   assert.equal(panel.innerHTML.includes('data-entity-param-path="area.x0"'), true, "fog volume editing should use nested param paths for area fields");
   assert.equal(panel.innerHTML.includes('data-entity-param-path="render.lumoBehindFog"'), true, "fog volume editing should expose nested render booleans");
   assert.equal(panel.innerHTML.includes('data-entity-field="fogWidth"'), true, "fog volume editing should expose width controls in the bottom panel");
   assert.equal(panel.innerHTML.includes('data-entity-field="fogHeight"'), true, "fog volume editing should expose height controls in the bottom panel");
+  assert.equal(panel.innerHTML.includes('data-number-commit="deferred"'), true, "fog volume editing should use deferred numeric commits for stable entry");
+  assert.equal(panel.innerHTML.includes("selectionFogPreviewSwatch"), true, "fog volume editing should expose a visual preview swatch");
+}
+
+function runInspectorFogRegressionChecks() {
+  globalThis.document = { activeElement: null };
+
+  const panel = {
+    innerHTML: "",
+    classList: {
+      toggle() {},
+    },
+    querySelector() {
+      return null;
+    },
+  };
+
+  const state = {
+    document: {
+      status: "ready",
+      error: null,
+      active: {
+        ...createDoc(),
+        entities: [
+          {
+            id: "entity-fog",
+            name: "Fog Volume",
+            type: "fog_volume",
+            x: 2,
+            y: 1,
+            visible: true,
+            params: {
+              area: { x0: 32, x1: 128, y0: 32, falloff: 12 },
+              look: { density: 0.22, lift: 8, thickness: 36, layers: 28, noise: 0, drift: 0, color: "#E1EEFF", exposure: 1 },
+            },
+          },
+        ],
+        decor: [],
+        sounds: [],
+      },
+    },
+    interaction: {
+      selectedEntityIndices: [0],
+      selectedEntityIndex: 0,
+      selectedDecorIndices: [],
+      selectedDecorIndex: null,
+      selectedSoundIndices: [],
+      selectedSoundIndex: null,
+    },
+  };
+
+  renderInspector(panel, state);
+  assert.equal(panel.innerHTML.trim(), "", "inspector should stay empty for special-volume entity editing");
 }
 
 function runInspectorSoundSummaryRegressionChecks() {
@@ -1397,6 +1465,7 @@ async function main() {
   runSoundBatchSelectionRegressionChecks();
   runBottomPanelBatchSoundRegressionChecks();
   runBottomPanelFogVolumeRegressionChecks();
+  runInspectorFogRegressionChecks();
   runInspectorSoundSummaryRegressionChecks();
   runSourceRegressionChecks();
 

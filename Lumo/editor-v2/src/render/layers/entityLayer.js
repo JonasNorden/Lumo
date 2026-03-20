@@ -1,7 +1,13 @@
 import { getEntityHitRadius, getEntityVisual } from "../../domain/entities/entityVisuals.js";
 import { getSelectedEntityIndices, isEntitySelected } from "../../domain/entities/selection.js";
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
-import { getFogVolumeRect, isFogVolumeEntityType, isSpecialVolumeEntityType } from "../../domain/entities/specialVolumeTypes.js";
+import {
+  createFogVolumeEntityFromWorldRect,
+  getFogVolumeParams,
+  getFogVolumeRect,
+  isFogVolumeEntityType,
+  isSpecialVolumeEntityType,
+} from "../../domain/entities/specialVolumeTypes.js";
 
 function getEntityCenter(entity, tileSize) {
   if (isFogVolumeEntityType(entity?.type)) {
@@ -147,20 +153,34 @@ function drawEntityMarker(ctx, entity, x, y, viewport, { isSelected, isHovered, 
 
 function drawFogVolumeMarker(ctx, entity, tileSize, viewport, { isSelected, isHovered, alpha = 1, preview = false } = {}) {
   const rect = getFogVolumeScreenRect(entity, tileSize, viewport);
-  const params = entity?.params || {};
+  const params = getFogVolumeParams(entity);
   const density = Number.isFinite(Number(params?.look?.density)) ? Number(params.look.density) : 0.14;
+  const lift = Number.isFinite(Number(params?.look?.lift)) ? Number(params.look.lift) : 0;
+  const exposure = Number.isFinite(Number(params?.look?.exposure)) ? Number(params.look.exposure) : 1;
+  const layers = Number.isFinite(Number(params?.look?.layers)) ? Number(params.look.layers) : 28;
+  const color = typeof params?.look?.color === "string" && params.look.color.trim() ? params.look.color : "#E1EEFF";
   const falloff = Math.max(0, rect.falloff);
-  const fillAlpha = Math.max(0.08, Math.min(0.3, density * (preview ? 1.2 : 1.45)));
+  const fillAlpha = Math.max(0.08, Math.min(0.42, density * exposure * (preview ? 1.25 : 1.55)));
   const strokeAlpha = preview ? 0.85 : isSelected ? 0.92 : isHovered ? 0.78 : 0.56;
   const lineWidth = Math.max(1, (preview ? 2 : isSelected ? 2 : 1.25) * viewport.zoom ** 0 * 1);
   const bandHeight = Math.max(6, Math.min(rect.height * 0.4, 18 * viewport.zoom));
+  const highlightHeight = Math.max(10, Math.min(rect.height * 0.48, (10 + layers * 0.35) * viewport.zoom));
+  const baseLineY = rect.y + rect.height - Math.max(1, lift * viewport.zoom);
+  const parsedColor = /^#([0-9a-f]{6})$/i.exec(color);
+  const fogRgb = parsedColor
+    ? {
+        r: Number.parseInt(parsedColor[1].slice(0, 2), 16),
+        g: Number.parseInt(parsedColor[1].slice(2, 4), 16),
+        b: Number.parseInt(parsedColor[1].slice(4, 6), 16),
+      }
+    : { r: 225, g: 238, b: 255 };
 
   ctx.save();
   ctx.globalAlpha *= alpha;
 
   const fillGradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
-  fillGradient.addColorStop(0, `rgba(225, 238, 255, ${Math.min(0.36, fillAlpha + 0.07)})`);
-  fillGradient.addColorStop(1, `rgba(157, 204, 255, ${fillAlpha})`);
+  fillGradient.addColorStop(0, `rgba(${fogRgb.r}, ${fogRgb.g}, ${fogRgb.b}, ${Math.min(0.48, fillAlpha + 0.1)})`);
+  fillGradient.addColorStop(1, `rgba(${Math.max(0, fogRgb.r - 44)}, ${Math.max(0, fogRgb.g - 34)}, ${Math.max(0, fogRgb.b - 22)}, ${fillAlpha})`);
   ctx.fillStyle = fillGradient;
   ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
 
@@ -179,8 +199,14 @@ function drawFogVolumeMarker(ctx, entity, tileSize, viewport, { isSelected, isHo
     ctx.fillRect(rect.x + rect.width - rightWidth, rect.y, rightWidth, rect.height);
   }
 
-  ctx.fillStyle = `rgba(235, 245, 255, ${Math.min(0.34, fillAlpha + 0.08)})`;
-  ctx.fillRect(rect.x, rect.y, rect.width, bandHeight);
+  ctx.fillStyle = `rgba(${Math.min(255, fogRgb.r + 12)}, ${Math.min(255, fogRgb.g + 12)}, ${Math.min(255, fogRgb.b + 12)}, ${Math.min(0.4, fillAlpha + 0.08)})`;
+  ctx.fillRect(rect.x, rect.y, rect.width, highlightHeight);
+
+  ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(0.1, fillAlpha * 0.45)})`;
+  for (let index = 0; index < 3; index += 1) {
+    const stripeY = rect.y + bandHeight + index * Math.max(5, rect.height / 5.5);
+    ctx.fillRect(rect.x + 6, stripeY, Math.max(12, rect.width - 12), Math.max(1, viewport.zoom));
+  }
 
   if (isHovered || isSelected || preview) {
     ctx.fillStyle = preview
@@ -204,8 +230,10 @@ function drawFogVolumeMarker(ctx, entity, tileSize, viewport, { isSelected, isHo
   ctx.strokeStyle = preview ? "rgba(255, 226, 168, 0.75)" : "rgba(225, 238, 255, 0.42)";
   ctx.lineWidth = Math.max(1, lineWidth * 0.75);
   ctx.beginPath();
-  ctx.moveTo(rect.x + 0.5, rect.y + bandHeight);
-  ctx.lineTo(rect.x + rect.width - 0.5, rect.y + bandHeight);
+  ctx.moveTo(rect.x + 0.5, rect.y + highlightHeight);
+  ctx.lineTo(rect.x + rect.width - 0.5, rect.y + highlightHeight);
+  ctx.moveTo(rect.x + 0.5, baseLineY);
+  ctx.lineTo(rect.x + rect.width - 0.5, baseLineY);
   ctx.stroke();
 
   ctx.fillStyle = preview ? "rgba(255, 234, 196, 0.92)" : "rgba(225, 238, 255, 0.72)";
@@ -213,6 +241,8 @@ function drawFogVolumeMarker(ctx, entity, tileSize, viewport, { isSelected, isHo
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
   ctx.fillText("Fog", rect.x + 6, rect.y + 4);
+  ctx.textAlign = "right";
+  ctx.fillText(`${Math.round(rect.width)}×${Math.round(rect.height)}`, rect.x + rect.width - 6, rect.y + 4);
   ctx.restore();
 }
 
@@ -307,7 +337,30 @@ export function renderEntityDragPreview(ctx, doc, viewport, interaction) {
 export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, activePreset) {
   if (interaction.activeTool !== "inspect") return;
   if (interaction.activeLayer !== "entities") return;
-  if (!interaction.hoverCell || !activePreset) return;
+  if (!activePreset) return;
+
+  if (interaction.specialVolumePlacement?.active && isSpecialVolumeEntityType(activePreset.type)) {
+    const placement = interaction.specialVolumePlacement;
+    const previewEntity = createFogVolumeEntityFromWorldRect({
+      type: activePreset.type,
+      x: placement.startCell?.x ?? interaction.hoverCell?.x ?? 0,
+      y: placement.startCell?.y ?? interaction.hoverCell?.y ?? 0,
+      params: activePreset.defaultParams || {},
+    }, {
+      x0: placement.startWorld?.x ?? 0,
+      y0: placement.startWorld?.y ?? 0,
+      x1: placement.currentWorld?.x ?? placement.startWorld?.x ?? 0,
+      y1: placement.currentWorld?.y ?? placement.startWorld?.y ?? 0,
+    }, doc.dimensions.tileSize);
+    drawFogVolumeMarker(ctx, previewEntity, doc.dimensions.tileSize, viewport, {
+      isSelected: true,
+      preview: true,
+      alpha: 0.96,
+    });
+    return;
+  }
+
+  if (!interaction.hoverCell) return;
 
   const previewEntity = {
     type: activePreset.type,
