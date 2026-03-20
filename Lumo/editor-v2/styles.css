@@ -649,8 +649,14 @@ select {
 }
 
 .assetPicker {
+  --asset-picker-thumb-size: 32px;
+  --asset-picker-item-gap: 7px;
+  --asset-picker-item-padding-block: 5px;
+  --asset-picker-item-padding-inline: 7px;
+  --asset-picker-item-radius: 9px;
+  --asset-picker-thumb-radius: 8px;
   display: grid;
-  gap: 8px;
+  gap: 5px;
   max-height: 220px;
   overflow-y: auto;
   padding-right: 2px;
@@ -658,12 +664,12 @@ select {
 
 .assetPickerItem {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: var(--asset-picker-thumb-size) minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: var(--asset-picker-item-gap);
   width: 100%;
-  padding: 8px 10px;
-  border-radius: 12px;
+  padding: var(--asset-picker-item-padding-block) var(--asset-picker-item-padding-inline);
+  border-radius: var(--asset-picker-item-radius);
   border: 1px solid #23304a;
   background: rgba(12, 18, 31, 0.92);
   color: #d8e4fb;
@@ -680,9 +686,9 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: var(--asset-picker-thumb-size);
+  height: var(--asset-picker-thumb-size);
+  border-radius: var(--asset-picker-thumb-radius);
   border: 1px solid rgba(79, 101, 145, 0.55);
   background: linear-gradient(180deg, rgba(22, 31, 49, 0.96) 0%, rgba(12, 18, 31, 0.98) 100%);
   overflow: hidden;
@@ -758,16 +764,13 @@ select {
 }
 
 .assetPickerCompact .assetPickerItem {
-  grid-template-columns: 32px minmax(0, 1fr);
-  gap: 7px;
-  padding: 5px 7px;
-  border-radius: 9px;
+  grid-template-columns: var(--asset-picker-thumb-size) minmax(0, 1fr);
 }
 
 .assetPickerCompact .assetThumb {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: var(--asset-picker-thumb-size);
+  height: var(--asset-picker-thumb-size);
+  border-radius: var(--asset-picker-thumb-radius);
 }
 
 .assetPickerCompact .assetPickerMeta {
@@ -785,19 +788,6 @@ select {
 
 .assetPickerDecorCompact {
   gap: 6px;
-}
-
-.assetPickerDecorCompact .assetPickerItem {
-  grid-template-columns: 36px minmax(0, 1fr);
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 10px;
-}
-
-.assetPickerDecorCompact .assetThumb {
-  width: 36px;
-  height: 36px;
-  border-radius: 9px;
 }
 
 .assetPickerDecorCompact .assetPickerMeta {
