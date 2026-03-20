@@ -69,6 +69,15 @@ function renderSection(sectionId, title, isOpen, content, sectionClass = "") {
   `;
 }
 
+function renderInlineSection(title, content) {
+  return `
+    <section class="panelSection panelSectionInline" aria-label="${title} section">
+      <div class="sectionTitle sectionTitleInline">${title}</div>
+      <div class="sectionContent">${content}</div>
+    </section>
+  `;
+}
+
 function renderLayerSection(state) {
   const activeLayer = state.interaction.activeLayer || PANEL_LAYERS.TILES;
 
@@ -375,8 +384,6 @@ export function renderBrushPanel(panel, state) {
   const summary = getBrushDraftSummary(brushDraft);
   const activeTileSprite = findBrushSpriteOptionByValue(brushDraft.sprite);
   const panelSections = {
-    tools: true,
-    layer: true,
     tiles: true,
     decor: true,
     entities: true,
@@ -386,13 +393,13 @@ export function renderBrushPanel(panel, state) {
   };
 
   panel.innerHTML = `
-    ${renderSection("tools", "TOOLS", panelSections.tools, `
+    ${renderInlineSection("TOOLS", `
       <div class="toolSwitch toolSwitchCompact" role="group" aria-label="Editor tool">
         ${VISIBLE_TOOL_OPTIONS.map((option) => renderToolButton(option, state.interaction.activeTool)).join("")}
       </div>
-    `, "panelSectionInline")}
+    `)}
 
-    ${renderSection("layer", "LAYER", panelSections.layer, renderLayerSection(state), "panelSectionInline")}
+    ${renderInlineSection("LAYER", renderLayerSection(state))}
 
     ${renderSection("tiles", "TILES", panelSections.tiles, `
       <label class="fieldRow fieldRowCompact">
@@ -516,18 +523,6 @@ export function bindBrushPanel(panel, store, options = {}) {
   const onClick = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
-
-    const sectionToggle = target.closest("[data-section-toggle]");
-    if (sectionToggle instanceof HTMLButtonElement) {
-      const sectionId = sectionToggle.dataset.sectionToggle;
-      if (!sectionId) return;
-
-      store.setState((draft) => {
-        if (!draft.ui.panelSections || !(sectionId in draft.ui.panelSections)) return;
-        draft.ui.panelSections[sectionId] = !draft.ui.panelSections[sectionId];
-      });
-      return;
-    }
 
     const decorActionButton = target.closest("[data-decor-action]");
     if (decorActionButton instanceof HTMLButtonElement) {

@@ -424,32 +424,21 @@ select {
 .panelSectionInline {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding-block: 10px;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: nowrap;
+  padding-block: 9px;
 }
 
-.panelSectionInline .sectionToggle {
-  width: auto;
+.panelSectionInline .sectionTitle,
+.panelSectionInline .sectionTitleInline {
   flex: 0 0 auto;
-  gap: 0;
-}
-
-.panelSectionInline .sectionEyebrow {
-  display: none;
-}
-
-.panelSectionInline .sectionTitleRow {
-  gap: 6px;
-}
-
-.panelSectionInline .sectionTitle {
   font-size: 11px;
   letter-spacing: 0.14em;
 }
 
 .panelSectionInline .sectionContent {
-  flex: 1 1 170px;
+  flex: 1 1 auto;
   min-width: 0;
   margin-top: 0;
 }
@@ -463,22 +452,29 @@ select {
 .toolSwitchCompact,
 .layerSwitch {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
 }
 
 .toolSwitchCompact .toolButton,
 .layerSwitch .toolButton {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 28px;
-  padding: 5px 8px;
+  min-height: 27px;
+  padding: 4px 7px;
   border-radius: 9px;
   font-size: 11px;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 .toolButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 34px;
   padding: 8px 10px;
   border-radius: 10px;
@@ -487,6 +483,8 @@ select {
   color: #b8c9eb;
   font-size: 12px;
   font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
   cursor: pointer;
 }
 

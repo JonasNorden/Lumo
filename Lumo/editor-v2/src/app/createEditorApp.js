@@ -1076,7 +1076,6 @@ export function createEditorApp({
     if (layer === PANEL_LAYERS.ENTITIES) draft.ui.panelSections.entities = true;
     if (layer === PANEL_LAYERS.DECOR) draft.ui.panelSections.decor = true;
     if (layer === PANEL_LAYERS.SOUND) draft.ui.panelSections.sound = true;
-    draft.ui.panelSections.layer = true;
   };
 
   const setActiveLayer = (draft, layer) => {

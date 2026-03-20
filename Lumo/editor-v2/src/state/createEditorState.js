@@ -100,8 +100,6 @@ export function createEditorState() {
       darknessPreviewEnabled: false,
       topBarMenu: null,
       panelSections: {
-        tools: true,
-        layer: true,
         tiles: true,
         entities: true,
         decor: true,
