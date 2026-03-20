@@ -60,6 +60,7 @@ import {
   stopScanPlaybackState,
   syncScanPlaybackState,
 } from "../domain/scan/scanSystem.js";
+import { createScanAudioPlaybackController } from "../domain/scan/scanAudioPlayback.js";
 import {
   clearDecorSelection,
   getPrimarySelectedDecorIndex,
@@ -427,6 +428,14 @@ export function createEditorApp({
   };
   let scanAnimationFrame = 0;
   let scanPlaybackToken = 0;
+  const scanAudioPlayback = createScanAudioPlaybackController();
+
+  const syncScanAudioPlayback = (state) => {
+    scanAudioPlayback.sync({
+      doc: state?.document?.active || null,
+      scan: state?.scan || null,
+    });
+  };
 
   const cancelScheduledScanFrame = () => {
     if (!scanAnimationFrame) return;
@@ -3647,6 +3656,7 @@ export function createEditorApp({
   };
 
   const unsubscribe = store.subscribe(draw);
+  const unsubscribeScanAudio = store.subscribe(syncScanAudioPlayback);
   const panelBindingOptions = {
     onEntityUpdate: updateEntity,
     onDecorUpdate: updateDecor,
@@ -3678,11 +3688,14 @@ export function createEditorApp({
 
   resize();
   draw(store.getState());
+  syncScanAudioPlayback(store.getState());
   void loadDocument();
 
   return () => {
     invalidateScanPlayback();
+    scanAudioPlayback.destroy();
     unsubscribe();
+    unsubscribeScanAudio();
     unbindInspectorPanel();
     unbindBottomPanel();
     unbindBrushPanel();
