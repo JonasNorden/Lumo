@@ -47,6 +47,7 @@ export function createEditorState() {
       lineDrag: null,
       boxSelection: null,
       entityDrag: null,
+      specialVolumePlacement: null,
       decorDrag: null,
       soundDrag: null,
       scanDrag: null,

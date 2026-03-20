@@ -2,6 +2,7 @@ import { bindSelectionEditorPanel, renderSelectionEditorPanel } from "./selectio
 
 export function renderInspector(panel, state) {
   renderSelectionEditorPanel(panel, state, {
+    hideSpecialVolumeEntity: true,
     soundMode: "summary",
   });
 }

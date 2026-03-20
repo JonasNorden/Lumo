@@ -9,6 +9,33 @@ import { getEntityPresetDefaultParams } from "./entityPresets.js";
 const SPECIAL_VOLUME_ENTITY_TYPES = new Set(["fog_volume"]);
 const DEFAULT_FOG_WIDTH_PX = 288;
 const DEFAULT_FOG_THICKNESS_PX = 44;
+const MIN_SPECIAL_VOLUME_PREVIEW_HEIGHT_PX = 12;
+
+export const SPECIAL_VOLUME_EDITOR_LAYOUTS = {
+  fog_volume: {
+    primarySections: [
+      {
+        key: "volume",
+        title: "Volume",
+        description: "Direct authoring controls for the authored span and base shape.",
+        fields: ["fogWidth", "fogHeight", "area.falloff"],
+      },
+      {
+        key: "look",
+        title: "Look",
+        description: "Common fog look controls used during placement and tuning.",
+        fields: ["look.density", "look.lift", "look.thickness", "look.color", "look.exposure"],
+      },
+    ],
+    advancedSections: [
+      { key: "area", title: "Area", fields: ["area.x0", "area.x1", "area.y0"] },
+      { key: "smoothing", title: "Smoothing", fields: ["smoothing.diffuse", "smoothing.relax", "smoothing.visc"] },
+      { key: "interaction", title: "Interaction", fields: ["interaction.radius", "interaction.push", "interaction.bulge", "interaction.gate"] },
+      { key: "organic", title: "Organic", fields: ["organic.strength", "organic.scale", "organic.speed"] },
+      { key: "render", title: "Render", fields: ["look.layers", "look.noise", "look.drift", "render.blend", "render.lumoBehindFog"] },
+    ],
+  },
+};
 
 export const FOG_VOLUME_PARAM_SECTIONS = [
   { key: "area", title: "Area", fields: ["x0", "x1", "y0", "falloff"] },
@@ -72,6 +99,35 @@ export function getFogVolumeAnchorCell(entity, tileSize) {
     x: Math.max(0, Math.round(rect.x0 / tileSize)),
     y: Math.max(0, Math.round((rect.y0 - tileSize) / tileSize)),
   };
+}
+
+export function createFogVolumeEntityFromWorldRect(entity, worldRect, tileSize) {
+  const normalized = syncFogVolumeEntityToAnchor(entity, tileSize);
+  const minX = Math.min(readNumber(worldRect?.x0, normalized.x * tileSize), readNumber(worldRect?.x1, normalized.x * tileSize + DEFAULT_FOG_WIDTH_PX));
+  const maxX = Math.max(readNumber(worldRect?.x0, normalized.x * tileSize), readNumber(worldRect?.x1, normalized.x * tileSize + DEFAULT_FOG_WIDTH_PX));
+  const minY = Math.min(readNumber(worldRect?.y0, normalized.y * tileSize), readNumber(worldRect?.y1, (normalized.y + 1) * tileSize));
+  const maxY = Math.max(readNumber(worldRect?.y0, normalized.y * tileSize), readNumber(worldRect?.y1, (normalized.y + 1) * tileSize));
+  const nextAnchorX = Math.max(0, Math.round(minX / tileSize));
+  const nextAnchorY = Math.max(0, Math.round((maxY - tileSize) / tileSize));
+  const width = Math.max(tileSize, Math.round(maxX - minX));
+  const height = Math.max(MIN_SPECIAL_VOLUME_PREVIEW_HEIGHT_PX, Math.round(maxY - minY));
+  const nextEntity = syncFogVolumeEntityToAnchor({
+    ...normalized,
+    x: nextAnchorX,
+    y: nextAnchorY,
+  }, tileSize);
+
+  let nextParams = setNestedEntityParam(nextEntity.params, "area.x0", minX);
+  nextParams = setNestedEntityParam(nextParams, "area.x1", minX + width);
+  nextParams = setNestedEntityParam(nextParams, "area.y0", maxY);
+  nextParams = setNestedEntityParam(nextParams, "look.thickness", height);
+
+  return syncFogVolumeEntityToAnchor({
+    ...nextEntity,
+    x: nextAnchorX,
+    y: nextAnchorY,
+    params: nextParams,
+  }, tileSize);
 }
 
 export function syncFogVolumeEntityToAnchor(entity, tileSize) {
