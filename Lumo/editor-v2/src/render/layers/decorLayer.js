@@ -1,132 +1,12 @@
-import { getDecorHitRadius, getDecorVisual } from '../../domain/decor/decorVisuals.js';
+import { getDecorHitRadius, getDecorVisual } from "../../domain/decor/decorVisuals.js";
 import { getSelectedDecorIndices, isDecorSelected } from "../../domain/decor/selection.js";
+import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
 
 function getDecorScreenCenter(decor, tileSize, viewport) {
   return {
     x: viewport.offsetX + (decor.x + 0.5) * tileSize * viewport.zoom,
     y: viewport.offsetY + (decor.y + 0.76) * tileSize * viewport.zoom,
   };
-}
-
-function drawGrassMarker(ctx, x, y, scale, visual) {
-  ctx.save();
-  ctx.strokeStyle = visual.stroke;
-  ctx.lineWidth = 1.5 * scale;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(x - 4.4 * scale, y + 4.2 * scale);
-  ctx.quadraticCurveTo(x - 3.4 * scale, y - 1.8 * scale, x - 1.8 * scale, y - 5.2 * scale);
-  ctx.moveTo(x, y + 4.8 * scale);
-  ctx.quadraticCurveTo(x - 0.2 * scale, y - 0.9 * scale, x + 0.2 * scale, y - 6.4 * scale);
-  ctx.moveTo(x + 4.2 * scale, y + 4.2 * scale);
-  ctx.quadraticCurveTo(x + 3.2 * scale, y - 1.4 * scale, x + 1.8 * scale, y - 5.3 * scale);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawBushMarker(ctx, x, y, scale, visual) {
-  ctx.beginPath();
-  ctx.arc(x - 3.2 * scale, y + 0.2 * scale, 3.2 * scale, 0, Math.PI * 2);
-  ctx.arc(x + 3.1 * scale, y + 0.1 * scale, 3.5 * scale, 0, Math.PI * 2);
-  ctx.arc(x, y - 2.5 * scale, 4.2 * scale, 0, Math.PI * 2);
-  ctx.fillStyle = visual.fill;
-  ctx.fill();
-  ctx.strokeStyle = visual.stroke;
-  ctx.lineWidth = 1.4 * scale;
-  ctx.stroke();
-}
-
-function drawRockMarker(ctx, x, y, scale, visual) {
-  ctx.beginPath();
-  ctx.moveTo(x - 6.2 * scale, y + 4.8 * scale);
-  ctx.lineTo(x - 5.1 * scale, y - 1.6 * scale);
-  ctx.lineTo(x - 1.4 * scale, y - 5.2 * scale);
-  ctx.lineTo(x + 5.8 * scale, y - 3.1 * scale);
-  ctx.lineTo(x + 6.6 * scale, y + 4.3 * scale);
-  ctx.closePath();
-  ctx.fillStyle = visual.fill;
-  ctx.fill();
-  ctx.strokeStyle = visual.stroke;
-  ctx.lineWidth = 1.4 * scale;
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(x - 2.5 * scale, y - 1.4 * scale);
-  ctx.lineTo(x + 1.2 * scale, y - 2.7 * scale);
-  ctx.lineTo(x + 3.2 * scale, y + 1.2 * scale);
-  ctx.strokeStyle = visual.accent;
-  ctx.lineWidth = 1 * scale;
-  ctx.stroke();
-}
-
-function drawFlowerMarker(ctx, x, y, scale, visual) {
-  ctx.save();
-  ctx.strokeStyle = '#8ad27e';
-  ctx.lineWidth = 1.3 * scale;
-  ctx.beginPath();
-  ctx.moveTo(x, y + 5 * scale);
-  ctx.lineTo(x, y - 1.5 * scale);
-  ctx.stroke();
-  ctx.restore();
-
-  for (let i = 0; i < 4; i += 1) {
-    const angle = (Math.PI / 2) * i;
-    ctx.beginPath();
-    ctx.arc(x + Math.cos(angle) * 2.8 * scale, y - 3.6 * scale + Math.sin(angle) * 2.8 * scale, 2.4 * scale, 0, Math.PI * 2);
-    ctx.fillStyle = visual.stroke;
-    ctx.fill();
-  }
-
-  ctx.beginPath();
-  ctx.arc(x, y - 3.6 * scale, 1.7 * scale, 0, Math.PI * 2);
-  ctx.fillStyle = visual.accent;
-  ctx.fill();
-}
-
-function drawSignMarker(ctx, x, y, scale, visual) {
-  ctx.save();
-  ctx.strokeStyle = visual.stroke;
-  ctx.lineWidth = 1.3 * scale;
-  ctx.beginPath();
-  ctx.moveTo(x, y + 5.2 * scale);
-  ctx.lineTo(x, y - 4.4 * scale);
-  ctx.stroke();
-  ctx.restore();
-
-  ctx.beginPath();
-  ctx.roundRect(x - 5.8 * scale, y - 7.4 * scale, 11.6 * scale, 6.2 * scale, 1.6 * scale);
-  ctx.fillStyle = visual.fill;
-  ctx.fill();
-  ctx.strokeStyle = visual.stroke;
-  ctx.lineWidth = 1.2 * scale;
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(x - 2.8 * scale, y - 4.4 * scale);
-  ctx.lineTo(x + 2.6 * scale, y - 4.4 * scale);
-  ctx.strokeStyle = visual.accent;
-  ctx.lineWidth = 1 * scale;
-  ctx.stroke();
-}
-
-function drawDecorGlyph(ctx, decor, x, y, scale, visual) {
-  switch (visual.marker) {
-    case 'bush':
-      drawBushMarker(ctx, x, y, scale, visual);
-      break;
-    case 'rock':
-      drawRockMarker(ctx, x, y, scale, visual);
-      break;
-    case 'flower':
-      drawFlowerMarker(ctx, x, y, scale, visual);
-      break;
-    case 'sign':
-      drawSignMarker(ctx, x, y, scale, visual);
-      break;
-    default:
-      drawGrassMarker(ctx, x, y, scale, visual);
-      break;
-  }
 }
 
 function drawDecorFocus(ctx, x, y, radius, { selected = false, hovered = false, preview = false } = {}, scale = 1) {
@@ -136,20 +16,57 @@ function drawDecorFocus(ctx, x, y, radius, { selected = false, hovered = false, 
   ctx.beginPath();
   ctx.ellipse(x, y + 1.5 * scale, radius, radius * 0.72, 0, 0, Math.PI * 2);
   ctx.fillStyle = preview
-    ? 'rgba(255, 214, 138, 0.14)'
+    ? "rgba(255, 214, 138, 0.16)"
     : selected
-      ? 'rgba(255, 179, 71, 0.18)'
-      : 'rgba(125, 231, 255, 0.12)';
+      ? "rgba(255, 179, 71, 0.18)"
+      : "rgba(125, 231, 255, 0.14)";
   ctx.fill();
   ctx.strokeStyle = preview
-    ? 'rgba(255, 214, 138, 0.85)'
+    ? "rgba(255, 214, 138, 0.88)"
     : selected
-      ? 'rgba(255, 179, 71, 0.8)'
-      : 'rgba(125, 231, 255, 0.72)';
+      ? "rgba(255, 179, 71, 0.82)"
+      : "rgba(125, 231, 255, 0.76)";
   ctx.lineWidth = (preview ? 1.6 : 1.2) * scale;
   if (preview) ctx.setLineDash([3 * scale, 2 * scale]);
   ctx.stroke();
   ctx.restore();
+}
+
+function drawDecorFallback(ctx, x, y, scale, visual) {
+  ctx.save();
+  ctx.fillStyle = "rgba(17, 28, 46, 0.92)";
+  ctx.strokeStyle = "rgba(239, 245, 255, 0.74)";
+  ctx.lineWidth = 1.4 * scale;
+  ctx.beginPath();
+  ctx.roundRect(x - 7 * scale, y - 10 * scale, 14 * scale, 14 * scale, 4 * scale);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "rgba(239, 245, 255, 0.82)";
+  ctx.font = `${Math.max(7, 9 * scale)}px Inter, system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText((visual.label || "D").slice(0, 1).toUpperCase(), x, y - 3 * scale);
+  ctx.restore();
+}
+
+function drawDecorSprite(ctx, x, y, viewport, visual, options = {}) {
+  const image = getSpriteImage(visual.img);
+  if (!isSpriteReady(image)) return false;
+
+  const zoom = viewport.zoom;
+  const drawWidth = (visual.drawW || 24) * zoom;
+  const drawHeight = (visual.drawH || 24) * zoom;
+  const drawX = x - drawWidth / 2;
+  const drawY = visual.drawAnchor === "BL"
+    ? y - drawHeight + (8 * zoom)
+    : y - drawHeight / 2;
+
+  ctx.save();
+  ctx.globalAlpha *= options.alpha ?? 1;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(image, Math.floor(drawX), Math.floor(drawY), Math.round(drawWidth), Math.round(drawHeight));
+  ctx.restore();
+  return true;
 }
 
 function drawDecorMarker(ctx, decor, viewport, tileSize, options = {}) {
@@ -159,8 +76,10 @@ function drawDecorMarker(ctx, decor, viewport, tileSize, options = {}) {
 
   ctx.save();
   ctx.globalAlpha *= options.alpha ?? 1;
-  drawDecorFocus(ctx, x, y, 9 * scale, options, scale);
-  drawDecorGlyph(ctx, decor, x, y, scale, visual);
+  drawDecorFocus(ctx, x, y, Math.max(9, (visual.drawW || 24) * 0.42) * scale, options, scale);
+  if (!drawDecorSprite(ctx, x, y, viewport, visual, options)) {
+    drawDecorFallback(ctx, x, y, scale, visual);
+  }
   ctx.restore();
 }
 
@@ -246,6 +165,7 @@ export function renderDecorDragPreview(ctx, doc, viewport, interaction) {
 
 export function renderDecorPlacementPreview(ctx, doc, viewport, interaction, activePreset) {
   if (interaction.activeTool !== "inspect") return;
+  if (interaction.activeLayer !== "decor") return;
   if (interaction.decorScatterMode) return;
   if (!interaction.hoverCell || !activePreset) return;
 
@@ -269,8 +189,8 @@ export function renderDecorScatterPreview(ctx, doc, viewport, interaction) {
   if (!rect) return;
 
   ctx.save();
-  ctx.fillStyle = 'rgba(255, 184, 76, 0.16)';
-  ctx.strokeStyle = 'rgba(255, 196, 110, 0.9)';
+  ctx.fillStyle = "rgba(255, 184, 76, 0.16)";
+  ctx.strokeStyle = "rgba(255, 196, 110, 0.9)";
   ctx.lineWidth = 1.5;
   ctx.setLineDash([8, 6]);
   ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
@@ -281,15 +201,15 @@ export function renderDecorScatterPreview(ctx, doc, viewport, interaction) {
     ? Math.max(0, Math.min(1, interaction.decorScatterSettings.density))
     : 0.3;
   const label = `Scatter · ${Math.round(scatterDensity * 100)}% density`;
-  ctx.font = '12px Inter, system-ui, sans-serif';
+  ctx.font = "12px Inter, system-ui, sans-serif";
   const textWidth = ctx.measureText(label).width;
   const badgeX = rect.x + 8;
   const badgeY = rect.y + 8;
-  ctx.fillStyle = 'rgba(12, 18, 31, 0.88)';
+  ctx.fillStyle = "rgba(12, 18, 31, 0.88)";
   ctx.fillRect(badgeX, badgeY, textWidth + 14, 22);
-  ctx.strokeStyle = 'rgba(255, 196, 110, 0.65)';
+  ctx.strokeStyle = "rgba(255, 196, 110, 0.65)";
   ctx.strokeRect(badgeX, badgeY, textWidth + 14, 22);
-  ctx.fillStyle = '#f6d69a';
+  ctx.fillStyle = "#f6d69a";
   ctx.fillText(label, badgeX + 7, badgeY + 15);
   ctx.restore();
 }

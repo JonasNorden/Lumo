@@ -8,6 +8,7 @@ import { TOOL_OPTIONS, EDITOR_TOOLS, isEditorTool } from "../domain/tiles/tools.
 import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
 import { DECOR_PRESETS } from "../domain/decor/decorPresets.js";
 import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
+import { findBrushSpriteOptionByValue } from "../domain/tiles/tileSpriteCatalog.js";
 
 const PANEL_LAYERS = {
   TOOLS: "tools",
@@ -109,6 +110,44 @@ function renderSelectorField(label, dataField, options, selectedValue, placehold
   `;
 }
 
+function renderAssetThumb(option, className = "assetThumb") {
+  if (!option?.img) {
+    return `<span class="${className} isFallback" aria-hidden="true">${escapeHtml((option?.defaultName || option?.label || "?").slice(0, 1))}</span>`;
+  }
+  return `<span class="${className}" aria-hidden="true"><img src="${escapeHtml(option.img)}" alt="" loading="lazy" decoding="async" /></span>`;
+}
+
+function renderAssetPicker(groupLabel, buttonDataKey, options, activeValue, emptyLabel) {
+  if (!options.length) {
+    return `<div class="assetPickerEmpty">${escapeHtml(emptyLabel)}</div>`;
+  }
+
+  return `
+    <div class="assetPicker" role="group" aria-label="${escapeHtml(groupLabel)}">
+      ${options.map((option) => {
+        const isActive = option.id === activeValue || option.value === activeValue;
+        const itemValue = option.id || option.value;
+        const detail = option.group || option.type || option.value || "";
+        return `
+          <button
+            type="button"
+            class="assetPickerItem ${isActive ? "isActive" : ""}"
+            data-${buttonDataKey}="${escapeHtml(itemValue)}"
+            aria-pressed="${isActive ? "true" : "false"}"
+            title="${escapeHtml(option.defaultName || option.label || itemValue)}"
+          >
+            ${renderAssetThumb(option)}
+            <span class="assetPickerMeta">
+              <span class="assetPickerLabel">${escapeHtml(option.defaultName || option.label || itemValue)}</span>
+              <span class="assetPickerDetail">${escapeHtml(detail)}</span>
+            </span>
+          </button>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function renderPlacementBlock(label, hint = "") {
   return `
     <div class="statusCard">
@@ -126,7 +165,7 @@ function renderEntitiesSettings(state) {
   const placementHint = activePreset ? "Alt/Option + Click places" : "Select a preset to arm placement";
 
   return `
-    ${renderSelectorField("Select Entity", "entity-preset-select", PLACEABLE_ENTITY_PRESETS, activePresetId, "No entity selected")}
+    ${renderAssetPicker("Entity presets", "entity-preset-button", PLACEABLE_ENTITY_PRESETS, activePresetId, "No entity selected")}
     ${renderPlacementBlock(placementLabel, placementHint)}
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton isSecondary" data-entity-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
@@ -155,7 +194,7 @@ function renderDecorSettings(state) {
       : "Alt/Option + Click places one";
 
   return `
-    ${renderSelectorField("Select Decor", "decor-preset-select", DECOR_PRESETS, activePresetId, "No decor selected")}
+    ${renderAssetPicker("Decor presets", "decor-preset-button", DECOR_PRESETS, activePresetId, "No decor selected")}
     ${renderPlacementBlock(placementLabel, placementHint)}
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton isSecondary" data-decor-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
@@ -346,6 +385,7 @@ function renderScanSettings(state) {
 export function renderBrushPanel(panel, state) {
   const brushDraft = state.brush.activeDraft;
   const summary = getBrushDraftSummary(brushDraft);
+  const activeTileSprite = findBrushSpriteOptionByValue(brushDraft.sprite);
   const panelSections = {
     tools: true,
     layer: true,
@@ -383,15 +423,27 @@ export function renderBrushPanel(panel, state) {
 
       <label class="fieldRow fieldRowCompact">
         <span class="label">Sprite</span>
-        <select data-brush-field="sprite">
-          ${renderOptions(BRUSH_SPRITE_OPTIONS, brushDraft.sprite)}
-        </select>
+        <span class="fieldMeta">Real tile preview</span>
       </label>
+
+      ${renderAssetPicker("Tile sprites", "brush-sprite-button", BRUSH_SPRITE_OPTIONS, brushDraft.sprite, "No tile sprite selected")}
 
       <div class="statusRow compactStatusRow">
         <span class="label">Current</span>
         <span class="value">${summary}</span>
       </div>
+      ${activeTileSprite ? `
+        <div class="statusCard assetSelectionCard">
+          <span class="statusCardLabel">Tile Sprite</span>
+          <div class="assetSelectionRow">
+            ${renderAssetThumb(activeTileSprite, "assetThumb assetThumbLarge")}
+            <div class="assetSelectionMeta">
+              <span class="statusCardValue">${escapeHtml(activeTileSprite.label)}</span>
+              <span class="statusCardMeta">Tile ID ${escapeHtml(String(activeTileSprite.tileId))} · ${escapeHtml(activeTileSprite.drawW)}×${escapeHtml(activeTileSprite.drawH)}</span>
+            </div>
+          </div>
+        </div>
+      ` : ""}
     `)}
 
     ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
@@ -509,6 +561,32 @@ export function bindBrushPanel(panel, store, options = {}) {
     if (soundActionButton instanceof HTMLButtonElement) {
       onLayerChange?.(PANEL_LAYERS.SOUND);
       if (soundActionButton.dataset.soundAction === "clear-preset") onSoundUpdate?.(-1, "clear-preset", null);
+      return;
+    }
+
+    const decorPresetButton = target.closest("[data-decor-preset-button]");
+    if (decorPresetButton instanceof HTMLButtonElement) {
+      onLayerChange?.(PANEL_LAYERS.DECOR);
+      onDecorUpdate?.(-1, "preset", decorPresetButton.dataset.decorPresetButton || null);
+      return;
+    }
+
+    const entityPresetButton = target.closest("[data-entity-preset-button]");
+    if (entityPresetButton instanceof HTMLButtonElement) {
+      onLayerChange?.(PANEL_LAYERS.ENTITIES);
+      onEntityUpdate?.(-1, "preset", entityPresetButton.dataset.entityPresetButton || null);
+      return;
+    }
+
+    const brushSpriteButton = target.closest("[data-brush-sprite-button]");
+    if (brushSpriteButton instanceof HTMLButtonElement) {
+      const nextSprite = brushSpriteButton.dataset.brushSpriteButton;
+      if (!nextSprite) return;
+      store.setState((draft) => {
+        draft.interaction.activeLayer = PANEL_LAYERS.TILES;
+        draft.ui.panelSections.tiles = true;
+        draft.brush.activeDraft.sprite = nextSprite;
+      });
       return;
     }
 
