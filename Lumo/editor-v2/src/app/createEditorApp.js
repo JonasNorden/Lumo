@@ -45,6 +45,7 @@ import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
 import { DEFAULT_ENTITY_PRESET_ID, findEntityPresetById, getEntityPresetDefaultParams } from "../domain/entities/entityPresets.js";
 import { DEFAULT_DECOR_PRESET_ID, findDecorPresetById } from "../domain/decor/decorPresets.js";
 import { DEFAULT_SOUND_PRESET_ID, findSoundPresetById, getSoundPresetDefaultParams, getSoundPresetForType } from "../domain/sound/soundPresets.js";
+import { normalizeSoundSourceValue } from "../domain/sound/sourceReference.js";
 import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
 import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
 import {
@@ -1800,15 +1801,24 @@ export function createEditorApp({
         return;
       }
 
-      if (field === "name" || field === "type") {
+      if (field === "name" || field === "type" || field === "source") {
         const trimmed = String(value || "").trim();
         const preset = field === "type" ? getSoundPresetForType(trimmed || sound[field]) : null;
-        const nextValue = field === "type" ? normalizeSoundType(preset?.type || trimmed || sound[field]) : trimmed || sound[field];
-        if (sound[field] === nextValue) return;
+        const nextValue = field === "type"
+          ? normalizeSoundType(preset?.type || trimmed || sound[field])
+          : field === "source"
+            ? normalizeSoundSourceValue(value)
+            : trimmed || sound[field];
+        const previousValue = field === "source" ? sound.source || null : sound[field];
+        if (previousValue === nextValue) return;
         const previousSound = { ...sound, params: cloneEntityParams(sound.params) };
         const nextSound = {
           ...sound,
-          [field]: nextValue,
+          ...(field === "source"
+            ? nextValue
+              ? { source: nextValue }
+              : { source: undefined }
+            : { [field]: nextValue }),
           params: field === "type"
             ? { ...getSoundPresetDefaultParams(preset?.id || DEFAULT_SOUND_PRESET_ID), ...cloneEntityParams(sound.params) }
             : cloneEntityParams(sound.params),

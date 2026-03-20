@@ -201,6 +201,7 @@ function runSoundRegressionChecks() {
     x: 0,
     y: 0,
     visible: true,
+    source: "./audio/ambient.ogg",
     params: { width: 2, height: 3 },
   };
   doc.sounds.push(sound);
@@ -257,8 +258,37 @@ function runSoundRegressionChecks() {
   assert.equal(normalized.sounds[1].params.loop, true, "ambient zones should default to looping");
   assert.equal(normalized.sounds[1].params.spatial, false, "ambient zones should default to non-spatial playback");
 
-  const exported = JSON.parse(serializeLevelDocument(normalized));
-  assert.equal(exported.sounds[1].type, "ambientZone", "sound export should retain ambient zones as a normal authoring type");
+  const normalizedSourceDoc = validateLevelDocument({
+    ...createDoc(),
+    sounds: [
+      {
+        id: "sound-source",
+        name: "Source Doc",
+        type: "spot",
+        x: 2,
+        y: 1,
+        visible: true,
+        source: "  ./audio/wind.ogg  ",
+        params: {},
+      },
+      {
+        id: "sound-legacy-source",
+        name: "Legacy Source Doc",
+        type: "spot",
+        x: 1,
+        y: 0,
+        visible: true,
+        params: { source: "./audio/legacy.ogg" },
+      },
+    ],
+  });
+  assert.equal(normalizedSourceDoc.sounds[0].source, "./audio/wind.ogg", "validation should preserve and trim authored top-level sound sources");
+  assert.equal(normalizedSourceDoc.sounds[1].source, "./audio/legacy.ogg", "validation should lift legacy param-based sound sources into the authored source field");
+
+  const exported = JSON.parse(serializeLevelDocument(normalizedSourceDoc));
+  assert.equal(exported.sounds[0].source, "./audio/wind.ogg", "sound export should retain authored sound sources");
+  assert.equal(exported.sounds[1].source, "./audio/legacy.ogg", "sound export should retain normalized legacy sound sources");
+  assert.equal(exported.sounds[1].type, "spot", "sound export should retain normal authoring types alongside sound sources");
 }
 
 
@@ -527,6 +557,7 @@ function runScanAudioPlaybackRegressionChecks() {
       x: 4,
       y: 0,
       visible: true,
+      source: "./audio/spot.ogg",
       params: { volume: 0.75, pitch: 1, radius: 2, spatial: true, loop: false },
     },
     {
@@ -566,6 +597,8 @@ function runScanAudioPlaybackRegressionChecks() {
       const metrics = {
         soundId: sound.id,
         soundType: soundState.soundType,
+        source: sound.source || null,
+        usedFallback: !sound.source,
         playCalls: 0,
         pauseCalls: 0,
         resumeCalls: 0,
@@ -611,6 +644,7 @@ function runScanAudioPlaybackRegressionChecks() {
   controller.sync({ doc, scan: createScanState("playing", spotStart) });
   assert.deepEqual(controller.getActiveInstanceIds(), ["spot-audio"], "spot sounds should start a persistent playback instance when the scan enters their radius");
   assert.equal(instanceLog[0].playCalls, 1, "persistent spot sounds should create exactly one instance on entry");
+  assert.equal(instanceLog[0].source, "./audio/spot.ogg", "playback should receive the authored sound source when one is available");
   assert.equal(instanceLog[0].volumes.at(-1) < 0.7, true, "spot sounds should be slightly moderated by the simple mix balancing rules");
   assert.equal(instanceLog[0].pans.at(-1), 0, "spot sounds should start centered when the scan is at the sound midpoint");
 
@@ -672,6 +706,118 @@ function runScanAudioPlaybackRegressionChecks() {
   assert.deepEqual(controller.getActiveInstanceIds(), [], "stopping scan playback should stop and clear all active audio instances");
 
   controller.destroy();
+}
+
+
+async function runScanAudioAssetFallbackChecks() {
+  const FakeAudio = class {
+    constructor(source) {
+      this.source = source;
+      this.currentTime = 0;
+      this.loop = false;
+      this.volume = 1;
+      this.playbackRate = 1;
+      this.listeners = new Map();
+    }
+
+    addEventListener(type, handler) {
+      if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+      this.listeners.get(type).add(handler);
+    }
+
+    removeEventListener(type, handler) {
+      this.listeners.get(type)?.delete(handler);
+    }
+
+    pause() {}
+
+    play() {
+      if (this.source.includes("missing")) {
+        return Promise.reject(new Error("missing"));
+      }
+      return Promise.resolve();
+    }
+  };
+
+  const previousAudio = globalThis.Audio;
+  globalThis.Audio = FakeAudio;
+
+  try {
+    const fakeAudioContext = {
+      currentTime: 0,
+      destination: {},
+      createOscillator() {
+        return {
+          type: "sine",
+          frequency: { value: 0 },
+          connect() {},
+          start() {},
+          stop() {},
+          onended: null,
+        };
+      },
+      createGain() {
+        return {
+          gain: {
+            value: 0,
+            cancelScheduledValues() {},
+            setValueAtTime() {},
+            linearRampToValueAtTime() {},
+          },
+          connect() {},
+        };
+      },
+    };
+    const controller = createScanAudioPlaybackController({
+      audioContext: fakeAudioContext,
+    });
+
+    const failingDoc = createDoc();
+    failingDoc.sounds = [
+      {
+        id: "bad-source",
+        name: "Bad Source",
+        type: "spot",
+        x: 4,
+        y: 0,
+        visible: true,
+        source: "./audio/missing.ogg",
+        params: { volume: 0.7, pitch: 1, radius: 2, spatial: true, loop: false },
+      },
+    ];
+
+    const failingEval = evaluateScanAudio(failingDoc, 1, 4.5);
+    controller.sync({
+      doc: failingDoc,
+      scan: { playbackState: "playing", isPlaying: true, audioEvaluation: failingEval },
+    });
+    await Promise.resolve();
+    assert.equal(controller.getActiveInstanceIds().includes("bad-source"), true, "failed asset playback should fall back to placeholder playback instead of dropping the sound");
+    controller.stopAll();
+
+    const missingSourceDoc = createDoc();
+    missingSourceDoc.sounds = [
+      {
+        id: "no-source",
+        name: "No Source",
+        type: "spot",
+        x: 4,
+        y: 0,
+        visible: true,
+        params: { volume: 0.7, pitch: 1, radius: 2, spatial: true, loop: false },
+      },
+    ];
+    const missingSourceEval = evaluateScanAudio(missingSourceDoc, 1, 4.5);
+    controller.sync({
+      doc: missingSourceDoc,
+      scan: { playbackState: "playing", isPlaying: true, audioEvaluation: missingSourceEval },
+    });
+    assert.equal(controller.getActiveInstanceIds().includes("no-source"), true, "sounds without an authored source should continue using placeholder playback");
+
+    controller.destroy();
+  } finally {
+    globalThis.Audio = previousAudio;
+  }
 }
 
 function runSourceRegressionChecks() {
@@ -774,13 +920,18 @@ function runSourceRegressionChecks() {
   );
 }
 
-runTileRegressionChecks();
-runEntityRegressionChecks();
-runDecorRegressionChecks();
-runSoundRegressionChecks();
-runScanRegressionChecks();
-runScanAudioPlaybackRegressionChecks();
-runUiRegressionChecks();
-runSourceRegressionChecks();
+async function main() {
+  runTileRegressionChecks();
+  runEntityRegressionChecks();
+  runDecorRegressionChecks();
+  runSoundRegressionChecks();
+  runScanRegressionChecks();
+  runScanAudioPlaybackRegressionChecks();
+  await runScanAudioAssetFallbackChecks();
+  runUiRegressionChecks();
+  runSourceRegressionChecks();
 
-console.log("editor-v2 regression checks passed");
+  console.log("editor-v2 regression checks passed");
+}
+
+await main();

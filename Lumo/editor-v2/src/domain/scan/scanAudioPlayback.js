@@ -1,3 +1,5 @@
+import { getAuthoredSoundSource } from "../sound/sourceReference.js";
+
 function clampUnitInterval(value) {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(1, value));
@@ -15,12 +17,7 @@ function clampPositiveNumber(value, fallback = 0) {
 }
 
 function resolveSoundSource(sound) {
-  const params = sound?.params || {};
-  const candidates = [params.source, params.src, params.url, params.path, sound?.source];
-  for (const candidate of candidates) {
-    if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
-  }
-  return null;
+  return getAuthoredSoundSource(sound);
 }
 
 function resolveLoopSetting(sound, soundState) {
@@ -142,7 +139,7 @@ function createAudioElementInstance(audioContext, sound, soundState, options = {
   const source = resolveSoundSource(sound);
   if (!source || typeof Audio !== "function") return null;
 
-  const { onEnded } = options;
+  const { onEnded, onAssetError } = options;
   const audio = new Audio(source);
   const audioGraph = createAudioElementGraph(audioContext, audio);
   audio.preload = "auto";
@@ -150,18 +147,31 @@ function createAudioElementInstance(audioContext, sound, soundState, options = {
   audio.volume = audioGraph ? 1 : 0;
   audio.playbackRate = clampPositiveNumber(soundState?.metadata?.pitch ?? sound?.params?.pitch, 1) || 1;
 
-  const handleEnded = () => {
+  let failed = false;
+  const safeOnEnded = () => {
     onEnded?.();
+  };
+  const handleEnded = () => {
+    safeOnEnded();
+  };
+  const handleError = () => {
+    if (failed) return;
+    failed = true;
+    onAssetError?.();
+    safeOnEnded();
   };
 
   audio.addEventListener("ended", handleEnded);
+  audio.addEventListener("error", handleError);
 
   return {
     kind: "audio-element",
     play() {
       const maybePromise = audio.play();
       if (maybePromise?.catch) {
-        maybePromise.catch(() => {});
+        maybePromise.catch(() => {
+          handleError();
+        });
       }
     },
     pause() {
@@ -170,7 +180,9 @@ function createAudioElementInstance(audioContext, sound, soundState, options = {
     resume() {
       const maybePromise = audio.play();
       if (maybePromise?.catch) {
-        maybePromise.catch(() => {});
+        maybePromise.catch(() => {
+          handleError();
+        });
       }
     },
     setVolume(volume) {
@@ -194,6 +206,7 @@ function createAudioElementInstance(audioContext, sound, soundState, options = {
       audio.pause();
       audio.currentTime = 0;
       audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("error", handleError);
       audioGraph?.sourceNode?.disconnect?.();
       audioGraph?.gainNode?.disconnect?.();
       audioGraph?.pannerNode?.disconnect?.();
@@ -264,8 +277,11 @@ function createOscillatorInstance(audioContext, sound, soundState, options = {})
 }
 
 function createDefaultPlaybackInstanceFactory(audioContext) {
-  return ({ sound, soundState, onEnded }) => {
-    const elementInstance = createAudioElementInstance(audioContext, sound, soundState, { onEnded });
+  return ({ sound, soundState, onEnded, onAssetError }) => {
+    const elementInstance = createAudioElementInstance(audioContext, sound, soundState, {
+      onEnded,
+      onAssetError,
+    });
     if (elementInstance) return elementInstance;
     return createOscillatorInstance(audioContext, sound, soundState, { onEnded });
   };
@@ -298,28 +314,67 @@ export function createScanAudioPlaybackController(options = {}) {
     const existingEntry = activeInstances.get(soundState.soundId);
     if (existingEntry) return existingEntry;
 
+    let nextEntry = null;
+    const createFallbackEntry = () => {
+      const fallbackInstance = createOscillatorInstance(audioContext, sound, soundState, {
+        onEnded: () => {
+          if (activeInstances.get(soundState.soundId)?.instance === fallbackInstance) {
+            removeInstance(soundState.soundId);
+          }
+        },
+      });
+      if (!fallbackInstance) return null;
+      return {
+        soundId: soundState.soundId,
+        soundType: soundState.soundType,
+        instance: fallbackInstance,
+        loop: resolveLoopSetting(sound, soundState),
+        transient: soundState.eventLike,
+      };
+    };
+
+    let primaryInstance = null;
     const instance = createPlaybackInstance({
       sound,
       soundState,
       onEnded: () => {
-        if (activeInstances.get(soundState.soundId)?.instance === instance) {
+        if (activeInstances.get(soundState.soundId)?.instance === primaryInstance) {
           removeInstance(soundState.soundId);
         }
       },
+      onAssetError: () => {
+        if (!nextEntry || nextEntry.instance !== primaryInstance || nextEntry.instance.kind !== "audio-element") return;
+        const fallbackEntry = createFallbackEntry();
+        if (!fallbackEntry) {
+          removeInstance(soundState.soundId);
+          return;
+        }
+        activeInstances.set(soundState.soundId, fallbackEntry);
+        nextEntry = fallbackEntry;
+        fallbackEntry.instance.play();
+        if (paused) {
+          fallbackEntry.instance.pause();
+        }
+      },
     });
-    if (!instance) return null;
+    primaryInstance = instance;
+    if (!instance) {
+      nextEntry = createFallbackEntry();
+      if (!nextEntry) return null;
+    } else {
+      nextEntry = {
+        soundId: soundState.soundId,
+        soundType: soundState.soundType,
+        instance,
+        loop: resolveLoopSetting(sound, soundState),
+        transient: soundState.eventLike,
+      };
+    }
 
-    const nextEntry = {
-      soundId: soundState.soundId,
-      soundType: soundState.soundType,
-      instance,
-      loop: resolveLoopSetting(sound, soundState),
-      transient: soundState.eventLike,
-    };
     activeInstances.set(soundState.soundId, nextEntry);
-    instance.play();
+    nextEntry.instance.play();
     if (paused) {
-      instance.pause();
+      nextEntry.instance.pause();
     }
     return nextEntry;
   };
