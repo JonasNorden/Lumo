@@ -217,6 +217,8 @@ export const mockLevelDocument = {
         spatial: false,
         width: 6,
         height: 4,
+        fadeDistance: 1.5,
+        sustainWidth: 3,
       },
     },
   ],

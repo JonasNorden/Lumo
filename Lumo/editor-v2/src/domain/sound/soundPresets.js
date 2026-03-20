@@ -61,6 +61,8 @@ export const SOUND_PRESETS = [
       spatial: false,
       width: 8,
       height: 5,
+      fadeDistance: 2,
+      sustainWidth: 4,
     },
   },
 ];
