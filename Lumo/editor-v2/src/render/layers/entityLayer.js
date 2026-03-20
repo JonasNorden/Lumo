@@ -360,6 +360,7 @@ export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, ac
     return;
   }
 
+  if (isSpecialVolumeEntityType(activePreset.type)) return;
   if (!interaction.hoverCell) return;
 
   const previewEntity = {
@@ -368,15 +369,6 @@ export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, ac
     y: interaction.hoverCell.y,
     params: activePreset.defaultParams || {},
   };
-
-  if (isSpecialVolumeEntityType(previewEntity.type)) {
-    drawFogVolumeMarker(ctx, previewEntity, doc.dimensions.tileSize, viewport, {
-      isSelected: true,
-      preview: true,
-      alpha: 0.9,
-    });
-    return;
-  }
 
   const { x, y } = getEntityScreenCenter(previewEntity, doc.dimensions.tileSize, viewport);
   drawEntityMarker(ctx, previewEntity, x, y, viewport, {
