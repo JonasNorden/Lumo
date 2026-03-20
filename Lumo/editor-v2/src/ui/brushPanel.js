@@ -154,9 +154,9 @@ function renderAssetPicker(groupLabel, buttonDataKey, options, activeValue, empt
   `;
 }
 
-function renderPlacementBlock(label, hint = "") {
+function renderPlacementBlock(label, hint = "", className = "") {
   return `
-    <div class="statusCard">
+    <div class="statusCard ${className}">
       <span class="statusCardLabel">Placement</span>
       <span class="statusCardValue">${escapeHtml(label)}</span>
       ${hint ? `<span class="statusCardMeta">${escapeHtml(hint)}</span>` : ""}
@@ -214,65 +214,59 @@ function renderDecorSettings(state) {
   const scatterVariantMode = scatterSettings.variantMode === "random" ? "random" : "fixed";
   const scatterModeActive = Boolean(state.interaction.decorScatterMode);
   const placementLabel = activePreset ? `Placing: ${activePreset.defaultName}` : "No placement";
-  const placementHint = !activePreset
-    ? "Select a preset to arm placement"
-    : scatterModeActive
-      ? "Alt/Option + Drag scatters"
-      : "Alt/Option + Click places";
   const scatterStatus = !activePreset
     ? "Select Decor first"
     : scatterModeActive
-      ? `Alt/Option + Drag · ${Math.round(scatterDensity * 100)}% density · ${Math.round(scatterRandomness * 100)}% randomness`
+      ? `Alt/Option + Drag scatters · ${Math.round(scatterDensity * 100)}% density · ${Math.round(scatterRandomness * 100)}% randomness`
       : "Alt/Option + Click places one";
 
   return `
-    ${renderAssetPicker("Decor presets", "decor-preset-button", DECOR_PRESETS, activePresetId, "No decor selected")}
-    ${renderPlacementBlock(placementLabel, placementHint)}
+    ${renderAssetPicker("Decor presets", "decor-preset-button", DECOR_PRESETS, activePresetId, "No decor selected", "assetPickerDecorCompact")}
+    ${renderPlacementBlock(placementLabel, "", "decorPlacementCard")}
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton isSecondary" data-decor-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
     </div>
 
     <div class="compactSubsection">
-      <div class="compactSubsectionHeader">
+      <div class="compactSubsectionHeader decorScatterHeader">
         <span class="label">Scatter</span>
-        <button
-          type="button"
-          class="toolButton isSecondary compactToggleButton ${scatterModeActive ? "isActive" : ""}"
-          data-decor-action="toggle-scatter"
-          aria-pressed="${scatterModeActive ? "true" : "false"}"
-        >
-          ${scatterModeActive ? "On" : "Off"}
-        </button>
+        <div class="decorScatterHeaderControls">
+          <label class="fieldRow fieldRowCompact decorScatterVariantField">
+            <select data-decor-setting="variantMode" aria-label="Scatter variant mode">
+              <option value="fixed" ${scatterVariantMode === "fixed" ? "selected" : ""}>Fixed</option>
+              <option value="random" ${scatterVariantMode === "random" ? "selected" : ""}>Random</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            class="toolButton isSecondary compactToggleButton ${scatterModeActive ? "isActive" : ""}"
+            data-decor-action="toggle-scatter"
+            aria-pressed="${scatterModeActive ? "true" : "false"}"
+          >
+            ${scatterModeActive ? "On" : "Off"}
+          </button>
+        </div>
       </div>
 
       <div class="compactFieldGrid decorScatterCompactGrid">
-        <label class="fieldRow fieldRowCompact">
+        <label class="fieldRow fieldRowCompact decorScatterSliderRow decorScatterSliderRowFull">
           <span class="label">Density</span>
-          <div class="rangeField">
+          <div class="rangeField rangeFieldCompact">
             <input type="range" min="0" max="100" step="1" value="${Math.round(scatterDensity * 100)}" data-decor-setting="density" />
             <span class="rangeValue">${Math.round(scatterDensity * 100)}%</span>
           </div>
         </label>
 
-        <label class="fieldRow fieldRowCompact">
+        <label class="fieldRow fieldRowCompact decorScatterSliderRow decorScatterSliderRowFull">
           <span class="label">Randomness</span>
-          <div class="rangeField">
+          <div class="rangeField rangeFieldCompact">
             <input type="range" min="0" max="100" step="1" value="${Math.round(scatterRandomness * 100)}" data-decor-setting="randomness" />
             <span class="rangeValue">${Math.round(scatterRandomness * 100)}%</span>
           </div>
         </label>
-
-        <label class="fieldRow fieldRowCompact">
-          <span class="label">Variant</span>
-          <select data-decor-setting="variantMode">
-            <option value="fixed" ${scatterVariantMode === "fixed" ? "selected" : ""}>Fixed</option>
-            <option value="random" ${scatterVariantMode === "random" ? "selected" : ""}>Random</option>
-          </select>
-        </label>
       </div>
 
-      <div class="statusRow compactStatusRow">
-        <span class="label">Mode</span>
+      <div class="statusRow compactStatusRow decorScatterStatusRow">
         <span class="value">${escapeHtml(scatterStatus)}</span>
       </div>
     </div>
