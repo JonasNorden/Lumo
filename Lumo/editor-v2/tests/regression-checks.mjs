@@ -38,6 +38,7 @@ import { evaluateScanAudio } from "../src/domain/scan/scanAudioEvaluation.js";
 import { createScanAudioPlaybackController } from "../src/domain/scan/scanAudioPlayback.js";
 import { resolveSoundPlaybackSource } from "../src/domain/sound/sourceReference.js";
 import { findMatchingSoundIndices } from "../src/domain/sound/selection.js";
+import { collectDarknessPreviewLights, getPreviewPlayerLight } from "../src/render/darknessPreview.js";
 
 function createHistoryState() {
   return {
@@ -303,6 +304,40 @@ function runSoundRegressionChecks() {
   assert.equal(exported.sounds[0].source, "./audio/wind.ogg", "sound export should retain authored sound sources");
   assert.equal(exported.sounds[1].source, "./audio/legacy.ogg", "sound export should retain normalized legacy sound sources");
   assert.equal(exported.sounds[1].type, "spot", "sound export should retain normal authoring types alongside sound sources");
+}
+
+function runDarknessPreviewRegressionChecks() {
+  const doc = createDoc();
+  doc.dimensions.tileSize = 24;
+  doc.entities = [
+    { id: "spawn-1", name: "Spawn", type: "player-spawn", x: 4, y: 6, visible: true, params: {} },
+    { id: "lantern-1", name: "Lantern", type: "lantern", x: 8, y: 6, visible: true, params: { lightRadius: 170 } },
+    { id: "checkpoint-1", name: "Checkpoint", type: "checkpoint", x: 10, y: 6, visible: true, params: {} },
+  ];
+  doc.decor = [
+    { id: "decor-1", name: "Lantern Decor", type: "lantern_01", x: 12, y: 7, visible: true, variant: "a", params: {} },
+    { id: "decor-2", name: "Power Cell", type: "powercell_01", x: 14, y: 7, visible: true, variant: "a", params: {} },
+    { id: "decor-3", name: "Firefly", type: "firefly_01", x: 16, y: 7, visible: true, variant: "a", params: {} },
+  ];
+
+  const playerLight = getPreviewPlayerLight(doc);
+  assert.equal(playerLight?.kind, "player", "darkness preview should always include a player light");
+  assert.equal(playerLight?.radiusPx > 80 && playerLight?.radiusPx < 320, true, "player preview light should use the runtime-style 80..320 range");
+
+  const lights = collectDarknessPreviewLights(doc);
+  assert.deepEqual(
+    lights.map((light) => light.kind),
+    ["player", "lantern", "lantern"],
+    "darkness preview should include only the player light and lantern emitters",
+  );
+  assert.deepEqual(
+    lights.slice(1).map((light) => ({ radiusPx: Math.round(light.radiusPx), strength: Number(light.strength.toFixed(2)) })),
+    [
+      { radiusPx: 170, strength: 0.85 },
+      { radiusPx: 170, strength: 0.85 },
+    ],
+    "lantern preview emitters should use runtime-faithful radius and strength defaults",
+  );
 }
 
 
@@ -1184,6 +1219,7 @@ async function main() {
   runEntityRegressionChecks();
   runDecorRegressionChecks();
   runSoundRegressionChecks();
+  runDarknessPreviewRegressionChecks();
   runScanRegressionChecks();
   runScanAudioPlaybackRegressionChecks();
   await runScanAudioAssetFallbackChecks();

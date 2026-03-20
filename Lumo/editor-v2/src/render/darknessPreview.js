@@ -1,55 +1,62 @@
 import { findDecorPresetByType } from "../domain/decor/decorPresets.js";
 import { findEntityPresetByType } from "../domain/entities/entityPresets.js";
 
+const RUNTIME_DARKNESS_ALPHA = 0.93;
+const DEFAULT_PLAYER_PREVIEW_ENERGY = 0.72;
+const PLAYER_LIGHT_MIN_RADIUS = 80;
+const PLAYER_LIGHT_MAX_RADIUS = 320;
+const PLAYER_LIGHT_STRENGTH = 0.6;
+const PLAYER_LIGHT_ANCHOR_Y = 0.42;
+const PLAYER_DOWNLIGHT_SCALE = 0.78;
+
 const ENTITY_LIGHT_SOURCES = {
   lantern: {
-    radiusTiles: 6,
+    radiusPx: 170,
+    strength: 0.85,
     anchorY: 0.42,
-    glow: "255, 220, 148",
-    core: "255, 244, 201",
-  },
-  checkpoint: {
-    radiusTiles: 4.5,
-    anchorY: 0.42,
-    glow: "164, 212, 255",
-    core: "224, 242, 255",
   },
 };
 
 const DECOR_LIGHT_SOURCES = {
   lantern_01: {
-    radiusTiles: 5.25,
+    radiusPx: 170,
+    strength: 0.85,
     anchorY: 0.42,
-    glow: "255, 214, 138",
-    core: "255, 244, 201",
-  },
-  firefly_01: {
-    radiusTiles: 2.1,
-    anchorY: 0.36,
-    glow: "184, 255, 154",
-    core: "240, 255, 216",
-  },
-  powercell_01: {
-    radiusTiles: 3.8,
-    anchorY: 0.46,
-    glow: "116, 214, 255",
-    core: "220, 247, 255",
   },
 };
 
-function clampLightRadius(value, fallback) {
-  const parsed = Number.parseFloat(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(1.5, parsed);
+let darknessLayerTarget = null;
+
+function ensureDarknessLayerTarget(width, height) {
+  if (typeof document === "undefined") return null;
+  if (!darknessLayerTarget) {
+    const canvas = document.createElement("canvas");
+    const layerCtx = canvas.getContext("2d");
+    if (!layerCtx) return null;
+    darknessLayerTarget = { canvas, ctx: layerCtx };
+  }
+
+  if (darknessLayerTarget.canvas.width !== width) darknessLayerTarget.canvas.width = width;
+  if (darknessLayerTarget.canvas.height !== height) darknessLayerTarget.canvas.height = height;
+
+  return darknessLayerTarget;
 }
 
-function createLightSource(x, y, radiusTiles, glow, core) {
+function clampRuntimeRadius(value, fallback) {
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  if (parsed <= 0) return fallback;
+  return parsed;
+}
+
+function createLightSource(x, y, radiusPx, strength, kind, options = {}) {
   return {
     x,
     y,
-    radiusTiles,
-    glow,
-    core,
+    radiusPx,
+    strength,
+    kind,
+    ...options,
   };
 }
 
@@ -62,12 +69,16 @@ function getEntityLightSource(entity, tileSize) {
   const originX = (entity.x + 0.5) * tileSize;
   const originY = (entity.y + Math.max(0.16, preset.anchorY)) * tileSize;
 
+  const authoredRadius = clampRuntimeRadius(entity?.params?.lightRadius, preset.radiusPx);
+  const radiusPx = authoredRadius <= 32 ? authoredRadius * tileSize : authoredRadius;
+  const strength = clampRuntimeRadius(entity?.params?.strength, preset.strength);
+
   return createLightSource(
     originX,
     originY - Math.max(0, drawHeightTiles - 1) * tileSize * 0.2,
-    clampLightRadius(entity?.params?.lightRadius, preset.radiusTiles),
-    preset.glow,
-    preset.core,
+    radiusPx,
+    strength,
+    "lantern",
   );
 }
 
@@ -83,80 +94,109 @@ function getDecorLightSource(decor, tileSize) {
   return createLightSource(
     originX,
     originY - Math.max(0, drawHeightTiles - 1) * tileSize * 0.18,
-    preset.radiusTiles,
-    preset.glow,
-    preset.core,
+    preset.radiusPx,
+    preset.strength,
+    "lantern",
   );
 }
 
-export function renderDarknessPreview(ctx, doc, viewport) {
-  if (!doc) return;
+export function getPreviewPlayerLight(doc) {
+  if (!doc) return null;
+  const { tileSize } = doc.dimensions;
+  const visibleEntities = Array.isArray(doc.entities) ? doc.entities.filter((entity) => entity?.visible !== false) : [];
+  const spawn =
+    visibleEntities.find((entity) => entity?.type === "player-spawn")
+    || visibleEntities[0]
+    || null;
+
+  const fallbackX = Math.max(0.5, (doc.dimensions?.width || 1) * 0.25);
+  const fallbackY = Math.max(0.5, (doc.dimensions?.height || 1) * 0.6);
+  const originTileX = (spawn?.x ?? fallbackX) + 0.5;
+  const originTileY = (spawn?.y ?? fallbackY) + PLAYER_LIGHT_ANCHOR_Y;
+  const energy = DEFAULT_PLAYER_PREVIEW_ENERGY;
+  const radiusPx = PLAYER_LIGHT_MIN_RADIUS + (PLAYER_LIGHT_MAX_RADIUS - PLAYER_LIGHT_MIN_RADIUS) * energy;
+
+  return createLightSource(originTileX * tileSize, originTileY * tileSize, radiusPx, PLAYER_LIGHT_STRENGTH, "player", { energy });
+}
+
+export function collectDarknessPreviewLights(doc) {
+  if (!doc) return [];
 
   const { tileSize } = doc.dimensions;
-  const { width, height } = ctx.canvas;
-  const worldLights = [];
+  const lights = [];
+  const playerLight = getPreviewPlayerLight(doc);
+  if (playerLight) lights.push(playerLight);
 
   for (const entity of doc.entities || []) {
     if (!entity?.visible) continue;
     const light = getEntityLightSource(entity, tileSize);
-    if (light) worldLights.push(light);
+    if (light) lights.push(light);
   }
 
   for (const decor of doc.decor || []) {
     if (!decor?.visible) continue;
     const light = getDecorLightSource(decor, tileSize);
-    if (light) worldLights.push(light);
+    if (light) lights.push(light);
   }
 
+  return lights;
+}
+
+function punchCircularLight(ctx, x, y, radius, strength) {
+  const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+  gradient.addColorStop(0, `rgba(0, 0, 0, ${Math.min(1, strength).toFixed(3)})`);
+  gradient.addColorStop(0.55, `rgba(0, 0, 0, ${(strength * 0.85).toFixed(3)})`);
+  gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function punchPlayerLight(ctx, x, y, radius, strength) {
   ctx.save();
+  ctx.translate(x, y - radius * 0.08);
+  ctx.scale(1, PLAYER_DOWNLIGHT_SCALE);
+  punchCircularLight(ctx, 0, 0, radius, strength);
+  ctx.restore();
 
-  const darknessGradient = ctx.createLinearGradient(0, 0, 0, height);
-  darknessGradient.addColorStop(0, "rgba(12, 18, 34, 0.58)");
-  darknessGradient.addColorStop(0.45, "rgba(7, 12, 24, 0.72)");
-  darknessGradient.addColorStop(1, "rgba(3, 6, 14, 0.82)");
-  ctx.fillStyle = darknessGradient;
-  ctx.fillRect(0, 0, width, height);
+  const upperBiasRadius = radius * 0.74;
+  const upperBiasStrength = Math.min(1, strength * 0.42);
+  punchCircularLight(ctx, x, y - radius * 0.18, upperBiasRadius, upperBiasStrength);
+}
 
-  const vignette = ctx.createRadialGradient(
-    width * 0.5,
-    height * 0.42,
-    Math.min(width, height) * 0.14,
-    width * 0.5,
-    height * 0.42,
-    Math.max(width, height) * 0.82,
-  );
-  vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
-  vignette.addColorStop(0.58, "rgba(2, 5, 12, 0.2)");
-  vignette.addColorStop(1, "rgba(0, 0, 0, 0.48)");
-  ctx.fillStyle = vignette;
-  ctx.fillRect(0, 0, width, height);
+export function renderDarknessPreview(ctx, doc, viewport) {
+  if (!doc) return;
 
-  ctx.globalCompositeOperation = "screen";
+  const target = ensureDarknessLayerTarget(ctx.canvas.width, ctx.canvas.height);
+  const darknessCtx = target?.ctx || ctx;
+  const layerCanvas = target?.canvas || ctx.canvas;
+  const previewLights = collectDarknessPreviewLights(doc);
 
-  for (const light of worldLights) {
+  darknessCtx.save();
+  darknessCtx.setTransform(1, 0, 0, 1, 0, 0);
+  darknessCtx.globalCompositeOperation = "source-over";
+  darknessCtx.clearRect(0, 0, layerCanvas.width, layerCanvas.height);
+  darknessCtx.fillStyle = `rgba(0, 0, 0, ${RUNTIME_DARKNESS_ALPHA})`;
+  darknessCtx.fillRect(0, 0, layerCanvas.width, layerCanvas.height);
+  darknessCtx.globalCompositeOperation = "destination-out";
+
+  for (const light of previewLights) {
     const lightX = viewport.offsetX + light.x * viewport.zoom;
     const lightY = viewport.offsetY + light.y * viewport.zoom;
-    const outerRadius = Math.max(tileSize * viewport.zoom * 1.6, light.radiusTiles * tileSize * viewport.zoom);
-    const innerRadius = outerRadius * 0.18;
+    const radius = Math.max(36, light.radiusPx * viewport.zoom);
 
-    const halo = ctx.createRadialGradient(lightX, lightY, innerRadius, lightX, lightY, outerRadius);
-    halo.addColorStop(0, `rgba(${light.core}, 0.52)`);
-    halo.addColorStop(0.22, `rgba(${light.glow}, 0.34)`);
-    halo.addColorStop(0.7, `rgba(${light.glow}, 0.12)`);
-    halo.addColorStop(1, "rgba(255, 255, 255, 0)");
-    ctx.fillStyle = halo;
-    ctx.beginPath();
-    ctx.arc(lightX, lightY, outerRadius, 0, Math.PI * 2);
-    ctx.fill();
+    if (light.kind === "player") {
+      punchPlayerLight(darknessCtx, lightX, lightY, radius, light.strength);
+      continue;
+    }
 
-    const core = ctx.createRadialGradient(lightX, lightY, 0, lightX, lightY, outerRadius * 0.28);
-    core.addColorStop(0, `rgba(${light.core}, 0.34)`);
-    core.addColorStop(1, "rgba(255, 255, 255, 0)");
-    ctx.fillStyle = core;
-    ctx.beginPath();
-    ctx.arc(lightX, lightY, outerRadius * 0.28, 0, Math.PI * 2);
-    ctx.fill();
+    punchCircularLight(darknessCtx, lightX, lightY, radius, light.strength);
   }
 
-  ctx.restore();
+  darknessCtx.restore();
+
+  if (target) {
+    ctx.drawImage(target.canvas, 0, 0);
+  }
 }

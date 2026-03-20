@@ -16,7 +16,7 @@ export const ENTITY_PRESETS = [
     type: "lantern",
     defaultName: "Lantern",
     defaultParams: {
-      lightRadius: 6,
+      lightRadius: 170,
       flicker: true,
     },
     img: "../data/assets/sprites/lights/lantern_01.png",
