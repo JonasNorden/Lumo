@@ -227,6 +227,19 @@ function formatScanValue(value, fallback = "Auto") {
   return Number.isFinite(value) ? value.toFixed(2).replace(/\.00$/, "") : fallback;
 }
 
+function formatAudioEvaluationLabel(soundState) {
+  if (!soundState) return "";
+  const phaseLabel = soundState.phase && soundState.phase !== "inactive" ? ` · ${soundState.phase}` : "";
+  const intensityLabel = Number.isFinite(soundState.normalizedIntensity)
+    ? ` · lvl ${soundState.normalizedIntensity.toFixed(2).replace(/\.00$/, "")}`
+    : "";
+  return `${soundState.soundName}${phaseLabel}${intensityLabel}`;
+}
+
+function renderScanDebugEvent(entry, index) {
+  return `<div class="scanDebugItem"><span class="scanDebugIndex">${escapeHtml(String(index + 1))}</span><div class="scanDebugBody"><span class="scanDebugTitle">${escapeHtml(entry.soundName || entry.soundId || "Sound")}</span><span class="scanDebugMeta"><span class="scanDebugBadge">${escapeHtml(entry.transitionKind || entry.intersectionType || entry.soundType || "event")}</span><span>${escapeHtml(entry.phase || "inactive")}</span><span>x ${escapeHtml(String(entry.atX || "0"))}</span></span></div></div>`;
+}
+
 function renderScanSettings(state) {
   const scan = state.scan || {};
   const docWidth = Number(state.document.active?.dimensions?.width) || 0;
@@ -236,9 +249,14 @@ function renderScanSettings(state) {
   const playbackState = scan.playbackState || (scan.isPlaying ? "playing" : "idle");
   const isPlaying = playbackState === "playing";
   const isPaused = playbackState === "paused";
-  const activeCount = Array.isArray(scan.activeSoundIds) ? scan.activeSoundIds.length : 0;
-  const lastEventSummary = scan.lastEventSummary || "No intersections yet";
+  const audioEvaluation = scan.audioEvaluation || {};
+  const activeSounds = Array.isArray(audioEvaluation.activeSounds) ? audioEvaluation.activeSounds : [];
+  const startedSounds = Array.isArray(audioEvaluation.startedSounds) ? audioEvaluation.startedSounds : [];
+  const endedSounds = Array.isArray(audioEvaluation.endedSounds) ? audioEvaluation.endedSounds : [];
+  const activeCount = Array.isArray(scan.activeSoundIds) ? scan.activeSoundIds.length : activeSounds.length;
+  const lastEventSummary = scan.lastEventSummary || "No audio transitions yet";
   const eventLog = Array.isArray(scan.eventLog) ? scan.eventLog.slice(0, 4) : [];
+  const activePreview = activeSounds.slice(0, 3).map(formatAudioEvaluationLabel);
   const statusLabel = isPlaying ? "Running" : isPaused ? "Paused" : "Stopped";
   const statusToneClass = isPlaying ? "isRunning" : isPaused ? "isPaused" : "isIdle";
 
@@ -289,10 +307,22 @@ function renderScanSettings(state) {
           <span class="scanMetricLabel">Active Sounds</span>
           <span class="scanMetricValue">${escapeHtml(String(activeCount))}</span>
         </div>
+        <div class="scanMetricCard">
+          <span class="scanMetricLabel">Started</span>
+          <span class="scanMetricValue">${escapeHtml(String(startedSounds.length))}</span>
+        </div>
+        <div class="scanMetricCard">
+          <span class="scanMetricLabel">Ended</span>
+          <span class="scanMetricValue">${escapeHtml(String(endedSounds.length))}</span>
+        </div>
       </div>
       <div class="scanMonitorSummary">
         <span class="scanMonitorSummaryLabel">Latest event</span>
         <span class="scanMonitorSummaryValue">${escapeHtml(lastEventSummary)}</span>
+      </div>
+      <div class="scanMonitorSummary">
+        <span class="scanMonitorSummaryLabel">Active detail</span>
+        <span class="scanMonitorSummaryValue">${activePreview.length ? escapeHtml(activePreview.join(" • ")) : "No active sounds at the current scan position"}</span>
       </div>
     </div>
 
@@ -300,14 +330,14 @@ function renderScanSettings(state) {
       <div class="compactSubsectionHeader scanDebugHeader">
         <div>
           <span class="label">Event Feed</span>
-          <span class="scanDebugCaption">Recent scan intersections</span>
+          <span class="scanDebugCaption">Recent started / ended / triggered audio transitions</span>
         </div>
         <button type="button" class="toolButton isSecondary compactToggleButton" data-scan-action="clear-log" ${eventLog.length ? "" : "disabled"}>Clear</button>
       </div>
       <div class="scanDebugList">
         ${eventLog.length
-          ? eventLog.map((entry, index) => `<div class="scanDebugItem"><span class="scanDebugIndex">${escapeHtml(String(index + 1))}</span><div class="scanDebugBody"><span class="scanDebugTitle">${escapeHtml(entry.soundName || entry.soundId || "Sound")}</span><span class="scanDebugMeta"><span class="scanDebugBadge">${escapeHtml(entry.intersectionType || entry.soundType || "intersection")}</span><span>x ${escapeHtml(String(entry.atX || "0"))}</span></span></div></div>`).join("")
-          : '<div class="scanDebugEmpty">Waiting for scan intersections.</div>'}
+          ? eventLog.map(renderScanDebugEvent).join("")
+          : '<div class="scanDebugEmpty">Waiting for scan audio transitions.</div>'}
       </div>
     </div>
   `;

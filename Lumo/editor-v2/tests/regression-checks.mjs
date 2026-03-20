@@ -32,6 +32,7 @@ import {
   stopScanPlaybackState,
   syncScanPlaybackState,
 } from "../src/domain/scan/scanSystem.js";
+import { evaluateScanAudio } from "../src/domain/scan/scanAudioEvaluation.js";
 
 function createHistoryState() {
   return {
@@ -295,13 +296,77 @@ function runScanRegressionChecks() {
 
   assert.deepEqual(getScanRange({ startX: 12, endX: 3 }, doc), { startX: 3, endX: 12 }, "scan range should normalize reversed start/end values");
 
-  const firstPass = getScanActivity(doc, 0, 5, []);
+  const firstPass = getScanActivity(doc, 0, 5);
   assert.equal(firstPass.activeSoundIds.includes("spot-1"), true, "scan activity should keep spot sounds active while the scan line is inside their radius");
-  assert.equal(firstPass.triggeredEvents.some((event) => event.soundId === "spot-1"), true, "scan activity should emit spot sound intersections");
+  assert.equal(firstPass.triggeredEvents.some((event) => event.soundId === "spot-1" && event.transitionKind === "started"), true, "scan activity should emit spot sound start events");
 
-  const secondPass = getScanActivity(doc, 7.5, 10.5, []);
-  assert.equal(secondPass.triggeredEvents.some((event) => event.soundId === "trigger-1"), true, "scan activity should emit trigger intersections when crossing their X position");
+  const secondPass = getScanActivity(doc, 7.5, 10.5);
+  assert.equal(secondPass.triggeredEvents.some((event) => event.soundId === "trigger-1" && event.transitionKind === "triggered"), true, "scan activity should emit trigger crossings when passing their X position");
   assert.equal(secondPass.activeSoundIds.includes("zone-1"), true, "scan activity should activate ambient zones while the scan line overlaps them");
+
+  const audioDoc = createDoc();
+  audioDoc.sounds = [
+    {
+      id: "spot-audio",
+      name: "Spot Audio",
+      type: "spot",
+      x: 4,
+      y: 0,
+      visible: true,
+      params: { volume: 0.75, pitch: 0.9, radius: 2, spatial: true, loop: false },
+    },
+    {
+      id: "trigger-audio",
+      name: "Trigger Audio",
+      type: "trigger",
+      x: 8,
+      y: 0,
+      visible: true,
+      params: { volume: 1, pitch: 1.1, loop: false, spatial: true },
+    },
+    {
+      id: "ambient-audio",
+      name: "Ambient Audio",
+      type: "ambientZone",
+      x: 10,
+      y: 0,
+      visible: true,
+      params: { volume: 0.5, pitch: 1, loop: true, spatial: false, width: 4, height: 2 },
+    },
+    {
+      id: "music-audio",
+      name: "Music Audio",
+      type: "musicZone",
+      x: 16,
+      y: 0,
+      visible: true,
+      params: { volume: 0.8, pitch: 1, loop: true, spatial: false, fadeDistance: 2, sustainWidth: 3 },
+    },
+  ];
+
+  const spotEval = evaluateScanAudio(audioDoc, 1, 4.5).soundStates.find((entry) => entry.soundId === "spot-audio");
+  assert.equal(spotEval?.active, true, "spot evaluation should become active when the scan enters its radius span");
+  assert.equal(spotEval?.startedThisStep, true, "spot evaluation should record a start transition when entering the radius span");
+  assert.equal(spotEval?.normalizedIntensity, 1, "spot evaluation should peak at full intensity at the sound center");
+  assert.equal(spotEval?.metadata.spatial, true, "spot evaluation should preserve spatial metadata");
+
+  const triggerEval = evaluateScanAudio(audioDoc, 8.2, 8.8).soundStates.find((entry) => entry.soundId === "trigger-audio");
+  assert.equal(triggerEval?.active, true, "trigger evaluation should become active only on crossing frames");
+  assert.equal(triggerEval?.eventLike, true, "trigger evaluation should be modeled as an event-like activation");
+  assert.equal(triggerEval?.startedThisStep, true, "trigger evaluation should flag crossing frames as starts");
+
+  const ambientEval = evaluateScanAudio(audioDoc, 9.5, 11).soundStates.find((entry) => entry.soundId === "ambient-audio");
+  assert.equal(ambientEval?.active, true, "ambient zones should stay active inside the authored width");
+  assert.equal(ambientEval?.phase, "sustain", "ambient zones should evaluate as a sustained environmental phase");
+  assert.equal(ambientEval?.normalizedIntensity, 1, "ambient zones can report a constant normalized level for now");
+
+  const musicFadeIn = evaluateScanAudio(audioDoc, 15, 16.5).soundStates.find((entry) => entry.soundId === "music-audio");
+  const musicSustain = evaluateScanAudio(audioDoc, 17.8, 19).soundStates.find((entry) => entry.soundId === "music-audio");
+  const musicFadeOut = evaluateScanAudio(audioDoc, 21.5, 22.25).soundStates.find((entry) => entry.soundId === "music-audio");
+  assert.equal(musicFadeIn?.phase, "fadeIn", "music zones should expose a fade-in phase near the zone entrance");
+  assert.equal(musicSustain?.phase, "sustain", "music zones should expose a sustain phase after fade-in");
+  assert.equal(musicFadeOut?.phase, "fadeOut", "music zones should expose a fade-out phase near the zone exit");
+  assert.equal(musicFadeOut?.metadata.fadeDistance, 2, "music zone evaluation should preserve fade-distance metadata");
 
   const viewport = { offsetX: 120, offsetY: 32 };
   const scan = {
@@ -312,6 +377,18 @@ function runScanRegressionChecks() {
     endX: 9,
     positionX: 0,
     activeSoundIds: ["spot-1"],
+    audioEvaluation: {
+      previousPositionX: 0,
+      positionX: 0,
+      activeSoundIds: ["spot-1"],
+      startedSoundIds: [],
+      endedSoundIds: [],
+      activeSounds: [],
+      startedSounds: [],
+      endedSounds: [],
+      transitionEvents: [],
+      soundStates: [],
+    },
     eventLog: [{ soundId: "spot-1" }],
     lastEventSummary: "spot-1",
     lastFrameTime: 1000,
@@ -355,6 +432,7 @@ function runScanRegressionChecks() {
   assert.equal(scan.positionX, 2, "stopping scan playback should reset the scan head to the range start");
   assert.equal(scan.lastFrameTime, null, "stopping scan playback should clear frame timing state");
   assert.deepEqual(scan.activeSoundIds, [], "stopping scan playback should clear active sound state");
+  assert.deepEqual(scan.audioEvaluation.activeSoundIds, [], "stopping scan playback should clear the structured audio evaluation state");
   assert.deepEqual(viewport, { offsetX: 120, offsetY: 32 }, "stopping scan playback should restore the pre-follow viewport");
   assert.equal(scan.viewportSnapshot, null, "stopping scan playback should clear the stored viewport snapshot");
   assert.deepEqual(scan.eventLog, [{ soundId: "spot-1" }], "stopping scan playback should preserve scan logs when requested");

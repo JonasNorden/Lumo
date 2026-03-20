@@ -184,7 +184,13 @@ function clampScanSpeed(value, fallback = 6) {
 
 function formatScanEventSummary(event) {
   if (!event) return null;
-  return `${event.soundName} · ${event.intersectionType} · x ${event.atX}`;
+  const transitionLabel = event.transitionKind === "ended"
+    ? "ended"
+    : event.transitionKind === "triggered"
+      ? "triggered"
+      : "started";
+  const phaseLabel = event.phase && event.phase !== "inactive" ? ` · ${event.phase}` : "";
+  return `${event.soundName} · ${transitionLabel}${phaseLabel} · x ${event.atX}`;
 }
 
 const PANEL_LAYERS = {
@@ -463,6 +469,26 @@ export function createEditorApp({
     invalidateScanPlayback();
     applyCanvasTarget(draft, "sound");
     startScanPlaybackState(draft.scan, draft.viewport, draft.document.active);
+    applyScanEvaluation(draft, draft.scan.positionX, draft.scan.positionX);
+  };
+
+  const applyScanEvaluation = (draft, previousX, nextX, options = {}) => {
+    const { appendLog = false } = options;
+    const doc = draft.document.active;
+    if (!doc) return null;
+
+    const activity = getScanActivity(doc, previousX, nextX);
+    draft.scan.positionX = nextX;
+    draft.scan.activeSoundIds = activity.activeSoundIds;
+    draft.scan.audioEvaluation = activity.audioEvaluation;
+
+    const triggeredEvents = activity.triggeredEvents;
+    if (appendLog && triggeredEvents.length) {
+      draft.scan.eventLog = [...triggeredEvents.slice().reverse(), ...(draft.scan.eventLog || [])].slice(0, 8);
+      draft.scan.lastEventSummary = formatScanEventSummary(triggeredEvents[triggeredEvents.length - 1]);
+    }
+
+    return activity;
   };
 
   const scheduleScanFrame = (playbackToken = scanPlaybackToken) => {
@@ -486,17 +512,11 @@ export function createEditorApp({
         const deltaSeconds = Math.max(0, Math.min(0.1, (timestamp - previousFrameTime) / 1000));
         const speed = clampScanSpeed(draft.scan.speed);
         const nextX = Math.min(endX, previousX + speed * deltaSeconds);
-        const activity = getScanActivity(activeDoc, previousX, nextX, draft.scan.activeSoundIds);
-        triggeredEvents = activity.triggeredEvents;
+        const activity = applyScanEvaluation(draft, previousX, nextX, { appendLog: true });
+        triggeredEvents = activity?.triggeredEvents || [];
 
-        draft.scan.positionX = nextX;
         draft.scan.speed = speed;
-        draft.scan.activeSoundIds = activity.activeSoundIds;
         draft.scan.lastFrameTime = timestamp;
-        if (triggeredEvents.length) {
-          draft.scan.eventLog = [...triggeredEvents.slice().reverse(), ...(draft.scan.eventLog || [])].slice(0, 8);
-          draft.scan.lastEventSummary = formatScanEventSummary(triggeredEvents[triggeredEvents.length - 1]);
-        }
 
         const rect = canvas.getBoundingClientRect();
         const targetOffsetX = rect.width * 0.5 - nextX * activeDoc.dimensions.tileSize * draft.viewport.zoom;
@@ -672,6 +692,7 @@ export function createEditorApp({
     store.setState((draft) => {
       if (!draft.interaction.scanDrag?.active || !draft.document.active) return;
       if (!setPausedScanPosition(draft.scan, draft.document.active, nextPositionX)) return;
+      applyScanEvaluation(draft, state.scan.positionX, draft.scan.positionX);
       keepScanPlayheadVisible(draft, draft.scan.positionX);
       draft.interaction.scanDrag.lastClientX = event.clientX;
       draft.interaction.scanDrag.lastClientY = event.clientY;
@@ -2274,7 +2295,7 @@ export function createEditorApp({
         if (draft.scan.positionX < startX || draft.scan.positionX > endX || getScanPlaybackState(draft.scan) === "idle") {
           draft.scan.positionX = startX;
         }
-        draft.scan.activeSoundIds = [];
+        applyScanEvaluation(draft, draft.scan.positionX, draft.scan.positionX);
         draft.scan.lastFrameTime = null;
         if (getScanPlaybackState(draft.scan) === "idle") {
           draft.scan.viewportSnapshot = null;

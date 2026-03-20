@@ -1,3 +1,5 @@
+import { evaluateScanAudio } from "./scanAudioEvaluation.js";
+
 export function clampScanCoordinate(value, maxWidth) {
   if (!Number.isFinite(maxWidth) || maxWidth <= 0) return 0;
   const parsed = Number.parseFloat(value);
@@ -56,13 +58,33 @@ export function restoreScanViewport(scan, viewport) {
   return true;
 }
 
+function createEmptyScanAudioState(positionX) {
+  return {
+    previousPositionX: Number.isFinite(positionX) ? positionX : null,
+    positionX: Number.isFinite(positionX) ? positionX : null,
+    activeSoundIds: [],
+    startedSoundIds: [],
+    endedSoundIds: [],
+    activeSounds: [],
+    startedSounds: [],
+    endedSounds: [],
+    transitionEvents: [],
+    soundStates: [],
+  };
+}
+
+export function resetScanAudioState(scan, positionX = scan?.positionX ?? 0) {
+  scan.activeSoundIds = [];
+  scan.audioEvaluation = createEmptyScanAudioState(positionX);
+}
+
 export function syncScanPlaybackState(scan, doc, options = {}) {
   const { preserveLog = false } = options;
 
   scan.positionX = getScanResetPosition(scan, doc);
   scan.playbackState = "idle";
   scan.isPlaying = false;
-  scan.activeSoundIds = [];
+  resetScanAudioState(scan, scan.positionX);
   scan.lastFrameTime = null;
   scan.viewportSnapshot = null;
 
@@ -79,7 +101,7 @@ export function startScanPlaybackState(scan, viewport, doc) {
 
   if (!isResuming) {
     scan.positionX = startX;
-    scan.activeSoundIds = [];
+    resetScanAudioState(scan, scan.positionX);
     scan.viewportSnapshot = captureScanViewport(viewport);
   } else if (!scan.viewportSnapshot) {
     scan.viewportSnapshot = captureScanViewport(viewport);
@@ -87,6 +109,7 @@ export function startScanPlaybackState(scan, viewport, doc) {
 
   if (!Number.isFinite(scan.positionX) || scan.positionX < startX || scan.positionX > endX) {
     scan.positionX = startX;
+    resetScanAudioState(scan, scan.positionX);
   }
 
   scan.lastFrameTime = null;
@@ -99,7 +122,6 @@ export function pauseScanPlaybackState(scan) {
 
   scan.playbackState = "paused";
   scan.isPlaying = false;
-  scan.activeSoundIds = [];
   scan.lastFrameTime = null;
   return true;
 }
@@ -109,7 +131,6 @@ export function setPausedScanPosition(scan, doc, positionX) {
 
   const { startX, endX } = getScanRange(scan, doc);
   scan.positionX = Math.max(startX, Math.min(endX, clampScanCoordinate(positionX, endX)));
-  scan.activeSoundIds = [];
   scan.lastFrameTime = null;
   return true;
 }
@@ -117,7 +138,7 @@ export function setPausedScanPosition(scan, doc, positionX) {
 export function finishScanPlaybackState(scan) {
   scan.playbackState = "idle";
   scan.isPlaying = false;
-  scan.activeSoundIds = [];
+  resetScanAudioState(scan, scan.positionX);
   scan.lastFrameTime = null;
   scan.viewportSnapshot = null;
 }
@@ -129,7 +150,7 @@ export function stopScanPlaybackState(scan, viewport, doc, options = {}) {
   scan.positionX = getScanResetPosition(scan, doc);
   scan.playbackState = "idle";
   scan.isPlaying = false;
-  scan.activeSoundIds = [];
+  resetScanAudioState(scan, scan.positionX);
   scan.lastFrameTime = null;
   scan.viewportSnapshot = null;
 
@@ -139,78 +160,30 @@ export function stopScanPlaybackState(scan, viewport, doc, options = {}) {
   }
 }
 
-function clampPositiveValue(value, fallback) {
-  const parsed = Number.parseFloat(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(0, parsed);
-}
-
-function getSoundSpan(sound) {
-  const x = Number(sound?.x) || 0;
-  if (sound?.type === "ambientZone" || sound?.type === "musicZone") {
-    const width = Math.max(1, clampPositiveValue(sound?.params?.width, 1));
-    return { minX: x, maxX: x + width };
-  }
-
-  if (sound?.type === "trigger") {
-    return { minX: x + 0.5, maxX: x + 0.5 };
-  }
-
-  const spatial = Boolean(sound?.params?.spatial);
-  const radius = spatial ? clampPositiveValue(sound?.params?.radius, 0) : 0;
-  const centerX = x + 0.5;
-  return radius > 0
-    ? { minX: centerX - radius, maxX: centerX + radius }
-    : { minX: centerX, maxX: centerX };
-}
-
-function intersectsSweep(span, fromX, toX) {
-  const sweepMin = Math.min(fromX, toX);
-  const sweepMax = Math.max(fromX, toX);
-  return span.maxX >= sweepMin && span.minX <= sweepMax;
-}
-
-function isActiveAtX(span, x) {
-  return x >= span.minX && x <= span.maxX;
-}
-
-function formatScanCoordinate(value) {
-  return Number.isFinite(value) ? value.toFixed(2).replace(/\.00$/, "") : "0";
-}
-
-function getIntersectionTypeLabel(sound) {
-  if (sound?.type === "ambientZone") return "ambient-zone";
-  if (sound?.type === "musicZone") return "music-zone";
-  if (sound?.type === "trigger") return "trigger";
+function getIntersectionTypeLabel(soundState) {
+  if (soundState.soundType === "ambientZone") return "ambient-zone";
+  if (soundState.soundType === "musicZone") return "music-zone";
+  if (soundState.soundType === "trigger") return "trigger";
   return "spot-radius";
 }
 
-export function getScanActivity(doc, previousX, nextX, previousActiveIds = []) {
-  const activeSoundIds = [];
-  const triggeredEvents = [];
-  const previousActiveIdSet = new Set(previousActiveIds);
-
-  for (const sound of doc?.sounds || []) {
-    if (!sound?.visible || !sound?.id) continue;
-
-    const span = getSoundSpan(sound);
-    if (isActiveAtX(span, nextX)) {
-      activeSoundIds.push(sound.id);
-    }
-
-    if (!intersectsSweep(span, previousX, nextX) || previousActiveIdSet.has(sound.id)) continue;
-
-    triggeredEvents.push({
-      soundId: sound.id,
-      soundName: sound.name || sound.id,
-      soundType: sound.type || "spot",
-      intersectionType: getIntersectionTypeLabel(sound),
-      atX: formatScanCoordinate(nextX),
-    });
-  }
+export function getScanActivity(doc, previousX, nextX) {
+  const audioEvaluation = evaluateScanAudio(doc, previousX, nextX);
+  const triggeredEvents = audioEvaluation.transitionEvents.map((event) => ({
+    soundId: event.soundId,
+    soundName: event.soundName,
+    soundType: event.soundType,
+    intersectionType: getIntersectionTypeLabel(event),
+    transitionKind: event.transitionKind,
+    phase: event.phase,
+    normalizedIntensity: event.normalizedIntensity,
+    spatial: event.spatial,
+    atX: event.atX,
+  }));
 
   return {
-    activeSoundIds,
+    activeSoundIds: audioEvaluation.activeSoundIds,
     triggeredEvents,
+    audioEvaluation,
   };
 }
