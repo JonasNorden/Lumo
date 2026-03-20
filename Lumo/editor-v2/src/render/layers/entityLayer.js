@@ -1,5 +1,6 @@
 import { getEntityHitRadius, getEntityVisual } from "../../domain/entities/entityVisuals.js";
 import { getSelectedEntityIndices, isEntitySelected } from "../../domain/entities/selection.js";
+import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
 
 function getEntityCenter(entity, tileSize) {
   return {
@@ -16,186 +17,59 @@ function getEntityScreenCenter(entity, tileSize, viewport) {
   };
 }
 
-function getShapeRadius(isSelected) {
-  return isSelected ? 6.5 : 5.5;
-}
-
-function drawHex(ctx, x, y, radius) {
-  ctx.beginPath();
-  for (let i = 0; i < 6; i += 1) {
-    const angle = ((Math.PI * 2) / 6) * i - Math.PI / 6;
-    const px = x + Math.cos(angle) * radius;
-    const py = y + Math.sin(angle) * radius;
-    if (i === 0) ctx.moveTo(px, py);
-    else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-}
-
-function drawDiamond(ctx, x, y, radius) {
-  ctx.beginPath();
-  ctx.moveTo(x, y - radius);
-  ctx.lineTo(x + radius, y);
-  ctx.lineTo(x, y + radius);
-  ctx.lineTo(x - radius, y);
-  ctx.closePath();
-}
-
-function drawRoundedSquare(ctx, x, y, radius) {
-  const size = radius * 2;
-  const corner = Math.max(2, radius * 0.45);
-  ctx.beginPath();
-  ctx.roundRect(x - radius, y - radius, size, size, corner);
-}
-
-function drawShield(ctx, x, y, radius) {
-  const top = y - radius;
-  const bottom = y + radius * 1.05;
-  ctx.beginPath();
-  ctx.moveTo(x, top);
-  ctx.lineTo(x + radius * 0.78, y - radius * 0.45);
-  ctx.lineTo(x + radius * 0.64, y + radius * 0.45);
-  ctx.quadraticCurveTo(x, bottom, x - radius * 0.64, y + radius * 0.45);
-  ctx.lineTo(x - radius * 0.78, y - radius * 0.45);
-  ctx.closePath();
-}
-
-function drawEntityShape(ctx, visual, x, y, radius) {
-  switch (visual.shape) {
-    case "hex":
-      drawHex(ctx, x, y, radius);
-      break;
-    case "diamond":
-      drawDiamond(ctx, x, y, radius);
-      break;
-    case "shield":
-      drawShield(ctx, x, y, radius);
-      break;
-    case "rounded-square":
-      drawRoundedSquare(ctx, x, y, radius);
-      break;
-    default:
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
-      break;
-  }
-}
-
-function drawSpawnSymbol(ctx, x, y, color, scale) {
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.4 * scale;
-  ctx.beginPath();
-  ctx.arc(x, y, 1.4 * scale, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x, y - 4.4 * scale);
-  ctx.lineTo(x, y - 1.8 * scale);
-  ctx.moveTo(x + 4.4 * scale, y);
-  ctx.lineTo(x + 1.8 * scale, y);
-  ctx.moveTo(x, y + 4.4 * scale);
-  ctx.lineTo(x, y + 1.8 * scale);
-  ctx.moveTo(x - 4.4 * scale, y);
-  ctx.lineTo(x - 1.8 * scale, y);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawLanternSymbol(ctx, x, y, color, scale) {
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 1.3 * scale;
-  ctx.beginPath();
-  ctx.arc(x, y - 2.9 * scale, 1.8 * scale, Math.PI, 0);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.roundRect(x - 2.8 * scale, y - 2.4 * scale, 5.6 * scale, 6.3 * scale, 1.4 * scale);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x - 2.1 * scale, y + 4 * scale);
-  ctx.lineTo(x + 2.1 * scale, y + 4 * scale);
-  ctx.moveTo(x, y - 2.4 * scale);
-  ctx.lineTo(x, y + 3.9 * scale);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawPlusSymbol(ctx, x, y, color, scale) {
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.lineCap = "round";
-  ctx.lineWidth = 1.8 * scale;
-  ctx.beginPath();
-  ctx.moveTo(x, y - 4.2 * scale);
-  ctx.lineTo(x, y + 4.2 * scale);
-  ctx.moveTo(x - 4.2 * scale, y);
-  ctx.lineTo(x + 4.2 * scale, y);
-  ctx.stroke();
-  ctx.restore();
-}
-
-function drawFlagSymbol(ctx, x, y, color, scale) {
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = 1.2 * scale;
-  ctx.beginPath();
-  ctx.moveTo(x - 2.2 * scale, y + 4.4 * scale);
-  ctx.lineTo(x - 2.2 * scale, y - 4.4 * scale);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x - 1.8 * scale, y - 4 * scale);
-  ctx.lineTo(x + 3.7 * scale, y - 2.6 * scale);
-  ctx.lineTo(x - 1.8 * scale, y - 0.9 * scale);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawDotSymbol(ctx, x, y, color, scale) {
-  ctx.save();
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(x, y, 1.8 * scale, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-}
-
-function drawEntitySymbol(ctx, visual, x, y, scale) {
-  switch (visual.symbol) {
-    case "spawn":
-      drawSpawnSymbol(ctx, x, y, visual.stroke, scale);
-      break;
-    case "lantern":
-      drawLanternSymbol(ctx, x, y, visual.stroke, scale);
-      break;
-    case "plus":
-      drawPlusSymbol(ctx, x, y, visual.stroke, scale);
-      break;
-    case "flag":
-      drawFlagSymbol(ctx, x, y, visual.stroke, scale);
-      break;
-    default:
-      drawDotSymbol(ctx, x, y, visual.stroke, scale);
-      break;
-  }
-}
-
-function drawFocusRing(ctx, x, y, radius, fillStyle, strokeStyle, lineWidth) {
+function drawFocusRing(ctx, x, y, radius, fillStyle, strokeStyle, lineWidth, dashed = false) {
   ctx.beginPath();
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.fillStyle = fillStyle;
   ctx.fill();
   ctx.strokeStyle = strokeStyle;
   ctx.lineWidth = lineWidth;
+  if (dashed) ctx.setLineDash([4, 3]);
   ctx.stroke();
+  ctx.setLineDash([]);
 }
 
-function drawEntityMarker(ctx, entity, x, y, zoomScale, { isSelected, isHovered, alpha = 1, preview = false } = {}) {
+function drawEntityFallback(ctx, x, y, radius, label) {
+  ctx.save();
+  ctx.fillStyle = "rgba(17, 28, 46, 0.94)";
+  ctx.strokeStyle = "rgba(239, 245, 255, 0.74)";
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.roundRect(x - radius, y - radius, radius * 2, radius * 2, 5);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "rgba(239, 245, 255, 0.82)";
+  ctx.font = "10px Inter, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText((label || "E").slice(0, 1).toUpperCase(), x, y);
+  ctx.restore();
+}
+
+function drawEntitySprite(ctx, x, y, viewport, visual, alpha = 1) {
+  const image = getSpriteImage(visual.img);
+  if (!isSpriteReady(image)) return false;
+
+  const drawWidth = (visual.drawW || 24) * viewport.zoom;
+  const drawHeight = (visual.drawH || 24) * viewport.zoom;
+  const drawX = x - drawWidth / 2;
+  const drawY = visual.drawAnchor === "BL"
+    ? y - drawHeight / 2
+    : y - drawHeight / 2;
+
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(image, Math.floor(drawX), Math.floor(drawY), Math.round(drawWidth), Math.round(drawHeight));
+  ctx.restore();
+  return true;
+}
+
+function drawEntityMarker(ctx, entity, x, y, viewport, { isSelected, isHovered, alpha = 1, preview = false } = {}) {
   const visual = getEntityVisual(entity.type);
-  const shapeRadius = getShapeRadius(isSelected);
-  const outlineWidth = (preview ? 2.1 : isSelected ? 2.2 : isHovered ? 1.8 : 1.5) * zoomScale;
-  const focusWidth = (isSelected ? 1.4 : 1.1) * zoomScale;
+  const zoomScale = 1 / Math.max(0.001, viewport.zoom);
+  const focusRadius = Math.max(8.5, Math.max(visual.drawW || 24, visual.drawH || 24) * 0.34) * zoomScale;
+  const outlineWidth = (preview ? 2.1 : isSelected ? 2 : isHovered ? 1.7 : 1.3) * zoomScale;
 
   ctx.save();
   ctx.globalAlpha *= alpha;
@@ -205,43 +79,38 @@ function drawEntityMarker(ctx, entity, x, y, zoomScale, { isSelected, isHovered,
       ctx,
       x,
       y,
-      shapeRadius + 4.2,
+      focusRadius + 3.5 * zoomScale,
       "rgba(125, 231, 255, 0.14)",
-      "rgba(125, 231, 255, 0.48)",
-      focusWidth,
+      "rgba(125, 231, 255, 0.52)",
+      1.2 * zoomScale,
     );
   }
 
-  if (isSelected) {
+  if (isSelected || preview) {
     drawFocusRing(
       ctx,
       x,
       y,
-      shapeRadius + 5.8,
-      preview ? "rgba(255, 179, 71, 0.10)" : "rgba(255, 179, 71, 0.20)",
-      preview ? "rgba(255, 214, 138, 0.78)" : "rgba(255, 179, 71, 0.72)",
-      focusWidth,
+      focusRadius + 5.2 * zoomScale,
+      preview ? "rgba(255, 179, 71, 0.10)" : "rgba(255, 179, 71, 0.18)",
+      preview ? "rgba(255, 214, 138, 0.82)" : "rgba(255, 179, 71, 0.78)",
+      outlineWidth,
+      preview,
     );
   }
 
-  drawEntityShape(ctx, visual, x, y, shapeRadius);
-  ctx.fillStyle = preview ? "rgba(248, 250, 255, 0.24)" : visual.fill;
-  ctx.fill();
-  ctx.strokeStyle = preview ? "#ffd68a" : isSelected ? "#ffb347" : isHovered ? "#7de7ff" : visual.stroke;
-  ctx.lineWidth = outlineWidth;
-  if (preview) ctx.setLineDash([3 * zoomScale, 2 * zoomScale]);
-  ctx.stroke();
-  ctx.setLineDash([]);
+  if (!drawEntitySprite(ctx, x, y, viewport, visual, alpha)) {
+    drawEntityFallback(ctx, x, y, 7 * zoomScale, visual.label);
+  }
 
   if (visual.key === "lantern") {
     ctx.beginPath();
-    ctx.arc(x, y, shapeRadius + 2.6, 0, Math.PI * 2);
+    ctx.arc(x, y, focusRadius + 2.2 * zoomScale, 0, Math.PI * 2);
     ctx.strokeStyle = preview ? "rgba(255, 223, 141, 0.34)" : "rgba(255, 209, 102, 0.32)";
-    ctx.lineWidth = 1.1 * zoomScale;
+    ctx.lineWidth = 1.05 * zoomScale;
     ctx.stroke();
   }
 
-  drawEntitySymbol(ctx, visual, x, y, zoomScale);
   ctx.restore();
 }
 
@@ -269,28 +138,20 @@ export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 
 export function renderEntities(ctx, doc, viewport, interaction) {
   const entities = doc.entities || [];
   const tileSize = doc.dimensions.tileSize;
-  const zoomScale = 1 / Math.max(0.001, viewport.zoom);
   const draggedSelection = new Set(interaction.entityDrag?.active ? getSelectedEntityIndices(interaction) : []);
-
-  ctx.save();
-  ctx.translate(viewport.offsetX, viewport.offsetY);
-  ctx.scale(viewport.zoom, viewport.zoom);
 
   for (let i = 0; i < entities.length; i += 1) {
     const entity = entities[i];
     if (!entity.visible) continue;
+    if (draggedSelection.has(i)) continue;
 
-    const { x, y } = getEntityCenter(entity, tileSize);
-    const isSelected = isEntitySelected(interaction, i);
-    const isHovered = interaction.hoveredEntityIndex === i;
-    drawEntityMarker(ctx, entity, x, y, zoomScale, {
-      isSelected,
-      isHovered,
-      alpha: draggedSelection.has(i) ? 0.34 : 1,
+    const { x, y } = getEntityScreenCenter(entity, tileSize, viewport);
+    drawEntityMarker(ctx, entity, x, y, viewport, {
+      isSelected: isEntitySelected(interaction, i),
+      isHovered: interaction.hoveredEntityIndex === i,
+      alpha: 1,
     });
   }
-
-  ctx.restore();
 }
 
 export function renderEntityDragPreview(ctx, doc, viewport, interaction) {
@@ -298,24 +159,36 @@ export function renderEntityDragPreview(ctx, doc, viewport, interaction) {
   if (!entityDrag?.active) return;
 
   const tileSize = doc.dimensions.tileSize;
-  const zoomScale = 1 / Math.max(0.001, viewport.zoom);
   const delta = entityDrag.previewDelta || { x: 0, y: 0 };
-
-  ctx.save();
-  ctx.translate(viewport.offsetX, viewport.offsetY);
-  ctx.scale(viewport.zoom, viewport.zoom);
 
   for (const origin of entityDrag.originPositions || []) {
     const entity = doc.entities?.[origin.index];
     if (!entity?.visible) continue;
 
     const previewEntity = { ...entity, x: origin.x + delta.x, y: origin.y + delta.y };
-    const { x, y } = getEntityCenter(previewEntity, tileSize);
-    drawEntityMarker(ctx, previewEntity, x, y, zoomScale, {
+    const { x, y } = getEntityScreenCenter(previewEntity, tileSize, viewport);
+    drawEntityMarker(ctx, previewEntity, x, y, viewport, {
       isSelected: true,
       preview: true,
     });
   }
+}
 
-  ctx.restore();
+export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, activePreset) {
+  if (interaction.activeTool !== "inspect") return;
+  if (interaction.activeLayer !== "entities") return;
+  if (!interaction.hoverCell || !activePreset) return;
+
+  const previewEntity = {
+    type: activePreset.type,
+    x: interaction.hoverCell.x,
+    y: interaction.hoverCell.y,
+  };
+
+  const { x, y } = getEntityScreenCenter(previewEntity, doc.dimensions.tileSize, viewport);
+  drawEntityMarker(ctx, previewEntity, x, y, viewport, {
+    isSelected: true,
+    preview: true,
+    alpha: 0.9,
+  });
 }

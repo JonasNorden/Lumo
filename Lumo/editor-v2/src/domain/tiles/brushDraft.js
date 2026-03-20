@@ -20,7 +20,7 @@ export function createDefaultBrushDraft() {
     label: "Primary Brush",
     behavior: BRUSH_BEHAVIOR_OPTIONS[0].value,
     size: BRUSH_SIZE_OPTIONS[0].value,
-    sprite: BRUSH_SPRITE_OPTIONS[0].value,
+    sprite: BRUSH_SPRITE_OPTIONS[0]?.value || "soil_c",
   };
 }
 

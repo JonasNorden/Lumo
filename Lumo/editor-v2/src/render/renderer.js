@@ -3,11 +3,12 @@ import { renderTiles } from "./layers/tileLayer.js";
 import { renderBackgroundLayers } from "./layers/backgroundLayer.js";
 import { renderSelectionOverlay } from "./layers/selectionLayer.js";
 import { renderBrushPreviewOverlay } from "./layers/previewLayer.js";
-import { renderEntities, renderEntityDragPreview } from "./layers/entityLayer.js";
+import { renderEntities, renderEntityDragPreview, renderEntityPlacementPreview } from "./layers/entityLayer.js";
 import { renderDecor, renderDecorDragPreview, renderDecorPlacementPreview, renderDecorScatterPreview } from "./layers/decorLayer.js";
 import { renderSounds, renderSoundDragPreview, renderSoundPlacementPreview } from "./layers/soundLayer.js";
 import { renderScanOverlay } from "./layers/scanLayer.js";
 import { findDecorPresetById } from "../domain/decor/decorPresets.js";
+import { findEntityPresetById } from "../domain/entities/entityPresets.js";
 import { findSoundPresetById } from "../domain/sound/soundPresets.js";
 
 export function renderEditorFrame(ctx, state) {
@@ -32,6 +33,7 @@ export function renderEditorFrame(ctx, state) {
   renderBrushPreviewOverlay(ctx, doc, state.viewport, state.interaction, state.brush.activeDraft);
   renderDecorScatterPreview(ctx, doc, state.viewport, state.interaction);
   renderDecorPlacementPreview(ctx, doc, state.viewport, state.interaction, findDecorPresetById(state.interaction.activeDecorPresetId));
+  renderEntityPlacementPreview(ctx, doc, state.viewport, state.interaction, findEntityPresetById(state.interaction.activeEntityPresetId));
   renderSoundPlacementPreview(ctx, doc, state.viewport, state.interaction, findSoundPresetById(state.interaction.activeSoundPresetId));
   renderSelectionOverlay(ctx, doc, state.viewport, state.interaction);
   renderScanOverlay(ctx, doc, state.viewport, state.scan);

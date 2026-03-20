@@ -6,16 +6,16 @@ const tileSize = 24;
 const base = new Array(width * height).fill(0);
 
 for (let x = 0; x < width; x += 1) {
-  base[getTileIndex(width, x, height - 3)] = 1;
-  base[getTileIndex(width, x, height - 2)] = 1;
+  base[getTileIndex(width, x, height - 3)] = 12;
+  base[getTileIndex(width, x, height - 2)] = 9;
 }
 
 for (let x = 8; x < 18; x += 1) {
-  base[getTileIndex(width, x, 12)] = 1;
+  base[getTileIndex(width, x, 12)] = 15;
 }
 
 for (let y = 7; y < 13; y += 1) {
-  base[getTileIndex(width, 23, y)] = 2;
+  base[getTileIndex(width, 23, y)] = 16;
 }
 
 for (let x = 26; x < 33; x += 1) {
@@ -67,8 +67,8 @@ export const mockLevelDocument = {
   decor: [
     {
       id: "decor-1",
-      name: "Grass Tuft",
-      type: "grass",
+      name: "Flower",
+      type: "decor_flower_01",
       x: 7,
       y: 15,
       visible: true,
@@ -76,8 +76,8 @@ export const mockLevelDocument = {
     },
     {
       id: "decor-2",
-      name: "Bush",
-      type: "bush",
+      name: "Lantern",
+      type: "lantern_01",
       x: 13,
       y: 11,
       visible: true,
@@ -85,17 +85,17 @@ export const mockLevelDocument = {
     },
     {
       id: "decor-3",
-      name: "Rock",
-      type: "rock",
+      name: "Power-cell",
+      type: "powercell_01",
       x: 27,
       y: 8,
       visible: true,
-      variant: "b",
+      variant: "a",
     },
     {
       id: "decor-4",
-      name: "Sign",
-      type: "sign",
+      name: "Hover Void",
+      type: "hover_void_01",
       x: 31,
       y: 17,
       visible: true,

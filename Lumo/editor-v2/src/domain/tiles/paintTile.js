@@ -1,4 +1,5 @@
 import { getTileIndex } from "../level/levelDocument.js";
+import { findBrushSpriteOptionByValue } from "./tileSpriteCatalog.js";
 
 const BRUSH_BEHAVIOR_TO_TILE = {
   solid: 1,
@@ -6,13 +7,10 @@ const BRUSH_BEHAVIOR_TO_TILE = {
   accent: 3,
 };
 
-const BRUSH_SPRITE_TO_TILE = {
-  void_1: 0,
-};
-
 export function resolveTileFromBrushDraft(brushDraft) {
-  if (BRUSH_SPRITE_TO_TILE[brushDraft.sprite] !== undefined) {
-    return BRUSH_SPRITE_TO_TILE[brushDraft.sprite];
+  const spriteOption = findBrushSpriteOptionByValue(brushDraft.sprite);
+  if (spriteOption && Number.isInteger(spriteOption.tileId)) {
+    return spriteOption.tileId;
   }
 
   return BRUSH_BEHAVIOR_TO_TILE[brushDraft.behavior] ?? 1;
