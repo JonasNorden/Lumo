@@ -1,4 +1,5 @@
 import { renderEditorFrame } from "../render/renderer.js";
+import { getScanScreenX, isPausedScanPlayheadHit } from "../render/layers/scanLayer.js";
 import { loadLevelDocument } from "../data/loadLevelDocument.js";
 import {
   clampViewportZoom,
@@ -54,6 +55,7 @@ import {
   isScanPlaying,
   pauseScanPlaybackState,
   sanitizeOptionalScanCoordinate,
+  setPausedScanPosition,
   startScanPlaybackState,
   stopScanPlaybackState,
   syncScanPlaybackState,
@@ -407,6 +409,7 @@ export function createEditorApp({
   const interactionState = {
     panDrag: null,
     suppressNextClick: false,
+    hoveringPausedScanHandle: false,
   };
   const toolShortcutMap = {
     v: EDITOR_TOOLS.INSPECT,
@@ -553,7 +556,14 @@ export function createEditorApp({
   const isSpacePanModifierActive = () => store.getState().interaction.spacePanActive;
 
   const syncCanvasCursor = () => {
-    canvas.style.cursor = isPanGestureActive() ? PAN_ACTIVE_CURSOR : isSpacePanModifierActive() ? PAN_CURSOR : "";
+    const state = store.getState();
+    const scanCursor =
+      state.interaction.scanDrag?.active
+        ? "ew-resize"
+        : interactionState.hoveringPausedScanHandle
+          ? "grab"
+          : "";
+    canvas.style.cursor = isPanGestureActive() ? PAN_ACTIVE_CURSOR : isSpacePanModifierActive() ? PAN_CURSOR : scanCursor;
   };
 
   const updateSpacePanActive = (active) => {
@@ -619,6 +629,54 @@ export function createEditorApp({
 
     interactionState.panDrag = null;
     syncCanvasCursor();
+  };
+
+  const syncPausedScanHover = (state, point) => {
+    const nextHovering = Boolean(
+      point &&
+      state.document.active &&
+      isPausedScanPlayheadHit(state.document.active, state.viewport, state.scan, point.x, point.y) &&
+      !state.interaction.scanDrag?.active &&
+      !isPanGestureActive(),
+    );
+    if (interactionState.hoveringPausedScanHandle === nextHovering) return;
+    interactionState.hoveringPausedScanHandle = nextHovering;
+    syncCanvasCursor();
+  };
+
+  const keepScanPlayheadVisible = (draft, positionX) => {
+    const doc = draft.document.active;
+    if (!doc) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scanScreenX = getScanScreenX(draft.viewport, doc.dimensions.tileSize, positionX);
+    const edgePadding = Math.max(72, Math.min(rect.width * 0.2, 180));
+    if (scanScreenX < edgePadding) {
+      panViewportByDelta(draft.viewport, edgePadding - scanScreenX, 0);
+      return;
+    }
+    if (scanScreenX > rect.width - edgePadding) {
+      panViewportByDelta(draft.viewport, (rect.width - edgePadding) - scanScreenX, 0);
+    }
+  };
+
+  const updatePausedScanDrag = (event, state) => {
+    if (!state.interaction.scanDrag?.active || !state.document.active) return false;
+    if ((event.buttons & 1) !== 1) return false;
+
+    const point = getCanvasPointFromMouseEvent(canvas, event);
+    const doc = state.document.active;
+    const safeZoom = Math.max(0.0001, state.viewport.zoom);
+    const nextPositionX = (point.x - state.viewport.offsetX) / (doc.dimensions.tileSize * safeZoom);
+    interactionState.suppressNextClick = true;
+    store.setState((draft) => {
+      if (!draft.interaction.scanDrag?.active || !draft.document.active) return;
+      if (!setPausedScanPosition(draft.scan, draft.document.active, nextPositionX)) return;
+      keepScanPlayheadVisible(draft, draft.scan.positionX);
+      draft.interaction.scanDrag.lastClientX = event.clientX;
+      draft.interaction.scanDrag.lastClientY = event.clientY;
+    });
+    return true;
   };
 
 
@@ -897,6 +955,7 @@ export function createEditorApp({
     draft.interaction.entityDrag = null;
     draft.interaction.decorDrag = null;
     draft.interaction.soundDrag = null;
+    draft.interaction.scanDrag = null;
     clearDecorScatterDrag(draft);
 
     if (nextMode === "decor") {
@@ -2261,6 +2320,7 @@ export function createEditorApp({
     if (!state.document.active) return;
 
     const point = getCanvasPointFromMouseEvent(canvas, event);
+    syncPausedScanHover(state, point);
     const nextHoverCell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const nextHoveredEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const nextHoveredDecorIndex = findDecorAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
@@ -2290,6 +2350,8 @@ export function createEditorApp({
 
   const clearHoveredCanvasState = () => {
     const state = store.getState();
+    interactionState.hoveringPausedScanHandle = false;
+    syncCanvasCursor();
     if (!state.interaction.hoverCell && state.interaction.hoveredEntityIndex === null && state.interaction.hoveredDecorIndex === null && state.interaction.hoveredSoundIndex === null) return;
 
     store.setState((draft) => {
@@ -2607,6 +2669,21 @@ export function createEditorApp({
     if (!state.document.active) return;
 
     const point = getCanvasPointFromMouseEvent(canvas, event);
+    if (isPausedScanPlayheadHit(state.document.active, state.viewport, state.scan, point.x, point.y)) {
+      event.preventDefault();
+      interactionState.suppressNextClick = true;
+      interactionState.hoveringPausedScanHandle = false;
+      store.setState((draft) => {
+        applyCanvasTarget(draft, "sound");
+        draft.interaction.scanDrag = {
+          active: true,
+          lastClientX: event.clientX,
+          lastClientY: event.clientY,
+        };
+      });
+      syncCanvasCursor();
+      return;
+    }
     const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     if (!cell) return;
 
@@ -2696,10 +2773,15 @@ export function createEditorApp({
       return;
     }
 
-    updateHoveredCanvasState(event);
-
     const state = store.getState();
     if (!state.document.active) return;
+
+    if (updatePausedScanDrag(event, state)) {
+      updateHoveredCanvasState(event);
+      return;
+    }
+
+    updateHoveredCanvasState(event);
 
     if (state.interaction.entityDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
@@ -2857,6 +2939,14 @@ export function createEditorApp({
     stopPanDrag();
 
     const state = store.getState();
+
+    if (state.interaction.scanDrag?.active) {
+      store.setState((draft) => {
+        draft.interaction.scanDrag = null;
+      });
+      syncCanvasCursor();
+      return;
+    }
 
     if (state.interaction.entityDrag?.active) {
       store.setState((draft) => {
@@ -3086,6 +3176,7 @@ export function createEditorApp({
     draft.interaction.entityDrag = null;
     draft.interaction.decorDrag = null;
     draft.interaction.soundDrag = null;
+    draft.interaction.scanDrag = null;
     draft.interaction.activeLayer = PANEL_LAYERS.TILES;
     draft.interaction.canvasSelectionMode = "entity";
     draft.interaction.decorScatterMode = false;
@@ -3516,6 +3607,7 @@ export function createEditorApp({
         state.interaction.entityDrag = null;
         state.interaction.decorDrag = null;
         state.interaction.soundDrag = null;
+        state.interaction.scanDrag = null;
         state.interaction.decorScatterMode = false;
         state.interaction.decorScatterDrag = null;
         state.interaction.activeEntityPresetId = null;

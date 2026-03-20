@@ -27,6 +27,7 @@ import {
   isScanPaused,
   isScanPlaying,
   pauseScanPlaybackState,
+  setPausedScanPosition,
   startScanPlaybackState,
   stopScanPlaybackState,
   syncScanPlaybackState,
@@ -336,9 +337,16 @@ function runScanRegressionChecks() {
   assert.deepEqual(scan.viewportSnapshot, { offsetX: 120, offsetY: 32 }, "pausing scan playback should keep the original viewport snapshot for stop/reset");
   assert.deepEqual(viewport, { offsetX: 164, offsetY: 48 }, "pausing scan playback should preserve the live viewport position");
 
+  assert.equal(setPausedScanPosition(scan, doc, 1), true, "paused scan playback should allow repositioning the scan head");
+  assert.equal(scan.positionX, 2, "paused scan repositioning should clamp to the configured scan start");
+  assert.equal(setPausedScanPosition(scan, doc, 8.25), true, "paused scan playback should accept in-range drag positions");
+  assert.equal(scan.positionX, 8.25, "paused scan repositioning should preserve the dragged position");
+  assert.equal(setPausedScanPosition(scan, doc, 20), true, "paused scan playback should clamp drag positions above the scan end");
+  assert.equal(scan.positionX, 9, "paused scan repositioning should clamp to the configured scan end");
+
   startScanPlaybackState(scan, viewport, doc);
   assert.equal(isScanPlaying(scan), true, "restarting a paused scan should resume playback");
-  assert.equal(scan.positionX, 6.5, "restarting a paused scan should resume from the paused position");
+  assert.equal(scan.positionX, 9, "restarting a paused scan should resume from the latest dragged paused position");
   assert.deepEqual(scan.viewportSnapshot, { offsetX: 120, offsetY: 32 }, "resuming scan playback should preserve the original viewport snapshot");
 
   stopScanPlaybackState(scan, viewport, doc, { preserveLog: true });
@@ -368,6 +376,7 @@ function runScanRegressionChecks() {
   assert.deepEqual(scan.eventLog, [], "syncing scan playback should clear scan logs when preserveLog is false");
   assert.equal(scan.lastEventSummary, null, "syncing scan playback should clear the last event summary when preserveLog is false");
   assert.equal(scan.viewportSnapshot, null, "syncing scan playback should discard any stale viewport snapshot");
+  assert.equal(setPausedScanPosition(scan, doc, 5), false, "idle scan playback should reject manual repositioning");
 }
 
 function runUiRegressionChecks() {

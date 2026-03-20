@@ -1,11 +1,11 @@
 import { getScanPlaybackState, getScanRange } from "../../domain/scan/scanSystem.js";
 
-function getScreenX(viewport, tileSize, worldX) {
+export function getScanScreenX(viewport, tileSize, worldX) {
   return viewport.offsetX + worldX * tileSize * viewport.zoom;
 }
 
 function drawRangeMarker(ctx, viewport, tileSize, x, color, dashed = true) {
-  const screenX = getScreenX(viewport, tileSize, x);
+  const screenX = getScanScreenX(viewport, tileSize, x);
   ctx.save();
   ctx.strokeStyle = color;
   ctx.lineWidth = 1;
@@ -93,6 +93,18 @@ function drawPlayheadHead(ctx, screenX, visualState) {
   ctx.restore();
 }
 
+export function isPausedScanPlayheadHit(doc, viewport, scan, pointX, pointY) {
+  if (!doc || !viewport || !scan || getScanPlaybackState(scan) !== "paused") return false;
+
+  const tileSize = doc.dimensions.tileSize;
+  const scanScreenX = getScanScreenX(viewport, tileSize, scan.positionX ?? getScanRange(scan, doc).startX);
+  const headTop = 10;
+  const headBottom = headTop + 14;
+  const withinHead = pointX >= scanScreenX - 14 && pointX <= scanScreenX + 14 && pointY >= headTop && pointY <= headBottom;
+  const withinLine = Math.abs(pointX - scanScreenX) <= 8;
+  return withinHead || withinLine;
+}
+
 export function renderScanOverlay(ctx, doc, viewport, scan) {
   if (!doc || !scan) return;
 
@@ -112,7 +124,7 @@ export function renderScanOverlay(ctx, doc, viewport, scan) {
     drawRangeMarker(ctx, viewport, tileSize, endX, "rgba(255, 180, 120, 0.34)");
   }
 
-  const scanScreenX = getScreenX(viewport, tileSize, scan.positionX ?? startX);
+  const scanScreenX = getScanScreenX(viewport, tileSize, scan.positionX ?? startX);
   const bandWidth = visualState.label === "PLAY" ? 24 : 18;
   const gradient = ctx.createLinearGradient(scanScreenX - bandWidth, 0, scanScreenX + bandWidth, 0);
   gradient.addColorStop(0, "rgba(0, 0, 0, 0)");
