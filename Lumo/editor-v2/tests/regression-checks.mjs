@@ -350,6 +350,7 @@ function runScanRegressionChecks() {
   assert.equal(spotEval?.startedThisStep, true, "spot evaluation should record a start transition when entering the radius span");
   assert.equal(spotEval?.normalizedIntensity, 1, "spot evaluation should peak at full intensity at the sound center");
   assert.equal(spotEval?.metadata.spatial, true, "spot evaluation should preserve spatial metadata");
+  assert.equal(spotEval?.pan, 0, "spot evaluation should center the pan at the sound midpoint");
 
   const triggerEval = evaluateScanAudio(audioDoc, 8.2, 8.8).soundStates.find((entry) => entry.soundId === "trigger-audio");
   assert.equal(triggerEval?.active, true, "trigger evaluation should become active only on crossing frames");
@@ -367,6 +368,8 @@ function runScanRegressionChecks() {
   assert.equal(musicFadeIn?.phase, "fadeIn", "music zones should expose a fade-in phase near the zone entrance");
   assert.equal(musicSustain?.phase, "sustain", "music zones should expose a sustain phase after fade-in");
   assert.equal(musicFadeOut?.phase, "fadeOut", "music zones should expose a fade-out phase near the zone exit");
+  assert.equal(musicFadeIn?.normalizedIntensity > 0.1 && musicFadeIn?.normalizedIntensity < 0.2, true, "music fade-in should use a softened ease curve instead of a raw linear ramp");
+  assert.equal(musicFadeOut?.normalizedIntensity > 0.3 && musicFadeOut?.normalizedIntensity < 0.33, true, "music fade-out should use a softened ease curve instead of a raw linear ramp");
   assert.equal(musicFadeOut?.metadata.fadeDistance, 2, "music zone evaluation should preserve fade-distance metadata");
 
   const viewport = { offsetX: 120, offsetY: 32 };
@@ -568,6 +571,7 @@ function runScanAudioPlaybackRegressionChecks() {
         resumeCalls: 0,
         stopCalls: 0,
         volumes: [],
+        pans: [],
       };
       instanceLog.push(metrics);
       liveInstances.set(sound.id, metrics);
@@ -584,6 +588,9 @@ function runScanAudioPlaybackRegressionChecks() {
         },
         setVolume(volume) {
           metrics.volumes.push(volume);
+        },
+        setPan(pan) {
+          metrics.pans.push(pan);
         },
         stop() {
           metrics.stopCalls += 1;
@@ -604,7 +611,8 @@ function runScanAudioPlaybackRegressionChecks() {
   controller.sync({ doc, scan: createScanState("playing", spotStart) });
   assert.deepEqual(controller.getActiveInstanceIds(), ["spot-audio"], "spot sounds should start a persistent playback instance when the scan enters their radius");
   assert.equal(instanceLog[0].playCalls, 1, "persistent spot sounds should create exactly one instance on entry");
-  assert.equal(instanceLog[0].volumes.at(-1), 0.75, "spot sounds should map normalized intensity onto authored volume");
+  assert.equal(instanceLog[0].volumes.at(-1) < 0.7, true, "spot sounds should be slightly moderated by the simple mix balancing rules");
+  assert.equal(instanceLog[0].pans.at(-1), 0, "spot sounds should start centered when the scan is at the sound midpoint");
 
   const spotSustain = evaluateScanAudio(doc, 4.5, 5.25);
   controller.sync({ doc, scan: createScanState("playing", spotSustain) });
@@ -622,16 +630,28 @@ function runScanAudioPlaybackRegressionChecks() {
   const ambientInside = evaluateScanAudio(doc, 9.5, 11);
   controller.sync({ doc, scan: createScanState("playing", ambientInside) });
   assert.equal(controller.getActiveInstanceIds().includes("ambient-audio"), true, "ambient zones should remain active while the scan stays inside the zone");
+  assert.equal(instanceLog.find((entry) => entry.soundId === "ambient-audio").volumes.at(-1) < 0.25, true, "ambient zones should sit below foreground layers in the balanced mix");
+
 
   const musicFadeIn = evaluateScanAudio(doc, 15, 16.5);
   controller.sync({ doc, scan: createScanState("playing", musicFadeIn) });
   const musicMetrics = instanceLog.find((entry) => entry.soundId === "music-audio");
   assert.equal(controller.getActiveInstanceIds().includes("music-audio"), true, "music zones should start playback when the scan reaches the fade-in boundary");
-  assert.equal(musicMetrics.volumes.at(-1), 0.2, "music zones should scale volume during fade-in using normalized intensity");
+  assert.equal(musicMetrics.volumes.at(-1) > 0.08 && musicMetrics.volumes.at(-1) < 0.1, true, "music zones should use eased fades plus simple mix balancing during fade-in");
 
   const musicSustain = evaluateScanAudio(doc, 17.8, 19);
   controller.sync({ doc, scan: createScanState("playing", musicSustain) });
-  assert.equal(musicMetrics.volumes.at(-1), 0.8, "music zones should reach full authored volume during sustain");
+  assert.equal(musicMetrics.volumes.at(-1) > 0.6 && musicMetrics.volumes.at(-1) < 0.65, true, "music zones should remain strong during sustain while staying below raw authored loudness");
+  const spatialMusicDoc = {
+    ...doc,
+    sounds: doc.sounds.map((sound) => (sound.id === "music-audio"
+      ? { ...sound, params: { ...sound.params, spatial: true } }
+      : sound)),
+  };
+  const spatialMusicEval = evaluateScanAudio(spatialMusicDoc, 16, 16.5);
+  controller.sync({ doc: spatialMusicDoc, scan: createScanState("playing", spatialMusicEval) });
+  assert.equal(musicMetrics.pans.at(-1) > 0.7, true, "spatial music should pan right before the zone center on this first-pass scan model");
+
 
   const activeBeforePause = controller.getActiveInstanceIds();
   controller.sync({ doc, scan: createScanState("paused", musicSustain) });
