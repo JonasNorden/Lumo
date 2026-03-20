@@ -1,4 +1,4 @@
-import { getAuthoredSoundSource } from "../sound/sourceReference.js";
+import { resolveSoundPlaybackSource } from "../sound/sourceReference.js";
 
 function clampUnitInterval(value) {
   if (!Number.isFinite(value)) return 0;
@@ -17,7 +17,7 @@ function clampPositiveNumber(value, fallback = 0) {
 }
 
 function resolveSoundSource(sound) {
-  return getAuthoredSoundSource(sound);
+  return resolveSoundPlaybackSource(sound);
 }
 
 function resolveLoopSetting(sound, soundState) {
@@ -311,11 +311,24 @@ export function createScanAudioPlaybackController(options = {}) {
   };
 
   const ensureInstance = (sound, soundState) => {
+    const resolvedSource = resolveSoundSource(sound);
     const existingEntry = activeInstances.get(soundState.soundId);
-    if (existingEntry) return existingEntry;
+    if (existingEntry) {
+      const shouldPromoteFallbackToAsset = existingEntry.isFallback
+        && resolvedSource
+        && resolvedSource !== existingEntry.failedSource;
+      const shouldRefreshAssetInstance = !existingEntry.isFallback
+        && existingEntry.resolvedSource !== resolvedSource;
+
+      if (!shouldPromoteFallbackToAsset && !shouldRefreshAssetInstance) {
+        return existingEntry;
+      }
+
+      stopInstance(soundState.soundId);
+    }
 
     let nextEntry = null;
-    const createFallbackEntry = () => {
+    const createFallbackEntry = (failedSource = null) => {
       const fallbackInstance = createOscillatorInstance(audioContext, sound, soundState, {
         onEnded: () => {
           if (activeInstances.get(soundState.soundId)?.instance === fallbackInstance) {
@@ -330,6 +343,9 @@ export function createScanAudioPlaybackController(options = {}) {
         instance: fallbackInstance,
         loop: resolveLoopSetting(sound, soundState),
         transient: soundState.eventLike,
+        isFallback: true,
+        resolvedSource,
+        failedSource,
       };
     };
 
@@ -343,8 +359,8 @@ export function createScanAudioPlaybackController(options = {}) {
         }
       },
       onAssetError: () => {
-        if (!nextEntry || nextEntry.instance !== primaryInstance || nextEntry.instance.kind !== "audio-element") return;
-        const fallbackEntry = createFallbackEntry();
+        if (!nextEntry || nextEntry.instance !== primaryInstance) return;
+        const fallbackEntry = createFallbackEntry(resolvedSource);
         if (!fallbackEntry) {
           removeInstance(soundState.soundId);
           return;
@@ -368,6 +384,9 @@ export function createScanAudioPlaybackController(options = {}) {
         instance,
         loop: resolveLoopSetting(sound, soundState),
         transient: soundState.eventLike,
+        isFallback: false,
+        resolvedSource,
+        failedSource: null,
       };
     }
 

@@ -4,6 +4,10 @@ export function normalizeSoundSourceValue(value) {
   return trimmed || null;
 }
 
+function hasAbsoluteUrlScheme(value) {
+  return /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(value);
+}
+
 export function getAuthoredSoundSource(sound) {
   const candidates = [
     sound?.source,
@@ -20,4 +24,15 @@ export function getAuthoredSoundSource(sound) {
   }
 
   return null;
+}
+
+export function resolveSoundPlaybackSource(sound) {
+  const authoredSource = getAuthoredSoundSource(sound);
+  if (!authoredSource) return null;
+  if (hasAbsoluteUrlScheme(authoredSource) || authoredSource.startsWith("//")) return authoredSource;
+  if (authoredSource.startsWith("/")) return authoredSource;
+  if (authoredSource.startsWith("../")) return authoredSource;
+  if (authoredSource.startsWith("./data/")) return `../${authoredSource.slice(2)}`;
+  if (authoredSource.startsWith("data/")) return `../${authoredSource}`;
+  return authoredSource;
 }
