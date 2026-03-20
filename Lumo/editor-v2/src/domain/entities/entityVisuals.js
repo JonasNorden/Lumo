@@ -1,4 +1,4 @@
-import { findEntityPresetByType } from "./entityPresets.js";
+import { getEntityPresetForType } from "./entityPresets.js";
 
 const ENTITY_VISUALS = {
   "player-spawn": {
@@ -7,11 +7,29 @@ const ENTITY_VISUALS = {
     stroke: "#8ef3ff",
     hitRadius: 8.5,
   },
-  lantern: {
-    key: "lantern",
+  lantern_01: {
+    key: "lantern_01",
     label: "Lantern",
     stroke: "#ffe29a",
     hitRadius: 8,
+  },
+  firefly_01: {
+    key: "firefly_01",
+    label: "Firefly",
+    stroke: "#e3f7a4",
+    hitRadius: 7,
+  },
+  dark_creature_01: {
+    key: "dark_creature_01",
+    label: "Dark Creature",
+    stroke: "#bda9ff",
+    hitRadius: 9,
+  },
+  hover_void_01: {
+    key: "hover_void_01",
+    label: "Hover Void",
+    stroke: "#cba7ff",
+    hitRadius: 8.5,
   },
   trigger: {
     key: "trigger",
@@ -37,23 +55,19 @@ const ENTITY_TYPE_ALIASES = new Map([
   ["spawn", "player-spawn"],
   ["player_spawn", "player-spawn"],
   ["player spawn", "player-spawn"],
-  ["lantern", "lantern"],
-  ["trigger", "trigger"],
-  ["checkpoint", "checkpoint"],
-  ["generic", "generic"],
+  ["lantern", "lantern_01"],
 ]);
 
 function normalizeEntityType(type) {
   return String(type || "")
     .trim()
-    .toLowerCase()
-    .replace(/[_\s]+/g, "-");
+    .toLowerCase();
 }
 
 export function getEntityVisual(entityType) {
   const normalizedType = normalizeEntityType(entityType);
   const visualKey = ENTITY_TYPE_ALIASES.get(normalizedType) || normalizedType || "generic";
-  const preset = findEntityPresetByType(visualKey) || findEntityPresetByType("generic");
+  const preset = getEntityPresetForType(visualKey) || getEntityPresetForType("generic");
   const baseVisual = ENTITY_VISUALS[visualKey] || ENTITY_VISUALS.generic;
 
   return {
@@ -61,7 +75,10 @@ export function getEntityVisual(entityType) {
     img: preset?.img || null,
     drawW: preset?.drawW || 24,
     drawH: preset?.drawH || 24,
+    footprintW: preset?.footprintW || preset?.drawW || 24,
+    footprintH: preset?.footprintH || preset?.drawH || 24,
     drawAnchor: preset?.drawAnchor || "BL",
+    hitRadius: preset?.hitRadius || baseVisual.hitRadius,
   };
 }
 

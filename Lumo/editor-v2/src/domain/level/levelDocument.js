@@ -1,5 +1,7 @@
 import { cloneEntityParams } from "../entities/entityParams.js";
+import { getEntityPresetParamsForType } from "../entities/entityPresets.js";
 import { DEFAULT_SOUND_PRESET_ID, getSoundPresetDefaultParams, getSoundPresetForType } from "../sound/soundPresets.js";
+import { isEntityLikeEditableType, normalizeEditableObjectType } from "../placeables/editableObjectBuckets.js";
 import { getAuthoredSoundSource } from "../sound/sourceReference.js";
 import { normalizeSoundType } from "../sound/soundVisuals.js";
 
@@ -54,7 +56,7 @@ function normalizeDecor(decor, index) {
   const fallbackId = `decor-${index + 1}`;
   const nextId = typeof decor?.id === "string" && decor.id.trim() ? decor.id.trim() : fallbackId;
   const nextName = typeof decor?.name === "string" && decor.name.trim() ? decor.name.trim() : `Decor ${index + 1}`;
-  const nextType = typeof decor?.type === "string" && decor.type.trim() ? decor.type.trim() : "grass";
+  const nextType = typeof decor?.type === "string" && decor.type.trim() ? normalizeEditableObjectType(decor.type) : "grass";
   const nextX = Number.isFinite(decor?.x) ? Math.round(decor.x) : 0;
   const nextY = Number.isFinite(decor?.y) ? Math.round(decor.y) : 0;
   const nextVisible = typeof decor?.visible === "boolean" ? decor.visible : true;
@@ -77,11 +79,11 @@ function normalizeEntity(entity, index) {
   const fallbackId = `entity-${index + 1}`;
   const nextId = typeof entity?.id === "string" && entity.id.trim() ? entity.id : fallbackId;
   const nextName = typeof entity?.name === "string" && entity.name.trim() ? entity.name : `Entity ${index + 1}`;
-  const nextType = typeof entity?.type === "string" && entity.type.trim() ? entity.type : "generic";
+  const nextType = typeof entity?.type === "string" && entity.type.trim() ? normalizeEditableObjectType(entity.type) : "generic";
   const nextX = Number.isFinite(entity?.x) ? Math.round(entity.x) : 0;
   const nextY = Number.isFinite(entity?.y) ? Math.round(entity.y) : 0;
   const nextVisible = typeof entity?.visible === "boolean" ? entity.visible : true;
-  const nextParams = cloneEntityParams(entity?.params);
+  const nextParams = getEntityPresetParamsForType(nextType, entity?.params);
 
   return {
     id: nextId,
@@ -157,10 +159,28 @@ export function validateLevelDocument(doc) {
   };
 
   const rawDecor = Array.isArray(doc.decor) ? doc.decor : [];
-  doc.decor = rawDecor.map((decor, index) => normalizeDecor(decor, index));
+  const normalizedDecor = rawDecor.map((decor, index) => normalizeDecor(decor, index));
 
   const rawEntities = Array.isArray(doc.entities) ? doc.entities : [];
-  doc.entities = rawEntities.map((entity, index) => normalizeEntity(entity, index));
+  const normalizedEntities = rawEntities.map((entity, index) => normalizeEntity(entity, index));
+
+  const migratedDecorEntities = [];
+  doc.decor = normalizedDecor.filter((decor) => {
+    if (!isEntityLikeEditableType(decor.type)) return true;
+
+    migratedDecorEntities.push({
+      id: decor.id,
+      name: decor.name,
+      type: normalizeEditableObjectType(decor.type),
+      x: decor.x,
+      y: decor.y,
+      visible: decor.visible,
+      params: getEntityPresetParamsForType(decor.type, decor.params),
+    });
+    return false;
+  });
+
+  doc.entities = [...normalizedEntities, ...migratedDecorEntities];
 
   const rawSounds = Array.isArray(doc.sounds) ? doc.sounds : [];
   doc.sounds = rawSounds.map((sound, index) => normalizeSound(sound, index));
