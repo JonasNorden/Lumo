@@ -263,6 +263,51 @@ function runSoundRegressionChecks() {
   assert.equal(normalized.sounds[1].params.loop, true, "ambient zones should default to looping");
   assert.equal(normalized.sounds[1].params.spatial, false, "ambient zones should default to non-spatial playback");
 
+  const normalizedEntityBucketsDoc = validateLevelDocument({
+    ...createDoc(),
+    decor: [
+      {
+        id: "decor-firefly",
+        name: "Firefly Decor Alias",
+        type: "firefly_01",
+        x: 3,
+        y: 2,
+        visible: true,
+        variant: "a",
+        params: { lightRadius: 100 },
+      },
+      {
+        id: "decor-flower",
+        name: "Flower",
+        type: "decor_flower_01",
+        x: 0,
+        y: 0,
+        visible: true,
+        variant: "a",
+      },
+    ],
+    entities: [
+      {
+        id: "entity-lantern",
+        name: "Lantern Alias",
+        type: "lantern",
+        x: 1,
+        y: 1,
+        visible: true,
+        params: { lightRadius: 180 },
+      },
+    ],
+  });
+
+  assert.equal(normalizedEntityBucketsDoc.decor.length, 1, "validation should keep flower decor in the decor bucket");
+  assert.equal(normalizedEntityBucketsDoc.decor[0].type, "decor_flower_01", "validation should preserve flower decor types");
+  assert.equal(normalizedEntityBucketsDoc.entities.length, 2, "validation should migrate entity-like decor into entities");
+  assert.equal(normalizedEntityBucketsDoc.entities[0].type, "lantern_01", "validation should normalize lantern aliases into the entity workflow");
+  assert.equal(normalizedEntityBucketsDoc.entities[0].params.radius, 180, "validation should remap lantern light radius params");
+  assert.equal(normalizedEntityBucketsDoc.entities[1].type, "firefly_01", "validation should move fireflies into the entity workflow");
+  assert.equal(normalizedEntityBucketsDoc.entities[1].params.lightDiameter, 200, "validation should remap firefly radius params into editable defaults");
+  assert.equal(normalizedEntityBucketsDoc.entities[1].params.lightStrength, 0.8, "validation should seed firefly defaults for param editing");
+
   const normalizedSourceDoc = validateLevelDocument({
     ...createDoc(),
     sounds: [
@@ -311,13 +356,13 @@ function runDarknessPreviewRegressionChecks() {
   doc.dimensions.tileSize = 24;
   doc.entities = [
     { id: "spawn-1", name: "Spawn", type: "player-spawn", x: 4, y: 6, visible: true, params: {} },
-    { id: "lantern-1", name: "Lantern", type: "lantern", x: 8, y: 6, visible: true, params: { lightRadius: 170 } },
+    { id: "lantern-1", name: "Lantern", type: "lantern_01", x: 8, y: 6, visible: true, params: { radius: 170 } },
+    { id: "firefly-1", name: "Firefly", type: "firefly_01", x: 9, y: 5, visible: true, params: { lightDiameter: 240 } },
     { id: "checkpoint-1", name: "Checkpoint", type: "checkpoint", x: 10, y: 6, visible: true, params: {} },
   ];
   doc.decor = [
-    { id: "decor-1", name: "Lantern Decor", type: "lantern_01", x: 12, y: 7, visible: true, variant: "a", params: {} },
+    { id: "decor-1", name: "Flower", type: "decor_flower_01", x: 12, y: 7, visible: true, variant: "a", params: {} },
     { id: "decor-2", name: "Power Cell", type: "powercell_01", x: 14, y: 7, visible: true, variant: "a", params: {} },
-    { id: "decor-3", name: "Firefly", type: "firefly_01", x: 16, y: 7, visible: true, variant: "a", params: {} },
   ];
 
   const playerLight = getPreviewPlayerLight(doc);
@@ -327,16 +372,16 @@ function runDarknessPreviewRegressionChecks() {
   const lights = collectDarknessPreviewLights(doc);
   assert.deepEqual(
     lights.map((light) => light.kind),
-    ["player", "lantern", "lantern"],
-    "darkness preview should include only the player light and lantern emitters",
+    ["player", "lantern", "firefly"],
+    "darkness preview should include the player light plus audited entity light emitters",
   );
   assert.deepEqual(
     lights.slice(1).map((light) => ({ radiusPx: Math.round(light.radiusPx), strength: Number(light.strength.toFixed(2)) })),
     [
       { radiusPx: 170, strength: 0.85 },
-      { radiusPx: 170, strength: 0.85 },
+      { radiusPx: 120, strength: 0.8 },
     ],
-    "lantern preview emitters should use runtime-faithful radius and strength defaults",
+    "audited entity light emitters should use runtime-faithful radius and strength defaults",
   );
 }
 
@@ -556,7 +601,7 @@ function runUiRegressionChecks() {
     interaction: {
       activeTool: "inspect",
       activeLayer: "entities",
-      activeEntityPresetId: "lantern",
+      activeEntityPresetId: "lantern_01",
       activeDecorPresetId: null,
       activeSoundPresetId: null,
       decorScatterMode: false,

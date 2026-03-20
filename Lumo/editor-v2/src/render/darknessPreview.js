@@ -14,6 +14,19 @@ const ENTITY_LIGHT_SOURCES = {
     radiusPx: 170,
     strength: 0.85,
     anchorY: 0.42,
+    kind: "lantern",
+  },
+  lantern_01: {
+    radiusPx: 170,
+    strength: 0.85,
+    anchorY: 0.42,
+    kind: "lantern",
+  },
+  firefly_01: {
+    radiusPx: 120,
+    strength: 0.8,
+    anchorY: 0.58,
+    kind: "firefly",
   },
 };
 
@@ -69,16 +82,20 @@ function getEntityLightSource(entity, tileSize) {
   const originX = (entity.x + 0.5) * tileSize;
   const originY = (entity.y + Math.max(0.16, preset.anchorY)) * tileSize;
 
-  const authoredRadius = clampRuntimeRadius(entity?.params?.lightRadius, preset.radiusPx);
+  const rawLightDiameter = entity?.params?.lightDiameter;
+  const rawLightRadius = entity?.params?.lightRadius ?? entity?.params?.radius;
+  const authoredRadius = Number.isFinite(Number(rawLightDiameter))
+    ? Number(rawLightDiameter) * 0.5
+    : clampRuntimeRadius(rawLightRadius, preset.radiusPx);
   const radiusPx = authoredRadius <= 32 ? authoredRadius * tileSize : authoredRadius;
-  const strength = clampRuntimeRadius(entity?.params?.strength, preset.strength);
+  const strength = clampRuntimeRadius(entity?.params?.lightStrength ?? entity?.params?.strength, preset.strength);
 
   return createLightSource(
     originX,
     originY - Math.max(0, drawHeightTiles - 1) * tileSize * 0.2,
     radiusPx,
     strength,
-    "lantern",
+    preset.kind || "lantern",
   );
 }
 

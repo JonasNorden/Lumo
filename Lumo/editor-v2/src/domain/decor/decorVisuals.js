@@ -4,6 +4,7 @@ const LEGACY_DECOR_ALIASES = new Map([
   ["grass", "decor_flower_01"],
   ["tuft", "decor_flower_01"],
   ["flower", "decor_flower_01"],
+  ["decor-flower-01", "decor_flower_01"],
   ["bush", "bush"],
   ["shrub", "bush"],
   ["rock", "rock"],
@@ -15,8 +16,7 @@ const LEGACY_DECOR_ALIASES = new Map([
 function normalizeDecorType(type) {
   return String(type || "")
     .trim()
-    .toLowerCase()
-    .replace(/[_\s]+/g, "-");
+    .toLowerCase();
 }
 
 export function getDecorVisual(decorType) {

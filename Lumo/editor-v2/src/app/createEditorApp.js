@@ -42,8 +42,16 @@ import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
 import { findDecorAtCanvasPoint } from "../render/layers/decorLayer.js";
 import { findSoundAtCanvasPoint } from "../render/layers/soundLayer.js";
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
-import { DEFAULT_ENTITY_PRESET_ID, findEntityPresetById, getEntityPresetDefaultParams } from "../domain/entities/entityPresets.js";
-import { DEFAULT_DECOR_PRESET_ID, findDecorPresetById } from "../domain/decor/decorPresets.js";
+import {
+  DEFAULT_ENTITY_PRESET_ID,
+  findEntityPresetById,
+  findEntityPresetByType,
+  getEntityPresetDefaultParams,
+  getEntityPresetForType,
+  getEntityPresetParamsForType,
+} from "../domain/entities/entityPresets.js";
+import { DEFAULT_DECOR_PRESET_ID, findDecorPresetById, findDecorPresetByType } from "../domain/decor/decorPresets.js";
+import { isEntityLikeEditableType, normalizeEditableObjectType } from "../domain/placeables/editableObjectBuckets.js";
 import { DEFAULT_SOUND_PRESET_ID, findSoundPresetById, getSoundPresetDefaultParams, getSoundPresetForType } from "../domain/sound/soundPresets.js";
 import { normalizeSoundSourceValue } from "../domain/sound/sourceReference.js";
 import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
@@ -1162,6 +1170,34 @@ export function createEditorApp({
     return preset?.defaultVariant || variants[0] || "a";
   };
 
+
+  const resolveEntityPlacementPreset = (presetId) => {
+    const normalizedPresetId = normalizeEditableObjectType(presetId);
+    const entityPreset = findEntityPresetById(normalizedPresetId)
+      || findEntityPresetByType(normalizedPresetId);
+
+    if (entityPreset) return entityPreset;
+
+    const decorPreset = findDecorPresetById(normalizedPresetId) || findDecorPresetByType(normalizedPresetId);
+    if (decorPreset && isEntityLikeEditableType(decorPreset.type)) {
+      return getEntityPresetForType(decorPreset.type);
+    }
+
+    if (isEntityLikeEditableType(normalizedPresetId)) {
+      return getEntityPresetForType(normalizedPresetId);
+    }
+
+    return null;
+  };
+
+  const resolveDecorPlacementPreset = (presetId) => {
+    const normalizedPresetId = normalizeEditableObjectType(presetId);
+    if (isEntityLikeEditableType(normalizedPresetId)) return null;
+    return findDecorPresetById(normalizedPresetId)
+      || findDecorPresetByType(normalizedPresetId)
+      || findDecorPresetById(DEFAULT_DECOR_PRESET_ID);
+  };
+
   const createDecorDraft = (
     doc,
     x,
@@ -1171,7 +1207,7 @@ export function createEditorApp({
     options = {},
   ) => {
     const placement = clampDecorPosition(doc, x, y);
-    const preset = findDecorPresetById(presetId) || findDecorPresetById(DEFAULT_DECOR_PRESET_ID);
+    const preset = resolveDecorPlacementPreset(presetId);
 
     return {
       id: options.id || `decor-${nextNumber}`,
@@ -1259,7 +1295,7 @@ export function createEditorApp({
 
   const createEntityDraft = (doc, x, y, presetId = DEFAULT_ENTITY_PRESET_ID, nextNumber = (doc.entities?.length || 0) + 1) => {
     const placement = clampEntityPosition(doc, x, y);
-    const preset = findEntityPresetById(presetId) || findEntityPresetById(DEFAULT_ENTITY_PRESET_ID);
+    const preset = resolveEntityPlacementPreset(presetId) || findEntityPresetById(DEFAULT_ENTITY_PRESET_ID);
 
     return {
       id: `entity-${nextNumber}`,
@@ -1268,7 +1304,7 @@ export function createEditorApp({
       x: placement.x,
       y: placement.y,
       visible: true,
-      params: getEntityPresetDefaultParams(preset?.id || DEFAULT_ENTITY_PRESET_ID),
+      params: getEntityPresetParamsForType(preset?.type || DEFAULT_ENTITY_PRESET_ID, getEntityPresetDefaultParams(preset?.id || DEFAULT_ENTITY_PRESET_ID)),
     };
   };
 
@@ -1713,6 +1749,11 @@ export function createEditorApp({
   const createDecorAtCell = (draft, cell, presetId = draft.interaction.activeDecorPresetId || DEFAULT_DECOR_PRESET_ID) => {
     const doc = draft.document.active;
     if (!doc || !cell) return null;
+
+    const entityPreset = resolveEntityPlacementPreset(presetId);
+    if (entityPreset) {
+      return createEntityAtCell(draft, cell, entityPreset.id);
+    }
 
     const decor = createDecorDraft(doc, cell.x, cell.y, presetId, (doc.decor?.length || 0) + 1);
     doc.decor.push(decor);
@@ -2209,6 +2250,11 @@ export function createEditorApp({
     const doc = draft.document.active;
     if (!doc || !cell) return null;
 
+    const decorPreset = resolveDecorPlacementPreset(presetId);
+    if (decorPreset && !resolveEntityPlacementPreset(presetId) && presetId !== decorPreset.id) {
+      return createDecorAtCell(draft, cell, decorPreset.id);
+    }
+
     const entities = doc.entities;
     const entity = createEntityDraft(doc, cell.x, cell.y, presetId, entities.length + 1);
     entities.push(entity);
@@ -2315,10 +2361,18 @@ export function createEditorApp({
 
       if (field === "name" || field === "type") {
         const trimmed = String(value || "").trim();
-        const nextValue = trimmed || entity[field];
+        const nextValue = field === "type"
+          ? (normalizeEditableObjectType(trimmed) || entity[field])
+          : (trimmed || entity[field]);
         if (entity[field] === nextValue) return;
         const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
-        const nextEntity = { ...entity, [field]: nextValue };
+        const nextEntity = {
+          ...entity,
+          [field]: nextValue,
+          params: field === "type"
+            ? getEntityPresetParamsForType(nextValue, entity.params)
+            : cloneEntityParams(entity.params),
+        };
         doc.entities.splice(index, 1, nextEntity);
         pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
         return;
@@ -2353,6 +2407,18 @@ export function createEditorApp({
 
       if (field === 'preset') {
         const nextPresetId = typeof value === 'string' ? value : null;
+        const entityPreset = resolveEntityPlacementPreset(nextPresetId);
+        if (entityPreset) {
+          draft.interaction.activeEntityPresetId =
+            draft.interaction.activeEntityPresetId === entityPreset.id ? null : entityPreset.id;
+          draft.interaction.activeDecorPresetId = null;
+          draft.interaction.activeSoundPresetId = null;
+          draft.interaction.activeTool = EDITOR_TOOLS.INSPECT;
+          applyCanvasTarget(draft, "entity");
+          clearDecorScatterDrag(draft);
+          return;
+        }
+
         draft.interaction.activeDecorPresetId =
           draft.interaction.activeDecorPresetId === nextPresetId ? null : nextPresetId;
         draft.interaction.activeEntityPresetId = null;

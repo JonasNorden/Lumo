@@ -3,6 +3,17 @@ import { getSelectedEntityIndices, isEntitySelected } from "../../domain/entitie
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
 
 function getEntityCenter(entity, tileSize) {
+  const visual = getEntityVisual(entity.type);
+  const footprintW = Math.max(1, visual.footprintW || visual.drawW || tileSize);
+  const footprintH = Math.max(1, visual.footprintH || visual.drawH || tileSize);
+
+  if (visual.drawAnchor === "BL") {
+    return {
+      x: entity.x * tileSize + (footprintW / 2),
+      y: entity.y * tileSize + tileSize - (footprintH / 2),
+    };
+  }
+
   return {
     x: (entity.x + 0.5) * tileSize,
     y: (entity.y + 0.5) * tileSize,
@@ -103,7 +114,7 @@ function drawEntityMarker(ctx, entity, x, y, viewport, { isSelected, isHovered, 
     drawEntityFallback(ctx, x, y, 7 * zoomScale, visual.label);
   }
 
-  if (visual.key === "lantern") {
+  if (visual.key === "lantern_01") {
     ctx.beginPath();
     ctx.arc(x, y, focusRadius + 2.2 * zoomScale, 0, Math.PI * 2);
     ctx.strokeStyle = preview ? "rgba(255, 223, 141, 0.34)" : "rgba(255, 209, 102, 0.32)";
