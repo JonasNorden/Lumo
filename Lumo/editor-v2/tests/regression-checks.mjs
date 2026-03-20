@@ -771,6 +771,8 @@ function runUiRegressionChecks() {
   assert.equal(panel.innerHTML.includes('data-section-toggle="tiles"'), true, "tiles section should still render a collapse toggle");
   assert.equal(panel.innerHTML.includes('<span class="sectionTitle">TILES</span>'), true, "tiles section should still render its title");
   assert.equal(panel.innerHTML.includes('class="sectionHeaderRow"'), true, "tiles section should render the compact header row wrapper");
+  assert.equal(panel.innerHTML.includes('role="button"'), true, "collapsible section headers should expose button semantics on the full header row");
+  assert.equal(panel.innerHTML.includes('tabindex="0"'), true, "collapsible section headers should remain keyboard focusable");
   assert.equal(tilesControlMarkup.includes('aria-label="Mode"'), true, "tiles controls should keep an accessible mode label");
   assert.equal(tilesControlMarkup.includes('aria-label="Size"'), true, "tiles controls should keep an accessible size label");
   assert.equal(tilesControlMarkup.includes('<span class="label">Mode</span>'), false, "tiles controls should no longer render a visible mode label");
@@ -805,11 +807,13 @@ function runUiRegressionChecks() {
   assert.equal(panel.innerHTML.includes("Music Zone"), true, "sound selector should expose music zones");
   const soundMarkup = panel.innerHTML.match(/<section class="panelSection soundSection[^>]*" aria-label="SOUND section">[\s\S]*?<\/section>/)?.[0] || "";
   assert.equal(soundMarkup.includes('soundHeaderSelectField'), true, "sound panel should render the preset dropdown inline in the header row");
+  assert.equal(soundMarkup.includes('sectionHeaderControls'), true, "sound header should preserve its inline control wrapper inside the compact header layout");
   assert.equal(soundMarkup.includes('aria-label="Select Sound"'), true, "sound header selector should keep an accessible label");
   assert.equal(soundMarkup.includes('<span class="label">Select Sound</span>'), false, "sound panel should not render a redundant visible selector label");
   assert.equal(soundMarkup.includes('statusCardLabel">Placement'), false, "sound panel should not render a placement status card");
   assert.equal(soundMarkup.includes('Placing: Spot Sound'), false, "sound panel should not duplicate the selected sound type in body content");
   assert.equal(soundMarkup.includes('Alt/Option + Click places'), false, "sound panel should not render the redundant placement hint card");
+  assert.equal(soundMarkup.includes('class="toolButton isSecondary soundClearButton"'), true, "sound panel clear action should use the tightened compact button styling hook");
 
   const collapsedTilesState = {
     ...baseState,
@@ -823,6 +827,10 @@ function runUiRegressionChecks() {
   assert.equal(panel.innerHTML.includes('class="panelSection tilesSection isCollapsed"'), true, "tiles section should render collapsed when its panelSections state is false");
   assert.equal(panel.innerHTML.includes('aria-expanded="false"'), true, "collapsed sections should expose aria-expanded false");
   assert.equal(brushPanelSource.includes('const sectionToggleButton = target.closest("[data-section-toggle]");'), true, "brush panel should bind click handling for collapsible section toggles");
+  assert.equal(brushPanelSource.includes('function togglePanelSection(store, sectionId) {'), true, "brush panel should centralize collapsible section state updates");
+  assert.equal(brushPanelSource.includes('function isInteractiveHeaderControl(target, sectionToggleTarget) {'), true, "brush panel should guard inline header controls from toggling sections");
+  assert.equal(brushPanelSource.includes('if (isInteractiveHeaderControl(target, sectionToggleButton)) return;'), true, "header-row toggles should ignore compact inline controls like the sound selector");
+  assert.equal(brushPanelSource.includes('if (event.key !== "Enter" && event.key !== " ") return;'), true, "header-row toggles should remain keyboard accessible");
   assert.equal(brushPanelSource.includes('panelSections[sectionId] = !isOpen;'), true, "brush panel toggle handler should invert stored open/closed state");
 
   const decorState = {
