@@ -783,7 +783,18 @@ function runUiRegressionChecks() {
   assert.equal(panel.innerHTML.includes('sectionEyebrow'), false, "panel headers should no longer render the redundant section eyebrow label");
   assert.equal(panel.innerHTML.includes('<span class="label">Current</span>'), true, "brush panel should still expose current-state summaries outside the compact tools/layer rows");
   assert.equal(/<span class=\"label\">Current<\/span>\s*<span class=\"value\">Entities<\/span>/.test(panel.innerHTML), false, "layer panel should not render a redundant current-layer row");
-  assert.equal(panel.innerHTML.includes("Alt/Option + Click places"), true, "entity placement hint should mention Alt/Option + Click");
+  assert.equal(panel.innerHTML.includes("Lantern · Alt/Option + Click"), true, "entity status row should carry the active preset and placement readiness summary");
+  const entitiesMarkup = panel.innerHTML.match(/<section class="panelSection [^>]*" aria-label="ENTITIES section">[\s\S]*?<\/section>/)?.[0] || "";
+  assert.equal(entitiesMarkup.includes('statusCardLabel">Placement'), false, "entity panel should no longer render a separate placement status card");
+  const entityInactiveState = {
+    ...baseState,
+    interaction: {
+      ...baseState.interaction,
+      activeEntityPresetId: null,
+    },
+  };
+  renderBrushPanel(panel, entityInactiveState);
+  assert.equal(panel.innerHTML.includes("Select an entity preset"), true, "entity status row should prompt for a preset when placement is not armed");
   assert.equal(panel.innerHTML.includes('data-scan-action="play"'), true, "scan controls should expose a play button");
   assert.equal(panel.innerHTML.includes('data-scan-action="pause"'), true, "scan controls should expose a pause button");
   assert.equal(panel.innerHTML.includes('data-scan-action="stop"'), true, "scan controls should expose a stop button");
@@ -832,6 +843,7 @@ function runUiRegressionChecks() {
   };
   renderBrushPanel(panel, decorInactiveState);
   assert.equal(panel.innerHTML.includes("Select a decor preset"), true, "decor status row should prompt for a preset when placement is not armed");
+
 }
 
 function runSoundBatchSelectionRegressionChecks() {

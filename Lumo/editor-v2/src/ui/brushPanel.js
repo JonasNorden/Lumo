@@ -193,14 +193,15 @@ function renderTileSelectionSummary(activeTileSprite) {
 function renderEntitiesSettings(state) {
   const activePresetId = state.interaction.activeEntityPresetId;
   const activePreset = ENTITY_PRESETS.find((preset) => preset.id === activePresetId) || null;
-  const placementLabel = activePreset ? `Placing: ${activePreset.defaultName}` : "No placement";
-  const placementHint = activePreset ? "Alt/Option + Click places" : "Select a preset to arm placement";
+  const placementStatus = activePreset ? `${activePreset.defaultName} · Alt/Option + Click` : "Select an entity preset";
 
   return `
     ${renderAssetPicker("Entity presets", "entity-preset-button", PLACEABLE_ENTITY_PRESETS, activePresetId, "No entity selected")}
-    ${renderPlacementBlock(placementLabel, placementHint)}
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton isSecondary" data-entity-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
+    </div>
+    <div class="statusRow compactStatusRow entityPlacementStatusRow">
+      <span class="value">${escapeHtml(placementStatus)}</span>
     </div>
   `;
 }
