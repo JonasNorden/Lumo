@@ -21,6 +21,14 @@ import { renderBrushPanel } from "../src/ui/brushPanel.js";
 import { renderBottomPanel } from "../src/ui/bottomPanel.js";
 import { renderInspector } from "../src/ui/inspectorPanel.js";
 import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
+import {
+  createNewLevelDocument,
+  DEFAULT_NEW_LEVEL_HEIGHT,
+  DEFAULT_NEW_LEVEL_WIDTH,
+  MAX_LEVEL_DIMENSION,
+  MIN_LEVEL_DIMENSION,
+  sanitizeLevelDimension,
+} from "../src/data/createNewLevelDocument.js";
 import { serializeLevelDocument } from "../src/data/exportLevelDocument.js";
 import {
   getScanActivity,
@@ -130,6 +138,21 @@ function runTileRegressionChecks() {
 
   redoTileEdit(doc, history);
   assert.equal(doc.tiles.base[5], 0, "redo should reapply the tile erase");
+}
+
+function runNewLevelDocumentRegressionChecks() {
+  const defaultDoc = createNewLevelDocument();
+  assert.equal(defaultDoc.dimensions.width, DEFAULT_NEW_LEVEL_WIDTH, "new level should use the default width");
+  assert.equal(defaultDoc.dimensions.height, DEFAULT_NEW_LEVEL_HEIGHT, "new level should use the default height");
+  assert.equal(defaultDoc.tiles.base.length, DEFAULT_NEW_LEVEL_WIDTH * DEFAULT_NEW_LEVEL_HEIGHT, "new level tiles should match the default dimensions");
+
+  const resizedDoc = createNewLevelDocument({ width: 64, height: 24 });
+  assert.equal(resizedDoc.dimensions.width, 64, "new level should accept a custom width");
+  assert.equal(resizedDoc.dimensions.height, 24, "new level should accept a custom height");
+  assert.equal(resizedDoc.tiles.base.length, 64 * 24, "new level tiles should match the custom dimensions");
+
+  assert.equal(sanitizeLevelDimension("5", DEFAULT_NEW_LEVEL_WIDTH), MIN_LEVEL_DIMENSION, "dimension sanitizing should clamp to the minimum");
+  assert.equal(sanitizeLevelDimension("999", DEFAULT_NEW_LEVEL_WIDTH), MAX_LEVEL_DIMENSION, "dimension sanitizing should clamp to the maximum");
 }
 
 function runEntityRegressionChecks() {
@@ -1667,6 +1690,7 @@ function runSourceRegressionChecks() {
 
 async function main() {
   runTileRegressionChecks();
+  runNewLevelDocumentRegressionChecks();
   runEntityRegressionChecks();
   runFogVolumeRegressionChecks();
   runFogPlacementPreviewRegressionChecks();
