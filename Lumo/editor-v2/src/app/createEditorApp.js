@@ -47,6 +47,7 @@ import { DEFAULT_DECOR_PRESET_ID, findDecorPresetById } from "../domain/decor/de
 import { DEFAULT_SOUND_PRESET_ID, findSoundPresetById, getSoundPresetDefaultParams, getSoundPresetForType } from "../domain/sound/soundPresets.js";
 import { normalizeSoundSourceValue } from "../domain/sound/sourceReference.js";
 import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
+import { createSoundPreviewController, getSoundPreviewKey } from "../domain/sound/soundPreviewPlayback.js";
 import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
 import {
   finishScanPlaybackState,
@@ -433,6 +434,58 @@ export function createEditorApp({
   let scanAnimationFrame = 0;
   let scanPlaybackToken = 0;
   const scanAudioPlayback = createScanAudioPlaybackController();
+  const soundPreviewPlayback = createSoundPreviewController();
+
+  const setSoundPreviewState = (draft, updates = {}) => {
+    draft.soundPreview = {
+      playbackState: "idle",
+      soundIndex: null,
+      soundId: null,
+      source: null,
+      error: null,
+      ...draft.soundPreview,
+      ...updates,
+    };
+  };
+
+  const clearSoundPreviewState = (draft, error = null) => {
+    setSoundPreviewState(draft, {
+      playbackState: "idle",
+      soundIndex: null,
+      soundId: null,
+      source: null,
+      error,
+    });
+  };
+
+  const stopSoundPreview = (error = null) => {
+    soundPreviewPlayback.stop();
+    store.setState((draft) => {
+      clearSoundPreviewState(draft, error);
+    });
+  };
+
+  const syncSoundPreviewLifecycle = (state) => {
+    const previewState = state?.soundPreview;
+    if (!previewState || previewState.playbackState !== "playing") return;
+
+    const selectedIndices = getSelectedSoundIndices(state.interaction);
+    if (state?.scan?.playbackState !== "idle") {
+      stopSoundPreview("Preview is unavailable while scan playback is active.");
+      return;
+    }
+
+    if (selectedIndices.length !== 1 || selectedIndices[0] !== previewState.soundIndex) {
+      stopSoundPreview();
+      return;
+    }
+
+    const sound = state?.document?.active?.sounds?.[previewState.soundIndex];
+    const previewKey = getSoundPreviewKey(sound, previewState.soundIndex);
+    if (!sound || previewKey !== soundPreviewPlayback.getActiveKey() || previewKey === null) {
+      stopSoundPreview();
+    }
+  };
 
   const syncScanAudioPlayback = (state) => {
     scanAudioPlayback.sync({
@@ -1889,6 +1942,62 @@ export function createEditorApp({
         if (index >= 0 && index < soundItems.length) {
           selectRelatedSounds(draft, index, value);
         }
+        return;
+      }
+
+      if (field === "preview-play") {
+        if (draft.scan.playbackState !== "idle") {
+          soundPreviewPlayback.stop();
+          clearSoundPreviewState(draft, "Preview is unavailable while scan playback is active.");
+          return;
+        }
+
+        const sound = soundItems[index];
+        if (!sound) {
+          clearSoundPreviewState(draft, "Select a sound source to preview.");
+          return;
+        }
+
+        const playbackResult = soundPreviewPlayback.play({
+          sound,
+          soundIndex: index,
+          onEnded: () => {
+            store.setState((nextDraft) => {
+              if (nextDraft.soundPreview.soundIndex !== index) return;
+              clearSoundPreviewState(nextDraft);
+            });
+          },
+          onError: () => {
+            store.setState((nextDraft) => {
+              if (nextDraft.soundPreview.soundIndex !== index) return;
+              clearSoundPreviewState(nextDraft, "Preview failed to load.");
+            });
+          },
+        });
+
+        if (!playbackResult.ok) {
+          clearSoundPreviewState(
+            draft,
+            playbackResult.reason === "missing-source"
+              ? "Assign a source asset to preview it."
+              : "Preview is unavailable in this browser.",
+          );
+          return;
+        }
+
+        setSoundPreviewState(draft, {
+          playbackState: "playing",
+          soundIndex: index,
+          soundId: sound.id || null,
+          source: playbackResult.source,
+          error: null,
+        });
+        return;
+      }
+
+      if (field === "preview-stop") {
+        clearSoundPreviewState(draft);
+        soundPreviewPlayback.stop();
         return;
       }
 
@@ -3742,6 +3851,7 @@ export function createEditorApp({
 
   const unsubscribe = store.subscribe(draw);
   const unsubscribeScanAudio = store.subscribe(syncScanAudioPlayback);
+  const unsubscribeSoundPreview = store.subscribe(syncSoundPreviewLifecycle);
   const panelBindingOptions = {
     onEntityUpdate: updateEntity,
     onDecorUpdate: updateDecor,
@@ -3779,8 +3889,10 @@ export function createEditorApp({
   return () => {
     invalidateScanPlayback();
     scanAudioPlayback.destroy();
+    soundPreviewPlayback.destroy();
     unsubscribe();
     unsubscribeScanAudio();
+    unsubscribeSoundPreview();
     unbindInspectorPanel();
     unbindBottomPanel();
     unbindBrushPanel();

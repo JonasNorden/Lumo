@@ -280,7 +280,48 @@ function renderSoundTypeField(sound, selectedSoundIndex) {
   `;
 }
 
-function renderSoundSourceField(sound, selectedSoundIndex) {
+function renderSoundPreviewControls(sound, selectedSoundIndex, previewState, scanState) {
+  const authoredSource = getAuthoredSoundSource(sound) || "";
+  const isPreviewingSelectedSound = previewState?.playbackState === "playing" && previewState?.soundIndex === selectedSoundIndex;
+  const hasPreviewError = Boolean(previewState?.error) && previewState?.soundIndex === selectedSoundIndex;
+  const scanIsActive = (scanState?.playbackState || "idle") !== "idle";
+  const statusLabel = scanIsActive
+    ? "Scan active"
+    : isPreviewingSelectedSound
+      ? "Previewing"
+      : hasPreviewError
+        ? previewState.error
+        : authoredSource
+          ? "Ready"
+          : "No source";
+  const statusTone = scanIsActive ? "warning" : isPreviewingSelectedSound ? "active" : hasPreviewError ? "error" : "idle";
+
+  return `
+    <span class="selectionFieldActions selectionSoundPreviewActions">
+      <button
+        type="button"
+        class="selectionActionPill ${isPreviewingSelectedSound ? "isActive" : ""}"
+        data-sound-action="preview-play"
+        data-sound-index="${selectedSoundIndex}"
+        ${!authoredSource || scanIsActive ? "disabled" : ""}
+      >
+        Play
+      </button>
+      <button
+        type="button"
+        class="selectionActionPill"
+        data-sound-action="preview-stop"
+        data-sound-index="${selectedSoundIndex}"
+        ${isPreviewingSelectedSound ? "" : "disabled"}
+      >
+        Stop
+      </button>
+      <span class="selectionStatusPill is-${escapeHtml(statusTone)}">${escapeHtml(statusLabel)}</span>
+    </span>
+  `;
+}
+
+function renderSoundSourceField(sound, selectedSoundIndex, previewState, scanState) {
   const authoredSource = getAuthoredSoundSource(sound) || "";
   const selectedAsset = findSoundAssetByPath(authoredSource);
   const assetOptions = getSoundAssetOptionsForType(sound?.type);
@@ -324,6 +365,7 @@ function renderSoundSourceField(sound, selectedSoundIndex) {
   return `
     <div class="selectionInlineCluster selectionSoundSourceCluster">
       ${fieldMarkup}
+      ${renderSoundPreviewControls(sound, selectedSoundIndex, previewState, scanState)}
       ${renderSoundSmartSelectActions(selectedSoundIndex)}
     </div>
   `;
@@ -489,11 +531,11 @@ function renderDecorEditor(decor, selectedDecorIndex) {
   ].join(""));
 }
 
-function renderSoundEditor(sound, selectedSoundIndex) {
+function renderSoundEditor(sound, selectedSoundIndex, previewState, scanState) {
   return renderSelectionFields([
     renderTextField("sound", "name", "Name", sound.name, selectedSoundIndex, "selectionFieldName"),
     renderSoundTypeField(sound, selectedSoundIndex),
-    renderSoundSourceField(sound, selectedSoundIndex),
+    renderSoundSourceField(sound, selectedSoundIndex, previewState, scanState),
     renderNumberField("sound", "x", "X", sound.x, selectedSoundIndex),
     renderNumberField("sound", "y", "Y", sound.y, selectedSoundIndex),
     renderCheckboxField("sound", "visible", "Visible", sound.visible, selectedSoundIndex, "selectionFieldToggle"),
@@ -564,7 +606,7 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
     if (soundMode === "summary") {
       return { markup: "", isEmpty: true };
     }
-    return { markup: renderSoundEditor(selectedSound, selectedSoundIndex), isEmpty: false };
+    return { markup: renderSoundEditor(selectedSound, selectedSoundIndex, state.soundPreview, state.scan), isEmpty: false };
   }
 
   return {
@@ -692,6 +734,10 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const index = Number.parseInt(soundActionButton.dataset.soundIndex || "", 10);
     if (action === "smart-select" && Number.isInteger(index) && index >= 0) {
       onSoundUpdate?.(index, "smart-select", soundActionButton.dataset.soundSelectionMode || null);
+      return;
+    }
+    if ((action === "preview-play" || action === "preview-stop") && Number.isInteger(index) && index >= 0) {
+      onSoundUpdate?.(index, action, null);
     }
   };
 

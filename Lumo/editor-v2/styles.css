@@ -881,6 +881,10 @@ select {
   gap: 4px;
 }
 
+.selectionSoundPreviewActions {
+  gap: 3px;
+}
+
 .selectionSoundSmartActions {
   flex-wrap: nowrap;
   gap: 3px;
@@ -913,6 +917,46 @@ select {
 .selectionActionPill:focus-visible {
   outline: 2px solid rgba(110, 168, 254, 0.85);
   outline-offset: 1px;
+}
+
+.selectionActionPill.isActive {
+  border-color: rgba(255, 179, 71, 0.62);
+  background: rgba(62, 43, 18, 0.95);
+  color: #ffe6be;
+}
+
+.selectionActionPill:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.selectionStatusPill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border: 1px solid rgba(92, 113, 158, 0.3);
+  border-radius: 999px;
+  background: rgba(24, 31, 45, 0.82);
+  color: #aebfdf;
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.selectionStatusPill.is-active {
+  border-color: rgba(255, 179, 71, 0.45);
+  color: #ffd38c;
+}
+
+.selectionStatusPill.is-warning {
+  border-color: rgba(255, 205, 118, 0.34);
+  color: #ffdc98;
+}
+
+.selectionStatusPill.is-error {
+  border-color: rgba(255, 126, 126, 0.38);
+  color: #ffb0b0;
 }
 
 .entityPositionGrid,
