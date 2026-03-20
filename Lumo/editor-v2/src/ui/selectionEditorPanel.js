@@ -221,14 +221,56 @@ function resolveSharedValue(values) {
   return remainingValues.every((value) => value === firstValue) ? firstValue : MIXED_FIELD_VALUE;
 }
 
-function formatSelectionCountLabel(count) {
-  return `${count} sound object${count === 1 ? "" : "s"}`;
-}
-
 function renderSelectionFields(fieldMarkup) {
   return `
     <div class="selectionInspectorCard compactSelectionCard">
       <div class="selectionEditorFlow">${fieldMarkup}</div>
+    </div>
+  `;
+}
+
+function renderSmartSelectPill(selectedSoundIndex, mode, label, className = "") {
+  return `
+    <button
+      type="button"
+      class="selectionActionPill ${escapeHtml(className)}"
+      data-sound-action="smart-select"
+      data-sound-selection-mode="${escapeHtml(mode)}"
+      data-sound-index="${selectedSoundIndex}"
+    >
+      ${escapeHtml(label)}
+    </button>
+  `;
+}
+
+function renderFieldActions(actions, className = "") {
+  if (!actions.length) return "";
+
+  return `
+    <span class="selectionFieldActions ${escapeHtml(className)}">
+      ${actions.join("")}
+    </span>
+  `;
+}
+
+function renderReadOnlyField(label, value, className = "") {
+  const classes = ["fieldRow", "fieldRowCompact", "selectionInlineField", "selectionReadOnlyField", className].filter(Boolean).join(" ");
+  return `
+    <div class="${classes}">
+      <span class="label">${escapeHtml(label)}</span>
+      <span class="selectionValueChip">${escapeHtml(value)}</span>
+    </div>
+  `;
+}
+
+function renderSoundTypeField(sound, selectedSoundIndex) {
+  const soundTypeOptions = SOUND_PRESETS.map((preset) => ({ value: preset.type, label: preset.defaultName }));
+  return `
+    <div class="selectionInlineCluster selectionSoundTypeCluster">
+      ${renderSelectField("sound", "type", "Type", sound.type, selectedSoundIndex, soundTypeOptions, "selectionFieldType")}
+      ${renderFieldActions([
+        renderSmartSelectPill(selectedSoundIndex, "same-type", "same type"),
+      ])}
     </div>
   `;
 }
@@ -238,62 +280,49 @@ function renderSoundSourceField(sound, selectedSoundIndex) {
   const selectedAsset = findSoundAssetByPath(authoredSource);
   const assetOptions = getSoundAssetOptionsForType(sound?.type);
 
-  if (!assetOptions.length) {
-    return `
-      ${renderTextField("sound", "source", "Source", authoredSource, selectedSoundIndex, "selectionFieldVariant selectionParamField selectionSourceField")}
-      <span class="selectionInlineHint">No repo audio assets were discovered, so the raw source field remains available as a fallback.</span>
-    `;
-  }
+  const fieldMarkup = !assetOptions.length
+    ? renderTextField("sound", "source", "Source", authoredSource, selectedSoundIndex, "selectionFieldVariant selectionParamField selectionSourceField")
+    : (() => {
+      const optionMarkup = [];
 
-  const optionMarkup = [];
+      optionMarkup.push(`<option value="" ${!authoredSource ? "selected" : ""}>Unassigned</option>`);
 
-  optionMarkup.push(`<option value="" ${!authoredSource ? "selected" : ""}>Unassigned</option>`);
+      const seenCategories = new Set();
+      for (const asset of assetOptions) {
+        if (!seenCategories.has(asset.category)) {
+          if (seenCategories.size > 0) optionMarkup.push("</optgroup>");
+          optionMarkup.push(`<optgroup label="${escapeHtml(getSoundAssetCategoryLabel(asset.category))}">`);
+          seenCategories.add(asset.category);
+        }
 
-  const seenCategories = new Set();
-  for (const asset of assetOptions) {
-    if (!seenCategories.has(asset.category)) {
+        const optionLabel = asset.hint && asset.hint !== getSoundAssetCategoryLabel(asset.category)
+          ? `${asset.label} · ${asset.hint}`
+          : asset.label;
+        optionMarkup.push(`<option value="${escapeHtml(asset.value)}" ${asset.value === authoredSource ? "selected" : ""}>${escapeHtml(optionLabel)}</option>`);
+      }
       if (seenCategories.size > 0) optionMarkup.push("</optgroup>");
-      optionMarkup.push(`<optgroup label="${escapeHtml(getSoundAssetCategoryLabel(asset.category))}">`);
-      seenCategories.add(asset.category);
-    }
 
-    const optionLabel = asset.hint && asset.hint !== getSoundAssetCategoryLabel(asset.category)
-      ? `${asset.label} · ${asset.hint}`
-      : asset.label;
-    optionMarkup.push(`<option value="${escapeHtml(asset.value)}" ${asset.value === authoredSource ? "selected" : ""}>${escapeHtml(optionLabel)}</option>`);
-  }
-  if (seenCategories.size > 0) optionMarkup.push("</optgroup>");
+      if (authoredSource && !selectedAsset) {
+        optionMarkup.push(`<option value="${escapeHtml(authoredSource)}" selected>Custom source · ${escapeHtml(authoredSource)}</option>`);
+      }
 
-  if (authoredSource && !selectedAsset) {
-    optionMarkup.push(`<option value="${escapeHtml(authoredSource)}" selected>Custom source · ${escapeHtml(authoredSource)}</option>`);
-  }
-
-  const sourceMeta = selectedAsset
-    ? `${selectedAsset.label} · ${selectedAsset.hint}`
-    : authoredSource
-      ? authoredSource
-      : "Pick an in-repo audio asset after placing the sound.";
+      return `
+        <label class="fieldRow fieldRowCompact selectionInlineField selectionSourceField selectionSourcePickerField">
+          <span class="label">Source</span>
+          <select data-sound-field="source" data-sound-index="${selectedSoundIndex}">
+            ${optionMarkup.join("")}
+          </select>
+        </label>
+      `;
+    })();
 
   return `
-    <label class="fieldRow fieldRowCompact selectionInlineField selectionSourceField selectionSourcePickerField">
-      <span class="label">Source</span>
-      <select data-sound-field="source" data-sound-index="${selectedSoundIndex}">
-        ${optionMarkup.join("")}
-      </select>
-    </label>
-    <span class="selectionInlineHint selectionSourceMeta">${escapeHtml(sourceMeta)}</span>
-  `;
-}
-
-function renderSmartSoundSelectionActions(selectedSoundIndex, label = "Smart select") {
-  return `
-    <div class="selectionInlineGroup selectionActionGroup">
-      <span class="selectionInlineHint selectionActionLabel">${escapeHtml(label)}</span>
-      <div class="compactActionRow compactActionRowTriple selectionActionRow">
-        <button type="button" class="toolButton isSecondary" data-sound-action="smart-select" data-sound-selection-mode="same-type" data-sound-index="${selectedSoundIndex}">Same type</button>
-        <button type="button" class="toolButton isSecondary" data-sound-action="smart-select" data-sound-selection-mode="same-source" data-sound-index="${selectedSoundIndex}">Same source</button>
-        <button type="button" class="toolButton isSecondary" data-sound-action="smart-select" data-sound-selection-mode="same-type-source" data-sound-index="${selectedSoundIndex}">Type + source</button>
-      </div>
+    <div class="selectionInlineCluster selectionSoundSourceCluster">
+      ${fieldMarkup}
+      ${renderFieldActions([
+        renderSmartSelectPill(selectedSoundIndex, "same-source", "same source"),
+        renderSmartSelectPill(selectedSoundIndex, "same-type-source", "type + source"),
+      ])}
     </div>
   `;
 }
@@ -312,13 +341,27 @@ function getBatchSoundAssetOptions(selectedSounds) {
   });
 }
 
-function renderBatchSoundSourceField(selectedSounds) {
+function renderBatchSoundTypeSummary(selectedSounds, selectedSoundIndex) {
+  const sharedType = resolveSharedValue(selectedSounds.map((sound) => sound?.type || ""));
+  const typeLabel = sharedType === MIXED_FIELD_VALUE ? "Mixed" : sharedType || "Unassigned";
+
+  return `
+    <div class="selectionInlineCluster selectionSoundTypeCluster">
+      ${renderReadOnlyField("Type", typeLabel, "selectionFieldType")}
+      ${renderFieldActions([
+        renderSmartSelectPill(selectedSoundIndex, "same-type", "same type"),
+      ])}
+    </div>
+  `;
+}
+
+function renderBatchSoundSourceField(selectedSounds, selectedSoundIndex) {
   const sharedSource = resolveSharedValue(selectedSounds.map((sound) => getAuthoredSoundSource(sound) || ""));
   const selectedAsset = sharedSource && sharedSource !== MIXED_FIELD_VALUE ? findSoundAssetByPath(sharedSource) : null;
   const assetOptions = getBatchSoundAssetOptions(selectedSounds);
 
-  if (!assetOptions.length) {
-    return `
+  const fieldMarkup = !assetOptions.length
+    ? `
       <label class="fieldRow fieldRowCompact selectionInlineField selectionParamField selectionSourceField">
         <span class="label">Source</span>
         <input
@@ -329,52 +372,52 @@ function renderBatchSoundSourceField(selectedSounds) {
           data-sound-index="-1"
         />
       </label>
-      <span class="selectionInlineHint">Applies the entered source to every selected sound.</span>
-    `;
-  }
+    `
+    : (() => {
+      const optionMarkup = [];
+      if (sharedSource === MIXED_FIELD_VALUE) {
+        optionMarkup.push(`<option value="${MIXED_FIELD_VALUE}" selected disabled>Mixed source</option>`);
+      } else {
+        optionMarkup.push(`<option value="" ${!sharedSource ? "selected" : ""}>Unassigned</option>`);
+      }
 
-  const optionMarkup = [];
-  if (sharedSource === MIXED_FIELD_VALUE) {
-    optionMarkup.push(`<option value="${MIXED_FIELD_VALUE}" selected disabled>Mixed source</option>`);
-  } else {
-    optionMarkup.push(`<option value="" ${!sharedSource ? "selected" : ""}>Unassigned</option>`);
-  }
+      const seenCategories = new Set();
+      for (const asset of assetOptions) {
+        if (!seenCategories.has(asset.category)) {
+          if (seenCategories.size > 0) optionMarkup.push("</optgroup>");
+          optionMarkup.push(`<optgroup label="${escapeHtml(getSoundAssetCategoryLabel(asset.category))}">`);
+          seenCategories.add(asset.category);
+        }
 
-  const seenCategories = new Set();
-  for (const asset of assetOptions) {
-    if (!seenCategories.has(asset.category)) {
+        const optionLabel = asset.hint && asset.hint !== getSoundAssetCategoryLabel(asset.category)
+          ? `${asset.label} · ${asset.hint}`
+          : asset.label;
+        optionMarkup.push(`<option value="${escapeHtml(asset.value)}" ${asset.value === sharedSource ? "selected" : ""}>${escapeHtml(optionLabel)}</option>`);
+      }
       if (seenCategories.size > 0) optionMarkup.push("</optgroup>");
-      optionMarkup.push(`<optgroup label="${escapeHtml(getSoundAssetCategoryLabel(asset.category))}">`);
-      seenCategories.add(asset.category);
-    }
 
-    const optionLabel = asset.hint && asset.hint !== getSoundAssetCategoryLabel(asset.category)
-      ? `${asset.label} · ${asset.hint}`
-      : asset.label;
-    optionMarkup.push(`<option value="${escapeHtml(asset.value)}" ${asset.value === sharedSource ? "selected" : ""}>${escapeHtml(optionLabel)}</option>`);
-  }
-  if (seenCategories.size > 0) optionMarkup.push("</optgroup>");
+      if (sharedSource && sharedSource !== MIXED_FIELD_VALUE && !selectedAsset) {
+        optionMarkup.push(`<option value="${escapeHtml(sharedSource)}" selected>Custom source · ${escapeHtml(sharedSource)}</option>`);
+      }
 
-  if (sharedSource && sharedSource !== MIXED_FIELD_VALUE && !selectedAsset) {
-    optionMarkup.push(`<option value="${escapeHtml(sharedSource)}" selected>Custom source · ${escapeHtml(sharedSource)}</option>`);
-  }
-
-  const sourceMeta = sharedSource === MIXED_FIELD_VALUE
-    ? "Mixed source values. Picking one applies it to every selected sound."
-    : selectedAsset
-      ? `${selectedAsset.label} · ${selectedAsset.hint}`
-      : sharedSource
-        ? sharedSource
-        : "Pick one source to apply it across the current sound selection.";
+      return `
+        <label class="fieldRow fieldRowCompact selectionInlineField selectionSourceField selectionSourcePickerField">
+          <span class="label">Source</span>
+          <select data-sound-field="source" data-sound-index="-1">
+            ${optionMarkup.join("")}
+          </select>
+        </label>
+      `;
+    })();
 
   return `
-    <label class="fieldRow fieldRowCompact selectionInlineField selectionSourceField selectionSourcePickerField">
-      <span class="label">Source</span>
-      <select data-sound-field="source" data-sound-index="-1">
-        ${optionMarkup.join("")}
-      </select>
-    </label>
-    <span class="selectionInlineHint selectionSourceMeta">${escapeHtml(sourceMeta)}</span>
+    <div class="selectionInlineCluster selectionSoundSourceCluster">
+      ${fieldMarkup}
+      ${renderFieldActions([
+        renderSmartSelectPill(selectedSoundIndex, "same-source", "same source"),
+        renderSmartSelectPill(selectedSoundIndex, "same-type-source", "type + source"),
+      ])}
+    </div>
   `;
 }
 
@@ -412,23 +455,14 @@ function renderBatchSoundParamField(paramKey, label, inputType, value, options =
 }
 
 function renderBatchSoundEditor(selectedSounds, selectedSoundIndex) {
-  const sharedTypes = resolveSharedValue(selectedSounds.map((sound) => sound?.type || ""));
   const sharedSpatial = resolveSharedValue(selectedSounds.map((sound) => Boolean(sound?.params?.spatial)));
   const sharedVolume = resolveSharedValue(selectedSounds.map((sound) => sound?.params?.volume ?? 0));
   const sharedPitch = resolveSharedValue(selectedSounds.map((sound) => sound?.params?.pitch ?? 1));
   const sharedLoop = resolveSharedValue(selectedSounds.map((sound) => Boolean(sound?.params?.loop)));
-  const typeDetail = sharedTypes === MIXED_FIELD_VALUE ? "Mixed types" : `Type: ${sharedTypes || "spot"}`;
 
   return renderSelectionFields([
-    `
-      <div class="selectionInlineGroup selectionBatchHeader">
-        <span class="selectionEditorPlaceholderCount">Batch edit ${escapeHtml(formatSelectionCountLabel(selectedSounds.length))}</span>
-        <span class="selectionEditorPlaceholderDetail">${escapeHtml(typeDetail)}</span>
-        <span class="selectionEditorPlaceholderDetail">Changes apply only to the current sound selection.</span>
-      </div>
-    `,
-    renderSmartSoundSelectionActions(selectedSoundIndex, "Expand from primary"),
-    renderBatchSoundSourceField(selectedSounds),
+    renderBatchSoundTypeSummary(selectedSounds, selectedSoundIndex),
+    renderBatchSoundSourceField(selectedSounds, selectedSoundIndex),
     renderBatchSoundParamField("spatial", "Spatial", "boolean-select", sharedSpatial),
     renderBatchSoundParamField("volume", "Volume", "number", sharedVolume),
     renderBatchSoundParamField("pitch", "Pitch", "number", sharedPitch),
@@ -460,11 +494,9 @@ function renderDecorEditor(decor, selectedDecorIndex) {
 }
 
 function renderSoundEditor(sound, selectedSoundIndex) {
-  const soundTypeOptions = SOUND_PRESETS.map((preset) => ({ value: preset.type, label: preset.defaultName }));
   return renderSelectionFields([
-    renderSmartSoundSelectionActions(selectedSoundIndex),
     renderTextField("sound", "name", "Name", sound.name, selectedSoundIndex, "selectionFieldName"),
-    renderSelectField("sound", "type", "Type", sound.type, selectedSoundIndex, soundTypeOptions, "selectionFieldType"),
+    renderSoundTypeField(sound, selectedSoundIndex),
     renderSoundSourceField(sound, selectedSoundIndex),
     renderNumberField("sound", "x", "X", sound.x, selectedSoundIndex),
     renderNumberField("sound", "y", "Y", sound.y, selectedSoundIndex),
@@ -535,6 +567,9 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   }
 
   if (selectedSoundIndices.length > 1) {
+    if (soundMode === "summary") {
+      return { markup: "", isEmpty: true };
+    }
     return { markup: renderBatchSoundEditor(selectedSounds, selectedSoundIndex), isEmpty: false };
   }
 
