@@ -27,6 +27,13 @@ const VISIBLE_TOOL_OPTIONS = TOOL_OPTIONS.filter((option) => (
 
 const HIDDEN_ENTITY_PRESET_IDS = new Set(["player-spawn", "player-exit", "exit", "fog_volume"]);
 const PLACEABLE_ENTITY_PRESETS = ENTITY_PRESETS.filter((preset) => !HIDDEN_ENTITY_PRESET_IDS.has(preset.id));
+const COLLAPSIBLE_PANEL_DEFAULTS = {
+  tiles: true,
+  decor: true,
+  entities: true,
+  sound: true,
+  scan: true,
+};
 
 function escapeHtml(value) {
   return String(value)
@@ -58,7 +65,6 @@ function renderSection(sectionId, title, isOpen, content, sectionClass = "") {
         data-section-toggle="${sectionId}"
         aria-expanded="${isOpen ? "true" : "false"}"
       >
-        <span class="sectionEyebrow">Section</span>
         <span class="sectionTitleRow">
           <span class="sectionTitle">${title}</span>
           <span class="sectionChevron" aria-hidden="true">${isOpen ? "▾" : "▸"}</span>
@@ -114,13 +120,13 @@ function renderAssetThumb(option, className = "assetThumb") {
   return `<span class="${className}" aria-hidden="true"><img src="${escapeHtml(option.img)}" alt="" loading="lazy" decoding="async" /></span>`;
 }
 
-function renderAssetPicker(groupLabel, buttonDataKey, options, activeValue, emptyLabel) {
+function renderAssetPicker(groupLabel, buttonDataKey, options, activeValue, emptyLabel, pickerClass = "") {
   if (!options.length) {
     return `<div class="assetPickerEmpty">${escapeHtml(emptyLabel)}</div>`;
   }
 
   return `
-    <div class="assetPicker" role="group" aria-label="${escapeHtml(groupLabel)}">
+    <div class="assetPicker ${pickerClass}" role="group" aria-label="${escapeHtml(groupLabel)}">
       ${options.map((option) => {
         const isActive = option.id === activeValue || option.value === activeValue;
         const itemValue = option.id || option.value;
@@ -151,6 +157,33 @@ function renderPlacementBlock(label, hint = "") {
       <span class="statusCardLabel">Placement</span>
       <span class="statusCardValue">${escapeHtml(label)}</span>
       ${hint ? `<span class="statusCardMeta">${escapeHtml(hint)}</span>` : ""}
+    </div>
+  `;
+}
+
+function renderTileField(label, field, options, selectedValue) {
+  return `
+    <label class="fieldRow fieldRowCompact tileControlField">
+      <span class="label">${label}</span>
+      <select data-brush-field="${field}">
+        ${renderOptions(options, selectedValue)}
+      </select>
+    </label>
+  `;
+}
+
+function renderTileSelectionSummary(activeTileSprite) {
+  if (!activeTileSprite) return "";
+
+  return `
+    <div class="statusCard assetSelectionCard assetSelectionCardCompact">
+      <div class="assetSelectionRow assetSelectionRowCompact">
+        ${renderAssetThumb(activeTileSprite, "assetThumb assetThumbSelected")}
+        <div class="assetSelectionMeta">
+          <span class="statusCardValue">${escapeHtml(activeTileSprite.label)}</span>
+          <span class="statusCardMeta">ID ${escapeHtml(String(activeTileSprite.tileId))} · ${escapeHtml(activeTileSprite.drawW)}×${escapeHtml(activeTileSprite.drawH)}</span>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -384,11 +417,7 @@ export function renderBrushPanel(panel, state) {
   const summary = getBrushDraftSummary(brushDraft);
   const activeTileSprite = findBrushSpriteOptionByValue(brushDraft.sprite);
   const panelSections = {
-    tiles: true,
-    decor: true,
-    entities: true,
-    sound: true,
-    scan: true,
+    ...COLLAPSIBLE_PANEL_DEFAULTS,
     ...state.ui.panelSections,
   };
 
@@ -402,44 +431,24 @@ export function renderBrushPanel(panel, state) {
     ${renderInlineSection("LAYER", renderLayerSection(state))}
 
     ${renderSection("tiles", "TILES", panelSections.tiles, `
-      <label class="fieldRow fieldRowCompact">
-        <span class="label">Mode</span>
-        <select data-brush-field="behavior">
-          ${renderOptions(BRUSH_BEHAVIOR_OPTIONS, brushDraft.behavior)}
-        </select>
-      </label>
+      <div class="tilesPanelControls">
+        ${renderTileField("Mode", "behavior", BRUSH_BEHAVIOR_OPTIONS, brushDraft.behavior)}
+        ${renderTileField("Size", "size", BRUSH_SIZE_OPTIONS, brushDraft.size)}
+      </div>
 
-      <label class="fieldRow fieldRowCompact">
-        <span class="label">Size</span>
-        <select data-brush-field="size">
-          ${renderOptions(BRUSH_SIZE_OPTIONS, brushDraft.size)}
-        </select>
-      </label>
-
-      <label class="fieldRow fieldRowCompact">
+      <div class="tilesPanelSpriteHeader">
         <span class="label">Sprite</span>
-        <span class="fieldMeta">Real tile preview</span>
-      </label>
+        <span class="fieldMeta">Select a tile to paint</span>
+      </div>
 
-      ${renderAssetPicker("Tile sprites", "brush-sprite-button", BRUSH_SPRITE_OPTIONS, brushDraft.sprite, "No tile sprite selected")}
+      ${renderAssetPicker("Tile sprites", "brush-sprite-button", BRUSH_SPRITE_OPTIONS, brushDraft.sprite, "No tile sprite selected", "assetPickerCompact")}
 
-      <div class="statusRow compactStatusRow">
+      <div class="statusRow compactStatusRow tilesCurrentRow">
         <span class="label">Current</span>
         <span class="value">${summary}</span>
       </div>
-      ${activeTileSprite ? `
-        <div class="statusCard assetSelectionCard">
-          <span class="statusCardLabel">Tile Sprite</span>
-          <div class="assetSelectionRow">
-            ${renderAssetThumb(activeTileSprite, "assetThumb assetThumbLarge")}
-            <div class="assetSelectionMeta">
-              <span class="statusCardValue">${escapeHtml(activeTileSprite.label)}</span>
-              <span class="statusCardMeta">Tile ID ${escapeHtml(String(activeTileSprite.tileId))} · ${escapeHtml(activeTileSprite.drawW)}×${escapeHtml(activeTileSprite.drawH)}</span>
-            </div>
-          </div>
-        </div>
-      ` : ""}
-    `)}
+      ${renderTileSelectionSummary(activeTileSprite)}
+    `, "tilesSection")}
 
     ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
     ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
@@ -523,6 +532,20 @@ export function bindBrushPanel(panel, store, options = {}) {
   const onClick = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
+
+    const sectionToggleButton = target.closest("[data-section-toggle]");
+    if (sectionToggleButton instanceof HTMLButtonElement) {
+      const sectionId = sectionToggleButton.dataset.sectionToggle;
+      if (!sectionId) return;
+      store.setState((draft) => {
+        const panelSections = draft.ui.panelSections || (draft.ui.panelSections = {});
+        const isOpen = typeof panelSections[sectionId] === "boolean"
+          ? panelSections[sectionId]
+          : COLLAPSIBLE_PANEL_DEFAULTS[sectionId] !== false;
+        panelSections[sectionId] = !isOpen;
+      });
+      return;
+    }
 
     const decorActionButton = target.closest("[data-decor-action]");
     if (decorActionButton instanceof HTMLButtonElement) {

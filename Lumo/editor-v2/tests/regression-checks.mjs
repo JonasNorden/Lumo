@@ -731,6 +731,8 @@ function runScanRegressionChecks() {
 }
 
 function runUiRegressionChecks() {
+  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const brushPanelSource = fs.readFileSync(path.join(repoRoot, "src/ui/brushPanel.js"), "utf8");
   const panel = { innerHTML: "" };
   const baseState = {
     brush: {
@@ -765,6 +767,12 @@ function runUiRegressionChecks() {
   assert.equal(panel.innerHTML.includes("panelSectionInline"), true, "tools and layer sections should use the compact inline section layout");
   assert.equal(panel.innerHTML.includes('data-section-toggle="tools"'), false, "tools section should no longer render a collapse toggle");
   assert.equal(panel.innerHTML.includes('data-section-toggle="layer"'), false, "layer section should no longer render a collapse toggle");
+  assert.equal(panel.innerHTML.includes('data-section-toggle="tiles"'), true, "tiles section should still render a collapse toggle");
+  assert.equal(panel.innerHTML.includes('data-section-toggle="decor"'), true, "decor section should still render a collapse toggle");
+  assert.equal(panel.innerHTML.includes('data-section-toggle="entities"'), true, "entities section should still render a collapse toggle");
+  assert.equal(panel.innerHTML.includes('data-section-toggle="sound"'), true, "sound section should still render a collapse toggle");
+  assert.equal(panel.innerHTML.includes('data-section-toggle="scan"'), true, "scan section should still render a collapse toggle");
+  assert.equal(panel.innerHTML.includes('sectionEyebrow'), false, "panel headers should no longer render the redundant section eyebrow label");
   assert.equal(panel.innerHTML.includes('<span class="label">Current</span>'), true, "brush panel should still expose current-state summaries outside the compact tools/layer rows");
   assert.equal(/<span class=\"label\">Current<\/span>\s*<span class=\"value\">Entities<\/span>/.test(panel.innerHTML), false, "layer panel should not render a redundant current-layer row");
   assert.equal(panel.innerHTML.includes("Alt/Option + Click places"), true, "entity placement hint should mention Alt/Option + Click");
@@ -776,6 +784,21 @@ function runUiRegressionChecks() {
   assert.equal(panel.innerHTML.includes("Trigger Sound"), true, "sound selector should expose trigger sounds");
   assert.equal(panel.innerHTML.includes("Ambient Zone"), true, "sound selector should expose ambient zones");
   assert.equal(panel.innerHTML.includes("Music Zone"), true, "sound selector should expose music zones");
+
+
+  const collapsedTilesState = {
+    ...baseState,
+    ui: {
+      panelSections: {
+        tiles: false,
+      },
+    },
+  };
+  renderBrushPanel(panel, collapsedTilesState);
+  assert.equal(panel.innerHTML.includes('class="panelSection tilesSection isCollapsed"'), true, "tiles section should render collapsed when its panelSections state is false");
+  assert.equal(panel.innerHTML.includes('aria-expanded="false"'), true, "collapsed sections should expose aria-expanded false");
+  assert.equal(brushPanelSource.includes('const sectionToggleButton = target.closest("[data-section-toggle]");'), true, "brush panel should bind click handling for collapsible section toggles");
+  assert.equal(brushPanelSource.includes('panelSections[sectionId] = !isOpen;'), true, "brush panel toggle handler should invert stored open/closed state");
 
   const decorState = {
     ...baseState,
