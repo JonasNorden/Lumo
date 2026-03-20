@@ -165,7 +165,7 @@ export const mockLevelDocument = {
       x: 10,
       y: 10,
       visible: true,
-      source: "./assets/audio/drip.ogg",
+      source: "data/assets/audio/spot/drip/waterdrip.ogg",
       params: {
         volume: 0.7,
         pitch: 0.95,
@@ -180,6 +180,7 @@ export const mockLevelDocument = {
       x: 17,
       y: 9,
       visible: true,
+      source: "data/assets/audio/events/creatures/alien_presence.ogg",
       params: {
         volume: 0.9,
         pitch: 1,
@@ -195,6 +196,7 @@ export const mockLevelDocument = {
       x: 22,
       y: 6,
       visible: true,
+      source: "data/assets/audio/ambient/ruin/dark-ambient-horror.ogg",
       params: {
         volume: 0.5,
         pitch: 1,
@@ -211,6 +213,7 @@ export const mockLevelDocument = {
       x: 30,
       y: 14,
       visible: true,
+      source: "data/assets/audio/music/game_play_1.mp3",
       params: {
         volume: 0.85,
         pitch: 1,
