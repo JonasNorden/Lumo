@@ -86,6 +86,13 @@ export function createEditorState() {
       lastFrameTime: null,
       viewportSnapshot: null,
     },
+    soundPreview: {
+      playbackState: "idle",
+      soundIndex: null,
+      soundId: null,
+      source: null,
+      error: null,
+    },
     ui: {
       inspectorOpen: true,
       importStatus: null,
