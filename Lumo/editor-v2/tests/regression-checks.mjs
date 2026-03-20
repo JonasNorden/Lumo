@@ -496,6 +496,22 @@ function runSourceRegressionChecks() {
     "stopScanPlayback should restore the saved scan-follow viewport through the shared stop helper",
   );
 
+  const pauseScanPlaybackSection = source.match(/const pauseScanPlayback = \(draft\) => \{[\s\S]*?\n  \};/);
+  assert.ok(pauseScanPlaybackSection, "pauseScanPlayback should exist");
+  assert.equal(
+    pauseScanPlaybackSection[0].includes('applyCanvasTarget(draft, "sound");'),
+    true,
+    "pauseScanPlayback should keep the canvas target on Sound for immediate sound editing",
+  );
+
+  const startScanPlaybackSection = source.match(/const startScanPlayback = \(draft\) => \{[\s\S]*?\n  \};/);
+  assert.ok(startScanPlaybackSection, "startScanPlayback should exist");
+  assert.equal(
+    startScanPlaybackSection[0].includes('applyCanvasTarget(draft, "sound");'),
+    true,
+    "startScanPlayback should auto-activate the Sound canvas target",
+  );
+
   const scheduleScanFrameSection = source.match(/const scheduleScanFrame = \(playbackToken = scanPlaybackToken\) => \{[\s\S]*?\n  \};/);
   assert.ok(scheduleScanFrameSection, "scheduleScanFrame should exist");
   assert.equal(
