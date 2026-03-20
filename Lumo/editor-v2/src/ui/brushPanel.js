@@ -341,6 +341,18 @@ export function renderBrushPanel(panel, state) {
 export function bindBrushPanel(panel, store, options = {}) {
   const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onCanvasTargetChange, onLayerChange, onScanUpdate } = options;
 
+  const triggerScanAction = (target) => {
+    if (!(target instanceof HTMLElement)) return false;
+    const scanActionButton = target.closest("[data-scan-action]");
+    if (!(scanActionButton instanceof HTMLButtonElement)) return false;
+
+    const action = scanActionButton.dataset.scanAction;
+    if (!action || scanActionButton.disabled) return true;
+
+    onScanUpdate?.(action, null);
+    return true;
+  };
+
   const onChange = (event) => {
     const target = event.target;
 
@@ -437,10 +449,7 @@ export function bindBrushPanel(panel, store, options = {}) {
       return;
     }
 
-    const scanActionButton = target.closest("[data-scan-action]");
-    if (scanActionButton instanceof HTMLButtonElement) {
-      const action = scanActionButton.dataset.scanAction;
-      if (action) onScanUpdate?.(action, null);
+    if (event.detail === 0 && triggerScanAction(target)) {
       return;
     }
 
@@ -470,11 +479,21 @@ export function bindBrushPanel(panel, store, options = {}) {
     });
   };
 
+  const onPointerDown = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (!triggerScanAction(target)) return;
+
+    event.preventDefault();
+  };
+
   panel.addEventListener("change", onChange);
+  panel.addEventListener("pointerdown", onPointerDown);
   panel.addEventListener("click", onClick);
 
   return () => {
     panel.removeEventListener("change", onChange);
+    panel.removeEventListener("pointerdown", onPointerDown);
     panel.removeEventListener("click", onClick);
   };
 }
