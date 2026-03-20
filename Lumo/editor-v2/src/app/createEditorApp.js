@@ -80,12 +80,15 @@ import {
 } from "../domain/entities/selection.js";
 import {
   clearSoundSelection,
+  findMatchingSoundIndices,
   getPrimarySelectedSoundIndex,
   getSelectedSoundIndices,
   pruneSoundSelection,
   setSoundSelection,
   toggleSoundSelection,
 } from "../domain/sound/selection.js";
+
+const BATCH_EDITABLE_SOUND_PARAM_KEYS = new Set(["spatial", "volume", "pitch", "loop"]);
 
 
 function getInspectedCell(state) {
@@ -1357,6 +1360,101 @@ export function createEditorApp({
     );
   };
 
+  const applySoundFieldUpdate = (sound, field, value) => {
+    if (!sound) return null;
+
+    if (field === "param") {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+      const key = typeof value.key === "string" ? value.key.trim() : "";
+      if (!key || !isSupportedEntityParamValue(value.value)) return null;
+
+      const nextParams = { ...cloneEntityParams(sound.params), [key]: value.value };
+      if (cloneEntityParams(sound.params)[key] === value.value) return null;
+      return { ...sound, params: nextParams };
+    }
+
+    if (field === "name" || field === "type" || field === "source") {
+      const trimmed = String(value || "").trim();
+      const preset = field === "type" ? getSoundPresetForType(trimmed || sound[field]) : null;
+      const nextValue = field === "type"
+        ? normalizeSoundType(preset?.type || trimmed || sound[field])
+        : field === "source"
+          ? normalizeSoundSourceValue(value)
+          : trimmed || sound[field];
+      const previousValue = field === "source" ? sound.source || null : sound[field];
+      if (previousValue === nextValue) return null;
+
+      return {
+        ...sound,
+        ...(field === "source"
+          ? nextValue
+            ? { source: nextValue }
+            : { source: undefined }
+          : { [field]: nextValue }),
+        params: field === "type"
+          ? { ...getSoundPresetDefaultParams(preset?.id || DEFAULT_SOUND_PRESET_ID), ...cloneEntityParams(sound.params) }
+          : cloneEntityParams(sound.params),
+      };
+    }
+
+    if (field === "visible") {
+      const nextVisible = Boolean(value);
+      if (sound.visible === nextVisible) return null;
+      return { ...sound, visible: nextVisible, params: cloneEntityParams(sound.params) };
+    }
+
+    return null;
+  };
+
+  const applyBatchSoundUpdate = (draft, indices, field, value) => {
+    const doc = draft.document.active;
+    if (!doc || !indices.length) return false;
+
+    let changed = false;
+    startHistoryBatch(draft.history, "sound-batch-edit");
+    for (const index of indices) {
+      const sound = doc.sounds?.[index];
+      const nextSound = applySoundFieldUpdate(sound, field, value);
+      if (!sound || !nextSound) continue;
+
+      doc.sounds.splice(index, 1, nextSound);
+      pushSoundUpdateHistory(
+        draft.history,
+        index,
+        { ...sound, params: cloneEntityParams(sound.params) },
+        { ...nextSound, params: cloneEntityParams(nextSound.params) },
+      );
+      changed = true;
+    }
+    endHistoryBatch(draft.history);
+    return changed;
+  };
+
+  const selectRelatedSounds = (draft, referenceIndex, mode) => {
+    const doc = draft.document.active;
+    if (!doc) return false;
+
+    const options = mode === "same-source"
+      ? { matchType: false, matchSource: true }
+      : mode === "same-type-source"
+        ? { matchType: true, matchSource: true }
+        : { matchType: true, matchSource: false };
+    const nextSelection = findMatchingSoundIndices(doc.sounds || [], referenceIndex, options);
+    if (!nextSelection.length) return false;
+
+    setSoundSelection(draft.interaction, nextSelection, nextSelection.includes(referenceIndex) ? referenceIndex : nextSelection.at(-1) ?? null);
+    draft.interaction.hoveredSoundIndex = Number.isInteger(referenceIndex) ? referenceIndex : nextSelection.at(-1) ?? null;
+    clearEntitySelection(draft.interaction);
+    clearDecorSelection(draft.interaction);
+    draft.interaction.hoveredEntityIndex = null;
+    draft.interaction.hoveredDecorIndex = null;
+    draft.interaction.entityDrag = null;
+    draft.interaction.decorDrag = null;
+    applyCanvasTarget(draft, "sound");
+    updateSoundSelectionCell(draft, getPrimarySelectedSoundIndex(draft.interaction));
+    return true;
+  };
+
   const moveDecorSelectionByDelta = (draft, originPositions, delta) => {
     const doc = draft.document.active;
     if (!doc) return false;
@@ -1740,6 +1838,7 @@ export function createEditorApp({
       const doc = draft.document.active;
       if (!doc) return;
       const soundItems = doc.sounds || [];
+      const selectedIndices = getSoundSelectionIndices(draft.interaction, soundItems);
 
       if (field === "preset") {
         const nextPresetId = typeof value === "string" ? value : null;
@@ -1786,53 +1885,29 @@ export function createEditorApp({
         return;
       }
 
+      if (field === "smart-select") {
+        if (index >= 0 && index < soundItems.length) {
+          selectRelatedSounds(draft, index, value);
+        }
+        return;
+      }
+
+      if (index === -1 && selectedIndices.length > 1) {
+        const isBatchField = field === "source"
+          || (field === "param" && value && typeof value === "object" && BATCH_EDITABLE_SOUND_PARAM_KEYS.has(value.key));
+        if (isBatchField) {
+          applyBatchSoundUpdate(draft, selectedIndices, field, value);
+        }
+        return;
+      }
+
       const sound = soundItems[index];
       if (!sound) return;
 
-      if (field === "param") {
-        if (!value || typeof value !== "object" || Array.isArray(value)) return;
-        const key = typeof value.key === "string" ? value.key.trim() : "";
-        if (!key || !isSupportedEntityParamValue(value.value)) return;
-
+      if (field === "param" || field === "name" || field === "type" || field === "source" || field === "visible") {
+        const nextSound = applySoundFieldUpdate(sound, field, value);
+        if (!nextSound) return;
         const previousSound = { ...sound, params: cloneEntityParams(sound.params) };
-        const nextSound = { ...sound, params: { ...cloneEntityParams(sound.params), [key]: value.value } };
-        doc.sounds.splice(index, 1, nextSound);
-        pushSoundUpdateHistory(draft.history, index, previousSound, nextSound);
-        return;
-      }
-
-      if (field === "name" || field === "type" || field === "source") {
-        const trimmed = String(value || "").trim();
-        const preset = field === "type" ? getSoundPresetForType(trimmed || sound[field]) : null;
-        const nextValue = field === "type"
-          ? normalizeSoundType(preset?.type || trimmed || sound[field])
-          : field === "source"
-            ? normalizeSoundSourceValue(value)
-            : trimmed || sound[field];
-        const previousValue = field === "source" ? sound.source || null : sound[field];
-        if (previousValue === nextValue) return;
-        const previousSound = { ...sound, params: cloneEntityParams(sound.params) };
-        const nextSound = {
-          ...sound,
-          ...(field === "source"
-            ? nextValue
-              ? { source: nextValue }
-              : { source: undefined }
-            : { [field]: nextValue }),
-          params: field === "type"
-            ? { ...getSoundPresetDefaultParams(preset?.id || DEFAULT_SOUND_PRESET_ID), ...cloneEntityParams(sound.params) }
-            : cloneEntityParams(sound.params),
-        };
-        doc.sounds.splice(index, 1, nextSound);
-        pushSoundUpdateHistory(draft.history, index, previousSound, nextSound);
-        return;
-      }
-
-      if (field === "visible") {
-        const nextVisible = Boolean(value);
-        if (sound.visible === nextVisible) return;
-        const previousSound = { ...sound, params: cloneEntityParams(sound.params) };
-        const nextSound = { ...sound, visible: nextVisible };
         doc.sounds.splice(index, 1, nextSound);
         pushSoundUpdateHistory(draft.history, index, previousSound, nextSound);
         return;
