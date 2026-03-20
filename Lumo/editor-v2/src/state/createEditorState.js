@@ -97,6 +97,7 @@ export function createEditorState() {
       inspectorOpen: true,
       importStatus: null,
       workspaceBackground: "#0a0f1d",
+      darknessPreviewEnabled: false,
       topBarMenu: null,
       panelSections: {
         tools: true,

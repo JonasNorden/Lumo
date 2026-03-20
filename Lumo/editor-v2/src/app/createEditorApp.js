@@ -258,8 +258,18 @@ function renderSettingsMenu(state) {
   const active = state.document.active;
   const layers = [...(active?.backgrounds?.layers || [])].sort((left, right) => (left.depth ?? 0) - (right.depth ?? 0));
   const { gridVisible, gridOpacity, gridColor } = state.viewport;
+  const darknessPreviewEnabled = Boolean(state.ui.darknessPreviewEnabled);
 
   return `
+    <div class="topBarMenuSection">
+      <div class="topBarMenuTitle">Preview</div>
+      <label class="fieldRow compactInline">
+        <span class="label">Darkness Preview</span>
+        <input type="checkbox" data-preview-field="darkness" ${darknessPreviewEnabled ? "checked" : ""} />
+      </label>
+      <div class="fieldMeta">Darkens the level view while keeping editing overlays readable.</div>
+    </div>
+
     <div class="topBarMenuSection">
       <div class="topBarMenuTitle">Grid</div>
       <div class="compactFieldGrid topBarCompactFields">
@@ -874,6 +884,13 @@ export function createEditorApp({
     });
   };
 
+  const updatePreviewSettings = (field, value) => {
+    store.setState((draft) => {
+      if (field !== "darkness") return;
+      draft.ui.darknessPreviewEnabled = Boolean(value);
+    });
+  };
+
   const updateBackgroundLayer = (index, field, value) => {
     store.setState((draft) => {
       const layers = draft.document.active?.backgrounds?.layers;
@@ -1010,6 +1027,11 @@ export function createEditorApp({
       const action = button.dataset.topbarAction;
       if (action === "undo") button.disabled = !undoEnabled;
       if (action === "redo") button.disabled = !redoEnabled;
+      if (action === "toggle-darkness") {
+        const enabled = Boolean(state.ui.darknessPreviewEnabled);
+        button.classList.toggle("isActive", enabled);
+        button.setAttribute("aria-pressed", enabled ? "true" : "false");
+      }
     });
 
     const exportToggle = topBar.querySelector(`[data-topbar-menu-toggle="export"]`);
@@ -3700,6 +3722,7 @@ export function createEditorApp({
       if (action === "import") handleImport();
       if (action === "undo") handleUndo();
       if (action === "redo") handleRedo();
+      if (action === "toggle-darkness") updatePreviewSettings("darkness", !store.getState().ui.darknessPreviewEnabled);
       return;
     }
 
@@ -3767,6 +3790,12 @@ export function createEditorApp({
           ? Number.parseFloat(target.value)
           : target.value;
       updateGridSettings(gridField, value);
+      return true;
+    }
+
+    const previewField = target.dataset.previewField;
+    if (previewField === "darkness") {
+      updatePreviewSettings("darkness", target.checked);
       return true;
     }
 
