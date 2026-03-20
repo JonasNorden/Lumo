@@ -311,7 +311,7 @@ function renderNewLevelSizePopover(state) {
         <label class="fieldRow fieldRowCompact">
           <span class="label">Width</span>
           <input
-            type="number"
+            type="text"
             min="${MIN_LEVEL_DIMENSION}"
             max="${MAX_LEVEL_DIMENSION}"
             step="1"
@@ -323,7 +323,7 @@ function renderNewLevelSizePopover(state) {
         <label class="fieldRow fieldRowCompact">
           <span class="label">Height</span>
           <input
-            type="number"
+            type="text"
             min="${MIN_LEVEL_DIMENSION}"
             max="${MAX_LEVEL_DIMENSION}"
             step="1"
@@ -1223,12 +1223,23 @@ export function createEditorApp({
     const focusedField = document.activeElement instanceof HTMLInputElement
       ? document.activeElement.dataset.newLevelField || null
       : null;
+    const selectionStart = focusedField && typeof document.activeElement.selectionStart === "number"
+      ? document.activeElement.selectionStart
+      : null;
+    const selectionEnd = focusedField && typeof document.activeElement.selectionEnd === "number"
+      ? document.activeElement.selectionEnd
+      : null;
+    const selectionDirection = focusedField && typeof document.activeElement.selectionDirection === "string"
+      ? document.activeElement.selectionDirection
+      : "none";
     floatingPanelHost.innerHTML = renderNewLevelSizePopover(state);
     if (!focusedField || !state.ui.newLevelSize?.isOpen) return;
     const nextField = floatingPanelHost.querySelector(`[data-new-level-field="${focusedField}"]`);
     if (nextField instanceof HTMLInputElement) {
       nextField.focus({ preventScroll: true });
-      nextField.select();
+      if (typeof selectionStart === "number" && typeof selectionEnd === "number") {
+        nextField.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
+      }
     }
   };
 

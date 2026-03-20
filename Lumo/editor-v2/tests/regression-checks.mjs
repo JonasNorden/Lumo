@@ -1644,6 +1644,21 @@ function runSourceRegressionChecks() {
     true,
     "top bar should listen for input events so export fields stay editable during rerenders",
   );
+  assert.equal(
+    source.includes('type="text"'),
+    true,
+    "new level size fields should render as text inputs so caret selection can be restored normally",
+  );
+  assert.equal(
+    source.includes('const selectionStart = focusedField && typeof document.activeElement.selectionStart === "number"'),
+    true,
+    "floating panel rerenders should capture the current caret start for new level size inputs",
+  );
+  assert.equal(
+    source.includes("nextField.setSelectionRange(selectionStart, selectionEnd, selectionDirection);"),
+    true,
+    "floating panel rerenders should restore the caret instead of reselecting the whole new level field value",
+  );
 
   const stopScanPlaybackSection = source.match(/const stopScanPlayback = \(draft, preserveLog = true\) => \{[\s\S]*?\n  \};/);
   assert.ok(stopScanPlaybackSection, "stopScanPlayback should exist");
