@@ -976,6 +976,62 @@ export function createEditorApp({
     y: Math.max(0, Math.min(doc.dimensions.height - 1, Math.round(y))),
   });
 
+  const isTopBarInputElement = (value) =>
+    typeof HTMLInputElement !== "undefined" && value instanceof HTMLInputElement;
+
+  const captureFocusedTopBarField = () => {
+    const activeElement = document.activeElement;
+    if (!isTopBarInputElement(activeElement)) return null;
+    if (!topBar.contains(activeElement)) return null;
+
+    const datasetKeys = [
+      "exportMetaField",
+      "exportDimensionField",
+      "workspaceField",
+      "backgroundField",
+      "backgroundIndex",
+      "gridField",
+      "previewField",
+    ];
+    const dataset = {};
+    let hasDataset = false;
+
+    for (const key of datasetKeys) {
+      const value = activeElement.dataset[key];
+      if (typeof value !== "string") continue;
+      dataset[key] = value;
+      hasDataset = true;
+    }
+
+    if (!hasDataset) return null;
+
+    return {
+      dataset,
+      selectionStart: activeElement.selectionStart,
+      selectionEnd: activeElement.selectionEnd,
+      selectionDirection: activeElement.selectionDirection,
+    };
+  };
+
+  const restoreFocusedTopBarField = (snapshot) => {
+    if (!snapshot) return;
+
+    const selector = Object.entries(snapshot.dataset)
+      .map(([key, value]) => `[data-${key.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`)}="${CSS.escape(value)}"]`)
+      .join("");
+    if (!selector) return;
+
+    const replacementInput = topBar.querySelector(selector);
+    if (!isTopBarInputElement(replacementInput)) return;
+
+    replacementInput.focus({ preventScroll: true });
+    if (snapshot.selectionStart === null || snapshot.selectionEnd === null) return;
+
+    const clampedStart = Math.max(0, Math.min(snapshot.selectionStart, replacementInput.value.length));
+    const clampedEnd = Math.max(0, Math.min(snapshot.selectionEnd, replacementInput.value.length));
+    replacementInput.setSelectionRange(clampedStart, clampedEnd, snapshot.selectionDirection || "none");
+  };
+
   const getWorldPointFromCanvasPoint = (viewport, point) => ({
     x: (point.x - viewport.offsetX) / Math.max(0.0001, viewport.zoom),
     y: (point.y - viewport.offsetY) / Math.max(0.0001, viewport.zoom),
@@ -1038,6 +1094,7 @@ export function createEditorApp({
   };
 
   const renderTopBar = (state) => {
+    const focusedTopBarField = captureFocusedTopBarField();
     const activeLayer = getActiveLayer(state.interaction);
     const selectedCount = activeLayer === PANEL_LAYERS.DECOR
       ? getSelectedDecorIndices(state.interaction).length
@@ -1077,6 +1134,7 @@ export function createEditorApp({
     topBarExportMenu.innerHTML = renderExportMenu(state);
     topBarSettingsMenu.innerHTML = renderSettingsMenu(state);
     topBarHelpMenu.innerHTML = renderHelpMenu();
+    restoreFocusedTopBarField(focusedTopBarField);
 
     const activeMenu = state.ui.topBarMenu;
     topBar.querySelectorAll("[data-topbar-menu-toggle]").forEach((toggle) => {
@@ -1137,7 +1195,12 @@ export function createEditorApp({
     }
   };
 
+  const clearSpecialVolumePlacement = (draft) => {
+    draft.interaction.specialVolumePlacement = null;
+  };
+
   const clearActiveSelection = (draft, nextMode = getSelectionMode(draft.interaction)) => {
+    clearSpecialVolumePlacement(draft);
     if (getActiveLayer(draft.interaction) === PANEL_LAYERS.TILES) {
       clearEntitySelection(draft.interaction);
       clearDecorSelection(draft.interaction);
@@ -1353,6 +1416,12 @@ export function createEditorApp({
 
     const startWorld = placement.startWorld;
     const currentWorld = placement.currentWorld || placement.startWorld;
+    const draggedWidth = Math.abs((currentWorld?.x ?? startWorld?.x ?? 0) - (startWorld?.x ?? 0));
+    const draggedHeight = Math.abs((currentWorld?.y ?? startWorld?.y ?? 0) - (startWorld?.y ?? 0));
+    if (draggedWidth < 1 && draggedHeight < 1) {
+      clearSpecialVolumePlacement(draft);
+      return null;
+    }
     const baseEntity = createEntityDraft(
       doc,
       placement.startCell.x,
@@ -1387,7 +1456,7 @@ export function createEditorApp({
     draft.interaction.entityDrag = null;
     draft.interaction.decorDrag = null;
     draft.interaction.soundDrag = null;
-    draft.interaction.specialVolumePlacement = null;
+    clearSpecialVolumePlacement(draft);
     setCanvasSelectionMode(draft, "entity");
     updateEntitySelectionCell(draft, createdIndex);
     return createdIndex;
@@ -2219,6 +2288,8 @@ export function createEditorApp({
     if (Number.isInteger(draft.interaction.hoveredSoundIndex) && draft.interaction.hoveredSoundIndex >= soundCount) {
       draft.interaction.hoveredSoundIndex = soundCount ? soundCount - 1 : null;
     }
+
+    clearSpecialVolumePlacement(draft);
 
     if (getSelectedEntityIndices(draft.interaction).length) {
       updateEntitySelectionCell(draft);
@@ -3245,7 +3316,12 @@ export function createEditorApp({
     updateHoveredCanvasState(event);
 
     if (state.interaction.specialVolumePlacement?.active) {
-      if ((event.buttons & 1) !== 1) return;
+      if ((event.buttons & 1) !== 1) {
+        store.setState((draft) => {
+          clearSpecialVolumePlacement(draft);
+        });
+        return;
+      }
 
       const point = getCanvasPointFromMouseEvent(canvas, event);
       const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
@@ -3789,6 +3865,7 @@ export function createEditorApp({
   const setActiveTool = (tool) => {
     store.setState((draft) => {
       draft.interaction.activeTool = tool;
+      clearSpecialVolumePlacement(draft);
       if (tool !== EDITOR_TOOLS.INSPECT) {
         setActiveLayer(draft, PANEL_LAYERS.TILES);
       }
@@ -3819,6 +3896,7 @@ export function createEditorApp({
       }
 
       setActiveLayer(draft, PANEL_LAYERS.TILES);
+      clearSpecialVolumePlacement(draft);
       draft.interaction.activeEntityPresetId = null;
       draft.interaction.activeDecorPresetId = null;
       draft.interaction.activeSoundPresetId = null;
@@ -3998,11 +4076,16 @@ export function createEditorApp({
     }
   };
 
-  const handleTopBarFieldInput = (target) => {
+  const handleTopBarFieldInput = (target, options = {}) => {
+    const { commit = true } = options;
     const exportMetaField = target.dataset.exportMetaField;
     if (exportMetaField === "name" || exportMetaField === "id") {
-      const nextValue = target.value.trim() || (exportMetaField === "name" ? "Untitled Level" : "untitled-level");
-      target.value = nextValue;
+      const nextValue = commit
+        ? target.value.trim() || (exportMetaField === "name" ? "Untitled Level" : "untitled-level")
+        : target.value;
+      if (commit) {
+        target.value = nextValue;
+      }
       updateDocumentMeta(exportMetaField, nextValue);
       return true;
     }
@@ -4042,11 +4125,17 @@ export function createEditorApp({
     return false;
   };
 
+  const handleTopBarInput = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    handleTopBarFieldInput(target, { commit: false });
+  };
+
   const handleTopBarChange = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
 
-    if (handleTopBarFieldInput(target)) return;
+    if (handleTopBarFieldInput(target, { commit: true })) return;
 
     const workspaceField = target.dataset.workspaceField;
     if (workspaceField === "background") {
@@ -4096,6 +4185,7 @@ export function createEditorApp({
         state.interaction.selectedCell = null;
         state.interaction.hoverCell = null;
         clearEntitySelection(state.interaction);
+        state.interaction.specialVolumePlacement = null;
         state.interaction.boxSelection = null;
         state.interaction.entityDrag = null;
         state.interaction.decorDrag = null;
@@ -4147,6 +4237,7 @@ export function createEditorApp({
   window.addEventListener("keydown", handleGlobalKeyDown);
   window.addEventListener("keyup", handleGlobalKeyUp);
   topBar.addEventListener("click", handleTopBarClick);
+  topBar.addEventListener("input", handleTopBarInput);
   topBar.addEventListener("change", handleTopBarChange);
   document.addEventListener("pointerdown", handleDocumentPointerDown);
 
@@ -4176,6 +4267,7 @@ export function createEditorApp({
     window.removeEventListener("keydown", handleGlobalKeyDown);
     window.removeEventListener("keyup", handleGlobalKeyUp);
     topBar.removeEventListener("click", handleTopBarClick);
+    topBar.removeEventListener("input", handleTopBarInput);
     topBar.removeEventListener("change", handleTopBarChange);
     document.removeEventListener("pointerdown", handleDocumentPointerDown);
   };
