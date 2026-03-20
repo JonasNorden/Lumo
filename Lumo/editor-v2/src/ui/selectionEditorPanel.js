@@ -2,13 +2,6 @@ import { getPrimarySelectedEntityIndex, getSelectedEntityIndices } from "../doma
 import { getPrimarySelectedDecorIndex, getSelectedDecorIndices } from "../domain/decor/selection.js";
 import { getPrimarySelectedSoundIndex, getSelectedSoundIndices } from "../domain/sound/selection.js";
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
-import {
-  SPECIAL_VOLUME_EDITOR_LAYOUTS,
-  getFogVolumeRect,
-  getFogVolumeParams,
-  isFogVolumeEntityType,
-  isSpecialVolumeEntityType,
-} from "../domain/entities/specialVolumeTypes.js";
 import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
 import {
   getSoundAssetCatalog,
@@ -176,66 +169,6 @@ function formatNumericDisplay(value) {
   if (!Number.isFinite(numericValue)) return "";
   if (Math.abs(numericValue) >= 1000 || Number.isInteger(numericValue)) return String(Math.round(numericValue * 1000) / 1000).replace(/\.0+$/, "");
   return numericValue.toFixed(3).replace(/\.?0+$/, "");
-}
-
-function getFogNumericFieldConfig(fieldKey, path) {
-  const key = path || fieldKey || "";
-  const defaults = { step: 1, largeStep: 4, precision: "int" };
-
-  if (key === "fogWidth") return { step: 24, largeStep: 96, precision: "int" };
-  if (key === "fogHeight" || key === "look.thickness") return { step: 8, largeStep: 24, precision: "int" };
-  if (key === "area.falloff") return { step: 8, largeStep: 24, precision: "int" };
-  if (key === "look.lift") return { step: 2, largeStep: 8, precision: "float" };
-  if (key === "look.density") return { step: 0.02, largeStep: 0.08, precision: "float" };
-  if (key === "look.exposure") return { step: 0.05, largeStep: 0.2, precision: "float" };
-  if (key.includes("smoothing.")) return { step: 0.05, largeStep: 0.2, precision: "float" };
-  if (key === "interaction.radius" || key === "interaction.gate") return { step: 8, largeStep: 24, precision: "int" };
-  if (key === "interaction.push" || key === "interaction.bulge") return { step: 0.2, largeStep: 1, precision: "float" };
-  if (key.includes("organic.")) return { step: 0.1, largeStep: 0.5, precision: "float" };
-  if (key === "area.x0" || key === "area.x1" || key === "area.y0") return { step: 24, largeStep: 96, precision: "int" };
-  if (key === "look.layers") return { step: 2, largeStep: 8, precision: "int" };
-  if (key === "look.noise" || key === "look.drift") return { step: 0.05, largeStep: 0.2, precision: "float" };
-
-  return defaults;
-}
-
-function renderStableNumberControl(value, datasetMarkup, config = {}) {
-  const normalizedValue = formatNumericDisplay(value);
-  const step = Number.isFinite(config.step) ? config.step : 1;
-  const largeStep = Number.isFinite(config.largeStep) ? config.largeStep : Math.max(step, step * 4);
-  const precision = config.precision === "int" ? "int" : "float";
-
-  return `
-    <span class="selectionStableNumber" data-deferred-number="true">
-      <button
-        type="button"
-        class="selectionStepperButton"
-        data-step-direction="-1"
-        title="Decrease"
-      >
-        −
-      </button>
-      <input
-        type="text"
-        inputmode="decimal"
-        value="${escapeHtml(normalizedValue)}"
-        ${datasetMarkup}
-        data-number-step="${step}"
-        data-number-large-step="${largeStep}"
-        data-number-precision="${precision}"
-        data-number-commit="deferred"
-        spellcheck="false"
-      />
-      <button
-        type="button"
-        class="selectionStepperButton"
-        data-step-direction="1"
-        title="Increase"
-      >
-        +
-      </button>
-    </span>
-  `;
 }
 
 function renderCheckboxField(prefix, fieldKey, label, value, selectedIndex, className = "") {
@@ -597,11 +530,7 @@ function renderBatchSoundEditor(selectedSounds, selectedSoundIndex) {
   ].join(""));
 }
 
-function renderEntityEditor(entity, selectedEntityIndex, tileSize = 24) {
-  if (isFogVolumeEntityType(entity?.type)) {
-    return renderFogVolumeEditor(entity, selectedEntityIndex, tileSize);
-  }
-
+function renderEntityEditor(entity, selectedEntityIndex) {
   return renderSelectionFields([
     renderTextField("entity", "name", "Name", entity.name, selectedEntityIndex, "selectionFieldName"),
     renderTextField("entity", "type", "Type", entity.type, selectedEntityIndex, "selectionFieldType"),
@@ -609,169 +538,6 @@ function renderEntityEditor(entity, selectedEntityIndex, tileSize = 24) {
     renderNumberField("entity", "y", "Y", entity.y, selectedEntityIndex),
     renderCheckboxField("entity", "visible", "Visible", entity.visible, selectedEntityIndex, "selectionFieldToggle"),
     renderParamFields("entity", entity?.params, selectedEntityIndex),
-  ].join(""));
-}
-
-function renderFogVolumeStructuredField(selectedEntityIndex, path, value) {
-  const inputType = getEntityParamInputType(value);
-  const escapedPath = escapeHtml(path);
-  const label = escapeHtml(formatParamLabel(path.split(".").at(-1)));
-
-  if (inputType === "boolean") {
-    return `
-      <label class="fieldRow compactInline compactBooleanField selectionInlineField selectionInlineCheckbox selectionParamField selectionParamCheckbox">
-        <span class="label">${label}</span>
-        <input
-          type="checkbox"
-          ${value ? "checked" : ""}
-          data-entity-param-path="${escapedPath}"
-          data-entity-param-type="boolean"
-          data-entity-index="${selectedEntityIndex}"
-        />
-      </label>
-    `;
-  }
-
-  if (inputType === "number") {
-    const config = getFogNumericFieldConfig(null, path);
-    return `
-      <label class="fieldRow fieldRowCompact selectionInlineField selectionParamField selectionStableNumberField">
-        <span class="label">${label}</span>
-        ${renderStableNumberControl(
-          value,
-          `data-entity-param-path="${escapedPath}" data-entity-param-type="number" data-entity-index="${selectedEntityIndex}"`,
-          config,
-        )}
-      </label>
-    `;
-  }
-
-  return `
-    <label class="fieldRow fieldRowCompact selectionInlineField selectionParamField">
-      <span class="label">${label}</span>
-      <input
-        type="${inputType === "number" ? "number" : "text"}"
-        ${inputType === "number" ? 'step="any"' : ""}
-        value="${escapeHtml(inputType === "json" ? JSON.stringify(value) : value)}"
-        data-entity-param-path="${escapedPath}"
-        data-entity-param-type="${inputType}"
-        data-entity-index="${selectedEntityIndex}"
-      />
-    </label>
-  `;
-}
-
-function renderFogVolumeEditor(entity, selectedEntityIndex, tileSize = 24) {
-  const params = getFogVolumeParams(entity);
-  const rect = getFogVolumeRect(entity, tileSize);
-  const layout = SPECIAL_VOLUME_EDITOR_LAYOUTS.fog_volume;
-  const previewTone = params?.look?.color || "#E1EEFF";
-  const previewDensity = Number.isFinite(Number(params?.look?.density)) ? Number(params.look.density) : 0;
-  const previewExposure = Number.isFinite(Number(params?.look?.exposure)) ? Number(params.look.exposure) : 1;
-  const primarySections = layout.primarySections.map((section) => `
-    <div class="selectionInlineGroup selectionStructuredGroup selectionSpecialVolumeSection">
-      <div class="selectionStructuredHeader">
-        <span class="selectionStructuredTitle">${escapeHtml(section.title)}</span>
-        ${section.description ? `<span class="selectionStructuredMeta">${escapeHtml(section.description)}</span>` : ""}
-      </div>
-      <div class="selectionEditorFlow selectionStructuredFlow">
-        ${section.fields.map((fieldKey) => {
-          if (fieldKey === "fogWidth") {
-            return `
-              <label class="fieldRow fieldRowCompact selectionInlineField selectionStableNumberField selectionFogMetricField">
-                <span class="label">Width</span>
-                ${renderStableNumberControl(
-                  Math.round(rect.width),
-                  `data-entity-field="fogWidth" data-entity-index="${selectedEntityIndex}"`,
-                  getFogNumericFieldConfig("fogWidth"),
-                )}
-              </label>
-            `;
-          }
-
-          if (fieldKey === "fogHeight") {
-            return `
-              <label class="fieldRow fieldRowCompact selectionInlineField selectionStableNumberField selectionFogMetricField">
-                <span class="label">Height</span>
-                ${renderStableNumberControl(
-                  Math.round(rect.height),
-                  `data-entity-field="fogHeight" data-entity-index="${selectedEntityIndex}"`,
-                  getFogNumericFieldConfig("fogHeight"),
-                )}
-              </label>
-            `;
-          }
-
-          return renderFogVolumeStructuredField(
-            selectedEntityIndex,
-            fieldKey,
-            fieldKey.split(".").reduce((current, segment) => current?.[segment], params),
-          );
-        }).join("")}
-      </div>
-    </div>
-  `).join("");
-  const advancedSections = layout.advancedSections.map((section) => `
-    <details class="selectionInlineGroup selectionStructuredGroup selectionAdvancedVolumeGroup" ${section.key === "area" ? "open" : ""}>
-      <summary class="selectionStructuredHeader selectionStructuredSummaryToggle">
-        <span class="selectionStructuredTitle">${escapeHtml(section.title)}</span>
-        <span class="selectionStructuredMeta">Advanced</span>
-      </summary>
-      <div class="selectionEditorFlow selectionStructuredFlow">
-        ${section.fields.map((fieldPath) => renderFogVolumeStructuredField(
-          selectedEntityIndex,
-          fieldPath,
-          fieldPath.split(".").reduce((current, segment) => current?.[segment], params),
-        )).join("")}
-      </div>
-    </details>
-  `).join("");
-
-  return renderSelectionFields([
-    `
-      <div class="selectionInlineGroup selectionStructuredGroup selectionStructuredSummary selectionFogPreviewSummary">
-        <div class="selectionStructuredHeader">
-          <span class="selectionStructuredTitle">Fog Volume</span>
-          <span class="selectionStructuredMeta">Drag on the canvas to author the span directly, then tune the live look here.</span>
-        </div>
-        <div class="selectionFogPreviewCard">
-          <div class="selectionFogPreviewSwatch" style="--fog-preview-color: ${escapeHtml(previewTone)}; --fog-preview-density: ${Math.max(0.12, Math.min(0.9, previewDensity * 2.8))}; --fog-preview-exposure: ${Math.max(0.65, Math.min(1.6, previewExposure))};"></div>
-          <div class="selectionFogPreviewMetrics">
-            ${renderReadOnlyField("Span", `${Math.round(rect.x0)} → ${Math.round(rect.x1)}`)}
-            ${renderReadOnlyField("Top", `${Math.round(rect.top)}`)}
-            ${renderReadOnlyField("Base", `${Math.round(rect.bottom)}`)}
-            ${renderReadOnlyField("Density", formatNumericDisplay(params?.look?.density ?? 0))}
-            ${renderReadOnlyField("Lift", formatNumericDisplay(params?.look?.lift ?? 0))}
-            ${renderReadOnlyField("Visible", entity.visible ? "On" : "Off")}
-          </div>
-        </div>
-      </div>
-    `,
-    `
-      <div class="selectionInlineGroup selectionStructuredGroup selectionSpecialVolumeMetaGroup">
-        <div class="selectionStructuredHeader">
-          <span class="selectionStructuredTitle">Placement</span>
-          <span class="selectionStructuredMeta">Anchor cells stay compatible with authored nested params and history.</span>
-        </div>
-        <div class="selectionEditorFlow selectionStructuredFlow">
-          ${renderTextField("entity", "name", "Name", entity.name, selectedEntityIndex, "selectionFieldName")}
-          ${renderReadOnlyField("Type", entity.type, "selectionFieldType")}
-          ${renderNumberField("entity", "x", "Anchor X", entity.x, selectedEntityIndex)}
-          ${renderNumberField("entity", "y", "Anchor Y", entity.y, selectedEntityIndex)}
-          ${renderCheckboxField("entity", "visible", "Visible", entity.visible, selectedEntityIndex, "selectionFieldToggle")}
-        </div>
-      </div>
-    `,
-    primarySections,
-    `
-      <div class="selectionInlineGroup selectionStructuredGroup selectionSpecialVolumeAdvancedShell">
-        <div class="selectionStructuredHeader">
-          <span class="selectionStructuredTitle">Advanced</span>
-          <span class="selectionStructuredMeta">All authored nested params remain available for compatibility and later special volumes.</span>
-        </div>
-        <div class="selectionSpecialVolumeAdvancedList">${advancedSections}</div>
-      </div>
-    `,
   ].join(""));
 }
 
@@ -820,7 +586,7 @@ function renderMultiSelectionState(kind, count, primaryName) {
 }
 
 function renderSelectionEditor(state, emptyMessage, options = {}) {
-  const { soundMode = "full", hideSpecialVolumeEntity = false } = options;
+  const { soundMode = "full", hideEntityTypes = [] } = options;
   const active = state.document.active;
   const selectedEntityIndices = getSelectedEntityIndices(state.interaction);
   const selectedDecorIndices = getSelectedDecorIndices(state.interaction);
@@ -831,7 +597,6 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   const selectedEntity = Number.isInteger(selectedEntityIndex) ? active.entities?.[selectedEntityIndex] : null;
   const selectedDecor = Number.isInteger(selectedDecorIndex) ? active.decor?.[selectedDecorIndex] : null;
   const selectedSound = Number.isInteger(selectedSoundIndex) ? active.sounds?.[selectedSoundIndex] : null;
-  const tileSize = active?.dimensions?.tileSize || 24;
   const selectedSounds = selectedSoundIndices
     .map((index) => active.sounds?.[index] || null)
     .filter(Boolean);
@@ -852,10 +617,10 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   }
 
   if (selectedEntity) {
-    if (hideSpecialVolumeEntity && isSpecialVolumeEntityType(selectedEntity.type)) {
+    if (hideEntityTypes.includes(String(selectedEntity.type || "").trim().toLowerCase())) {
       return { markup: "", isEmpty: true };
     }
-    return { markup: renderEntityEditor(selectedEntity, selectedEntityIndex, tileSize), isEmpty: false };
+    return { markup: renderEntityEditor(selectedEntity, selectedEntityIndex), isEmpty: false };
   }
 
   if (selectedDecor) {
@@ -989,7 +754,7 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const target = event.target;
     if (!isTextInputElement(target) && !isSelectElement(target)) return;
 
-    if (handleChange(target, "entity", ["name", "type", "visible", "x", "y", "fogWidth", "fogHeight"], onEntityUpdate)) return;
+    if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) return;
     if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) return;
     handleChange(target, "sound", ["name", "type", "source", "visible", "x", "y"], onSoundUpdate, { allowBatchSelection: true });
   };
@@ -999,7 +764,7 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     if (!isTextInputElement(target) && !isSelectElement(target)) return;
     if (isTextInputElement(target) && target.dataset.numberCommit === "deferred") return;
 
-    if (handleChange(target, "entity", ["name", "type", "visible", "x", "y", "fogWidth", "fogHeight"], onEntityUpdate)) return;
+    if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) return;
     if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) return;
     handleChange(target, "sound", ["name", "type", "source", "visible", "x", "y"], onSoundUpdate, { allowBatchSelection: true });
   };

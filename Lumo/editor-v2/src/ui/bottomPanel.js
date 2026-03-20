@@ -5,6 +5,7 @@ export function renderBottomPanel(panel, state) {
     noDocumentMessage: "No document loaded.",
     emptyMessage: "No selection",
     soundMode: "full",
+    hideEntityTypes: ["fog_volume"],
   });
 }
 

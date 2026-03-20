@@ -272,7 +272,7 @@ function runFogPlacementPreviewRegressionChecks() {
   const doc = createDoc();
   const viewport = { offsetX: 0, offsetY: 0, zoom: 1 };
   const fogPreset = findEntityPresetById("fog_volume");
-  assert.ok(fogPreset, "fog volume preset should exist for placement previews");
+  assert.ok(fogPreset, "fog volume preset should remain available for roundtrip defaults");
 
   const armedOnly = createPreviewTestContext();
   renderEntityPlacementPreview(armedOnly.ctx, doc, viewport, {
@@ -300,9 +300,9 @@ function runFogPlacementPreviewRegressionChecks() {
     },
   }, fogPreset);
   assert.equal(
-    activeDrag.operations.some(([type]) => type === "strokeRect"),
-    true,
-    "active fog drag placement should still render the fog preview",
+    activeDrag.operations.length,
+    0,
+    "fog volume placement previews should stay disabled during drag placement",
   );
 }
 
@@ -938,15 +938,7 @@ function runBottomPanelFogVolumeRegressionChecks() {
   };
 
   renderBottomPanel(panel, state);
-  assert.equal(panel.innerHTML.includes("Fog Volume"), true, "fog volume editing should expose a dedicated structured summary block");
-  assert.equal(panel.innerHTML.includes("Placement"), true, "fog volume editing should expose the placement section");
-  assert.equal(panel.innerHTML.includes("Advanced"), true, "fog volume editing should expose advanced grouping");
-  assert.equal(panel.innerHTML.includes('data-entity-param-path="area.x0"'), true, "fog volume editing should use nested param paths for area fields");
-  assert.equal(panel.innerHTML.includes('data-entity-param-path="render.lumoBehindFog"'), true, "fog volume editing should expose nested render booleans");
-  assert.equal(panel.innerHTML.includes('data-entity-field="fogWidth"'), true, "fog volume editing should expose width controls in the bottom panel");
-  assert.equal(panel.innerHTML.includes('data-entity-field="fogHeight"'), true, "fog volume editing should expose height controls in the bottom panel");
-  assert.equal(panel.innerHTML.includes('data-number-commit="deferred"'), true, "fog volume editing should use deferred numeric commits for stable entry");
-  assert.equal(panel.innerHTML.includes("selectionFogPreviewSwatch"), true, "fog volume editing should expose a visual preview swatch");
+  assert.equal(panel.innerHTML.trim(), "", "bottom panel should stay empty for hidden fog volume selections");
 }
 
 function runInspectorFogRegressionChecks() {
@@ -1476,46 +1468,44 @@ function runSourceRegressionChecks() {
   );
   assert.equal(
     source.includes("const clearSpecialVolumePlacement = (draft) => {"),
-    true,
-    "special-volume placement cleanup helper should exist for shared interaction resets",
+    false,
+    "fog-specific placement cleanup helpers should be removed from the editor app",
   );
 
   const setActiveToolSection = source.match(/const setActiveTool = \(tool\) => \{[\s\S]*?\n  \};/);
   assert.ok(setActiveToolSection, "setActiveTool should exist");
   assert.equal(
-    setActiveToolSection[0].includes("clearSpecialVolumePlacement(draft);"),
-    true,
-    "tool switching should clear stale special-volume placement state",
+    setActiveToolSection[0].includes("specialVolumePlacement"),
+    false,
+    "tool switching should no longer manage fog-specific placement state",
   );
 
   assert.equal(
-    setActiveLayerFromPanelSection[0].includes("clearSpecialVolumePlacement(draft);"),
-    true,
-    "panel layer switching should clear stale special-volume placement state",
+    setActiveLayerFromPanelSection[0].includes("specialVolumePlacement"),
+    false,
+    "panel layer switching should no longer manage fog-specific placement state",
   );
 
   const handleCanvasMouseMoveSection = source.match(/const handleCanvasMouseMove = \(event\) => \{[\s\S]*?\n  \};/);
   assert.ok(handleCanvasMouseMoveSection, "handleCanvasMouseMove should exist");
   assert.equal(
-    handleCanvasMouseMoveSection[0].includes("clearSpecialVolumePlacement(draft);"),
-    true,
-    "canvas mouse move should clean up stale special-volume placement when the drag button is no longer held",
+    handleCanvasMouseMoveSection[0].includes("specialVolumePlacement"),
+    false,
+    "canvas mouse move should no longer manage fog-specific placement state",
   );
 
-  const finalizeSpecialVolumePlacementSection = source.match(/const finalizeSpecialVolumePlacement = \(draft\) => \{[\s\S]*?\n  \};/);
-  assert.ok(finalizeSpecialVolumePlacementSection, "finalizeSpecialVolumePlacement should exist");
   assert.equal(
-    finalizeSpecialVolumePlacementSection[0].includes("if (draggedWidth < 1 && draggedHeight < 1) {"),
-    true,
-    "special-volume placement should ignore zero-distance clicks instead of creating accidental fog entities",
+    source.includes("const finalizeSpecialVolumePlacement = (draft) => {"),
+    false,
+    "fog-specific finalize placement helpers should be removed from the editor app",
   );
 
   const syncInteractionAfterHistoryChangeSection = source.match(/const syncInteractionAfterHistoryChange = \(draft\) => \{[\s\S]*?\n  \};/);
   assert.ok(syncInteractionAfterHistoryChangeSection, "syncInteractionAfterHistoryChange should exist");
   assert.equal(
-    syncInteractionAfterHistoryChangeSection[0].includes("clearSpecialVolumePlacement(draft);"),
-    true,
-    "history changes should clear stale special-volume placement state",
+    syncInteractionAfterHistoryChangeSection[0].includes("specialVolumePlacement"),
+    false,
+    "history changes should no longer manage fog-specific placement state",
   );
 
   assert.equal(

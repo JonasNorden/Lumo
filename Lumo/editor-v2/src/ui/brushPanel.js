@@ -25,7 +25,7 @@ const VISIBLE_TOOL_OPTIONS = TOOL_OPTIONS.filter((option) => (
   || option.value === EDITOR_TOOLS.ERASE
 ));
 
-const HIDDEN_ENTITY_PRESET_IDS = new Set(["player-spawn", "player-exit", "exit"]);
+const HIDDEN_ENTITY_PRESET_IDS = new Set(["player-spawn", "player-exit", "exit", "fog_volume"]);
 const PLACEABLE_ENTITY_PRESETS = ENTITY_PRESETS.filter((preset) => !HIDDEN_ENTITY_PRESET_IDS.has(preset.id));
 
 function escapeHtml(value) {

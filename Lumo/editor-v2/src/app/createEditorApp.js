@@ -59,11 +59,8 @@ import { createSoundPreviewController, getSoundPreviewKey } from "../domain/soun
 import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
 import {
   applyFogVolumeParamChange,
-  createFogVolumeEntityFromWorldRect,
-  getFogVolumeRect,
   isFogVolumeEntityType,
   isSpecialVolumeEntityType,
-  resizeFogVolumeEntity,
   shiftFogVolumeEntity,
   syncFogVolumeEntityToAnchor,
 } from "../domain/entities/specialVolumeTypes.js";
@@ -1155,7 +1152,6 @@ export function createEditorApp({
     setActiveLayer(draft, nextMode === "decor" ? PANEL_LAYERS.DECOR : nextMode === "sound" ? PANEL_LAYERS.SOUND : PANEL_LAYERS.ENTITIES);
     draft.interaction.boxSelection = null;
     draft.interaction.entityDrag = null;
-    draft.interaction.specialVolumePlacement = null;
     draft.interaction.decorDrag = null;
     draft.interaction.soundDrag = null;
     draft.interaction.scanDrag = null;
@@ -1195,12 +1191,7 @@ export function createEditorApp({
     }
   };
 
-  const clearSpecialVolumePlacement = (draft) => {
-    draft.interaction.specialVolumePlacement = null;
-  };
-
   const clearActiveSelection = (draft, nextMode = getSelectionMode(draft.interaction)) => {
-    clearSpecialVolumePlacement(draft);
     if (getActiveLayer(draft.interaction) === PANEL_LAYERS.TILES) {
       clearEntitySelection(draft.interaction);
       clearDecorSelection(draft.interaction);
@@ -1267,7 +1258,7 @@ export function createEditorApp({
     const entityPreset = findEntityPresetById(normalizedPresetId)
       || findEntityPresetByType(normalizedPresetId);
 
-    if (entityPreset) return entityPreset;
+    if (entityPreset && !isFogVolumeEntityType(entityPreset.type)) return entityPreset;
 
     const decorPreset = findDecorPresetById(normalizedPresetId) || findDecorPresetByType(normalizedPresetId);
     if (decorPreset && isEntityLikeEditableType(decorPreset.type)) {
@@ -1275,7 +1266,8 @@ export function createEditorApp({
     }
 
     if (isEntityLikeEditableType(normalizedPresetId)) {
-      return getEntityPresetForType(normalizedPresetId);
+      const entityLikePreset = getEntityPresetForType(normalizedPresetId);
+      return entityLikePreset && !isFogVolumeEntityType(entityLikePreset.type) ? entityLikePreset : null;
     }
 
     return null;
@@ -1403,65 +1395,6 @@ export function createEditorApp({
       : entity;
   };
 
-  const finalizeSpecialVolumePlacement = (draft) => {
-    const doc = draft.document.active;
-    const placement = draft.interaction.specialVolumePlacement;
-    if (!doc || !placement?.active) return null;
-
-    const preset = resolveEntityPlacementPreset(placement.presetId);
-    if (!preset || !isSpecialVolumeEntityType(preset.type)) {
-      draft.interaction.specialVolumePlacement = null;
-      return null;
-    }
-
-    const startWorld = placement.startWorld;
-    const currentWorld = placement.currentWorld || placement.startWorld;
-    const draggedWidth = Math.abs((currentWorld?.x ?? startWorld?.x ?? 0) - (startWorld?.x ?? 0));
-    const draggedHeight = Math.abs((currentWorld?.y ?? startWorld?.y ?? 0) - (startWorld?.y ?? 0));
-    if (draggedWidth < 1 && draggedHeight < 1) {
-      clearSpecialVolumePlacement(draft);
-      return null;
-    }
-    const baseEntity = createEntityDraft(
-      doc,
-      placement.startCell.x,
-      placement.startCell.y,
-      placement.presetId,
-      (doc.entities?.length || 0) + 1,
-    );
-    const nextEntity = isFogVolumeEntityType(baseEntity.type)
-      ? createFogVolumeEntityFromWorldRect(baseEntity, {
-          x0: startWorld.x,
-          y0: startWorld.y,
-          x1: currentWorld.x,
-          y1: currentWorld.y,
-        }, doc.dimensions.tileSize)
-      : baseEntity;
-
-    doc.entities.push(nextEntity);
-    const createdIndex = doc.entities.length - 1;
-    pushHistoryEntry(
-      draft.history,
-      createEntityEditEntry("create", {
-        index: createdIndex,
-        entity: { ...nextEntity, params: cloneEntityParams(nextEntity.params) },
-      }),
-    );
-    setEntitySelection(draft.interaction, [createdIndex], createdIndex);
-    draft.interaction.hoveredEntityIndex = createdIndex;
-    draft.interaction.hoveredDecorIndex = null;
-    draft.interaction.hoveredSoundIndex = null;
-    clearDecorSelection(draft.interaction);
-    clearSoundSelection(draft.interaction);
-    draft.interaction.entityDrag = null;
-    draft.interaction.decorDrag = null;
-    draft.interaction.soundDrag = null;
-    clearSpecialVolumePlacement(draft);
-    setCanvasSelectionMode(draft, "entity");
-    updateEntitySelectionCell(draft, createdIndex);
-    return createdIndex;
-  };
-
   const createSoundDraft = (doc, x, y, presetId = DEFAULT_SOUND_PRESET_ID, nextNumber = (doc.sounds?.length || 0) + 1) => {
     const placement = clampSoundPosition(doc, x, y);
     const preset = findSoundPresetById(presetId) || findSoundPresetById(DEFAULT_SOUND_PRESET_ID);
@@ -1525,17 +1458,8 @@ export function createEditorApp({
 
     return (doc.entities || [])
       .map((entity, index) => ({ entity, index }))
-      .filter(({ entity }) => entity?.visible)
+      .filter(({ entity }) => entity?.visible && !isFogVolumeEntityType(entity?.type))
       .filter(({ entity }) => {
-        if (isSpecialVolumeEntityType(entity?.type)) {
-          const rect = getFogVolumeRect(entity, tileSize);
-          const rectMinX = viewport.offsetX + rect.x0 * viewport.zoom;
-          const rectMaxX = viewport.offsetX + rect.x1 * viewport.zoom;
-          const rectMinY = viewport.offsetY + rect.top * viewport.zoom;
-          const rectMaxY = viewport.offsetY + rect.bottom * viewport.zoom;
-          return rectMaxX >= minX && rectMinX <= maxX && rectMaxY >= minY && rectMinY <= maxY;
-        }
-
         const centerX = viewport.offsetX + (entity.x + 0.5) * tileSize * viewport.zoom;
         const centerY = viewport.offsetY + (entity.y + 0.5) * tileSize * viewport.zoom;
         return centerX >= minX && centerX <= maxX && centerY >= minY && centerY <= maxY;
@@ -2289,7 +2213,6 @@ export function createEditorApp({
       draft.interaction.hoveredSoundIndex = soundCount ? soundCount - 1 : null;
     }
 
-    clearSpecialVolumePlacement(draft);
 
     if (getSelectedEntityIndices(draft.interaction).length) {
       updateEntitySelectionCell(draft);
@@ -2430,8 +2353,11 @@ export function createEditorApp({
       return createDecorAtCell(draft, cell, decorPreset.id);
     }
 
+    const entityPreset = resolveEntityPlacementPreset(presetId);
+    if (!entityPreset) return null;
+
     const entities = doc.entities;
-    const entity = createEntityDraft(doc, cell.x, cell.y, presetId, entities.length + 1);
+    const entity = createEntityDraft(doc, cell.x, cell.y, entityPreset.id, entities.length + 1);
     entities.push(entity);
     const createdIndex = entities.length - 1;
     pushHistoryEntry(
@@ -2467,8 +2393,10 @@ export function createEditorApp({
 
       if (field === "preset") {
         const nextPresetId = typeof value === "string" ? value : null;
-        draft.interaction.activeEntityPresetId =
-          draft.interaction.activeEntityPresetId === nextPresetId ? null : nextPresetId;
+        const entityPreset = resolveEntityPlacementPreset(nextPresetId);
+        draft.interaction.activeEntityPresetId = entityPreset
+          ? (draft.interaction.activeEntityPresetId === entityPreset.id ? null : entityPreset.id)
+          : null;
         draft.interaction.activeDecorPresetId = null;
         draft.interaction.activeSoundPresetId = null;
         draft.interaction.activeTool = EDITOR_TOOLS.INSPECT;
@@ -2540,7 +2468,10 @@ export function createEditorApp({
       if (field === "name" || field === "type") {
         const trimmed = String(value || "").trim();
         const nextValue = field === "type"
-          ? (normalizeEditableObjectType(trimmed) || entity[field])
+          ? (() => {
+              const normalizedType = normalizeEditableObjectType(trimmed) || entity[field];
+              return isFogVolumeEntityType(normalizedType) ? entity[field] : normalizedType;
+            })()
           : (trimmed || entity[field]);
         if (entity[field] === nextValue) return;
         const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
@@ -2579,17 +2510,6 @@ export function createEditorApp({
         return;
       }
 
-      if ((field === "fogWidth" || field === "fogHeight") && isSpecialVolumeEntityType(entity.type)) {
-        const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
-        const nextEntity = resizeFogVolumeEntity(
-          entity,
-          field === "fogWidth" ? "width" : "height",
-          value,
-          doc.dimensions.tileSize,
-        );
-        doc.entities.splice(index, 1, nextEntity);
-        pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
-      }
     });
   };
 
@@ -2991,34 +2911,8 @@ export function createEditorApp({
     const activeSoundPresetId = state.interaction.activeSoundPresetId;
 
     if (activeLayer === PANEL_LAYERS.ENTITIES && activeEntityPresetId && isMomentaryPlacementTrigger(event)) {
-      const activeEntityPreset = resolveEntityPlacementPreset(activeEntityPresetId);
       interactionState.suppressNextClick = true;
       event.preventDefault();
-      if (activeEntityPreset && isSpecialVolumeEntityType(activeEntityPreset.type)) {
-        store.setState((draft) => {
-          applyCanvasTarget(draft, "entity");
-          draft.interaction.selectedCell = cell;
-          draft.interaction.hoverCell = cell;
-          draft.interaction.specialVolumePlacement = {
-            active: true,
-            presetId: activeEntityPresetId,
-            type: activeEntityPreset.type,
-            startCell: cell,
-            startPoint: point,
-            currentPoint: point,
-            startWorld: getClampedWorldPointFromCanvasPoint(draft.document.active, draft.viewport, point),
-            currentWorld: getClampedWorldPointFromCanvasPoint(draft.document.active, draft.viewport, point),
-          };
-          clearEntitySelection(draft.interaction);
-          clearDecorSelection(draft.interaction);
-          clearSoundSelection(draft.interaction);
-          draft.interaction.entityDrag = null;
-          draft.interaction.decorDrag = null;
-          draft.interaction.soundDrag = null;
-        });
-        return true;
-      }
-
       store.setState((draft) => {
         createEntityAtCell(draft, cell, activeEntityPresetId);
         draft.interaction.hoverCell = cell;
@@ -3315,27 +3209,6 @@ export function createEditorApp({
 
     updateHoveredCanvasState(event);
 
-    if (state.interaction.specialVolumePlacement?.active) {
-      if ((event.buttons & 1) !== 1) {
-        store.setState((draft) => {
-          clearSpecialVolumePlacement(draft);
-        });
-        return;
-      }
-
-      const point = getCanvasPointFromMouseEvent(canvas, event);
-      const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
-      const worldPoint = getClampedWorldPointFromCanvasPoint(state.document.active, state.viewport, point);
-
-      store.setState((draft) => {
-        const placement = draft.interaction.specialVolumePlacement;
-        if (!placement?.active) return;
-        placement.currentPoint = point;
-        placement.currentWorld = worldPoint;
-        draft.interaction.hoverCell = cell || draft.interaction.hoverCell;
-      });
-      return;
-    }
 
     if (state.interaction.entityDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
@@ -3502,12 +3375,6 @@ export function createEditorApp({
       return;
     }
 
-    if (state.interaction.specialVolumePlacement?.active) {
-      store.setState((draft) => {
-        finalizeSpecialVolumePlacement(draft);
-      });
-      return;
-    }
 
     if (state.interaction.entityDrag?.active) {
       store.setState((draft) => {
@@ -3735,7 +3602,6 @@ export function createEditorApp({
     draft.interaction.lineDrag = null;
     draft.interaction.boxSelection = null;
     draft.interaction.entityDrag = null;
-    draft.interaction.specialVolumePlacement = null;
     draft.interaction.decorDrag = null;
     draft.interaction.soundDrag = null;
     draft.interaction.scanDrag = null;
@@ -3865,7 +3731,6 @@ export function createEditorApp({
   const setActiveTool = (tool) => {
     store.setState((draft) => {
       draft.interaction.activeTool = tool;
-      clearSpecialVolumePlacement(draft);
       if (tool !== EDITOR_TOOLS.INSPECT) {
         setActiveLayer(draft, PANEL_LAYERS.TILES);
       }
@@ -3896,7 +3761,6 @@ export function createEditorApp({
       }
 
       setActiveLayer(draft, PANEL_LAYERS.TILES);
-      clearSpecialVolumePlacement(draft);
       draft.interaction.activeEntityPresetId = null;
       draft.interaction.activeDecorPresetId = null;
       draft.interaction.activeSoundPresetId = null;
@@ -4185,7 +4049,6 @@ export function createEditorApp({
         state.interaction.selectedCell = null;
         state.interaction.hoverCell = null;
         clearEntitySelection(state.interaction);
-        state.interaction.specialVolumePlacement = null;
         state.interaction.boxSelection = null;
         state.interaction.entityDrag = null;
         state.interaction.decorDrag = null;
