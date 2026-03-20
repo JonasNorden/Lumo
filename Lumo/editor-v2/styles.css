@@ -630,6 +630,11 @@ select {
   background: rgba(15, 23, 40, 0.9);
 }
 
+.decorPlacementCard {
+  gap: 2px;
+  padding: 8px 10px;
+}
+
 .statusCardLabel {
   color: #8fa5d3;
   font-size: 10px;
@@ -783,6 +788,35 @@ select {
   font-size: 9px;
 }
 
+.assetPickerDecorCompact {
+  gap: 6px;
+}
+
+.assetPickerDecorCompact .assetPickerItem {
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+}
+
+.assetPickerDecorCompact .assetThumb {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+}
+
+.assetPickerDecorCompact .assetPickerMeta {
+  gap: 2px;
+}
+
+.assetPickerDecorCompact .assetPickerLabel {
+  line-height: 1.2;
+}
+
+.assetPickerDecorCompact .assetPickerDetail {
+  font-size: 9px;
+}
+
 .assetPickerEmpty {
   padding: 10px 12px;
   border-radius: 12px;
@@ -799,7 +833,7 @@ select {
 
 .tilesPanelControls {
   display: grid;
-  grid-template-columns: repeat(2, minmax(72px, max-content));
+  grid-template-columns: minmax(94px, max-content) minmax(72px, max-content);
   gap: 6px;
   align-items: center;
   justify-content: end;
@@ -1062,9 +1096,17 @@ select {
 }
 
 .compactSubsection {
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: 8px;
+  padding-top: 8px;
   border-top: 1px solid rgba(40, 54, 83, 0.8);
+}
+
+.compactSubsectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .compactFieldGrid {
@@ -1072,9 +1114,48 @@ select {
   gap: 8px;
 }
 
+.decorScatterHeader {
+  align-items: flex-start;
+}
+
+.decorScatterHeaderControls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.decorScatterVariantField {
+  margin-bottom: 0;
+  min-width: 82px;
+}
+
+.decorScatterVariantField select {
+  min-height: 28px;
+  padding-block: 4px;
+  font-size: 11px;
+}
+
 .decorScatterCompactGrid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+
+.decorScatterSliderRow {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+.decorScatterSliderRow .label {
+  white-space: nowrap;
+}
+
+.decorScatterSliderRowFull {
+  grid-column: 1 / -1;
 }
 
 .rangeField {
@@ -1084,6 +1165,10 @@ select {
   align-items: center;
 }
 
+.rangeFieldCompact {
+  gap: 6px;
+}
+
 .rangeField input[type="range"] {
   width: 100%;
   min-width: 0;
@@ -1091,7 +1176,7 @@ select {
 }
 
 .rangeValue {
-  min-width: 42px;
+  min-width: 38px;
   color: #dbe5ff;
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -1522,4 +1607,13 @@ kbd {
     gap: 4px 8px;
   }
 
+}
+
+.decorScatterStatusRow {
+  padding: 0;
+  margin-top: 4px;
+}
+
+.decorScatterStatusRow .value {
+  font-size: 11px;
 }
