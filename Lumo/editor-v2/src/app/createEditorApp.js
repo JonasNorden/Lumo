@@ -15,7 +15,15 @@ import { renderBottomPanel, bindBottomPanel } from "../ui/bottomPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
-import { createNewLevelDocument } from "../data/createNewLevelDocument.js";
+import {
+  createNewLevelDocument,
+  DEFAULT_NEW_LEVEL_HEIGHT,
+  DEFAULT_NEW_LEVEL_WIDTH,
+  isValidLevelDimension,
+  MAX_LEVEL_DIMENSION,
+  MIN_LEVEL_DIMENSION,
+  sanitizeLevelDimension,
+} from "../data/createNewLevelDocument.js";
 import { resolveTileFromBrushDraft, paintSingleTile } from "../domain/tiles/paintTile.js";
 import { resolveBrushSize, getBrushCells } from "../domain/tiles/brushSize.js";
 import { eraseSingleTile } from "../domain/tiles/eraseTile.js";
@@ -269,6 +277,71 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function getNewLevelSizeValidationMessage(widthValue, heightValue) {
+  const parsedWidth = Number.parseInt(String(widthValue), 10);
+  const parsedHeight = Number.parseInt(String(heightValue), 10);
+
+  if (!Number.isInteger(parsedWidth) || !Number.isInteger(parsedHeight)) {
+    return `Use whole numbers from ${MIN_LEVEL_DIMENSION} to ${MAX_LEVEL_DIMENSION}.`;
+  }
+
+  if (!isValidLevelDimension(parsedWidth) || !isValidLevelDimension(parsedHeight)) {
+    return `Size must stay between ${MIN_LEVEL_DIMENSION} and ${MAX_LEVEL_DIMENSION}.`;
+  }
+
+  return null;
+}
+
+function renderNewLevelSizePopover(state) {
+  const newLevelSize = state.ui.newLevelSize;
+  if (!newLevelSize?.isOpen) return "";
+
+  const widthValue = newLevelSize.width ?? String(DEFAULT_NEW_LEVEL_WIDTH);
+  const heightValue = newLevelSize.height ?? String(DEFAULT_NEW_LEVEL_HEIGHT);
+  const validationMessage = newLevelSize.error || getNewLevelSizeValidationMessage(widthValue, heightValue);
+  const isValid = !validationMessage;
+
+  return `
+    <form class="newLevelPopover panelSection" data-new-level-popover>
+      <div class="newLevelPopoverHeader">
+        <span class="newLevelPopoverTitle">New level size</span>
+        <button type="button" class="topBarIconButton newLevelPopoverClose" data-new-level-action="cancel" aria-label="Cancel">×</button>
+      </div>
+      <div class="newLevelPopoverFields compactFieldGrid">
+        <label class="fieldRow fieldRowCompact">
+          <span class="label">Width</span>
+          <input
+            type="number"
+            min="${MIN_LEVEL_DIMENSION}"
+            max="${MAX_LEVEL_DIMENSION}"
+            step="1"
+            inputmode="numeric"
+            value="${escapeHtml(widthValue)}"
+            data-new-level-field="width"
+          />
+        </label>
+        <label class="fieldRow fieldRowCompact">
+          <span class="label">Height</span>
+          <input
+            type="number"
+            min="${MIN_LEVEL_DIMENSION}"
+            max="${MAX_LEVEL_DIMENSION}"
+            step="1"
+            inputmode="numeric"
+            value="${escapeHtml(heightValue)}"
+            data-new-level-field="height"
+          />
+        </label>
+      </div>
+      <div class="newLevelPopoverError">${validationMessage ? escapeHtml(validationMessage) : "&nbsp;"}</div>
+      <div class="newLevelPopoverActions">
+        <button type="button" class="toolButton isSecondary" data-new-level-action="cancel">Cancel</button>
+        <button type="submit" class="toolButton" data-new-level-action="confirm" ${isValid ? "" : "disabled"}>Create</button>
+      </div>
+    </form>
+  `;
+}
+
 function renderSettingsMenu(state) {
   const active = state.document.active;
   const layers = [...(active?.backgrounds?.layers || [])].sort((left, right) => (left.depth ?? 0) - (right.depth ?? 0));
@@ -390,11 +463,11 @@ function renderExportMenu(state) {
         </label>
         <label class="fieldRow fieldRowCompact">
           <span class="label">Width</span>
-          <input type="number" min="8" max="256" step="1" value="${active.dimensions.width}" data-export-dimension-field="width" />
+          <input type="number" min="${MIN_LEVEL_DIMENSION}" max="${MAX_LEVEL_DIMENSION}" step="1" value="${active.dimensions.width}" data-export-dimension-field="width" />
         </label>
         <label class="fieldRow fieldRowCompact">
           <span class="label">Height</span>
-          <input type="number" min="8" max="256" step="1" value="${active.dimensions.height}" data-export-dimension-field="height" />
+          <input type="number" min="${MIN_LEVEL_DIMENSION}" max="${MAX_LEVEL_DIMENSION}" step="1" value="${active.dimensions.height}" data-export-dimension-field="height" />
         </label>
       </div>
       <div class="compactActionRow compactActionRowSingle topBarMenuActionRow">
@@ -427,6 +500,7 @@ function renderHelpMenu() {
 export function createEditorApp({
   canvas,
   minimapCanvas,
+  floatingPanelHost,
   inspector,
   brushPanel,
   cellHud,
@@ -1143,6 +1217,19 @@ export function createEditorApp({
     topBarExportMenu.classList.toggle("isOpen", activeMenu === "export");
     topBarSettingsMenu.classList.toggle("isOpen", activeMenu === "settings");
     topBarHelpMenu.classList.toggle("isOpen", activeMenu === "help");
+  };
+
+  const renderFloatingPanels = (state) => {
+    const focusedField = document.activeElement instanceof HTMLInputElement
+      ? document.activeElement.dataset.newLevelField || null
+      : null;
+    floatingPanelHost.innerHTML = renderNewLevelSizePopover(state);
+    if (!focusedField || !state.ui.newLevelSize?.isOpen) return;
+    const nextField = floatingPanelHost.querySelector(`[data-new-level-field="${focusedField}"]`);
+    if (nextField instanceof HTMLInputElement) {
+      nextField.focus({ preventScroll: true });
+      nextField.select();
+    }
   };
 
   const applyCanvasTarget = (draft, mode) => {
@@ -2720,6 +2807,7 @@ export function createEditorApp({
     renderBrushPanel(brushPanel, state);
     renderCellHud(cellHud, state);
     renderTopBar(state);
+    renderFloatingPanels(state);
     bottomPanel.dataset.selectionTarget = getActiveLayer(state.interaction);
   };
 
@@ -3625,11 +3713,66 @@ export function createEditorApp({
     clearSoundSelection(draft.interaction);
     draft.interaction.hoverCell = null;
     draft.ui.importStatus = statusMessage;
+    draft.ui.newLevelSize = {
+      isOpen: false,
+      width: String(nextDocument?.dimensions?.width || DEFAULT_NEW_LEVEL_WIDTH),
+      height: String(nextDocument?.dimensions?.height || DEFAULT_NEW_LEVEL_HEIGHT),
+      error: null,
+    };
     syncScanWithDocument(draft, { preserveRange: false, preserveLog: false });
   };
 
-  const handleNewLevel = () => {
-    const newDocument = createNewLevelDocument();
+  const openNewLevelSizeFlow = () => {
+    const active = store.getState().document.active;
+    store.setState((draft) => {
+      draft.ui.topBarMenu = null;
+      draft.ui.newLevelSize.isOpen = true;
+      draft.ui.newLevelSize.width = String(active?.dimensions?.width || DEFAULT_NEW_LEVEL_WIDTH);
+      draft.ui.newLevelSize.height = String(active?.dimensions?.height || DEFAULT_NEW_LEVEL_HEIGHT);
+      draft.ui.newLevelSize.error = null;
+    });
+    requestAnimationFrame(() => {
+      const firstField = floatingPanelHost.querySelector('[data-new-level-field="width"]');
+      if (firstField instanceof HTMLInputElement) {
+        firstField.focus({ preventScroll: true });
+        firstField.select();
+      }
+    });
+  };
+
+  const closeNewLevelSizeFlow = () => {
+    store.setState((draft) => {
+      draft.ui.newLevelSize.isOpen = false;
+      draft.ui.newLevelSize.error = null;
+    });
+  };
+
+  const updateNewLevelSizeField = (field, rawValue, options = {}) => {
+    if (field !== "width" && field !== "height") return false;
+    const { commit = false } = options;
+    store.setState((draft) => {
+      draft.ui.newLevelSize[field] = commit
+        ? String(sanitizeLevelDimension(rawValue, field === "width" ? DEFAULT_NEW_LEVEL_WIDTH : DEFAULT_NEW_LEVEL_HEIGHT))
+        : rawValue;
+      draft.ui.newLevelSize.error = null;
+    });
+    return true;
+  };
+
+  const confirmNewLevelSizeFlow = () => {
+    const newLevelSize = store.getState().ui.newLevelSize;
+    const validationMessage = getNewLevelSizeValidationMessage(newLevelSize.width, newLevelSize.height);
+    if (validationMessage) {
+      store.setState((draft) => {
+        draft.ui.newLevelSize.error = validationMessage;
+      });
+      return false;
+    }
+
+    const newDocument = createNewLevelDocument({
+      width: newLevelSize.width,
+      height: newLevelSize.height,
+    });
 
     store.setState((draft) => {
       resetEditorForDocument(draft, newDocument, "New level created");
@@ -3637,6 +3780,7 @@ export function createEditorApp({
 
     resize();
     draw(store.getState());
+    return true;
   };
 
   const handleUndo = () => {
@@ -3779,6 +3923,14 @@ export function createEditorApp({
   };
 
   const handleGlobalKeyDown = (event) => {
+    if (store.getState().ui.newLevelSize?.isOpen) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeNewLevelSizeFlow();
+        return;
+      }
+    }
+
     if (event.code === "Space") {
       if (isShortcutTargetBlocked(event.target)) return;
       event.preventDefault();
@@ -3883,6 +4035,43 @@ export function createEditorApp({
     });
   };
 
+  const handleFloatingPanelClick = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+
+    const actionButton = target.closest("[data-new-level-action]");
+    if (!(actionButton instanceof HTMLButtonElement)) return;
+
+    const action = actionButton.dataset.newLevelAction;
+    if (action === "cancel") {
+      closeNewLevelSizeFlow();
+      return;
+    }
+
+    if (action === "confirm") {
+      confirmNewLevelSizeFlow();
+    }
+  };
+
+  const handleFloatingPanelInput = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const field = target.dataset.newLevelField;
+    updateNewLevelSizeField(field, target.value, { commit: false });
+  };
+
+  const handleFloatingPanelChange = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const field = target.dataset.newLevelField;
+    updateNewLevelSizeField(field, target.value, { commit: true });
+  };
+
+  const handleFloatingPanelSubmit = (event) => {
+    event.preventDefault();
+    confirmNewLevelSizeFlow();
+  };
+
   const handleTopBarClick = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
@@ -3899,7 +4088,7 @@ export function createEditorApp({
     const actionButton = target.closest("[data-topbar-action]");
     if (actionButton instanceof HTMLButtonElement) {
       const action = actionButton.dataset.topbarAction;
-      if (action === "new") handleNewLevel();
+      if (action === "new") openNewLevelSizeFlow();
       if (action === "import") handleImport();
       if (action === "undo") handleUndo();
       if (action === "redo") handleRedo();
@@ -3959,8 +4148,9 @@ export function createEditorApp({
       const active = state.document.active;
       if (!active) return true;
 
-      const parsed = Number.parseInt(target.value, 10);
-      const nextValue = Number.isInteger(parsed) ? Math.max(8, Math.min(256, parsed)) : active.dimensions[exportDimensionField];
+      const nextValue = target.value.trim()
+        ? sanitizeLevelDimension(target.value, active.dimensions[exportDimensionField])
+        : active.dimensions[exportDimensionField];
       target.value = String(nextValue);
       const nextWidth = exportDimensionField === "width" ? nextValue : active.dimensions.width;
       const nextHeight = exportDimensionField === "height" ? nextValue : active.dimensions.height;
@@ -4022,8 +4212,12 @@ export function createEditorApp({
   const handleDocumentPointerDown = (event) => {
     if (!(event.target instanceof Element)) return;
     if (topBar.contains(event.target)) return;
+    if (floatingPanelHost.contains(event.target)) return;
     if (store.getState().ui.topBarMenu) {
       closeTopBarMenu();
+    }
+    if (store.getState().ui.newLevelSize?.isOpen) {
+      closeNewLevelSizeFlow();
     }
   };
 
@@ -4058,6 +4252,12 @@ export function createEditorApp({
         state.interaction.activeEntityPresetId = null;
         state.interaction.activeDecorPresetId = null;
         state.interaction.activeSoundPresetId = null;
+        state.ui.newLevelSize = {
+          isOpen: false,
+          width: String(doc?.dimensions?.width || DEFAULT_NEW_LEVEL_WIDTH),
+          height: String(doc?.dimensions?.height || DEFAULT_NEW_LEVEL_HEIGHT),
+          error: null,
+        };
         syncScanWithDocument(state, { preserveRange: false, preserveLog: false });
       });
       resize();
@@ -4102,6 +4302,10 @@ export function createEditorApp({
   topBar.addEventListener("click", handleTopBarClick);
   topBar.addEventListener("input", handleTopBarInput);
   topBar.addEventListener("change", handleTopBarChange);
+  floatingPanelHost.addEventListener("click", handleFloatingPanelClick);
+  floatingPanelHost.addEventListener("input", handleFloatingPanelInput);
+  floatingPanelHost.addEventListener("change", handleFloatingPanelChange);
+  floatingPanelHost.addEventListener("submit", handleFloatingPanelSubmit);
   document.addEventListener("pointerdown", handleDocumentPointerDown);
 
   resize();
@@ -4132,6 +4336,10 @@ export function createEditorApp({
     topBar.removeEventListener("click", handleTopBarClick);
     topBar.removeEventListener("input", handleTopBarInput);
     topBar.removeEventListener("change", handleTopBarChange);
+    floatingPanelHost.removeEventListener("click", handleFloatingPanelClick);
+    floatingPanelHost.removeEventListener("input", handleFloatingPanelInput);
+    floatingPanelHost.removeEventListener("change", handleFloatingPanelChange);
+    floatingPanelHost.removeEventListener("submit", handleFloatingPanelSubmit);
     document.removeEventListener("pointerdown", handleDocumentPointerDown);
   };
 }

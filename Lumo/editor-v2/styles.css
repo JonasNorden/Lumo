@@ -276,6 +276,19 @@ select {
   padding: 12px;
 }
 
+.floatingPanelHost {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  z-index: 8;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.floatingPanelHost > * {
+  pointer-events: auto;
+}
+
 #editorCanvas {
   width: 100%;
   height: 100%;
@@ -296,6 +309,61 @@ select {
   background: rgba(5, 9, 18, 0.92);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
   overflow: hidden;
+}
+
+.newLevelPopover {
+  width: min(320px, calc(100vw - 48px));
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(58, 78, 118, 0.95);
+  background: rgba(8, 13, 24, 0.96);
+  box-shadow: 0 20px 42px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(16px);
+}
+
+.newLevelPopoverHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.newLevelPopoverTitle {
+  color: #dbe7ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.newLevelPopoverClose {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.newLevelPopoverFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.newLevelPopoverActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.newLevelPopoverError {
+  min-height: 16px;
+  margin-top: 8px;
+  color: #ff9ca8;
+  font-size: 11px;
 }
 
 #minimapCanvas {

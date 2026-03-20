@@ -1,4 +1,5 @@
 import { createDefaultBrushDraft } from "../domain/tiles/brushDraft.js";
+import { DEFAULT_NEW_LEVEL_HEIGHT, DEFAULT_NEW_LEVEL_WIDTH } from "../data/createNewLevelDocument.js";
 
 export function createEditorState() {
   return {
@@ -99,6 +100,12 @@ export function createEditorState() {
       workspaceBackground: "#0a0f1d",
       darknessPreviewEnabled: false,
       topBarMenu: null,
+      newLevelSize: {
+        isOpen: false,
+        width: String(DEFAULT_NEW_LEVEL_WIDTH),
+        height: String(DEFAULT_NEW_LEVEL_HEIGHT),
+        error: null,
+      },
       panelSections: {
         tiles: true,
         entities: true,
