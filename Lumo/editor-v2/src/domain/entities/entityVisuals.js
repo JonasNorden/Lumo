@@ -43,6 +43,13 @@ const ENTITY_VISUALS = {
     stroke: "#d7c7ff",
     hitRadius: 8.5,
   },
+  fog_volume: {
+    key: "fog_volume",
+    label: "Fog Volume",
+    stroke: "#cbe9ff",
+    hitRadius: 10,
+    isVolume: true,
+  },
   generic: {
     key: "generic",
     label: "Generic",
@@ -79,6 +86,7 @@ export function getEntityVisual(entityType) {
     footprintH: preset?.footprintH || preset?.drawH || 24,
     drawAnchor: preset?.drawAnchor || "BL",
     hitRadius: preset?.hitRadius || baseVisual.hitRadius,
+    isVolume: baseVisual.isVolume || false,
   };
 }
 
