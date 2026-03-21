@@ -46,6 +46,12 @@ import { evaluateScanAudio } from "../src/domain/scan/scanAudioEvaluation.js";
 import { createScanAudioPlaybackController } from "../src/domain/scan/scanAudioPlayback.js";
 import { resolveSoundPlaybackSource } from "../src/domain/sound/sourceReference.js";
 import {
+  captureIdObjectInteractionSnapshot,
+  captureIndexedObjectInteractionSnapshot,
+  reconcileIdObjectInteraction,
+  reconcileIndexedObjectInteraction,
+} from "../src/domain/placeables/objectInteractionReconciliation.js";
+import {
   findMatchingSoundIndices,
   getSelectedSoundIds,
   getSelectedSoundIndices,
@@ -784,6 +790,103 @@ function runSoundDragPreviewIdentityRegressionChecks() {
     operations.length,
     operationsAfterRender,
     "stale drag preview ids should not render a different surviving zone sound at the deleted sound's previous slot",
+  );
+}
+
+function runObjectLayerInteractionReconciliationChecks() {
+  const beforeEntities = [
+    { id: "entity-a", x: 0, y: 0, visible: true },
+    { id: "entity-b", x: 1, y: 0, visible: true },
+    { id: "entity-c", x: 2, y: 0, visible: true },
+  ];
+  const afterEntities = beforeEntities.slice(1);
+  const capturedEntityInteraction = captureIndexedObjectInteractionSnapshot(beforeEntities, {
+    selectedIndices: [1, 2],
+    primarySelectedIndex: 2,
+    hoveredIndex: 1,
+    drag: {
+      active: true,
+      leadIndex: 2,
+      anchorCell: { x: 2, y: 0 },
+      previewDelta: { x: 1, y: 0 },
+      originPositions: [
+        { index: 1, x: 1, y: 0 },
+        { index: 2, x: 2, y: 0 },
+      ],
+    },
+  });
+  const reconciledEntityInteraction = reconcileIndexedObjectInteraction(afterEntities, capturedEntityInteraction);
+
+  assert.deepEqual(
+    reconciledEntityInteraction.selectedIndices,
+    [0, 1],
+    "indexed object reconciliation should rebind surviving selections to their new indices after deletion",
+  );
+  assert.equal(
+    reconciledEntityInteraction.primarySelectedIndex,
+    1,
+    "indexed object reconciliation should keep the primary selection attached to the surviving entity id",
+  );
+  assert.equal(
+    reconciledEntityInteraction.hoveredIndex,
+    0,
+    "indexed object reconciliation should rebind hover state by id instead of leaving a stale array slot reference",
+  );
+  assert.deepEqual(
+    reconciledEntityInteraction.drag?.originPositions,
+    [
+      { index: 0, x: 1, y: 0 },
+      { index: 1, x: 2, y: 0 },
+    ],
+    "indexed object reconciliation should remap drag origins so surviving objects do not inherit deleted indices",
+  );
+  assert.equal(
+    reconciledEntityInteraction.drag?.leadIndex,
+    1,
+    "indexed object reconciliation should keep the drag lead attached to the surviving entity id",
+  );
+
+  const beforeSounds = [
+    { id: "sound-a", x: 0, y: 0, visible: true },
+    { id: "sound-b", x: 1, y: 0, visible: true },
+    { id: "sound-c", x: 2, y: 0, visible: true },
+  ];
+  const reconciledSoundInteraction = reconcileIdObjectInteraction(
+    beforeSounds.slice(1),
+    captureIdObjectInteractionSnapshot({
+      selectedIds: ["sound-b", "sound-c"],
+      primarySelectedId: "sound-c",
+      hoveredId: "sound-b",
+      drag: {
+        active: true,
+        leadSoundId: "sound-c",
+        anchorCell: { x: 2, y: 0 },
+        previewDelta: { x: -1, y: 0 },
+        originPositions: [
+          { soundId: "sound-b", x: 1, y: 0 },
+          { soundId: "sound-c", x: 2, y: 0 },
+        ],
+      },
+    }),
+  );
+
+  assert.deepEqual(
+    reconciledSoundInteraction.selectedIndices,
+    [0, 1],
+    "id-based object reconciliation should resolve surviving sound ids to their new indices after deletion",
+  );
+  assert.equal(
+    reconciledSoundInteraction.hoveredIndex,
+    0,
+    "id-based object reconciliation should immediately rebind sound hover state without a follow-up pointer move",
+  );
+  assert.deepEqual(
+    reconciledSoundInteraction.drag?.originPositions,
+    [
+      { soundId: "sound-b", x: 1, y: 0 },
+      { soundId: "sound-c", x: 2, y: 0 },
+    ],
+    "id-based object reconciliation should preserve drag origins only for surviving sound ids",
   );
 }
 
@@ -1815,6 +1918,21 @@ function runSourceRegressionChecks() {
     "momentary placement should use Alt/Option",
   );
   assert.equal(
+    source.includes("const captureObjectLayerInteractionSnapshots = (draft) => ({"),
+    true,
+    "editor-v2 should snapshot shared object-layer interaction identities before object mutations",
+  );
+  assert.equal(
+    source.includes("const reconcileObjectLayerInteractionAfterMutation = (draft, snapshots = captureObjectLayerInteractionSnapshots(draft), options = {}) => {"),
+    true,
+    "editor-v2 should use a shared post-mutation object-layer reconciliation path",
+  );
+  assert.equal(
+    source.includes("reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, {"),
+    true,
+    "delete and history mutations should reconcile object-layer interaction state immediately after mutation",
+  );
+  assert.equal(
     source.includes('activeEntityPresetId && isMomentaryPlacementTrigger(event)'),
     true,
     "armed entities should only place with the Alt/Option modifier",
@@ -1879,8 +1997,8 @@ function runSourceRegressionChecks() {
     "fog-specific finalize placement helpers should be removed from the editor app",
   );
 
-  const syncInteractionAfterHistoryChangeSection = source.match(/const syncInteractionAfterHistoryChange = \(draft\) => \{[\s\S]*?\n  \};/);
-  assert.ok(syncInteractionAfterHistoryChangeSection, "syncInteractionAfterHistoryChange should exist");
+  const syncInteractionAfterHistoryChangeSection = source.match(/const reconcileObjectLayerInteractionAfterMutation = \(draft, snapshots = captureObjectLayerInteractionSnapshots\(draft\), options = \{\}\) => \{[\s\S]*?\n  \};/);
+  assert.ok(syncInteractionAfterHistoryChangeSection, "shared object-layer post-mutation reconciliation should exist");
   assert.equal(
     syncInteractionAfterHistoryChangeSection[0].includes("specialVolumePlacement"),
     false,
@@ -1983,6 +2101,7 @@ async function main() {
   runSoundTypeRenderRegressionChecks();
   runSoundIdentityRegressionChecks();
   runSoundDragPreviewIdentityRegressionChecks();
+  runObjectLayerInteractionReconciliationChecks();
   runDarknessPreviewRegressionChecks();
   runScanRegressionChecks();
   runScanAudioPlaybackRegressionChecks();

@@ -25,11 +25,15 @@ export function setEntitySelection(interaction, indices, primaryIndex = null) {
       : nextSelection.length
         ? nextSelection[nextSelection.length - 1]
         : null;
+  interaction.selectedEntityIds = [];
+  interaction.selectedEntityId = null;
 }
 
 export function clearEntitySelection(interaction) {
   interaction.selectedEntityIndices = [];
   interaction.selectedEntityIndex = null;
+  interaction.selectedEntityIds = [];
+  interaction.selectedEntityId = null;
 }
 
 export function isEntitySelected(interaction, index) {
