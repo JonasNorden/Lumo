@@ -56,7 +56,8 @@ import { collectDarknessPreviewLights, getPreviewPlayerLight } from "../src/rend
 import { createFogVolumeEntityFromWorldRect } from "../src/domain/entities/specialVolumeTypes.js";
 import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
 import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
-import { findSoundAtCanvasPoint, renderSoundDragPreview, renderSounds } from "../src/render/layers/soundLayer.js";
+import { findSoundAtCanvasPoint, renderSoundDragPreview, renderSoundPlacementPreview, renderSounds } from "../src/render/layers/soundLayer.js";
+import { findSoundPresetById } from "../src/domain/sound/soundPresets.js";
 
 function createHistoryState() {
   return {
@@ -654,6 +655,31 @@ function runSoundTypeRenderRegressionChecks() {
     },
   });
   assert.ok(dragPreview.operations.length > 0, "sound drag previews should render for spot, trigger, ambient, and music sounds");
+
+  for (const presetId of ["spot", "trigger", "ambient-zone", "music-zone"]) {
+    const preset = findSoundPresetById(presetId);
+    assert.ok(preset, `${presetId} sound preset should exist for placement preview coverage`);
+
+    const placementPreview = createPreviewTestContext();
+    renderSoundPlacementPreview(placementPreview.ctx, doc, viewport, {
+      activeTool: "inspect",
+      hoverCell: { x: 1, y: 1 },
+      soundPlacementPreviewSuppressed: false,
+    }, preset);
+    assert.ok(placementPreview.operations.length > 0, `${preset.defaultName} placement preview should keep rendering during normal placement workflow`);
+
+    const suppressedPlacementPreview = createPreviewTestContext();
+    renderSoundPlacementPreview(suppressedPlacementPreview.ctx, doc, viewport, {
+      activeTool: "inspect",
+      hoverCell: { x: 1, y: 1 },
+      soundPlacementPreviewSuppressed: true,
+    }, preset);
+    assert.equal(
+      suppressedPlacementPreview.operations.length,
+      0,
+      `${preset.defaultName} placement preview should stay hidden while authored sound mutations suppress stale hover previews`,
+    );
+  }
 }
 
 function runSoundIdentityRegressionChecks() {

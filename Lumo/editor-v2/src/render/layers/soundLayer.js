@@ -619,6 +619,7 @@ export function renderSoundDragPreview(ctx, doc, viewport, interaction) {
 
 export function renderSoundPlacementPreview(ctx, doc, viewport, interaction, activePreset) {
   if (interaction.activeTool !== "inspect") return;
+  if (interaction.soundPlacementPreviewSuppressed) return;
   if (!interaction.hoverCell || !activePreset) return;
 
   drawSoundMarker(ctx, {
