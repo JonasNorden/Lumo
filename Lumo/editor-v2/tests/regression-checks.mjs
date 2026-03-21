@@ -45,11 +45,18 @@ import {
 import { evaluateScanAudio } from "../src/domain/scan/scanAudioEvaluation.js";
 import { createScanAudioPlaybackController } from "../src/domain/scan/scanAudioPlayback.js";
 import { resolveSoundPlaybackSource } from "../src/domain/sound/sourceReference.js";
-import { findMatchingSoundIndices } from "../src/domain/sound/selection.js";
+import {
+  findMatchingSoundIndices,
+  getSelectedSoundIds,
+  getSelectedSoundIndices,
+  pruneSoundSelection,
+  setSoundSelection,
+} from "../src/domain/sound/selection.js";
 import { collectDarknessPreviewLights, getPreviewPlayerLight } from "../src/render/darknessPreview.js";
 import { createFogVolumeEntityFromWorldRect } from "../src/domain/entities/specialVolumeTypes.js";
 import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
 import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
+import { renderSoundDragPreview, renderSounds } from "../src/render/layers/soundLayer.js";
 
 function createHistoryState() {
   return {
@@ -103,11 +110,30 @@ function createPreviewTestContext() {
     beginPath() {},
     moveTo() {},
     lineTo() {},
+    bezierCurveTo() {},
+    quadraticCurveTo() {},
+    arc() {},
+    closePath() {},
     stroke() {},
+    fill() {},
     fillText(...args) { operations.push(["fillText", ...args]); },
     setLineDash() {},
+    translate() {},
+    rotate() {},
   };
   return { ctx, operations };
+}
+
+function createSoundInteractionState() {
+  return {
+    hoveredSoundIndex: null,
+    hoveredSoundId: null,
+    selectedSoundIndices: [],
+    selectedSoundIndex: null,
+    selectedSoundIds: [],
+    selectedSoundId: null,
+    soundDrag: null,
+  };
 }
 
 function runTileRegressionChecks() {
@@ -574,6 +600,96 @@ function runSoundRegressionChecks() {
   assert.equal(exported.sounds[0].source, "./audio/wind.ogg", "sound export should retain authored sound sources");
   assert.equal(exported.sounds[1].source, "./audio/legacy.ogg", "sound export should retain normalized legacy sound sources");
   assert.equal(exported.sounds[1].type, "spot", "sound export should retain normal authoring types alongside sound sources");
+}
+
+function runSoundIdentityRegressionChecks() {
+  const interaction = createSoundInteractionState();
+  const sounds = [
+    { id: "spot-a", type: "spot", x: 0, y: 0, visible: true, params: {} },
+    { id: "trigger-b", type: "trigger", x: 1, y: 0, visible: true, params: {} },
+    { id: "ambient-c", type: "ambientZone", x: 2, y: 0, visible: true, params: { width: 2, height: 1 } },
+    { id: "music-d", type: "musicZone", x: 4, y: 0, visible: true, params: { width: 3, height: 1 } },
+  ];
+
+  setSoundSelection(interaction, [0, 2, 3], 3, sounds);
+  assert.deepEqual(
+    getSelectedSoundIds(interaction),
+    ["spot-a", "ambient-c", "music-d"],
+    "sound selection should capture stable sound ids when selecting by index",
+  );
+  assert.deepEqual(
+    getSelectedSoundIndices(interaction, sounds),
+    [0, 2, 3],
+    "sound selection should still resolve the original indices before mutation",
+  );
+
+  sounds.splice(2, 1);
+  pruneSoundSelection(interaction, sounds);
+  assert.deepEqual(
+    getSelectedSoundIds(interaction),
+    ["spot-a", "music-d"],
+    "pruning after deletion should discard only the deleted sound id and keep surviving sound ids",
+  );
+  assert.deepEqual(
+    getSelectedSoundIndices(interaction, sounds),
+    [0, 2],
+    "pruning after deletion should rebind surviving sound ids to their new indices",
+  );
+  assert.equal(interaction.selectedSoundId, "music-d", "primary sound selection should stay attached to the surviving sound id");
+  assert.equal(interaction.selectedSoundIndex, 2, "primary sound selection should update to the surviving sound's new index");
+}
+
+function runSoundDragPreviewIdentityRegressionChecks() {
+  const doc = createDoc();
+  doc.sounds = [
+    {
+      id: "ambient-zone",
+      name: "Ambient Zone",
+      type: "ambientZone",
+      x: 0,
+      y: 0,
+      visible: true,
+      params: { width: 2, height: 2 },
+    },
+    {
+      id: "music-zone",
+      name: "Music Zone",
+      type: "musicZone",
+      x: 4,
+      y: 0,
+      visible: true,
+      params: { width: 3, height: 2, fadeDistance: 1 },
+    },
+  ];
+
+  const interaction = createSoundInteractionState();
+  interaction.selectedSoundIds = ["ambient-zone"];
+  interaction.selectedSoundId = "ambient-zone";
+  interaction.selectedSoundIndices = [0];
+  interaction.selectedSoundIndex = 0;
+  interaction.hoveredSoundId = "ambient-zone";
+  interaction.hoveredSoundIndex = 0;
+  interaction.soundDrag = {
+    active: true,
+    leadSoundId: "ambient-zone",
+    originPositions: [{ soundId: "ambient-zone", x: 0, y: 0 }],
+    previewDelta: { x: 1, y: 0 },
+  };
+
+  const viewport = { zoom: 1, offsetX: 0, offsetY: 0 };
+  const { ctx, operations } = createPreviewTestContext();
+
+  doc.sounds.splice(0, 1);
+  renderSounds(ctx, doc, viewport, interaction, null);
+  const operationsAfterRender = operations.length;
+  assert.ok(operationsAfterRender > 0, "remaining sounds should still render after deleting a dragged sound");
+
+  renderSoundDragPreview(ctx, doc, viewport, interaction);
+  assert.equal(
+    operations.length,
+    operationsAfterRender,
+    "stale drag preview ids should not render a different surviving zone sound at the deleted sound's previous slot",
+  );
 }
 
 function runDarknessPreviewRegressionChecks() {
@@ -1769,6 +1885,8 @@ async function main() {
   runFogPlacementPreviewRegressionChecks();
   runDecorRegressionChecks();
   runSoundRegressionChecks();
+  runSoundIdentityRegressionChecks();
+  runSoundDragPreviewIdentityRegressionChecks();
   runDarknessPreviewRegressionChecks();
   runScanRegressionChecks();
   runScanAudioPlaybackRegressionChecks();
