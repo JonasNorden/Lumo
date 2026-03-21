@@ -48,7 +48,7 @@ import {
 import { createDefaultBackgroundLayer, getTileIndex } from "../domain/level/levelDocument.js";
 import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
 import { findDecorAtCanvasPoint } from "../render/layers/decorLayer.js";
-import { findSoundAtCanvasPoint } from "../render/layers/soundLayer.js";
+import { findSoundAtCanvasPoint, getSoundPlacementPreviewDiagnostic } from "../render/layers/soundLayer.js";
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
 import {
   DEFAULT_ENTITY_PRESET_ID,
@@ -113,6 +113,7 @@ import {
 } from "../domain/sound/selection.js";
 
 const BATCH_EDITABLE_SOUND_PARAM_KEYS = new Set(["spatial", "volume", "pitch", "loop"]);
+const SOUND_DEBUG_MAX_EVENTS = 18;
 
 
 function getInspectedCell(state) {
@@ -240,6 +241,110 @@ function getSelectionMode(interaction) {
   if (interaction.canvasSelectionMode === "decor") return "decor";
   if (interaction.canvasSelectionMode === "sound") return "sound";
   return "entity";
+}
+
+function formatSoundDebugCell(cell) {
+  return cell ? `${cell.x},${cell.y}` : "null";
+}
+
+function formatSoundDebugList(values) {
+  if (!Array.isArray(values) || !values.length) return "[]";
+  return `[${values.map((value) => value ?? "null").join(", ")}]`;
+}
+
+function summarizeSoundDebugDrag(soundDrag) {
+  if (!soundDrag) return "null";
+  return soundDrag.active
+    ? `active lead=${soundDrag.leadSoundId || "null"} Δ${formatSoundDebugCell(soundDrag.previewDelta || { x: 0, y: 0 })}`
+    : "inactive";
+}
+
+function summarizeAuthoredSounds(sounds) {
+  const authoredSounds = Array.isArray(sounds) ? sounds : [];
+  return {
+    count: authoredSounds.length,
+    ids: authoredSounds.map((sound) => sound?.id || "∅"),
+    types: authoredSounds.map((sound) => sound?.type || "∅"),
+    positions: authoredSounds.map((sound) => `${sound?.id || "∅"}@${sound?.x ?? "?"},${sound?.y ?? "?"}`),
+  };
+}
+
+function getSoundPreviewDebugState(state) {
+  const activePreset = findSoundPresetById(state.interaction.activeSoundPresetId);
+  const previewDiagnostic = getSoundPlacementPreviewDiagnostic(state.interaction, activePreset);
+  const activeLayer = getActiveLayer(state.interaction);
+  const reason = `${previewDiagnostic.reason} · activeLayer=${activeLayer}`;
+  return {
+    activePresetType: activePreset?.type || null,
+    eligible: previewDiagnostic.eligible,
+    reason,
+  };
+}
+
+function createSoundDebugSnapshot(state) {
+  const interaction = state?.interaction || {};
+  const authoredSoundSummary = summarizeAuthoredSounds(state?.document?.active?.sounds || []);
+  const preview = getSoundPreviewDebugState(state);
+
+  return {
+    activeLayer: getActiveLayer(interaction),
+    activeSoundPresetId: interaction.activeSoundPresetId ?? null,
+    selectedSoundId: interaction.selectedSoundId ?? null,
+    selectedSoundIds: [...(interaction.selectedSoundIds || [])],
+    selectedSoundIndex: interaction.selectedSoundIndex ?? null,
+    selectedSoundIndices: [...(interaction.selectedSoundIndices || [])],
+    hoveredSoundId: interaction.hoveredSoundId ?? null,
+    hoveredSoundIndex: interaction.hoveredSoundIndex ?? null,
+    hoverCell: interaction.hoverCell ? { ...interaction.hoverCell } : null,
+    selectedCell: interaction.selectedCell ? { ...interaction.selectedCell } : null,
+    soundDrag: interaction.soundDrag
+      ? {
+          active: Boolean(interaction.soundDrag.active),
+          leadSoundId: interaction.soundDrag.leadSoundId ?? null,
+          previewDelta: interaction.soundDrag.previewDelta ? { ...interaction.soundDrag.previewDelta } : null,
+        }
+      : null,
+    soundPlacementPreviewSuppressed: Boolean(interaction.soundPlacementPreviewSuppressed),
+    preview,
+    authoredSounds: authoredSoundSummary,
+  };
+}
+
+function formatSoundDebugSnapshot(snapshot) {
+  return [
+    `layer=${snapshot.activeLayer}`,
+    `preset=${snapshot.activeSoundPresetId || "null"}`,
+    `selIds=${formatSoundDebugList(snapshot.selectedSoundIds)}`,
+    `selIdx=${formatSoundDebugList(snapshot.selectedSoundIndices)}`,
+    `hoverId=${snapshot.hoveredSoundId || "null"}`,
+    `hoverIdx=${snapshot.hoveredSoundIndex ?? "null"}`,
+    `hoverCell=${formatSoundDebugCell(snapshot.hoverCell)}`,
+    `selectedCell=${formatSoundDebugCell(snapshot.selectedCell)}`,
+    `drag=${summarizeSoundDebugDrag(snapshot.soundDrag)}`,
+    `suppressed=${snapshot.soundPlacementPreviewSuppressed ? "yes" : "no"}`,
+    `preview=${snapshot.preview.eligible ? "yes" : "no"} (${snapshot.preview.reason})`,
+    `sounds=${snapshot.authoredSounds.count}:${formatSoundDebugList(snapshot.authoredSounds.ids)}`,
+  ].join(" | ");
+}
+
+function getSoundDebugSelectionSignature(snapshot) {
+  return JSON.stringify({
+    selectedSoundId: snapshot.selectedSoundId,
+    selectedSoundIds: snapshot.selectedSoundIds,
+    selectedSoundIndex: snapshot.selectedSoundIndex,
+    selectedSoundIndices: snapshot.selectedSoundIndices,
+    selectedCell: snapshot.selectedCell,
+  });
+}
+
+function getSoundDebugPreviewSignature(snapshot) {
+  return JSON.stringify({
+    eligible: snapshot.preview.eligible,
+    reason: snapshot.preview.reason,
+    activeSoundPresetId: snapshot.activeSoundPresetId,
+    hoverCell: snapshot.hoverCell,
+    suppressed: snapshot.soundPlacementPreviewSuppressed,
+  });
 }
 
 function historyEntryContainsDecor(entry) {
@@ -520,6 +625,7 @@ export function createEditorApp({
   inspector,
   brushPanel,
   cellHud,
+  soundDebugOverlay,
   topBar,
   topBarStatus,
   topBarExportMenu,
@@ -555,6 +661,88 @@ export function createEditorApp({
   let scanPlaybackToken = 0;
   const scanAudioPlayback = createScanAudioPlaybackController();
   const soundPreviewPlayback = createSoundPreviewController();
+  const soundDebugState = {
+    events: [],
+    sequence: 0,
+    lastSelectionSignature: null,
+    lastSelectionSnapshot: null,
+    lastPreviewSignature: null,
+    lastPreviewSnapshot: null,
+  };
+
+  const appendSoundDebugEvent = (title, details, beforeSnapshot = null, afterSnapshot = null) => {
+    soundDebugState.sequence += 1;
+    soundDebugState.events.unshift({
+      id: soundDebugState.sequence,
+      title,
+      details,
+      beforeSnapshot: beforeSnapshot ? formatSoundDebugSnapshot(beforeSnapshot) : null,
+      afterSnapshot: afterSnapshot ? formatSoundDebugSnapshot(afterSnapshot) : null,
+    });
+    soundDebugState.events = soundDebugState.events.slice(0, SOUND_DEBUG_MAX_EVENTS);
+  };
+
+  const renderSoundDebugOverlay = (state) => {
+    const snapshot = createSoundDebugSnapshot(state);
+    const authoredSounds = snapshot.authoredSounds;
+    soundDebugOverlay.innerHTML = `
+      <div class="soundDebugOverlayHeader">
+        <span>TEMP sound debug</span>
+        <span class="soundDebugOverlayMeta">${soundDebugState.events.length} recent events</span>
+      </div>
+      <div class="soundDebugOverlayGrid">
+        <span class="soundDebugOverlayLabel">active layer</span>
+        <span class="soundDebugOverlayValue">${escapeHtml(snapshot.activeLayer)}</span>
+        <span class="soundDebugOverlayLabel">activeSoundPresetId</span>
+        <span class="soundDebugOverlayValue">${escapeHtml(snapshot.activeSoundPresetId || "null")}</span>
+        <span class="soundDebugOverlayLabel">selectedSoundId / Ids</span>
+        <span class="soundDebugOverlayValue">${escapeHtml(`${snapshot.selectedSoundId || "null"} / ${formatSoundDebugList(snapshot.selectedSoundIds)}`)}</span>
+        <span class="soundDebugOverlayLabel">selectedSoundIndex / Indices</span>
+        <span class="soundDebugOverlayValue">${escapeHtml(`${snapshot.selectedSoundIndex ?? "null"} / ${formatSoundDebugList(snapshot.selectedSoundIndices)}`)}</span>
+        <span class="soundDebugOverlayLabel">hoveredSoundId / Index</span>
+        <span class="soundDebugOverlayValue">${escapeHtml(`${snapshot.hoveredSoundId || "null"} / ${snapshot.hoveredSoundIndex ?? "null"}`)}</span>
+        <span class="soundDebugOverlayLabel">hoverCell</span>
+        <span class="soundDebugOverlayValue">${escapeHtml(formatSoundDebugCell(snapshot.hoverCell))}</span>
+        <span class="soundDebugOverlayLabel">selectedCell</span>
+        <span class="soundDebugOverlayValue">${escapeHtml(formatSoundDebugCell(snapshot.selectedCell))}</span>
+        <span class="soundDebugOverlayLabel">soundDrag</span>
+        <span class="soundDebugOverlayValue">${escapeHtml(summarizeSoundDebugDrag(snapshot.soundDrag))}</span>
+        <span class="soundDebugOverlayLabel">preview suppressed</span>
+        <span class="soundDebugOverlayValue">${snapshot.soundPlacementPreviewSuppressed ? "yes" : "no"}</span>
+        <span class="soundDebugOverlayLabel">preview eligible</span>
+        <span class="soundDebugOverlayValue">${snapshot.preview.eligible ? "yes" : "no"}</span>
+        <span class="soundDebugOverlayLabel">preview reason</span>
+        <span class="soundDebugOverlayValue">${escapeHtml(snapshot.preview.reason)}</span>
+        <span class="soundDebugOverlayLabel">authored sounds</span>
+        <span class="soundDebugOverlayValue">${escapeHtml(`count=${authoredSounds.count}`)}</span>
+        <span class="soundDebugOverlayLabel">ordered ids</span>
+        <span class="soundDebugOverlayValue">${escapeHtml(formatSoundDebugList(authoredSounds.ids))}</span>
+        <span class="soundDebugOverlayLabel">ordered types</span>
+        <span class="soundDebugOverlayValue">${escapeHtml(formatSoundDebugList(authoredSounds.types))}</span>
+        <span class="soundDebugOverlayLabel">sound positions</span>
+        <span class="soundDebugOverlayValue">${escapeHtml(formatSoundDebugList(authoredSounds.positions))}</span>
+      </div>
+      <div class="soundDebugOverlaySection">
+        <div class="soundDebugOverlaySectionTitle">Recent events</div>
+        <div class="soundDebugOverlayLog">
+          ${soundDebugState.events.length
+            ? soundDebugState.events.map((entry) => `
+              <article class="soundDebugOverlayLogEntry">
+                <div class="soundDebugOverlayLogEntryHeader">
+                  <span class="soundDebugOverlayLogEntryTitle">#${entry.id} ${escapeHtml(entry.title)}</span>
+                  <span class="soundDebugOverlayLogEntryMeta">${escapeHtml(entry.details || "")}</span>
+                </div>
+                <div class="soundDebugOverlayLogEntryBody">${escapeHtml([
+                  entry.beforeSnapshot ? `before: ${entry.beforeSnapshot}` : "",
+                  entry.afterSnapshot ? `after:  ${entry.afterSnapshot}` : "",
+                ].filter(Boolean).join("\n"))}</div>
+              </article>
+            `).join("")
+            : '<div class="soundDebugOverlayValue isMuted">No sound debug events yet.</div>'}
+        </div>
+      </div>
+    `;
+  };
 
   const setSoundPreviewState = (draft, updates = {}) => {
     draft.soundPreview = {
@@ -1089,12 +1277,22 @@ export function createEditorApp({
     draft.interaction.hoveredSoundId = sound?.id || null;
   };
 
-  const suppressSoundPlacementPreview = (draft) => {
+  const suppressSoundPlacementPreview = (draft, reason = "unspecified") => {
+    const beforeSnapshot = createSoundDebugSnapshot(draft);
     draft.interaction.soundPlacementPreviewSuppressed = true;
+    const afterSnapshot = createSoundDebugSnapshot(draft);
+    if (beforeSnapshot.soundPlacementPreviewSuppressed !== afterSnapshot.soundPlacementPreviewSuppressed) {
+      appendSoundDebugEvent("sound placement preview suppression", reason, beforeSnapshot, afterSnapshot);
+    }
   };
 
-  const resumeSoundPlacementPreview = (draft) => {
+  const resumeSoundPlacementPreview = (draft, reason = "unspecified") => {
+    const beforeSnapshot = createSoundDebugSnapshot(draft);
     draft.interaction.soundPlacementPreviewSuppressed = false;
+    const afterSnapshot = createSoundDebugSnapshot(draft);
+    if (beforeSnapshot.soundPlacementPreviewSuppressed !== afterSnapshot.soundPlacementPreviewSuppressed) {
+      appendSoundDebugEvent("sound placement preview unsuppressed", reason, beforeSnapshot, afterSnapshot);
+    }
   };
 
   const reconcileSoundInteractionState = (draft) => {
@@ -1179,9 +1377,10 @@ export function createEditorApp({
     return isInsideCanvas ? point : null;
   };
 
-  const reconcileCanvasHoverState = (draft) => {
+  const reconcileCanvasHoverState = (draft, reason = "reconcile") => {
     const doc = draft.document.active;
     if (!doc) return;
+    const beforeSnapshot = createSoundDebugSnapshot(draft);
 
     const point = getTrackedCanvasPoint();
     syncPausedScanHover(draft, point);
@@ -1190,6 +1389,10 @@ export function createEditorApp({
       draft.interaction.hoveredEntityIndex = null;
       draft.interaction.hoveredDecorIndex = null;
       clearHoveredSound(draft.interaction);
+      const afterSnapshot = createSoundDebugSnapshot(draft);
+      if (formatSoundDebugSnapshot(beforeSnapshot) !== formatSoundDebugSnapshot(afterSnapshot)) {
+        appendSoundDebugEvent("hover recompute", `${reason} · pointer outside canvas`, beforeSnapshot, afterSnapshot);
+      }
       return;
     }
 
@@ -1200,14 +1403,19 @@ export function createEditorApp({
     draft.interaction.hoveredEntityIndex = hoveredEntityIndex >= 0 ? hoveredEntityIndex : null;
     draft.interaction.hoveredDecorIndex = hoveredDecorIndex >= 0 ? hoveredDecorIndex : null;
     setHoveredSound(draft, hoveredSoundIndex >= 0 ? hoveredSoundIndex : null);
+    const afterSnapshot = createSoundDebugSnapshot(draft);
+    if (formatSoundDebugSnapshot(beforeSnapshot) !== formatSoundDebugSnapshot(afterSnapshot)) {
+      appendSoundDebugEvent("hover recompute", `${reason} · hover targets refreshed`, beforeSnapshot, afterSnapshot);
+    }
   };
 
-  const reconcileSoundRenderState = (draft) => {
+  const reconcileSoundRenderState = (draft, reason = "reconcile") => {
     reconcileSoundInteractionState(draft);
-    reconcileCanvasHoverState(draft);
+    reconcileCanvasHoverState(draft, reason);
   };
 
   const restoreHistorySoundSelection = (draft, entry, direction) => {
+    const beforeSnapshot = createSoundDebugSnapshot(draft);
     const sounds = draft.document.active?.sounds || [];
     const restoredSoundIds = direction === "undo"
       ? collectHistorySoundIds(entry, "delete")
@@ -1217,6 +1425,7 @@ export function createEditorApp({
     if (!restoredSoundIds.length) {
       clearHoveredSound(draft.interaction);
       draft.interaction.soundDrag = null;
+      appendSoundDebugEvent(`history sound restore (${direction})`, "no sound ids found in history entry", beforeSnapshot, createSoundDebugSnapshot(draft));
       return;
     }
 
@@ -1224,6 +1433,7 @@ export function createEditorApp({
       clearSoundSelection(draft.interaction);
       clearHoveredSound(draft.interaction);
       draft.interaction.soundDrag = null;
+      appendSoundDebugEvent(`history sound restore (${direction})`, `sound ids missing after ${direction}`, beforeSnapshot, createSoundDebugSnapshot(draft));
       return;
     }
 
@@ -1233,6 +1443,12 @@ export function createEditorApp({
     draft.interaction.soundDrag = null;
     applyCanvasTarget(draft, "sound");
     updateSoundSelectionCell(draft, getPrimarySelectedSoundIndex(draft.interaction, sounds));
+    appendSoundDebugEvent(
+      `history sound restore (${direction})`,
+      `restored ids ${formatSoundDebugList(uniqueRestoredSoundIds)}`,
+      beforeSnapshot,
+      createSoundDebugSnapshot(draft),
+    );
   };
 
   const isTopBarInputElement = (value) =>
@@ -1993,7 +2209,7 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
-    reconcileSoundRenderState(draft);
+    reconcileSoundRenderState(draft, "move sound selection");
     return changed;
   };
 
@@ -2195,9 +2411,11 @@ export function createEditorApp({
   const deleteSelectedSound = (draft) => {
     const doc = draft.document.active;
     if (!doc) return false;
+    const beforeSnapshot = createSoundDebugSnapshot(draft);
 
     const selectedEntries = getSelectedSounds(draft.interaction, doc.sounds || []);
     if (!selectedEntries.length) return false;
+    const deletedIds = selectedEntries.map(({ sound }) => sound?.id || "∅");
 
     startHistoryBatch(draft.history, "sound-delete");
     for (const { index, sound } of [...selectedEntries].sort((left, right) => right.index - left.index)) {
@@ -2216,8 +2434,14 @@ export function createEditorApp({
     clearHoveredSound(draft.interaction);
     draft.interaction.soundDrag = null;
     draft.interaction.selectedCell = null;
-    suppressSoundPlacementPreview(draft);
-    reconcileSoundRenderState(draft);
+    suppressSoundPlacementPreview(draft, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`);
+    reconcileSoundRenderState(draft, "deleteSelectedSound");
+    appendSoundDebugEvent(
+      "sound delete mutation",
+      `deleted ids ${formatSoundDebugList(deletedIds)}`,
+      beforeSnapshot,
+      createSoundDebugSnapshot(draft),
+    );
     return true;
   };
 
@@ -2492,7 +2716,7 @@ export function createEditorApp({
       draft.interaction.hoveredDecorIndex = decorCount ? decorCount - 1 : null;
     }
 
-    reconcileSoundRenderState(draft);
+    reconcileSoundRenderState(draft, "sync after history change");
 
 
     if (getSelectedEntityIndices(draft.interaction).length) {
@@ -2995,12 +3219,35 @@ export function createEditorApp({
   };
 
   const draw = (state) => {
+    const soundSnapshot = createSoundDebugSnapshot(state);
+    const nextSelectionSignature = getSoundDebugSelectionSignature(soundSnapshot);
+    if (soundDebugState.lastSelectionSignature !== null && soundDebugState.lastSelectionSignature !== nextSelectionSignature) {
+      appendSoundDebugEvent("sound selection change", "selection fields changed", soundDebugState.lastSelectionSnapshot, soundSnapshot);
+    }
+    soundDebugState.lastSelectionSignature = nextSelectionSignature;
+    soundDebugState.lastSelectionSnapshot = soundSnapshot;
+
+    const nextPreviewSignature = getSoundDebugPreviewSignature(soundSnapshot);
+    if (soundDebugState.lastPreviewSignature !== null && soundDebugState.lastPreviewSignature !== nextPreviewSignature) {
+      appendSoundDebugEvent(
+        "placement preview render decision",
+        soundSnapshot.preview.eligible
+          ? `shown · ${soundSnapshot.preview.reason}`
+          : `suppressed · ${soundSnapshot.preview.reason}`,
+        soundDebugState.lastPreviewSnapshot,
+        soundSnapshot,
+      );
+    }
+    soundDebugState.lastPreviewSignature = nextPreviewSignature;
+    soundDebugState.lastPreviewSnapshot = soundSnapshot;
+
     renderEditorFrame(ctx, state);
     minimapLayout = renderMinimap(minimapCtx, state);
     renderInspector(inspector, state);
     renderBottomPanel(bottomPanel, state);
     renderBrushPanel(brushPanel, state);
     renderCellHud(cellHud, state);
+    renderSoundDebugOverlay(state);
     renderTopBar(state);
     renderFloatingPanels(state);
     bottomPanel.dataset.selectionTarget = getActiveLayer(state.interaction);
@@ -3026,6 +3273,7 @@ export function createEditorApp({
   const updateHoveredCanvasState = (event) => {
     const state = store.getState();
     if (!state.document.active) return;
+    const beforeSnapshot = createSoundDebugSnapshot(state);
 
     trackCanvasPointerEvent(event);
     const point = getCanvasPointFromMouseEvent(canvas, event);
@@ -3047,6 +3295,12 @@ export function createEditorApp({
       currentHoveredSoundIndex === (nextHoveredSoundIndex >= 0 ? nextHoveredSoundIndex : null) &&
       !state.interaction.soundPlacementPreviewSuppressed
     ) {
+      appendSoundDebugEvent(
+        "canvas mousemove",
+        `point=${Math.round(point.x)},${Math.round(point.y)} no hover change`,
+        beforeSnapshot,
+        beforeSnapshot,
+      );
       return;
     }
 
@@ -3055,7 +3309,13 @@ export function createEditorApp({
       draft.interaction.hoveredEntityIndex = nextHoveredEntityIndex >= 0 ? nextHoveredEntityIndex : null;
       draft.interaction.hoveredDecorIndex = nextHoveredDecorIndex >= 0 ? nextHoveredDecorIndex : null;
       setHoveredSound(draft, nextHoveredSoundIndex >= 0 ? nextHoveredSoundIndex : null);
-      resumeSoundPlacementPreview(draft);
+      resumeSoundPlacementPreview(draft, "canvas mousemove");
+      appendSoundDebugEvent(
+        "canvas mousemove",
+        `point=${Math.round(point.x)},${Math.round(point.y)} cell=${formatSoundDebugCell(nextHoverCell)}`,
+        beforeSnapshot,
+        createSoundDebugSnapshot(draft),
+      );
     });
   };
 
@@ -3991,6 +4251,7 @@ export function createEditorApp({
   };
 
   const handleUndo = () => {
+    const beforeSnapshot = createSoundDebugSnapshot(store.getState());
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
@@ -4007,13 +4268,15 @@ export function createEditorApp({
       }
       if (historyEntryContainsSound(entry)) {
         restoreHistorySoundSelection(draft, entry, "undo");
-        suppressSoundPlacementPreview(draft);
+        suppressSoundPlacementPreview(draft, "undo");
       }
       syncInteractionAfterHistoryChange(draft);
+      appendSoundDebugEvent("Undo handled", historyEntryContainsSound(entry) ? "history entry touched sound layer" : "history entry touched non-sound data", beforeSnapshot, createSoundDebugSnapshot(draft));
     });
   };
 
   const handleRedo = () => {
+    const beforeSnapshot = createSoundDebugSnapshot(store.getState());
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
@@ -4030,9 +4293,10 @@ export function createEditorApp({
       }
       if (historyEntryContainsSound(entry)) {
         restoreHistorySoundSelection(draft, entry, "redo");
-        suppressSoundPlacementPreview(draft);
+        suppressSoundPlacementPreview(draft, "redo");
       }
       syncInteractionAfterHistoryChange(draft);
+      appendSoundDebugEvent("Redo handled", historyEntryContainsSound(entry) ? "history entry touched sound layer" : "history entry touched non-sound data", beforeSnapshot, createSoundDebugSnapshot(draft));
     });
   };
 
@@ -4186,6 +4450,7 @@ export function createEditorApp({
     if ((event.key === "Delete" || event.key === "Backspace")) {
       const state = store.getState();
       const activeLayer = getActiveLayer(state.interaction);
+      const beforeSnapshot = createSoundDebugSnapshot(state);
       const hasSelection =
         activeLayer === PANEL_LAYERS.DECOR
           ? getSelectedDecorIndices(state.interaction).length
@@ -4205,6 +4470,7 @@ export function createEditorApp({
         }
         if (activeLayer === PANEL_LAYERS.SOUND) {
           deleteSelectedSound(draft);
+          appendSoundDebugEvent("Delete key handled", `key=${event.key} on sound layer`, beforeSnapshot, createSoundDebugSnapshot(draft));
           return;
         }
         if (activeLayer === PANEL_LAYERS.ENTITIES) {
