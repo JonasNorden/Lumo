@@ -151,8 +151,8 @@ export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 
 export function renderEntities(ctx, doc, viewport, interaction) {
   const entities = doc.entities || [];
   const tileSize = doc.dimensions.tileSize;
-  // TEMP ENTITY CLEAN PATH ACTIVE: render authored entities directly from stable entity ids only.
-  // OLD ENTITY PATH DISABLED: do not fall back to legacy index-based entity selection/hover state.
+  // CANONICAL ENTITY RUNTIME: render authored entities directly from stable entity ids only.
+  // Do not fall back to legacy index-based entity selection/hover state in editor-v2.
   const selectedEntityIds = new Set(
     Array.isArray(interaction.selectedEntityIds)
       ? interaction.selectedEntityIds.filter((entityId) => typeof entityId === "string" && entityId.trim())
@@ -182,7 +182,7 @@ export function renderEntityDragPreview(ctx, doc, viewport, interaction) {
   void doc;
   void viewport;
   void interaction;
-  // OLD ENTITY PATH DISABLED: legacy entity drag preview rendering is fully bypassed.
+  // CANONICAL ENTITY RUNTIME: legacy entity drag preview rendering stays fully bypassed.
 }
 
 export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, activePreset) {
@@ -191,5 +191,5 @@ export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, ac
   void viewport;
   void interaction;
   void activePreset;
-  // OLD ENTITY PATH DISABLED: preview/render-suppression coupling is removed from the live entity path.
+  // CANONICAL ENTITY RUNTIME: preview/render-suppression coupling stays removed from the live entity path.
 }
