@@ -73,7 +73,7 @@ import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.j
 import { renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
 import { applyCanonicalDecorAction, createCanonicalDecorHistory } from "../src/app/cleanRoomDecorMode.js";
 import { applyCanonicalEntityAction, cloneCanonicalEntitySnapshot, createCanonicalEntityHistory } from "../src/app/cleanRoomEntityMode.js";
-import { applyCanonicalSoundAction, createCanonicalSoundHistory } from "../src/app/cleanRoomSoundMode.js";
+import { applyCanonicalSoundAction, cloneCanonicalSoundSnapshot, createCanonicalSoundHistory } from "../src/app/cleanRoomSoundMode.js";
 import { createEditorApp } from "../src/app/createEditorApp.js";
 import { createEditorState } from "../src/state/createEditorState.js";
 import { createStore } from "../src/state/createStore.js";
@@ -3388,6 +3388,174 @@ function runMixedLayerGlobalChronologyRegressionChecks() {
   }
 }
 
+function runCanonicalParameterMutationRegressionChecks() {
+  {
+    const doc = createDoc();
+    doc.sounds = [
+      cloneCanonicalSoundSnapshot({
+        id: "sound-param",
+        name: "Rain Loop",
+        type: "loop",
+        source: "data/assets/audio/loop/rain.ogg",
+        x: 2,
+        y: 1,
+        visible: true,
+        params: { volume: 0.8, pitch: 1, loop: true, spatial: true },
+      }),
+    ];
+    const history = createCanonicalSoundHistory();
+    const action = {
+      type: "update",
+      items: [
+        {
+          index: 0,
+          previousSound: cloneCanonicalSoundSnapshot(doc.sounds[0]),
+          nextSound: cloneCanonicalSoundSnapshot({
+            ...doc.sounds[0],
+            source: "data/assets/audio/loop/rain-soft.ogg",
+            params: { ...doc.sounds[0].params, volume: 0.35, loop: false },
+          }),
+        },
+      ],
+    };
+
+    const applied = applyCanonicalSoundAction(doc, action, "forward");
+    assert.equal(applied.changed, true, "canonical sound update should mutate the authored sound object");
+    assert.equal(doc.sounds[0].source, "data/assets/audio/loop/rain-soft.ogg", "canonical sound update should write the new authored source");
+    assert.deepEqual(doc.sounds[0].params, { volume: 0.35, pitch: 1, loop: false, spatial: true }, "canonical sound update should write the authored sound params");
+
+    history.record(action);
+    const undoAction = history.popUndo();
+    const undoResult = applyCanonicalSoundAction(doc, undoAction, "backward");
+    assert.equal(undoResult.changed, true, "canonical sound update undo should restore the previous authored sound");
+    assert.equal(doc.sounds[0].source, "data/assets/audio/loop/rain.ogg", "undo should restore the exact previous authored sound source");
+    assert.deepEqual(doc.sounds[0].params, { volume: 0.8, pitch: 1, loop: true, spatial: true }, "undo should restore the exact previous authored sound params");
+
+    history.pushRedo(undoAction);
+    const redoAction = history.popRedo();
+    const redoResult = applyCanonicalSoundAction(doc, redoAction, "forward");
+    assert.equal(redoResult.changed, true, "canonical sound update redo should restore the next authored sound");
+    assert.equal(doc.sounds[0].source, "data/assets/audio/loop/rain-soft.ogg", "redo should restore the next authored sound source");
+    assert.deepEqual(doc.sounds[0].params, { volume: 0.35, pitch: 1, loop: false, spatial: true }, "redo should restore the next authored sound params");
+  }
+
+  {
+    const doc = createDoc();
+    doc.entities = [
+      cloneCanonicalEntitySnapshot({
+        id: "entity-param",
+        name: "Spawn",
+        type: "spawn",
+        x: 1,
+        y: 1,
+        visible: true,
+        params: { facing: "right", patrol: false },
+      }),
+    ];
+    const history = createCanonicalEntityHistory();
+    const action = {
+      type: "update",
+      index: 0,
+      previousEntity: cloneCanonicalEntitySnapshot(doc.entities[0]),
+      nextEntity: cloneCanonicalEntitySnapshot({
+        ...doc.entities[0],
+        name: "Spawn Updated",
+        x: 3,
+        params: { facing: "left", patrol: true },
+      }),
+    };
+
+    const applied = applyCanonicalEntityAction(doc, action, "forward");
+    assert.equal(applied.changed, true, "canonical entity update should mutate the authored entity object");
+    assert.equal(doc.entities[0].name, "Spawn Updated", "canonical entity update should write the new authored entity fields");
+    assert.equal(doc.entities[0].x, 3, "canonical entity update should write the authored entity coordinates");
+    assert.deepEqual(doc.entities[0].params, { facing: "left", patrol: true }, "canonical entity update should write the authored entity params");
+
+    history.record(action);
+    const undoAction = history.popUndo();
+    const undoResult = applyCanonicalEntityAction(doc, undoAction, "backward");
+    assert.equal(undoResult.changed, true, "canonical entity update undo should restore the previous authored entity");
+    assert.equal(doc.entities[0].name, "Spawn", "entity undo should restore the previous authored name");
+    assert.equal(doc.entities[0].x, 1, "entity undo should restore the previous authored coordinates");
+    assert.deepEqual(doc.entities[0].params, { facing: "right", patrol: false }, "entity undo should restore the previous authored params");
+
+    history.pushRedo(undoAction);
+    const redoAction = history.popRedo();
+    const redoResult = applyCanonicalEntityAction(doc, redoAction, "forward");
+    assert.equal(redoResult.changed, true, "canonical entity update redo should restore the next authored entity");
+    assert.equal(doc.entities[0].name, "Spawn Updated", "entity redo should restore the next authored name");
+    assert.equal(doc.entities[0].x, 3, "entity redo should restore the next authored coordinates");
+    assert.deepEqual(doc.entities[0].params, { facing: "left", patrol: true }, "entity redo should restore the next authored params");
+  }
+
+  {
+    const harness = createMixedLayerChronologyHarness();
+    harness.recordEntityAction({
+      type: "create",
+      index: 0,
+      entity: cloneCanonicalEntitySnapshot({ id: "entity-mixed", name: "Entity Mixed", type: "spawn", x: 0, y: 0, visible: true, params: { facing: "right" } }),
+    });
+    harness.recordSoundAction({
+      type: "create",
+      index: 0,
+      sound: cloneCanonicalSoundSnapshot({ id: "sound-mixed", name: "Sound Mixed", type: "loop", x: 1, y: 1, visible: true, params: { volume: 0.4, pitch: 1, loop: true, spatial: true } }),
+    });
+    harness.recordSoundAction({
+      type: "update",
+      items: [
+        {
+          index: 0,
+          previousSound: cloneCanonicalSoundSnapshot(harness.doc.sounds[0]),
+          nextSound: cloneCanonicalSoundSnapshot({ ...harness.doc.sounds[0], params: { ...harness.doc.sounds[0].params, volume: 0.9 } }),
+        },
+      ],
+    });
+    harness.recordDecorAction({
+      type: "create",
+      index: 0,
+      decor: { id: "decor-mixed", name: "Decor Mixed", type: "torch", x: 2, y: 2, rotation: 0, visible: true, params: {} },
+    });
+
+    assert.equal(harness.history.undoStack.length, 0, "canonical entity/sound parameter updates should not revive shared document-history mutation paths");
+    assert.deepEqual([harness.undo()?.domain, harness.undo()?.domain], ["decor", "sound"], "mixed chronology should undo the later decor create before the earlier sound parameter edit");
+    assert.equal(harness.doc.sounds[0].params.volume, 0.4, "undoing the sound parameter edit should restore the exact previous authored sound value");
+    assert.equal(harness.doc.decor.length, 0, "undoing the later decor create should remove only that authored decor");
+
+    assert.deepEqual([harness.redo()?.domain, harness.redo()?.domain], ["sound", "decor"], "redo should restore the sound parameter edit before the later decor create");
+    assert.equal(harness.doc.sounds[0].params.volume, 0.9, "redo should restore the authored sound parameter value");
+    assert.equal(harness.doc.decor.length, 1, "redo should restore the later decor create after the sound parameter edit");
+  }
+
+  {
+    const harness = createMixedLayerChronologyHarness();
+    harness.recordSoundAction({
+      type: "create",
+      index: 0,
+      sound: cloneCanonicalSoundSnapshot({ id: "sound-redo-tail", name: "Redo Tail", type: "loop", x: 0, y: 0, visible: true, params: { volume: 0.2, pitch: 1, loop: true, spatial: true } }),
+    });
+    harness.recordSoundAction({
+      type: "update",
+      items: [
+        {
+          index: 0,
+          previousSound: cloneCanonicalSoundSnapshot(harness.doc.sounds[0]),
+          nextSound: cloneCanonicalSoundSnapshot({ ...harness.doc.sounds[0], params: { ...harness.doc.sounds[0].params, volume: 0.7 } }),
+        },
+      ],
+    });
+
+    const undone = harness.undo();
+    assert.equal(undone?.domain, "sound", "undo should target the latest canonical sound parameter edit first");
+    assert.equal(harness.doc.sounds[0].params.volume, 0.2, "undo should restore the previous authored sound parameter before stale-redo coverage");
+    assert.equal(harness.canRedo(), true, "undoing a canonical parameter edit should populate the global redo tail");
+
+    harness.recordTilePaint({ x: 1, y: 1 }, 6);
+
+    assert.equal(harness.canRedo(), false, "recording a new change after undo should clear stale redo for canonical parameter edits");
+    assert.equal(harness.doc.sounds[0].params.volume, 0.2, "clearing stale redo should not resurrect the undone sound parameter edit");
+  }
+}
+
 function runSourceRegressionChecks() {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const source = fs.readFileSync(path.join(repoRoot, "src/app/createEditorApp.js"), "utf8");
@@ -3533,6 +3701,14 @@ function runSourceRegressionChecks() {
       && source.includes('appendSoundDebugEvent("Redo handled", "canonical sound history"'),
     true,
     "sound place/delete/undo/redo should stay pinned to the canonical clean-room sound history lane",
+  );
+  assert.equal(
+    source.includes("const applyCanonicalEntityUpdate = (draft, action) => {")
+      && source.includes('recordCleanRoomObjectAction("entity", action);')
+      && source.includes("const applyCanonicalSoundUpdate = (draft, action) => {")
+      && source.includes('recordCleanRoomObjectAction("sound", action);'),
+    true,
+    "entity and sound inspector mutations should record through canonical stable-id update actions instead of reviving legacy inspector write-backs",
   );
   assert.equal(
     source.includes("selectDecorByIds(draft, nextSelectedDecorIds, nextSelectedDecorIds.at(-1) ?? null")
@@ -3733,6 +3909,7 @@ async function main() {
   runObjectLayerStableIdentityHistoryRegressionChecks();
   runGlobalObjectLayerUndoRedoRegressionChecks();
   runMixedLayerGlobalChronologyRegressionChecks();
+  runCanonicalParameterMutationRegressionChecks();
   runFogVolumeRegressionChecks();
   runFogPlacementPreviewRegressionChecks();
   runObjectPlacementPreviewSuppressionRegressionChecks();
