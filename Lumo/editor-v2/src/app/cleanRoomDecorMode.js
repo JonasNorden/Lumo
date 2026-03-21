@@ -28,6 +28,16 @@ function insertDecorSnapshot(decorItems, decor, index) {
 }
 
 function getCanonicalDecorActionItems(action) {
+  if (action?.type === "update" && Array.isArray(action?.items)) {
+    return action.items
+      .map((item) => ({
+        index: Number.isInteger(item?.index) ? item.index : null,
+        previousDecor: cloneCanonicalDecorSnapshot(item?.previousDecor),
+        nextDecor: cloneCanonicalDecorSnapshot(item?.nextDecor),
+      }))
+      .filter((item) => Number.isInteger(item.index) && item.previousDecor?.id && item.nextDecor?.id);
+  }
+
   if (Array.isArray(action?.items)) {
     return action.items
       .map((item) => ({
@@ -46,12 +56,12 @@ function getCanonicalDecorActionItems(action) {
 
 export function applyCanonicalDecorAction(doc, action, direction = "forward") {
   if (!doc || !Array.isArray(doc.decor)) {
-    return { changed: false, selectedDecorId: null };
+    return { changed: false, selectedDecorIds: [], selectedDecorId: null };
   }
 
   const items = getCanonicalDecorActionItems(action);
   if (!items.length) {
-    return { changed: false, selectedDecorId: null };
+    return { changed: false, selectedDecorIds: [], selectedDecorId: null };
   }
 
   if (action.type === "create") {
@@ -59,14 +69,19 @@ export function applyCanonicalDecorAction(doc, action, direction = "forward") {
       for (const item of [...items].sort((left, right) => left.index - right.index)) {
         insertDecorSnapshot(doc.decor, item.decor, item.index);
       }
-      return { changed: true, selectedDecorId: items.at(-1)?.decor?.id || null };
+      const selectedDecorIds = items.map((item) => item.decor.id);
+      return {
+        changed: true,
+        selectedDecorIds,
+        selectedDecorId: selectedDecorIds.at(-1) ?? null,
+      };
     }
 
     let changed = false;
     for (const item of items) {
       changed = Boolean(removeDecorById(doc.decor, item.decor.id)) || changed;
     }
-    return { changed, selectedDecorId: null };
+    return { changed, selectedDecorIds: [], selectedDecorId: null };
   }
 
   if (action.type === "delete") {
@@ -75,16 +90,40 @@ export function applyCanonicalDecorAction(doc, action, direction = "forward") {
       for (const item of items) {
         changed = Boolean(removeDecorById(doc.decor, item.decor.id)) || changed;
       }
-      return { changed, selectedDecorId: null };
+      return { changed, selectedDecorIds: [], selectedDecorId: null };
     }
 
     for (const item of [...items].sort((left, right) => left.index - right.index)) {
       insertDecorSnapshot(doc.decor, item.decor, item.index);
     }
-    return { changed: true, selectedDecorId: items.at(-1)?.decor?.id || null };
+    const selectedDecorIds = items.map((item) => item.decor.id);
+    return {
+      changed: true,
+      selectedDecorIds,
+      selectedDecorId: selectedDecorIds.at(-1) ?? null,
+    };
   }
 
-  return { changed: false, selectedDecorId: null };
+  if (action.type === "update") {
+    let changed = false;
+    const selectedDecorIds = [];
+
+    for (const item of items) {
+      const snapshot = direction === "forward" ? item.nextDecor : item.previousDecor;
+      const inserted = insertDecorSnapshot(doc.decor, snapshot, item.index);
+      if (!inserted) continue;
+      changed = true;
+      selectedDecorIds.push(inserted.id);
+    }
+
+    return {
+      changed,
+      selectedDecorIds,
+      selectedDecorId: selectedDecorIds.at(-1) ?? null,
+    };
+  }
+
+  return { changed: false, selectedDecorIds: [], selectedDecorId: null };
 }
 
 export function createCanonicalDecorHistory() {

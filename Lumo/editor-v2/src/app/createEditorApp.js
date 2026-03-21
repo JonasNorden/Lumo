@@ -2759,6 +2759,13 @@ export function createEditorApp({
     return true;
   };
 
+  const applyCanonicalDecorUpdate = (draft, action) => {
+    const changed = applyCleanRoomDecorHistoryAction(draft, action, "forward");
+    if (!changed) return false;
+    recordCleanRoomObjectAction("decor", action);
+    return true;
+  };
+
   const applyCanonicalSoundUpdate = (draft, action) => {
     const changed = applyCleanRoomSoundHistoryAction(draft, action, "forward");
     if (!changed) return false;
@@ -2819,30 +2826,32 @@ export function createEditorApp({
     const doc = draft.document.active;
     if (!doc) return false;
 
-    let changed = false;
-    startHistoryBatch(draft.history, "decor-move");
-    for (const origin of originPositions) {
+    const items = [];
+    for (const origin of Array.isArray(originPositions) ? originPositions : []) {
       const index = getDecorIndexById(doc.decor || [], origin.decorId);
       const decor = Number.isInteger(index) ? doc.decor?.[index] : null;
       if (!decor) continue;
 
-      const previousDecor = { ...decor };
-      const nextDecor = {
-        ...decor,
-        x: origin.x + delta.x,
-        y: origin.y + delta.y,
-      };
+      const nextPosition = clampDecorPosition(doc, origin.x + delta.x, origin.y + delta.y);
+      if (decor.x === nextPosition.x && decor.y === nextPosition.y) continue;
 
-      if (previousDecor.x === nextDecor.x && previousDecor.y === nextDecor.y) continue;
-      doc.decor.splice(index, 1, nextDecor);
-      pushDecorUpdateHistory(draft.history, index, previousDecor, nextDecor);
-      changed = true;
+      items.push({
+        index,
+        previousDecor: cloneCanonicalDecorSnapshot(decor),
+        nextDecor: cloneCanonicalDecorSnapshot({
+          ...decor,
+          x: nextPosition.x,
+          y: nextPosition.y,
+        }),
+      });
     }
-    endHistoryBatch(draft.history);
 
-    const primaryIndex = getPrimarySelectedDecorIndex(draft.interaction, doc.decor || []);
-    updateDecorSelectionCell(draft, primaryIndex);
-    return changed;
+    if (!items.length) return false;
+
+    return applyCanonicalDecorUpdate(draft, {
+      type: "update",
+      items,
+    });
   };
 
   const moveSoundSelectionByDelta = (draft, originPositions, delta) => {
@@ -3212,6 +3221,53 @@ export function createEditorApp({
     setCanvasSelectionMode(draft, "decor");
     updateDecorSelectionCell(draft, index);
     return changed;
+  };
+
+  const beginCleanRoomDecorDrag = (draft, decorId, anchorCell) => {
+    const doc = draft.document.active;
+    if (!doc || !anchorCell || typeof decorId !== "string" || !decorId.trim()) return false;
+
+    const selectedDecorIds = Array.isArray(draft.interaction.selectedDecorIds)
+      ? draft.interaction.selectedDecorIds.filter((selectedId) => typeof selectedId === "string" && selectedId.trim())
+      : [];
+    if (selectedDecorIds.length !== 1 || draft.interaction.selectedDecorId !== decorId) return false;
+
+    const decorIndex = getDecorIndexById(doc.decor || [], decorId);
+    const decor = Number.isInteger(decorIndex) ? doc.decor?.[decorIndex] : null;
+    if (!decor?.visible) return false;
+
+    draft.interaction.decorDrag = {
+      active: true,
+      leadDecorId: decorId,
+      anchorCell: { x: anchorCell.x, y: anchorCell.y },
+      previewDelta: { x: 0, y: 0 },
+      originPositions: [
+        {
+          decorId,
+          x: decor.x,
+          y: decor.y,
+        },
+      ],
+    };
+    draft.interaction.hoverCell = anchorCell;
+    setHoveredDecor(draft, decorId);
+    draft.interaction.selectedCell = { x: decor.x, y: decor.y };
+    return true;
+  };
+
+  const commitCleanRoomDecorDrag = (draft, decorDrag) => {
+    const doc = draft.document.active;
+    if (!doc || !decorDrag?.active) return false;
+
+    const leadDecorId = typeof decorDrag.leadDecorId === "string" && decorDrag.leadDecorId.trim()
+      ? decorDrag.leadDecorId
+      : typeof decorDrag.originPositions?.[0]?.decorId === "string" && decorDrag.originPositions[0].decorId.trim()
+        ? decorDrag.originPositions[0].decorId
+        : null;
+    const origin = decorDrag.originPositions?.find((item) => item?.decorId === leadDecorId) || null;
+    if (!leadDecorId || !origin) return false;
+
+    return moveDecorSelectionByDelta(draft, [origin], decorDrag.previewDelta || { x: 0, y: 0 });
   };
 
   const deleteSelectedEntity = (draft) => {
@@ -3935,6 +3991,11 @@ if (event.shiftKey) {
         const decorItems = draft.document.active?.decor || [];
         const decorId = decorItems[hitDecorIndex]?.id || null;
         if (!decorId) return;
+        if (!event.shiftKey && draft.interaction.selectedDecorId === decorId) {
+          beginCleanRoomDecorDrag(draft, decorId, cell);
+          return;
+        }
+
         const selectedDecorIds = getSelectedDecorIds(draft.interaction);
         const nextSelectedDecorIds = event.shiftKey
           ? (selectedDecorIds.includes(decorId)
@@ -4140,8 +4201,7 @@ if (event.shiftKey) {
       return;
     }
 
-    // CANONICAL DECOR RUNTIME ONLY: ignore stale legacy decor drag state if anything managed to set it.
-    if (false && state.interaction.decorDrag?.active) {
+    if (state.interaction.decorDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
 
       const point = getCanvasPointFromMouseEvent(canvas, event);
@@ -4160,6 +4220,15 @@ if (event.shiftKey) {
           requestedDeltaY,
         );
         draft.interaction.hoverCell = cell;
+        const leadOrigin = decorDrag.originPositions?.find((origin) => origin?.decorId === decorDrag.leadDecorId)
+          || decorDrag.originPositions?.[0]
+          || null;
+        draft.interaction.selectedCell = leadOrigin
+          ? {
+            x: leadOrigin.x + decorDrag.previewDelta.x,
+            y: leadOrigin.y + decorDrag.previewDelta.y,
+          }
+          : draft.interaction.selectedCell;
         setHoveredDecor(draft, decorDrag.leadDecorId);
       });
       return;
@@ -4274,13 +4343,13 @@ if (event.shiftKey) {
       return;
     }
 
-    // CANONICAL DECOR RUNTIME ONLY: never commit legacy decor drag state on mouseup.
-    if (false && state.interaction.decorDrag?.active) {
+    if (state.interaction.decorDrag?.active) {
       store.setState((draft) => {
         const decorDrag = draft.interaction.decorDrag;
         if (!decorDrag?.active) return;
-        moveDecorSelectionByDelta(draft, decorDrag.originPositions, decorDrag.previewDelta || { x: 0, y: 0 });
+        commitCleanRoomDecorDrag(draft, decorDrag);
         draft.interaction.decorDrag = null;
+        updateDecorSelectionCell(draft);
       });
       return;
     }
@@ -4780,6 +4849,11 @@ if (event.shiftKey) {
     store.setState((draft) => {
       resumeObjectPlacementPreviews(draft, `tool ${tool}`);
       draft.interaction.activeTool = tool;
+      draft.interaction.entityDrag = null;
+      draft.interaction.decorDrag = null;
+      draft.interaction.soundDrag = null;
+      draft.interaction.boxSelection = null;
+      clearDecorScatterDrag(draft);
       if (tool !== EDITOR_TOOLS.INSPECT) {
         setActiveLayer(draft, PANEL_LAYERS.TILES);
       }
