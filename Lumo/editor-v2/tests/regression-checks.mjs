@@ -214,6 +214,63 @@ function runEntityRegressionChecks() {
   assert.equal(doc.entities.length, 0, "redo should reapply entity create/update/delete history");
 }
 
+function runDecorAndSoundDeletionRegressionChecks() {
+  const doc = createDoc();
+  const history = createHistoryState();
+
+  const decor = {
+    id: "decor-1",
+    name: "Lamp",
+    type: "lamp",
+    x: 1,
+    y: 2,
+    visible: true,
+    variant: "gold",
+    params: {
+      light: {
+        radius: 48,
+      },
+    },
+  };
+  const sound = {
+    id: "sound-1",
+    name: "Wind",
+    type: "loop",
+    x: 3,
+    y: 1,
+    visible: true,
+    params: {
+      volume: 0.85,
+      loop: true,
+    },
+  };
+
+  doc.decor.push(decor);
+  doc.sounds.push(sound);
+  const deletedDecorSnapshot = { ...decor, params: structuredClone(decor.params) };
+  const deletedSoundSnapshot = { ...sound, params: structuredClone(sound.params) };
+
+  startHistoryBatch(history, "object-delete");
+  doc.decor.splice(0, 1);
+  pushHistoryEntry(history, createDecorEditEntry("delete", { index: 0, decor: deletedDecorSnapshot }));
+  doc.sounds.splice(0, 1);
+  pushHistoryEntry(history, createSoundEditEntry("delete", { index: 0, sound: deletedSoundSnapshot }));
+  assert.equal(endHistoryBatch(history), true, "decor/sound deletion should produce a history batch");
+
+  decor.params.light.radius = 96;
+  sound.params.volume = 0.1;
+
+  undoTileEdit(doc, history);
+  assert.equal(doc.decor.length, 1, "undo should restore deleted decor");
+  assert.equal(doc.sounds.length, 1, "undo should restore deleted sounds");
+  assert.deepEqual(doc.decor[0].params, { light: { radius: 48 } }, "undo should restore nested decor params from history snapshots");
+  assert.deepEqual(doc.sounds[0].params, { volume: 0.85, loop: true }, "undo should restore sound params from history snapshots");
+
+  redoTileEdit(doc, history);
+  assert.equal(doc.decor.length, 0, "redo should re-delete decor");
+  assert.equal(doc.sounds.length, 0, "redo should re-delete sounds");
+}
+
 function runFogVolumeRegressionChecks() {
   const normalized = validateLevelDocument({
     ...createDoc(),
@@ -1707,6 +1764,7 @@ async function main() {
   runTileRegressionChecks();
   runNewLevelDocumentRegressionChecks();
   runEntityRegressionChecks();
+  runDecorAndSoundDeletionRegressionChecks();
   runFogVolumeRegressionChecks();
   runFogPlacementPreviewRegressionChecks();
   runDecorRegressionChecks();

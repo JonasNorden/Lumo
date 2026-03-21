@@ -713,6 +713,12 @@ export function createEditorApp({
     return Boolean(eventTarget.closest("input, textarea, select, button, [contenteditable='true'], [contenteditable='']"));
   };
 
+  const hasBlockedShortcutFocus = () => {
+    const activeElement = document.activeElement;
+    return activeElement instanceof Element
+      && Boolean(activeElement.closest("input, textarea, select, button, [contenteditable='true'], [contenteditable='']"));
+  };
+
   const resize = () => {
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
@@ -1879,7 +1885,7 @@ export function createEditorApp({
         draft.history,
         createDecorEditEntry("delete", {
           index,
-          decor: { ...decor },
+          decor: { ...decor, params: cloneEntityParams(decor.params) },
         }),
       );
     }
@@ -1922,7 +1928,7 @@ export function createEditorApp({
         draft.history,
         createDecorEditEntry("create", {
           index: insertIndex,
-          decor: { ...duplicate },
+          decor: { ...duplicate, params: cloneEntityParams(duplicate.params) },
         }),
       );
       insertIndex += 1;
@@ -1956,7 +1962,7 @@ export function createEditorApp({
       draft.history,
       createDecorEditEntry("create", {
         index: createdIndex,
-        decor: { ...decor },
+        decor: { ...decor, params: cloneEntityParams(decor.params) },
       }),
     );
     setDecorSelection(draft.interaction, [createdIndex], createdIndex);
@@ -1985,7 +1991,7 @@ export function createEditorApp({
         draft.history,
         createDecorEditEntry("create", {
           index: nextIndex,
-          decor: { ...decor },
+          decor: { ...decor, params: cloneEntityParams(decor.params) },
         }),
       );
     }
@@ -3940,6 +3946,10 @@ export function createEditorApp({
         closeNewLevelSizeFlow();
         return;
       }
+    }
+
+    if (hasBlockedShortcutFocus()) {
+      return;
     }
 
     if (event.code === "Space") {
