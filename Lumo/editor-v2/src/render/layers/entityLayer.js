@@ -1,5 +1,5 @@
 import { getEntityHitRadius, getEntityVisual } from "../../domain/entities/entityVisuals.js";
-import { getSelectedEntityIndices, isEntitySelected } from "../../domain/entities/selection.js";
+import { isEntitySelected } from "../../domain/entities/selection.js";
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
 import { isFogVolumeEntityType } from "../../domain/entities/specialVolumeTypes.js";
 import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
@@ -153,7 +153,6 @@ export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 
 export function renderEntities(ctx, doc, viewport, interaction) {
   const entities = doc.entities || [];
   const tileSize = doc.dimensions.tileSize;
-  const draggedSelection = new Set(interaction.entityDrag?.active ? getSelectedEntityIndices(interaction) : []);
   const selectedEntityIds = new Set(
     Array.isArray(interaction.selectedEntityIds)
       ? interaction.selectedEntityIds.filter((entityId) => typeof entityId === "string" && entityId.trim())
@@ -166,7 +165,6 @@ export function renderEntities(ctx, doc, viewport, interaction) {
   for (let i = 0; i < entities.length; i += 1) {
     const entity = entities[i];
     if (!entity.visible) continue;
-    if (draggedSelection.has(i)) continue;
 
     if (isFogVolumeEntityType(entity.type)) continue;
 
