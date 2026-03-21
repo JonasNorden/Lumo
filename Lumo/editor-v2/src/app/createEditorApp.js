@@ -67,6 +67,16 @@ import {
 import { captureObjectLayerAnchor, getObjectLayerId } from "../domain/placeables/objectLayerHistory.js";
 import { DEFAULT_SOUND_PRESET_ID, findSoundPresetById, getSoundPresetDefaultParams, getSoundPresetForType } from "../domain/sound/soundPresets.js";
 import { normalizeSoundSourceValue } from "../domain/sound/sourceReference.js";
+import {
+  canRedoGlobalHistory,
+  canUndoGlobalHistory,
+  clearGlobalHistoryTimeline,
+  markGlobalHistoryActionRedone,
+  markGlobalHistoryActionUndone,
+  peekNextGlobalRedoAction,
+  peekNextGlobalUndoAction,
+  recordGlobalHistoryAction,
+} from "../domain/history/globalTimeline.js";
 import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
 import { createSoundPreviewController, getSoundPreviewKey } from "../domain/sound/soundPreviewPlayback.js";
 import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
@@ -700,35 +710,13 @@ export function createEditorApp({
   const canonicalDecorHistory = createCanonicalDecorHistory();
   const canonicalSoundRuntimeEnabled = true;
   const canonicalSoundHistory = createCanonicalSoundHistory();
-  const cleanRoomObjectHistory = {
-    undoStack: [],
-    redoStack: [],
-    clear() {
-      this.undoStack.length = 0;
-      this.redoStack.length = 0;
-    },
-    record(lane) {
-      this.undoStack.push(lane);
-      this.redoStack.length = 0;
-    },
-    canUndo() {
-      return this.undoStack.length > 0;
-    },
-    canRedo() {
-      return this.redoStack.length > 0;
-    },
-    popUndo() {
-      return this.undoStack.pop() || null;
-    },
-    popRedo() {
-      return this.redoStack.pop() || null;
-    },
-    pushUndo(lane) {
-      this.undoStack.push(lane);
-    },
-    pushRedo(lane) {
-      this.redoStack.push(lane);
-    },
+  const globalHistoryTimeline = store.getState().history.globalTimeline;
+
+  globalHistoryTimeline.clearRedoTargets = () => {
+    store.getState().history.redoStack.length = 0;
+    canonicalEntityHistory.redoStack.length = 0;
+    canonicalDecorHistory.redoStack.length = 0;
+    canonicalSoundHistory.redoStack.length = 0;
   };
 
   const appendSoundDebugEvent = (title, details, beforeSnapshot = null, afterSnapshot = null) => {
@@ -1146,6 +1134,7 @@ export function createEditorApp({
       draft.history.undoStack = [];
       draft.history.redoStack = [];
       draft.history.activeBatch = null;
+      clearGlobalHistoryTimeline(draft.history.globalTimeline);
       syncScanWithDocument(draft, { preserveRange: true, preserveLog: false });
     });
 
@@ -1348,25 +1337,34 @@ export function createEditorApp({
     clearCleanRoomEntityHistory();
     clearCleanRoomDecorHistory();
     clearCleanRoomSoundHistory();
-    cleanRoomObjectHistory.clear();
+    clearGlobalHistoryTimeline(globalHistoryTimeline);
   };
 
   const recordCleanRoomObjectAction = (lane, action) => {
+    const actionRecord = recordGlobalHistoryAction(globalHistoryTimeline, {
+      domain: lane,
+      actionType: action?.type || null,
+      route: {
+        lane: `${lane}-canonical`,
+        domain: lane,
+      },
+    });
+    const actionWithTimeline = actionRecord?.actionId
+      ? { ...action, globalActionId: actionRecord.actionId }
+      : action;
+
     if (lane === "entity") {
-      canonicalEntityHistory.record(action);
-      cleanRoomObjectHistory.record("entity");
+      canonicalEntityHistory.record(actionWithTimeline);
       return;
     }
 
     if (lane === "decor") {
-      canonicalDecorHistory.record(action);
-      cleanRoomObjectHistory.record("decor");
+      canonicalDecorHistory.record(actionWithTimeline);
       return;
     }
 
     if (lane === "sound") {
-      canonicalSoundHistory.record(action);
-      cleanRoomObjectHistory.record("sound");
+      canonicalSoundHistory.record(actionWithTimeline);
     }
   };
 
@@ -2120,8 +2118,8 @@ export function createEditorApp({
     topBarStatus.textContent = statusLabel;
     topBarStatus.dataset.target = activeLayer;
 
-    const undoEnabled = canUndo(state.history) || cleanRoomObjectHistory.canUndo();
-    const redoEnabled = canRedo(state.history) || cleanRoomObjectHistory.canRedo();
+    const undoEnabled = canUndoGlobalHistory(globalHistoryTimeline) || canUndo(state.history);
+    const redoEnabled = canRedoGlobalHistory(globalHistoryTimeline) || canRedo(state.history);
     const exportEnabled = Boolean(state.document.active);
 
     const actionButtons = topBar.querySelectorAll("[data-topbar-action]");
@@ -4459,34 +4457,54 @@ if (event.shiftKey) {
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
-      if (cleanRoomObjectHistory.canUndo()) {
-        const lane = cleanRoomObjectHistory.popUndo();
-        if (lane === "entity") {
-          handleCleanRoomEntityUndo(draft);
-          cleanRoomObjectHistory.pushRedo("entity");
+
+      const timelineEntry = peekNextGlobalUndoAction(globalHistoryTimeline);
+      if (!timelineEntry) {
+        const entry = undoTileEdit(doc, draft.history);
+        applyHistoryObjectMutationState(draft, entry, "undo");
+        appendSoundDebugEvent("Undo handled", historyEntryContainsObjectLayer(entry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
+        return;
+      }
+
+      if (timelineEntry.route?.lane === "entity-canonical") {
+        const action = canonicalEntityHistory.undoStack.at(-1) || null;
+        if (action?.globalActionId === timelineEntry.actionId && handleCleanRoomEntityUndo(draft)) {
+          markGlobalHistoryActionUndone(globalHistoryTimeline, timelineEntry.actionId);
           appendSoundDebugEvent("Undo handled", "canonical entity history", beforeSnapshot, createSoundDebugSnapshot(draft));
           return;
         }
-        if (lane === "decor") {
-          const action = canonicalDecorHistory.popUndo();
-          if (action && applyCleanRoomDecorHistoryAction(draft, action, "backward")) {
-            canonicalDecorHistory.pushRedo(action);
-            cleanRoomObjectHistory.pushRedo("decor");
+      }
+
+      if (timelineEntry.route?.lane === "decor-canonical") {
+        const action = canonicalDecorHistory.undoStack.at(-1) || null;
+        if (action?.globalActionId === timelineEntry.actionId) {
+          const poppedAction = canonicalDecorHistory.popUndo();
+          if (poppedAction && applyCleanRoomDecorHistoryAction(draft, poppedAction, "backward")) {
+            canonicalDecorHistory.pushRedo(poppedAction);
+            markGlobalHistoryActionUndone(globalHistoryTimeline, timelineEntry.actionId);
             appendSoundDebugEvent("Undo handled", "canonical decor history", beforeSnapshot, createSoundDebugSnapshot(draft));
             return;
           }
-        }
-        if (lane === "sound") {
-          if (handleCleanRoomSoundUndo(draft)) {
-            cleanRoomObjectHistory.pushRedo("sound");
-            appendSoundDebugEvent("Undo handled", "canonical sound history", beforeSnapshot, createSoundDebugSnapshot(draft));
-            return;
-          }
+          if (poppedAction) canonicalDecorHistory.pushUndo(poppedAction);
         }
       }
-      const entry = undoTileEdit(doc, draft.history);
-      applyHistoryObjectMutationState(draft, entry, "undo");
-      appendSoundDebugEvent("Undo handled", historyEntryContainsObjectLayer(entry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
+
+      if (timelineEntry.route?.lane === "sound-canonical") {
+        const action = canonicalSoundHistory.undoStack.at(-1) || null;
+        if (action?.globalActionId === timelineEntry.actionId && handleCleanRoomSoundUndo(draft)) {
+          markGlobalHistoryActionUndone(globalHistoryTimeline, timelineEntry.actionId);
+          appendSoundDebugEvent("Undo handled", "canonical sound history", beforeSnapshot, createSoundDebugSnapshot(draft));
+          return;
+        }
+      }
+
+      const entry = draft.history.undoStack.at(-1) || null;
+      if (entry?.globalActionId === timelineEntry.actionId) {
+        const undoneEntry = undoTileEdit(doc, draft.history);
+        applyHistoryObjectMutationState(draft, undoneEntry, "undo");
+        markGlobalHistoryActionUndone(globalHistoryTimeline, timelineEntry.actionId);
+        appendSoundDebugEvent("Undo handled", historyEntryContainsObjectLayer(undoneEntry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
+      }
     });
   };
 
@@ -4495,34 +4513,54 @@ if (event.shiftKey) {
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
-      if (cleanRoomObjectHistory.canRedo()) {
-        const lane = cleanRoomObjectHistory.popRedo();
-        if (lane === "entity") {
-          handleCleanRoomEntityRedo(draft);
-          cleanRoomObjectHistory.pushUndo("entity");
+
+      const timelineEntry = peekNextGlobalRedoAction(globalHistoryTimeline);
+      if (!timelineEntry) {
+        const entry = redoTileEdit(doc, draft.history);
+        applyHistoryObjectMutationState(draft, entry, "redo");
+        appendSoundDebugEvent("Redo handled", historyEntryContainsObjectLayer(entry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
+        return;
+      }
+
+      if (timelineEntry.route?.lane === "entity-canonical") {
+        const action = canonicalEntityHistory.redoStack.at(-1) || null;
+        if (action?.globalActionId === timelineEntry.actionId && handleCleanRoomEntityRedo(draft)) {
+          markGlobalHistoryActionRedone(globalHistoryTimeline, timelineEntry.actionId);
           appendSoundDebugEvent("Redo handled", "canonical entity history", beforeSnapshot, createSoundDebugSnapshot(draft));
           return;
         }
-        if (lane === "decor") {
-          const action = canonicalDecorHistory.popRedo();
-          if (action && applyCleanRoomDecorHistoryAction(draft, action, "forward")) {
-            canonicalDecorHistory.pushUndo(action);
-            cleanRoomObjectHistory.pushUndo("decor");
+      }
+
+      if (timelineEntry.route?.lane === "decor-canonical") {
+        const action = canonicalDecorHistory.redoStack.at(-1) || null;
+        if (action?.globalActionId === timelineEntry.actionId) {
+          const poppedAction = canonicalDecorHistory.popRedo();
+          if (poppedAction && applyCleanRoomDecorHistoryAction(draft, poppedAction, "forward")) {
+            canonicalDecorHistory.pushUndo(poppedAction);
+            markGlobalHistoryActionRedone(globalHistoryTimeline, timelineEntry.actionId);
             appendSoundDebugEvent("Redo handled", "canonical decor history", beforeSnapshot, createSoundDebugSnapshot(draft));
             return;
           }
-        }
-        if (lane === "sound") {
-          if (handleCleanRoomSoundRedo(draft)) {
-            cleanRoomObjectHistory.pushUndo("sound");
-            appendSoundDebugEvent("Redo handled", "canonical sound history", beforeSnapshot, createSoundDebugSnapshot(draft));
-            return;
-          }
+          if (poppedAction) canonicalDecorHistory.pushRedo(poppedAction);
         }
       }
-      const entry = redoTileEdit(doc, draft.history);
-      applyHistoryObjectMutationState(draft, entry, "redo");
-      appendSoundDebugEvent("Redo handled", historyEntryContainsObjectLayer(entry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
+
+      if (timelineEntry.route?.lane === "sound-canonical") {
+        const action = canonicalSoundHistory.redoStack.at(-1) || null;
+        if (action?.globalActionId === timelineEntry.actionId && handleCleanRoomSoundRedo(draft)) {
+          markGlobalHistoryActionRedone(globalHistoryTimeline, timelineEntry.actionId);
+          appendSoundDebugEvent("Redo handled", "canonical sound history", beforeSnapshot, createSoundDebugSnapshot(draft));
+          return;
+        }
+      }
+
+      const entry = draft.history.redoStack.at(-1) || null;
+      if (entry?.globalActionId === timelineEntry.actionId) {
+        const redoneEntry = redoTileEdit(doc, draft.history);
+        applyHistoryObjectMutationState(draft, redoneEntry, "redo");
+        markGlobalHistoryActionRedone(globalHistoryTimeline, timelineEntry.actionId);
+        appendSoundDebugEvent("Redo handled", historyEntryContainsObjectLayer(redoneEntry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
+      }
     });
   };
 

@@ -72,18 +72,30 @@ import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
 import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
 import { renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
 import { applyCanonicalDecorAction, createCanonicalDecorHistory } from "../src/app/cleanRoomDecorMode.js";
+import { applyCanonicalEntityAction, cloneCanonicalEntitySnapshot, createCanonicalEntityHistory } from "../src/app/cleanRoomEntityMode.js";
 import { applyCanonicalSoundAction, createCanonicalSoundHistory } from "../src/app/cleanRoomSoundMode.js";
 import { createEditorApp } from "../src/app/createEditorApp.js";
 import { createEditorState } from "../src/state/createEditorState.js";
 import { createStore } from "../src/state/createStore.js";
 import { findSoundAtCanvasPoint, renderSoundDragPreview, renderSoundPlacementPreview, renderSounds } from "../src/render/layers/soundLayer.js";
 import { findSoundPresetById } from "../src/domain/sound/soundPresets.js";
+import {
+  canRedoGlobalHistory,
+  canUndoGlobalHistory,
+  createGlobalHistoryTimelineState,
+  markGlobalHistoryActionRedone,
+  markGlobalHistoryActionUndone,
+  peekNextGlobalRedoAction,
+  peekNextGlobalUndoAction,
+  recordGlobalHistoryAction,
+} from "../src/domain/history/globalTimeline.js";
 
 function createHistoryState() {
   return {
     undoStack: [],
     redoStack: [],
     activeBatch: null,
+    globalTimeline: createGlobalHistoryTimelineState(),
   };
 }
 
@@ -3137,6 +3149,245 @@ async function runScanAudioAssetFallbackChecks() {
   }
 }
 
+function createMixedLayerChronologyHarness() {
+  const doc = createDoc();
+  const history = createHistoryState();
+  const timeline = history.globalTimeline;
+  const entityHistory = createCanonicalEntityHistory();
+  const decorHistory = createCanonicalDecorHistory();
+  const soundHistory = createCanonicalSoundHistory();
+
+  timeline.clearRedoTargets = () => {
+    history.redoStack.length = 0;
+    entityHistory.redoStack.length = 0;
+    decorHistory.redoStack.length = 0;
+    soundHistory.redoStack.length = 0;
+  };
+
+  const recordCanonicalAction = (domain, action) => {
+    const actionRecord = recordGlobalHistoryAction(timeline, {
+      domain,
+      actionType: action.type,
+      route: {
+        lane: `${domain}-canonical`,
+        domain,
+      },
+    });
+    return actionRecord?.actionId ? { ...action, globalActionId: actionRecord.actionId } : action;
+  };
+
+  const recordEntityAction = (action) => {
+    const applied = applyCanonicalEntityAction(doc, action, "forward");
+    assert.equal(applied.changed, true, `entity ${action.type} should apply before entering global chronology`);
+    entityHistory.record(recordCanonicalAction("entity", action));
+  };
+
+  const recordDecorAction = (action) => {
+    const applied = applyCanonicalDecorAction(doc, action, "forward");
+    assert.equal(applied.changed, true, `decor ${action.type} should apply before entering global chronology`);
+    decorHistory.record(recordCanonicalAction("decor", action));
+  };
+
+  const recordSoundAction = (action) => {
+    const applied = applyCanonicalSoundAction(doc, action, "forward");
+    assert.equal(applied.changed, true, `sound ${action.type} should apply before entering global chronology`);
+    soundHistory.record(recordCanonicalAction("sound", action));
+  };
+
+  const recordTilePaint = (cell, nextValue) => {
+    const previousValue = doc.tiles.base[cell.y * doc.dimensions.width + cell.x];
+    const changed = paintSingleTile(doc, cell.x, cell.y, nextValue);
+    assert.equal(changed, true, "tile paint should mutate the document before recording global chronology");
+    pushTileEdit(history, createTileEditEntry(doc, cell, previousValue, nextValue));
+  };
+
+  const undo = () => {
+    const timelineEntry = peekNextGlobalUndoAction(timeline);
+    if (!timelineEntry) return null;
+
+    if (timelineEntry.route?.lane === "document-history") {
+      const entry = history.undoStack.at(-1) || null;
+      assert.equal(entry?.globalActionId, timelineEntry.actionId, "global chronology should target the latest tile/history action next");
+      const undoneEntry = undoTileEdit(doc, history);
+      markGlobalHistoryActionUndone(timeline, timelineEntry.actionId);
+      return { domain: timelineEntry.domain, actionId: timelineEntry.actionId, entry: undoneEntry };
+    }
+
+    if (timelineEntry.route?.lane === "entity-canonical") {
+      const action = entityHistory.undoStack.at(-1) || null;
+      assert.equal(action?.globalActionId, timelineEntry.actionId, "global chronology should target the latest entity action next");
+      const poppedAction = entityHistory.popUndo();
+      const result = applyCanonicalEntityAction(doc, poppedAction, "backward");
+      assert.equal(result.changed, true, "global entity undo should route through the canonical entity lane");
+      entityHistory.pushRedo(poppedAction);
+      markGlobalHistoryActionUndone(timeline, timelineEntry.actionId);
+      return { domain: timelineEntry.domain, actionId: timelineEntry.actionId, action: poppedAction };
+    }
+
+    if (timelineEntry.route?.lane === "decor-canonical") {
+      const action = decorHistory.undoStack.at(-1) || null;
+      assert.equal(action?.globalActionId, timelineEntry.actionId, "global chronology should target the latest decor action next");
+      const poppedAction = decorHistory.popUndo();
+      const result = applyCanonicalDecorAction(doc, poppedAction, "backward");
+      assert.equal(result.changed, true, "global decor undo should route through the canonical decor lane");
+      decorHistory.pushRedo(poppedAction);
+      markGlobalHistoryActionUndone(timeline, timelineEntry.actionId);
+      return { domain: timelineEntry.domain, actionId: timelineEntry.actionId, action: poppedAction };
+    }
+
+    if (timelineEntry.route?.lane === "sound-canonical") {
+      const action = soundHistory.undoStack.at(-1) || null;
+      assert.equal(action?.globalActionId, timelineEntry.actionId, "global chronology should target the latest sound action next");
+      const poppedAction = soundHistory.popUndo();
+      const result = applyCanonicalSoundAction(doc, poppedAction, "backward");
+      assert.equal(result.changed, true, "global sound undo should route through the canonical sound lane");
+      soundHistory.pushRedo(poppedAction);
+      markGlobalHistoryActionUndone(timeline, timelineEntry.actionId);
+      return { domain: timelineEntry.domain, actionId: timelineEntry.actionId, action: poppedAction };
+    }
+
+    assert.fail(`unsupported timeline lane ${timelineEntry.route?.lane}`);
+  };
+
+  const redo = () => {
+    const timelineEntry = peekNextGlobalRedoAction(timeline);
+    if (!timelineEntry) return null;
+
+    if (timelineEntry.route?.lane === "document-history") {
+      const entry = history.redoStack.at(-1) || null;
+      assert.equal(entry?.globalActionId, timelineEntry.actionId, "global chronology should target the latest redoable tile/history action next");
+      const redoneEntry = redoTileEdit(doc, history);
+      markGlobalHistoryActionRedone(timeline, timelineEntry.actionId);
+      return { domain: timelineEntry.domain, actionId: timelineEntry.actionId, entry: redoneEntry };
+    }
+
+    if (timelineEntry.route?.lane === "entity-canonical") {
+      const action = entityHistory.redoStack.at(-1) || null;
+      assert.equal(action?.globalActionId, timelineEntry.actionId, "global chronology should target the latest redoable entity action next");
+      const poppedAction = entityHistory.popRedo();
+      const result = applyCanonicalEntityAction(doc, poppedAction, "forward");
+      assert.equal(result.changed, true, "global entity redo should route through the canonical entity lane");
+      entityHistory.pushUndo(poppedAction);
+      markGlobalHistoryActionRedone(timeline, timelineEntry.actionId);
+      return { domain: timelineEntry.domain, actionId: timelineEntry.actionId, action: poppedAction };
+    }
+
+    if (timelineEntry.route?.lane === "decor-canonical") {
+      const action = decorHistory.redoStack.at(-1) || null;
+      assert.equal(action?.globalActionId, timelineEntry.actionId, "global chronology should target the latest redoable decor action next");
+      const poppedAction = decorHistory.popRedo();
+      const result = applyCanonicalDecorAction(doc, poppedAction, "forward");
+      assert.equal(result.changed, true, "global decor redo should route through the canonical decor lane");
+      decorHistory.pushUndo(poppedAction);
+      markGlobalHistoryActionRedone(timeline, timelineEntry.actionId);
+      return { domain: timelineEntry.domain, actionId: timelineEntry.actionId, action: poppedAction };
+    }
+
+    if (timelineEntry.route?.lane === "sound-canonical") {
+      const action = soundHistory.redoStack.at(-1) || null;
+      assert.equal(action?.globalActionId, timelineEntry.actionId, "global chronology should target the latest redoable sound action next");
+      const poppedAction = soundHistory.popRedo();
+      const result = applyCanonicalSoundAction(doc, poppedAction, "forward");
+      assert.equal(result.changed, true, "global sound redo should route through the canonical sound lane");
+      soundHistory.pushUndo(poppedAction);
+      markGlobalHistoryActionRedone(timeline, timelineEntry.actionId);
+      return { domain: timelineEntry.domain, actionId: timelineEntry.actionId, action: poppedAction };
+    }
+
+    assert.fail(`unsupported timeline lane ${timelineEntry.route?.lane}`);
+  };
+
+  return {
+    doc,
+    history,
+    timeline,
+    recordEntityAction,
+    recordDecorAction,
+    recordSoundAction,
+    recordTilePaint,
+    undo,
+    redo,
+    canUndo: () => canUndoGlobalHistory(timeline),
+    canRedo: () => canRedoGlobalHistory(timeline),
+  };
+}
+
+function runMixedLayerGlobalChronologyRegressionChecks() {
+  {
+    const harness = createMixedLayerChronologyHarness();
+    harness.recordEntityAction({ type: "create", index: 0, entity: cloneCanonicalEntitySnapshot({ id: "entity-1", name: "Entity 1", type: "spawn", x: 1, y: 1, params: {} }) });
+    harness.recordDecorAction({ type: "create", index: 0, decor: { id: "decor-1", name: "Decor 1", type: "torch", x: 2, y: 2, rotation: 0, visible: true, params: {} } });
+    harness.recordTilePaint({ x: 0, y: 0 }, 7);
+    harness.recordSoundAction({ type: "create", index: 0, sound: { id: "sound-1", name: "Sound 1", type: "loop", x: 3, y: 3, radius: 24, volume: 1, visible: true, params: {} } });
+
+    assert.deepEqual([harness.undo()?.domain, harness.undo()?.domain, harness.undo()?.domain, harness.undo()?.domain], ["sound", "tile", "decor", "entity"], "mixed chronology should undo sound, then tile, then decor, then entity in true authored order");
+    assert.equal(harness.doc.sounds.length, 0, "mixed chronology should remove the created sound on the first undo");
+    assert.equal(harness.doc.tiles.base[0], 0, "mixed chronology should restore the painted tile on the second undo");
+    assert.equal(harness.doc.decor.length, 0, "mixed chronology should remove the created decor on the third undo");
+    assert.equal(harness.doc.entities.length, 0, "mixed chronology should remove the created entity on the fourth undo");
+  }
+
+  {
+    const harness = createMixedLayerChronologyHarness();
+    harness.recordEntityAction({ type: "create", index: 0, entity: cloneCanonicalEntitySnapshot({ id: "entity-a", name: "Entity A", type: "spawn", x: 1, y: 1, params: {} }) });
+    harness.recordDecorAction({ type: "create", index: 0, decor: { id: "decor-a", name: "Decor A", type: "torch", x: 2, y: 2, rotation: 0, visible: true, params: {} } });
+    harness.recordEntityAction({ type: "delete", index: 0, entity: cloneCanonicalEntitySnapshot({ id: "entity-a", name: "Entity A", type: "spawn", x: 1, y: 1, params: {} }) });
+    harness.recordTilePaint({ x: 1, y: 0 }, 9);
+
+    assert.deepEqual([harness.undo()?.domain, harness.undo()?.domain, harness.undo()?.domain], ["tile", "entity", "decor"], "mixed chronology should undo tile, then restore the deleted entity, then undo the older decor create");
+    assert.equal(harness.doc.tiles.base[1], 0, "undo after mixed chronology should restore the painted tile");
+    assert.deepEqual(harness.doc.entities.map((entity) => entity.id), ["entity-a"], "undo after mixed chronology should restore only the deleted entity");
+    assert.equal(harness.doc.decor.length, 0, "undo after mixed chronology should remove only the older decor create last");
+  }
+
+  {
+    const harness = createMixedLayerChronologyHarness();
+    harness.recordSoundAction({ type: "create", index: 0, sound: { id: "sound-tail", name: "Sound Tail", type: "loop", x: 0, y: 0, radius: 24, volume: 1, visible: true, params: {} } });
+    const undone = harness.undo();
+    assert.equal(undone?.domain, "sound", "setup undo should target the sound action first");
+    assert.equal(harness.canRedo(), true, "undoing a sound should populate the global redo tail");
+
+    harness.recordTilePaint({ x: 2, y: 0 }, 5);
+
+    assert.equal(harness.canRedo(), false, "recording a tile after undo should clear stale redo across all layers globally");
+    assert.equal(harness.doc.sounds.some((sound) => sound.id === "sound-tail"), false, "recording a new tile action after undo should not resurrect the stale sound");
+    assert.equal(harness.history.redoStack.length, 0, "recording a new action should clear document-history redo state globally");
+  }
+
+  {
+    const harness = createMixedLayerChronologyHarness();
+    harness.recordDecorAction({ type: "create", index: 0, decor: { id: "decor-1", name: "Decor 1", type: "torch", x: 0, y: 0, rotation: 0, visible: true, params: {} } });
+    harness.recordEntityAction({ type: "create", index: 0, entity: cloneCanonicalEntitySnapshot({ id: "entity-1", name: "Entity 1", type: "spawn", x: 1, y: 1, params: {} }) });
+    harness.recordDecorAction({ type: "delete", index: 0, decor: { id: "decor-1", name: "Decor 1", type: "torch", x: 0, y: 0, rotation: 0, visible: true, params: {} } });
+    harness.recordSoundAction({ type: "create", index: 0, sound: { id: "sound-1", name: "Sound 1", type: "loop", x: 2, y: 2, radius: 24, volume: 1, visible: true, params: {} } });
+
+    assert.deepEqual([harness.undo()?.domain, harness.undo()?.domain], ["sound", "decor"], "mixed create/delete chronology should undo the latest sound create before restoring the earlier decor delete");
+    assert.deepEqual(harness.doc.decor.map((decor) => decor.id), ["decor-1"], "undoing the decor delete should restore only the targeted decor without reviving unrelated objects");
+    assert.deepEqual(harness.doc.entities.map((entity) => entity.id), ["entity-1"], "undoing the decor delete should leave unrelated entities untouched");
+    assert.equal(harness.doc.sounds.length, 0, "undoing the latest sound create should not revive unrelated sounds");
+  }
+
+  {
+    const harness = createMixedLayerChronologyHarness();
+    harness.recordEntityAction({ type: "create", index: 0, entity: cloneCanonicalEntitySnapshot({ id: "entity-r", name: "Entity R", type: "spawn", x: 0, y: 0, params: {} }) });
+    harness.recordDecorAction({ type: "create", index: 0, decor: { id: "decor-r", name: "Decor R", type: "torch", x: 1, y: 1, rotation: 0, visible: true, params: {} } });
+    harness.recordTilePaint({ x: 3, y: 0 }, 4);
+    harness.recordSoundAction({ type: "create", index: 0, sound: { id: "sound-r", name: "Sound R", type: "loop", x: 2, y: 2, radius: 24, volume: 1, visible: true, params: {} } });
+
+    harness.undo();
+    harness.undo();
+    harness.undo();
+    harness.undo();
+
+    assert.equal(harness.canRedo(), true, "undoing mixed actions should populate the global redo tail");
+    assert.deepEqual([harness.redo()?.domain, harness.redo()?.domain, harness.redo()?.domain, harness.redo()?.domain], ["entity", "decor", "tile", "sound"], "mixed chronology should redo entity, then decor, then tile, then sound in exact authored order");
+    assert.deepEqual(harness.doc.entities.map((entity) => entity.id), ["entity-r"], "redo should restore the canonical entity action first");
+    assert.deepEqual(harness.doc.decor.map((decor) => decor.id), ["decor-r"], "redo should restore the canonical decor action second");
+    assert.equal(harness.doc.tiles.base[3], 4, "redo should reapply the tile action third");
+    assert.deepEqual(harness.doc.sounds.map((sound) => sound.id), ["sound-r"], "redo should restore the canonical sound action last");
+  }
+}
+
 function runSourceRegressionChecks() {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const source = fs.readFileSync(path.join(repoRoot, "src/app/createEditorApp.js"), "utf8");
@@ -3481,6 +3732,7 @@ async function main() {
   await runLiveSoundPlacementRuntimeRegressionChecks();
   runObjectLayerStableIdentityHistoryRegressionChecks();
   runGlobalObjectLayerUndoRedoRegressionChecks();
+  runMixedLayerGlobalChronologyRegressionChecks();
   runFogVolumeRegressionChecks();
   runFogPlacementPreviewRegressionChecks();
   runObjectPlacementPreviewSuppressionRegressionChecks();
