@@ -639,6 +639,8 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   const selectedEntityId = typeof state.interaction.selectedEntityId === "string" && state.interaction.selectedEntityId.trim()
     ? state.interaction.selectedEntityId
     : null;
+  // TEMP ENTITY CLEAN PATH ACTIVE: resolve the bottom-panel entity editor from the live selected id first.
+  // OLD ENTITY PATH DISABLED: do not trust stale entity indices when the authored entity order changes.
   const resolvedSelectedEntityIndex = selectedEntityId
     ? active.entities?.findIndex((entity) => entity?.id === selectedEntityId)
     : selectedEntityIndex;

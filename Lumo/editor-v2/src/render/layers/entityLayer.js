@@ -1,8 +1,6 @@
 import { getEntityHitRadius, getEntityVisual } from "../../domain/entities/entityVisuals.js";
-import { isEntitySelected } from "../../domain/entities/selection.js";
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
 import { isFogVolumeEntityType } from "../../domain/entities/specialVolumeTypes.js";
-import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
 function getEntityCenter(entity, tileSize) {
   const visual = getEntityVisual(entity.type);
@@ -153,6 +151,8 @@ export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 
 export function renderEntities(ctx, doc, viewport, interaction) {
   const entities = doc.entities || [];
   const tileSize = doc.dimensions.tileSize;
+  // TEMP ENTITY CLEAN PATH ACTIVE: render authored entities directly from stable entity ids only.
+  // OLD ENTITY PATH DISABLED: do not fall back to legacy index-based entity selection/hover state.
   const selectedEntityIds = new Set(
     Array.isArray(interaction.selectedEntityIds)
       ? interaction.selectedEntityIds.filter((entityId) => typeof entityId === "string" && entityId.trim())
@@ -170,55 +170,26 @@ export function renderEntities(ctx, doc, viewport, interaction) {
 
     const { x, y } = getEntityScreenCenter(entity, tileSize, viewport);
     drawEntityMarker(ctx, entity, x, y, viewport, {
-      isSelected: selectedEntityIds.size ? selectedEntityIds.has(entity.id) : isEntitySelected(interaction, i),
-      isHovered: hoveredEntityId ? hoveredEntityId === entity.id : interaction.hoveredEntityIndex === i,
+      isSelected: selectedEntityIds.has(entity.id),
+      isHovered: hoveredEntityId === entity.id,
       alpha: 1,
     });
   }
 }
 
 export function renderEntityDragPreview(ctx, doc, viewport, interaction) {
-  const entityDrag = interaction.entityDrag;
-  if (!entityDrag?.active) return;
-
-  const tileSize = doc.dimensions.tileSize;
-  const delta = entityDrag.previewDelta || { x: 0, y: 0 };
-
-  for (const origin of entityDrag.originPositions || []) {
-    const entity = doc.entities?.[origin.index];
-    if (!entity?.visible) continue;
-
-    const previewEntity = { ...entity, x: origin.x + delta.x, y: origin.y + delta.y };
-    if (isFogVolumeEntityType(previewEntity.type)) continue;
-
-    const { x, y } = getEntityScreenCenter(previewEntity, tileSize, viewport);
-    drawEntityMarker(ctx, previewEntity, x, y, viewport, {
-      isSelected: true,
-      preview: true,
-    });
-  }
+  void ctx;
+  void doc;
+  void viewport;
+  void interaction;
+  // OLD ENTITY PATH DISABLED: legacy entity drag preview rendering is fully bypassed.
 }
 
 export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, activePreset) {
-  if (interaction.activeTool !== "inspect") return;
-  if (interaction.activeLayer !== "entities") return;
-  if (isObjectPlacementPreviewSuppressed(interaction)) return;
-  if (!activePreset) return;
-
-  if (isFogVolumeEntityType(activePreset.type)) return;
-  if (!interaction.hoverCell) return;
-
-  const previewEntity = {
-    type: activePreset.type,
-    x: interaction.hoverCell.x,
-    y: interaction.hoverCell.y,
-    params: activePreset.defaultParams || {},
-  };
-
-  const { x, y } = getEntityScreenCenter(previewEntity, doc.dimensions.tileSize, viewport);
-  drawEntityMarker(ctx, previewEntity, x, y, viewport, {
-    isSelected: true,
-    preview: true,
-    alpha: 0.9,
-  });
+  void ctx;
+  void doc;
+  void viewport;
+  void interaction;
+  void activePreset;
+  // OLD ENTITY PATH DISABLED: preview/render-suppression coupling is removed from the live entity path.
 }

@@ -680,12 +680,11 @@ export function createEditorApp({
     lastPreviewSnapshot: null,
   };
 
-  // TEMP clean-room entity mode: hard-bypass the infected legacy V2 entity interaction/history path.
-  const cleanRoomEntityModeEnabled = Boolean(cleanRoomEntityMode?.enabled);
+  // TEMP ENTITY CLEAN PATH ACTIVE: force the clean-room entity runtime on for every editor-v2 session.
+  // OLD ENTITY PATH DISABLED: do not allow the infected legacy V2 entity engine back onto the live path.
+  const cleanRoomEntityModeEnabled = true;
   const cleanRoomEntityHistory = createCleanRoomEntityHistory();
-  const cleanRoomEntityModeLabel = cleanRoomEntityModeEnabled
-    ? `TEMP clean-room entities ON (?${cleanRoomEntityMode?.queryParam || CLEAN_ROOM_ENTITY_MODE_QUERY_PARAM}=1)`
-    : null;
+  const cleanRoomEntityModeLabel = "TEMP ENTITY CLEAN PATH ACTIVE · old entity runtime disabled";
 
   const appendSoundDebugEvent = (title, details, beforeSnapshot = null, afterSnapshot = null) => {
     soundDebugState.sequence += 1;
@@ -3072,140 +3071,21 @@ export function createEditorApp({
   };
 
   const deleteSelectedEntity = (draft) => {
-    if (canUseCleanRoomEntityMode()) {
-      return deleteSelectedEntityCleanRoom(draft);
-    }
-
-    const doc = draft.document.active;
-    if (!doc) return false;
-    const selectedEntries = getEntityIdsFromSelection(draft.interaction, doc.entities)
-      .map((entityId) => {
-        const index = getEntityIndexById(doc.entities, entityId);
-        return Number.isInteger(index) ? { index, entity: doc.entities[index], entityId } : null;
-      })
-      .filter((entry) => entry?.entity);
-    if (!selectedEntries.length) {
-      return false;
-    }
-
-    startHistoryBatch(draft.history, "entity-delete");
-    for (const { entityId, entity } of [...selectedEntries].sort((left, right) => right.index - left.index)) {
-      const deleteIndex = getEntityIndexById(doc.entities, entityId);
-      if (!Number.isInteger(deleteIndex)) continue;
-      const anchor = captureObjectLayerAnchor(doc.entities, deleteIndex);
-      const deletedSnapshot = cloneEntitySnapshot(entity);
-      doc.entities.splice(deleteIndex, 1);
-      pushHistoryEntry(
-        draft.history,
-        createEntityEditEntry("delete", {
-          index: deleteIndex,
-          anchor,
-          entity: deletedSnapshot,
-        }),
-      );
-    }
-    endHistoryBatch(draft.history);
-
-    finalizeEntityMutationState(draft, { entityIds: [], entityPrimaryId: null }, "deleteSelectedEntity");
-    return true;
+    // TEMP ENTITY CLEAN PATH ACTIVE.
+    // OLD ENTITY PATH DISABLED: legacy entity delete/history reconciliation is off the live path.
+    return deleteSelectedEntityCleanRoom(draft);
   };
 
   const duplicateSelectedEntity = (draft) => {
-    if (canUseCleanRoomEntityMode()) {
-      return false;
-    }
-
-    const doc = draft.document.active;
-    if (!doc) return false;
-
-    const selectedEntries = getSelectedEntities(draft.interaction, doc.entities);
-    if (!selectedEntries.length) return false;
-
-    let insertIndex = selectedEntries[selectedEntries.length - 1].index + 1;
-    const duplicatedIndices = [];
-
-    startHistoryBatch(draft.history, "entity-duplicate");
-    for (const { entity: source } of selectedEntries) {
-      const offset = clampEntityPosition(doc, source.x + 1, source.y + 1);
-      const duplicate = {
-        ...source,
-        id: getNextStringId(doc.entities, "id", "entity"),
-        x: offset.x,
-        y: offset.y,
-        params: cloneEntityParams(source.params),
-      };
-
-      if (typeof source.instanceId === "string" && source.instanceId.trim()) {
-        duplicate.instanceId = getNextStringId(doc.entities, "instanceId", "instance");
-      }
-
-      doc.entities.splice(insertIndex, 0, duplicate);
-      duplicatedIndices.push(insertIndex);
-      pushHistoryEntry(
-        draft.history,
-        createEntityEditEntry("create", {
-          index: insertIndex,
-          anchor: captureObjectLayerAnchor(doc.entities, insertIndex),
-          entity: { ...duplicate, params: cloneEntityParams(duplicate.params) },
-        }),
-      );
-      insertIndex += 1;
-    }
-    endHistoryBatch(draft.history);
-
-    const duplicatedIds = duplicatedIndices
-      .map((index) => doc.entities[index]?.id)
-      .filter(Boolean);
-    const primaryId = duplicatedIds.at(-1) ?? null;
-    selectEntitiesByIds(draft, duplicatedIds, primaryId, {
-      clearHover: true,
-      clearHoverCell: true,
-      clearDrag: true,
-    });
-
-    return true;
+    void draft;
+    // OLD ENTITY PATH DISABLED: duplicate stays off until a clean-room entity mutation path exists.
+    return false;
   };
 
   const createEntityAtCell = (draft, cell, presetId = draft.interaction.activeEntityPresetId || DEFAULT_ENTITY_PRESET_ID) => {
-    if (canUseCleanRoomEntityMode()) {
-      return createCleanRoomEntityAtCell(draft, cell, presetId);
-    }
-
-    const doc = draft.document.active;
-    if (!doc || !cell) return null;
-
-    const decorPreset = resolveDecorPlacementPreset(presetId);
-    if (decorPreset && !resolveEntityPlacementPreset(presetId) && presetId !== decorPreset.id) {
-      return createDecorAtCell(draft, cell, decorPreset.id);
-    }
-
-    const entityPreset = resolveEntityPlacementPreset(presetId);
-    if (!entityPreset) return null;
-
-    const entities = doc.entities;
-    const entity = createEntityDraft(doc, cell.x, cell.y, entityPreset.id, entities.length + 1);
-    entities.push(entity);
-    const createdIndex = entities.length - 1;
-    pushHistoryEntry(
-      draft.history,
-      createEntityEditEntry("create", {
-        index: createdIndex,
-        anchor: captureObjectLayerAnchor(entities, createdIndex),
-        entity: { ...entity, params: cloneEntityParams(entity.params) },
-      }),
-    );
-    selectEntitiesByIds(draft, [entity.id], entity.id, {
-      clearHover: true,
-      clearHoverCell: true,
-      clearDrag: true,
-    });
-    draft.interaction.hoveredDecorIndex = null;
-    clearHoveredSound(draft.interaction);
-    clearDecorSelection(draft.interaction);
-    clearSoundSelection(draft.interaction);
-    draft.interaction.decorDrag = null;
-    draft.interaction.soundDrag = null;
-    return createdIndex;
+    // TEMP ENTITY CLEAN PATH ACTIVE.
+    // OLD ENTITY PATH DISABLED: legacy entity create/history wiring has been removed from live execution.
+    return createCleanRoomEntityAtCell(draft, cell, presetId);
   };
 
   const updateEntity = (index, field, value) => {
@@ -3243,6 +3123,7 @@ export function createEditorApp({
       }
 
       if (field === "duplicate") {
+        // OLD ENTITY PATH DISABLED: duplicate depended on the legacy entity mutation/history engine.
         duplicateSelectedEntity(draft);
         return;
       }
@@ -3273,76 +3154,12 @@ export function createEditorApp({
         return;
       }
 
-      const entity = entities[index];
-      if (!entity) return;
-
-      if (field === "param") {
-        if (!value || typeof value !== "object" || Array.isArray(value)) return;
-
-        const key = typeof value.key === "string" ? value.key.trim() : "";
-        const path = typeof value.path === "string" ? value.path.trim() : "";
-        if (!key && !path) return;
-        if (!isSupportedEntityParamValue(value.value)) return;
-
-        const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
-        const nextEntity = isSpecialVolumeEntityType(entity.type) && path
-          ? applyFogVolumeParamChange(entity, path, value.value, doc.dimensions.tileSize)
-          : {
-            ...entity,
-            params: {
-              ...cloneEntityParams(entity.params),
-              [key || path]: value.value,
-            },
-          };
-        doc.entities.splice(index, 1, nextEntity);
-        pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
-        return;
+      if (index >= 0 && index < entities.length) {
+        // OLD ENTITY PATH DISABLED: inspector-driven entity mutation still routes through the legacy
+        // entity history/reconcile engine. Keep the selected entity truthful in the panel, but block
+        // these edits from executing until the minimal clean entity path grows a new direct mutation path.
       }
-
-      if (field === "name" || field === "type") {
-        const trimmed = String(value || "").trim();
-        const nextValue = field === "type"
-          ? (() => {
-              const normalizedType = normalizeEditableObjectType(trimmed) || entity[field];
-              return isFogVolumeEntityType(normalizedType) ? entity[field] : normalizedType;
-            })()
-          : (trimmed || entity[field]);
-        if (entity[field] === nextValue) return;
-        const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
-        const nextEntity = {
-          ...entity,
-          [field]: nextValue,
-          params: field === "type"
-            ? getEntityPresetParamsForType(nextValue, entity.params)
-            : cloneEntityParams(entity.params),
-        };
-        const normalizedNextEntity = field === "type" && isSpecialVolumeEntityType(nextValue)
-          ? syncFogVolumeEntityToAnchor(nextEntity, doc.dimensions.tileSize)
-          : nextEntity;
-        doc.entities.splice(index, 1, normalizedNextEntity);
-        pushEntityUpdateHistory(draft.history, index, previousEntity, normalizedNextEntity);
-        return;
-      }
-
-      if (field === "visible") {
-        const nextVisible = Boolean(value);
-        if (entity.visible === nextVisible) return;
-        const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
-        const nextEntity = { ...entity, visible: nextVisible };
-        doc.entities.splice(index, 1, nextEntity);
-        pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
-        return;
-      }
-
-      if (field === "x" || field === "y") {
-        const next = clampEntityPosition(
-          doc,
-          field === "x" ? value : entity.x,
-          field === "y" ? value : entity.y,
-        );
-        moveEntityToCell(draft, index, next);
-        return;
-      }
+      return;
 
     });
   };
@@ -3860,7 +3677,8 @@ export function createEditorApp({
       return true;
     }
 
-    if (activeLayer === PANEL_LAYERS.ENTITIES && selectionMode === "entity" && hitEntityIndex >= 0) {
+    // OLD ENTITY PATH DISABLED: entity click/select must never drop back into the legacy inspect path.
+    if (false && activeLayer === PANEL_LAYERS.ENTITIES && selectionMode === "entity" && hitEntityIndex >= 0) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
@@ -4130,7 +3948,8 @@ if (event.shiftKey) {
     updateHoveredCanvasState(event);
 
 
-    if (state.interaction.entityDrag?.active) {
+    // OLD ENTITY PATH DISABLED: ignore stale legacy entity drag state if anything managed to set it.
+    if (false && state.interaction.entityDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
 
       const point = getCanvasPointFromMouseEvent(canvas, event);
@@ -4296,7 +4115,8 @@ if (event.shiftKey) {
     }
 
 
-    if (state.interaction.entityDrag?.active) {
+    // OLD ENTITY PATH DISABLED: never commit legacy entity drag state on mouseup.
+    if (false && state.interaction.entityDrag?.active) {
       store.setState((draft) => {
         const entityDrag = draft.interaction.entityDrag;
         if (!entityDrag?.active) return;
