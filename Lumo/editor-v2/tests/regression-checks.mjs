@@ -72,6 +72,9 @@ import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
 import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
 import { renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
 import { applyCanonicalDecorAction, createCanonicalDecorHistory } from "../src/app/cleanRoomDecorMode.js";
+import { createEditorApp } from "../src/app/createEditorApp.js";
+import { createEditorState } from "../src/state/createEditorState.js";
+import { createStore } from "../src/state/createStore.js";
 import { findSoundAtCanvasPoint, renderSoundDragPreview, renderSoundPlacementPreview, renderSounds } from "../src/render/layers/soundLayer.js";
 import { findSoundPresetById } from "../src/domain/sound/soundPresets.js";
 
@@ -199,6 +202,409 @@ function createSoundInteractionState() {
     selectedSoundId: null,
     soundDrag: null,
   };
+}
+
+class FakeEventTarget {
+  constructor() {
+    this.listeners = new Map();
+  }
+
+  addEventListener(type, listener) {
+    if (!this.listeners.has(type)) {
+      this.listeners.set(type, new Set());
+    }
+    this.listeners.get(type).add(listener);
+  }
+
+  removeEventListener(type, listener) {
+    this.listeners.get(type)?.delete(listener);
+  }
+
+  dispatch(type, event = {}) {
+    const listeners = [...(this.listeners.get(type) || [])];
+    const nextEvent = {
+      defaultPrevented: false,
+      preventDefault() {
+        nextEvent.defaultPrevented = true;
+      },
+      stopPropagation() {},
+      target: this,
+      currentTarget: this,
+      ...event,
+    };
+    for (const listener of listeners) {
+      listener(nextEvent);
+    }
+    return nextEvent;
+  }
+}
+
+class FakeClassList {
+  constructor() {
+    this.values = new Set();
+  }
+
+  add(...names) {
+    names.forEach((name) => this.values.add(name));
+  }
+
+  remove(...names) {
+    names.forEach((name) => this.values.delete(name));
+  }
+
+  toggle(name, force) {
+    if (force === true) {
+      this.values.add(name);
+      return true;
+    }
+    if (force === false) {
+      this.values.delete(name);
+      return false;
+    }
+    if (this.values.has(name)) {
+      this.values.delete(name);
+      return false;
+    }
+    this.values.add(name);
+    return true;
+  }
+
+  contains(name) {
+    return this.values.has(name);
+  }
+}
+
+function createFakeCanvasContext(canvas) {
+  const gradient = { addColorStop() {} };
+  const base = {
+    canvas,
+    fillStyle: "",
+    strokeStyle: "",
+    lineWidth: 1,
+    globalAlpha: 1,
+    font: "",
+    textAlign: "left",
+    textBaseline: "alphabetic",
+    imageSmoothingEnabled: false,
+    save() {},
+    restore() {},
+    scale() {},
+    translate() {},
+    rotate() {},
+    setTransform() {},
+    clearRect() {},
+    fillRect() {},
+    strokeRect() {},
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    closePath() {},
+    stroke() {},
+    fill() {},
+    arc() {},
+    ellipse() {},
+    roundRect() {},
+    drawImage() {},
+    fillText() {},
+    strokeText() {},
+    setLineDash() {},
+    createLinearGradient() { return gradient; },
+    createRadialGradient() { return gradient; },
+    measureText(text) { return { width: String(text || "").length * 8 }; },
+    getImageData() { return { data: new Uint8ClampedArray(canvas.width * canvas.height * 4) }; },
+    putImageData() {},
+  };
+  return new Proxy(base, {
+    get(target, prop) {
+      if (prop in target) return target[prop];
+      return () => {};
+    },
+  });
+}
+
+class FakeElement extends FakeEventTarget {
+  constructor({ width = 0, height = 0 } = {}) {
+    super();
+    this.width = width;
+    this.height = height;
+    this.style = {};
+    this.dataset = {};
+    this.classList = new FakeClassList();
+    this.innerHTML = "";
+    this.textContent = "";
+  }
+
+  getContext() {
+    return createFakeCanvasContext(this);
+  }
+
+  getBoundingClientRect() {
+    return {
+      left: 0,
+      top: 0,
+      width: this.width,
+      height: this.height,
+      right: this.width,
+      bottom: this.height,
+    };
+  }
+
+  querySelector() {
+    return null;
+  }
+
+  querySelectorAll() {
+    return [];
+  }
+
+  closest() {
+    return null;
+  }
+
+  focus() {}
+
+  click() {}
+
+  setSelectionRange() {}
+}
+
+async function createEditorRuntimeHarness() {
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  const previousElement = globalThis.Element;
+  const previousHTMLElement = globalThis.HTMLElement;
+  const previousHTMLButtonElement = globalThis.HTMLButtonElement;
+  const previousHTMLInputElement = globalThis.HTMLInputElement;
+  const previousHTMLSelectElement = globalThis.HTMLSelectElement;
+
+  class FakeWindow extends FakeEventTarget {
+    constructor() {
+      super();
+      this.devicePixelRatio = 1;
+      this._rafId = 0;
+    }
+
+    requestAnimationFrame(callback) {
+      this._rafId += 1;
+      const id = this._rafId;
+      setTimeout(() => callback(Date.now()), 0);
+      return id;
+    }
+
+    cancelAnimationFrame() {}
+  }
+
+  class FakeDocument extends FakeEventTarget {
+    constructor() {
+      super();
+      this.activeElement = null;
+      this.body = new FakeElement();
+    }
+
+    createElement() {
+      return new FakeElement();
+    }
+  }
+
+  const fakeWindow = new FakeWindow();
+  const fakeDocument = new FakeDocument();
+  globalThis.window = fakeWindow;
+  globalThis.document = fakeDocument;
+  globalThis.Element = FakeElement;
+  globalThis.HTMLElement = FakeElement;
+  globalThis.HTMLButtonElement = FakeElement;
+  globalThis.HTMLInputElement = FakeElement;
+  globalThis.HTMLSelectElement = FakeElement;
+
+  const canvas = new FakeElement({ width: 320, height: 320 });
+  const minimapCanvas = new FakeElement({ width: 160, height: 160 });
+  const floatingPanelHost = new FakeElement();
+  const inspector = new FakeElement();
+  const brushPanel = new FakeElement();
+  const cellHud = new FakeElement();
+  const topBar = new FakeElement();
+  const topBarStatus = new FakeElement();
+  const topBarExportMenu = new FakeElement();
+  const topBarSettingsMenu = new FakeElement();
+  const topBarHelpMenu = new FakeElement();
+  const bottomPanel = new FakeElement();
+  const store = createStore(createEditorState());
+
+  const destroy = createEditorApp({
+    canvas,
+    minimapCanvas,
+    floatingPanelHost,
+    inspector,
+    brushPanel,
+    cellHud,
+    topBar,
+    topBarStatus,
+    topBarExportMenu,
+    topBarSettingsMenu,
+    topBarHelpMenu,
+    bottomPanel,
+    store,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 40));
+
+  return {
+    canvas,
+    store,
+    fakeWindow,
+    fakeDocument,
+    destroy() {
+      destroy();
+      globalThis.window = previousWindow;
+      globalThis.document = previousDocument;
+      globalThis.Element = previousElement;
+      globalThis.HTMLElement = previousHTMLElement;
+      globalThis.HTMLButtonElement = previousHTMLButtonElement;
+      globalThis.HTMLInputElement = previousHTMLInputElement;
+      globalThis.HTMLSelectElement = previousHTMLSelectElement;
+    },
+  };
+}
+
+function getClientPointForCell(state, cell) {
+  const tileSize = state.document.active.dimensions.tileSize;
+  return {
+    clientX: state.viewport.offsetX + (cell.x + 0.5) * tileSize * state.viewport.zoom,
+    clientY: state.viewport.offsetY + (cell.y + 0.5) * tileSize * state.viewport.zoom,
+  };
+}
+
+async function runLiveDecorPlacementRuntimeRegressionChecks() {
+  const harness = await createEditorRuntimeHarness();
+  const { canvas, fakeWindow, store } = harness;
+
+  try {
+    const initialState = store.getState();
+    assert.equal(initialState.document.status, "ready", "runtime harness should load the mock level document");
+    const initialDecorIds = initialState.document.active.decor.map((decor) => decor.id);
+
+    store.setState((draft) => {
+      draft.interaction.activeTool = "inspect";
+      draft.interaction.activeLayer = "decor";
+      draft.interaction.canvasSelectionMode = "decor";
+      draft.interaction.activeDecorPresetId = "decor_flower_01";
+      draft.interaction.activeEntityPresetId = null;
+      draft.interaction.activeSoundPresetId = null;
+      draft.interaction.decorScatterMode = false;
+    });
+
+    const firstCell = { x: 1, y: 1 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), firstCell),
+      altKey: true,
+      button: 0,
+    });
+
+    const afterCreateState = store.getState();
+    const createdDecor = afterCreateState.document.active.decor.at(-1);
+    assert.equal(afterCreateState.document.active.decor.length, initialDecorIds.length + 1, "Alt+click decor placement should append authored decor immediately");
+    assert.equal(afterCreateState.interaction.selectedDecorId, createdDecor.id, "live decor placement should select the newly authored decor by stable id");
+    assert.deepEqual(afterCreateState.interaction.selectedDecorIds, [createdDecor.id], "live decor placement should keep clean-room decor selection on the new authored decor only");
+    assert.deepEqual(afterCreateState.interaction.selectedCell, firstCell, "live decor placement should update the selected decor cell immediately");
+    assert.equal(createdDecor.type, findDecorPresetById("decor_flower_01").type, "live decor placement should author the preset decor type through the canonical create lane");
+
+    fakeWindow.dispatch("keydown", {
+      key: "z",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: false,
+      altKey: false,
+      repeat: false,
+      code: "KeyZ",
+      target: null,
+    });
+
+    const afterUndoState = store.getState();
+    assert.deepEqual(afterUndoState.document.active.decor.map((decor) => decor.id), initialDecorIds, "undo after live decor placement should remove that exact authored decor from the document");
+    assert.equal(afterUndoState.document.active.decor.some((decor) => decor.id === createdDecor.id), false, "undo after live decor placement should not leave the created decor ghost-authored");
+
+    fakeWindow.dispatch("keydown", {
+      key: "z",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: true,
+      altKey: false,
+      repeat: false,
+      code: "KeyZ",
+      target: null,
+    });
+
+    const afterRedoState = store.getState();
+    assert.deepEqual(afterRedoState.document.active.decor.map((decor) => decor.id), [...initialDecorIds, createdDecor.id], "redo after live decor placement should restore the exact authored decor in canonical order");
+    assert.equal(afterRedoState.interaction.selectedDecorId, createdDecor.id, "redo after live decor placement should reselect the restored decor id");
+
+    const secondCell = { x: 2, y: 1 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), secondCell),
+      altKey: true,
+      button: 0,
+    });
+
+    const afterSecondCreate = store.getState();
+    const secondCreatedDecor = afterSecondCreate.document.active.decor.at(-1);
+    assert.deepEqual(
+      afterSecondCreate.document.active.decor.map((decor) => decor.id).slice(-2),
+      [createdDecor.id, secondCreatedDecor.id],
+      "multiple live decor placements should preserve deterministic authored append order on the canonical lane",
+    );
+
+    fakeWindow.dispatch("keydown", {
+      key: "Delete",
+      ctrlKey: false,
+      metaKey: false,
+      shiftKey: false,
+      altKey: false,
+      repeat: false,
+      code: "Delete",
+      target: null,
+    });
+
+    const afterDeleteState = store.getState();
+    assert.equal(afterDeleteState.document.active.decor.some((decor) => decor.id === secondCreatedDecor.id), false, "delete after live decor placement should remove the selected authored decor");
+
+    fakeWindow.dispatch("keydown", {
+      key: "z",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: false,
+      altKey: false,
+      repeat: false,
+      code: "KeyZ",
+      target: null,
+    });
+
+    const afterDeleteUndoState = store.getState();
+    assert.deepEqual(
+      afterDeleteUndoState.document.active.decor.map((decor) => decor.id).slice(-2),
+      [createdDecor.id, secondCreatedDecor.id],
+      "undo after live decor delete should restore the same authored decor sequence deterministically",
+    );
+
+    fakeWindow.dispatch("keydown", {
+      key: "z",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: true,
+      altKey: false,
+      repeat: false,
+      code: "KeyZ",
+      target: null,
+    });
+
+    const afterDeleteRedoState = store.getState();
+    assert.deepEqual(
+      afterDeleteRedoState.document.active.decor.map((decor) => decor.id),
+      [...initialDecorIds, createdDecor.id],
+      "redo after live decor delete should deterministically remove only the same created decor again",
+    );
+  } finally {
+    harness.destroy();
+  }
 }
 
 function runTileRegressionChecks() {
@@ -890,6 +1296,23 @@ function runObjectPlacementPreviewSuppressionRegressionChecks() {
 }
 
 function runDecorRegressionChecks() {
+  const source = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../src/app/createEditorApp.js"), "utf8");
+  assert.equal(
+    source.includes("const createDecorAtCell = (draft, cell, presetId = draft.interaction.activeDecorPresetId || DEFAULT_DECOR_PRESET_ID) => {"),
+    true,
+    "live decor placement wiring should expose a dedicated createDecorAtCell entry point again",
+  );
+  assert.equal(
+    source.includes("return createCleanRoomDecorAtCell(draft, cell, presetId);"),
+    true,
+    "live decor placement should continue delegating into the canonical clean-room decor create lane",
+  );
+  assert.equal(
+    source.includes('createDecorAtCell(draft, cell, activeDecorPresetId);'),
+    true,
+    "inspect-mode Alt+click decor placement should stay wired to the canonical decor create entry point",
+  );
+
   const doc = createDoc();
   const history = createHistoryState();
 
@@ -2709,6 +3132,7 @@ async function main() {
   runDecorAndSoundDeletionRegressionChecks();
   runCleanRoomDecorRuntimeRegressionChecks();
   runCleanRoomDecorHistoryDeterminismRegressionChecks();
+  await runLiveDecorPlacementRuntimeRegressionChecks();
   runObjectLayerStableIdentityHistoryRegressionChecks();
   runGlobalObjectLayerUndoRedoRegressionChecks();
   runFogVolumeRegressionChecks();
