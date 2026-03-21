@@ -269,6 +269,22 @@ function historyEntryContainsSound(entry) {
   return false;
 }
 
+function collectHistorySoundIds(entry, mode, bucket = []) {
+  if (!entry) return bucket;
+  if (entry.type === "batch") {
+    for (const edit of entry.edits || []) {
+      collectHistorySoundIds(edit, mode, bucket);
+    }
+    return bucket;
+  }
+  if (entry.kind !== "sound" || entry.mode !== mode) return bucket;
+  const soundId = entry.sound?.id || entry.previousSound?.id || entry.nextSound?.id || null;
+  if (typeof soundId === "string" && soundId.trim()) {
+    bucket.push(soundId);
+  }
+  return bucket;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -1080,13 +1096,6 @@ export function createEditorApp({
       } else {
         clearHoveredSound(draft.interaction);
       }
-    } else if (Number.isInteger(draft.interaction.hoveredSoundIndex)) {
-      const hoveredSound = sounds[draft.interaction.hoveredSoundIndex];
-      if (hoveredSound?.id) {
-        draft.interaction.hoveredSoundId = hoveredSound.id;
-      } else {
-        clearHoveredSound(draft.interaction);
-      }
     } else {
       clearHoveredSound(draft.interaction);
     }
@@ -1105,7 +1114,51 @@ export function createEditorApp({
       }
     }
 
+    const previewSoundId = typeof draft.soundPreview?.soundId === "string" && draft.soundPreview.soundId.trim()
+      ? draft.soundPreview.soundId
+      : null;
+    if (previewSoundId) {
+      const previewIndex = getSoundIndexById(sounds, previewSoundId);
+      if (Number.isInteger(previewIndex)) {
+        draft.soundPreview.soundIndex = previewIndex;
+      } else {
+        clearSoundPreviewState(draft);
+        soundPreviewPlayback.stop();
+      }
+    } else if (Number.isInteger(draft.soundPreview?.soundIndex)) {
+      clearSoundPreviewState(draft);
+      soundPreviewPlayback.stop();
+    }
+
     updateSoundSelectionCell(draft);
+  };
+
+  const restoreHistorySoundSelection = (draft, entry, direction) => {
+    const sounds = draft.document.active?.sounds || [];
+    const restoredSoundIds = direction === "undo"
+      ? collectHistorySoundIds(entry, "delete")
+      : collectHistorySoundIds(entry, "create");
+    const uniqueRestoredSoundIds = [...new Set(restoredSoundIds)].filter((soundId) => Number.isInteger(getSoundIndexById(sounds, soundId)));
+
+    if (!restoredSoundIds.length) {
+      clearHoveredSound(draft.interaction);
+      draft.interaction.soundDrag = null;
+      return;
+    }
+
+    if (!uniqueRestoredSoundIds.length) {
+      clearSoundSelection(draft.interaction);
+      clearHoveredSound(draft.interaction);
+      draft.interaction.soundDrag = null;
+      return;
+    }
+
+    const primarySoundId = uniqueRestoredSoundIds.at(-1) ?? null;
+    setSoundSelection(draft.interaction, uniqueRestoredSoundIds, primarySoundId, sounds);
+    clearHoveredSound(draft.interaction);
+    draft.interaction.soundDrag = null;
+    applyCanvasTarget(draft, "sound");
+    updateSoundSelectionCell(draft, getPrimarySelectedSoundIndex(draft.interaction, sounds));
   };
 
   const isTopBarInputElement = (value) =>
@@ -3869,9 +3922,7 @@ export function createEditorApp({
         draft.interaction.decorDrag = null;
       }
       if (historyEntryContainsSound(entry)) {
-        clearSoundSelection(draft.interaction);
-        clearHoveredSound(draft.interaction);
-        draft.interaction.soundDrag = null;
+        restoreHistorySoundSelection(draft, entry, "undo");
       }
       syncInteractionAfterHistoryChange(draft);
     });
@@ -3893,9 +3944,7 @@ export function createEditorApp({
         draft.interaction.decorDrag = null;
       }
       if (historyEntryContainsSound(entry)) {
-        clearSoundSelection(draft.interaction);
-        clearHoveredSound(draft.interaction);
-        draft.interaction.soundDrag = null;
+        restoreHistorySoundSelection(draft, entry, "redo");
       }
       syncInteractionAfterHistoryChange(draft);
     });

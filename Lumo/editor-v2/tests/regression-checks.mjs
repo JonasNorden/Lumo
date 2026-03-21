@@ -637,6 +637,21 @@ function runSoundIdentityRegressionChecks() {
   );
   assert.equal(interaction.selectedSoundId, "music-d", "primary sound selection should stay attached to the surviving sound id");
   assert.equal(interaction.selectedSoundIndex, 2, "primary sound selection should update to the surviving sound's new index");
+
+  const staleInteraction = createSoundInteractionState();
+  staleInteraction.selectedSoundIndices = [1];
+  staleInteraction.selectedSoundIndex = 1;
+  pruneSoundSelection(staleInteraction, sounds);
+  assert.deepEqual(
+    staleInteraction.selectedSoundIndices,
+    [],
+    "sound pruning should clear stale legacy indices instead of rebinding them to whichever sound now occupies the slot",
+  );
+  assert.equal(
+    staleInteraction.selectedSoundIndex,
+    null,
+    "sound pruning should clear a stale primary index when there is no stable sound id to reconcile",
+  );
 }
 
 function runSoundDragPreviewIdentityRegressionChecks() {
