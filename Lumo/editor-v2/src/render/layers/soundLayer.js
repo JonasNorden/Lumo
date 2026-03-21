@@ -617,10 +617,44 @@ export function renderSoundDragPreview(ctx, doc, viewport, interaction) {
   }
 }
 
+export function getSoundPlacementPreviewDiagnostic(interaction, activePreset) {
+  if (interaction.activeTool !== "inspect") {
+    return {
+      eligible: false,
+      reason: `activeTool=${interaction.activeTool || "unknown"}`,
+    };
+  }
+
+  if (interaction.soundPlacementPreviewSuppressed) {
+    return {
+      eligible: false,
+      reason: "suppressed",
+    };
+  }
+
+  if (!interaction.hoverCell) {
+    return {
+      eligible: false,
+      reason: "hoverCell missing",
+    };
+  }
+
+  if (!activePreset) {
+    return {
+      eligible: false,
+      reason: "activeSoundPresetId missing",
+    };
+  }
+
+  return {
+    eligible: true,
+    reason: "inspect tool + hoverCell + active sound preset",
+  };
+}
+
 export function renderSoundPlacementPreview(ctx, doc, viewport, interaction, activePreset) {
-  if (interaction.activeTool !== "inspect") return;
-  if (interaction.soundPlacementPreviewSuppressed) return;
-  if (!interaction.hoverCell || !activePreset) return;
+  const previewDiagnostic = getSoundPlacementPreviewDiagnostic(interaction, activePreset);
+  if (!previewDiagnostic.eligible) return;
 
   drawSoundMarker(ctx, {
     type: activePreset.type,
