@@ -56,7 +56,7 @@ import { collectDarknessPreviewLights, getPreviewPlayerLight } from "../src/rend
 import { createFogVolumeEntityFromWorldRect } from "../src/domain/entities/specialVolumeTypes.js";
 import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
 import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
-import { renderSoundDragPreview, renderSounds } from "../src/render/layers/soundLayer.js";
+import { findSoundAtCanvasPoint, renderSoundDragPreview, renderSounds } from "../src/render/layers/soundLayer.js";
 
 function createHistoryState() {
   return {
@@ -105,6 +105,7 @@ function createPreviewTestContext() {
     save() {},
     restore() {},
     createLinearGradient() { return gradient; },
+    createRadialGradient() { return gradient; },
     fillRect(...args) { operations.push(["fillRect", ...args]); },
     strokeRect(...args) { operations.push(["strokeRect", ...args]); },
     beginPath() {},
@@ -112,10 +113,11 @@ function createPreviewTestContext() {
     lineTo() {},
     bezierCurveTo() {},
     quadraticCurveTo() {},
-    arc() {},
+    arc(...args) { operations.push(["arc", ...args]); },
+    roundRect(...args) { operations.push(["roundRect", ...args]); },
     closePath() {},
-    stroke() {},
-    fill() {},
+    stroke() { operations.push(["stroke"]); },
+    fill() { operations.push(["fill"]); },
     fillText(...args) { operations.push(["fillText", ...args]); },
     setLineDash() {},
     translate() {},
@@ -600,6 +602,58 @@ function runSoundRegressionChecks() {
   assert.equal(exported.sounds[0].source, "./audio/wind.ogg", "sound export should retain authored sound sources");
   assert.equal(exported.sounds[1].source, "./audio/legacy.ogg", "sound export should retain normalized legacy sound sources");
   assert.equal(exported.sounds[1].type, "spot", "sound export should retain normal authoring types alongside sound sources");
+}
+
+function runSoundTypeRenderRegressionChecks() {
+  const doc = createDoc();
+  doc.sounds = [
+    { id: "sound-spot", name: "Spot", type: "spot", x: 0, y: 0, visible: true, params: { radius: 2, spatial: true } },
+    { id: "sound-trigger", name: "Trigger", type: "trigger", x: 2, y: 0, visible: true, params: { radius: 0, spatial: true } },
+    { id: "sound-ambient", name: "Ambient", type: "ambientZone", x: 0, y: 2, visible: true, params: { width: 2, height: 2 } },
+    { id: "sound-music", name: "Music", type: "musicZone", x: 2, y: 2, visible: true, params: { width: 2, height: 2, fadeDistance: 1 } },
+  ];
+
+  const viewport = { offsetX: 0, offsetY: 0, zoom: 1 };
+  const scan = {
+    activeSoundIds: ["sound-spot", "sound-trigger", "sound-ambient", "sound-music"],
+    audioEvaluation: {
+      soundStates: doc.sounds.map((sound) => ({
+        soundId: sound.id,
+        presence: { intensity: 0.5, isTriggered: sound.type === "trigger" },
+        evaluation: { positionX: sound.x + 0.5 },
+      })),
+    },
+  };
+
+  const interaction = {
+    ...createSoundInteractionState(),
+    hoveredSoundId: "sound-music",
+    hoveredSoundIndex: 3,
+    selectedSoundIds: ["sound-ambient"],
+    selectedSoundId: "sound-ambient",
+    selectedSoundIndices: [2],
+    selectedSoundIndex: 2,
+  };
+
+  const { ctx, operations } = createPreviewTestContext();
+  renderSounds(ctx, doc, viewport, interaction, scan);
+  assert.ok(operations.length > 0, "sound render should draw the authored sound types without waiting for pointer updates");
+
+  assert.equal(findSoundAtCanvasPoint(doc, viewport, 8, 8), 0, "spot sound hit-testing should work");
+  assert.equal(findSoundAtCanvasPoint(doc, viewport, 40, 8), 1, "trigger sound hit-testing should work");
+  assert.equal(findSoundAtCanvasPoint(doc, viewport, 8, 40), 2, "ambient zone hit-testing should work");
+  assert.equal(findSoundAtCanvasPoint(doc, viewport, 40, 40), 3, "music zone hit-testing should work");
+
+  const dragPreview = createPreviewTestContext();
+  renderSoundDragPreview(dragPreview.ctx, doc, viewport, {
+    ...interaction,
+    soundDrag: {
+      active: true,
+      originPositions: doc.sounds.map((sound) => ({ soundId: sound.id, x: sound.x, y: sound.y })),
+      previewDelta: { x: 1, y: 0 },
+    },
+  });
+  assert.ok(dragPreview.operations.length > 0, "sound drag previews should render for spot, trigger, ambient, and music sounds");
 }
 
 function runSoundIdentityRegressionChecks() {
@@ -1900,6 +1954,7 @@ async function main() {
   runFogPlacementPreviewRegressionChecks();
   runDecorRegressionChecks();
   runSoundRegressionChecks();
+  runSoundTypeRenderRegressionChecks();
   runSoundIdentityRegressionChecks();
   runSoundDragPreviewIdentityRegressionChecks();
   runDarknessPreviewRegressionChecks();
