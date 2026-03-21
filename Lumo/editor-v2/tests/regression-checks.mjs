@@ -71,6 +71,7 @@ import { findDecorPresetById } from "../src/domain/decor/decorPresets.js";
 import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
 import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
 import { renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
+import { applyCanonicalDecorAction, createCanonicalDecorHistory } from "../src/app/cleanRoomDecorMode.js";
 import { findSoundAtCanvasPoint, renderSoundDragPreview, renderSoundPlacementPreview, renderSounds } from "../src/render/layers/soundLayer.js";
 import { findSoundPresetById } from "../src/domain/sound/soundPresets.js";
 
@@ -314,6 +315,41 @@ function runDecorAndSoundDeletionRegressionChecks() {
   redoTileEdit(doc, history);
   assert.equal(doc.decor.length, 0, "redo should re-delete decor");
   assert.equal(doc.sounds.length, 0, "redo should re-delete sounds");
+}
+
+function runCleanRoomDecorRuntimeRegressionChecks() {
+  const doc = createDoc();
+  doc.decor = [
+    { id: "decor-a", name: "A", type: "torch", x: 0, y: 0, visible: true, variant: "a", params: { glow: 1 } },
+    { id: "decor-b", name: "B", type: "torch", x: 1, y: 0, visible: true, variant: "a", params: { glow: 2 } },
+    { id: "decor-c", name: "C", type: "torch", x: 2, y: 0, visible: true, variant: "a", params: { glow: 3 } },
+  ];
+
+  const action = {
+    type: "delete",
+    items: [
+      { index: 0, decor: doc.decor[0] },
+      { index: 2, decor: doc.decor[2] },
+    ],
+  };
+
+  const forwardResult = applyCanonicalDecorAction(doc, action, "forward");
+  assert.equal(forwardResult.changed, true, "clean-room decor delete should remove selected authored decor by stable id");
+  assert.equal(forwardResult.selectedDecorId, null, "clean-room decor delete should clear authored decor selection after deletion");
+  assert.deepEqual(doc.decor.map((decor) => decor.id), ["decor-b"], "clean-room decor delete should preserve surviving authored decor without index drift");
+
+  const undoResult = applyCanonicalDecorAction(doc, action, "backward");
+  assert.equal(undoResult.changed, true, "clean-room decor undo should restore deleted authored decor");
+  assert.equal(undoResult.selectedDecorId, "decor-c", "clean-room decor undo should report the restored primary decor id");
+  assert.deepEqual(doc.decor.map((decor) => decor.id), ["decor-a", "decor-b", "decor-c"], "clean-room decor undo should restore authored decor in canonical order");
+
+  const history = createCanonicalDecorHistory();
+  history.record(action);
+  assert.equal(history.canUndo(), true, "clean-room decor history should track canonical decor delete batches");
+  const undoAction = history.popUndo();
+  assert.deepEqual(undoAction.items.map((item) => item.decor.id), ["decor-a", "decor-c"], "clean-room decor history should keep stable decor ids in undo batches");
+  history.pushRedo(undoAction);
+  assert.equal(history.canRedo(), true, "clean-room decor history should preserve redo batches after undo");
 }
 
 function runObjectLayerStableIdentityHistoryRegressionChecks() {
@@ -2136,6 +2172,11 @@ async function runScanAudioAssetFallbackChecks() {
 function runSourceRegressionChecks() {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const source = fs.readFileSync(path.join(repoRoot, "src/app/createEditorApp.js"), "utf8");
+  const mainSource = fs.readFileSync(path.join(repoRoot, "src/main.js"), "utf8");
+  const indexSource = fs.readFileSync(path.join(repoRoot, "index.html"), "utf8");
+  const rendererSource = fs.readFileSync(path.join(repoRoot, "src/render/renderer.js"), "utf8");
+  const decorLayerSource = fs.readFileSync(path.join(repoRoot, "src/render/layers/decorLayer.js"), "utf8");
+  const selectionPanelSource = fs.readFileSync(path.join(repoRoot, "src/ui/selectionEditorPanel.js"), "utf8");
 
   const handleCanvasMouseDownSection = source.match(/const handleCanvasMouseDown = \(event\) => \{[\s\S]*?\n  \};/);
   assert.ok(handleCanvasMouseDownSection, "handleCanvasMouseDown should exist");
@@ -2190,12 +2231,12 @@ function runSourceRegressionChecks() {
   );
   assert.equal(
     source.includes("return deleteSelectedEntityCleanRoom(draft);")
-      && source.includes("reconcileObjectLayerMutationState(draft, {}, \"deleteSelectedDecor\")")
+      && source.includes("return deleteSelectedDecorCleanRoom(draft);")
       && source.includes("reconcileObjectLayerMutationState(draft, {}, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)")
       && source.includes("applyHistoryObjectMutationState(draft, entry, \"undo\")")
       && source.includes("applyHistoryObjectMutationState(draft, entry, \"redo\")"),
     true,
-    "delete and history mutations should route through the clean entity delete path plus the shared non-entity reconciliation helpers",
+    "delete and history mutations should route through the clean entity/decor delete paths plus the shared sound reconciliation helpers",
   );
   assert.equal(
     source.includes("return deleteSelectedEntityCleanRoom(draft);"),
@@ -2203,9 +2244,9 @@ function runSourceRegressionChecks() {
     "entity deletion should stay pinned to the canonical stable-id delete path before the next frame renders",
   );
   assert.equal(
-    source.includes("reconcileObjectLayerMutationState(draft, {}, \"deleteSelectedDecor\")"),
+    source.includes("return deleteSelectedDecorCleanRoom(draft);"),
     true,
-    "decor deletion should clear stale object-layer interaction state before the next frame renders",
+    "decor deletion should stay pinned to the canonical stable-id clean-room delete path before the next frame renders",
   );
   assert.equal(
     source.includes("reconcileObjectLayerMutationState(draft, {}, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)"),
@@ -2254,6 +2295,57 @@ function runSourceRegressionChecks() {
       && source.includes("const getDecorIndexById = (decorItems, decorId) => {"),
     true,
     "decor authored-object interaction should reconcile through stable decor ids during the first bypass step",
+  );
+  assert.equal(
+    source.includes("const canonicalDecorHistory = createCanonicalDecorHistory();")
+      && source.includes("const deleteSelectedDecorCleanRoom = (draft) => {")
+      && source.includes('return deleteSelectedDecorCleanRoom(draft);')
+      && source.includes('appendSoundDebugEvent("Undo handled", "canonical decor history"')
+      && source.includes('appendSoundDebugEvent("Redo handled", "canonical decor history"'),
+    true,
+    "decor delete and undo/redo should stay pinned to the canonical clean-room decor history lane",
+  );
+  assert.equal(
+    source.includes("selectDecorByIds(draft, nextSelectedDecorIds, nextSelectedDecorIds.at(-1) ?? null")
+      && source.includes("if (false && state.interaction.decorDrag?.active)"),
+    true,
+    "decor click selection should resolve through stable ids while the legacy drag lane stays hard-disabled",
+  );
+  assert.equal(
+    source.includes("TEMP sound debug"),
+    false,
+    "editor-v2 should no longer ship the temporary sound debug overlay markup in the app runtime",
+  );
+  assert.equal(
+    source.includes("renderSoundDebugOverlay(state);"),
+    false,
+    "editor-v2 should remove the sound debug overlay render path instead of merely hiding its text",
+  );
+  assert.equal(
+    mainSource.includes("soundDebugOverlay"),
+    false,
+    "editor-v2 bootstrap should no longer require the removed sound debug overlay node",
+  );
+  assert.equal(
+    indexSource.includes('id="soundDebugOverlay"'),
+    false,
+    "editor-v2 HTML should no longer render the removed canvas debug overlay host",
+  );
+  assert.equal(
+    rendererSource.includes("renderDecorDragPreview") || rendererSource.includes("renderDecorScatterPreview"),
+    false,
+    "normal live renderer usage should not invoke legacy decor drag/scatter overlay passes",
+  );
+  assert.equal(
+    decorLayerSource.includes("isDecorSelected") || decorLayerSource.includes("hoveredDecorIndex === i"),
+    false,
+    "decor render/highlight resolution should not fall back to stale index-based authored decor state",
+  );
+  assert.equal(
+    selectionPanelSource.includes('const selectedDecorId = typeof getPrimarySelectedDecorId(state.interaction) === "string"')
+      && selectionPanelSource.includes("const resolvedSelectedDecorIndex = selectedDecorId"),
+    true,
+    "bottom panel decor resolution should derive from the selected decor id before any index fallback",
   );
   assert.equal(
     source.includes("additive: event.shiftKey,"),
@@ -2391,6 +2483,7 @@ async function main() {
   runNewLevelDocumentRegressionChecks();
   runEntityRegressionChecks();
   runDecorAndSoundDeletionRegressionChecks();
+  runCleanRoomDecorRuntimeRegressionChecks();
   runObjectLayerStableIdentityHistoryRegressionChecks();
   runGlobalObjectLayerUndoRedoRegressionChecks();
   runFogVolumeRegressionChecks();

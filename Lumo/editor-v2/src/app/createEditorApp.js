@@ -123,6 +123,11 @@ import {
   cloneCanonicalEntitySnapshot,
   createCanonicalEntityHistory,
 } from "./cleanRoomEntityMode.js";
+import {
+  applyCanonicalDecorAction,
+  cloneCanonicalDecorSnapshot,
+  createCanonicalDecorHistory,
+} from "./cleanRoomDecorMode.js";
 
 const BATCH_EDITABLE_SOUND_PARAM_KEYS = new Set(["spatial", "volume", "pitch", "loop"]);
 const SOUND_DEBUG_MAX_EVENTS = 18;
@@ -636,7 +641,6 @@ export function createEditorApp({
   inspector,
   brushPanel,
   cellHud,
-  soundDebugOverlay,
   topBar,
   topBarStatus,
   topBarExportMenu,
@@ -687,6 +691,38 @@ export function createEditorApp({
   // Future entity work must extend the canonical runtime below instead of reviving the disabled legacy entity engine.
   const canonicalEntityRuntimeEnabled = true;
   const canonicalEntityHistory = createCanonicalEntityHistory();
+  const canonicalDecorRuntimeEnabled = true;
+  const canonicalDecorHistory = createCanonicalDecorHistory();
+  const cleanRoomObjectHistory = {
+    undoStack: [],
+    redoStack: [],
+    clear() {
+      this.undoStack.length = 0;
+      this.redoStack.length = 0;
+    },
+    record(lane) {
+      this.undoStack.push(lane);
+      this.redoStack.length = 0;
+    },
+    canUndo() {
+      return this.undoStack.length > 0;
+    },
+    canRedo() {
+      return this.redoStack.length > 0;
+    },
+    popUndo() {
+      return this.undoStack.pop() || null;
+    },
+    popRedo() {
+      return this.redoStack.pop() || null;
+    },
+    pushUndo(lane) {
+      this.undoStack.push(lane);
+    },
+    pushRedo(lane) {
+      this.redoStack.push(lane);
+    },
+  };
 
   const appendSoundDebugEvent = (title, details, beforeSnapshot = null, afterSnapshot = null) => {
     soundDebugState.sequence += 1;
@@ -700,67 +736,6 @@ export function createEditorApp({
     soundDebugState.events = soundDebugState.events.slice(0, SOUND_DEBUG_MAX_EVENTS);
   };
 
-  const renderSoundDebugOverlay = (state) => {
-    const snapshot = createSoundDebugSnapshot(state);
-    const authoredSounds = snapshot.authoredSounds;
-    soundDebugOverlay.innerHTML = `
-      <div class="soundDebugOverlayHeader">
-        <span>TEMP sound debug</span>
-        <span class="soundDebugOverlayMeta">${soundDebugState.events.length} recent events</span>
-      </div>
-      <div class="soundDebugOverlayGrid">
-        <span class="soundDebugOverlayLabel">active layer</span>
-        <span class="soundDebugOverlayValue">${escapeHtml(snapshot.activeLayer)}</span>
-        <span class="soundDebugOverlayLabel">activeSoundPresetId</span>
-        <span class="soundDebugOverlayValue">${escapeHtml(snapshot.activeSoundPresetId || "null")}</span>
-        <span class="soundDebugOverlayLabel">selectedSoundId / Ids</span>
-        <span class="soundDebugOverlayValue">${escapeHtml(`${snapshot.selectedSoundId || "null"} / ${formatSoundDebugList(snapshot.selectedSoundIds)}`)}</span>
-        <span class="soundDebugOverlayLabel">selectedSoundIndex / Indices</span>
-        <span class="soundDebugOverlayValue">${escapeHtml(`${snapshot.selectedSoundIndex ?? "null"} / ${formatSoundDebugList(snapshot.selectedSoundIndices)}`)}</span>
-        <span class="soundDebugOverlayLabel">hoveredSoundId / Index</span>
-        <span class="soundDebugOverlayValue">${escapeHtml(`${snapshot.hoveredSoundId || "null"} / ${snapshot.hoveredSoundIndex ?? "null"}`)}</span>
-        <span class="soundDebugOverlayLabel">hoverCell</span>
-        <span class="soundDebugOverlayValue">${escapeHtml(formatSoundDebugCell(snapshot.hoverCell))}</span>
-        <span class="soundDebugOverlayLabel">selectedCell</span>
-        <span class="soundDebugOverlayValue">${escapeHtml(formatSoundDebugCell(snapshot.selectedCell))}</span>
-        <span class="soundDebugOverlayLabel">soundDrag</span>
-        <span class="soundDebugOverlayValue">${escapeHtml(summarizeSoundDebugDrag(snapshot.soundDrag))}</span>
-        <span class="soundDebugOverlayLabel">preview suppressed</span>
-        <span class="soundDebugOverlayValue">${snapshot.objectPlacementPreviewSuppressed ? "yes" : "no"}</span>
-        <span class="soundDebugOverlayLabel">preview eligible</span>
-        <span class="soundDebugOverlayValue">${snapshot.preview.eligible ? "yes" : "no"}</span>
-        <span class="soundDebugOverlayLabel">preview reason</span>
-        <span class="soundDebugOverlayValue">${escapeHtml(snapshot.preview.reason)}</span>
-        <span class="soundDebugOverlayLabel">authored sounds</span>
-        <span class="soundDebugOverlayValue">${escapeHtml(`count=${authoredSounds.count}`)}</span>
-        <span class="soundDebugOverlayLabel">ordered ids</span>
-        <span class="soundDebugOverlayValue">${escapeHtml(formatSoundDebugList(authoredSounds.ids))}</span>
-        <span class="soundDebugOverlayLabel">ordered types</span>
-        <span class="soundDebugOverlayValue">${escapeHtml(formatSoundDebugList(authoredSounds.types))}</span>
-        <span class="soundDebugOverlayLabel">sound positions</span>
-        <span class="soundDebugOverlayValue">${escapeHtml(formatSoundDebugList(authoredSounds.positions))}</span>
-      </div>
-      <div class="soundDebugOverlaySection">
-        <div class="soundDebugOverlaySectionTitle">Recent events</div>
-        <div class="soundDebugOverlayLog">
-          ${soundDebugState.events.length
-            ? soundDebugState.events.map((entry) => `
-              <article class="soundDebugOverlayLogEntry">
-                <div class="soundDebugOverlayLogEntryHeader">
-                  <span class="soundDebugOverlayLogEntryTitle">#${entry.id} ${escapeHtml(entry.title)}</span>
-                  <span class="soundDebugOverlayLogEntryMeta">${escapeHtml(entry.details || "")}</span>
-                </div>
-                <div class="soundDebugOverlayLogEntryBody">${escapeHtml([
-                  entry.beforeSnapshot ? `before: ${entry.beforeSnapshot}` : "",
-                  entry.afterSnapshot ? `after:  ${entry.afterSnapshot}` : "",
-                ].filter(Boolean).join("\n"))}</div>
-              </article>
-            `).join("")
-            : '<div class="soundDebugOverlayValue isMuted">No sound debug events yet.</div>'}
-        </div>
-      </div>
-    `;
-  };
 
   const setSoundPreviewState = (draft, updates = {}) => {
     draft.soundPreview = {
@@ -1354,6 +1329,29 @@ export function createEditorApp({
     canonicalEntityHistory.clear();
   };
 
+  const clearCleanRoomDecorHistory = () => {
+    canonicalDecorHistory.clear();
+  };
+
+  const clearCleanRoomObjectRuntimeHistory = () => {
+    clearCleanRoomEntityHistory();
+    clearCleanRoomDecorHistory();
+    cleanRoomObjectHistory.clear();
+  };
+
+  const recordCleanRoomObjectAction = (lane, action) => {
+    if (lane === "entity") {
+      canonicalEntityHistory.record(action);
+      cleanRoomObjectHistory.record("entity");
+      return;
+    }
+
+    if (lane === "decor") {
+      canonicalDecorHistory.record(action);
+      cleanRoomObjectHistory.record("decor");
+    }
+  };
+
   const syncCleanRoomEntitySelection = (draft, selectedEntityId = null) => {
     applyCanvasTarget(draft, "entity");
     draft.interaction.entityDrag = null;
@@ -1421,7 +1419,7 @@ export function createEditorApp({
     const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
     if (!changed) return null;
 
-    canonicalEntityHistory.record(action);
+    recordCleanRoomObjectAction("entity", action);
     return getEntityIndexById(doc.entities, entity.id);
   };
 
@@ -1448,7 +1446,7 @@ export function createEditorApp({
     const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
     if (!changed) return false;
 
-    canonicalEntityHistory.record(action);
+    recordCleanRoomObjectAction("entity", action);
     return true;
   };
 
@@ -1559,6 +1557,21 @@ export function createEditorApp({
     draft.interaction.selectedDecorId = nextPrimaryId;
   };
 
+  const selectDecorByIds = (draft, ids = [], primaryId = null, options = {}) => {
+    applyCanvasTarget(draft, "decor");
+    setDecorSelectionByIds(draft, ids, primaryId);
+    setHoveredDecor(draft, options.clearHover === false ? options.hoveredDecorId ?? null : null);
+    draft.interaction.decorDrag = null;
+    draft.interaction.decorScatterDrag = null;
+    updateDecorSelectionCell(draft);
+    if (!draft.interaction.selectedDecorIds?.length) {
+      draft.interaction.selectedCell = null;
+      if (options.clearHoverCell ?? true) {
+        draft.interaction.hoverCell = null;
+      }
+    }
+  };
+
   const setHoveredDecor = (draft, decorRef = null) => {
     const decorItems = draft.document.active?.decor || [];
     const index = typeof decorRef === "string"
@@ -1615,6 +1628,44 @@ export function createEditorApp({
       }
       : null;
     updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction, decorItems));
+  };
+
+  const syncCleanRoomDecorSelection = (draft, selectedDecorId = null) => {
+    applyCanvasTarget(draft, "decor");
+    draft.interaction.decorDrag = null;
+    draft.interaction.decorScatterDrag = null;
+    draft.interaction.hoveredDecorIndex = null;
+    draft.interaction.hoveredDecorId = null;
+
+    if (typeof selectedDecorId === "string" && selectedDecorId.trim()) {
+      selectDecorByIds(draft, [selectedDecorId], selectedDecorId, {
+        clearHover: true,
+        clearHoverCell: true,
+      });
+      return;
+    }
+
+    setDecorSelectionByIds(draft, [], null);
+    draft.interaction.selectedCell = null;
+    draft.interaction.hoverCell = null;
+  };
+
+  const applyCleanRoomDecorHistoryAction = (draft, action, direction) => {
+    const doc = draft.document.active;
+    if (!doc || !action || !canonicalDecorRuntimeEnabled) return false;
+
+    const result = applyCanonicalDecorAction(doc, action, direction);
+    if (!result.changed) return false;
+
+    syncCleanRoomDecorSelection(draft, result.selectedDecorId);
+    clearEntitySelection(draft.interaction);
+    clearSoundSelection(draft.interaction);
+    draft.interaction.hoveredEntityIndex = null;
+    draft.interaction.hoveredEntityId = null;
+    clearHoveredSound(draft.interaction);
+    draft.interaction.entityDrag = null;
+    draft.interaction.soundDrag = null;
+    return true;
   };
 
   const applyObjectLayerMutationSelection = (draft, selection = {}) => {
@@ -1975,8 +2026,8 @@ export function createEditorApp({
     topBarStatus.textContent = statusLabel;
     topBarStatus.dataset.target = activeLayer;
 
-    const undoEnabled = canUndo(state.history) || (canonicalEntityRuntimeEnabled && canonicalEntityHistory.canUndo());
-    const redoEnabled = canRedo(state.history) || (canonicalEntityRuntimeEnabled && canonicalEntityHistory.canRedo());
+    const undoEnabled = canUndo(state.history) || cleanRoomObjectHistory.canUndo();
+    const redoEnabled = canRedo(state.history) || cleanRoomObjectHistory.canRedo();
     const exportEnabled = Boolean(state.document.active);
 
     const actionButtons = topBar.querySelectorAll("[data-topbar-action]");
@@ -2682,77 +2733,36 @@ export function createEditorApp({
     return changed;
   };
 
-  const deleteSelectedDecor = (draft) => {
+  const deleteSelectedDecorCleanRoom = (draft) => {
     const doc = draft.document.active;
     if (!doc) return false;
 
     const selectedEntries = getSelectedDecor(draft.interaction, doc.decor || []);
     if (!selectedEntries.length) return false;
 
-    startHistoryBatch(draft.history, "decor-delete");
-    for (const { index, decor } of [...selectedEntries].sort((left, right) => right.index - left.index)) {
-      const anchor = captureObjectLayerAnchor(doc.decor, index);
-      doc.decor.splice(index, 1);
-      pushHistoryEntry(
-        draft.history,
-        createDecorEditEntry("delete", {
-          index,
-          anchor,
-          decor: { ...decor, params: cloneEntityParams(decor.params) },
-        }),
-      );
-    }
-    endHistoryBatch(draft.history);
+    const action = {
+      type: "delete",
+      items: selectedEntries.map(({ index, decor }) => ({
+        index,
+        decor: cloneCanonicalDecorSnapshot(decor),
+      })),
+    };
 
-    reconcileObjectLayerMutationState(draft, {}, "deleteSelectedDecor");
+    const changed = applyCleanRoomDecorHistoryAction(draft, action, "forward");
+    if (!changed) return false;
+
+    recordCleanRoomObjectAction("decor", action);
     return true;
   };
 
+  const deleteSelectedDecor = (draft) => {
+    return deleteSelectedDecorCleanRoom(draft);
+  };
+
   const duplicateSelectedDecor = (draft) => {
-    const doc = draft.document.active;
-    if (!doc) return false;
-
-    const selectedEntries = getSelectedDecor(draft.interaction, doc.decor || []);
-    if (!selectedEntries.length) return false;
-
-    let insertIndex = selectedEntries[selectedEntries.length - 1].index + 1;
-    const duplicatedIndices = [];
-
-    startHistoryBatch(draft.history, "decor-duplicate");
-    for (const { decor: source } of selectedEntries) {
-      const position = clampDecorPosition(doc, source.x + 1, source.y + 1);
-      const duplicate = {
-        ...source,
-        id: getNextStringId(doc.decor, "id", "decor"),
-        x: position.x,
-        y: position.y,
-      };
-
-      doc.decor.splice(insertIndex, 0, duplicate);
-      duplicatedIndices.push(insertIndex);
-      pushHistoryEntry(
-        draft.history,
-        createDecorEditEntry("create", {
-          index: insertIndex,
-          anchor: captureObjectLayerAnchor(doc.decor, insertIndex),
-          decor: { ...duplicate, params: cloneEntityParams(duplicate.params) },
-        }),
-      );
-      insertIndex += 1;
-    }
-    endHistoryBatch(draft.history);
-
-    const duplicatedIds = duplicatedIndices.map((index) => getDecorIdAtIndex(doc.decor || [], index)).filter(Boolean);
-    const primaryId = duplicatedIds.at(-1) ?? null;
-    const primaryIndex = primaryId ? getDecorIndexById(doc.decor || [], primaryId) : null;
-    setDecorSelection(draft.interaction, duplicatedIds, primaryId, doc.decor || []);
-    setHoveredDecor(draft, primaryId);
-    setCanvasSelectionMode(draft, "decor");
-    updateDecorSelectionCell(draft, primaryIndex);
-    draft.interaction.decorDrag = null;
-    clearEntitySelection(draft.interaction);
-    draft.interaction.hoveredEntityIndex = null;
-    return true;
+    void draft;
+    // CANONICAL DECOR RUNTIME ONLY: duplicate stays off until a stable-id clean-room create path replaces the legacy branch.
+    return false;
   };
 
   const createDecorAtCell = (draft, cell, presetId = draft.interaction.activeDecorPresetId || DEFAULT_DECOR_PRESET_ID) => {
@@ -3324,20 +3334,18 @@ export function createEditorApp({
 
       if (field === 'select') {
         if (index >= 0 && index < decorItems.length) {
-          if (value?.toggle) {
-            toggleDecorSelection(draft.interaction, index, decorItems);
-          } else {
-            setDecorSelection(draft.interaction, [index], index, decorItems);
-          }
-          setHoveredDecor(draft, index);
-          clearEntitySelection(draft.interaction);
-          clearSoundSelection(draft.interaction);
-          draft.interaction.hoveredEntityIndex = null;
-          clearHoveredSound(draft.interaction);
-          draft.interaction.entityDrag = null;
-          draft.interaction.soundDrag = null;
-          applyCanvasTarget(draft, "decor");
-          updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction, decorItems));
+          const decorId = decorItems[index]?.id || null;
+          if (!decorId) return;
+          const selectedDecorIds = getSelectedDecorIds(draft.interaction);
+          const nextSelectedDecorIds = value?.toggle
+            ? (selectedDecorIds.includes(decorId)
+              ? selectedDecorIds.filter((selectedId) => selectedId !== decorId)
+              : [...selectedDecorIds, decorId])
+            : [decorId];
+          selectDecorByIds(draft, nextSelectedDecorIds, nextSelectedDecorIds.at(-1) ?? null, {
+            clearHover: true,
+            clearHoverCell: true,
+          });
         }
         return;
       }
@@ -3345,52 +3353,9 @@ export function createEditorApp({
       const decor = decorItems[index];
       if (!decor) return;
 
-      if (field === "param") {
-        if (!value || typeof value !== "object" || Array.isArray(value)) return;
-
-        const key = typeof value.key === "string" ? value.key.trim() : "";
-        if (!key) return;
-        if (!isSupportedEntityParamValue(value.value)) return;
-
-        const previousDecor = { ...decor, params: cloneEntityParams(decor.params) };
-        const nextDecor = {
-          ...decor,
-          params: {
-            ...cloneEntityParams(decor.params),
-            [key]: value.value,
-          },
-        };
-        doc.decor.splice(index, 1, nextDecor);
-        pushDecorUpdateHistory(draft.history, index, previousDecor, nextDecor);
+      if (field === "param" || field === 'name' || field === 'type' || field === 'variant' || field === 'visible' || field === 'x' || field === 'y') {
+        // CANONICAL DECOR RUNTIME ONLY: the old inspect mutation lane stays disabled until a stable-id clean-room edit path replaces it.
         return;
-      }
-
-      if (field === 'name' || field === 'type' || field === 'variant') {
-        const trimmed = String(value || '').trim();
-        const nextValue = trimmed || decor[field];
-        if (decor[field] === nextValue) return;
-        const previousDecor = { ...decor };
-        const nextDecor = { ...decor, [field]: nextValue };
-        doc.decor.splice(index, 1, nextDecor);
-        pushDecorUpdateHistory(draft.history, index, previousDecor, nextDecor);
-        return;
-      }
-
-      if (field === 'visible') {
-        const nextVisible = Boolean(value);
-        if (decor.visible === nextVisible) return;
-        const previousDecor = { ...decor };
-        const nextDecor = { ...decor, visible: nextVisible };
-        doc.decor.splice(index, 1, nextDecor);
-        pushDecorUpdateHistory(draft.history, index, previousDecor, nextDecor);
-        return;
-      }
-
-      if (field === 'x' || field === 'y') {
-        moveDecorToCell(draft, index, {
-          x: field === 'x' ? value : decor.x,
-          y: field === 'y' ? value : decor.y,
-        });
       }
     });
   };
@@ -3475,7 +3440,6 @@ export function createEditorApp({
     renderBottomPanel(bottomPanel, state);
     renderBrushPanel(brushPanel, state);
     renderCellHud(cellHud, state);
-    renderSoundDebugOverlay(state);
     renderTopBar(state);
     renderFloatingPanels(state);
     bottomPanel.dataset.selectionTarget = getActiveLayer(state.interaction);
@@ -3834,36 +3798,19 @@ if (event.shiftKey) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
-        const decor = draft.document.active?.decor?.[hitDecorIndex];
         const decorItems = draft.document.active?.decor || [];
-        applyCanvasTarget(draft, "decor");
-        setHoveredDecor(draft, hitDecorIndex);
-        if (event.shiftKey) {
-          toggleDecorSelection(draft.interaction, hitDecorIndex, decorItems);
-          updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction, decorItems));
-          draft.interaction.decorDrag = null;
-          return;
-        } else {
-          const selectedIndices = getSelectedDecorIndices(draft.interaction, decorItems);
-          const dragSelection = selectedIndices.includes(hitDecorIndex) ? selectedIndices : [hitDecorIndex];
-          setDecorSelection(draft.interaction, dragSelection, hitDecorIndex, decorItems);
-        }
-        const primaryDecorIndex = getPrimarySelectedDecorIndex(draft.interaction, decorItems);
-        updateDecorSelectionCell(draft, primaryDecorIndex);
-        draft.interaction.decorDrag = {
-          active: true,
-          leadDecorId: decor?.id || null,
-          anchorCell: decor ? { x: decor.x, y: decor.y } : cell,
-          originPositions: getDecorSelectionIndices(draft.interaction, decorItems).map((index) => {
-            const selectedDecor = decorItems[index];
-            return {
-              decorId: selectedDecor?.id || null,
-              x: selectedDecor?.x ?? 0,
-              y: selectedDecor?.y ?? 0,
-            };
-          }).filter((origin) => origin.decorId),
-          previewDelta: { x: 0, y: 0 },
-        };
+        const decorId = decorItems[hitDecorIndex]?.id || null;
+        if (!decorId) return;
+        const selectedDecorIds = getSelectedDecorIds(draft.interaction);
+        const nextSelectedDecorIds = event.shiftKey
+          ? (selectedDecorIds.includes(decorId)
+            ? selectedDecorIds.filter((selectedId) => selectedId !== decorId)
+            : [...selectedDecorIds, decorId])
+          : [decorId];
+        selectDecorByIds(draft, nextSelectedDecorIds, nextSelectedDecorIds.at(-1) ?? null, {
+          clearHover: true,
+          clearHoverCell: true,
+        });
       });
       return true;
     }
@@ -4056,7 +4003,8 @@ if (event.shiftKey) {
       return;
     }
 
-    if (state.interaction.decorDrag?.active) {
+    // CANONICAL DECOR RUNTIME ONLY: ignore stale legacy decor drag state if anything managed to set it.
+    if (false && state.interaction.decorDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
 
       const point = getCanvasPointFromMouseEvent(canvas, event);
@@ -4210,7 +4158,8 @@ if (event.shiftKey) {
       return;
     }
 
-    if (state.interaction.decorDrag?.active) {
+    // CANONICAL DECOR RUNTIME ONLY: never commit legacy decor drag state on mouseup.
+    if (false && state.interaction.decorDrag?.active) {
       store.setState((draft) => {
         const decorDrag = draft.interaction.decorDrag;
         if (!decorDrag?.active) return;
@@ -4272,15 +4221,15 @@ if (event.shiftKey) {
       store.setState((draft) => {
         if (boxSelection.mode === "decor") {
           const decorItems = draft.document.active?.decor || [];
-          const baseSelection = boxSelection.additive ? getSelectedDecorIndices(draft.interaction, decorItems) : [];
-          applyCanvasTarget(draft, "decor");
-          setDecorSelection(
-            draft.interaction,
-            boxSelection.additive ? [...baseSelection, ...nextSelection] : nextSelection,
-            nextSelection[nextSelection.length - 1] ?? getPrimarySelectedDecorIndex(draft.interaction, decorItems),
-            decorItems,
-          );
-          updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction, decorItems));
+          const baseSelectionIds = boxSelection.additive ? getSelectedDecorIds(draft.interaction) : [];
+          const nextSelectionIds = nextSelection.map((index) => decorItems[index]?.id).filter(Boolean);
+          const mergedSelectionIds = boxSelection.additive
+            ? [...baseSelectionIds, ...nextSelectionIds]
+            : nextSelectionIds;
+          selectDecorByIds(draft, mergedSelectionIds, mergedSelectionIds.at(-1) ?? null, {
+            clearHover: true,
+            clearHoverCell: true,
+          });
         } else if (boxSelection.mode === "sound") {
           const soundItems = draft.document.active?.sounds || [];
           const baseSelection = boxSelection.additive ? getSelectedSoundIndices(draft.interaction, soundItems) : [];
@@ -4407,14 +4356,18 @@ if (event.shiftKey) {
     if (activeLayer === PANEL_LAYERS.DECOR && selectionMode === "decor" && hitDecorIndex >= 0) {
       store.setState((draft) => {
         const decorItems = draft.document.active?.decor || [];
-        applyCanvasTarget(draft, "decor");
-        if (event.shiftKey) {
-          toggleDecorSelection(draft.interaction, hitDecorIndex, decorItems);
-        } else {
-          setDecorSelection(draft.interaction, [hitDecorIndex], hitDecorIndex, decorItems);
-        }
-        setHoveredDecor(draft, hitDecorIndex);
-        updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction, decorItems));
+        const decorId = decorItems[hitDecorIndex]?.id || null;
+        if (!decorId) return;
+        const selectedDecorIds = getSelectedDecorIds(draft.interaction);
+        const nextSelectedDecorIds = event.shiftKey
+          ? (selectedDecorIds.includes(decorId)
+            ? selectedDecorIds.filter((selectedId) => selectedId !== decorId)
+            : [...selectedDecorIds, decorId])
+          : [decorId];
+        selectDecorByIds(draft, nextSelectedDecorIds, nextSelectedDecorIds.at(-1) ?? null, {
+          clearHover: true,
+          clearHoverCell: true,
+        });
       });
       return;
     }
@@ -4449,7 +4402,7 @@ if (event.shiftKey) {
 
 
   const resetEditorForDocument = (draft, nextDocument, statusMessage = null) => {
-    clearCleanRoomEntityHistory();
+    clearCleanRoomObjectRuntimeHistory();
     draft.document.active = nextDocument;
     draft.document.status = "ready";
     draft.document.error = null;
@@ -4563,10 +4516,23 @@ if (event.shiftKey) {
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
-      if (canUseCleanRoomEntityMode() && canonicalEntityHistory.canUndo()) {
-        handleCleanRoomEntityUndo(draft);
-        appendSoundDebugEvent("Undo handled", "canonical entity history", beforeSnapshot, createSoundDebugSnapshot(draft));
-        return;
+      if (cleanRoomObjectHistory.canUndo()) {
+        const lane = cleanRoomObjectHistory.popUndo();
+        if (lane === "entity") {
+          handleCleanRoomEntityUndo(draft);
+          cleanRoomObjectHistory.pushRedo("entity");
+          appendSoundDebugEvent("Undo handled", "canonical entity history", beforeSnapshot, createSoundDebugSnapshot(draft));
+          return;
+        }
+        if (lane === "decor") {
+          const action = canonicalDecorHistory.popUndo();
+          if (action && applyCleanRoomDecorHistoryAction(draft, action, "backward")) {
+            canonicalDecorHistory.pushRedo(action);
+            cleanRoomObjectHistory.pushRedo("decor");
+            appendSoundDebugEvent("Undo handled", "canonical decor history", beforeSnapshot, createSoundDebugSnapshot(draft));
+            return;
+          }
+        }
       }
       const entry = undoTileEdit(doc, draft.history);
       applyHistoryObjectMutationState(draft, entry, "undo");
@@ -4579,10 +4545,23 @@ if (event.shiftKey) {
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
-      if (canUseCleanRoomEntityMode() && canonicalEntityHistory.canRedo()) {
-        handleCleanRoomEntityRedo(draft);
-        appendSoundDebugEvent("Redo handled", "canonical entity history", beforeSnapshot, createSoundDebugSnapshot(draft));
-        return;
+      if (cleanRoomObjectHistory.canRedo()) {
+        const lane = cleanRoomObjectHistory.popRedo();
+        if (lane === "entity") {
+          handleCleanRoomEntityRedo(draft);
+          cleanRoomObjectHistory.pushUndo("entity");
+          appendSoundDebugEvent("Redo handled", "canonical entity history", beforeSnapshot, createSoundDebugSnapshot(draft));
+          return;
+        }
+        if (lane === "decor") {
+          const action = canonicalDecorHistory.popRedo();
+          if (action && applyCleanRoomDecorHistoryAction(draft, action, "forward")) {
+            canonicalDecorHistory.pushUndo(action);
+            cleanRoomObjectHistory.pushUndo("decor");
+            appendSoundDebugEvent("Redo handled", "canonical decor history", beforeSnapshot, createSoundDebugSnapshot(draft));
+            return;
+          }
+        }
       }
       const entry = redoTileEdit(doc, draft.history);
       applyHistoryObjectMutationState(draft, entry, "redo");

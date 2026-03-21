@@ -1,5 +1,5 @@
 import { getDecorHitRadius, getDecorVisual } from "../../domain/decor/decorVisuals.js";
-import { getSelectedDecorIndices, isDecorSelected } from "../../domain/decor/selection.js";
+
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
 import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
@@ -125,9 +125,8 @@ export function findDecorAtCanvasPoint(doc, viewport, pointX, pointY, radius = 2
 export function renderDecor(ctx, doc, viewport, interaction) {
   const decorItems = doc.decor || [];
   const tileSize = doc.dimensions.tileSize;
-  // Decor migration seam: authored decor highlighting/hover now prefers stable ids so legacy index drift
-  // does not retarget already-authored objects after deletes, duplicates, or reordering.
-  const draggedSelection = new Set(interaction.decorDrag?.active ? getSelectedDecorIndices(interaction, decorItems) : []);
+  // CANONICAL DECOR RUNTIME: authored decor rendering/highlighting resolves through stable ids only.
+  // Do not fall back to stale selection indices or legacy drag-driven preview suppression.
   const selectedDecorIds = new Set(
     Array.isArray(interaction.selectedDecorIds)
       ? interaction.selectedDecorIds.filter((decorId) => typeof decorId === "string" && decorId.trim())
@@ -140,12 +139,11 @@ export function renderDecor(ctx, doc, viewport, interaction) {
   for (let i = 0; i < decorItems.length; i += 1) {
     const decor = decorItems[i];
     if (!decor?.visible) continue;
-    if (draggedSelection.has(i)) continue;
 
     drawDecorMarker(ctx, decor, viewport, tileSize, {
-      selected: selectedDecorIds.size ? selectedDecorIds.has(decor.id) : isDecorSelected(interaction, i),
-      hovered: hoveredDecorId ? hoveredDecorId === decor.id : interaction.hoveredDecorIndex === i,
-      alpha: draggedSelection.has(i) ? 0.34 : 1,
+      selected: selectedDecorIds.has(decor.id),
+      hovered: hoveredDecorId === decor.id,
+      alpha: 1,
     });
   }
 }
