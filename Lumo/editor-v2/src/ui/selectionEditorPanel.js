@@ -1,5 +1,5 @@
 import { getPrimarySelectedEntityIndex, getSelectedEntityIndices } from "../domain/entities/selection.js";
-import { getPrimarySelectedDecorIndex, getSelectedDecorIndices } from "../domain/decor/selection.js";
+import { getPrimarySelectedDecorId, getPrimarySelectedDecorIndex, getSelectedDecorIndices } from "../domain/decor/selection.js";
 import { getPrimarySelectedSoundIndex, getSelectedSoundIndices } from "../domain/sound/selection.js";
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
 import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
@@ -647,7 +647,15 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   const selectedEntity = Number.isInteger(resolvedSelectedEntityIndex) && resolvedSelectedEntityIndex >= 0
     ? active.entities?.[resolvedSelectedEntityIndex]
     : null;
-  const selectedDecor = Number.isInteger(selectedDecorIndex) ? active.decor?.[selectedDecorIndex] : null;
+  const selectedDecorId = typeof getPrimarySelectedDecorId(state.interaction) === "string"
+    ? getPrimarySelectedDecorId(state.interaction)
+    : null;
+  const resolvedSelectedDecorIndex = selectedDecorId
+    ? active.decor?.findIndex((decor) => decor?.id === selectedDecorId)
+    : selectedDecorIndex;
+  const selectedDecor = Number.isInteger(resolvedSelectedDecorIndex) && resolvedSelectedDecorIndex >= 0
+    ? active.decor?.[resolvedSelectedDecorIndex]
+    : null;
   const selectedSound = Number.isInteger(selectedSoundIndex) ? active.sounds?.[selectedSoundIndex] : null;
   const selectedSounds = selectedSoundIndices
     .map((index) => active.sounds?.[index] || null)
@@ -676,7 +684,7 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   }
 
   if (selectedDecor) {
-    return { markup: renderDecorEditor(selectedDecor, selectedDecorIndex), isEmpty: false };
+    return { markup: renderDecorEditor(selectedDecor, resolvedSelectedDecorIndex), isEmpty: false };
   }
 
   if (selectedSound) {
