@@ -66,6 +66,7 @@ import {
   reconcileIdObjectInteraction,
   reconcileIndexedObjectInteraction,
 } from "../domain/placeables/objectInteractionReconciliation.js";
+import { captureObjectLayerAnchor, getObjectLayerId } from "../domain/placeables/objectLayerHistory.js";
 import { DEFAULT_SOUND_PRESET_ID, findSoundPresetById, getSoundPresetDefaultParams, getSoundPresetForType } from "../domain/sound/soundPresets.js";
 import { normalizeSoundSourceValue } from "../domain/sound/sourceReference.js";
 import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
@@ -382,6 +383,17 @@ function historyEntryContainsSound(entry) {
 
 function historyEntryContainsObjectLayer(entry) {
   return historyEntryContainsEntity(entry) || historyEntryContainsDecor(entry) || historyEntryContainsSound(entry);
+}
+
+function collectHistoryEntries(entry, callback) {
+  if (!entry || typeof callback !== "function") return;
+  if (entry.type === "batch") {
+    for (const edit of entry.edits || []) {
+      collectHistoryEntries(edit, callback);
+    }
+    return;
+  }
+  callback(entry);
 }
 
 function collectHistoryObjectIds(entry, kind, mode, bucket = []) {
@@ -1274,6 +1286,92 @@ export function createEditorApp({
     return index >= 0 ? index : null;
   };
 
+  const getObjectIndicesByIds = (items, ids = []) => {
+    const lookup = new Map();
+    (Array.isArray(items) ? items : []).forEach((item, index) => {
+      const itemId = getObjectLayerId(item);
+      if (itemId) lookup.set(itemId, index);
+    });
+
+    const resolvedIds = [];
+    const resolvedIndices = [];
+    const seenIds = new Set();
+    for (const itemId of Array.isArray(ids) ? ids : []) {
+      if (typeof itemId !== "string" || !itemId.trim() || seenIds.has(itemId) || !lookup.has(itemId)) continue;
+      seenIds.add(itemId);
+      resolvedIds.push(itemId);
+      resolvedIndices.push(lookup.get(itemId));
+    }
+
+    return { ids: resolvedIds, indices: resolvedIndices };
+  };
+
+  const setEntitySelectionByIds = (draft, ids = [], primaryId = null) => {
+    const entities = draft.document.active?.entities || [];
+    const resolved = getObjectIndicesByIds(entities, ids);
+    const nextPrimaryId = resolved.ids.includes(primaryId) ? primaryId : resolved.ids.at(-1) ?? null;
+    const primaryIndex = nextPrimaryId ? resolved.indices[resolved.ids.indexOf(nextPrimaryId)] ?? null : null;
+    setEntitySelection(draft.interaction, resolved.indices, primaryIndex);
+    draft.interaction.selectedEntityIds = resolved.ids;
+    draft.interaction.selectedEntityId = nextPrimaryId;
+  };
+
+  const setDecorSelectionByIds = (draft, ids = [], primaryId = null) => {
+    const decorItems = draft.document.active?.decor || [];
+    const resolved = getObjectIndicesByIds(decorItems, ids);
+    const nextPrimaryId = resolved.ids.includes(primaryId) ? primaryId : resolved.ids.at(-1) ?? null;
+    const primaryIndex = nextPrimaryId ? resolved.indices[resolved.ids.indexOf(nextPrimaryId)] ?? null : null;
+    setDecorSelection(draft.interaction, resolved.indices, primaryIndex);
+    draft.interaction.selectedDecorIds = resolved.ids;
+    draft.interaction.selectedDecorId = nextPrimaryId;
+  };
+
+  const clearObjectMutationInteractionState = (draft, reason = "object mutation") => {
+    draft.interaction.hoverCell = null;
+    draft.interaction.selectedCell = null;
+    draft.interaction.boxSelection = null;
+    draft.interaction.entityDrag = null;
+    draft.interaction.decorDrag = null;
+    draft.interaction.soundDrag = null;
+    draft.interaction.decorScatterDrag = null;
+    draft.interaction.hoveredEntityIndex = null;
+    draft.interaction.hoveredEntityId = null;
+    draft.interaction.hoveredDecorIndex = null;
+    draft.interaction.hoveredDecorId = null;
+    clearHoveredSound(draft.interaction);
+    clearEntitySelection(draft.interaction);
+    clearDecorSelection(draft.interaction);
+    clearSoundSelection(draft.interaction);
+    clearSoundPreviewState(draft);
+    soundPreviewPlayback.stop();
+    suppressObjectPlacementPreviews(draft, reason);
+  };
+
+  const applyObjectMutationSelection = (draft, selection = {}) => {
+    setEntitySelectionByIds(draft, selection.entityIds || [], selection.entityPrimaryId ?? null);
+    setDecorSelectionByIds(draft, selection.decorIds || [], selection.decorPrimaryId ?? null);
+    setSoundSelection(
+      draft.interaction,
+      selection.soundIds || [],
+      selection.soundPrimaryId ?? null,
+      draft.document.active?.sounds || [],
+    );
+
+    if (draft.interaction.selectedEntityIds?.length) {
+      updateEntitySelectionCell(draft);
+      return;
+    }
+    if (draft.interaction.selectedDecorIds?.length) {
+      updateDecorSelectionCell(draft);
+      return;
+    }
+    if (draft.interaction.selectedSoundIds?.length) {
+      updateSoundSelectionCell(draft);
+      return;
+    }
+    draft.interaction.selectedCell = null;
+  };
+
   const clearHoveredSound = (interaction) => {
     interaction.hoveredSoundIndex = null;
     interaction.hoveredSoundId = null;
@@ -1496,6 +1594,54 @@ export function createEditorApp({
       },
       reason: `history ${direction}`,
     };
+  };
+
+  const getObjectHistorySelection = (entry, direction) => {
+    const shouldSelect = (mode) => {
+      if (mode === "update") return true;
+      if (direction === "undo") return mode === "delete";
+      return mode === "create";
+    };
+
+    const collectSelectedIds = (kind) => {
+      const ids = [];
+      collectHistoryEntries(entry, (edit) => {
+        if (edit?.kind !== kind || !shouldSelect(edit.mode)) return;
+        const objectId = edit.objectId
+          || edit.entity?.id
+          || edit.decor?.id
+          || edit.sound?.id
+          || edit.previousEntity?.id
+          || edit.nextEntity?.id
+          || edit.previousDecor?.id
+          || edit.nextDecor?.id
+          || edit.previousSound?.id
+          || edit.nextSound?.id
+          || null;
+        if (typeof objectId === "string" && objectId.trim()) {
+          ids.push(objectId);
+        }
+      });
+      return [...new Set(ids)];
+    };
+
+    const entityIds = collectSelectedIds("entity");
+    const decorIds = collectSelectedIds("decor");
+    const soundIds = collectSelectedIds("sound");
+    return {
+      entityIds,
+      entityPrimaryId: entityIds.at(-1) ?? null,
+      decorIds,
+      decorPrimaryId: decorIds.at(-1) ?? null,
+      soundIds,
+      soundPrimaryId: soundIds.at(-1) ?? null,
+    };
+  };
+
+  const applyHistoryObjectMutationState = (draft, entry, direction) => {
+    if (!historyEntryContainsObjectLayer(entry)) return;
+    clearObjectMutationInteractionState(draft, `history ${direction}`);
+    applyObjectMutationSelection(draft, getObjectHistorySelection(entry, direction));
   };
 
   const isTopBarInputElement = (value) =>
@@ -2077,6 +2223,7 @@ export function createEditorApp({
       history,
       createDecorEditEntry("update", {
         index,
+        anchor: captureObjectLayerAnchor([previousDecor], 0),
         previousDecor: { ...previousDecor, params: cloneEntityParams(previousDecor.params) },
         nextDecor: { ...nextDecor, params: cloneEntityParams(nextDecor.params) },
       }),
@@ -2089,6 +2236,7 @@ export function createEditorApp({
       history,
       createEntityEditEntry("update", {
         index,
+        anchor: captureObjectLayerAnchor([previousEntity], 0),
         previousEntity: { ...previousEntity, params: cloneEntityParams(previousEntity.params) },
         nextEntity: { ...nextEntity, params: cloneEntityParams(nextEntity.params) },
       }),
@@ -2102,6 +2250,7 @@ export function createEditorApp({
       history,
       createSoundEditEntry("update", {
         index,
+        anchor: captureObjectLayerAnchor([previousSound], 0),
         previousSound: { ...previousSound, params: cloneEntityParams(previousSound.params) },
         nextSound: { ...nextSound, params: cloneEntityParams(nextSound.params) },
       }),
@@ -2322,29 +2471,26 @@ export function createEditorApp({
   const deleteSelectedDecor = (draft) => {
     const doc = draft.document.active;
     if (!doc) return false;
-    const interactionSnapshots = captureObjectLayerInteractionSnapshots(draft);
 
     const selectedEntries = getSelectedDecor(draft.interaction, doc.decor || []);
     if (!selectedEntries.length) return false;
 
     startHistoryBatch(draft.history, "decor-delete");
     for (const { index, decor } of [...selectedEntries].sort((left, right) => right.index - left.index)) {
+      const anchor = captureObjectLayerAnchor(doc.decor, index);
       doc.decor.splice(index, 1);
       pushHistoryEntry(
         draft.history,
         createDecorEditEntry("delete", {
           index,
+          anchor,
           decor: { ...decor, params: cloneEntityParams(decor.params) },
         }),
       );
     }
     endHistoryBatch(draft.history);
 
-    suppressObjectPlacementPreviews(draft, "deleteSelectedDecor");
-    reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, {
-      decor: { clearSelection: true, clearDrag: true, clearHover: true },
-      reason: "deleteSelectedDecor",
-    });
+    clearObjectMutationInteractionState(draft, "deleteSelectedDecor");
     return true;
   };
 
@@ -2374,6 +2520,7 @@ export function createEditorApp({
         draft.history,
         createDecorEditEntry("create", {
           index: insertIndex,
+          anchor: captureObjectLayerAnchor(doc.decor, insertIndex),
           decor: { ...duplicate, params: cloneEntityParams(duplicate.params) },
         }),
       );
@@ -2408,6 +2555,7 @@ export function createEditorApp({
       draft.history,
       createDecorEditEntry("create", {
         index: createdIndex,
+        anchor: captureObjectLayerAnchor(doc.decor, createdIndex),
         decor: { ...decor, params: cloneEntityParams(decor.params) },
       }),
     );
@@ -2437,6 +2585,7 @@ export function createEditorApp({
         draft.history,
         createDecorEditEntry("create", {
           index: nextIndex,
+          anchor: captureObjectLayerAnchor(doc.decor, nextIndex),
           decor: { ...decor, params: cloneEntityParams(decor.params) },
         }),
       );
@@ -2458,7 +2607,6 @@ export function createEditorApp({
     const doc = draft.document.active;
     if (!doc) return false;
     const beforeSnapshot = createSoundDebugSnapshot(draft);
-    const interactionSnapshots = captureObjectLayerInteractionSnapshots(draft);
 
     const selectedEntries = getSelectedSounds(draft.interaction, doc.sounds || []);
     if (!selectedEntries.length) return false;
@@ -2466,22 +2614,20 @@ export function createEditorApp({
 
     startHistoryBatch(draft.history, "sound-delete");
     for (const { index, sound } of [...selectedEntries].sort((left, right) => right.index - left.index)) {
+      const anchor = captureObjectLayerAnchor(doc.sounds, index);
       doc.sounds.splice(index, 1);
       pushHistoryEntry(
         draft.history,
         createSoundEditEntry("delete", {
           index,
+          anchor,
           sound: { ...sound, params: cloneEntityParams(sound.params) },
         }),
       );
     }
     endHistoryBatch(draft.history);
 
-    suppressObjectPlacementPreviews(draft, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`);
-    reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, {
-      sound: { clearSelection: true, clearDrag: true, clearHover: true },
-      reason: "deleteSelectedSound",
-    });
+    clearObjectMutationInteractionState(draft, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`);
     appendSoundDebugEvent(
       "sound delete mutation",
       `deleted ids ${formatSoundDebugList(deletedIds)}`,
@@ -2518,6 +2664,7 @@ export function createEditorApp({
         draft.history,
         createSoundEditEntry("create", {
           index: insertIndex,
+          anchor: captureObjectLayerAnchor(doc.sounds, insertIndex),
           sound: { ...duplicate, params: cloneEntityParams(duplicate.params) },
         }),
       );
@@ -2549,6 +2696,7 @@ export function createEditorApp({
       draft.history,
       createSoundEditEntry("create", {
         index: createdIndex,
+        anchor: captureObjectLayerAnchor(doc.sounds, createdIndex),
         sound: { ...sound, params: cloneEntityParams(sound.params) },
       }),
     );
@@ -2784,8 +2932,6 @@ export function createEditorApp({
   const deleteSelectedEntity = (draft) => {
     const doc = draft.document.active;
     if (!doc) return false;
-    const interactionSnapshots = captureObjectLayerInteractionSnapshots(draft);
-
     const selectedEntries = getSelectedEntities(draft.interaction, doc.entities);
     if (!selectedEntries.length) {
       return false;
@@ -2793,22 +2939,20 @@ export function createEditorApp({
 
     startHistoryBatch(draft.history, "entity-delete");
     for (const { index, entity } of [...selectedEntries].sort((left, right) => right.index - left.index)) {
+      const anchor = captureObjectLayerAnchor(doc.entities, index);
       doc.entities.splice(index, 1);
       pushHistoryEntry(
         draft.history,
         createEntityEditEntry("delete", {
           index,
+          anchor,
           entity: { ...entity, params: cloneEntityParams(entity.params) },
         }),
       );
     }
     endHistoryBatch(draft.history);
 
-    suppressObjectPlacementPreviews(draft, "deleteSelectedEntity");
-    reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, {
-      entity: { clearSelection: true, clearDrag: true, clearHover: true },
-      reason: "deleteSelectedEntity",
-    });
+    clearObjectMutationInteractionState(draft, "deleteSelectedEntity");
     return true;
   };
 
@@ -2843,6 +2987,7 @@ export function createEditorApp({
         draft.history,
         createEntityEditEntry("create", {
           index: insertIndex,
+          anchor: captureObjectLayerAnchor(doc.entities, insertIndex),
           entity: { ...duplicate, params: cloneEntityParams(duplicate.params) },
         }),
       );
@@ -2879,6 +3024,7 @@ export function createEditorApp({
       draft.history,
       createEntityEditEntry("create", {
         index: createdIndex,
+        anchor: captureObjectLayerAnchor(entities, createdIndex),
         entity: { ...entity, params: cloneEntityParams(entity.params) },
       }),
     );
@@ -4267,12 +4413,8 @@ export function createEditorApp({
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
-      const interactionSnapshots = captureObjectLayerInteractionSnapshots(draft);
       const entry = undoTileEdit(doc, draft.history);
-      if (historyEntryContainsObjectLayer(entry)) {
-        suppressObjectPlacementPreviews(draft, "undo");
-      }
-      reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, getHistoryMutationInteractionOptions(entry, "undo"));
+      applyHistoryObjectMutationState(draft, entry, "undo");
       appendSoundDebugEvent("Undo handled", historyEntryContainsObjectLayer(entry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
     });
   };
@@ -4282,12 +4424,8 @@ export function createEditorApp({
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
-      const interactionSnapshots = captureObjectLayerInteractionSnapshots(draft);
       const entry = redoTileEdit(doc, draft.history);
-      if (historyEntryContainsObjectLayer(entry)) {
-        suppressObjectPlacementPreviews(draft, "redo");
-      }
-      reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, getHistoryMutationInteractionOptions(entry, "redo"));
+      applyHistoryObjectMutationState(draft, entry, "redo");
       appendSoundDebugEvent("Redo handled", historyEntryContainsObjectLayer(entry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
     });
   };
