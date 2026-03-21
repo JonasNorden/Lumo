@@ -1,4 +1,5 @@
 import { getTileIndex } from "../level/levelDocument.js";
+import { recordGlobalHistoryAction } from "../history/globalTimeline.js";
 import {
   applyObjectLayerRedoEntry,
   applyObjectLayerUndoEntry,
@@ -33,6 +34,37 @@ export function createSoundEditEntry(mode, payload) {
   return createObjectLayerEditEntry("sound", mode, payload);
 }
 
+
+function getHistoryEntryDomain(entry) {
+  if (entry?.type === "batch") {
+    const editDomains = [...new Set((entry.edits || []).map((edit) => getHistoryEntryDomain(edit)).filter(Boolean))];
+    if (editDomains.length === 1) return editDomains[0];
+    return editDomains[0] || "tile";
+  }
+
+  if (isObjectLayerKind(entry?.kind)) return entry.kind;
+  return "tile";
+}
+
+function annotateHistoryEntry(entry, actionRecord) {
+  if (!entry || !actionRecord?.actionId) return entry;
+  entry.globalActionId = actionRecord.actionId;
+  return entry;
+}
+
+function recordHistoryTimelineEntry(history, entry) {
+  if (!history?.globalTimeline || !entry) return null;
+  const domain = getHistoryEntryDomain(entry);
+  return recordGlobalHistoryAction(history.globalTimeline, {
+    domain,
+    actionType: entry?.mode || entry?.type || entry?.kind || domain,
+    route: {
+      lane: "document-history",
+      domain,
+    },
+  });
+}
+
 function createBatchEntry(label = "tile-drag") {
   return {
     type: "batch",
@@ -59,6 +91,8 @@ export function pushHistoryEntry(history, editEntry, dedupeKey = null) {
     return;
   }
 
+  const actionRecord = recordHistoryTimelineEntry(history, editEntry);
+  annotateHistoryEntry(editEntry, actionRecord);
   history.undoStack.push(editEntry);
   history.redoStack.length = 0;
 }
@@ -70,11 +104,14 @@ export function endHistoryBatch(history) {
     return false;
   }
 
-  history.undoStack.push({
+  const entry = {
     type: "batch",
     label: batch.label,
     edits: batch.edits,
-  });
+  };
+  const actionRecord = recordHistoryTimelineEntry(history, entry);
+  annotateHistoryEntry(entry, actionRecord);
+  history.undoStack.push(entry);
   history.redoStack.length = 0;
   return true;
 }

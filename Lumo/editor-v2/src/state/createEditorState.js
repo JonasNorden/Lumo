@@ -1,4 +1,5 @@
 import { createDefaultBrushDraft } from "../domain/tiles/brushDraft.js";
+import { createGlobalHistoryTimelineState } from "../domain/history/globalTimeline.js";
 import { DEFAULT_NEW_LEVEL_HEIGHT, DEFAULT_NEW_LEVEL_WIDTH } from "../data/createNewLevelDocument.js";
 
 export function createEditorState() {
@@ -71,6 +72,7 @@ export function createEditorState() {
       undoStack: [],
       redoStack: [],
       activeBatch: null,
+      globalTimeline: createGlobalHistoryTimelineState(),
     },
     scan: {
       playbackState: "idle",
