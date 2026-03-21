@@ -72,6 +72,7 @@ import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
 import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
 import { renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
 import { applyCanonicalDecorAction, createCanonicalDecorHistory } from "../src/app/cleanRoomDecorMode.js";
+import { applyCanonicalSoundAction, createCanonicalSoundHistory } from "../src/app/cleanRoomSoundMode.js";
 import { createEditorApp } from "../src/app/createEditorApp.js";
 import { createEditorState } from "../src/state/createEditorState.js";
 import { createStore } from "../src/state/createStore.js";
@@ -602,6 +603,326 @@ async function runLiveDecorPlacementRuntimeRegressionChecks() {
       [...initialDecorIds, createdDecor.id],
       "redo after live decor delete should deterministically remove only the same created decor again",
     );
+  } finally {
+    harness.destroy();
+  }
+}
+
+function runCleanRoomSoundHistoryDeterminismRegressionChecks() {
+  const doc = createDoc();
+  const history = createCanonicalSoundHistory();
+  const laneHistory = {
+    undoStack: [],
+    redoStack: [],
+  };
+  const applyAndRecord = (action) => {
+    const result = applyCanonicalSoundAction(doc, action, "forward");
+    assert.equal(result.changed, true, "canonical sound actions should apply before recording history");
+    history.record(action);
+    laneHistory.undoStack.push("sound");
+    laneHistory.redoStack.length = 0;
+    return result;
+  };
+  const undo = () => {
+    const lane = laneHistory.undoStack.pop();
+    assert.equal(lane, "sound", "canonical sound history should route through the dedicated sound lane");
+    const action = history.popUndo();
+    const result = applyCanonicalSoundAction(doc, action, "backward");
+    assert.equal(result.changed, true, "canonical sound undo should replay through the stable-id lane");
+    history.pushRedo(action);
+    laneHistory.redoStack.push("sound");
+    return result;
+  };
+  const redo = () => {
+    const lane = laneHistory.redoStack.pop();
+    assert.equal(lane, "sound", "canonical sound redo should stay on the dedicated sound lane");
+    const action = history.popRedo();
+    const result = applyCanonicalSoundAction(doc, action, "forward");
+    assert.equal(result.changed, true, "canonical sound redo should replay through the stable-id lane");
+    history.pushUndo(action);
+    laneHistory.undoStack.push("sound");
+    return result;
+  };
+
+  const soundA = { id: "sound-a", name: "A", type: "spot", x: 1, y: 1, visible: true, params: { radius: 2, spatial: true } };
+  const soundB = { id: "sound-b", name: "B", type: "ambientZone", x: 2, y: 1, visible: true, params: { width: 2, height: 1, loop: true } };
+  const soundC = { id: "sound-c", name: "C", type: "trigger", x: 3, y: 1, visible: true, params: { spatial: true } };
+
+  applyAndRecord({ type: "create", items: [{ index: 0, sound: soundA }] });
+  applyAndRecord({ type: "create", items: [{ index: 1, sound: soundB }] });
+  applyAndRecord({ type: "create", items: [{ index: 2, sound: soundC }] });
+
+  assert.deepEqual(
+    doc.sounds.map((sound) => sound.id),
+    ["sound-a", "sound-b", "sound-c"],
+    "canonical sound create should append authored sounds in deterministic order",
+  );
+
+  undo();
+  undo();
+  assert.deepEqual(
+    doc.sounds.map((sound) => sound.id),
+    ["sound-a"],
+    "multiple sequential canonical sound creates should undo in exact reverse order",
+  );
+
+  redo();
+  redo();
+  assert.deepEqual(
+    doc.sounds.map((sound) => ({ id: sound.id, type: sound.type, params: sound.params })),
+    [
+      { id: "sound-a", type: "spot", params: { radius: 2, spatial: true } },
+      { id: "sound-b", type: "ambientZone", params: { width: 2, height: 1, loop: true } },
+      { id: "sound-c", type: "trigger", params: { spatial: true } },
+    ],
+    "canonical sound redo should restore the exact authored sound objects",
+  );
+
+  const deleteResult = applyAndRecord({
+    type: "delete",
+    items: [
+      { index: 1, sound: doc.sounds[1] },
+    ],
+  });
+  assert.equal(deleteResult.selectedSoundId, null, "canonical sound delete should clear active authored sound selection");
+  assert.deepEqual(doc.sounds.map((sound) => sound.id), ["sound-a", "sound-c"], "canonical sound delete should remove the selected sound by stable id");
+
+  const undoDeleteResult = undo();
+  assert.deepEqual(
+    doc.sounds.map((sound) => sound.id),
+    ["sound-a", "sound-b", "sound-c"],
+    "canonical sound undo should restore deleted sounds in authored order",
+  );
+  assert.deepEqual(
+    undoDeleteResult.selectedSoundIds,
+    ["sound-b"],
+    "canonical sound undo should reselect the restored sound by stable id",
+  );
+}
+
+async function runLiveSoundPlacementRuntimeRegressionChecks() {
+  const harness = await createEditorRuntimeHarness();
+  const { canvas, fakeWindow, store } = harness;
+
+  try {
+    const initialState = store.getState();
+    assert.equal(initialState.document.status, "ready", "runtime harness should load the mock level document");
+    const initialSoundIds = initialState.document.active.sounds.map((sound) => sound.id);
+
+    store.setState((draft) => {
+      draft.interaction.activeTool = "inspect";
+      draft.interaction.activeLayer = "sound";
+      draft.interaction.canvasSelectionMode = "sound";
+      draft.interaction.activeSoundPresetId = "ambient-zone";
+      draft.interaction.activeEntityPresetId = null;
+      draft.interaction.activeDecorPresetId = null;
+      draft.interaction.soundDrag = {
+        active: true,
+        leadSoundId: initialSoundIds[0] || "stale-sound",
+        anchorCell: { x: 0, y: 0 },
+        originPositions: [{ soundId: "stale-sound", x: 0, y: 0 }],
+        previewDelta: { x: 1, y: 0 },
+      };
+    });
+
+    const firstCell = { x: 1, y: 2 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), firstCell),
+      altKey: true,
+      button: 0,
+    });
+
+    const afterCreateState = store.getState();
+    const createdSound = afterCreateState.document.active.sounds.at(-1);
+    assert.equal(afterCreateState.document.active.sounds.length, initialSoundIds.length + 1, "Alt+click sound placement should append an authored sound immediately");
+    assert.equal(afterCreateState.interaction.selectedSoundId, createdSound.id, "live sound placement should select the new authored sound by stable id");
+    assert.deepEqual(afterCreateState.interaction.selectedSoundIds, [createdSound.id], "live sound placement should keep selection pinned to the new authored sound id only");
+    assert.deepEqual(afterCreateState.interaction.selectedCell, firstCell, "live sound placement should update the selected sound cell immediately");
+    assert.equal(createdSound.type, findSoundPresetById("ambient-zone").type, "live sound placement should author the preset sound type through the canonical lane");
+    assert.equal(afterCreateState.interaction.soundDrag, null, "live sound placement should clear stale drag state instead of reviving the legacy move lane");
+
+    const selectPoint = getClientPointForCell(afterCreateState, firstCell);
+    canvas.dispatch("mousedown", {
+      ...selectPoint,
+      altKey: false,
+      button: 0,
+    });
+
+    const afterSelectState = store.getState();
+    assert.equal(afterSelectState.interaction.selectedSoundId, createdSound.id, "click selection should resolve the exact authored sound by stable id");
+    assert.equal(afterSelectState.interaction.soundDrag, null, "click selection should not re-arm the disabled sound drag lane");
+
+    fakeWindow.dispatch("keydown", {
+      key: "Delete",
+      ctrlKey: false,
+      metaKey: false,
+      shiftKey: false,
+      altKey: false,
+      repeat: false,
+      code: "Delete",
+      target: null,
+    });
+
+    const afterDeleteState = store.getState();
+    assert.equal(afterDeleteState.document.active.sounds.some((sound) => sound.id === createdSound.id), false, "delete should remove the selected authored sound by id");
+    assert.equal(afterDeleteState.interaction.selectedSoundId, null, "delete should clear selectedSoundId on the canonical lane");
+
+    fakeWindow.dispatch("keydown", {
+      key: "z",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: false,
+      altKey: false,
+      repeat: false,
+      code: "KeyZ",
+      target: null,
+    });
+
+    const afterDeleteUndoState = store.getState();
+    assert.equal(afterDeleteUndoState.document.active.sounds.some((sound) => sound.id === createdSound.id), true, "undo after sound delete should restore the exact authored sound object");
+    assert.equal(afterDeleteUndoState.interaction.selectedSoundId, createdSound.id, "undo after sound delete should reselect the restored sound id");
+
+    fakeWindow.dispatch("keydown", {
+      key: "z",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: true,
+      altKey: false,
+      repeat: false,
+      code: "KeyZ",
+      target: null,
+    });
+
+    const afterDeleteRedoState = store.getState();
+    assert.equal(afterDeleteRedoState.document.active.sounds.some((sound) => sound.id === createdSound.id), false, "redo after sound delete should remove only the same authored sound again");
+
+    fakeWindow.dispatch("keydown", {
+      key: "z",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: false,
+      altKey: false,
+      repeat: false,
+      code: "KeyZ",
+      target: null,
+    });
+
+    const afterCreateUndoState = store.getState();
+    assert.deepEqual(
+      afterCreateUndoState.document.active.sounds.map((sound) => sound.id),
+      [...initialSoundIds, createdSound.id],
+      "mixed sound history routing should keep the canonical sound lane isolated from legacy shared object-layer undo stacks",
+    );
+
+    const secondCell = { x: 2, y: 2 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), secondCell),
+      altKey: true,
+      button: 0,
+    });
+
+    const thirdCell = { x: 3, y: 2 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), thirdCell),
+      altKey: true,
+      button: 0,
+    });
+
+    const afterMultipleCreates = store.getState();
+    const lastThreeSoundIds = afterMultipleCreates.document.active.sounds.slice(-3).map((sound) => sound.id);
+    assert.deepEqual(
+      lastThreeSoundIds,
+      afterMultipleCreates.document.active.sounds.slice(-3).map((sound) => sound.id),
+      "multiple canonical sound creates should preserve deterministic append order before undo checks",
+    );
+
+    fakeWindow.dispatch("keydown", {
+      key: "z",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: false,
+      altKey: false,
+      repeat: false,
+      code: "KeyZ",
+      target: null,
+    });
+    fakeWindow.dispatch("keydown", {
+      key: "z",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: false,
+      altKey: false,
+      repeat: false,
+      code: "KeyZ",
+      target: null,
+    });
+
+    const afterSequentialUndoState = store.getState();
+    assert.deepEqual(
+      afterSequentialUndoState.document.active.sounds.slice(-1).map((sound) => sound.id),
+      [createdSound.id],
+      "multiple sequential sound creates should undo in exact reverse order on the canonical lane",
+    );
+
+    fakeWindow.dispatch("keydown", {
+      key: "z",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: true,
+      altKey: false,
+      repeat: false,
+      code: "KeyZ",
+      target: null,
+    });
+    fakeWindow.dispatch("keydown", {
+      key: "z",
+      ctrlKey: true,
+      metaKey: false,
+      shiftKey: true,
+      altKey: false,
+      repeat: false,
+      code: "KeyZ",
+      target: null,
+    });
+
+    const afterSequentialRedoState = store.getState();
+    assert.deepEqual(
+      afterSequentialRedoState.document.active.sounds.slice(-3).map((sound) => ({ id: sound.id, type: sound.type, x: sound.x, y: sound.y })),
+      [
+        { id: createdSound.id, type: createdSound.type, x: createdSound.x, y: createdSound.y },
+        { id: afterMultipleCreates.document.active.sounds.at(-2).id, type: afterMultipleCreates.document.active.sounds.at(-2).type, x: 2, y: 2 },
+        { id: afterMultipleCreates.document.active.sounds.at(-1).id, type: afterMultipleCreates.document.active.sounds.at(-1).type, x: 3, y: 2 },
+      ],
+      "redo should restore the exact authored sound objects in canonical order",
+    );
+
+    const { ctx: renderCtx, operations: renderOperations } = createPreviewTestContext();
+    renderSounds(
+      renderCtx,
+      afterSequentialRedoState.document.active,
+      afterSequentialRedoState.viewport,
+      afterSequentialRedoState.interaction,
+      afterSequentialRedoState.scan,
+    );
+    assert.ok(renderOperations.length > 0, "sound render/highlight resolution should continue drawing authored sounds from stable ids");
+
+    const { ctx: previewCtx, operations: previewOperations } = createPreviewTestContext();
+    renderSoundDragPreview(
+      previewCtx,
+      afterSequentialRedoState.document.active,
+      afterSequentialRedoState.viewport,
+      {
+        ...afterSequentialRedoState.interaction,
+        soundDrag: {
+          active: true,
+          leadSoundId: createdSound.id,
+          anchorCell: { x: createdSound.x, y: createdSound.y },
+          originPositions: [{ soundId: createdSound.id, x: createdSound.x, y: createdSound.y }],
+          previewDelta: { x: 1, y: 0 },
+        },
+      },
+    );
+    assert.equal(previewOperations.length, 0, "normal live usage should no longer render any legacy sound drag overlay or preview");
   } finally {
     harness.destroy();
   }
@@ -1551,7 +1872,7 @@ function runSoundTypeRenderRegressionChecks() {
       previewDelta: { x: 1, y: 0 },
     },
   });
-  assert.ok(dragPreview.operations.length > 0, "sound drag previews should render for spot, trigger, ambient, and music sounds");
+  assert.equal(dragPreview.operations.length, 0, "sound drag previews should stay disabled until a canonical sound move lane exists");
 
   for (const presetId of ["spot", "trigger", "ambient-zone", "music-zone"]) {
     const preset = findSoundPresetById(presetId);
@@ -2879,11 +3200,11 @@ function runSourceRegressionChecks() {
   assert.equal(
     source.includes("return deleteSelectedEntityCleanRoom(draft);")
       && source.includes("return deleteSelectedDecorCleanRoom(draft);")
-      && source.includes("reconcileObjectLayerMutationState(draft, {}, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)")
+      && source.includes("return deleteSelectedSoundCleanRoom(draft);")
       && source.includes("applyHistoryObjectMutationState(draft, entry, \"undo\")")
       && source.includes("applyHistoryObjectMutationState(draft, entry, \"redo\")"),
     true,
-    "delete and history mutations should route through the clean entity/decor delete paths plus the shared sound reconciliation helpers",
+    "delete and history mutations should route through the clean entity/decor delete paths plus the canonical sound history lane",
   );
   assert.equal(
     source.includes("return deleteSelectedEntityCleanRoom(draft);"),
@@ -2896,9 +3217,10 @@ function runSourceRegressionChecks() {
     "decor deletion should stay pinned to the canonical stable-id clean-room delete path before the next frame renders",
   );
   assert.equal(
-    source.includes("reconcileObjectLayerMutationState(draft, {}, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)"),
+    source.includes("const deleteSelectedSoundCleanRoom = (draft) => {")
+      && source.includes("recordCleanRoomObjectAction(\"sound\", action);"),
     true,
-    "sound deletion should clear stale object-layer interaction state before the next frame renders",
+    "sound deletion should stay pinned to the canonical stable-id clean-room delete path",
   );
   assert.equal(
     source.includes('activeEntityPresetId && isMomentaryPlacementTrigger(event)'),
@@ -2953,10 +3275,26 @@ function runSourceRegressionChecks() {
     "decor delete and undo/redo should stay pinned to the canonical clean-room decor history lane",
   );
   assert.equal(
+    source.includes("const canonicalSoundHistory = createCanonicalSoundHistory();")
+      && source.includes("const createCleanRoomSoundAtCell = (draft, cell, presetId = draft.interaction.activeSoundPresetId || DEFAULT_SOUND_PRESET_ID) => {")
+      && source.includes("const deleteSelectedSoundCleanRoom = (draft) => {")
+      && source.includes('appendSoundDebugEvent("Undo handled", "canonical sound history"')
+      && source.includes('appendSoundDebugEvent("Redo handled", "canonical sound history"'),
+    true,
+    "sound place/delete/undo/redo should stay pinned to the canonical clean-room sound history lane",
+  );
+  assert.equal(
     source.includes("selectDecorByIds(draft, nextSelectedDecorIds, nextSelectedDecorIds.at(-1) ?? null")
       && source.includes("if (false && state.interaction.decorDrag?.active)"),
     true,
     "decor click selection should resolve through stable ids while the legacy drag lane stays hard-disabled",
+  );
+  assert.equal(
+    source.includes("selectSoundByIds(draft, [soundId], soundId")
+      && source.includes("if (false && state.interaction.soundDrag?.active) return;")
+      && source.includes("const duplicateSelectedSound = (draft) => {"),
+    true,
+    "sound click selection should resolve through stable ids while drag and duplicate remain hard-disabled",
   );
   assert.equal(
     source.includes("TEMP sound debug"),
@@ -2993,6 +3331,12 @@ function runSourceRegressionChecks() {
       && selectionPanelSource.includes("const resolvedSelectedDecorIndex = selectedDecorId"),
     true,
     "bottom panel decor resolution should derive from the selected decor id before any index fallback",
+  );
+  assert.equal(
+    selectionPanelSource.includes('const selectedSoundId = typeof getPrimarySelectedSoundId(state.interaction) === "string"')
+      && selectionPanelSource.includes("const resolvedSelectedSoundIndex = selectedSoundId"),
+    true,
+    "bottom panel sound resolution should derive from the selected sound id before any index fallback",
   );
   assert.equal(
     source.includes("additive: event.shiftKey,"),
@@ -3132,7 +3476,9 @@ async function main() {
   runDecorAndSoundDeletionRegressionChecks();
   runCleanRoomDecorRuntimeRegressionChecks();
   runCleanRoomDecorHistoryDeterminismRegressionChecks();
+  runCleanRoomSoundHistoryDeterminismRegressionChecks();
   await runLiveDecorPlacementRuntimeRegressionChecks();
+  await runLiveSoundPlacementRuntimeRegressionChecks();
   runObjectLayerStableIdentityHistoryRegressionChecks();
   runGlobalObjectLayerUndoRedoRegressionChecks();
   runFogVolumeRegressionChecks();
