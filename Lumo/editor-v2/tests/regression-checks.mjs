@@ -107,6 +107,51 @@ function createDoc() {
   };
 }
 
+function createDecorHistoryHarness(doc = createDoc()) {
+  const history = createCanonicalDecorHistory();
+  const laneHistory = {
+    undoStack: [],
+    redoStack: [],
+  };
+
+  return {
+    doc,
+    recordAndApply(action) {
+      const changed = applyCanonicalDecorAction(doc, action, "forward");
+      if (!changed.changed) return false;
+      history.record(action);
+      laneHistory.undoStack.push("decor");
+      laneHistory.redoStack.length = 0;
+      return true;
+    },
+    undo() {
+      const lane = laneHistory.undoStack.pop();
+      if (lane !== "decor") return false;
+      const action = history.popUndo();
+      if (!action) return false;
+      const changed = applyCanonicalDecorAction(doc, action, "backward");
+      if (!changed.changed) return false;
+      history.pushRedo(action);
+      laneHistory.redoStack.push("decor");
+      return true;
+    },
+    redo() {
+      const lane = laneHistory.redoStack.pop();
+      if (lane !== "decor") return false;
+      const action = history.popRedo();
+      if (!action) return false;
+      const changed = applyCanonicalDecorAction(doc, action, "forward");
+      if (!changed.changed) return false;
+      history.pushUndo(action);
+      laneHistory.undoStack.push("decor");
+      return true;
+    },
+    canRedo() {
+      return history.canRedo() && laneHistory.redoStack.length > 0;
+    },
+  };
+}
+
 function createPreviewTestContext() {
   const operations = [];
   const gradient = { addColorStop() {} };
@@ -350,6 +395,185 @@ function runCleanRoomDecorRuntimeRegressionChecks() {
   assert.deepEqual(undoAction.items.map((item) => item.decor.id), ["decor-a", "decor-c"], "clean-room decor history should keep stable decor ids in undo batches");
   history.pushRedo(undoAction);
   assert.equal(history.canRedo(), true, "clean-room decor history should preserve redo batches after undo");
+}
+
+function runCleanRoomDecorHistoryDeterminismRegressionChecks() {
+  const doc = createDoc();
+  const harness = createDecorHistoryHarness(doc);
+  const createdDecor = Array.from({ length: 5 }, (_, index) => ({
+    id: `decor-${index + 1}`,
+    name: `Decor ${index + 1}`,
+    type: "decor_flower_01",
+    x: index,
+    y: 0,
+    visible: true,
+    variant: "default",
+    params: { bloom: index + 1 },
+  }));
+
+  createdDecor.forEach((decor, index) => {
+    assert.equal(
+      harness.recordAndApply({
+        type: "create",
+        items: [{ index, decor }],
+      }),
+      true,
+      `clean-room decor create ${index + 1} should record and apply`,
+    );
+  });
+  assert.deepEqual(doc.decor.map((decor) => decor.id), createdDecor.map((decor) => decor.id), "sequential decor creates should preserve authored order");
+
+  for (let index = createdDecor.length - 1; index >= 0; index -= 1) {
+    assert.equal(harness.undo(), true, `undo ${createdDecor.length - index} should succeed`);
+    assert.deepEqual(
+      doc.decor.map((decor) => decor.id),
+      createdDecor.slice(0, index).map((decor) => decor.id),
+      "repeated undo should remove decor creates in exact reverse order, including the first placed decor",
+    );
+  }
+  assert.deepEqual(doc.decor, [], "undoing all decor creates should remove every authored decor item");
+
+  for (let index = 1; index <= createdDecor.length; index += 1) {
+    assert.equal(harness.redo(), true, `redo ${index} should succeed`);
+    assert.deepEqual(
+      doc.decor.map((decor) => decor.id),
+      createdDecor.slice(0, index).map((decor) => decor.id),
+      "repeated redo should restore decor creates in exact forward order",
+    );
+  }
+
+  const deleteHarness = createDecorHistoryHarness(createDoc());
+  deleteHarness.doc.decor = createdDecor.slice(0, 3).map((decor) => structuredClone(decor));
+  const deletedMiddle = structuredClone(deleteHarness.doc.decor[1]);
+  assert.equal(
+    deleteHarness.recordAndApply({
+      type: "delete",
+      items: [{ index: 1, decor: deletedMiddle }],
+    }),
+    true,
+    "clean-room decor delete should record and apply for the targeted authored decor",
+  );
+  assert.deepEqual(deleteHarness.doc.decor.map((decor) => decor.id), ["decor-1", "decor-3"], "deleting the middle decor should not disturb neighbors");
+  assert.equal(deleteHarness.undo(), true, "undo should restore the deleted middle decor");
+  assert.deepEqual(
+    deleteHarness.doc.decor.map((decor) => decor.id),
+    ["decor-1", "decor-2", "decor-3"],
+    "undoing a decor delete should restore exactly the deleted authored decor object at its canonical position",
+  );
+  assert.deepEqual(
+    deleteHarness.doc.decor[1],
+    deletedMiddle,
+    "undoing a decor delete should restore the exact deleted authored decor snapshot",
+  );
+  assert.equal(deleteHarness.redo(), true, "redo should reapply the same decor delete");
+  assert.deepEqual(deleteHarness.doc.decor.map((decor) => decor.id), ["decor-1", "decor-3"], "redo should remove only the same deleted decor again");
+
+  const redoTailHarness = createDecorHistoryHarness(createDoc());
+  createdDecor.slice(0, 3).forEach((decor, index) => {
+    assert.equal(
+      redoTailHarness.recordAndApply({
+        type: "create",
+        items: [{ index, decor }],
+      }),
+      true,
+      "setup creates for redo-tail coverage should succeed",
+    );
+  });
+  assert.equal(redoTailHarness.undo(), true, "first undo before redo-tail reset should succeed");
+  assert.equal(redoTailHarness.undo(), true, "second undo before redo-tail reset should succeed");
+  assert.deepEqual(redoTailHarness.doc.decor.map((decor) => decor.id), ["decor-1"], "setup undos should leave only the earliest decor");
+  assert.equal(redoTailHarness.canRedo(), true, "undoing decor creates should populate the redo tail");
+  assert.equal(
+    redoTailHarness.recordAndApply({
+      type: "create",
+      items: [{
+        index: redoTailHarness.doc.decor.length,
+        decor: {
+          id: "decor-new",
+          name: "Decor New",
+          type: "decor_flower_01",
+          x: 9,
+          y: 1,
+          visible: true,
+          variant: "default",
+          params: { bloom: 99 },
+        },
+      }],
+    }),
+    true,
+    "creating decor after undo should clear stale redo history",
+  );
+  assert.equal(redoTailHarness.canRedo(), false, "recording a new decor action after undo should clear the stale redo tail");
+  assert.equal(redoTailHarness.redo(), false, "redo should not resurrect stale decor after a new decor action");
+  assert.deepEqual(redoTailHarness.doc.decor.map((decor) => decor.id), ["decor-1", "decor-new"], "stale redo should not resurrect previously undone decor");
+
+  const mixedHarness = createDecorHistoryHarness(createDoc());
+  const mixedDecor = [
+    { id: "decor-a", name: "A", type: "decor_flower_01", x: 0, y: 0, visible: true, variant: "default", params: { bloom: 1 } },
+    { id: "decor-b", name: "B", type: "decor_flower_01", x: 1, y: 0, visible: true, variant: "default", params: { bloom: 2 } },
+    { id: "decor-c", name: "C", type: "decor_flower_01", x: 2, y: 0, visible: true, variant: "default", params: { bloom: 3 } },
+    { id: "decor-d", name: "D", type: "decor_flower_01", x: 3, y: 0, visible: true, variant: "default", params: { bloom: 4 } },
+  ];
+  mixedDecor.slice(0, 3).forEach((decor, index) => {
+    assert.equal(
+      mixedHarness.recordAndApply({
+        type: "create",
+        items: [{ index, decor }],
+      }),
+      true,
+      "mixed decor create setup should succeed",
+    );
+  });
+  assert.equal(
+    mixedHarness.recordAndApply({
+      type: "delete",
+      items: [{ index: 1, decor: mixedDecor[1] }],
+    }),
+    true,
+    "mixed decor delete should remove only the selected decor",
+  );
+  assert.equal(
+    mixedHarness.recordAndApply({
+      type: "create",
+      items: [{ index: mixedHarness.doc.decor.length, decor: mixedDecor[3] }],
+    }),
+    true,
+    "mixed decor create after delete should succeed",
+  );
+  assert.deepEqual(mixedHarness.doc.decor.map((decor) => decor.id), ["decor-a", "decor-c", "decor-d"], "mixed create/delete setup should only contain surviving decor");
+  assert.equal(mixedHarness.undo(), true, "mixed undo should remove the most recent decor create");
+  assert.deepEqual(mixedHarness.doc.decor.map((decor) => decor.id), ["decor-a", "decor-c"], "undo should remove only the latest created decor");
+  assert.equal(mixedHarness.undo(), true, "second mixed undo should restore the deleted decor");
+  assert.deepEqual(mixedHarness.doc.decor.map((decor) => decor.id), ["decor-a", "decor-b", "decor-c"], "undo should restore exactly the previously deleted decor without resurrecting unrelated items");
+  assert.equal(mixedHarness.redo(), true, "mixed redo should reapply the targeted decor delete");
+  assert.deepEqual(mixedHarness.doc.decor.map((decor) => decor.id), ["decor-a", "decor-c"], "redo should re-delete only the targeted decor");
+  assert.equal(mixedHarness.redo(), true, "second mixed redo should reapply the later decor create");
+  assert.deepEqual(mixedHarness.doc.decor.map((decor) => decor.id), ["decor-a", "decor-c", "decor-d"], "mixed redo should restore the later decor create without reviving unrelated decor");
+
+  const immutableHistory = createCanonicalDecorHistory();
+  const mutableAction = {
+    type: "delete",
+    items: [{
+      index: 0,
+      decor: {
+        id: "decor-immutable",
+        name: "Immutable",
+        type: "decor_flower_01",
+        x: 0,
+        y: 0,
+        visible: true,
+        variant: "default",
+        params: { bloom: 7 },
+      },
+    }],
+  };
+  immutableHistory.record(mutableAction);
+  mutableAction.items[0].decor.params.bloom = 42;
+  assert.equal(
+    immutableHistory.popUndo().items[0].decor.params.bloom,
+    7,
+    "clean-room decor history should store immutable action payloads instead of mutated references",
+  );
 }
 
 function runObjectLayerStableIdentityHistoryRegressionChecks() {
@@ -2484,6 +2708,7 @@ async function main() {
   runEntityRegressionChecks();
   runDecorAndSoundDeletionRegressionChecks();
   runCleanRoomDecorRuntimeRegressionChecks();
+  runCleanRoomDecorHistoryDeterminismRegressionChecks();
   runObjectLayerStableIdentityHistoryRegressionChecks();
   runGlobalObjectLayerUndoRedoRegressionChecks();
   runFogVolumeRegressionChecks();
