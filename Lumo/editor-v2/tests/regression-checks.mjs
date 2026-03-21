@@ -1328,6 +1328,28 @@ function runCleanRoomDecorRuntimeRegressionChecks() {
   assert.deepEqual(undoAction.items.map((item) => item.decor.id), ["decor-a", "decor-c"], "clean-room decor history should keep stable decor ids in undo batches");
   history.pushRedo(undoAction);
   assert.equal(history.canRedo(), true, "clean-room decor history should preserve redo batches after undo");
+
+  const updateAction = {
+    type: "update",
+    items: [
+      {
+        index: 1,
+        previousDecor: doc.decor[1],
+        nextDecor: { ...doc.decor[1], x: 4, y: 2, params: structuredClone(doc.decor[1].params) },
+      },
+    ],
+  };
+  const updateForwardResult = applyCanonicalDecorAction(doc, updateAction, "forward");
+  assert.equal(updateForwardResult.changed, true, "clean-room decor update should move the authored decor through the canonical lane");
+  assert.deepEqual(updateForwardResult.selectedDecorIds, ["decor-b"], "clean-room decor update should keep stable-id selection on the moved decor");
+  assert.equal(doc.decor[1].x, 4, "clean-room decor update should write the moved x position");
+  assert.equal(doc.decor[1].y, 2, "clean-room decor update should write the moved y position");
+
+  const updateUndoResult = applyCanonicalDecorAction(doc, updateAction, "backward");
+  assert.equal(updateUndoResult.changed, true, "clean-room decor update undo should restore the prior authored decor snapshot");
+  assert.deepEqual(updateUndoResult.selectedDecorIds, ["decor-b"], "clean-room decor update undo should keep stable-id selection on the restored decor");
+  assert.equal(doc.decor[1].x, 1, "clean-room decor update undo should restore the original x position");
+  assert.equal(doc.decor[1].y, 0, "clean-room decor update undo should restore the original y position");
 }
 
 function runCleanRoomDecorHistoryDeterminismRegressionChecks() {
@@ -1507,6 +1529,216 @@ function runCleanRoomDecorHistoryDeterminismRegressionChecks() {
     7,
     "clean-room decor history should store immutable action payloads instead of mutated references",
   );
+
+  const updateHistory = createCanonicalDecorHistory();
+  const updateAction = {
+    type: "update",
+    items: [{
+      index: 0,
+      previousDecor: {
+        id: "decor-update",
+        name: "Decor Update",
+        type: "decor_flower_01",
+        x: 0,
+        y: 0,
+        visible: true,
+        variant: "default",
+        params: { bloom: 1 },
+      },
+      nextDecor: {
+        id: "decor-update",
+        name: "Decor Update",
+        type: "decor_flower_01",
+        x: 2,
+        y: 1,
+        visible: true,
+        variant: "default",
+        params: { bloom: 1 },
+      },
+    }],
+  };
+  updateHistory.record(updateAction);
+  updateAction.items[0].nextDecor.x = 9;
+  assert.equal(
+    updateHistory.popUndo().items[0].nextDecor.x,
+    2,
+    "clean-room decor update history should snapshot moved decor positions immutably",
+  );
+}
+
+async function runLiveCanonicalDecorMoveRuntimeRegressionChecks() {
+  const harness = await createEditorRuntimeHarness();
+  const { canvas, fakeWindow, store } = harness;
+
+  try {
+    store.setState((draft) => {
+      draft.interaction.activeTool = "inspect";
+      draft.interaction.activeLayer = "decor";
+      draft.interaction.canvasSelectionMode = "decor";
+      draft.interaction.activeDecorPresetId = "decor_flower_01";
+      draft.interaction.activeEntityPresetId = null;
+      draft.interaction.activeSoundPresetId = null;
+      draft.interaction.decorScatterMode = false;
+    });
+
+    const createCell = { x: 0, y: 2 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), createCell),
+      altKey: true,
+      button: 0,
+    });
+
+    const afterCreateState = store.getState();
+    const createdDecor = afterCreateState.document.active.decor.at(-1);
+    assert.ok(createdDecor, "canonical decor drag regression should create an authored decor item before moving it");
+    assert.equal(afterCreateState.interaction.selectedDecorId, createdDecor.id, "decor placement should select the authored decor by stable id");
+
+    const moveTargetCell = { x: 2, y: 3 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(afterCreateState, createCell),
+      altKey: false,
+      button: 0,
+    });
+
+    const dragStartedState = store.getState();
+    assert.equal(dragStartedState.interaction.decorDrag?.active, true, "mousedown on the selected authored decor should arm canonical decor drag");
+    assert.equal(dragStartedState.interaction.decorDrag?.leadDecorId, createdDecor.id, "canonical decor drag should target the selected decor by stable id");
+    assert.equal("leadIndex" in dragStartedState.interaction.decorDrag, false, "canonical decor drag state should not revive legacy index targeting");
+    assert.deepEqual(
+      dragStartedState.interaction.decorDrag?.originPositions,
+      [{ decorId: createdDecor.id, x: createCell.x, y: createCell.y }],
+      "canonical decor drag state should keep only stable-id origin snapshots for authored decor",
+    );
+
+    canvas.dispatch("mousemove", {
+      ...getClientPointForCell(dragStartedState, moveTargetCell),
+      buttons: 1,
+    });
+
+    const dragPreviewState = store.getState();
+    assert.deepEqual(
+      dragPreviewState.interaction.decorDrag?.previewDelta,
+      { x: moveTargetCell.x - createCell.x, y: moveTargetCell.y - createCell.y },
+      "mousemove during canonical decor drag should track the live drag delta without mutating the authored decor yet",
+    );
+    assert.equal(
+      dragPreviewState.document.active.decor.find((decor) => decor.id === createdDecor.id)?.x,
+      createCell.x,
+      "canonical decor drag preview should not write through any legacy mutation path before commit",
+    );
+    assert.deepEqual(
+      dragPreviewState.interaction.selectedCell,
+      moveTargetCell,
+      "selectedCell should follow the canonical decor drag target during preview",
+    );
+
+    fakeWindow.dispatch("mouseup", {});
+
+    const afterMoveState = store.getState();
+    const movedDecor = afterMoveState.document.active.decor.find((decor) => decor.id === createdDecor.id);
+    assert.equal(movedDecor?.x, moveTargetCell.x, "mouseup should commit the authored decor x position through the canonical update lane");
+    assert.equal(movedDecor?.y, moveTargetCell.y, "mouseup should commit the authored decor y position through the canonical update lane");
+    assert.equal(afterMoveState.interaction.selectedDecorId, createdDecor.id, "selection should remain pinned to the moved authored decor id");
+    assert.deepEqual(afterMoveState.interaction.selectedDecorIds, [createdDecor.id], "decor move should stay single-select only in this pass");
+    assert.deepEqual(afterMoveState.interaction.selectedCell, moveTargetCell, "selection cell should stay truthful after canonical decor move commit");
+    assert.equal(afterMoveState.interaction.decorDrag, null, "decor drag state should clear immediately after canonical move commit");
+
+    dispatchUndoShortcut(fakeWindow);
+
+    const afterUndoState = store.getState();
+    const undoneDecor = afterUndoState.document.active.decor.find((decor) => decor.id === createdDecor.id);
+    assert.equal(undoneDecor?.x, createCell.x, "undo after canonical decor move should restore the previous authored x position");
+    assert.equal(undoneDecor?.y, createCell.y, "undo after canonical decor move should restore the previous authored y position");
+    assert.equal(afterUndoState.interaction.selectedDecorId, createdDecor.id, "undo after canonical decor move should reselect the same authored decor id");
+
+    dispatchRedoShortcut(fakeWindow);
+
+    const afterRedoState = store.getState();
+    const redoneDecor = afterRedoState.document.active.decor.find((decor) => decor.id === createdDecor.id);
+    assert.equal(redoneDecor?.x, moveTargetCell.x, "redo after canonical decor move should reapply the committed authored x position");
+    assert.equal(redoneDecor?.y, moveTargetCell.y, "redo after canonical decor move should reapply the committed authored y position");
+
+    store.setState((draft) => {
+      draft.interaction.activeLayer = "tiles";
+      draft.interaction.canvasSelectionMode = "tile";
+      draft.interaction.activeTool = "paint";
+      draft.brush.activeDraft.sprite = "grass_bt";
+      draft.interaction.activeDecorPresetId = null;
+    });
+
+    const paintedCell = { x: 1, y: 0 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), paintedCell),
+      button: 0,
+    });
+    fakeWindow.dispatch("mouseup", {});
+    const paintedTileValue = store.getState().document.active.tiles.base[paintedCell.y * store.getState().document.active.dimensions.width + paintedCell.x];
+    assert.notEqual(paintedTileValue, 0, "tile paint setup for decor mixed chronology should author a non-empty tile before undo checks");
+
+    store.setState((draft) => {
+      draft.interaction.activeTool = "inspect";
+      draft.interaction.activeLayer = "entities";
+      draft.interaction.canvasSelectionMode = "entity";
+      draft.interaction.activeEntityPresetId = "player-spawn";
+      draft.interaction.activeSoundPresetId = null;
+    });
+
+    const entityCell = { x: 3, y: 0 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), entityCell),
+      altKey: true,
+      button: 0,
+    });
+    const createdEntityId = store.getState().document.active.entities.at(-1)?.id;
+
+    store.setState((draft) => {
+      draft.interaction.activeLayer = "sound";
+      draft.interaction.canvasSelectionMode = "sound";
+      draft.interaction.activeSoundPresetId = "ambient-zone";
+      draft.interaction.activeEntityPresetId = null;
+    });
+
+    const soundCell = { x: 3, y: 1 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), soundCell),
+      altKey: true,
+      button: 0,
+    });
+    const createdSoundId = store.getState().document.active.sounds.at(-1)?.id;
+
+    dispatchUndoShortcut(fakeWindow);
+    let currentState = store.getState();
+    assert.equal(currentState.document.active.sounds.some((sound) => sound.id === createdSoundId), false, "mixed chronology undo after decor move should remove the later sound action first");
+
+    dispatchUndoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.entities.some((entity) => entity.id === createdEntityId), false, "mixed chronology undo after decor move should remove the later entity action second");
+
+    dispatchUndoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.tiles.base[paintedCell.y * currentState.document.active.dimensions.width + paintedCell.x], 0, "mixed chronology undo after decor move should revert the later tile paint before the older decor move");
+
+    dispatchUndoShortcut(fakeWindow);
+    currentState = store.getState();
+    const fullyUndoneDecor = currentState.document.active.decor.find((decor) => decor.id === createdDecor.id);
+    assert.equal(fullyUndoneDecor?.x, createCell.x, "mixed chronology undo after decor move should finally restore the earlier canonical decor move");
+    assert.equal(fullyUndoneDecor?.y, createCell.y, "mixed chronology undo after decor move should finally restore the earlier canonical decor move y position");
+
+    dispatchRedoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.decor.find((decor) => decor.id === createdDecor.id)?.x, moveTargetCell.x, "mixed chronology redo after decor move should reapply the canonical decor move first");
+    dispatchRedoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.tiles.base[paintedCell.y * currentState.document.active.dimensions.width + paintedCell.x], paintedTileValue, "mixed chronology redo after decor move should reapply the tile paint second");
+    dispatchRedoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.entities.some((entity) => entity.id === createdEntityId), true, "mixed chronology redo after decor move should restore the entity action third");
+    dispatchRedoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.sounds.some((sound) => sound.id === createdSoundId), true, "mixed chronology redo after decor move should restore the sound action last");
+  } finally {
+    harness.destroy();
+  }
 }
 
 function runObjectLayerStableIdentityHistoryRegressionChecks() {
@@ -3907,16 +4139,23 @@ function runSourceRegressionChecks() {
   assert.equal(
     source.includes("const applyCanonicalEntityUpdate = (draft, action) => {")
       && source.includes('recordCleanRoomObjectAction("entity", action);')
+      && source.includes("const applyCanonicalDecorUpdate = (draft, action) => {")
+      && source.includes('recordCleanRoomObjectAction("decor", action);')
       && source.includes("const applyCanonicalSoundUpdate = (draft, action) => {")
       && source.includes('recordCleanRoomObjectAction("sound", action);'),
     true,
-    "entity and sound inspector mutations should record through canonical stable-id update actions instead of reviving legacy inspector write-backs",
+    "entity, decor, and sound canonical update actions should record through stable-id history lanes instead of reviving legacy inspector write-backs",
   );
   assert.equal(
-    source.includes("selectDecorByIds(draft, nextSelectedDecorIds, nextSelectedDecorIds.at(-1) ?? null")
-      && source.includes("if (false && state.interaction.decorDrag?.active)"),
+    source.includes("const beginCleanRoomDecorDrag = (draft, decorId, anchorCell) => {")
+      && source.includes("const commitCleanRoomDecorDrag = (draft, decorDrag) => {")
+      && source.includes("beginCleanRoomDecorDrag(draft, decorId, cell);")
+      && source.includes("if (state.interaction.decorDrag?.active) {")
+      && source.includes("draft.interaction.decorDrag = null;")
+      && source.includes("toggleDecorSelection(draft.interaction, hitDecorIndex)") === false
+      && source.includes("leadIndex:") === false,
     true,
-    "decor click selection should resolve through stable ids while the legacy drag lane stays hard-disabled",
+    "decor drag should run only through the new canonical stable-id clean-room lane",
   );
   assert.equal(
     source.includes("selectSoundByIds(draft, [soundId], soundId")
@@ -4107,6 +4346,7 @@ async function main() {
   runCleanRoomDecorHistoryDeterminismRegressionChecks();
   runCleanRoomSoundHistoryDeterminismRegressionChecks();
   await runLiveDecorPlacementRuntimeRegressionChecks();
+  await runLiveCanonicalDecorMoveRuntimeRegressionChecks();
   await runLiveCanonicalEntityMoveRuntimeRegressionChecks();
   await runLiveSoundPlacementRuntimeRegressionChecks();
   runObjectLayerStableIdentityHistoryRegressionChecks();
