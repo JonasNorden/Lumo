@@ -779,16 +779,31 @@ async function runLiveSoundPlacementRuntimeRegressionChecks() {
     assert.equal(createdSound.type, findSoundPresetById("ambient-zone").type, "live sound placement should author the preset sound type through the canonical lane");
     assert.equal(afterCreateState.interaction.soundDrag, null, "live sound placement should clear stale drag state instead of reviving the legacy move lane");
 
+    store.setState((draft) => {
+      draft.interaction.selectedSoundIds = [];
+      draft.interaction.selectedSoundId = null;
+      draft.interaction.selectedSoundIndices = [];
+      draft.interaction.selectedSoundIndex = null;
+      draft.interaction.soundDrag = {
+        active: true,
+        leadSoundId: createdSound.id,
+        anchorCell: { x: createdSound.x, y: createdSound.y },
+        originPositions: [{ soundId: createdSound.id, x: createdSound.x, y: createdSound.y }],
+        previewDelta: { x: 1, y: 0 },
+      };
+    });
+
     const selectPoint = getClientPointForCell(afterCreateState, firstCell);
     canvas.dispatch("mousedown", {
       ...selectPoint,
       altKey: false,
       button: 0,
     });
+    fakeWindow.dispatch("mouseup", {});
 
     const afterSelectState = store.getState();
     assert.equal(afterSelectState.interaction.selectedSoundId, createdSound.id, "click selection should resolve the exact authored sound by stable id");
-    assert.equal(afterSelectState.interaction.soundDrag, null, "click selection should not re-arm the disabled sound drag lane");
+    assert.equal(afterSelectState.interaction.soundDrag, null, "click selection should clear stale drag state instead of reviving a legacy sound move lane");
 
     fakeWindow.dispatch("keydown", {
       key: "Delete",
@@ -961,6 +976,226 @@ async function runLiveSoundPlacementRuntimeRegressionChecks() {
       },
     );
     assert.equal(previewOperations.length, 0, "normal live usage should no longer render any legacy sound drag overlay or preview");
+  } finally {
+    harness.destroy();
+  }
+}
+
+async function runLiveCanonicalSoundMoveRuntimeRegressionChecks() {
+  const harness = await createEditorRuntimeHarness();
+  const { canvas, fakeWindow, store } = harness;
+
+  try {
+    store.setState((draft) => {
+      draft.interaction.activeTool = "inspect";
+      draft.interaction.activeLayer = "sound";
+      draft.interaction.canvasSelectionMode = "sound";
+      draft.interaction.activeSoundPresetId = "ambient-zone";
+      draft.interaction.activeEntityPresetId = null;
+      draft.interaction.activeDecorPresetId = null;
+    });
+
+    const createCell = { x: 0, y: 2 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), createCell),
+      altKey: true,
+      button: 0,
+    });
+
+    const afterCreateState = store.getState();
+    const createdSound = afterCreateState.document.active.sounds.at(-1);
+    assert.ok(createdSound, "canonical sound drag regression should create an authored sound before moving it");
+    assert.equal(afterCreateState.interaction.selectedSoundId, createdSound.id, "sound placement should select the authored sound by stable id");
+
+    const reselectCell = { x: 1, y: 1 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(afterCreateState, reselectCell),
+      altKey: true,
+      button: 0,
+    });
+    const secondCreatedSound = store.getState().document.active.sounds.at(-1);
+    assert.notEqual(secondCreatedSound?.id, createdSound.id, "sound move regression setup should create a second authored sound for stale-target protection");
+
+    store.setState((draft) => {
+      draft.interaction.activeSoundPresetId = null;
+    });
+
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), createCell),
+      altKey: false,
+      button: 0,
+    });
+    fakeWindow.dispatch("mouseup", {});
+
+    const afterSelectState = store.getState();
+    assert.equal(afterSelectState.interaction.selectedSoundId, createdSound.id, "click selection before sound move should resolve the exact authored sound by stable id");
+    assert.deepEqual(afterSelectState.interaction.selectedSoundIds, [createdSound.id], "sound move setup should stay single-select on the authored target only");
+    assert.equal(afterSelectState.interaction.soundDrag, null, "plain click selection should not leave stale sound drag armed");
+
+    const moveTargetCell = { x: 3, y: 1 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(afterSelectState, createCell),
+      altKey: false,
+      button: 0,
+    });
+
+    const dragStartedState = store.getState();
+    assert.equal(dragStartedState.interaction.soundDrag?.active, true, "mousedown on the selected authored sound should arm canonical sound drag");
+    assert.equal(dragStartedState.interaction.soundDrag?.leadSoundId, createdSound.id, "canonical sound drag should target the selected sound by stable id");
+    assert.equal("leadIndex" in dragStartedState.interaction.soundDrag, false, "canonical sound drag state should not revive legacy index targeting");
+    assert.deepEqual(
+      dragStartedState.interaction.soundDrag?.originPositions,
+      [{ soundId: createdSound.id, x: createCell.x, y: createCell.y }],
+      "canonical sound drag state should keep only stable-id origin snapshots for authored sounds",
+    );
+
+    canvas.dispatch("mousemove", {
+      ...getClientPointForCell(dragStartedState, moveTargetCell),
+      buttons: 1,
+    });
+
+    const dragPreviewState = store.getState();
+    assert.deepEqual(
+      dragPreviewState.interaction.soundDrag?.previewDelta,
+      { x: moveTargetCell.x - createCell.x, y: moveTargetCell.y - createCell.y },
+      "mousemove during canonical sound drag should track the live drag delta without mutating the authored sound yet",
+    );
+    assert.equal(
+      dragPreviewState.document.active.sounds.find((sound) => sound.id === createdSound.id)?.x,
+      createCell.x,
+      "canonical sound drag preview should not write through any legacy mutation path before commit",
+    );
+    assert.deepEqual(
+      dragPreviewState.interaction.selectedCell,
+      moveTargetCell,
+      "selectedCell should follow the canonical sound drag target during preview",
+    );
+
+    const { ctx: draggedRenderCtx, operations: draggedRenderOperations } = createPreviewTestContext();
+    renderSounds(
+      draggedRenderCtx,
+      dragPreviewState.document.active,
+      dragPreviewState.viewport,
+      dragPreviewState.interaction,
+      dragPreviewState.scan,
+    );
+    const expectedPreviewX = dragPreviewState.viewport.offsetX + moveTargetCell.x * dragPreviewState.document.active.dimensions.tileSize * dragPreviewState.viewport.zoom;
+    const expectedPreviewY = dragPreviewState.viewport.offsetY + moveTargetCell.y * dragPreviewState.document.active.dimensions.tileSize * dragPreviewState.viewport.zoom;
+    assert.ok(
+      draggedRenderOperations.some((operation) => {
+        if (operation[0] !== "fillRect" && operation[0] !== "strokeRect") return false;
+        return Math.abs(operation[1] - expectedPreviewX) <= 6 && Math.abs(operation[2] - expectedPreviewY) <= 6;
+      }),
+      "renderSounds should draw the dragged authored sound at the preview position instead of reviving a legacy overlay path",
+    );
+
+    fakeWindow.dispatch("mouseup", {});
+
+    const afterMoveState = store.getState();
+    const movedSound = afterMoveState.document.active.sounds.find((sound) => sound.id === createdSound.id);
+    assert.equal(movedSound?.x, moveTargetCell.x, "mouseup should commit the authored sound x position through the canonical update lane");
+    assert.equal(movedSound?.y, moveTargetCell.y, "mouseup should commit the authored sound y position through the canonical update lane");
+    assert.equal(afterMoveState.interaction.selectedSoundId, createdSound.id, "selection should remain pinned to the moved authored sound id");
+    assert.deepEqual(afterMoveState.interaction.selectedSoundIds, [createdSound.id], "sound move should stay single-select only in this pass");
+    assert.deepEqual(afterMoveState.interaction.selectedCell, moveTargetCell, "selection cell should stay truthful after canonical sound move commit");
+    assert.equal(afterMoveState.interaction.soundDrag, null, "sound drag state should clear immediately after canonical move commit");
+    assert.equal(afterMoveState.document.active.sounds.find((sound) => sound.id === secondCreatedSound.id)?.x, reselectCell.x, "canonical sound move should not retarget another authored sound after later create operations");
+
+    dispatchUndoShortcut(fakeWindow);
+
+    const afterUndoState = store.getState();
+    const undoneSound = afterUndoState.document.active.sounds.find((sound) => sound.id === createdSound.id);
+    assert.equal(undoneSound?.x, createCell.x, "undo after canonical sound move should restore the previous authored x position");
+    assert.equal(undoneSound?.y, createCell.y, "undo after canonical sound move should restore the previous authored y position");
+    assert.equal(afterUndoState.interaction.selectedSoundId, createdSound.id, "undo after canonical sound move should reselect the same authored sound id");
+
+    dispatchRedoShortcut(fakeWindow);
+
+    const afterRedoState = store.getState();
+    const redoneSound = afterRedoState.document.active.sounds.find((sound) => sound.id === createdSound.id);
+    assert.equal(redoneSound?.x, moveTargetCell.x, "redo after canonical sound move should reapply the committed authored x position");
+    assert.equal(redoneSound?.y, moveTargetCell.y, "redo after canonical sound move should reapply the committed authored y position");
+    assert.equal(afterRedoState.interaction.selectedSoundId, createdSound.id, "redo after canonical sound move should keep selection pinned to the same authored sound id");
+
+    store.setState((draft) => {
+      draft.interaction.activeLayer = "tiles";
+      draft.interaction.canvasSelectionMode = "tile";
+      draft.interaction.activeTool = "paint";
+      draft.brush.activeDraft.sprite = "grass_bt";
+      draft.interaction.activeSoundPresetId = null;
+    });
+
+    const paintedCell = { x: 2, y: 0 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), paintedCell),
+      button: 0,
+    });
+    fakeWindow.dispatch("mouseup", {});
+    const paintedTileValue = store.getState().document.active.tiles.base[paintedCell.y * store.getState().document.active.dimensions.width + paintedCell.x];
+    assert.notEqual(paintedTileValue, 0, "tile paint setup for sound mixed chronology should author a non-empty tile before undo checks");
+
+    store.setState((draft) => {
+      draft.interaction.activeTool = "inspect";
+      draft.interaction.activeLayer = "entities";
+      draft.interaction.canvasSelectionMode = "entity";
+      draft.interaction.activeEntityPresetId = "player-spawn";
+      draft.interaction.activeDecorPresetId = null;
+      draft.interaction.activeSoundPresetId = null;
+    });
+
+    const entityCell = { x: 2, y: 2 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), entityCell),
+      altKey: true,
+      button: 0,
+    });
+    const createdEntityId = store.getState().document.active.entities.at(-1)?.id;
+
+    store.setState((draft) => {
+      draft.interaction.activeLayer = "decor";
+      draft.interaction.canvasSelectionMode = "decor";
+      draft.interaction.activeDecorPresetId = "decor_flower_01";
+      draft.interaction.activeEntityPresetId = null;
+    });
+
+    const decorCell = { x: 2, y: 3 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), decorCell),
+      altKey: true,
+      button: 0,
+    });
+    const createdDecorId = store.getState().document.active.decor.at(-1)?.id;
+
+    dispatchUndoShortcut(fakeWindow);
+    let currentState = store.getState();
+    assert.equal(currentState.document.active.decor.some((decor) => decor.id === createdDecorId), false, "mixed chronology undo after sound move should remove the later decor action first");
+
+    dispatchUndoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.entities.some((entity) => entity.id === createdEntityId), false, "mixed chronology undo after sound move should remove the later entity action second");
+
+    dispatchUndoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.tiles.base[paintedCell.y * currentState.document.active.dimensions.width + paintedCell.x], 0, "mixed chronology undo after sound move should revert the later tile paint before the older sound move");
+
+    dispatchUndoShortcut(fakeWindow);
+    currentState = store.getState();
+    const fullyUndoneSound = currentState.document.active.sounds.find((sound) => sound.id === createdSound.id);
+    assert.equal(fullyUndoneSound?.x, createCell.x, "mixed chronology undo after sound move should finally restore the earlier canonical sound move");
+    assert.equal(fullyUndoneSound?.y, createCell.y, "mixed chronology undo after sound move should finally restore the earlier canonical sound move y position");
+
+    dispatchRedoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.sounds.find((sound) => sound.id === createdSound.id)?.x, moveTargetCell.x, "mixed chronology redo after sound move should reapply the canonical sound move first");
+    dispatchRedoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.tiles.base[paintedCell.y * currentState.document.active.dimensions.width + paintedCell.x], paintedTileValue, "mixed chronology redo after sound move should reapply the tile paint second");
+    dispatchRedoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.entities.some((entity) => entity.id === createdEntityId), true, "mixed chronology redo after sound move should restore the entity action third");
+    dispatchRedoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.decor.some((decor) => decor.id === createdDecorId), true, "mixed chronology redo after sound move should restore the decor action last");
   } finally {
     harness.destroy();
   }
@@ -4158,11 +4393,15 @@ function runSourceRegressionChecks() {
     "decor drag should run only through the new canonical stable-id clean-room lane",
   );
   assert.equal(
-    source.includes("selectSoundByIds(draft, [soundId], soundId")
-      && source.includes("if (false && state.interaction.soundDrag?.active) return;")
-      && source.includes("const duplicateSelectedSound = (draft) => {"),
+    source.includes("const beginCleanRoomSoundDrag = (draft, soundId, anchorCell) => {")
+      && source.includes("const commitCleanRoomSoundDrag = (draft, soundDrag) => {")
+      && source.includes("beginCleanRoomSoundDrag(draft, soundId, cell);")
+      && source.includes("if (state.interaction.soundDrag?.active) {")
+      && source.includes("commitCleanRoomSoundDrag(draft, soundDrag);")
+      && source.includes("return moveSoundSelectionByDelta(draft, [origin], soundDrag.previewDelta || { x: 0, y: 0 });")
+      && source.includes("leadIndex:") === false,
     true,
-    "sound click selection should resolve through stable ids while drag and duplicate remain hard-disabled",
+    "sound drag should run only through the canonical stable-id clean-room move lane without reviving legacy sound targeting",
   );
   assert.equal(
     source.includes("TEMP sound debug"),
@@ -4348,6 +4587,7 @@ async function main() {
   await runLiveDecorPlacementRuntimeRegressionChecks();
   await runLiveCanonicalDecorMoveRuntimeRegressionChecks();
   await runLiveCanonicalEntityMoveRuntimeRegressionChecks();
+  await runLiveCanonicalSoundMoveRuntimeRegressionChecks();
   await runLiveSoundPlacementRuntimeRegressionChecks();
   runObjectLayerStableIdentityHistoryRegressionChecks();
   runGlobalObjectLayerUndoRedoRegressionChecks();
