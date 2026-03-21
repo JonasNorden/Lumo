@@ -51,6 +51,7 @@ import {
   reconcileIdObjectInteraction,
   reconcileIndexedObjectInteraction,
 } from "../src/domain/placeables/objectInteractionReconciliation.js";
+import { captureObjectLayerAnchor } from "../src/domain/placeables/objectLayerHistory.js";
 import {
   findMatchingSoundIndices,
   getSelectedSoundIds,
@@ -307,6 +308,57 @@ function runDecorAndSoundDeletionRegressionChecks() {
   redoTileEdit(doc, history);
   assert.equal(doc.decor.length, 0, "redo should re-delete decor");
   assert.equal(doc.sounds.length, 0, "redo should re-delete sounds");
+}
+
+function runObjectLayerStableIdentityHistoryRegressionChecks() {
+  const history = createHistoryState();
+
+  const decorDoc = createDoc();
+  decorDoc.decor = [
+    { id: "decor-a", name: "A", type: "torch", x: 0, y: 0, visible: true, variant: "a", params: {} },
+    { id: "decor-b", name: "B", type: "torch", x: 1, y: 0, visible: true, variant: "a", params: {} },
+    { id: "decor-c", name: "C", type: "torch", x: 2, y: 0, visible: true, variant: "a", params: {} },
+  ];
+  pushHistoryEntry(
+    history,
+    createDecorEditEntry("delete", {
+      index: 1,
+      anchor: captureObjectLayerAnchor(decorDoc.decor, 1),
+      decor: decorDoc.decor[1],
+    }),
+  );
+  decorDoc.decor.splice(0, 2);
+
+  undoTileEdit(decorDoc, history);
+  assert.deepEqual(
+    decorDoc.decor.map((decor) => decor.id),
+    ["decor-b", "decor-c"],
+    "undo should restore a deleted decor object before its surviving neighbor even when the original array index is stale",
+  );
+
+  const soundDoc = createDoc();
+  soundDoc.sounds = [
+    { id: "sound-a", name: "A", type: "spot", x: 0, y: 0, visible: true, params: {} },
+    { id: "sound-new", name: "New", type: "spot", x: 1, y: 0, visible: true, params: {} },
+    { id: "sound-b", name: "B", type: "spot", x: 2, y: 0, visible: true, params: {} },
+  ];
+  pushHistoryEntry(
+    history,
+    createSoundEditEntry("create", {
+      index: 1,
+      anchor: captureObjectLayerAnchor(soundDoc.sounds, 1),
+      sound: soundDoc.sounds[1],
+    }),
+  );
+  soundDoc.sounds.splice(1, 1);
+  soundDoc.sounds.push({ id: "sound-new", name: "New", type: "spot", x: 1, y: 0, visible: true, params: {} });
+
+  undoTileEdit(soundDoc, history);
+  assert.deepEqual(
+    soundDoc.sounds.map((sound) => sound.id),
+    ["sound-a", "sound-b"],
+    "undo should remove the created sound by stable id instead of deleting whichever sound now occupies the old array slot",
+  );
 }
 
 function runFogVolumeRegressionChecks() {
@@ -1994,9 +2046,14 @@ function runSourceRegressionChecks() {
     "editor-v2 should snapshot shared object-layer interaction identities before object mutations",
   );
   assert.equal(
-    source.includes("const reconcileObjectLayerInteractionAfterMutation = (draft, snapshots = captureObjectLayerInteractionSnapshots(draft), options = {}) => {"),
+    source.includes("const clearObjectMutationInteractionState = (draft, reason = \"object mutation\") => {"),
     true,
-    "editor-v2 should use a shared post-mutation object-layer reconciliation path",
+    "editor-v2 should clear shared object-layer interaction state through one minimal post-mutation helper",
+  );
+  assert.equal(
+    source.includes("const applyHistoryObjectMutationState = (draft, entry, direction) => {"),
+    true,
+    "editor-v2 should use one shared history reconciliation helper for object-layer undo and redo",
   );
   assert.equal(
     source.includes("const suppressObjectPlacementPreviews = (draft, reason = \"unspecified\") => {"),
@@ -2009,24 +2066,28 @@ function runSourceRegressionChecks() {
     "editor-v2 should detect undo/redo mutations across all shared object layers",
   );
   assert.equal(
-    source.includes("reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, {"),
+    source.includes("clearObjectMutationInteractionState(draft, \"deleteSelectedEntity\")")
+      && source.includes("clearObjectMutationInteractionState(draft, \"deleteSelectedDecor\")")
+      && source.includes("clearObjectMutationInteractionState(draft, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)")
+      && source.includes("applyHistoryObjectMutationState(draft, entry, \"undo\")")
+      && source.includes("applyHistoryObjectMutationState(draft, entry, \"redo\")"),
     true,
-    "delete and history mutations should reconcile object-layer interaction state immediately after mutation",
+    "delete and history mutations should route through the new minimal shared object-layer mutation helpers",
   );
   assert.equal(
-    source.includes("suppressObjectPlacementPreviews(draft, \"deleteSelectedEntity\")"),
+    source.includes("clearObjectMutationInteractionState(draft, \"deleteSelectedEntity\")"),
     true,
-    "entity deletion should suppress stale object placement previews before the next frame renders",
+    "entity deletion should clear stale object-layer interaction state before the next frame renders",
   );
   assert.equal(
-    source.includes("suppressObjectPlacementPreviews(draft, \"deleteSelectedDecor\")"),
+    source.includes("clearObjectMutationInteractionState(draft, \"deleteSelectedDecor\")"),
     true,
-    "decor deletion should suppress stale object placement previews before the next frame renders",
+    "decor deletion should clear stale object-layer interaction state before the next frame renders",
   );
   assert.equal(
-    source.includes("suppressObjectPlacementPreviews(draft, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)"),
+    source.includes("clearObjectMutationInteractionState(draft, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)"),
     true,
-    "sound deletion should suppress stale object placement previews before the next frame renders",
+    "sound deletion should clear stale object-layer interaction state before the next frame renders",
   );
   assert.equal(
     source.includes('activeEntityPresetId && isMomentaryPlacementTrigger(event)'),
@@ -2190,6 +2251,7 @@ async function main() {
   runNewLevelDocumentRegressionChecks();
   runEntityRegressionChecks();
   runDecorAndSoundDeletionRegressionChecks();
+  runObjectLayerStableIdentityHistoryRegressionChecks();
   runFogVolumeRegressionChecks();
   runFogPlacementPreviewRegressionChecks();
   runObjectPlacementPreviewSuppressionRegressionChecks();
