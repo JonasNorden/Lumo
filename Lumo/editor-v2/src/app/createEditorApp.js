@@ -1089,6 +1089,14 @@ export function createEditorApp({
     draft.interaction.hoveredSoundId = sound?.id || null;
   };
 
+  const suppressSoundPlacementPreview = (draft) => {
+    draft.interaction.soundPlacementPreviewSuppressed = true;
+  };
+
+  const resumeSoundPlacementPreview = (draft) => {
+    draft.interaction.soundPlacementPreviewSuppressed = false;
+  };
+
   const reconcileSoundInteractionState = (draft) => {
     const sounds = draft.document.active?.sounds || [];
     pruneSoundSelection(draft.interaction, sounds);
@@ -2208,6 +2216,7 @@ export function createEditorApp({
     clearHoveredSound(draft.interaction);
     draft.interaction.soundDrag = null;
     draft.interaction.selectedCell = null;
+    suppressSoundPlacementPreview(draft);
     reconcileSoundRenderState(draft);
     return true;
   };
@@ -3035,7 +3044,8 @@ export function createEditorApp({
       cellUnchanged &&
       currentHoveredEntityIndex === (nextHoveredEntityIndex >= 0 ? nextHoveredEntityIndex : null) &&
       currentHoveredDecorIndex === (nextHoveredDecorIndex >= 0 ? nextHoveredDecorIndex : null) &&
-      currentHoveredSoundIndex === (nextHoveredSoundIndex >= 0 ? nextHoveredSoundIndex : null)
+      currentHoveredSoundIndex === (nextHoveredSoundIndex >= 0 ? nextHoveredSoundIndex : null) &&
+      !state.interaction.soundPlacementPreviewSuppressed
     ) {
       return;
     }
@@ -3045,6 +3055,7 @@ export function createEditorApp({
       draft.interaction.hoveredEntityIndex = nextHoveredEntityIndex >= 0 ? nextHoveredEntityIndex : null;
       draft.interaction.hoveredDecorIndex = nextHoveredDecorIndex >= 0 ? nextHoveredDecorIndex : null;
       setHoveredSound(draft, nextHoveredSoundIndex >= 0 ? nextHoveredSoundIndex : null);
+      resumeSoundPlacementPreview(draft);
     });
   };
 
@@ -3060,6 +3071,7 @@ export function createEditorApp({
       draft.interaction.hoveredEntityIndex = null;
       draft.interaction.hoveredDecorIndex = null;
       clearHoveredSound(draft.interaction);
+      resumeSoundPlacementPreview(draft);
     });
   };
 
@@ -3209,6 +3221,7 @@ export function createEditorApp({
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
+        resumeSoundPlacementPreview(draft);
         createSoundAtCell(draft, cell, activeSoundPresetId);
         draft.interaction.hoverCell = cell;
       });
@@ -3897,6 +3910,7 @@ export function createEditorApp({
     draft.interaction.activeEntityPresetId = null;
     draft.interaction.activeDecorPresetId = null;
     draft.interaction.activeSoundPresetId = null;
+    draft.interaction.soundPlacementPreviewSuppressed = false;
     draft.interaction.selectedCell = null;
     draft.interaction.hoveredEntityIndex = null;
     draft.interaction.hoveredDecorIndex = null;
@@ -3993,6 +4007,7 @@ export function createEditorApp({
       }
       if (historyEntryContainsSound(entry)) {
         restoreHistorySoundSelection(draft, entry, "undo");
+        suppressSoundPlacementPreview(draft);
       }
       syncInteractionAfterHistoryChange(draft);
     });
@@ -4015,6 +4030,7 @@ export function createEditorApp({
       }
       if (historyEntryContainsSound(entry)) {
         restoreHistorySoundSelection(draft, entry, "redo");
+        suppressSoundPlacementPreview(draft);
       }
       syncInteractionAfterHistoryChange(draft);
     });
@@ -4445,6 +4461,7 @@ export function createEditorApp({
         state.interaction.activeEntityPresetId = null;
         state.interaction.activeDecorPresetId = null;
         state.interaction.activeSoundPresetId = null;
+        state.interaction.soundPlacementPreviewSuppressed = false;
         state.ui.newLevelSize = {
           isOpen: false,
           width: String(doc?.dimensions?.width || DEFAULT_NEW_LEVEL_WIDTH),
