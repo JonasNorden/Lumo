@@ -630,7 +630,7 @@ function renderMultiSelectionState(kind, count, primaryName) {
     <div class="selectionInspectorCard compactSelectionCard">
       <div class="selectionEditorPlaceholder">
         <span class="selectionEditorPlaceholderCount">${count} ${noun} selected</span>
-        <span class="selectionEditorPlaceholderDetail">Batch editing is not available yet.</span>
+        <span class="selectionEditorPlaceholderDetail">Batch editing is unavailable for this selection.</span>
         ${primaryName ? `<span class="selectionEditorPlaceholderDetail">Primary: ${escapeHtml(primaryName)}</span>` : ""}
       </div>
     </div>

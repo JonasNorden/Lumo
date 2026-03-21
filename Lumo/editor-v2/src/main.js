@@ -16,7 +16,7 @@ const topBarHelpMenu = document.getElementById("topBarHelpMenu");
 const bottomPanel = document.getElementById("bottomPanel");
 
 if (!canvas || !minimapCanvas || !floatingPanelHost || !inspector || !brushPanel || !cellHud || !topBar || !topBarStatus || !topBarExportMenu || !topBarSettingsMenu || !topBarHelpMenu || !bottomPanel) {
-  throw new Error("LumoEditor V2 shell is missing required DOM nodes");
+  throw new Error("Lumo Editor shell is missing required DOM nodes");
 }
 
 const store = createStore(createEditorState());

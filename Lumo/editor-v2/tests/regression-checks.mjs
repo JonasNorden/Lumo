@@ -3103,6 +3103,7 @@ function runScanRegressionChecks() {
 function runUiRegressionChecks() {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const brushPanelSource = fs.readFileSync(path.join(repoRoot, "src/ui/brushPanel.js"), "utf8");
+  const selectionPanelSource = fs.readFileSync(path.join(repoRoot, "src/ui/selectionEditorPanel.js"), "utf8");
   const panel = { innerHTML: "" };
   const baseState = {
     brush: {
@@ -3229,6 +3230,16 @@ function runUiRegressionChecks() {
   };
   renderBrushPanel(panel, decorInactiveState);
   assert.equal(panel.innerHTML.includes("Select a decor preset"), true, "decor status row should prompt for a preset when placement is not armed");
+  assert.equal(
+    selectionPanelSource.includes("Batch editing is unavailable for this selection."),
+    true,
+    "selection editor placeholder copy should use polished production wording instead of temporary messaging",
+  );
+  assert.equal(
+    selectionPanelSource.includes("Batch editing is not available yet."),
+    false,
+    "selection editor placeholder copy should not ship with temporary 'yet' wording",
+  );
 
 }
 
@@ -4280,9 +4291,57 @@ function runSourceRegressionChecks() {
   const source = fs.readFileSync(path.join(repoRoot, "src/app/createEditorApp.js"), "utf8");
   const mainSource = fs.readFileSync(path.join(repoRoot, "src/main.js"), "utf8");
   const indexSource = fs.readFileSync(path.join(repoRoot, "index.html"), "utf8");
+  const exportSource = fs.readFileSync(path.join(repoRoot, "src/data/exportLevelDocument.js"), "utf8");
+  const mockLevelSource = fs.readFileSync(path.join(repoRoot, "src/data/mockLevelDocument.js"), "utf8");
   const rendererSource = fs.readFileSync(path.join(repoRoot, "src/render/renderer.js"), "utf8");
   const decorLayerSource = fs.readFileSync(path.join(repoRoot, "src/render/layers/decorLayer.js"), "utf8");
   const selectionPanelSource = fs.readFileSync(path.join(repoRoot, "src/ui/selectionEditorPanel.js"), "utf8");
+
+  assert.equal(
+    indexSource.includes("<title>Lumo Editor</title>"),
+    true,
+    "editor shell title should present the proper Lumo Editor identity without the temporary V2 suffix",
+  );
+  assert.equal(
+    indexSource.includes("LumoEditor V2") || indexSource.includes(">V2<"),
+    false,
+    "editor shell should remove the visible V2 suffix from user-facing branding",
+  );
+  assert.equal(
+    indexSource.includes('src="../data/assets/ui/lumo_sprite.png"') && indexSource.includes('class="brandMark"'),
+    true,
+    "editor shell should include the Lumo sprite hook in the top-bar brand treatment",
+  );
+  assert.equal(
+    mainSource.includes("Lumo Editor shell is missing required DOM nodes"),
+    true,
+    "bootstrap errors should use the polished Lumo Editor name",
+  );
+  assert.equal(
+    mainSource.includes("LumoEditor V2 shell is missing required DOM nodes"),
+    false,
+    "bootstrap errors should not keep the legacy V2 shell label",
+  );
+  assert.equal(
+    exportSource.includes('"lumo-level"'),
+    true,
+    "export fallback filenames should use the normalized Lumo identity",
+  );
+  assert.equal(
+    exportSource.includes('"lumo-v2-level"'),
+    false,
+    "export fallback filenames should not ship with the V2 suffix",
+  );
+  assert.equal(
+    mockLevelSource.includes('name: "Lumo Demo Chamber"') && mockLevelSource.includes('notes: "Read-only demo document for the Lumo editor pipeline."'),
+    true,
+    "mock editor content should use polished Lumo-facing demo metadata",
+  );
+  assert.equal(
+    mockLevelSource.includes('name: "V2 Demo Chamber"') || mockLevelSource.includes("Read-only prototype document for V2 rendering pipeline."),
+    false,
+    "mock editor content should not expose leftover prototype or V2-facing demo copy",
+  );
 
   const handleCanvasMouseDownSection = source.match(/const handleCanvasMouseDown = \(event\) => \{[\s\S]*?\n  \};/);
   assert.ok(handleCanvasMouseDownSection, "handleCanvasMouseDown should exist");
