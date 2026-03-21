@@ -3164,6 +3164,11 @@ export function createEditorApp({
     return createCleanRoomEntityAtCell(draft, cell, presetId);
   };
 
+  const createDecorAtCell = (draft, cell, presetId = draft.interaction.activeDecorPresetId || DEFAULT_DECOR_PRESET_ID) => {
+    // CANONICAL DECOR RUNTIME ONLY: live decor placement must stay on the stable-id clean-room create/history lane.
+    return createCleanRoomDecorAtCell(draft, cell, presetId);
+  };
+
   const updateEntity = (index, field, value) => {
     store.setState((draft) => {
       const doc = draft.document.active;
