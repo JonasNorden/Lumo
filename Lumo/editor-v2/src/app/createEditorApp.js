@@ -537,6 +537,11 @@ export function createEditorApp({
     panDrag: null,
     suppressNextClick: false,
     hoveringPausedScanHandle: false,
+    lastCanvasPointer: {
+      clientX: null,
+      clientY: null,
+      inside: false,
+    },
   };
   const toolShortcutMap = {
     v: EDITOR_TOOLS.INSPECT,
@@ -1131,6 +1136,67 @@ export function createEditorApp({
     }
 
     updateSoundSelectionCell(draft);
+  };
+
+  const trackCanvasPointerEvent = (event, inside = true) => {
+    interactionState.lastCanvasPointer = {
+      clientX: Number.isFinite(event?.clientX) ? event.clientX : null,
+      clientY: Number.isFinite(event?.clientY) ? event.clientY : null,
+      inside,
+    };
+  };
+
+  const clearTrackedCanvasPointer = () => {
+    interactionState.lastCanvasPointer = {
+      clientX: null,
+      clientY: null,
+      inside: false,
+    };
+  };
+
+  const getTrackedCanvasPoint = () => {
+    const pointer = interactionState.lastCanvasPointer;
+    if (!pointer?.inside || !Number.isFinite(pointer.clientX) || !Number.isFinite(pointer.clientY)) return null;
+
+    const rect = canvas.getBoundingClientRect();
+    const point = {
+      x: pointer.clientX - rect.left,
+      y: pointer.clientY - rect.top,
+    };
+    const isInsideCanvas =
+      point.x >= 0 &&
+      point.y >= 0 &&
+      point.x <= rect.width &&
+      point.y <= rect.height;
+    return isInsideCanvas ? point : null;
+  };
+
+  const reconcileCanvasHoverState = (draft) => {
+    const doc = draft.document.active;
+    if (!doc) return;
+
+    const point = getTrackedCanvasPoint();
+    syncPausedScanHover(draft, point);
+    if (!point) {
+      draft.interaction.hoverCell = null;
+      draft.interaction.hoveredEntityIndex = null;
+      draft.interaction.hoveredDecorIndex = null;
+      clearHoveredSound(draft.interaction);
+      return;
+    }
+
+    draft.interaction.hoverCell = getCellFromCanvasPoint(doc, draft.viewport, point.x, point.y);
+    const hoveredEntityIndex = findEntityAtCanvasPoint(doc, draft.viewport, point.x, point.y);
+    const hoveredDecorIndex = findDecorAtCanvasPoint(doc, draft.viewport, point.x, point.y);
+    const hoveredSoundIndex = findSoundAtCanvasPoint(doc, draft.viewport, point.x, point.y);
+    draft.interaction.hoveredEntityIndex = hoveredEntityIndex >= 0 ? hoveredEntityIndex : null;
+    draft.interaction.hoveredDecorIndex = hoveredDecorIndex >= 0 ? hoveredDecorIndex : null;
+    setHoveredSound(draft, hoveredSoundIndex >= 0 ? hoveredSoundIndex : null);
+  };
+
+  const reconcileSoundRenderState = (draft) => {
+    reconcileSoundInteractionState(draft);
+    reconcileCanvasHoverState(draft);
   };
 
   const restoreHistorySoundSelection = (draft, entry, direction) => {
@@ -1919,7 +1985,7 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
-    reconcileSoundInteractionState(draft);
+    reconcileSoundRenderState(draft);
     return changed;
   };
 
@@ -2142,6 +2208,7 @@ export function createEditorApp({
     clearHoveredSound(draft.interaction);
     draft.interaction.soundDrag = null;
     draft.interaction.selectedCell = null;
+    reconcileSoundRenderState(draft);
     return true;
   };
 
@@ -2416,7 +2483,7 @@ export function createEditorApp({
       draft.interaction.hoveredDecorIndex = decorCount ? decorCount - 1 : null;
     }
 
-    reconcileSoundInteractionState(draft);
+    reconcileSoundRenderState(draft);
 
 
     if (getSelectedEntityIndices(draft.interaction).length) {
@@ -2951,6 +3018,7 @@ export function createEditorApp({
     const state = store.getState();
     if (!state.document.active) return;
 
+    trackCanvasPointerEvent(event);
     const point = getCanvasPointFromMouseEvent(canvas, event);
     syncPausedScanHover(state, point);
     const nextHoverCell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
@@ -2982,6 +3050,7 @@ export function createEditorApp({
 
   const clearHoveredCanvasState = () => {
     const state = store.getState();
+    clearTrackedCanvasPointer();
     interactionState.hoveringPausedScanHandle = false;
     syncCanvasCursor();
     if (!state.interaction.hoverCell && state.interaction.hoveredEntityIndex === null && state.interaction.hoveredDecorIndex === null && state.interaction.hoveredSoundIndex === null) return;
@@ -3301,6 +3370,7 @@ export function createEditorApp({
     const state = store.getState();
     if (!state.document.active) return;
 
+    trackCanvasPointerEvent(event);
     const point = getCanvasPointFromMouseEvent(canvas, event);
     if (isPausedScanPlayheadHit(state.document.active, state.viewport, state.scan, point.x, point.y)) {
       event.preventDefault();
