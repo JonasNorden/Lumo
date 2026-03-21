@@ -60,8 +60,10 @@ import {
 } from "../src/domain/sound/selection.js";
 import { collectDarknessPreviewLights, getPreviewPlayerLight } from "../src/render/darknessPreview.js";
 import { createFogVolumeEntityFromWorldRect } from "../src/domain/entities/specialVolumeTypes.js";
+import { findDecorPresetById } from "../src/domain/decor/decorPresets.js";
 import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
 import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
+import { renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
 import { findSoundAtCanvasPoint, renderSoundDragPreview, renderSoundPlacementPreview, renderSounds } from "../src/render/layers/soundLayer.js";
 import { findSoundPresetById } from "../src/domain/sound/soundPresets.js";
 
@@ -121,6 +123,7 @@ function createPreviewTestContext() {
     bezierCurveTo() {},
     quadraticCurveTo() {},
     arc(...args) { operations.push(["arc", ...args]); },
+    ellipse(...args) { operations.push(["ellipse", ...args]); },
     roundRect(...args) { operations.push(["roundRect", ...args]); },
     closePath() {},
     stroke() { operations.push(["stroke"]); },
@@ -419,6 +422,74 @@ function runFogPlacementPreviewRegressionChecks() {
     0,
     "fog volume placement previews should stay disabled during drag placement",
   );
+}
+
+function runObjectPlacementPreviewSuppressionRegressionChecks() {
+  const doc = createDoc();
+  const viewport = { offsetX: 0, offsetY: 0, zoom: 1 };
+  const decorPreset = findDecorPresetById("decor_flower_01");
+  const entityPreset = findEntityPresetById("player-spawn");
+  const soundPreset = findSoundPresetById("spot");
+
+  assert.ok(decorPreset, "decor placement preview coverage should use a real decor preset");
+  assert.ok(entityPreset, "entity placement preview coverage should use a real entity preset");
+  assert.ok(soundPreset, "sound placement preview coverage should use a real sound preset");
+
+  const visibleEntityPreview = createPreviewTestContext();
+  renderEntityPlacementPreview(visibleEntityPreview.ctx, doc, viewport, {
+    activeTool: "inspect",
+    activeLayer: "entities",
+    hoverCell: { x: 1, y: 1 },
+    objectPlacementPreviewSuppressed: false,
+  }, entityPreset);
+  assert.ok(visibleEntityPreview.operations.length > 0, "entity placement previews should still render during normal placement workflow");
+
+  const suppressedEntityPreview = createPreviewTestContext();
+  renderEntityPlacementPreview(suppressedEntityPreview.ctx, doc, viewport, {
+    activeTool: "inspect",
+    activeLayer: "entities",
+    hoverCell: { x: 1, y: 1 },
+    objectPlacementPreviewSuppressed: true,
+  }, entityPreset);
+  assert.equal(suppressedEntityPreview.operations.length, 0, "entity placement previews should stay hidden while shared object preview suppression is active");
+
+  const visibleDecorPreview = createPreviewTestContext();
+  renderDecorPlacementPreview(visibleDecorPreview.ctx, doc, viewport, {
+    activeTool: "inspect",
+    activeLayer: "decor",
+    hoverCell: { x: 1, y: 1 },
+    decorScatterMode: false,
+    objectPlacementPreviewSuppressed: false,
+  }, decorPreset);
+  assert.ok(visibleDecorPreview.operations.length > 0, "decor placement previews should still render during normal placement workflow");
+
+  const suppressedDecorPreview = createPreviewTestContext();
+  renderDecorPlacementPreview(suppressedDecorPreview.ctx, doc, viewport, {
+    activeTool: "inspect",
+    activeLayer: "decor",
+    hoverCell: { x: 1, y: 1 },
+    decorScatterMode: false,
+    objectPlacementPreviewSuppressed: true,
+  }, decorPreset);
+  assert.equal(suppressedDecorPreview.operations.length, 0, "decor placement previews should stay hidden while shared object preview suppression is active");
+
+  const visibleSoundPreview = createPreviewTestContext();
+  renderSoundPlacementPreview(visibleSoundPreview.ctx, doc, viewport, {
+    activeTool: "inspect",
+    activeLayer: "sound",
+    hoverCell: { x: 1, y: 1 },
+    objectPlacementPreviewSuppressed: false,
+  }, soundPreset);
+  assert.ok(visibleSoundPreview.operations.length > 0, "sound placement previews should still render during normal placement workflow");
+
+  const suppressedSoundPreview = createPreviewTestContext();
+  renderSoundPlacementPreview(suppressedSoundPreview.ctx, doc, viewport, {
+    activeTool: "inspect",
+    activeLayer: "sound",
+    hoverCell: { x: 1, y: 1 },
+    objectPlacementPreviewSuppressed: true,
+  }, soundPreset);
+  assert.equal(suppressedSoundPreview.operations.length, 0, "sound placement previews should stay hidden while shared object preview suppression is active");
 }
 
 function runDecorRegressionChecks() {
@@ -1928,9 +1999,34 @@ function runSourceRegressionChecks() {
     "editor-v2 should use a shared post-mutation object-layer reconciliation path",
   );
   assert.equal(
+    source.includes("const suppressObjectPlacementPreviews = (draft, reason = \"unspecified\") => {"),
+    true,
+    "editor-v2 should use a shared object placement preview suppression helper after object-layer mutations",
+  );
+  assert.equal(
+    source.includes("function historyEntryContainsObjectLayer(entry) {"),
+    true,
+    "editor-v2 should detect undo/redo mutations across all shared object layers",
+  );
+  assert.equal(
     source.includes("reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, {"),
     true,
     "delete and history mutations should reconcile object-layer interaction state immediately after mutation",
+  );
+  assert.equal(
+    source.includes("suppressObjectPlacementPreviews(draft, \"deleteSelectedEntity\")"),
+    true,
+    "entity deletion should suppress stale object placement previews before the next frame renders",
+  );
+  assert.equal(
+    source.includes("suppressObjectPlacementPreviews(draft, \"deleteSelectedDecor\")"),
+    true,
+    "decor deletion should suppress stale object placement previews before the next frame renders",
+  );
+  assert.equal(
+    source.includes("suppressObjectPlacementPreviews(draft, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)"),
+    true,
+    "sound deletion should suppress stale object placement previews before the next frame renders",
   );
   assert.equal(
     source.includes('activeEntityPresetId && isMomentaryPlacementTrigger(event)'),
@@ -2096,6 +2192,7 @@ async function main() {
   runDecorAndSoundDeletionRegressionChecks();
   runFogVolumeRegressionChecks();
   runFogPlacementPreviewRegressionChecks();
+  runObjectPlacementPreviewSuppressionRegressionChecks();
   runDecorRegressionChecks();
   runSoundRegressionChecks();
   runSoundTypeRenderRegressionChecks();

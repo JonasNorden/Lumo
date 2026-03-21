@@ -1,5 +1,6 @@
 import { getSelectedSoundIds, isSoundSelected } from "../../domain/sound/selection.js";
 import { getSoundVisual } from "../../domain/sound/soundVisuals.js";
+import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
 const SOUND_STATE_LOOKUP_CACHE = new WeakMap();
 
@@ -625,7 +626,7 @@ export function getSoundPlacementPreviewDiagnostic(interaction, activePreset) {
     };
   }
 
-  if (interaction.soundPlacementPreviewSuppressed) {
+  if (isObjectPlacementPreviewSuppressed(interaction)) {
     return {
       eligible: false,
       reason: "suppressed",

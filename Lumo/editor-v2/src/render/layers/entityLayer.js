@@ -2,6 +2,7 @@ import { getEntityHitRadius, getEntityVisual } from "../../domain/entities/entit
 import { getSelectedEntityIndices, isEntitySelected } from "../../domain/entities/selection.js";
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
 import { isFogVolumeEntityType } from "../../domain/entities/specialVolumeTypes.js";
+import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
 function getEntityCenter(entity, tileSize) {
   const visual = getEntityVisual(entity.type);
@@ -195,6 +196,7 @@ export function renderEntityDragPreview(ctx, doc, viewport, interaction) {
 export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, activePreset) {
   if (interaction.activeTool !== "inspect") return;
   if (interaction.activeLayer !== "entities") return;
+  if (isObjectPlacementPreviewSuppressed(interaction)) return;
   if (!activePreset) return;
 
   if (isFogVolumeEntityType(activePreset.type)) return;

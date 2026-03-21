@@ -26,7 +26,7 @@ export function createEditorState() {
       activeEntityPresetId: null,
       activeDecorPresetId: null,
       activeSoundPresetId: null,
-      soundPlacementPreviewSuppressed: false,
+      objectPlacementPreviewSuppressed: false,
       decorScatterMode: false,
       decorScatterSettings: {
         density: 0.3,
