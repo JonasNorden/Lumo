@@ -636,7 +636,15 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   const selectedEntityIndex = getPrimarySelectedEntityIndex(state.interaction);
   const selectedDecorIndex = getPrimarySelectedDecorIndex(state.interaction);
   const selectedSoundIndex = getPrimarySelectedSoundIndex(state.interaction);
-  const selectedEntity = Number.isInteger(selectedEntityIndex) ? active.entities?.[selectedEntityIndex] : null;
+  const selectedEntityId = typeof state.interaction.selectedEntityId === "string" && state.interaction.selectedEntityId.trim()
+    ? state.interaction.selectedEntityId
+    : null;
+  const resolvedSelectedEntityIndex = selectedEntityId
+    ? active.entities?.findIndex((entity) => entity?.id === selectedEntityId)
+    : selectedEntityIndex;
+  const selectedEntity = Number.isInteger(resolvedSelectedEntityIndex) && resolvedSelectedEntityIndex >= 0
+    ? active.entities?.[resolvedSelectedEntityIndex]
+    : null;
   const selectedDecor = Number.isInteger(selectedDecorIndex) ? active.decor?.[selectedDecorIndex] : null;
   const selectedSound = Number.isInteger(selectedSoundIndex) ? active.sounds?.[selectedSoundIndex] : null;
   const selectedSounds = selectedSoundIndices
@@ -662,7 +670,7 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
     if (hideEntityTypes.includes(String(selectedEntity.type || "").trim().toLowerCase())) {
       return { markup: "", isEmpty: true };
     }
-    return { markup: renderEntityEditor(selectedEntity, selectedEntityIndex), isEmpty: false };
+    return { markup: renderEntityEditor(selectedEntity, resolvedSelectedEntityIndex), isEmpty: false };
   }
 
   if (selectedDecor) {

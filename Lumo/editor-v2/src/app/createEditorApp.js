@@ -105,7 +105,6 @@ import {
   getSelectedEntityIndices,
   pruneEntitySelection,
   setEntitySelection,
-  toggleEntitySelection,
 } from "../domain/entities/selection.js";
 import {
   clearSoundSelection,
@@ -1133,8 +1132,12 @@ export function createEditorApp({
       }
 
       pruneEntitySelection(draft.interaction, doc.entities?.length || 0);
+      reconcileEntitySelectionState(draft, {
+        clearHover: true,
+        clearHoverCell: true,
+        clearDrag: true,
+      });
       reconcileSoundInteractionState(draft);
-      updateEntitySelectionCell(draft);
       draft.interaction.hoverCell = null;
       draft.interaction.dragPaint = null;
       draft.interaction.rectDrag = null;
@@ -1298,6 +1301,74 @@ export function createEditorApp({
     draft.interaction.selectedEntityId = nextPrimaryId;
   };
 
+  const getEntityIdAtIndex = (entities, index) =>
+    Number.isInteger(index) && index >= 0 && index < entities.length
+      ? getObjectLayerId(entities[index])
+      : null;
+
+  const getEntityIdsFromSelection = (interaction, entities) => {
+    const selectedIds = Array.isArray(interaction.selectedEntityIds)
+      ? interaction.selectedEntityIds.filter((entityId) => typeof entityId === "string" && entityId.trim())
+      : [];
+    if (selectedIds.length) {
+      return selectedIds;
+    }
+
+    return getSelectedEntityIndices(interaction)
+      .map((index) => getEntityIdAtIndex(entities, index))
+      .filter(Boolean);
+  };
+
+  const reconcileEntitySelectionState = (draft, options = {}) => {
+    const entities = draft.document.active?.entities || [];
+    const selectionIds = Array.isArray(options.selectedIds)
+      ? options.selectedIds
+      : getEntityIdsFromSelection(draft.interaction, entities);
+    const fallbackPrimaryId = getEntityIdAtIndex(entities, draft.interaction.selectedEntityIndex);
+    const primaryId = typeof options.primaryId === "string"
+      ? options.primaryId
+      : draft.interaction.selectedEntityId || fallbackPrimaryId;
+
+    setEntitySelectionByIds(draft, selectionIds, primaryId);
+
+    const selectedEntity = draft.interaction.selectedEntityId
+      ? entities.find((entity) => entity?.id === draft.interaction.selectedEntityId) || null
+      : null;
+    draft.interaction.selectedCell = selectedEntity ? { x: selectedEntity.x, y: selectedEntity.y } : null;
+
+    if (options.clearHoverCell ?? true) {
+      draft.interaction.hoverCell = null;
+    }
+
+    if (options.clearHover ?? true) {
+      draft.interaction.hoveredEntityIndex = null;
+      draft.interaction.hoveredEntityId = null;
+    } else {
+      const hoveredId = typeof options.hoveredEntityId === "string"
+        ? options.hoveredEntityId
+        : draft.interaction.hoveredEntityId || getEntityIdAtIndex(entities, draft.interaction.hoveredEntityIndex);
+      const hoveredIndex = hoveredId ? entities.findIndex((entity) => entity?.id === hoveredId) : -1;
+      draft.interaction.hoveredEntityIndex = hoveredIndex >= 0 ? hoveredIndex : null;
+      draft.interaction.hoveredEntityId = hoveredIndex >= 0 ? hoveredId : null;
+    }
+
+    if (options.clearDrag ?? true) {
+      draft.interaction.entityDrag = null;
+    }
+  };
+
+  const selectEntitiesByIds = (draft, ids = [], primaryId = null, options = {}) => {
+    applyCanvasTarget(draft, "entity");
+    reconcileEntitySelectionState(draft, {
+      selectedIds: ids,
+      primaryId,
+      clearHover: options.clearHover ?? true,
+      clearHoverCell: options.clearHoverCell ?? true,
+      hoveredEntityId: options.hoveredEntityId ?? null,
+      clearDrag: options.clearDrag ?? true,
+    });
+  };
+
   const setDecorSelectionByIds = (draft, ids = [], primaryId = null) => {
     const decorItems = draft.document.active?.decor || [];
     const resolved = getObjectIndicesByIds(decorItems, ids);
@@ -1336,7 +1407,11 @@ export function createEditorApp({
     );
 
     if (draft.interaction.selectedEntityIds?.length) {
-      updateEntitySelectionCell(draft);
+      reconcileEntitySelectionState(draft, {
+        clearHover: true,
+        clearHoverCell: true,
+        clearDrag: true,
+      });
       return;
     }
     if (draft.interaction.selectedDecorIds?.length) {
@@ -1464,6 +1539,7 @@ export function createEditorApp({
     if (!point) {
       draft.interaction.hoverCell = null;
       draft.interaction.hoveredEntityIndex = null;
+      draft.interaction.hoveredEntityId = null;
       draft.interaction.hoveredDecorIndex = null;
       clearHoveredSound(draft.interaction);
       const afterSnapshot = createSoundDebugSnapshot(draft);
@@ -1478,6 +1554,7 @@ export function createEditorApp({
     const hoveredDecorIndex = findDecorAtCanvasPoint(doc, draft.viewport, point.x, point.y);
     const hoveredSoundIndex = findSoundAtCanvasPoint(doc, draft.viewport, point.x, point.y);
     draft.interaction.hoveredEntityIndex = hoveredEntityIndex >= 0 ? hoveredEntityIndex : null;
+    draft.interaction.hoveredEntityId = hoveredEntityIndex >= 0 ? getEntityIdAtIndex(doc.entities || [], hoveredEntityIndex) : null;
     draft.interaction.hoveredDecorIndex = hoveredDecorIndex >= 0 ? hoveredDecorIndex : null;
     setHoveredSound(draft, hoveredSoundIndex >= 0 ? hoveredSoundIndex : null);
     const afterSnapshot = createSoundDebugSnapshot(draft);
@@ -2102,7 +2179,12 @@ export function createEditorApp({
   };
 
   const updateEntitySelectionCell = (draft, primaryIndex = draft.interaction.selectedEntityIndex) => {
-    const entity = Number.isInteger(primaryIndex) ? draft.document.active?.entities?.[primaryIndex] : null;
+    const entities = draft.document.active?.entities || [];
+    const entity = typeof draft.interaction.selectedEntityId === "string" && draft.interaction.selectedEntityId.trim()
+      ? entities.find((candidate) => candidate?.id === draft.interaction.selectedEntityId) || null
+      : Number.isInteger(primaryIndex)
+        ? entities[primaryIndex] || null
+        : null;
     draft.interaction.selectedCell = entity ? { x: entity.x, y: entity.y } : null;
   };
 
@@ -2357,8 +2439,11 @@ export function createEditorApp({
       doc.entities.splice(index, 1, nextEntity);
       pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
     }
-    setEntitySelection(draft.interaction, [index], index);
-    updateEntitySelectionCell(draft, index);
+    selectEntitiesByIds(draft, [nextEntity.id], nextEntity.id, {
+      clearHover: true,
+      clearHoverCell: true,
+      clearDrag: true,
+    });
     return changed;
   };
 
@@ -2826,7 +2911,13 @@ export function createEditorApp({
   const deleteSelectedEntity = (draft) => {
     const doc = draft.document.active;
     if (!doc) return false;
-    const selectedEntries = getSelectedEntities(draft.interaction, doc.entities);
+    const selectedIds = getEntityIdsFromSelection(draft.interaction, doc.entities);
+    const selectedEntries = selectedIds
+      .map((entityId) => {
+        const index = doc.entities.findIndex((entity) => entity?.id === entityId);
+        return index >= 0 ? { index, entity: doc.entities[index] } : null;
+      })
+      .filter((entry) => entry?.entity);
     if (!selectedEntries.length) {
       return false;
     }
@@ -2889,11 +2980,15 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
-    const primaryIndex = duplicatedIndices[duplicatedIndices.length - 1] ?? null;
-    setEntitySelection(draft.interaction, duplicatedIndices, primaryIndex);
-    draft.interaction.hoveredEntityIndex = primaryIndex;
-    updateEntitySelectionCell(draft, primaryIndex);
-    draft.interaction.entityDrag = null;
+    const duplicatedIds = duplicatedIndices
+      .map((index) => doc.entities[index]?.id)
+      .filter(Boolean);
+    const primaryId = duplicatedIds.at(-1) ?? null;
+    selectEntitiesByIds(draft, duplicatedIds, primaryId, {
+      clearHover: true,
+      clearHoverCell: true,
+      clearDrag: true,
+    });
 
     return true;
   };
@@ -2922,16 +3017,17 @@ export function createEditorApp({
         entity: { ...entity, params: cloneEntityParams(entity.params) },
       }),
     );
-    setEntitySelection(draft.interaction, [createdIndex], createdIndex);
-    draft.interaction.hoveredEntityIndex = createdIndex;
+    selectEntitiesByIds(draft, [entity.id], entity.id, {
+      clearHover: true,
+      clearHoverCell: true,
+      clearDrag: true,
+    });
     draft.interaction.hoveredDecorIndex = null;
     clearHoveredSound(draft.interaction);
     clearDecorSelection(draft.interaction);
     clearSoundSelection(draft.interaction);
     draft.interaction.decorDrag = null;
     draft.interaction.soundDrag = null;
-    setCanvasSelectionMode(draft, "entity");
-    updateEntitySelectionCell(draft, createdIndex);
     return createdIndex;
   };
 
@@ -2976,20 +3072,26 @@ export function createEditorApp({
 
       if (field === "select") {
         if (index >= 0 && index < entities.length) {
+          const entityId = entities[index]?.id || null;
+          if (!entityId) return;
           const toggleSelection = Boolean(value?.toggle);
           if (toggleSelection) {
-            toggleEntitySelection(draft.interaction, index);
+            const selectedIds = getEntityIdsFromSelection(draft.interaction, entities);
+            const nextSelectedIds = selectedIds.includes(entityId)
+              ? selectedIds.filter((selectedId) => selectedId !== entityId)
+              : [...selectedIds, entityId];
+            selectEntitiesByIds(draft, nextSelectedIds, nextSelectedIds.at(-1) ?? null, {
+              clearHover: true,
+              clearHoverCell: true,
+              clearDrag: true,
+            });
           } else {
-            setEntitySelection(draft.interaction, [index], index);
+            selectEntitiesByIds(draft, [entityId], entityId, {
+              clearHover: true,
+              clearHoverCell: true,
+              clearDrag: true,
+            });
           }
-          clearDecorSelection(draft.interaction);
-          clearSoundSelection(draft.interaction);
-          draft.interaction.hoveredDecorIndex = null;
-          clearHoveredSound(draft.interaction);
-          draft.interaction.decorDrag = null;
-          draft.interaction.soundDrag = null;
-          setCanvasSelectionMode(draft, "entity");
-          updateEntitySelectionCell(draft);
         }
         return;
       }
@@ -3357,6 +3459,9 @@ export function createEditorApp({
     store.setState((draft) => {
       draft.interaction.hoverCell = nextHoverCell;
       draft.interaction.hoveredEntityIndex = nextHoveredEntityIndex >= 0 ? nextHoveredEntityIndex : null;
+      draft.interaction.hoveredEntityId = nextHoveredEntityIndex >= 0
+        ? getEntityIdAtIndex(draft.document.active?.entities || [], nextHoveredEntityIndex)
+        : null;
       draft.interaction.hoveredDecorIndex = nextHoveredDecorIndex >= 0 ? nextHoveredDecorIndex : null;
       setHoveredSound(draft, nextHoveredSoundIndex >= 0 ? nextHoveredSoundIndex : null);
       resumeObjectPlacementPreviews(draft, "canvas mousemove");
@@ -3379,6 +3484,7 @@ export function createEditorApp({
     store.setState((draft) => {
       draft.interaction.hoverCell = null;
       draft.interaction.hoveredEntityIndex = null;
+      draft.interaction.hoveredEntityId = null;
       draft.interaction.hoveredDecorIndex = null;
       clearHoveredSound(draft.interaction);
       resumeObjectPlacementPreviews(draft);
@@ -3544,33 +3650,31 @@ export function createEditorApp({
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
-        const entity = draft.document.active?.entities?.[hitEntityIndex];
-        applyCanvasTarget(draft, "entity");
-        if (event.shiftKey) {
+        const entityId = draft.document.active?.entities?.[hitEntityIndex]?.id || null;
+        if (!entityId) return;
+        /*
+if (event.shiftKey) {
           toggleEntitySelection(draft.interaction, hitEntityIndex);
-          updateEntitySelectionCell(draft);
+        }
+        */
+        if (event.shiftKey) {
+          const selectedIds = getEntityIdsFromSelection(draft.interaction, draft.document.active?.entities || []);
+          const nextSelectedIds = selectedIds.includes(entityId)
+            ? selectedIds.filter((selectedId) => selectedId !== entityId)
+            : [...selectedIds, entityId];
+          selectEntitiesByIds(draft, nextSelectedIds, nextSelectedIds.at(-1) ?? null, {
+            clearHover: true,
+            clearHoverCell: true,
+            clearDrag: true,
+          });
           return;
         }
 
-        const selectedIndices = getSelectedEntityIndices(draft.interaction);
-        const dragSelection = selectedIndices.includes(hitEntityIndex) ? selectedIndices : [hitEntityIndex];
-        setEntitySelection(draft.interaction, dragSelection, hitEntityIndex);
-        draft.interaction.hoveredEntityIndex = hitEntityIndex;
-        updateEntitySelectionCell(draft, hitEntityIndex);
-        draft.interaction.entityDrag = {
-          active: true,
-          leadIndex: hitEntityIndex,
-          anchorCell: entity ? { x: entity.x, y: entity.y } : cell,
-          originPositions: getEntitySelectionIndices(draft.interaction, draft.document.active?.entities || []).map((index) => {
-            const selectedEntity = draft.document.active?.entities?.[index];
-            return {
-              index,
-              x: selectedEntity?.x ?? 0,
-              y: selectedEntity?.y ?? 0,
-            };
-          }),
-          previewDelta: { x: 0, y: 0 },
-        };
+        selectEntitiesByIds(draft, [entityId], entityId, {
+          clearHover: true,
+          clearHoverCell: true,
+          clearDrag: true,
+        });
       });
       return true;
     }
@@ -4070,14 +4174,19 @@ export function createEditorApp({
           );
           updateSoundSelectionCell(draft, getPrimarySelectedSoundIndex(draft.interaction, soundItems));
         } else {
-          const baseSelection = boxSelection.additive ? getSelectedEntityIndices(draft.interaction) : [];
-          applyCanvasTarget(draft, "entity");
-          setEntitySelection(
-            draft.interaction,
-            boxSelection.additive ? [...baseSelection, ...nextSelection] : nextSelection,
-            nextSelection[nextSelection.length - 1] ?? getPrimarySelectedEntityIndex(draft.interaction),
-          );
-          updateEntitySelectionCell(draft);
+          const entities = draft.document.active?.entities || [];
+          const baseSelectionIds = boxSelection.additive ? getEntityIdsFromSelection(draft.interaction, entities) : [];
+          const nextSelectionIds = nextSelection
+            .map((index) => entities[index]?.id)
+            .filter(Boolean);
+          const mergedSelectionIds = boxSelection.additive
+            ? [...baseSelectionIds, ...nextSelectionIds]
+            : nextSelectionIds;
+          selectEntitiesByIds(draft, mergedSelectionIds, mergedSelectionIds.at(-1) ?? null, {
+            clearHover: true,
+            clearHoverCell: true,
+            clearDrag: true,
+          });
         }
         draft.interaction.boxSelection = null;
       });
@@ -4141,13 +4250,25 @@ export function createEditorApp({
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     if (activeLayer === PANEL_LAYERS.ENTITIES && selectionMode === "entity" && hitEntityIndex >= 0) {
       store.setState((draft) => {
-        applyCanvasTarget(draft, "entity");
+        const entityId = draft.document.active?.entities?.[hitEntityIndex]?.id || null;
+        if (!entityId) return;
         if (event.shiftKey) {
-          toggleEntitySelection(draft.interaction, hitEntityIndex);
+          const selectedIds = getEntityIdsFromSelection(draft.interaction, draft.document.active?.entities || []);
+          const nextSelectedIds = selectedIds.includes(entityId)
+            ? selectedIds.filter((selectedId) => selectedId !== entityId)
+            : [...selectedIds, entityId];
+          selectEntitiesByIds(draft, nextSelectedIds, nextSelectedIds.at(-1) ?? null, {
+            clearHover: true,
+            clearHoverCell: true,
+            clearDrag: true,
+          });
         } else {
-          setEntitySelection(draft.interaction, [hitEntityIndex], hitEntityIndex);
+          selectEntitiesByIds(draft, [entityId], entityId, {
+            clearHover: true,
+            clearHoverCell: true,
+            clearDrag: true,
+          });
         }
-        updateEntitySelectionCell(draft, getPrimarySelectedEntityIndex(draft.interaction));
       });
       return;
     }
@@ -4189,6 +4310,7 @@ export function createEditorApp({
     store.setState((draft) => {
       draft.interaction.selectedCell = cell;
       clearEntitySelection(draft.interaction);
+      draft.interaction.hoveredEntityId = null;
       clearDecorSelection(draft.interaction);
       clearSoundSelection(draft.interaction);
     });
@@ -4225,6 +4347,7 @@ export function createEditorApp({
     draft.interaction.objectPlacementPreviewSuppressed = false;
     draft.interaction.selectedCell = null;
     draft.interaction.hoveredEntityIndex = null;
+    draft.interaction.hoveredEntityId = null;
     draft.interaction.hoveredDecorIndex = null;
     clearHoveredSound(draft.interaction);
     clearDecorSelection(draft.interaction);
@@ -4734,6 +4857,7 @@ export function createEditorApp({
         state.document.active = doc;
         state.document.status = "ready";
         state.interaction.hoveredEntityIndex = null;
+        state.interaction.hoveredEntityId = null;
         state.interaction.hoveredDecorIndex = null;
         clearHoveredSound(state.interaction);
         state.interaction.activeLayer = PANEL_LAYERS.TILES;
