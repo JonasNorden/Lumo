@@ -2765,7 +2765,7 @@ export function createEditorApp({
     return false;
   };
 
-  const createDecorAtCell = (draft, cell, presetId = draft.interaction.activeDecorPresetId || DEFAULT_DECOR_PRESET_ID) => {
+  const createCleanRoomDecorAtCell = (draft, cell, presetId = draft.interaction.activeDecorPresetId || DEFAULT_DECOR_PRESET_ID) => {
     const doc = draft.document.active;
     if (!doc || !cell) return null;
 
@@ -2774,25 +2774,25 @@ export function createEditorApp({
       return createEntityAtCell(draft, cell, entityPreset.id);
     }
 
-    const decor = createDecorDraft(doc, cell.x, cell.y, presetId, (doc.decor?.length || 0) + 1);
-    doc.decor.push(decor);
-    const createdIndex = doc.decor.length - 1;
-    pushHistoryEntry(
-      draft.history,
-      createDecorEditEntry("create", {
-        index: createdIndex,
-        anchor: captureObjectLayerAnchor(doc.decor, createdIndex),
-        decor: { ...decor, params: cloneEntityParams(decor.params) },
-      }),
-    );
-    setDecorSelection(draft.interaction, [decor.id], decor.id, doc.decor || []);
-    setHoveredDecor(draft, decor.id);
-    draft.interaction.selectedCell = { x: decor.x, y: decor.y };
-    clearEntitySelection(draft.interaction);
-    draft.interaction.hoveredEntityIndex = null;
-    draft.interaction.entityDrag = null;
-    setCanvasSelectionMode(draft, "decor");
-    return createdIndex;
+    const createIndex = doc.decor.length;
+    const decor = createDecorDraft(doc, cell.x, cell.y, presetId, (doc.decor?.length || 0) + 1, {
+      id: getNextStringId(doc.decor || [], "id", "decor"),
+    });
+    const action = {
+      type: "create",
+      items: [
+        {
+          index: createIndex,
+          decor: cloneCanonicalDecorSnapshot(decor),
+        },
+      ],
+    };
+
+    const changed = applyCleanRoomDecorHistoryAction(draft, action, "forward");
+    if (!changed) return null;
+
+    recordCleanRoomObjectAction("decor", action);
+    return getDecorIndexById(doc.decor, decor.id);
   };
 
   const applyDecorScatter = (draft, startCell, endCell, presetId = draft.interaction.activeDecorPresetId || DEFAULT_DECOR_PRESET_ID) => {
@@ -2803,35 +2803,19 @@ export function createEditorApp({
     const scatterDecor = createScatterDecorEntries(doc, startCell, endCell, presetId, settings);
     if (!scatterDecor.length) return 0;
 
-    startHistoryBatch(draft.history, "decor-scatter");
-    for (const decor of scatterDecor) {
-      const nextIndex = doc.decor.length;
-      doc.decor.push(decor);
-      pushHistoryEntry(
-        draft.history,
-        createDecorEditEntry("create", {
-          index: nextIndex,
-          anchor: captureObjectLayerAnchor(doc.decor, nextIndex),
-          decor: { ...decor, params: cloneEntityParams(decor.params) },
-        }),
-      );
-    }
-    endHistoryBatch(draft.history);
+    const startIndex = doc.decor.length;
+    const action = {
+      type: "create",
+      items: scatterDecor.map((decor, offset) => ({
+        index: startIndex + offset,
+        decor: cloneCanonicalDecorSnapshot(decor),
+      })),
+    };
 
-    const selectedDecor = doc.decor[doc.decor.length - 1] || null;
-    const selectedIndex = doc.decor.length - 1;
-    setDecorSelection(
-      draft.interaction,
-      selectedDecor?.id ? [selectedDecor.id] : [],
-      selectedDecor?.id || null,
-      doc.decor || [],
-    );
-    setHoveredDecor(draft, selectedDecor?.id || null);
-    draft.interaction.selectedCell = selectedDecor ? { x: selectedDecor.x, y: selectedDecor.y } : null;
-    clearEntitySelection(draft.interaction);
-    draft.interaction.entityDrag = null;
-    draft.interaction.hoveredEntityIndex = null;
-    setCanvasSelectionMode(draft, "decor");
+    const changed = applyCleanRoomDecorHistoryAction(draft, action, "forward");
+    if (!changed) return 0;
+
+    recordCleanRoomObjectAction("decor", action);
     return scatterDecor.length;
   };
 
