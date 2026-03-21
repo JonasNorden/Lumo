@@ -128,6 +128,11 @@ import {
   cloneCanonicalDecorSnapshot,
   createCanonicalDecorHistory,
 } from "./cleanRoomDecorMode.js";
+import {
+  applyCanonicalSoundAction,
+  cloneCanonicalSoundSnapshot,
+  createCanonicalSoundHistory,
+} from "./cleanRoomSoundMode.js";
 
 const BATCH_EDITABLE_SOUND_PARAM_KEYS = new Set(["spatial", "volume", "pitch", "loop"]);
 const SOUND_DEBUG_MAX_EVENTS = 18;
@@ -693,6 +698,8 @@ export function createEditorApp({
   const canonicalEntityHistory = createCanonicalEntityHistory();
   const canonicalDecorRuntimeEnabled = true;
   const canonicalDecorHistory = createCanonicalDecorHistory();
+  const canonicalSoundRuntimeEnabled = true;
+  const canonicalSoundHistory = createCanonicalSoundHistory();
   const cleanRoomObjectHistory = {
     undoStack: [],
     redoStack: [],
@@ -1333,9 +1340,14 @@ export function createEditorApp({
     canonicalDecorHistory.clear();
   };
 
+  const clearCleanRoomSoundHistory = () => {
+    canonicalSoundHistory.clear();
+  };
+
   const clearCleanRoomObjectRuntimeHistory = () => {
     clearCleanRoomEntityHistory();
     clearCleanRoomDecorHistory();
+    clearCleanRoomSoundHistory();
     cleanRoomObjectHistory.clear();
   };
 
@@ -1349,6 +1361,12 @@ export function createEditorApp({
     if (lane === "decor") {
       canonicalDecorHistory.record(action);
       cleanRoomObjectHistory.record("decor");
+      return;
+    }
+
+    if (lane === "sound") {
+      canonicalSoundHistory.record(action);
+      cleanRoomObjectHistory.record("sound");
     }
   };
 
@@ -1671,12 +1689,7 @@ export function createEditorApp({
   const applyObjectLayerMutationSelection = (draft, selection = {}) => {
     setEntitySelectionByIds(draft, selection.entityIds || [], selection.entityPrimaryId ?? null);
     setDecorSelectionByIds(draft, selection.decorIds || [], selection.decorPrimaryId ?? null);
-    setSoundSelection(
-      draft.interaction,
-      selection.soundIds || [],
-      selection.soundPrimaryId ?? null,
-      draft.document.active?.sounds || [],
-    );
+    setSoundSelectionByIds(draft, selection.soundIds || [], selection.soundPrimaryId ?? null);
 
     if (draft.interaction.selectedEntityIds?.length) {
       reconcileEntitySelectionState(draft, {
@@ -1716,6 +1729,87 @@ export function createEditorApp({
     const sound = Number.isInteger(index) && index >= 0 && index < sounds.length ? sounds[index] : null;
     draft.interaction.hoveredSoundIndex = sound ? index : null;
     draft.interaction.hoveredSoundId = sound?.id || null;
+  };
+
+  const setSoundSelectionByIds = (draft, ids = [], primaryId = null) => {
+    const sounds = draft.document.active?.sounds || [];
+    const resolved = getObjectIndicesByIds(sounds, ids);
+    const nextPrimaryId = resolved.ids.includes(primaryId) ? primaryId : resolved.ids.at(-1) ?? null;
+    setSoundSelection(draft.interaction, resolved.ids, nextPrimaryId, sounds);
+    draft.interaction.selectedSoundIds = resolved.ids;
+    draft.interaction.selectedSoundId = nextPrimaryId;
+  };
+
+  const selectSoundByIds = (draft, ids = [], primaryId = null, options = {}) => {
+    applyCanvasTarget(draft, "sound");
+    setSoundSelectionByIds(draft, ids, primaryId);
+    setHoveredSound(draft, options.clearHover === false ? options.hoveredSoundId ?? null : null);
+    draft.interaction.soundDrag = null;
+    updateSoundSelectionCell(draft, getPrimarySelectedSoundIndex(draft.interaction, draft.document.active?.sounds || []));
+    if (!draft.interaction.selectedSoundIds?.length) {
+      draft.interaction.selectedCell = null;
+      if (options.clearHoverCell ?? true) {
+        draft.interaction.hoverCell = null;
+      }
+    }
+  };
+
+  const syncCleanRoomSoundSelection = (draft, selectedSoundIds = [], selectedSoundId = null) => {
+    applyCanvasTarget(draft, "sound");
+    draft.interaction.soundDrag = null;
+    clearHoveredSound(draft.interaction);
+
+    if (Array.isArray(selectedSoundIds) && selectedSoundIds.length) {
+      selectSoundByIds(draft, selectedSoundIds, selectedSoundId, {
+        clearHover: true,
+        clearHoverCell: true,
+      });
+      return;
+    }
+
+    setSoundSelectionByIds(draft, [], null);
+    draft.interaction.selectedCell = null;
+    draft.interaction.hoverCell = null;
+  };
+
+  const applyCleanRoomSoundHistoryAction = (draft, action, direction) => {
+    const doc = draft.document.active;
+    if (!doc || !action || !canonicalSoundRuntimeEnabled) return false;
+
+    const result = applyCanonicalSoundAction(doc, action, direction);
+    if (!result.changed) return false;
+
+    syncCleanRoomSoundSelection(draft, result.selectedSoundIds, result.selectedSoundId);
+    clearEntitySelection(draft.interaction);
+    clearDecorSelection(draft.interaction);
+    draft.interaction.hoveredEntityIndex = null;
+    draft.interaction.hoveredEntityId = null;
+    draft.interaction.hoveredDecorIndex = null;
+    draft.interaction.hoveredDecorId = null;
+    draft.interaction.entityDrag = null;
+    draft.interaction.decorDrag = null;
+    draft.interaction.decorScatterDrag = null;
+    clearSoundPreviewState(draft);
+    soundPreviewPlayback.stop();
+    return true;
+  };
+
+  const handleCleanRoomSoundUndo = (draft) => {
+    const action = canonicalSoundHistory.popUndo();
+    if (!action) return false;
+    const changed = applyCleanRoomSoundHistoryAction(draft, action, "backward");
+    if (!changed) return false;
+    canonicalSoundHistory.pushRedo(action);
+    return true;
+  };
+
+  const handleCleanRoomSoundRedo = (draft) => {
+    const action = canonicalSoundHistory.popRedo();
+    if (!action) return false;
+    const changed = applyCleanRoomSoundHistoryAction(draft, action, "forward");
+    if (!changed) return false;
+    canonicalSoundHistory.pushUndo(action);
+    return true;
   };
 
   const captureSoundInteractionSnapshot = (draft) =>
@@ -2819,152 +2913,59 @@ export function createEditorApp({
     return scatterDecor.length;
   };
 
-  const deleteSelectedSound = (draft) => {
+  const deleteSelectedSoundCleanRoom = (draft) => {
     const doc = draft.document.active;
     if (!doc) return false;
-    const beforeSnapshot = createSoundDebugSnapshot(draft);
 
     const selectedEntries = getSelectedSounds(draft.interaction, doc.sounds || []);
     if (!selectedEntries.length) return false;
-    const deletedIds = selectedEntries.map(({ sound }) => sound?.id || "∅");
+    const action = {
+      type: "delete",
+      items: selectedEntries.map(({ index, sound }) => ({
+        index,
+        sound: cloneCanonicalSoundSnapshot(sound),
+      })),
+    };
 
-    startHistoryBatch(draft.history, "sound-delete");
-    for (const { index, sound } of [...selectedEntries].sort((left, right) => right.index - left.index)) {
-      const anchor = captureObjectLayerAnchor(doc.sounds, index);
-      doc.sounds.splice(index, 1);
-      pushHistoryEntry(
-        draft.history,
-        createSoundEditEntry("delete", {
-          index,
-          anchor,
-          sound: { ...sound, params: cloneEntityParams(sound.params) },
-        }),
-      );
-    }
-    endHistoryBatch(draft.history);
+    const changed = applyCleanRoomSoundHistoryAction(draft, action, "forward");
+    if (!changed) return false;
 
-    reconcileObjectLayerMutationState(draft, {}, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`);
-    appendSoundDebugEvent(
-      "sound delete mutation",
-      `deleted ids ${formatSoundDebugList(deletedIds)}`,
-      beforeSnapshot,
-      createSoundDebugSnapshot(draft),
-    );
+    recordCleanRoomObjectAction("sound", action);
     return true;
+  };
+
+  const deleteSelectedSound = (draft) => {
+    return deleteSelectedSoundCleanRoom(draft);
   };
 
   const duplicateSelectedSound = (draft) => {
-    const doc = draft.document.active;
-    if (!doc) return false;
-
-    const selectedEntries = getSelectedSounds(draft.interaction, doc.sounds || []);
-    if (!selectedEntries.length) return false;
-
-    let insertIndex = selectedEntries[selectedEntries.length - 1].index + 1;
-    const duplicatedIndices = [];
-
-    startHistoryBatch(draft.history, "sound-duplicate");
-    for (const { sound: source } of selectedEntries) {
-      const position = clampSoundPosition(doc, source.x + 1, source.y + 1);
-      const duplicate = {
-        ...source,
-        id: getNextStringId(doc.sounds, "id", "sound"),
-        x: position.x,
-        y: position.y,
-        params: cloneEntityParams(source.params),
-      };
-
-      doc.sounds.splice(insertIndex, 0, duplicate);
-      duplicatedIndices.push(insertIndex);
-      pushHistoryEntry(
-        draft.history,
-        createSoundEditEntry("create", {
-          index: insertIndex,
-          anchor: captureObjectLayerAnchor(doc.sounds, insertIndex),
-          sound: { ...duplicate, params: cloneEntityParams(duplicate.params) },
-        }),
-      );
-      insertIndex += 1;
-    }
-    endHistoryBatch(draft.history);
-
-    const primaryIndex = duplicatedIndices[duplicatedIndices.length - 1] ?? null;
-    setSoundSelection(draft.interaction, duplicatedIndices, primaryIndex, doc.sounds || []);
-    setHoveredSound(draft, primaryIndex);
-    setCanvasSelectionMode(draft, "sound");
-    updateSoundSelectionCell(draft, primaryIndex);
-    draft.interaction.soundDrag = null;
-    clearEntitySelection(draft.interaction);
-    clearDecorSelection(draft.interaction);
-    draft.interaction.hoveredEntityIndex = null;
-    draft.interaction.hoveredDecorId = null;
-    draft.interaction.hoveredDecorIndex = null;
-    return true;
+    void draft;
+    // CANONICAL SOUND RUNTIME ONLY: duplicate stays disabled until a stable-id clean-room duplication lane exists.
+    return false;
   };
 
-  const createSoundAtCell = (draft, cell, presetId = draft.interaction.activeSoundPresetId || DEFAULT_SOUND_PRESET_ID) => {
+  const createCleanRoomSoundAtCell = (draft, cell, presetId = draft.interaction.activeSoundPresetId || DEFAULT_SOUND_PRESET_ID) => {
     const doc = draft.document.active;
     if (!doc || !cell) return null;
 
     const sound = createSoundDraft(doc, cell.x, cell.y, presetId, (doc.sounds?.length || 0) + 1);
-    doc.sounds.push(sound);
-    const createdIndex = doc.sounds.length - 1;
-    pushHistoryEntry(
-      draft.history,
-      createSoundEditEntry("create", {
-        index: createdIndex,
-        anchor: captureObjectLayerAnchor(doc.sounds, createdIndex),
-        sound: { ...sound, params: cloneEntityParams(sound.params) },
-      }),
-    );
-    setSoundSelection(draft.interaction, [createdIndex], createdIndex, doc.sounds || []);
-    setHoveredSound(draft, createdIndex);
-    draft.interaction.selectedCell = { x: sound.x, y: sound.y };
-    clearEntitySelection(draft.interaction);
-    clearDecorSelection(draft.interaction);
-    draft.interaction.hoveredEntityIndex = null;
-    draft.interaction.hoveredDecorId = null;
-    draft.interaction.hoveredDecorIndex = null;
-    draft.interaction.entityDrag = null;
-    draft.interaction.decorDrag = null;
-    setCanvasSelectionMode(draft, "sound");
-    return createdIndex;
-  };
+    sound.id = getNextStringId(doc.sounds || [], "id", "sound");
+    const createIndex = doc.sounds.length;
+    const action = {
+      type: "create",
+      items: [
+        {
+          index: createIndex,
+          sound: cloneCanonicalSoundSnapshot(sound),
+        },
+      ],
+    };
 
-  const moveSoundToCell = (draft, index, cell) => {
-    const doc = draft.document.active;
-    if (!doc) return false;
+    const changed = applyCleanRoomSoundHistoryAction(draft, action, "forward");
+    if (!changed) return null;
 
-    const sound = doc.sounds?.[index];
-    if (!sound || !cell) return false;
-
-    const next = clampSoundPosition(doc, cell.x, cell.y);
-    const changed = sound.x !== next.x || sound.y !== next.y;
-    if (!changed) {
-      setSoundSelection(draft.interaction, [index], index, doc.sounds || []);
-      setHoveredSound(draft, index);
-      clearEntitySelection(draft.interaction);
-      clearDecorSelection(draft.interaction);
-      draft.interaction.hoveredEntityIndex = null;
-      draft.interaction.hoveredDecorIndex = null;
-      setCanvasSelectionMode(draft, "sound");
-      updateSoundSelectionCell(draft, index);
-      return false;
-    }
-
-    const previousSound = { ...sound, params: cloneEntityParams(sound.params) };
-    const nextSound = { ...sound, x: next.x, y: next.y };
-    doc.sounds.splice(index, 1, nextSound);
-    pushSoundUpdateHistory(draft.history, index, previousSound, nextSound);
-    setSoundSelection(draft.interaction, [index], index, doc.sounds || []);
-    setHoveredSound(draft, index);
-    clearEntitySelection(draft.interaction);
-    clearDecorSelection(draft.interaction);
-    draft.interaction.hoveredEntityIndex = null;
-    draft.interaction.hoveredDecorIndex = null;
-    setCanvasSelectionMode(draft, "sound");
-    updateSoundSelectionCell(draft, index);
-    return changed;
+    recordCleanRoomObjectAction("sound", action);
+    return getSoundIndexById(doc.sounds, sound.id);
   };
 
   const updateSound = (index, field, value) => {
@@ -2972,7 +2973,6 @@ export function createEditorApp({
       const doc = draft.document.active;
       if (!doc) return;
       const soundItems = doc.sounds || [];
-      const selectedIndices = getSoundSelectionIndices(draft.interaction, soundItems);
 
       if (field === "preset") {
         const nextPresetId = typeof value === "string" ? value : null;
@@ -2990,7 +2990,7 @@ export function createEditorApp({
       }
 
       if (field === "delete") {
-        deleteSelectedSound(draft);
+        deleteSelectedSoundCleanRoom(draft);
         return;
       }
 
@@ -3001,12 +3001,18 @@ export function createEditorApp({
 
       if (field === "select") {
         if (index >= 0 && index < soundItems.length) {
+          const soundId = soundItems[index]?.id || null;
+          if (!soundId) return;
           if (value?.toggle) {
-            toggleSoundSelection(draft.interaction, index, soundItems);
+            toggleSoundSelection(draft.interaction, soundId, soundItems);
+            setHoveredSound(draft, soundId);
+            updateSoundSelectionCell(draft, getPrimarySelectedSoundIndex(draft.interaction, soundItems));
           } else {
-            setSoundSelection(draft.interaction, [index], index, soundItems);
+            selectSoundByIds(draft, [soundId], soundId, {
+              clearHover: false,
+              hoveredSoundId: soundId,
+            });
           }
-          setHoveredSound(draft, index);
           clearEntitySelection(draft.interaction);
           clearDecorSelection(draft.interaction);
           draft.interaction.hoveredEntityIndex = null;
@@ -3014,8 +3020,6 @@ export function createEditorApp({
           draft.interaction.hoveredDecorIndex = null;
           draft.interaction.entityDrag = null;
           draft.interaction.decorDrag = null;
-          applyCanvasTarget(draft, "sound");
-          updateSoundSelectionCell(draft, getPrimarySelectedSoundIndex(draft.interaction, soundItems));
         }
         return;
       }
@@ -3083,32 +3087,17 @@ export function createEditorApp({
         return;
       }
 
-      if (index === -1 && selectedIndices.length > 1) {
-        const isBatchField = field === "source"
-          || (field === "param" && value && typeof value === "object" && BATCH_EDITABLE_SOUND_PARAM_KEYS.has(value.key));
-        if (isBatchField) {
-          applyBatchSoundUpdate(draft, selectedIndices, field, value);
-        }
+      if (
+        field === "param"
+        || field === "name"
+        || field === "type"
+        || field === "source"
+        || field === "visible"
+        || field === "x"
+        || field === "y"
+      ) {
+        // CANONICAL SOUND RUNTIME ONLY: inspector/source mutation stays off until a stable-id edit lane exists.
         return;
-      }
-
-      const sound = soundItems[index];
-      if (!sound) return;
-
-      if (field === "param" || field === "name" || field === "type" || field === "source" || field === "visible") {
-        const nextSound = applySoundFieldUpdate(sound, field, value);
-        if (!nextSound) return;
-        const previousSound = { ...sound, params: cloneEntityParams(sound.params) };
-        doc.sounds.splice(index, 1, nextSound);
-        pushSoundUpdateHistory(draft.history, index, previousSound, nextSound);
-        return;
-      }
-
-      if (field === "x" || field === "y") {
-        moveSoundToCell(draft, index, {
-          x: field === "x" ? value : sound.x,
-          y: field === "y" ? value : sound.y,
-        });
       }
     });
   };
@@ -3706,7 +3695,7 @@ export function createEditorApp({
       event.preventDefault();
       store.setState((draft) => {
         resumeObjectPlacementPreviews(draft);
-        createSoundAtCell(draft, cell, activeSoundPresetId);
+        createCleanRoomSoundAtCell(draft, cell, activeSoundPresetId);
         draft.interaction.hoverCell = cell;
       });
       return true;
@@ -3750,35 +3739,23 @@ if (event.shiftKey) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
-        const sound = draft.document.active?.sounds?.[hitSoundIndex];
         const soundItems = draft.document.active?.sounds || [];
+        const soundId = soundItems[hitSoundIndex]?.id || null;
+        if (!soundId) return;
         applyCanvasTarget(draft, "sound");
-        setHoveredSound(draft, hitSoundIndex);
+        setHoveredSound(draft, soundId);
         if (event.shiftKey) {
-          toggleSoundSelection(draft.interaction, hitSoundIndex, soundItems);
+          toggleSoundSelection(draft.interaction, soundId, soundItems);
           updateSoundSelectionCell(draft, getPrimarySelectedSoundIndex(draft.interaction, soundItems));
           draft.interaction.soundDrag = null;
           return;
         }
 
-        const selectedIndices = getSelectedSoundIndices(draft.interaction, soundItems);
-        const dragSelection = selectedIndices.includes(hitSoundIndex) ? selectedIndices : [hitSoundIndex];
-        setSoundSelection(draft.interaction, dragSelection, hitSoundIndex, soundItems);
-        updateSoundSelectionCell(draft, hitSoundIndex);
-        draft.interaction.soundDrag = {
-          active: true,
-          leadSoundId: sound?.id || null,
-          anchorCell: sound ? { x: sound.x, y: sound.y } : cell,
-          originPositions: getSoundSelectionIndices(draft.interaction, soundItems).map((index) => {
-            const selectedSound = soundItems[index];
-            return {
-              soundId: selectedSound?.id || null,
-              x: selectedSound?.x ?? 0,
-              y: selectedSound?.y ?? 0,
-            };
-          }).filter((origin) => origin.soundId),
-          previewDelta: { x: 0, y: 0 },
-        };
+        selectSoundByIds(draft, [soundId], soundId, {
+          clearHover: false,
+          hoveredSoundId: soundId,
+          clearHoverCell: false,
+        });
       });
       return true;
     }
@@ -4017,29 +3994,9 @@ if (event.shiftKey) {
       return;
     }
 
-    if (state.interaction.soundDrag?.active) {
-      if ((event.buttons & 1) !== 1) return;
-
-      const point = getCanvasPointFromMouseEvent(canvas, event);
-      const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
-      if (!cell) return;
-
-      store.setState((draft) => {
-        const soundDrag = draft.interaction.soundDrag;
-        if (!soundDrag?.active) return;
-        const requestedDeltaX = cell.x - soundDrag.anchorCell.x;
-        const requestedDeltaY = cell.y - soundDrag.anchorCell.y;
-        soundDrag.previewDelta = getClampedGroupDragDelta(
-          draft.document.active,
-          soundDrag.originPositions,
-          requestedDeltaX,
-          requestedDeltaY,
-        );
-        draft.interaction.hoverCell = cell;
-        setHoveredSound(draft, soundDrag.leadSoundId);
-      });
-      return;
-    }
+    // CANONICAL SOUND RUNTIME ONLY: authored sound drag/move stays hard-disabled.
+    // Ignore stale drag state instead of reviving preview or mutation behavior.
+    if (false && state.interaction.soundDrag?.active) return;
 
     if (state.interaction.decorScatterDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
@@ -4160,9 +4117,6 @@ if (event.shiftKey) {
 
     if (state.interaction.soundDrag?.active) {
       store.setState((draft) => {
-        const soundDrag = draft.interaction.soundDrag;
-        if (!soundDrag?.active) return;
-        moveSoundSelectionByDelta(draft, soundDrag.originPositions, soundDrag.previewDelta || { x: 0, y: 0 });
         draft.interaction.soundDrag = null;
       });
       return;
@@ -4522,6 +4476,13 @@ if (event.shiftKey) {
             return;
           }
         }
+        if (lane === "sound") {
+          if (handleCleanRoomSoundUndo(draft)) {
+            cleanRoomObjectHistory.pushRedo("sound");
+            appendSoundDebugEvent("Undo handled", "canonical sound history", beforeSnapshot, createSoundDebugSnapshot(draft));
+            return;
+          }
+        }
       }
       const entry = undoTileEdit(doc, draft.history);
       applyHistoryObjectMutationState(draft, entry, "undo");
@@ -4548,6 +4509,13 @@ if (event.shiftKey) {
             canonicalDecorHistory.pushUndo(action);
             cleanRoomObjectHistory.pushUndo("decor");
             appendSoundDebugEvent("Redo handled", "canonical decor history", beforeSnapshot, createSoundDebugSnapshot(draft));
+            return;
+          }
+        }
+        if (lane === "sound") {
+          if (handleCleanRoomSoundRedo(draft)) {
+            cleanRoomObjectHistory.pushUndo("sound");
+            appendSoundDebugEvent("Redo handled", "canonical sound history", beforeSnapshot, createSoundDebugSnapshot(draft));
             return;
           }
         }

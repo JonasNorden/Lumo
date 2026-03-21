@@ -1,4 +1,4 @@
-import { getSelectedSoundIds, isSoundSelected } from "../../domain/sound/selection.js";
+import { isSoundSelected } from "../../domain/sound/selection.js";
 import { getSoundVisual } from "../../domain/sound/soundVisuals.js";
 import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
@@ -577,24 +577,16 @@ export function findSoundAtCanvasPoint(doc, viewport, pointX, pointY, radius = 3
 export function renderSounds(ctx, doc, viewport, interaction, scan = null) {
   const sounds = doc.sounds || [];
   const tileSize = doc.dimensions.tileSize;
-  const draggedSelection = new Set(
-    interaction.soundDrag?.active
-      ? getSelectedSoundIds(interaction).length
-        ? getSelectedSoundIds(interaction)
-        : (interaction.selectedSoundIndices || []).map((index) => sounds[index]?.id).filter(Boolean)
-      : [],
-  );
   const activeScanIds = new Set(scan?.activeSoundIds || []);
   getSoundStateLookup(scan);
 
   for (let i = 0; i < sounds.length; i += 1) {
     const sound = sounds[i];
     if (!sound?.visible) continue;
-    if (draggedSelection.has(sound.id)) continue;
 
     drawSoundMarker(ctx, sound, viewport, tileSize, scan, {
       isSelected: isSoundSelected(interaction, sound.id, sounds),
-      isHovered: interaction.hoveredSoundId ? interaction.hoveredSoundId === sound.id : interaction.hoveredSoundIndex === i,
+      isHovered: interaction.hoveredSoundId === sound.id,
       alpha: 1,
       isScanActive: activeScanIds.has(sound.id),
     });
@@ -602,20 +594,12 @@ export function renderSounds(ctx, doc, viewport, interaction, scan = null) {
 }
 
 export function renderSoundDragPreview(ctx, doc, viewport, interaction) {
-  const soundDrag = interaction.soundDrag;
-  if (!soundDrag?.active) return;
-  const soundsById = new Map((doc.sounds || []).filter((sound) => sound?.id).map((sound) => [sound.id, sound]));
-
-  for (const origin of soundDrag.originPositions || []) {
-    const sound = soundsById.get(origin.soundId);
-    if (!sound?.visible) continue;
-
-    drawSoundMarker(ctx, { ...sound, x: origin.x + (soundDrag.previewDelta?.x || 0), y: origin.y + (soundDrag.previewDelta?.y || 0) }, viewport, doc.dimensions.tileSize, null, {
-      isSelected: true,
-      preview: true,
-      alpha: 0.92,
-    });
-  }
+  void ctx;
+  void doc;
+  void viewport;
+  void interaction;
+  // CANONICAL SOUND RUNTIME ONLY: drag/move previews stay hard-disabled until a clean-room stable-id move lane exists.
+  // Do not revive the legacy authored-sound overlay path here.
 }
 
 export function getSoundPlacementPreviewDiagnostic(interaction, activePreset) {

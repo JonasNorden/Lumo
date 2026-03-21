@@ -1,6 +1,6 @@
 import { getPrimarySelectedEntityIndex, getSelectedEntityIndices } from "../domain/entities/selection.js";
 import { getPrimarySelectedDecorId, getPrimarySelectedDecorIndex, getSelectedDecorIndices } from "../domain/decor/selection.js";
-import { getPrimarySelectedSoundIndex, getSelectedSoundIndices } from "../domain/sound/selection.js";
+import { getPrimarySelectedSoundId, getPrimarySelectedSoundIndex, getSelectedSoundIndices } from "../domain/sound/selection.js";
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
 import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
 import {
@@ -656,7 +656,15 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   const selectedDecor = Number.isInteger(resolvedSelectedDecorIndex) && resolvedSelectedDecorIndex >= 0
     ? active.decor?.[resolvedSelectedDecorIndex]
     : null;
-  const selectedSound = Number.isInteger(selectedSoundIndex) ? active.sounds?.[selectedSoundIndex] : null;
+  const selectedSoundId = typeof getPrimarySelectedSoundId(state.interaction) === "string"
+    ? getPrimarySelectedSoundId(state.interaction)
+    : null;
+  const resolvedSelectedSoundIndex = selectedSoundId
+    ? active.sounds?.findIndex((sound) => sound?.id === selectedSoundId)
+    : selectedSoundIndex;
+  const selectedSound = Number.isInteger(resolvedSelectedSoundIndex) && resolvedSelectedSoundIndex >= 0
+    ? active.sounds?.[resolvedSelectedSoundIndex]
+    : null;
   const selectedSounds = selectedSoundIndices
     .map((index) => active.sounds?.[index] || null)
     .filter(Boolean);
@@ -673,7 +681,7 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
     if (soundMode === "summary") {
       return { markup: "", isEmpty: true };
     }
-    return { markup: renderBatchSoundEditor(selectedSounds, selectedSoundIndex), isEmpty: false };
+    return { markup: renderBatchSoundEditor(selectedSounds, resolvedSelectedSoundIndex), isEmpty: false };
   }
 
   if (selectedEntity) {
@@ -691,7 +699,7 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
     if (soundMode === "summary") {
       return { markup: "", isEmpty: true };
     }
-    return { markup: renderSoundEditor(selectedSound, selectedSoundIndex, state.soundPreview, state.scan), isEmpty: false };
+    return { markup: renderSoundEditor(selectedSound, resolvedSelectedSoundIndex, state.soundPreview, state.scan), isEmpty: false };
   }
 
   return {
