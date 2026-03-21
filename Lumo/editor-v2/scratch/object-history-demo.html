@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Editor V2 Object History Demo</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #111827;
+        --panel: #1f2937;
+        --panel-border: #374151;
+        --text: #f9fafb;
+        --muted: #9ca3af;
+        --grid: #334155;
+        --cell: #0f172a;
+        --entity: #38bdf8;
+        --decor: #f59e0b;
+        --sound: #34d399;
+        --selected: #f8fafc;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        background: linear-gradient(180deg, #020617 0%, #0f172a 100%);
+        color: var(--text);
+      }
+
+      .page {
+        width: min(1080px, calc(100vw - 32px));
+        margin: 24px auto;
+        display: grid;
+        gap: 16px;
+      }
+
+      .panel {
+        background: rgba(31, 41, 55, 0.95);
+        border: 1px solid var(--panel-border);
+        border-radius: 14px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+      }
+
+      .toolbar {
+        padding: 16px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .title {
+        flex: 1 1 300px;
+      }
+
+      .title h1 {
+        margin: 0 0 4px;
+        font-size: 1.15rem;
+      }
+
+      .title p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .layer-switcher,
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      button {
+        border: 1px solid #475569;
+        background: #0f172a;
+        color: var(--text);
+        border-radius: 10px;
+        padding: 9px 12px;
+        font-size: 0.92rem;
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: #94a3b8;
+      }
+
+      button.active {
+        background: #1d4ed8;
+        border-color: #60a5fa;
+      }
+
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 280px;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .board-wrap {
+        display: grid;
+        gap: 10px;
+      }
+
+      .board-help {
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.45;
+      }
+
+      .board {
+        display: grid;
+        grid-template-columns: repeat(8, minmax(56px, 1fr));
+        gap: 6px;
+        padding: 10px;
+        border-radius: 12px;
+        background: #020617;
+        border: 1px solid #334155;
+      }
+
+      .cell {
+        position: relative;
+        min-height: 56px;
+        border: 1px solid var(--grid);
+        background: var(--cell);
+        border-radius: 10px;
+        padding: 4px;
+        display: flex;
+        align-items: stretch;
+        justify-content: stretch;
+      }
+
+      .cell:hover {
+        border-color: #64748b;
+      }
+
+      .stack {
+        display: grid;
+        grid-template-rows: repeat(3, 1fr);
+        width: 100%;
+        gap: 4px;
+      }
+
+      .slot {
+        min-height: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        border: 1px dashed transparent;
+        font-size: 0.72rem;
+        color: rgba(255, 255, 255, 0.9);
+        user-select: none;
+      }
+
+      .slot.empty {
+        opacity: 0.18;
+        border-color: #475569;
+      }
+
+      .slot.occupied { font-weight: 700; }
+      .slot.layer-entities { background: color-mix(in srgb, var(--entity) 40%, transparent); }
+      .slot.layer-decor { background: color-mix(in srgb, var(--decor) 48%, transparent); }
+      .slot.layer-sound { background: color-mix(in srgb, var(--sound) 42%, transparent); }
+
+      .slot.selected {
+        outline: 2px solid var(--selected);
+        box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.9) inset;
+      }
+
+      .debug {
+        padding: 14px;
+        display: grid;
+        gap: 10px;
+        align-content: start;
+      }
+
+      .debug h2 {
+        margin: 0;
+        font-size: 1rem;
+      }
+
+      .status-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: grid;
+        gap: 8px;
+      }
+
+      .status-list li {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 9px 10px;
+        border-radius: 10px;
+        background: #111827;
+        border: 1px solid #374151;
+        font-size: 0.9rem;
+      }
+
+      .legend {
+        display: grid;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .legend-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .swatch {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+      }
+
+      .notes {
+        padding: 0 16px 16px;
+        color: var(--muted);
+        font-size: 0.86rem;
+        line-height: 1.5;
+      }
+
+      code {
+        color: #bfdbfe;
+        font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      @media (max-width: 920px) {
+        .workspace {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="panel toolbar">
+        <div class="title">
+          <h1>Temporary Reference Demo: Object Selection + Delete + Undo/Redo</h1>
+          <p>
+            Standalone sandbox for editor-v2 only. This file intentionally does not import or reuse the current
+            editor-v2 interaction/history code.
+          </p>
+        </div>
+        <div class="layer-switcher" id="layer-switcher"></div>
+        <div class="actions">
+          <button id="delete-button" type="button">Delete Selected</button>
+          <button id="undo-button" type="button">Undo</button>
+          <button id="redo-button" type="button">Redo</button>
+        </div>
+      </section>
+
+      <section class="panel workspace">
+        <div class="board-wrap">
+          <div class="board-help">
+            Click an empty cell to place an object in the <strong>active layer</strong>. Click an existing object to select it.
+            Press <code>Delete</code> to remove the selected object. Press <code>Ctrl/Cmd+Z</code> to undo and
+            <code>Ctrl/Cmd+Shift+Z</code> to redo.
+          </div>
+          <div class="board" id="board" aria-label="Object history demo grid"></div>
+        </div>
+
+        <aside class="debug">
+          <h2>Debug / Status</h2>
+          <ul class="status-list" id="status-list"></ul>
+          <div class="legend">
+            <div class="legend-row"><span class="swatch" style="background: var(--entity)"></span>Entities</div>
+            <div class="legend-row"><span class="swatch" style="background: var(--decor)"></span>Decor</div>
+            <div class="legend-row"><span class="swatch" style="background: var(--sound)"></span>Sound</div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="panel notes">
+        <strong>Educational notes.</strong>
+        State lives in one plain object: active layer, selected object id, object collections by layer, the next stable id,
+        and two global history stacks. Place/delete actions record the full object snapshot needed for inversion. Undo pops
+        one action, applies its inverse immediately, and pushes the original action onto the redo stack. Redo reapplies that
+        same action and pushes it back onto undo.
+      </section>
+    </main>
+
+    <script>
+      const GRID = { columns: 8, rows: 6 };
+      const LAYERS = [
+        { key: 'entities', label: 'Entities', shortLabel: 'ENT' },
+        { key: 'decor', label: 'Decor', shortLabel: 'DEC' },
+        { key: 'sound', label: 'Sound', shortLabel: 'SND' },
+      ];
+
+      const state = {
+        // The entire demo state lives here so updates are explicit and easy to reason about.
+        activeLayer: 'entities',
+        selectedObjectId: null,
+        nextObjectId: 1,
+        objectsByLayer: {
+          entities: [],
+          decor: [],
+          sound: [],
+        },
+        history: {
+          undoStack: [],
+          redoStack: [],
+        },
+      };
+
+      const boardEl = document.getElementById('board');
+      const statusListEl = document.getElementById('status-list');
+      const layerSwitcherEl = document.getElementById('layer-switcher');
+      const deleteButtonEl = document.getElementById('delete-button');
+      const undoButtonEl = document.getElementById('undo-button');
+      const redoButtonEl = document.getElementById('redo-button');
+
+      function buildUi() {
+        for (const layer of LAYERS) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = layer.label;
+          button.dataset.layer = layer.key;
+          button.addEventListener('click', () => {
+            state.activeLayer = layer.key;
+            render();
+          });
+          layerSwitcherEl.appendChild(button);
+        }
+
+        for (let y = 0; y < GRID.rows; y += 1) {
+          for (let x = 0; x < GRID.columns; x += 1) {
+            const cell = document.createElement('button');
+            cell.type = 'button';
+            cell.className = 'cell';
+            cell.dataset.x = String(x);
+            cell.dataset.y = String(y);
+            cell.addEventListener('click', () => handleCellClick(x, y));
+            boardEl.appendChild(cell);
+          }
+        }
+      }
+
+      function makeObject(layer, x, y) {
+        const objectId = `${layer}-${String(state.nextObjectId).padStart(3, '0')}`;
+        state.nextObjectId += 1;
+        return { id: objectId, layer, x, y };
+      }
+
+      function getObjectAt(layer, x, y) {
+        return state.objectsByLayer[layer].find((item) => item.x === x && item.y === y) ?? null;
+      }
+
+      function findObjectById(objectId) {
+        if (!objectId) return null;
+        for (const layer of LAYERS) {
+          const match = state.objectsByLayer[layer.key].find((item) => item.id === objectId);
+          if (match) {
+            return match;
+          }
+        }
+        return null;
+      }
+
+      function findTopObjectAt(x, y) {
+        const firstLayer = state.activeLayer;
+        const orderedLayers = [firstLayer, ...LAYERS.map((layer) => layer.key).filter((key) => key !== firstLayer)];
+        for (const layer of orderedLayers) {
+          const object = getObjectAt(layer, x, y);
+          if (object) {
+            return object;
+          }
+        }
+        return null;
+      }
+
+      function addObject(object) {
+        const layerObjects = state.objectsByLayer[object.layer];
+        const withoutId = layerObjects.filter((item) => item.id !== object.id);
+        withoutId.push({ ...object });
+        state.objectsByLayer[object.layer] = withoutId;
+      }
+
+      function removeObject(object) {
+        state.objectsByLayer[object.layer] = state.objectsByLayer[object.layer].filter((item) => item.id !== object.id);
+      }
+
+      // History records only mutations that should be undoable across every layer.
+      function recordAction(action) {
+        state.history.undoStack.push(action);
+        state.history.redoStack = [];
+      }
+
+      function applyAction(action, mode) {
+        if (action.type === 'place') {
+          if (mode === 'forward') {
+            addObject(action.object);
+            state.selectedObjectId = action.object.id;
+          } else {
+            removeObject(action.object);
+            if (state.selectedObjectId === action.object.id) {
+              state.selectedObjectId = null;
+            }
+          }
+          return;
+        }
+
+        if (action.type === 'delete') {
+          if (mode === 'forward') {
+            removeObject(action.object);
+            if (state.selectedObjectId === action.object.id) {
+              state.selectedObjectId = null;
+            }
+          } else {
+            addObject(action.object);
+            state.selectedObjectId = action.object.id;
+          }
+        }
+      }
+
+      function placeObject(layer, x, y) {
+        const object = makeObject(layer, x, y);
+        const action = { type: 'place', object };
+        applyAction(action, 'forward');
+        recordAction(action);
+        render();
+      }
+
+      function deleteSelectedObject() {
+        const selectedObject = findObjectById(state.selectedObjectId);
+        if (!selectedObject) {
+          return;
+        }
+
+        const action = { type: 'delete', object: { ...selectedObject } };
+        applyAction(action, 'forward');
+        recordAction(action);
+        render();
+      }
+
+      function undo() {
+        const action = state.history.undoStack.pop();
+        if (!action) {
+          return;
+        }
+
+        // Undo restores prior truth directly from the recorded object snapshot.
+        applyAction(action, 'backward');
+        state.history.redoStack.push(action);
+        render();
+      }
+
+      function redo() {
+        const action = state.history.redoStack.pop();
+        if (!action) {
+          return;
+        }
+
+        // Redo reapplies the same action and returns it to the undo stack.
+        applyAction(action, 'forward');
+        state.history.undoStack.push(action);
+        render();
+      }
+
+      function handleCellClick(x, y) {
+        const activeObject = getObjectAt(state.activeLayer, x, y);
+        if (activeObject) {
+          state.selectedObjectId = activeObject.id;
+          render();
+          return;
+        }
+
+        const existingObject = findTopObjectAt(x, y);
+        if (existingObject) {
+          state.selectedObjectId = existingObject.id;
+          render();
+          return;
+        }
+
+        placeObject(state.activeLayer, x, y);
+      }
+
+      function renderBoard() {
+        const cells = boardEl.querySelectorAll('.cell');
+        cells.forEach((cell) => {
+          const x = Number(cell.dataset.x);
+          const y = Number(cell.dataset.y);
+          cell.innerHTML = '';
+
+          const stack = document.createElement('div');
+          stack.className = 'stack';
+
+          for (const layer of LAYERS) {
+            const object = getObjectAt(layer.key, x, y);
+            const slot = document.createElement('div');
+            slot.className = `slot ${object ? 'occupied' : 'empty'} layer-${layer.key}`;
+            slot.textContent = object ? `${layer.shortLabel} ${object.id.split('-').at(-1)}` : layer.shortLabel;
+            if (object?.id === state.selectedObjectId) {
+              slot.classList.add('selected');
+            }
+            stack.appendChild(slot);
+          }
+
+          cell.appendChild(stack);
+          const selectedObject = findObjectById(state.selectedObjectId);
+          cell.setAttribute('aria-label', `Cell ${x}, ${y}${selectedObject && selectedObject.x === x && selectedObject.y === y ? ', contains selected object' : ''}`);
+        });
+      }
+
+      function renderStatus() {
+        const selectedObject = findObjectById(state.selectedObjectId);
+        const counts = Object.fromEntries(LAYERS.map((layer) => [layer.key, state.objectsByLayer[layer.key].length]));
+        const items = [
+          ['Active layer', state.activeLayer],
+          ['Selected object', selectedObject ? `${selectedObject.id} (${selectedObject.layer} @ ${selectedObject.x},${selectedObject.y})` : 'none'],
+          ['Entities count', String(counts.entities)],
+          ['Decor count', String(counts.decor)],
+          ['Sound count', String(counts.sound)],
+          ['Undo stack', String(state.history.undoStack.length)],
+          ['Redo stack', String(state.history.redoStack.length)],
+        ];
+
+        statusListEl.innerHTML = '';
+        for (const [label, value] of items) {
+          const item = document.createElement('li');
+          const labelEl = document.createElement('span');
+          labelEl.textContent = label;
+          const valueEl = document.createElement('strong');
+          valueEl.textContent = value;
+          item.append(labelEl, valueEl);
+          statusListEl.appendChild(item);
+        }
+      }
+
+      function renderControls() {
+        for (const button of layerSwitcherEl.querySelectorAll('button')) {
+          button.classList.toggle('active', button.dataset.layer === state.activeLayer);
+        }
+
+        const hasSelection = Boolean(findObjectById(state.selectedObjectId));
+        deleteButtonEl.disabled = !hasSelection;
+        undoButtonEl.disabled = state.history.undoStack.length === 0;
+        redoButtonEl.disabled = state.history.redoStack.length === 0;
+      }
+
+      function render() {
+        // Every mutation calls render immediately so the next frame already reflects the new truth.
+        renderBoard();
+        renderStatus();
+        renderControls();
+      }
+
+      deleteButtonEl.addEventListener('click', deleteSelectedObject);
+      undoButtonEl.addEventListener('click', undo);
+      redoButtonEl.addEventListener('click', redo);
+
+      window.addEventListener('keydown', (event) => {
+        const modifierPressed = event.ctrlKey || event.metaKey;
+
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+          if (findObjectById(state.selectedObjectId)) {
+            event.preventDefault();
+            deleteSelectedObject();
+          }
+          return;
+        }
+
+        if (modifierPressed && event.key.toLowerCase() === 'z' && event.shiftKey) {
+          event.preventDefault();
+          redo();
+          return;
+        }
+
+        if (modifierPressed && event.key.toLowerCase() === 'y') {
+          event.preventDefault();
+          redo();
+          return;
+        }
+
+        if (modifierPressed && event.key.toLowerCase() === 'z') {
+          event.preventDefault();
+          undo();
+        }
+      });
+
+      buildUi();
+      render();
+    </script>
+  </body>
+</html>
