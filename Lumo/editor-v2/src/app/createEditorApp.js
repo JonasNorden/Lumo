@@ -1306,6 +1306,17 @@ export function createEditorApp({
       ? getObjectLayerId(entities[index])
       : null;
 
+  const getEntityIndexById = (entities, entityId) => {
+    if (!Array.isArray(entities) || typeof entityId !== "string" || !entityId.trim()) return null;
+    const index = entities.findIndex((entity) => entity?.id === entityId);
+    return index >= 0 ? index : null;
+  };
+
+  const cloneEntitySnapshot = (entity) =>
+    entity
+      ? { ...entity, params: cloneEntityParams(entity.params) }
+      : null;
+
   const getEntityIdsFromSelection = (interaction, entities) => {
     const selectedIds = Array.isArray(interaction.selectedEntityIds)
       ? interaction.selectedEntityIds.filter((entityId) => typeof entityId === "string" && entityId.trim())
@@ -1367,6 +1378,23 @@ export function createEditorApp({
       hoveredEntityId: options.hoveredEntityId ?? null,
       clearDrag: options.clearDrag ?? true,
     });
+  };
+
+  const clearEntityMutationTransientState = (draft, reason = "entity mutation") => {
+    draft.interaction.hoveredEntityIndex = null;
+    draft.interaction.hoveredEntityId = null;
+    draft.interaction.entityDrag = null;
+    draft.interaction.boxSelection = null;
+    draft.interaction.hoverCell = null;
+    draft.interaction.selectedCell = null;
+    suppressObjectPlacementPreviews(draft, reason);
+  };
+
+  const finalizeEntityMutationState = (draft, selection = {}, reason = "entity mutation") => {
+    clearEntityMutationTransientState(draft, reason);
+    setEntitySelectionByIds(draft, selection.entityIds || [], selection.entityPrimaryId ?? null);
+    updateEntitySelectionCell(draft);
+    reconcileCanvasHoverState(draft, reason);
   };
 
   const setDecorSelectionByIds = (draft, ids = [], primaryId = null) => {
@@ -1612,6 +1640,10 @@ export function createEditorApp({
 
   const applyHistoryObjectMutationState = (draft, entry, direction) => {
     if (!historyEntryContainsObjectLayer(entry)) return;
+    if (historyEntryContainsEntity(entry) && !historyEntryContainsDecor(entry) && !historyEntryContainsSound(entry)) {
+      finalizeEntityMutationState(draft, getObjectHistorySelection(entry, direction), `entity history ${direction}`);
+      return;
+    }
     reconcileObjectLayerMutationState(draft, getObjectHistorySelection(entry, direction), `history ${direction}`);
   };
 
@@ -2911,11 +2943,10 @@ export function createEditorApp({
   const deleteSelectedEntity = (draft) => {
     const doc = draft.document.active;
     if (!doc) return false;
-    const selectedIds = getEntityIdsFromSelection(draft.interaction, doc.entities);
-    const selectedEntries = selectedIds
+    const selectedEntries = getEntityIdsFromSelection(draft.interaction, doc.entities)
       .map((entityId) => {
-        const index = doc.entities.findIndex((entity) => entity?.id === entityId);
-        return index >= 0 ? { index, entity: doc.entities[index] } : null;
+        const index = getEntityIndexById(doc.entities, entityId);
+        return Number.isInteger(index) ? { index, entity: doc.entities[index], entityId } : null;
       })
       .filter((entry) => entry?.entity);
     if (!selectedEntries.length) {
@@ -2923,21 +2954,24 @@ export function createEditorApp({
     }
 
     startHistoryBatch(draft.history, "entity-delete");
-    for (const { index, entity } of [...selectedEntries].sort((left, right) => right.index - left.index)) {
-      const anchor = captureObjectLayerAnchor(doc.entities, index);
-      doc.entities.splice(index, 1);
+    for (const { entityId, entity } of [...selectedEntries].sort((left, right) => right.index - left.index)) {
+      const deleteIndex = getEntityIndexById(doc.entities, entityId);
+      if (!Number.isInteger(deleteIndex)) continue;
+      const anchor = captureObjectLayerAnchor(doc.entities, deleteIndex);
+      const deletedSnapshot = cloneEntitySnapshot(entity);
+      doc.entities.splice(deleteIndex, 1);
       pushHistoryEntry(
         draft.history,
         createEntityEditEntry("delete", {
-          index,
+          index: deleteIndex,
           anchor,
-          entity: { ...entity, params: cloneEntityParams(entity.params) },
+          entity: deletedSnapshot,
         }),
       );
     }
     endHistoryBatch(draft.history);
 
-    reconcileObjectLayerMutationState(draft, {}, "deleteSelectedEntity");
+    finalizeEntityMutationState(draft, { entityIds: [], entityPrimaryId: null }, "deleteSelectedEntity");
     return true;
   };
 
