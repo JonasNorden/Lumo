@@ -136,11 +136,31 @@ export function renderDecor(ctx, doc, viewport, interaction) {
     ? interaction.hoveredDecorId
     : null;
 
+  const dragPreviewDelta = interaction.decorDrag?.active
+    ? interaction.decorDrag.previewDelta || { x: 0, y: 0 }
+    : null;
+  const draggedDecorOrigins = interaction.decorDrag?.active
+    ? new Map(
+        (interaction.decorDrag.originPositions || [])
+          .filter((origin) => typeof origin?.decorId === "string" && origin.decorId.trim())
+          .map((origin) => [origin.decorId, origin]),
+      )
+    : null;
+
   for (let i = 0; i < decorItems.length; i += 1) {
     const decor = decorItems[i];
     if (!decor?.visible) continue;
 
-    drawDecorMarker(ctx, decor, viewport, tileSize, {
+    const dragOrigin = draggedDecorOrigins?.get(decor.id) || null;
+    const renderDecorItem = dragOrigin
+      ? {
+          ...decor,
+          x: dragOrigin.x + dragPreviewDelta.x,
+          y: dragOrigin.y + dragPreviewDelta.y,
+        }
+      : decor;
+
+    drawDecorMarker(ctx, renderDecorItem, viewport, tileSize, {
       selected: selectedDecorIds.has(decor.id),
       hovered: hoveredDecorId === decor.id,
       alpha: 1,

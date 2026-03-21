@@ -78,7 +78,8 @@ import { createEditorApp } from "../src/app/createEditorApp.js";
 import { createEditorState } from "../src/state/createEditorState.js";
 import { createStore } from "../src/state/createStore.js";
 import { findSoundAtCanvasPoint, renderSoundDragPreview, renderSoundPlacementPreview, renderSounds } from "../src/render/layers/soundLayer.js";
-import { renderEditorFrame } from "../src/render/renderer.js";
+import { renderEditorFrame, WORLD_RENDER_ORDER, OVERLAY_RENDER_ORDER } from "../src/render/renderer.js";
+import { renderMinimap } from "../src/render/minimap.js";
 import { findSoundPresetById } from "../src/domain/sound/soundPresets.js";
 import {
   canRedoGlobalHistory,
@@ -2866,6 +2867,117 @@ function runObjectLayerInteractionReconciliationChecks() {
   );
 }
 
+function runCanvasRenderOrderRegressionChecks() {
+  const doc = createDoc();
+  doc.tiles.base[1] = 1;
+  doc.decor = [{ id: "decor-a", type: "rock", x: 0, y: 0, visible: true }];
+  doc.entities = [{ id: "entity-a", type: "trigger", x: 1, y: 0, visible: true }];
+  doc.sounds = [{ id: "sound-a", type: "ambientZone", x: 0, y: 1, visible: true, params: { width: 2, height: 1 } }];
+
+  const state = createEditorState();
+  state.document.active = doc;
+  state.viewport.zoom = 1;
+  state.viewport.offsetX = 0;
+  state.viewport.offsetY = 0;
+  state.interaction.selectedDecorIds = ["decor-a"];
+  state.interaction.hoveredDecorId = "decor-a";
+  state.interaction.selectedEntityIds = ["entity-a"];
+  state.interaction.hoveredEntityId = "entity-a";
+
+  const { ctx, operations } = createPreviewTestContext();
+  renderEditorFrame(ctx, state);
+
+  const decorFocusX = state.viewport.offsetX + (0.5 * doc.dimensions.tileSize * state.viewport.zoom);
+  const decorFocusY = state.viewport.offsetY + (0.76 * doc.dimensions.tileSize * state.viewport.zoom) + (1.5 / Math.max(0.001, state.viewport.zoom));
+  const tileScreenX = Math.floor(state.viewport.offsetX + doc.dimensions.tileSize * state.viewport.zoom) + 1;
+  const tileScreenY = Math.floor(state.viewport.offsetY) + 1;
+  const tileScreenSize = Math.ceil(doc.dimensions.tileSize * state.viewport.zoom - 1);
+  const entityCenterX = state.viewport.offsetX + (((1 * doc.dimensions.tileSize) + 12) * state.viewport.zoom);
+  const entityCenterY = state.viewport.offsetY + (((0 * doc.dimensions.tileSize) + 4) * state.viewport.zoom);
+  const decorIndex = operations.findIndex(([name, x, y]) => name === "ellipse" && x === decorFocusX && y === decorFocusY);
+  const tileIndex = operations.findIndex(([name, x, y, width, height]) => name === "fillRect" && x === tileScreenX && y === tileScreenY && width === tileScreenSize && height === tileScreenSize);
+  const entityIndex = operations.findIndex((operation, index) => index > tileIndex && operation[0] === "arc");
+  const rendererSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/render/renderer.js"), "utf8");
+  const soundIndex = rendererSource.indexOf("renderSounds(ctx, doc, state.viewport, state.interaction, state.scan);");
+  const entityRenderCallIndex = rendererSource.indexOf("renderEntities(worldCtx, doc, state.viewport, state.interaction);");
+
+  assert.ok(decorIndex >= 0, "renderer should draw authored decor markers during the world pass");
+  assert.ok(tileIndex >= 0, "renderer should draw authored tiles during the world pass");
+  assert.ok(entityIndex >= 0, "renderer should draw authored entities during the world pass");
+  assert.ok(soundIndex >= 0, "renderer should keep drawing sound overlays after the world pass");
+  assert.ok(decorIndex < tileIndex, "renderer should draw decor before tiles on the main canvas");
+  assert.ok(tileIndex < entityIndex, "renderer should draw tiles before entities on the main canvas");
+  assert.ok(entityRenderCallIndex < soundIndex, "renderer should keep sound visualization on a later overlay/system lane");
+
+  const dragOperations = createPreviewTestContext();
+  renderEditorFrame(dragOperations.ctx, {
+    ...state,
+    interaction: {
+      ...state.interaction,
+      decorDrag: {
+        active: true,
+        leadDecorId: "decor-a",
+        originPositions: [{ decorId: "decor-a", x: 0, y: 0 }],
+        previewDelta: { x: 1, y: 0 },
+      },
+      entityDrag: {
+        active: true,
+        leadEntityId: "entity-a",
+        originPositions: [{ entityId: "entity-a", x: 1, y: 0 }],
+        previewDelta: { x: 1, y: 0 },
+      },
+    },
+  });
+
+  const draggedDecorFocusX = state.viewport.offsetX + (1.5 * doc.dimensions.tileSize * state.viewport.zoom);
+  const draggedDecorFocusY = decorFocusY;
+  const draggedEntityCenterX = state.viewport.offsetX + (((2 * doc.dimensions.tileSize) + 12) * state.viewport.zoom);
+  const draggedEntityCenterY = entityCenterY;
+
+  assert.equal(
+    dragOperations.operations.some(([name, x, y]) => name === "ellipse" && x === draggedDecorFocusX && y === draggedDecorFocusY),
+    true,
+    "decor drag previews should resolve on the canonical decor lane instead of staying at their original slot",
+  );
+  assert.equal(
+    dragOperations.operations.some(([name, x, y]) => name === "roundRect" && x === draggedEntityCenterX - 7 && y === draggedEntityCenterY - 7),
+    true,
+    "entity drag previews should keep resolving on the canonical entity lane",
+  );
+
+  assert.deepEqual(WORLD_RENDER_ORDER, ["decor", "tiles", "entities"], "renderer should export the canonical world render order contract");
+  assert.deepEqual(OVERLAY_RENDER_ORDER, ["sound", "grid", "scan"], "renderer should keep sound/grid/scan on separate overlay lanes");
+}
+
+function runMinimapRenderOrderRegressionChecks() {
+  const state = createEditorState();
+  state.document.active = createDoc();
+  state.document.active.decor = [{ id: "decor-a", type: "rock", x: 0, y: 0, visible: true }];
+  state.document.active.tiles.base[0] = 1;
+  state.document.active.entities = [{ id: "entity-a", type: "trigger", x: 0, y: 0, visible: true }];
+  state.document.active.sounds = [{ id: "sound-a", type: "ambientZone", x: 0, y: 0, visible: true, params: { width: 1, height: 1 } }];
+
+  const { ctx, operations } = createPreviewTestContext();
+  ctx.canvas.getBoundingClientRect = () => ({ width: ctx.canvas.width, height: ctx.canvas.height });
+
+  renderMinimap(ctx, state);
+  assert.ok(operations.length > 0, "minimap should still render after adopting the shared world layer contract");
+
+  const minimapSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/render/minimap.js"), "utf8");
+  assert.equal(
+    minimapSource.includes("for (const decor of doc.decor || [])")
+      && minimapSource.indexOf("for (const decor of doc.decor || [])") < minimapSource.indexOf("for (let y = 0; y < height; y += 1)")
+      && minimapSource.indexOf("for (let y = 0; y < height; y += 1)") < minimapSource.indexOf("for (const entity of doc.entities || [])"),
+    true,
+    "minimap should follow the same decor → tiles → entities ordering as the main world view",
+  );
+  assert.equal(
+    minimapSource.indexOf("for (const sound of doc.sounds || [])") > minimapSource.indexOf("for (const entity of doc.entities || [])"),
+    true,
+    "minimap should keep sound markers on their own later overlay lane",
+  );
+}
+
 function runDarknessPreviewRegressionChecks() {
   const doc = createDoc();
   doc.dimensions.tileSize = 24;
@@ -4737,6 +4849,8 @@ async function main() {
   runSoundIdentityRegressionChecks();
   runSoundDragPreviewIdentityRegressionChecks();
   runObjectLayerInteractionReconciliationChecks();
+  runCanvasRenderOrderRegressionChecks();
+  runMinimapRenderOrderRegressionChecks();
   runDarknessPreviewRegressionChecks();
   runScanRegressionChecks();
   runScanLineRenderRegressionChecks();
