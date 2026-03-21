@@ -573,7 +573,7 @@ function runObjectPlacementPreviewSuppressionRegressionChecks() {
     hoverCell: { x: 1, y: 1 },
     objectPlacementPreviewSuppressed: false,
   }, entityPreset);
-  assert.ok(visibleEntityPreview.operations.length > 0, "entity placement previews should still render during normal placement workflow");
+  assert.equal(visibleEntityPreview.operations.length, 0, "entity placement previews should stay fully disabled while the temporary clean entity path bypasses legacy preview/render-suppression logic");
 
   const suppressedEntityPreview = createPreviewTestContext();
   renderEntityPlacementPreview(suppressedEntityPreview.ctx, doc, viewport, {
@@ -582,7 +582,7 @@ function runObjectPlacementPreviewSuppressionRegressionChecks() {
     hoverCell: { x: 1, y: 1 },
     objectPlacementPreviewSuppressed: true,
   }, entityPreset);
-  assert.equal(suppressedEntityPreview.operations.length, 0, "entity placement previews should stay hidden while shared object preview suppression is active");
+  assert.equal(suppressedEntityPreview.operations.length, 0, "entity placement previews should stay disabled even when legacy shared preview suppression flips on");
 
   const visibleDecorPreview = createPreviewTestContext();
   renderDecorPlacementPreview(visibleDecorPreview.ctx, doc, viewport, {
@@ -2150,18 +2150,18 @@ function runSourceRegressionChecks() {
     "editor-v2 should detect undo/redo mutations across all shared object layers",
   );
   assert.equal(
-    source.includes("finalizeEntityMutationState(draft, { entityIds: [], entityPrimaryId: null }, \"deleteSelectedEntity\")")
+    source.includes("return deleteSelectedEntityCleanRoom(draft);")
       && source.includes("reconcileObjectLayerMutationState(draft, {}, \"deleteSelectedDecor\")")
       && source.includes("reconcileObjectLayerMutationState(draft, {}, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)")
       && source.includes("applyHistoryObjectMutationState(draft, entry, \"undo\")")
       && source.includes("applyHistoryObjectMutationState(draft, entry, \"redo\")"),
     true,
-    "delete and history mutations should route through the minimal stable-id post-mutation helpers",
+    "delete and history mutations should route through the clean entity delete path plus the shared non-entity reconciliation helpers",
   );
   assert.equal(
-    source.includes("finalizeEntityMutationState(draft, { entityIds: [], entityPrimaryId: null }, \"deleteSelectedEntity\")"),
+    source.includes("return deleteSelectedEntityCleanRoom(draft);"),
     true,
-    "entity deletion should clear stale entity interaction state from a direct stable-id helper before the next frame renders",
+    "entity deletion should stay pinned to the clean-room delete path before the next frame renders",
   );
   assert.equal(
     source.includes("reconcileObjectLayerMutationState(draft, {}, \"deleteSelectedDecor\")"),
@@ -2194,10 +2194,11 @@ function runSourceRegressionChecks() {
     "decor scatter should use the Alt/Option-gated placement flow",
   );
   assert.equal(
-    source.includes(`if (event.shiftKey) {
-          toggleEntitySelection(draft.interaction, hitEntityIndex);`),
+    source.includes("TEMP ENTITY CLEAN PATH ACTIVE")
+      && source.includes("OLD ENTITY PATH DISABLED")
+      && source.includes("if (false && activeLayer === PANEL_LAYERS.ENTITIES && selectionMode === \"entity\" && hitEntityIndex >= 0) {"),
     true,
-    "shift-click entity selection should stay enabled",
+    "entity canvas selection should stay locked to the clean-room path while the legacy inspect branch is disabled",
   );
   assert.equal(
     source.includes("additive: event.shiftKey,"),

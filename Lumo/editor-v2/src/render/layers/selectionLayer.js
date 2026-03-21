@@ -50,7 +50,8 @@ export function renderSelectionOverlay(ctx, doc, viewport, interaction) {
     lineWidth: 2,
   });
 
-  if (interaction.entityDrag?.active) {
+  // OLD ENTITY PATH DISABLED: legacy entity drag overlays are intentionally bypassed.
+  if (false && interaction.entityDrag?.active) {
     const delta = interaction.entityDrag.previewDelta || { x: 0, y: 0 };
 
     for (const origin of interaction.entityDrag.originPositions || []) {
