@@ -10,7 +10,7 @@ function slugifyFilePart(value) {
 export function getLevelExportFileName(doc) {
   const namePart = slugifyFilePart(doc?.meta?.name ?? "");
   const idPart = slugifyFilePart(doc?.meta?.id ?? "");
-  const base = namePart || idPart || "lumo-v2-level";
+  const base = namePart || idPart || "lumo-level";
   return `${base}.json`;
 }
 

@@ -25,7 +25,7 @@ for (let x = 26; x < 33; x += 1) {
 export const mockLevelDocument = {
   meta: {
     id: "v2-demo-01",
-    name: "V2 Demo Chamber",
+    name: "Lumo Demo Chamber",
     version: "2.0.0",
   },
   dimensions: {
@@ -272,6 +272,6 @@ export const mockLevelDocument = {
     },
   ],
   extra: {
-    notes: "Read-only prototype document for V2 rendering pipeline.",
+    notes: "Read-only demo document for the Lumo editor pipeline.",
   },
 };

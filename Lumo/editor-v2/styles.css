@@ -55,18 +55,32 @@ select {
   gap: 10px;
 }
 
+.brandMark {
+  width: 24px;
+  height: 24px;
+  display: block;
+  image-rendering: pixelated;
+  filter: drop-shadow(0 2px 8px rgba(92, 132, 220, 0.24));
+}
+
+.brandWordmark {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
 .brand {
   font-weight: 700;
+  color: #eff5ff;
   letter-spacing: 0.02em;
 }
 
-.version {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid #2f3a56;
+.brandProduct {
   color: #9eb2e5;
-  background: rgba(25, 38, 64, 0.75);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .topBarActions {
