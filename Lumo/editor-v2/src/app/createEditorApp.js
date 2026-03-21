@@ -33,10 +33,8 @@ import { getFloodFillCells } from "../domain/tiles/floodFill.js";
 import {
   createEntityEditEntry,
   createDecorEditEntry,
-  createSoundEditEntry,
   createTileEditEntry,
   startTileEditBatch,
-  startHistoryBatch,
   pushHistoryEntry,
   pushTileEdit,
   endTileEditBatch,
@@ -1930,11 +1928,6 @@ export function createEditorApp({
     }
   };
 
-  const reconcileSoundRenderState = (draft, reason = "reconcile") => {
-    reconcileSoundInteractionState(draft);
-    reconcileCanvasHoverState(draft, reason);
-  };
-
   const getObjectHistorySelection = (entry, direction) => {
     const shouldSelect = (mode) => {
       if (mode === "update") return true;
@@ -2565,7 +2558,12 @@ export function createEditorApp({
   };
 
   const updateSoundSelectionCell = (draft, primaryIndex = getPrimarySelectedSoundIndex(draft.interaction, draft.document.active?.sounds || [])) => {
-    const sound = Number.isInteger(primaryIndex) ? draft.document.active?.sounds?.[primaryIndex] : null;
+    const sounds = draft.document.active?.sounds || [];
+    const sound = typeof draft.interaction.selectedSoundId === "string" && draft.interaction.selectedSoundId.trim()
+      ? sounds.find((candidate) => candidate?.id === draft.interaction.selectedSoundId) || null
+      : Number.isInteger(primaryIndex)
+        ? sounds[primaryIndex] || null
+        : null;
     draft.interaction.selectedCell = sound ? { x: sound.x, y: sound.y } : null;
   };
 
@@ -2591,20 +2589,6 @@ export function createEditorApp({
         anchor: captureObjectLayerAnchor([previousEntity], 0),
         previousEntity: { ...previousEntity, params: cloneEntityParams(previousEntity.params) },
         nextEntity: { ...nextEntity, params: cloneEntityParams(nextEntity.params) },
-      }),
-    );
-  };
-
-
-  const pushSoundUpdateHistory = (history, index, previousSound, nextSound) => {
-    if (!previousSound || !nextSound) return;
-    pushHistoryEntry(
-      history,
-      createSoundEditEntry("update", {
-        index,
-        anchor: captureObjectLayerAnchor([previousSound], 0),
-        previousSound: { ...previousSound, params: cloneEntityParams(previousSound.params) },
-        nextSound: { ...nextSound, params: cloneEntityParams(nextSound.params) },
       }),
     );
   };
@@ -2858,29 +2842,83 @@ export function createEditorApp({
     const doc = draft.document.active;
     if (!doc) return false;
 
-    let changed = false;
-    startHistoryBatch(draft.history, "sound-move");
-    for (const origin of originPositions) {
-      const index = getSoundIndexById(doc.sounds || [], origin.soundId);
+    const items = [];
+    for (const origin of Array.isArray(originPositions) ? originPositions : []) {
+      const soundId = typeof origin?.soundId === "string" && origin.soundId.trim() ? origin.soundId : null;
+      if (!soundId) continue;
+
+      const index = getSoundIndexById(doc.sounds || [], soundId);
       const sound = Number.isInteger(index) ? doc.sounds?.[index] : null;
       if (!sound) continue;
 
-      const previousSound = { ...sound, params: cloneEntityParams(sound.params) };
-      const nextSound = {
-        ...sound,
-        x: origin.x + delta.x,
-        y: origin.y + delta.y,
-      };
+      const nextPosition = clampSoundPosition(doc, origin.x + delta.x, origin.y + delta.y);
+      if (sound.x === nextPosition.x && sound.y === nextPosition.y) continue;
 
-      if (previousSound.x === nextSound.x && previousSound.y === nextSound.y) continue;
-      doc.sounds.splice(index, 1, nextSound);
-      pushSoundUpdateHistory(draft.history, index, previousSound, nextSound);
-      changed = true;
+      items.push({
+        index,
+        previousSound: cloneCanonicalSoundSnapshot(sound),
+        nextSound: cloneCanonicalSoundSnapshot({
+          ...sound,
+          x: nextPosition.x,
+          y: nextPosition.y,
+        }),
+      });
     }
-    endHistoryBatch(draft.history);
 
-    reconcileSoundRenderState(draft, "move sound selection");
-    return changed;
+    if (!items.length) return false;
+
+    return applyCanonicalSoundUpdate(draft, {
+      type: "update",
+      items,
+    });
+  };
+
+
+  const beginCleanRoomSoundDrag = (draft, soundId, anchorCell) => {
+    const doc = draft.document.active;
+    if (!doc || !anchorCell || typeof soundId !== "string" || !soundId.trim()) return false;
+
+    const selectedSoundIds = Array.isArray(draft.interaction.selectedSoundIds)
+      ? draft.interaction.selectedSoundIds.filter((selectedId) => typeof selectedId === "string" && selectedId.trim())
+      : [];
+    if (selectedSoundIds.length !== 1 || draft.interaction.selectedSoundId !== soundId) return false;
+
+    const soundIndex = getSoundIndexById(doc.sounds || [], soundId);
+    const sound = Number.isInteger(soundIndex) ? doc.sounds?.[soundIndex] : null;
+    if (!sound?.visible) return false;
+
+    draft.interaction.soundDrag = {
+      active: true,
+      leadSoundId: soundId,
+      anchorCell: { x: anchorCell.x, y: anchorCell.y },
+      previewDelta: { x: 0, y: 0 },
+      originPositions: [
+        {
+          soundId,
+          x: sound.x,
+          y: sound.y,
+        },
+      ],
+    };
+    draft.interaction.hoverCell = anchorCell;
+    setHoveredSound(draft, soundId);
+    draft.interaction.selectedCell = { x: sound.x, y: sound.y };
+    return true;
+  };
+
+  const commitCleanRoomSoundDrag = (draft, soundDrag) => {
+    const doc = draft.document.active;
+    if (!doc || !soundDrag?.active) return false;
+
+    const leadSoundId = typeof soundDrag.leadSoundId === "string" && soundDrag.leadSoundId.trim()
+      ? soundDrag.leadSoundId
+      : typeof soundDrag.originPositions?.[0]?.soundId === "string" && soundDrag.originPositions[0].soundId.trim()
+        ? soundDrag.originPositions[0].soundId
+        : null;
+    const origin = soundDrag.originPositions?.find((item) => item?.soundId === leadSoundId) || null;
+    if (!leadSoundId || !origin) return false;
+
+    return moveSoundSelectionByDelta(draft, [origin], soundDrag.previewDelta || { x: 0, y: 0 });
   };
 
   const deleteSelectedDecorCleanRoom = (draft) => {
@@ -3975,6 +4013,11 @@ if (event.shiftKey) {
           return;
         }
 
+        if (draft.interaction.selectedSoundId === soundId) {
+          beginCleanRoomSoundDrag(draft, soundId, cell);
+          return;
+        }
+
         selectSoundByIds(draft, [soundId], soundId, {
           clearHover: false,
           hoveredSoundId: soundId,
@@ -4234,9 +4277,38 @@ if (event.shiftKey) {
       return;
     }
 
-    // CANONICAL SOUND RUNTIME ONLY: authored sound drag/move stays hard-disabled.
-    // Ignore stale drag state instead of reviving preview or mutation behavior.
-    if (false && state.interaction.soundDrag?.active) return;
+    if (state.interaction.soundDrag?.active) {
+      if ((event.buttons & 1) !== 1) return;
+
+      const point = getCanvasPointFromMouseEvent(canvas, event);
+      const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+      if (!cell) return;
+
+      store.setState((draft) => {
+        const soundDrag = draft.interaction.soundDrag;
+        if (!soundDrag?.active) return;
+        const requestedDeltaX = cell.x - soundDrag.anchorCell.x;
+        const requestedDeltaY = cell.y - soundDrag.anchorCell.y;
+        soundDrag.previewDelta = getClampedGroupDragDelta(
+          draft.document.active,
+          soundDrag.originPositions,
+          requestedDeltaX,
+          requestedDeltaY,
+        );
+        draft.interaction.hoverCell = cell;
+        const leadOrigin = soundDrag.originPositions?.find((origin) => origin?.soundId === soundDrag.leadSoundId)
+          || soundDrag.originPositions?.[0]
+          || null;
+        draft.interaction.selectedCell = leadOrigin
+          ? {
+            x: leadOrigin.x + soundDrag.previewDelta.x,
+            y: leadOrigin.y + soundDrag.previewDelta.y,
+          }
+          : draft.interaction.selectedCell;
+        setHoveredSound(draft, soundDrag.leadSoundId);
+      });
+      return;
+    }
 
     if (state.interaction.decorScatterDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
@@ -4356,7 +4428,11 @@ if (event.shiftKey) {
 
     if (state.interaction.soundDrag?.active) {
       store.setState((draft) => {
+        const soundDrag = draft.interaction.soundDrag;
+        if (!soundDrag?.active) return;
+        commitCleanRoomSoundDrag(draft, soundDrag);
         draft.interaction.soundDrag = null;
+        updateSoundSelectionCell(draft);
       });
       return;
     }

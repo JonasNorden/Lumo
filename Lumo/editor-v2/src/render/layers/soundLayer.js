@@ -578,13 +578,32 @@ export function renderSounds(ctx, doc, viewport, interaction, scan = null) {
   const sounds = doc.sounds || [];
   const tileSize = doc.dimensions.tileSize;
   const activeScanIds = new Set(scan?.activeSoundIds || []);
+  const dragPreviewDelta = interaction.soundDrag?.active
+    ? interaction.soundDrag.previewDelta || { x: 0, y: 0 }
+    : null;
+  const draggedSoundOrigins = interaction.soundDrag?.active
+    ? new Map(
+        (interaction.soundDrag.originPositions || [])
+          .filter((origin) => typeof origin?.soundId === "string" && origin.soundId.trim())
+          .map((origin) => [origin.soundId, origin]),
+      )
+    : null;
   getSoundStateLookup(scan);
 
   for (let i = 0; i < sounds.length; i += 1) {
     const sound = sounds[i];
     if (!sound?.visible) continue;
 
-    drawSoundMarker(ctx, sound, viewport, tileSize, scan, {
+    const dragOrigin = draggedSoundOrigins?.get(sound.id) || null;
+    const renderSound = dragOrigin
+      ? {
+          ...sound,
+          x: dragOrigin.x + dragPreviewDelta.x,
+          y: dragOrigin.y + dragPreviewDelta.y,
+        }
+      : sound;
+
+    drawSoundMarker(ctx, renderSound, viewport, tileSize, scan, {
       isSelected: isSoundSelected(interaction, sound.id, sounds),
       isHovered: interaction.hoveredSoundId === sound.id,
       alpha: 1,
