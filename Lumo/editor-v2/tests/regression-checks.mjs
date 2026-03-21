@@ -2135,6 +2135,11 @@ function runSourceRegressionChecks() {
     "editor-v2 should use one shared history reconciliation helper for object-layer undo and redo",
   );
   assert.equal(
+    source.includes("const finalizeEntityMutationState = (draft, selection = {}, reason = \"entity mutation\") => {"),
+    true,
+    "entity-only delete/undo should use a direct stable-id post-mutation helper instead of the broader shared reconcile path",
+  );
+  assert.equal(
     source.includes("const suppressObjectPlacementPreviews = (draft, reason = \"unspecified\") => {"),
     true,
     "editor-v2 should use a shared object placement preview suppression helper after object-layer mutations",
@@ -2145,18 +2150,18 @@ function runSourceRegressionChecks() {
     "editor-v2 should detect undo/redo mutations across all shared object layers",
   );
   assert.equal(
-    source.includes("reconcileObjectLayerMutationState(draft, {}, \"deleteSelectedEntity\")")
+    source.includes("finalizeEntityMutationState(draft, { entityIds: [], entityPrimaryId: null }, \"deleteSelectedEntity\")")
       && source.includes("reconcileObjectLayerMutationState(draft, {}, \"deleteSelectedDecor\")")
       && source.includes("reconcileObjectLayerMutationState(draft, {}, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)")
       && source.includes("applyHistoryObjectMutationState(draft, entry, \"undo\")")
       && source.includes("applyHistoryObjectMutationState(draft, entry, \"redo\")"),
     true,
-    "delete and history mutations should route through the new minimal shared object-layer mutation helpers",
+    "delete and history mutations should route through the minimal stable-id post-mutation helpers",
   );
   assert.equal(
-    source.includes("reconcileObjectLayerMutationState(draft, {}, \"deleteSelectedEntity\")"),
+    source.includes("finalizeEntityMutationState(draft, { entityIds: [], entityPrimaryId: null }, \"deleteSelectedEntity\")"),
     true,
-    "entity deletion should clear stale object-layer interaction state before the next frame renders",
+    "entity deletion should clear stale entity interaction state from a direct stable-id helper before the next frame renders",
   );
   assert.equal(
     source.includes("reconcileObjectLayerMutationState(draft, {}, \"deleteSelectedDecor\")"),
