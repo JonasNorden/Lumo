@@ -26,11 +26,12 @@ function createBottomPanelMarkup(state) {
   `;
 }
 
-export function renderBottomPanel(panel, state) {
-  if (typeof HTMLElement === "undefined" || typeof panel.querySelector !== "function") {
-    panel.innerHTML = createBottomPanelMarkup(state);
-    panel.classList?.toggle?.("isEmpty", false);
-    return;
+function ensureBottomPanelLayout(panel) {
+  let scanPane = panel.querySelector("[data-bottom-panel-scan]");
+  let editorPane = panel.querySelector("[data-bottom-panel-editor]");
+
+  if (scanPane instanceof HTMLElement && editorPane instanceof HTMLElement) {
+    return { scanPane, editorPane };
   }
 
   panel.innerHTML = `
@@ -39,11 +40,28 @@ export function renderBottomPanel(panel, state) {
       <div class="bottomPanelEditorPane" data-bottom-panel-editor></div>
     </div>
   `;
-  panel.classList?.toggle?.("isEmpty", false);
 
-  const scanPane = panel.querySelector("[data-bottom-panel-scan]");
-  const editorPane = panel.querySelector("[data-bottom-panel-editor]");
-  if (!(scanPane instanceof HTMLElement) || !(editorPane instanceof HTMLElement)) return;
+  scanPane = panel.querySelector("[data-bottom-panel-scan]");
+  editorPane = panel.querySelector("[data-bottom-panel-editor]");
+  if (!(scanPane instanceof HTMLElement) || !(editorPane instanceof HTMLElement)) {
+    return null;
+  }
+
+  return { scanPane, editorPane };
+}
+
+export function renderBottomPanel(panel, state) {
+  if (typeof HTMLElement === "undefined" || typeof panel.querySelector !== "function") {
+    panel.innerHTML = createBottomPanelMarkup(state);
+    panel.classList?.toggle?.("isEmpty", false);
+    return;
+  }
+
+  const layout = ensureBottomPanelLayout(panel);
+  if (!layout) return;
+
+  panel.classList?.toggle?.("isEmpty", false);
+  const { scanPane, editorPane } = layout;
 
   scanPane.innerHTML = renderScanControls(state, { compact: true });
   renderSelectionEditorPanel(editorPane, state, SELECTION_PANEL_OPTIONS);

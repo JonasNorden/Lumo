@@ -25,41 +25,87 @@ function isTextInputElement(value) {
   return typeof HTMLInputElement !== "undefined" && value instanceof HTMLInputElement;
 }
 
+function isTextAreaElement(value) {
+  return typeof HTMLTextAreaElement !== "undefined" && value instanceof HTMLTextAreaElement;
+}
+
 function isSelectElement(value) {
   return typeof HTMLSelectElement !== "undefined" && value instanceof HTMLSelectElement;
 }
 
-function captureFocusedInput(panel) {
-  const activeElement = document.activeElement;
-  if (!isTextInputElement(activeElement) && !isSelectElement(activeElement)) return null;
-  if (!panel.contains(activeElement)) return null;
+function isKeyboardIsolatedInput(value) {
+  return isTextInputElement(value) || isTextAreaElement(value) || isSelectElement(value);
+}
+
+function isDraftableInput(value) {
+  return isTextInputElement(value) && value.type !== "checkbox" && value.type !== "radio";
+}
+
+function getInputDraftStore(panel) {
+  if (!(panel instanceof HTMLElement)) {
+    return new Map();
+  }
+
+  if (!(panel.__selectionInputDrafts instanceof Map)) {
+    panel.__selectionInputDrafts = new Map();
+  }
+
+  return panel.__selectionInputDrafts;
+}
+
+function buildTrackedDataset(target) {
+  if (!isKeyboardIsolatedInput(target)) return null;
 
   const datasetKeys = [
     "entityField",
     "entityIndex",
     "entityParamKey",
+    "entityParamPath",
     "entityParamType",
     "decorField",
     "decorIndex",
     "decorParamKey",
+    "decorParamPath",
     "decorParamType",
     "soundField",
     "soundIndex",
     "soundParamKey",
+    "soundParamPath",
     "soundParamType",
   ];
 
   const dataset = {};
   let hasDataset = false;
   for (const key of datasetKeys) {
-    const value = activeElement.dataset[key];
+    const value = target.dataset[key];
     if (typeof value === "string") {
       dataset[key] = value;
       hasDataset = true;
     }
   }
 
-  if (!hasDataset) return null;
+  return hasDataset ? dataset : null;
+}
+
+function serializeTrackedDataset(dataset) {
+  return Object.entries(dataset)
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+    .map(([key, value]) => `${key}:${value}`)
+    .join("|");
+}
+
+function buildDatasetSelector(dataset) {
+  return Object.entries(dataset)
+    .map(([key, value]) => `[data-${key.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`)}="${CSS.escape(value)}"]`)
+    .join("");
+}
+
+function captureFocusedInput(panel) {
+  const activeElement = document.activeElement;
+  if (!isKeyboardIsolatedInput(activeElement)) return null;
+  if (!panel.contains(activeElement)) return null;
+  const dataset = buildTrackedDataset(activeElement);
+  if (!dataset) return null;
 
   return {
     dataset,
@@ -71,15 +117,11 @@ function captureFocusedInput(panel) {
 
 function restoreFocusedInput(panel, snapshot) {
   if (!snapshot) return;
-
-  const selector = Object.entries(snapshot.dataset)
-    .map(([key, value]) => `[data-${key.replace(/[A-Z]/g, (char) => `-${char.toLowerCase()}`)}="${CSS.escape(value)}"]`)
-    .join("");
-
+  const selector = buildDatasetSelector(snapshot.dataset);
   if (!selector) return;
 
   const replacementInput = panel.querySelector(selector);
-  if (!isTextInputElement(replacementInput) && !isSelectElement(replacementInput)) return;
+  if (!isKeyboardIsolatedInput(replacementInput)) return;
 
   replacementInput.focus({ preventScroll: true });
 
@@ -708,6 +750,11 @@ export function getSelectionEditorPanelContent(state, options = {}) {
 }
 
 export function renderSelectionEditorPanel(panel, state, options = {}) {
+  const activeElement = document.activeElement;
+  if (panel.contains(activeElement) && getInputDraftStore(panel).size > 0) {
+    return;
+  }
+
   const { markup, isEmpty } = getSelectionEditorPanelContent(state, options);
   setPanelMarkup(panel, markup, isEmpty);
 }
@@ -715,6 +762,30 @@ export function renderSelectionEditorPanel(panel, state, options = {}) {
 export function bindSelectionEditorPanel(panel, store, options = {}) {
   const { onEntityUpdate, onDecorUpdate, onSoundUpdate } = options;
   let numberStepperSession = null;
+  const getEditorPane = () => panel.querySelector("[data-bottom-panel-editor]");
+
+  const updateInputDraft = (target) => {
+    if (!isDraftableInput(target)) return;
+    const editorPane = getEditorPane();
+    if (!(editorPane instanceof HTMLElement) || !editorPane.contains(target)) return;
+
+    const dataset = buildTrackedDataset(target);
+    if (!dataset) return;
+
+    const draftStore = getInputDraftStore(editorPane);
+    draftStore.set(serializeTrackedDataset(dataset), true);
+  };
+
+  const clearInputDraft = (target) => {
+    if (!isDraftableInput(target)) return;
+    const editorPane = getEditorPane();
+    if (!(editorPane instanceof HTMLElement)) return;
+
+    const dataset = buildTrackedDataset(target);
+    if (!dataset) return;
+
+    getInputDraftStore(editorPane).delete(serializeTrackedDataset(dataset));
+  };
 
   const commitDeferredNumberInput = (target) => {
     if (!isTextInputElement(target) || target.dataset.numberCommit !== "deferred") return false;
@@ -741,8 +812,8 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
 
     if (field === "x" || field === "y") {
       const parsed = Number.parseInt(target.value, 10);
-      const value = Number.isInteger(parsed) ? parsed : 0;
-      target.value = String(value);
+      if (!Number.isInteger(parsed)) return true;
+      const value = parsed;
       onUpdate?.(index, field, value);
       return true;
     }
@@ -755,19 +826,24 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const target = event.target;
     if (!isTextInputElement(target) && !isSelectElement(target)) return;
 
-    if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) return;
-    if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) return;
+    if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) {
+      clearInputDraft(target);
+      return;
+    }
+    if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) {
+      clearInputDraft(target);
+      return;
+    }
     handleChange(target, "sound", ["name", "type", "source", "visible", "x", "y"], onSoundUpdate, { allowBatchSelection: true });
+    clearInputDraft(target);
   };
 
   const onInput = (event) => {
     const target = event.target;
     if (!isTextInputElement(target) && !isSelectElement(target)) return;
     if (isTextInputElement(target) && target.dataset.numberCommit === "deferred") return;
-
-    if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) return;
-    if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) return;
-    handleChange(target, "sound", ["name", "type", "source", "visible", "x", "y"], onSoundUpdate, { allowBatchSelection: true });
+    if (!isDraftableInput(target)) return;
+    updateInputDraft(target);
   };
 
   const nudgeDeferredNumberInput = (button, direction, event = null) => {
@@ -828,6 +904,17 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     }
   };
 
+  const stopInputKeyboardPropagation = (event) => {
+    if (!isKeyboardIsolatedInput(event.target)) return;
+    event.stopPropagation();
+  };
+
+  const onFocusOut = (event) => {
+    const target = event.target;
+    if (!isDraftableInput(target)) return;
+    clearInputDraft(target);
+  };
+
   const onClick = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
@@ -866,6 +953,10 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
   panel.addEventListener("change", onChange);
   panel.addEventListener("input", onInput);
   panel.addEventListener("keydown", onKeyDown);
+  panel.addEventListener("keydown", stopInputKeyboardPropagation, true);
+  panel.addEventListener("keyup", stopInputKeyboardPropagation, true);
+  panel.addEventListener("keypress", stopInputKeyboardPropagation, true);
+  panel.addEventListener("focusout", onFocusOut);
   panel.addEventListener("click", onClick);
   panel.addEventListener("pointerdown", onPointerDown);
   document.addEventListener("pointerup", clearNumberStepperSession);
@@ -876,6 +967,10 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     panel.removeEventListener("change", onChange);
     panel.removeEventListener("input", onInput);
     panel.removeEventListener("keydown", onKeyDown);
+    panel.removeEventListener("keydown", stopInputKeyboardPropagation, true);
+    panel.removeEventListener("keyup", stopInputKeyboardPropagation, true);
+    panel.removeEventListener("keypress", stopInputKeyboardPropagation, true);
+    panel.removeEventListener("focusout", onFocusOut);
     panel.removeEventListener("click", onClick);
     panel.removeEventListener("pointerdown", onPointerDown);
     document.removeEventListener("pointerup", clearNumberStepperSession);
