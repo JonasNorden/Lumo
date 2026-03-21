@@ -36,7 +36,8 @@ export function getPrimarySelectedSoundId(interaction) {
 
 export function getSelectedSoundIndices(interaction, sounds = null) {
   const selectedIds = getSelectedSoundIds(interaction);
-  if (selectedIds.length && Array.isArray(sounds)) {
+  if (Array.isArray(sounds)) {
+    if (!selectedIds.length) return [];
     const lookup = createSoundIndexLookup(sounds);
     return selectedIds.map((soundId) => lookup.get(soundId)).filter(Number.isInteger);
   }
@@ -45,7 +46,8 @@ export function getSelectedSoundIndices(interaction, sounds = null) {
 
 export function getPrimarySelectedSoundIndex(interaction, sounds = null) {
   const soundId = getPrimarySelectedSoundId(interaction);
-  if (soundId && Array.isArray(sounds)) {
+  if (Array.isArray(sounds)) {
+    if (!soundId) return null;
     const index = createSoundIndexLookup(sounds).get(soundId);
     return Number.isInteger(index) ? index : null;
   }
