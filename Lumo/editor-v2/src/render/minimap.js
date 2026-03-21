@@ -29,6 +29,18 @@ export function renderMinimap(ctx, state) {
   const originY = (viewHeight - contentHeight) * 0.5;
   const tiles = doc.tiles.base;
 
+  for (const decor of doc.decor || []) {
+    if (!decor?.visible) continue;
+    const visual = getDecorVisual(decor.type);
+    ctx.fillStyle = visual.stroke;
+    ctx.fillRect(
+      Math.floor(originX + decor.x * contentScale),
+      Math.floor(originY + decor.y * contentScale),
+      Math.max(2, Math.ceil(contentScale)),
+      Math.max(2, Math.ceil(contentScale)),
+    );
+  }
+
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const tile = tiles[y * width + x];
@@ -40,18 +52,6 @@ export function renderMinimap(ctx, state) {
         Math.ceil(contentScale),
       );
     }
-  }
-
-  for (const decor of doc.decor || []) {
-    if (!decor?.visible) continue;
-    const visual = getDecorVisual(decor.type);
-    ctx.fillStyle = visual.stroke;
-    ctx.fillRect(
-      Math.floor(originX + decor.x * contentScale),
-      Math.floor(originY + decor.y * contentScale),
-      Math.max(2, Math.ceil(contentScale)),
-      Math.max(2, Math.ceil(contentScale)),
-    );
   }
 
   for (const entity of doc.entities || []) {

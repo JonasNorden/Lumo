@@ -12,6 +12,9 @@ import { findEntityPresetById } from "../domain/entities/entityPresets.js";
 import { findSoundPresetById } from "../domain/sound/soundPresets.js";
 import { renderDarknessPreview } from "./darknessPreview.js";
 
+export const WORLD_RENDER_ORDER = Object.freeze(["decor", "tiles", "entities"]);
+export const OVERLAY_RENDER_ORDER = Object.freeze(["sound", "grid", "scan"]);
+
 let darknessRenderTarget = null;
 
 function ensureDarknessRenderTarget(width, height) {
@@ -48,8 +51,8 @@ export function renderEditorFrame(ctx, state) {
   worldCtx.fillStyle = state.ui.workspaceBackground || "#0a0f1d";
   worldCtx.fillRect(0, 0, canvas.width, canvas.height);
   renderBackgroundLayers(worldCtx, doc, state.viewport);
-  renderTiles(worldCtx, doc, state.viewport);
   renderDecor(worldCtx, doc, state.viewport, state.interaction);
+  renderTiles(worldCtx, doc, state.viewport);
   renderEntities(worldCtx, doc, state.viewport, state.interaction);
 
   if (renderTarget) {
