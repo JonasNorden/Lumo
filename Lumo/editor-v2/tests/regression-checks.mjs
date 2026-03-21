@@ -4385,14 +4385,25 @@ function runSourceRegressionChecks() {
       && source.includes("leadEntityId: entityId,")
       && source.includes("originPositions: [")
       && source.includes("entityId,")
-      && source.includes("const commitCleanRoomEntityDrag = (draft, entityDrag) => {"),
+      && source.includes("const commitCleanRoomEntityDrag = (draft, entityDrag) => {")
+      && source.includes("const handleCleanRoomEntityInspectMouseDown = (event, state, cell, point) => {"),
     true,
-    "entity drag restore should stay on the new canonical stable-id helpers instead of reviving the legacy inspect drag path",
+    "entity drag restore should stay on the canonical stable-id helpers instead of reviving the legacy inspect drag path",
   );
   assert.equal(
     source.includes("moveEntitySelectionByDelta(draft, entityDrag.originPositions"),
     false,
     "entity mouseup should no longer commit through the legacy index-based move helper",
+  );
+  assert.equal(
+    source.includes("canUseCleanRoomEntityMode"),
+    false,
+    "editor-v2 should no longer ship the obsolete entity runtime toggle wrapper now that the canonical lane is always on",
+  );
+  assert.equal(
+    source.includes("canonicalEntityRuntimeEnabled") || source.includes("canonicalDecorRuntimeEnabled") || source.includes("canonicalSoundRuntimeEnabled"),
+    false,
+    "editor-v2 should remove disconnected object runtime feature flags after locking the canonical lanes in place",
   );
   assert.equal(
     source.includes("TEMP ENTITY CLEAN PATH ACTIVE"),
@@ -4407,9 +4418,11 @@ function runSourceRegressionChecks() {
   assert.equal(
     source.includes("const reconcileDecorInteractionState = (draft, snapshot = null, options = {}) => {")
       && source.includes("leadDecorId: reconciled.drag.leadSoundId,")
-      && source.includes("const getDecorIndexById = (decorItems, decorId) => {"),
+      && source.includes("const getDecorIndexById = (decorItems, decorId) => {")
+      && source.includes("const moveDecorToCell = (draft, index, cell) => {") === false
+      && source.includes("const pushDecorUpdateHistory = (history, index, previousDecor, nextDecor) => {") === false,
     true,
-    "decor authored-object interaction should reconcile through stable decor ids during the first bypass step",
+    "decor authored-object interaction should stay on stable decor ids without reviving the disconnected index-era move/history helpers",
   );
   assert.equal(
     source.includes("const canonicalDecorHistory = createCanonicalDecorHistory();")
@@ -4475,6 +4488,11 @@ function runSourceRegressionChecks() {
     mainSource.includes("soundDebugOverlay"),
     false,
     "editor-v2 bootstrap should no longer require the removed sound debug overlay node",
+  );
+  assert.equal(
+    mainSource.includes("resolveCleanRoomEntityMode") || mainSource.includes("cleanRoomEntityMode"),
+    false,
+    "editor-v2 bootstrap should no longer thread the removed entity runtime query-param toggle into the canonical app shell",
   );
   assert.equal(
     indexSource.includes('id="soundDebugOverlay"'),

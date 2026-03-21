@@ -1,5 +1,4 @@
 import { createEditorApp } from "./app/createEditorApp.js";
-import { resolveCleanRoomEntityMode } from "./app/cleanRoomEntityMode.js";
 import { createEditorState } from "./state/createEditorState.js";
 import { createStore } from "./state/createStore.js";
 
@@ -21,7 +20,6 @@ if (!canvas || !minimapCanvas || !floatingPanelHost || !inspector || !brushPanel
 }
 
 const store = createStore(createEditorState());
-const cleanRoomEntityMode = resolveCleanRoomEntityMode();
 
 createEditorApp({
   canvas,
@@ -37,5 +35,4 @@ createEditorApp({
   topBarHelpMenu,
   bottomPanel,
   store,
-  cleanRoomEntityMode,
 });

@@ -127,7 +127,6 @@ import {
 } from "../domain/sound/selection.js";
 import {
   applyCanonicalEntityAction,
-  CANONICAL_ENTITY_RUNTIME_QUERY_PARAM,
   cloneCanonicalEntitySnapshot,
   createCanonicalEntityHistory,
 } from "./cleanRoomEntityMode.js";
@@ -661,7 +660,6 @@ export function createEditorApp({
   topBarHelpMenu,
   bottomPanel,
   store,
-  cleanRoomEntityMode = { enabled: false, queryParam: CANONICAL_ENTITY_RUNTIME_QUERY_PARAM, rawValue: null },
 }) {
   const ctx = canvas.getContext("2d");
   const minimapCtx = minimapCanvas.getContext("2d");
@@ -699,14 +697,10 @@ export function createEditorApp({
     lastPreviewSnapshot: null,
   };
 
-  // CANONICAL ENTITY RUNTIME: this stable-id clean-room path is now the only supported entity runtime in editor-v2.
-  // DO NOT re-enable legacy entity interaction, mutation, drag, history, or render branches from the old runtime.
-  // Future entity work must extend the canonical runtime below instead of reviving the disabled legacy entity engine.
-  const canonicalEntityRuntimeEnabled = true;
+  // Canonical entity/decor/sound runtime guardrail: stable-id lanes are the only supported object runtime in editor-v2.
+  // Do not reintroduce legacy object interaction, mutation, drag, history, or render branches here.
   const canonicalEntityHistory = createCanonicalEntityHistory();
-  const canonicalDecorRuntimeEnabled = true;
   const canonicalDecorHistory = createCanonicalDecorHistory();
-  const canonicalSoundRuntimeEnabled = true;
   const canonicalSoundHistory = createCanonicalSoundHistory();
   const globalHistoryTimeline = store.getState().history.globalTimeline;
 
@@ -1315,10 +1309,6 @@ export function createEditorApp({
       : null;
 
 
-  // Canonical entity runtime guard: entity authoring, selection, delete, and undo/redo must stay on the
-  // stable-id path below. The disabled legacy branches later in this file are intentionally unreachable.
-  const canUseCleanRoomEntityMode = () => canonicalEntityRuntimeEnabled;
-
   const clearCleanRoomEntityHistory = () => {
     canonicalEntityHistory.clear();
   };
@@ -1666,7 +1656,7 @@ export function createEditorApp({
 
   const applyCleanRoomDecorHistoryAction = (draft, action, direction) => {
     const doc = draft.document.active;
-    if (!doc || !action || !canonicalDecorRuntimeEnabled) return false;
+    if (!doc || !action) return false;
 
     const result = applyCanonicalDecorAction(doc, action, direction);
     if (!result.changed) return false;
@@ -1770,7 +1760,7 @@ export function createEditorApp({
 
   const applyCleanRoomSoundHistoryAction = (draft, action, direction) => {
     const doc = draft.document.active;
-    if (!doc || !action || !canonicalSoundRuntimeEnabled) return false;
+    if (!doc || !action) return false;
 
     const result = applyCanonicalSoundAction(doc, action, direction);
     if (!result.changed) return false;
@@ -2567,18 +2557,6 @@ export function createEditorApp({
     draft.interaction.selectedCell = sound ? { x: sound.x, y: sound.y } : null;
   };
 
-  const pushDecorUpdateHistory = (history, index, previousDecor, nextDecor) => {
-    if (!previousDecor || !nextDecor) return;
-    pushHistoryEntry(
-      history,
-      createDecorEditEntry("update", {
-        index,
-        anchor: captureObjectLayerAnchor([previousDecor], 0),
-        previousDecor: { ...previousDecor, params: cloneEntityParams(previousDecor.params) },
-        nextDecor: { ...nextDecor, params: cloneEntityParams(nextDecor.params) },
-      }),
-    );
-  };
 
   const pushEntityUpdateHistory = (history, index, previousEntity, nextEntity) => {
     if (!previousEntity || !nextEntity) return;
@@ -3226,40 +3204,6 @@ export function createEditorApp({
     });
   };
 
-  const moveDecorToCell = (draft, index, cell) => {
-    const doc = draft.document.active;
-    if (!doc) return false;
-
-    const decor = doc.decor?.[index];
-    if (!decor || !cell) return false;
-
-    const next = clampDecorPosition(doc, cell.x, cell.y);
-    const changed = decor.x !== next.x || decor.y !== next.y;
-    if (!changed) {
-      setDecorSelection(draft.interaction, [decor.id], decor.id, doc.decor || []);
-      setHoveredDecor(draft, decor.id);
-      clearEntitySelection(draft.interaction);
-      draft.interaction.hoveredEntityIndex = null;
-      setCanvasSelectionMode(draft, "decor");
-      updateDecorSelectionCell(draft, index);
-      return false;
-    }
-    const previousDecor = { ...decor };
-    const nextDecor = {
-      ...decor,
-      x: next.x,
-      y: next.y,
-    };
-    doc.decor.splice(index, 1, nextDecor);
-    pushDecorUpdateHistory(draft.history, index, previousDecor, nextDecor);
-    setDecorSelection(draft.interaction, [nextDecor.id], nextDecor.id, doc.decor || []);
-    setHoveredDecor(draft, nextDecor.id);
-    clearEntitySelection(draft.interaction);
-    draft.interaction.hoveredEntityIndex = null;
-    setCanvasSelectionMode(draft, "decor");
-    updateDecorSelectionCell(draft, index);
-    return changed;
-  };
 
   const beginCleanRoomDecorDrag = (draft, decorId, anchorCell) => {
     const doc = draft.document.active;
@@ -3884,8 +3828,6 @@ export function createEditorApp({
   };
 
   const handleCleanRoomEntityInspectMouseDown = (event, state, cell, point) => {
-    if (!canUseCleanRoomEntityMode()) return false;
-
     const activeLayer = getActiveLayer(state.interaction);
     if (activeLayer !== PANEL_LAYERS.ENTITIES) return false;
 
@@ -4566,20 +4508,13 @@ if (event.shiftKey) {
       return;
     }
 
-    if (canUseCleanRoomEntityMode()) {
-      const state = store.getState();
-      if (!state.document.active) return;
-      if (state.interaction.activeTool !== EDITOR_TOOLS.INSPECT) return;
-      if (getActiveLayer(state.interaction) === PANEL_LAYERS.ENTITIES) {
-        event.preventDefault();
-        return;
-      }
-    }
-
-
     const state = store.getState();
     if (!state.document.active) return;
     if (state.interaction.activeTool !== EDITOR_TOOLS.INSPECT) return;
+    if (getActiveLayer(state.interaction) === PANEL_LAYERS.ENTITIES) {
+      event.preventDefault();
+      return;
+    }
 
     const point = getCanvasPointFromMouseEvent(canvas, event);
     const activeLayer = getActiveLayer(state.interaction);

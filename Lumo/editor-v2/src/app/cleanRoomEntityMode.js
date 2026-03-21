@@ -1,25 +1,7 @@
-const ENABLED_VALUES = new Set(["1", "true", "on", "yes", "clean-room", "cleanroom", "entity-only"]);
-
 // Canonical entity runtime note:
-// - This module now defines the protected editor-v2 entity runtime used for create/delete/undo/redo.
+// - This module defines the protected editor-v2 entity runtime used for create/delete/update/undo/redo.
 // - Do not reattach legacy entity mutation, drag, selection, history, or render branches around these helpers.
-// - Future entity features must extend this stable-id runtime rather than reviving any disabled legacy path.
-export const CANONICAL_ENTITY_RUNTIME_QUERY_PARAM = "cleanRoomEntityMode";
-export const CLEAN_ROOM_ENTITY_MODE_QUERY_PARAM = CANONICAL_ENTITY_RUNTIME_QUERY_PARAM;
-
-export function resolveCanonicalEntityRuntime(search = typeof window !== "undefined" ? window.location.search : "") {
-  const params = new URLSearchParams(typeof search === "string" ? search : "");
-  const rawValue = params.get(CANONICAL_ENTITY_RUNTIME_QUERY_PARAM);
-  const normalizedValue = typeof rawValue === "string" ? rawValue.trim().toLowerCase() : "";
-
-  return {
-    enabled: ENABLED_VALUES.has(normalizedValue),
-    queryParam: CANONICAL_ENTITY_RUNTIME_QUERY_PARAM,
-    rawValue: rawValue ?? null,
-  };
-}
-
-export const resolveCleanRoomEntityMode = resolveCanonicalEntityRuntime;
+// - Future entity work must extend this stable-id runtime rather than reviving any disabled legacy path.
 
 export function cloneCanonicalEntitySnapshot(entity) {
   if (!entity) return null;
@@ -31,7 +13,6 @@ export function cloneCanonicalEntitySnapshot(entity) {
   };
 }
 
-export const cloneCleanRoomEntitySnapshot = cloneCanonicalEntitySnapshot;
 
 function removeEntityById(entities, entityId) {
   const index = entities.findIndex((entity) => entity?.id === entityId);
@@ -95,7 +76,6 @@ export function applyCanonicalEntityAction(doc, action, direction = "forward") {
   return { changed: false, selectedEntityId: null };
 }
 
-export const applyCleanRoomEntityAction = applyCanonicalEntityAction;
 
 export function createCanonicalEntityHistory() {
   const history = {
@@ -146,4 +126,3 @@ export function createCanonicalEntityHistory() {
   };
 }
 
-export const createCleanRoomEntityHistory = createCanonicalEntityHistory;
