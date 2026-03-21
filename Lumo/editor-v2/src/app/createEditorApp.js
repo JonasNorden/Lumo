@@ -115,6 +115,12 @@ import {
   setSoundSelection,
   toggleSoundSelection,
 } from "../domain/sound/selection.js";
+import {
+  applyCleanRoomEntityAction,
+  CLEAN_ROOM_ENTITY_MODE_QUERY_PARAM,
+  cloneCleanRoomEntitySnapshot,
+  createCleanRoomEntityHistory,
+} from "./cleanRoomEntityMode.js";
 
 const BATCH_EDITABLE_SOUND_PARAM_KEYS = new Set(["spatial", "volume", "pitch", "loop"]);
 const SOUND_DEBUG_MAX_EVENTS = 18;
@@ -636,6 +642,7 @@ export function createEditorApp({
   topBarHelpMenu,
   bottomPanel,
   store,
+  cleanRoomEntityMode = { enabled: false, queryParam: CLEAN_ROOM_ENTITY_MODE_QUERY_PARAM, rawValue: null },
 }) {
   const ctx = canvas.getContext("2d");
   const minimapCtx = minimapCanvas.getContext("2d");
@@ -672,6 +679,13 @@ export function createEditorApp({
     lastPreviewSignature: null,
     lastPreviewSnapshot: null,
   };
+
+  // TEMP clean-room entity mode: hard-bypass the infected legacy V2 entity interaction/history path.
+  const cleanRoomEntityModeEnabled = Boolean(cleanRoomEntityMode?.enabled);
+  const cleanRoomEntityHistory = createCleanRoomEntityHistory();
+  const cleanRoomEntityModeLabel = cleanRoomEntityModeEnabled
+    ? `TEMP clean-room entities ON (?${cleanRoomEntityMode?.queryParam || CLEAN_ROOM_ENTITY_MODE_QUERY_PARAM}=1)`
+    : null;
 
   const appendSoundDebugEvent = (title, details, beforeSnapshot = null, afterSnapshot = null) => {
     soundDebugState.sequence += 1;
@@ -1317,6 +1331,123 @@ export function createEditorApp({
       ? { ...entity, params: cloneEntityParams(entity.params) }
       : null;
 
+
+  const canUseCleanRoomEntityMode = () => cleanRoomEntityModeEnabled;
+
+  const clearCleanRoomEntityHistory = () => {
+    cleanRoomEntityHistory.clear();
+  };
+
+  const syncCleanRoomEntitySelection = (draft, selectedEntityId = null) => {
+    applyCanvasTarget(draft, "entity");
+    draft.interaction.entityDrag = null;
+    draft.interaction.hoveredEntityIndex = null;
+    draft.interaction.hoveredEntityId = null;
+
+    if (typeof selectedEntityId === "string" && selectedEntityId.trim()) {
+      selectEntitiesByIds(draft, [selectedEntityId], selectedEntityId, {
+        clearHover: true,
+        clearHoverCell: true,
+        clearDrag: true,
+      });
+      return;
+    }
+
+    setEntitySelectionByIds(draft, [], null);
+    draft.interaction.selectedCell = null;
+    draft.interaction.hoverCell = null;
+  };
+
+  const applyCleanRoomEntityHistoryAction = (draft, action, direction) => {
+    const doc = draft.document.active;
+    if (!doc || !action) return false;
+
+    const result = applyCleanRoomEntityAction(doc, action, direction);
+    if (!result.changed) return false;
+
+    syncCleanRoomEntitySelection(draft, result.selectedEntityId);
+    clearDecorSelection(draft.interaction);
+    clearSoundSelection(draft.interaction);
+    draft.interaction.hoveredDecorIndex = null;
+    clearHoveredSound(draft.interaction);
+    draft.interaction.decorDrag = null;
+    draft.interaction.soundDrag = null;
+    return true;
+  };
+
+  const createCleanRoomEntityAtCell = (draft, cell, presetId = draft.interaction.activeEntityPresetId || DEFAULT_ENTITY_PRESET_ID) => {
+    const doc = draft.document.active;
+    if (!doc || !cell) return null;
+
+    const decorPreset = resolveDecorPlacementPreset(presetId);
+    if (decorPreset && !resolveEntityPlacementPreset(presetId) && presetId !== decorPreset.id) {
+      return createDecorAtCell(draft, cell, decorPreset.id);
+    }
+
+    const entityPreset = resolveEntityPlacementPreset(presetId);
+    if (!entityPreset) return null;
+
+    const nextNumber = (doc.entities?.length || 0) + 1;
+    const entity = createEntityDraft(doc, cell.x, cell.y, entityPreset.id, nextNumber);
+    entity.id = getNextStringId(doc.entities || [], "id", "entity");
+    const createIndex = doc.entities.length;
+    const action = {
+      type: "create",
+      index: createIndex,
+      entity: cloneCleanRoomEntitySnapshot(entity),
+    };
+
+    const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
+    if (!changed) return null;
+
+    cleanRoomEntityHistory.record(action);
+    return getEntityIndexById(doc.entities, entity.id);
+  };
+
+  const deleteSelectedEntityCleanRoom = (draft) => {
+    const doc = draft.document.active;
+    if (!doc) return false;
+
+    const entityId = typeof draft.interaction.selectedEntityId === "string" && draft.interaction.selectedEntityId.trim()
+      ? draft.interaction.selectedEntityId
+      : null;
+    if (!entityId) return false;
+
+    const deleteIndex = getEntityIndexById(doc.entities, entityId);
+    const entity = Number.isInteger(deleteIndex) ? doc.entities?.[deleteIndex] : null;
+    if (!entity) return false;
+
+    const action = {
+      type: "delete",
+      index: deleteIndex,
+      entity: cloneCleanRoomEntitySnapshot(entity),
+    };
+
+    const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
+    if (!changed) return false;
+
+    cleanRoomEntityHistory.record(action);
+    return true;
+  };
+
+  const handleCleanRoomEntityUndo = (draft) => {
+    const action = cleanRoomEntityHistory.popUndo();
+    if (!action) return false;
+    const changed = applyCleanRoomEntityHistoryAction(draft, action, "backward");
+    if (!changed) return false;
+    cleanRoomEntityHistory.pushRedo(action);
+    return true;
+  };
+
+  const handleCleanRoomEntityRedo = (draft) => {
+    const action = cleanRoomEntityHistory.popRedo();
+    if (!action) return false;
+    const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
+    if (!changed) return false;
+    cleanRoomEntityHistory.pushUndo(action);
+    return true;
+  };
+
   const getEntityIdsFromSelection = (interaction, entities) => {
     const selectedIds = Array.isArray(interaction.selectedEntityIds)
       ? interaction.selectedEntityIds.filter((entityId) => typeof entityId === "string" && entityId.trim())
@@ -1774,13 +1905,13 @@ export function createEditorApp({
           ? getSelectedSoundIndices(state.interaction).length
           : 0;
     const activeSelectionLabel = activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : "Tiles";
-    const statusLabel = state.ui.importStatus || `Layer: ${activeSelectionLabel} · ${selectedCount || 0} selected`;
+    const statusLabel = state.ui.importStatus || `${cleanRoomEntityModeLabel ? `${cleanRoomEntityModeLabel} · ` : ""}Layer: ${activeSelectionLabel} · ${selectedCount || 0} selected`;
 
     topBarStatus.textContent = statusLabel;
     topBarStatus.dataset.target = activeLayer;
 
-    const undoEnabled = canUndo(state.history);
-    const redoEnabled = canRedo(state.history);
+    const undoEnabled = canUndo(state.history) || (cleanRoomEntityModeEnabled && cleanRoomEntityHistory.canUndo());
+    const redoEnabled = canRedo(state.history) || (cleanRoomEntityModeEnabled && cleanRoomEntityHistory.canRedo());
     const exportEnabled = Boolean(state.document.active);
 
     const actionButtons = topBar.querySelectorAll("[data-topbar-action]");
@@ -2941,6 +3072,10 @@ export function createEditorApp({
   };
 
   const deleteSelectedEntity = (draft) => {
+    if (canUseCleanRoomEntityMode()) {
+      return deleteSelectedEntityCleanRoom(draft);
+    }
+
     const doc = draft.document.active;
     if (!doc) return false;
     const selectedEntries = getEntityIdsFromSelection(draft.interaction, doc.entities)
@@ -2976,6 +3111,10 @@ export function createEditorApp({
   };
 
   const duplicateSelectedEntity = (draft) => {
+    if (canUseCleanRoomEntityMode()) {
+      return false;
+    }
+
     const doc = draft.document.active;
     if (!doc) return false;
 
@@ -3028,6 +3167,10 @@ export function createEditorApp({
   };
 
   const createEntityAtCell = (draft, cell, presetId = draft.interaction.activeEntityPresetId || DEFAULT_ENTITY_PRESET_ID) => {
+    if (canUseCleanRoomEntityMode()) {
+      return createCleanRoomEntityAtCell(draft, cell, presetId);
+    }
+
     const doc = draft.document.active;
     if (!doc || !cell) return null;
 
@@ -3637,7 +3780,44 @@ export function createEditorApp({
     interaction.decorScatterMode &&
     Boolean(interaction.activeDecorPresetId);
 
+  const handleCleanRoomEntitySelectionHit = (draft, entityId) => {
+    syncCleanRoomEntitySelection(draft, entityId);
+  };
+
+  const handleCleanRoomEntityInspectMouseDown = (event, state, cell, point) => {
+    if (!canUseCleanRoomEntityMode()) return false;
+
+    const activeLayer = getActiveLayer(state.interaction);
+    if (activeLayer !== PANEL_LAYERS.ENTITIES) return false;
+
+    const activeEntityPresetId = state.interaction.activeEntityPresetId;
+    if (activeEntityPresetId && isMomentaryPlacementTrigger(event)) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        resumeObjectPlacementPreviews(draft, "clean-room entity placement");
+        createCleanRoomEntityAtCell(draft, cell, activeEntityPresetId);
+        draft.interaction.hoverCell = cell;
+      });
+      return true;
+    }
+
+    interactionState.suppressNextClick = true;
+    event.preventDefault();
+    const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+    store.setState((draft) => {
+      const entityId = hitEntityIndex >= 0 ? draft.document.active?.entities?.[hitEntityIndex]?.id || null : null;
+      draft.interaction.selectedCell = cell;
+      handleCleanRoomEntitySelectionHit(draft, entityId);
+    });
+    return true;
+  };
+
   const handleInspectCanvasMouseDown = (event, state, cell, point) => {
+    if (handleCleanRoomEntityInspectMouseDown(event, state, cell, point)) {
+      return true;
+    }
+
     const activeLayer = getActiveLayer(state.interaction);
     const selectionMode = getSelectionMode(state.interaction);
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
@@ -4274,6 +4454,17 @@ if (event.shiftKey) {
       return;
     }
 
+    if (canUseCleanRoomEntityMode()) {
+      const state = store.getState();
+      if (!state.document.active) return;
+      if (state.interaction.activeTool !== EDITOR_TOOLS.INSPECT) return;
+      if (getActiveLayer(state.interaction) === PANEL_LAYERS.ENTITIES) {
+        event.preventDefault();
+        return;
+      }
+    }
+
+
     const state = store.getState();
     if (!state.document.active) return;
     if (state.interaction.activeTool !== EDITOR_TOOLS.INSPECT) return;
@@ -4352,6 +4543,7 @@ if (event.shiftKey) {
 
 
   const resetEditorForDocument = (draft, nextDocument, statusMessage = null) => {
+    clearCleanRoomEntityHistory();
     draft.document.active = nextDocument;
     draft.document.status = "ready";
     draft.document.error = null;
@@ -4464,6 +4656,11 @@ if (event.shiftKey) {
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
+      if (canUseCleanRoomEntityMode() && cleanRoomEntityHistory.canUndo()) {
+        handleCleanRoomEntityUndo(draft);
+        appendSoundDebugEvent("Undo handled", "clean-room entity history", beforeSnapshot, createSoundDebugSnapshot(draft));
+        return;
+      }
       const entry = undoTileEdit(doc, draft.history);
       applyHistoryObjectMutationState(draft, entry, "undo");
       appendSoundDebugEvent("Undo handled", historyEntryContainsObjectLayer(entry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
@@ -4475,6 +4672,11 @@ if (event.shiftKey) {
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
+      if (canUseCleanRoomEntityMode() && cleanRoomEntityHistory.canRedo()) {
+        handleCleanRoomEntityRedo(draft);
+        appendSoundDebugEvent("Redo handled", "clean-room entity history", beforeSnapshot, createSoundDebugSnapshot(draft));
+        return;
+      }
       const entry = redoTileEdit(doc, draft.history);
       applyHistoryObjectMutationState(draft, entry, "redo");
       appendSoundDebugEvent("Redo handled", historyEntryContainsObjectLayer(entry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
