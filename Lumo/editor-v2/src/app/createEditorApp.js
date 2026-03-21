@@ -310,7 +310,7 @@ function createSoundDebugSnapshot(state) {
           previewDelta: interaction.soundDrag.previewDelta ? { ...interaction.soundDrag.previewDelta } : null,
         }
       : null,
-    soundPlacementPreviewSuppressed: Boolean(interaction.soundPlacementPreviewSuppressed),
+    objectPlacementPreviewSuppressed: Boolean(interaction.objectPlacementPreviewSuppressed),
     preview,
     authoredSounds: authoredSoundSummary,
   };
@@ -327,7 +327,7 @@ function formatSoundDebugSnapshot(snapshot) {
     `hoverCell=${formatSoundDebugCell(snapshot.hoverCell)}`,
     `selectedCell=${formatSoundDebugCell(snapshot.selectedCell)}`,
     `drag=${summarizeSoundDebugDrag(snapshot.soundDrag)}`,
-    `suppressed=${snapshot.soundPlacementPreviewSuppressed ? "yes" : "no"}`,
+    `suppressed=${snapshot.objectPlacementPreviewSuppressed ? "yes" : "no"}`,
     `preview=${snapshot.preview.eligible ? "yes" : "no"} (${snapshot.preview.reason})`,
     `sounds=${snapshot.authoredSounds.count}:${formatSoundDebugList(snapshot.authoredSounds.ids)}`,
   ].join(" | ");
@@ -349,7 +349,7 @@ function getSoundDebugPreviewSignature(snapshot) {
     reason: snapshot.preview.reason,
     activeSoundPresetId: snapshot.activeSoundPresetId,
     hoverCell: snapshot.hoverCell,
-    suppressed: snapshot.soundPlacementPreviewSuppressed,
+    suppressed: snapshot.objectPlacementPreviewSuppressed,
   });
 }
 
@@ -378,6 +378,10 @@ function historyEntryContainsSound(entry) {
     return entry.edits?.some((edit) => historyEntryContainsSound(edit)) ?? false;
   }
   return false;
+}
+
+function historyEntryContainsObjectLayer(entry) {
+  return historyEntryContainsEntity(entry) || historyEntryContainsDecor(entry) || historyEntryContainsSound(entry);
 }
 
 function collectHistoryObjectIds(entry, kind, mode, bucket = []) {
@@ -714,7 +718,7 @@ export function createEditorApp({
         <span class="soundDebugOverlayLabel">soundDrag</span>
         <span class="soundDebugOverlayValue">${escapeHtml(summarizeSoundDebugDrag(snapshot.soundDrag))}</span>
         <span class="soundDebugOverlayLabel">preview suppressed</span>
-        <span class="soundDebugOverlayValue">${snapshot.soundPlacementPreviewSuppressed ? "yes" : "no"}</span>
+        <span class="soundDebugOverlayValue">${snapshot.objectPlacementPreviewSuppressed ? "yes" : "no"}</span>
         <span class="soundDebugOverlayLabel">preview eligible</span>
         <span class="soundDebugOverlayValue">${snapshot.preview.eligible ? "yes" : "no"}</span>
         <span class="soundDebugOverlayLabel">preview reason</span>
@@ -1335,21 +1339,21 @@ export function createEditorApp({
     draft.interaction.decorDrag = reconciled.drag;
   };
 
-  const suppressSoundPlacementPreview = (draft, reason = "unspecified") => {
+  const suppressObjectPlacementPreviews = (draft, reason = "unspecified") => {
     const beforeSnapshot = createSoundDebugSnapshot(draft);
-    draft.interaction.soundPlacementPreviewSuppressed = true;
+    draft.interaction.objectPlacementPreviewSuppressed = true;
     const afterSnapshot = createSoundDebugSnapshot(draft);
-    if (beforeSnapshot.soundPlacementPreviewSuppressed !== afterSnapshot.soundPlacementPreviewSuppressed) {
-      appendSoundDebugEvent("sound placement preview suppression", reason, beforeSnapshot, afterSnapshot);
+    if (beforeSnapshot.objectPlacementPreviewSuppressed !== afterSnapshot.objectPlacementPreviewSuppressed) {
+      appendSoundDebugEvent("object placement preview suppression", reason, beforeSnapshot, afterSnapshot);
     }
   };
 
-  const resumeSoundPlacementPreview = (draft, reason = "unspecified") => {
+  const resumeObjectPlacementPreviews = (draft, reason = "unspecified") => {
     const beforeSnapshot = createSoundDebugSnapshot(draft);
-    draft.interaction.soundPlacementPreviewSuppressed = false;
+    draft.interaction.objectPlacementPreviewSuppressed = false;
     const afterSnapshot = createSoundDebugSnapshot(draft);
-    if (beforeSnapshot.soundPlacementPreviewSuppressed !== afterSnapshot.soundPlacementPreviewSuppressed) {
-      appendSoundDebugEvent("sound placement preview unsuppressed", reason, beforeSnapshot, afterSnapshot);
+    if (beforeSnapshot.objectPlacementPreviewSuppressed !== afterSnapshot.objectPlacementPreviewSuppressed) {
+      appendSoundDebugEvent("object placement preview unsuppressed", reason, beforeSnapshot, afterSnapshot);
     }
   };
 
@@ -1692,6 +1696,7 @@ export function createEditorApp({
 
   const applyCanvasTarget = (draft, mode) => {
     const nextMode = mode === "decor" ? "decor" : mode === "sound" ? "sound" : "entity";
+    resumeObjectPlacementPreviews(draft, `canvas target ${nextMode}`);
     setCanvasSelectionMode(draft, nextMode);
     setActiveLayer(draft, nextMode === "decor" ? PANEL_LAYERS.DECOR : nextMode === "sound" ? PANEL_LAYERS.SOUND : PANEL_LAYERS.ENTITIES);
     draft.interaction.boxSelection = null;
@@ -2335,6 +2340,7 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
+    suppressObjectPlacementPreviews(draft, "deleteSelectedDecor");
     reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, {
       decor: { clearSelection: true, clearDrag: true, clearHover: true },
       reason: "deleteSelectedDecor",
@@ -2471,7 +2477,7 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
-    suppressSoundPlacementPreview(draft, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`);
+    suppressObjectPlacementPreviews(draft, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`);
     reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, {
       sound: { clearSelection: true, clearDrag: true, clearHover: true },
       reason: "deleteSelectedSound",
@@ -2798,6 +2804,7 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
+    suppressObjectPlacementPreviews(draft, "deleteSelectedEntity");
     reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, {
       entity: { clearSelection: true, clearDrag: true, clearHover: true },
       reason: "deleteSelectedEntity",
@@ -3296,7 +3303,7 @@ export function createEditorApp({
       currentHoveredEntityIndex === (nextHoveredEntityIndex >= 0 ? nextHoveredEntityIndex : null) &&
       currentHoveredDecorIndex === (nextHoveredDecorIndex >= 0 ? nextHoveredDecorIndex : null) &&
       currentHoveredSoundIndex === (nextHoveredSoundIndex >= 0 ? nextHoveredSoundIndex : null) &&
-      !state.interaction.soundPlacementPreviewSuppressed
+      !state.interaction.objectPlacementPreviewSuppressed
     ) {
       appendSoundDebugEvent(
         "canvas mousemove",
@@ -3312,7 +3319,7 @@ export function createEditorApp({
       draft.interaction.hoveredEntityIndex = nextHoveredEntityIndex >= 0 ? nextHoveredEntityIndex : null;
       draft.interaction.hoveredDecorIndex = nextHoveredDecorIndex >= 0 ? nextHoveredDecorIndex : null;
       setHoveredSound(draft, nextHoveredSoundIndex >= 0 ? nextHoveredSoundIndex : null);
-      resumeSoundPlacementPreview(draft, "canvas mousemove");
+      resumeObjectPlacementPreviews(draft, "canvas mousemove");
       appendSoundDebugEvent(
         "canvas mousemove",
         `point=${Math.round(point.x)},${Math.round(point.y)} cell=${formatSoundDebugCell(nextHoverCell)}`,
@@ -3334,7 +3341,7 @@ export function createEditorApp({
       draft.interaction.hoveredEntityIndex = null;
       draft.interaction.hoveredDecorIndex = null;
       clearHoveredSound(draft.interaction);
-      resumeSoundPlacementPreview(draft);
+      resumeObjectPlacementPreviews(draft);
     });
   };
 
@@ -3464,6 +3471,7 @@ export function createEditorApp({
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
+        resumeObjectPlacementPreviews(draft, "entity placement");
         createEntityAtCell(draft, cell, activeEntityPresetId);
         draft.interaction.hoverCell = cell;
       });
@@ -3474,6 +3482,7 @@ export function createEditorApp({
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
+        resumeObjectPlacementPreviews(draft, "decor placement");
         createDecorAtCell(draft, cell, activeDecorPresetId);
         draft.interaction.hoverCell = cell;
       });
@@ -3484,7 +3493,7 @@ export function createEditorApp({
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
-        resumeSoundPlacementPreview(draft);
+        resumeObjectPlacementPreviews(draft);
         createSoundAtCell(draft, cell, activeSoundPresetId);
         draft.interaction.hoverCell = cell;
       });
@@ -4173,7 +4182,7 @@ export function createEditorApp({
     draft.interaction.activeEntityPresetId = null;
     draft.interaction.activeDecorPresetId = null;
     draft.interaction.activeSoundPresetId = null;
-    draft.interaction.soundPlacementPreviewSuppressed = false;
+    draft.interaction.objectPlacementPreviewSuppressed = false;
     draft.interaction.selectedCell = null;
     draft.interaction.hoveredEntityIndex = null;
     draft.interaction.hoveredDecorIndex = null;
@@ -4260,11 +4269,11 @@ export function createEditorApp({
       if (!doc) return;
       const interactionSnapshots = captureObjectLayerInteractionSnapshots(draft);
       const entry = undoTileEdit(doc, draft.history);
-      if (historyEntryContainsSound(entry)) {
-        suppressSoundPlacementPreview(draft, "undo");
+      if (historyEntryContainsObjectLayer(entry)) {
+        suppressObjectPlacementPreviews(draft, "undo");
       }
       reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, getHistoryMutationInteractionOptions(entry, "undo"));
-      appendSoundDebugEvent("Undo handled", historyEntryContainsSound(entry) ? "history entry touched sound layer" : "history entry touched non-sound data", beforeSnapshot, createSoundDebugSnapshot(draft));
+      appendSoundDebugEvent("Undo handled", historyEntryContainsObjectLayer(entry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
     });
   };
 
@@ -4275,11 +4284,11 @@ export function createEditorApp({
       if (!doc) return;
       const interactionSnapshots = captureObjectLayerInteractionSnapshots(draft);
       const entry = redoTileEdit(doc, draft.history);
-      if (historyEntryContainsSound(entry)) {
-        suppressSoundPlacementPreview(draft, "redo");
+      if (historyEntryContainsObjectLayer(entry)) {
+        suppressObjectPlacementPreviews(draft, "redo");
       }
       reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, getHistoryMutationInteractionOptions(entry, "redo"));
-      appendSoundDebugEvent("Redo handled", historyEntryContainsSound(entry) ? "history entry touched sound layer" : "history entry touched non-sound data", beforeSnapshot, createSoundDebugSnapshot(draft));
+      appendSoundDebugEvent("Redo handled", historyEntryContainsObjectLayer(entry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
     });
   };
 
@@ -4325,6 +4334,7 @@ export function createEditorApp({
 
   const setActiveTool = (tool) => {
     store.setState((draft) => {
+      resumeObjectPlacementPreviews(draft, `tool ${tool}`);
       draft.interaction.activeTool = tool;
       if (tool !== EDITOR_TOOLS.INSPECT) {
         setActiveLayer(draft, PANEL_LAYERS.TILES);
@@ -4355,6 +4365,7 @@ export function createEditorApp({
         return;
       }
 
+      resumeObjectPlacementPreviews(draft, `panel layer ${layer}`);
       setActiveLayer(draft, PANEL_LAYERS.TILES);
       draft.interaction.activeEntityPresetId = null;
       draft.interaction.activeDecorPresetId = null;
@@ -4710,7 +4721,7 @@ export function createEditorApp({
         state.interaction.activeEntityPresetId = null;
         state.interaction.activeDecorPresetId = null;
         state.interaction.activeSoundPresetId = null;
-        state.interaction.soundPlacementPreviewSuppressed = false;
+        state.interaction.objectPlacementPreviewSuppressed = false;
         state.ui.newLevelSize = {
           isOpen: false,
           width: String(doc?.dimensions?.width || DEFAULT_NEW_LEVEL_WIDTH),

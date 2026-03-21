@@ -1,6 +1,7 @@
 import { getDecorHitRadius, getDecorVisual } from "../../domain/decor/decorVisuals.js";
 import { getSelectedDecorIndices, isDecorSelected } from "../../domain/decor/selection.js";
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
+import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
 function getDecorScreenCenter(decor, tileSize, viewport) {
   return {
@@ -166,6 +167,7 @@ export function renderDecorDragPreview(ctx, doc, viewport, interaction) {
 export function renderDecorPlacementPreview(ctx, doc, viewport, interaction, activePreset) {
   if (interaction.activeTool !== "inspect") return;
   if (interaction.activeLayer !== "decor") return;
+  if (isObjectPlacementPreviewSuppressed(interaction)) return;
   if (interaction.decorScatterMode) return;
   if (!interaction.hoverCell || !activePreset) return;
 
