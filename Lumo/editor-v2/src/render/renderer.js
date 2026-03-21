@@ -32,6 +32,7 @@ function ensureDarknessRenderTarget(width, height) {
 export function renderEditorFrame(ctx, state) {
   const canvas = ctx.canvas;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const previewAndOverlayPassesEnabled = false;
 
   ctx.fillStyle = state.ui.workspaceBackground || "#0a0f1d";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -58,14 +59,16 @@ export function renderEditorFrame(ctx, state) {
 
   renderSounds(ctx, doc, state.viewport, state.interaction, state.scan);
   renderGrid(ctx, doc, state.viewport);
-  renderDecorDragPreview(ctx, doc, state.viewport, state.interaction);
-  renderSoundDragPreview(ctx, doc, state.viewport, state.interaction);
-  renderEntityDragPreview(ctx, doc, state.viewport, state.interaction);
-  renderBrushPreviewOverlay(ctx, doc, state.viewport, state.interaction, state.brush.activeDraft);
-  renderDecorScatterPreview(ctx, doc, state.viewport, state.interaction);
-  renderDecorPlacementPreview(ctx, doc, state.viewport, state.interaction, findDecorPresetById(state.interaction.activeDecorPresetId));
-  renderEntityPlacementPreview(ctx, doc, state.viewport, state.interaction, findEntityPresetById(state.interaction.activeEntityPresetId));
-  renderSoundPlacementPreview(ctx, doc, state.viewport, state.interaction, findSoundPresetById(state.interaction.activeSoundPresetId));
-  renderSelectionOverlay(ctx, doc, state.viewport, state.interaction);
-  renderScanOverlay(ctx, doc, state.viewport, state.scan);
+  if (previewAndOverlayPassesEnabled) {
+    renderDecorDragPreview(ctx, doc, state.viewport, state.interaction);
+    renderSoundDragPreview(ctx, doc, state.viewport, state.interaction);
+    renderEntityDragPreview(ctx, doc, state.viewport, state.interaction);
+    renderBrushPreviewOverlay(ctx, doc, state.viewport, state.interaction, state.brush.activeDraft);
+    renderDecorScatterPreview(ctx, doc, state.viewport, state.interaction);
+    renderDecorPlacementPreview(ctx, doc, state.viewport, state.interaction, findDecorPresetById(state.interaction.activeDecorPresetId));
+    renderEntityPlacementPreview(ctx, doc, state.viewport, state.interaction, findEntityPresetById(state.interaction.activeEntityPresetId));
+    renderSoundPlacementPreview(ctx, doc, state.viewport, state.interaction, findSoundPresetById(state.interaction.activeSoundPresetId));
+    renderSelectionOverlay(ctx, doc, state.viewport, state.interaction);
+    renderScanOverlay(ctx, doc, state.viewport, state.scan);
+  }
 }
