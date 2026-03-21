@@ -25,11 +25,15 @@ export function setDecorSelection(interaction, indices, primaryIndex = null) {
       : nextSelection.length
         ? nextSelection[nextSelection.length - 1]
         : null;
+  interaction.selectedDecorIds = [];
+  interaction.selectedDecorId = null;
 }
 
 export function clearDecorSelection(interaction) {
   interaction.selectedDecorIndices = [];
   interaction.selectedDecorIndex = null;
+  interaction.selectedDecorIds = [];
+  interaction.selectedDecorId = null;
 }
 
 export function isDecorSelected(interaction, index) {

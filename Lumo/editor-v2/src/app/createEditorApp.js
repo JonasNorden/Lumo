@@ -60,6 +60,12 @@ import {
 } from "../domain/entities/entityPresets.js";
 import { DEFAULT_DECOR_PRESET_ID, findDecorPresetById, findDecorPresetByType } from "../domain/decor/decorPresets.js";
 import { isEntityLikeEditableType, normalizeEditableObjectType } from "../domain/placeables/editableObjectBuckets.js";
+import {
+  captureIdObjectInteractionSnapshot,
+  captureIndexedObjectInteractionSnapshot,
+  reconcileIdObjectInteraction,
+  reconcileIndexedObjectInteraction,
+} from "../domain/placeables/objectInteractionReconciliation.js";
 import { DEFAULT_SOUND_PRESET_ID, findSoundPresetById, getSoundPresetDefaultParams, getSoundPresetForType } from "../domain/sound/soundPresets.js";
 import { normalizeSoundSourceValue } from "../domain/sound/sourceReference.js";
 import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
@@ -374,18 +380,18 @@ function historyEntryContainsSound(entry) {
   return false;
 }
 
-function collectHistorySoundIds(entry, mode, bucket = []) {
+function collectHistoryObjectIds(entry, kind, mode, bucket = []) {
   if (!entry) return bucket;
   if (entry.type === "batch") {
     for (const edit of entry.edits || []) {
-      collectHistorySoundIds(edit, mode, bucket);
+      collectHistoryObjectIds(edit, kind, mode, bucket);
     }
     return bucket;
   }
-  if (entry.kind !== "sound" || entry.mode !== mode) return bucket;
-  const soundId = entry.sound?.id || entry.previousSound?.id || entry.nextSound?.id || null;
-  if (typeof soundId === "string" && soundId.trim()) {
-    bucket.push(soundId);
+  if (entry.kind !== kind || entry.mode !== mode) return bucket;
+  const objectId = entry.sound?.id || entry.entity?.id || entry.decor?.id || entry.previousSound?.id || entry.nextSound?.id || entry.previousEntity?.id || entry.nextEntity?.id || entry.previousDecor?.id || entry.nextDecor?.id || null;
+  if (typeof objectId === "string" && objectId.trim()) {
+    bucket.push(objectId);
   }
   return bucket;
 }
@@ -1277,6 +1283,58 @@ export function createEditorApp({
     draft.interaction.hoveredSoundId = sound?.id || null;
   };
 
+  const captureEntityInteractionSnapshot = (draft) =>
+    captureIndexedObjectInteractionSnapshot(draft.document.active?.entities || [], {
+      selectedIndices: getSelectedEntityIndices(draft.interaction),
+      primarySelectedIndex: getPrimarySelectedEntityIndex(draft.interaction),
+      hoveredIndex: draft.interaction.hoveredEntityIndex,
+      drag: draft.interaction.entityDrag,
+    });
+
+  const captureDecorInteractionSnapshot = (draft) =>
+    captureIndexedObjectInteractionSnapshot(draft.document.active?.decor || [], {
+      selectedIndices: getSelectedDecorIndices(draft.interaction),
+      primarySelectedIndex: getPrimarySelectedDecorIndex(draft.interaction),
+      hoveredIndex: draft.interaction.hoveredDecorIndex,
+      drag: draft.interaction.decorDrag,
+    });
+
+  const captureSoundInteractionSnapshot = (draft) =>
+    captureIdObjectInteractionSnapshot({
+      selectedIds: draft.interaction.selectedSoundIds,
+      primarySelectedId: draft.interaction.selectedSoundId,
+      hoveredId: draft.interaction.hoveredSoundId,
+      drag: draft.interaction.soundDrag,
+    });
+
+  const captureObjectLayerInteractionSnapshots = (draft) => ({
+    entity: captureEntityInteractionSnapshot(draft),
+    decor: captureDecorInteractionSnapshot(draft),
+    sound: captureSoundInteractionSnapshot(draft),
+  });
+
+  const applyEntityInteractionSnapshot = (draft, snapshot = null, options = {}) => {
+    const entities = draft.document.active?.entities || [];
+    const reconciled = reconcileIndexedObjectInteraction(entities, snapshot || captureEntityInteractionSnapshot(draft), options);
+    setEntitySelection(draft.interaction, reconciled.selectedIndices, reconciled.primarySelectedIndex);
+    draft.interaction.selectedEntityIds = reconciled.selectedIds;
+    draft.interaction.selectedEntityId = reconciled.primarySelectedId;
+    draft.interaction.hoveredEntityIndex = reconciled.hoveredIndex;
+    draft.interaction.hoveredEntityId = reconciled.hoveredId;
+    draft.interaction.entityDrag = reconciled.drag;
+  };
+
+  const applyDecorInteractionSnapshot = (draft, snapshot = null, options = {}) => {
+    const decorItems = draft.document.active?.decor || [];
+    const reconciled = reconcileIndexedObjectInteraction(decorItems, snapshot || captureDecorInteractionSnapshot(draft), options);
+    setDecorSelection(draft.interaction, reconciled.selectedIndices, reconciled.primarySelectedIndex);
+    draft.interaction.selectedDecorIds = reconciled.selectedIds;
+    draft.interaction.selectedDecorId = reconciled.primarySelectedId;
+    draft.interaction.hoveredDecorIndex = reconciled.hoveredIndex;
+    draft.interaction.hoveredDecorId = reconciled.hoveredId;
+    draft.interaction.decorDrag = reconciled.drag;
+  };
+
   const suppressSoundPlacementPreview = (draft, reason = "unspecified") => {
     const beforeSnapshot = createSoundDebugSnapshot(draft);
     draft.interaction.soundPlacementPreviewSuppressed = true;
@@ -1295,35 +1353,13 @@ export function createEditorApp({
     }
   };
 
-  const reconcileSoundInteractionState = (draft) => {
+  const reconcileSoundInteractionState = (draft, snapshot = null, options = {}) => {
     const sounds = draft.document.active?.sounds || [];
-    pruneSoundSelection(draft.interaction, sounds);
-
-    const hoveredSoundId = draft.interaction.hoveredSoundId;
-    if (hoveredSoundId) {
-      const hoveredIndex = getSoundIndexById(sounds, hoveredSoundId);
-      if (Number.isInteger(hoveredIndex)) {
-        draft.interaction.hoveredSoundIndex = hoveredIndex;
-      } else {
-        clearHoveredSound(draft.interaction);
-      }
-    } else {
-      clearHoveredSound(draft.interaction);
-    }
-
-    const soundDrag = draft.interaction.soundDrag;
-    if (soundDrag?.active) {
-      const nextOriginPositions = (soundDrag.originPositions || []).filter((origin) => Number.isInteger(getSoundIndexById(sounds, origin.soundId)));
-      if (!nextOriginPositions.length) {
-        draft.interaction.soundDrag = null;
-      } else {
-        soundDrag.originPositions = nextOriginPositions;
-        const leadIndex = getSoundIndexById(sounds, soundDrag.leadSoundId);
-        if (!Number.isInteger(leadIndex)) {
-          soundDrag.leadSoundId = nextOriginPositions[0].soundId;
-        }
-      }
-    }
+    const reconciled = reconcileIdObjectInteraction(sounds, snapshot || captureSoundInteractionSnapshot(draft), options);
+    setSoundSelection(draft.interaction, reconciled.selectedIds, reconciled.primarySelectedId, sounds);
+    draft.interaction.hoveredSoundIndex = reconciled.hoveredIndex;
+    draft.interaction.hoveredSoundId = reconciled.hoveredId;
+    draft.interaction.soundDrag = reconciled.drag;
 
     const previewSoundId = typeof draft.soundPreview?.soundId === "string" && draft.soundPreview.soundId.trim()
       ? draft.soundPreview.soundId
@@ -1414,41 +1450,48 @@ export function createEditorApp({
     reconcileCanvasHoverState(draft, reason);
   };
 
-  const restoreHistorySoundSelection = (draft, entry, direction) => {
-    const beforeSnapshot = createSoundDebugSnapshot(draft);
-    const sounds = draft.document.active?.sounds || [];
-    const restoredSoundIds = direction === "undo"
-      ? collectHistorySoundIds(entry, "delete")
-      : collectHistorySoundIds(entry, "create");
-    const uniqueRestoredSoundIds = [...new Set(restoredSoundIds)].filter((soundId) => Number.isInteger(getSoundIndexById(sounds, soundId)));
+  const reconcileObjectLayerInteractionAfterMutation = (draft, snapshots = captureObjectLayerInteractionSnapshots(draft), options = {}) => {
+    applyEntityInteractionSnapshot(draft, snapshots.entity, options.entity);
+    applyDecorInteractionSnapshot(draft, snapshots.decor, options.decor);
+    reconcileSoundInteractionState(draft, snapshots.sound, options.sound);
+    reconcileCanvasHoverState(draft, options.reason || "object mutation");
 
-    if (!restoredSoundIds.length) {
-      clearHoveredSound(draft.interaction);
-      draft.interaction.soundDrag = null;
-      appendSoundDebugEvent(`history sound restore (${direction})`, "no sound ids found in history entry", beforeSnapshot, createSoundDebugSnapshot(draft));
-      return;
+    const doc = draft.document.active;
+    if (!doc) return;
+
+    if (getSelectedEntityIndices(draft.interaction).length) {
+      updateEntitySelectionCell(draft);
+    } else if (getSelectedDecorIndices(draft.interaction).length) {
+      updateDecorSelectionCell(draft);
+    } else if (getSelectedSoundIndices(draft.interaction, doc.sounds || []).length) {
+      updateSoundSelectionCell(draft);
+    } else {
+      draft.interaction.selectedCell = null;
     }
+  };
 
-    if (!uniqueRestoredSoundIds.length) {
-      clearSoundSelection(draft.interaction);
-      clearHoveredSound(draft.interaction);
-      draft.interaction.soundDrag = null;
-      appendSoundDebugEvent(`history sound restore (${direction})`, `sound ids missing after ${direction}`, beforeSnapshot, createSoundDebugSnapshot(draft));
-      return;
-    }
+  const getHistoryMutationInteractionOptions = (entry, direction) => {
+    const restoredMode = direction === "undo" ? "delete" : "create";
+    const uniqueIds = (kind) => [...new Set(collectHistoryObjectIds(entry, kind, restoredMode))];
+    const entityIds = uniqueIds("entity");
+    const decorIds = uniqueIds("decor");
+    const soundIds = uniqueIds("sound");
 
-    const primarySoundId = uniqueRestoredSoundIds.at(-1) ?? null;
-    setSoundSelection(draft.interaction, uniqueRestoredSoundIds, primarySoundId, sounds);
-    clearHoveredSound(draft.interaction);
-    draft.interaction.soundDrag = null;
-    applyCanvasTarget(draft, "sound");
-    updateSoundSelectionCell(draft, getPrimarySelectedSoundIndex(draft.interaction, sounds));
-    appendSoundDebugEvent(
-      `history sound restore (${direction})`,
-      `restored ids ${formatSoundDebugList(uniqueRestoredSoundIds)}`,
-      beforeSnapshot,
-      createSoundDebugSnapshot(draft),
-    );
+    return {
+      entity: {
+        ...(entityIds.length ? { selectedIds: entityIds, primarySelectedId: entityIds.at(-1) ?? null } : {}),
+        clearDrag: true,
+      },
+      decor: {
+        ...(decorIds.length ? { selectedIds: decorIds, primarySelectedId: decorIds.at(-1) ?? null } : {}),
+        clearDrag: true,
+      },
+      sound: {
+        ...(soundIds.length ? { selectedIds: soundIds, primarySelectedId: soundIds.at(-1) ?? null } : {}),
+        clearDrag: true,
+      },
+      reason: `history ${direction}`,
+    };
   };
 
   const isTopBarInputElement = (value) =>
@@ -2274,6 +2317,7 @@ export function createEditorApp({
   const deleteSelectedDecor = (draft) => {
     const doc = draft.document.active;
     if (!doc) return false;
+    const interactionSnapshots = captureObjectLayerInteractionSnapshots(draft);
 
     const selectedEntries = getSelectedDecor(draft.interaction, doc.decor || []);
     if (!selectedEntries.length) return false;
@@ -2291,14 +2335,10 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
-    clearDecorSelection(draft.interaction);
-    const decorCount = doc.decor?.length || 0;
-    draft.interaction.hoveredDecorIndex =
-      Number.isInteger(draft.interaction.hoveredDecorIndex) && draft.interaction.hoveredDecorIndex >= decorCount
-        ? decorCount ? decorCount - 1 : null
-        : draft.interaction.hoveredDecorIndex;
-    draft.interaction.decorDrag = null;
-    draft.interaction.selectedCell = null;
+    reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, {
+      decor: { clearSelection: true, clearDrag: true, clearHover: true },
+      reason: "deleteSelectedDecor",
+    });
     return true;
   };
 
@@ -2412,6 +2452,7 @@ export function createEditorApp({
     const doc = draft.document.active;
     if (!doc) return false;
     const beforeSnapshot = createSoundDebugSnapshot(draft);
+    const interactionSnapshots = captureObjectLayerInteractionSnapshots(draft);
 
     const selectedEntries = getSelectedSounds(draft.interaction, doc.sounds || []);
     if (!selectedEntries.length) return false;
@@ -2430,12 +2471,11 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
-    clearSoundSelection(draft.interaction);
-    clearHoveredSound(draft.interaction);
-    draft.interaction.soundDrag = null;
-    draft.interaction.selectedCell = null;
     suppressSoundPlacementPreview(draft, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`);
-    reconcileSoundRenderState(draft, "deleteSelectedSound");
+    reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, {
+      sound: { clearSelection: true, clearDrag: true, clearHover: true },
+      reason: "deleteSelectedSound",
+    });
     appendSoundDebugEvent(
       "sound delete mutation",
       `deleted ids ${formatSoundDebugList(deletedIds)}`,
@@ -2700,36 +2740,6 @@ export function createEditorApp({
     });
   };
 
-  const syncInteractionAfterHistoryChange = (draft) => {
-    const doc = draft.document.active;
-    if (!doc) return;
-
-    const entityCount = doc.entities?.length || 0;
-    pruneEntitySelection(draft.interaction, entityCount);
-    if (Number.isInteger(draft.interaction.hoveredEntityIndex) && draft.interaction.hoveredEntityIndex >= entityCount) {
-      draft.interaction.hoveredEntityIndex = entityCount ? entityCount - 1 : null;
-    }
-
-    const decorCount = doc.decor?.length || 0;
-    pruneDecorSelection(draft.interaction, decorCount);
-    if (Number.isInteger(draft.interaction.hoveredDecorIndex) && draft.interaction.hoveredDecorIndex >= decorCount) {
-      draft.interaction.hoveredDecorIndex = decorCount ? decorCount - 1 : null;
-    }
-
-    reconcileSoundRenderState(draft, "sync after history change");
-
-
-    if (getSelectedEntityIndices(draft.interaction).length) {
-      updateEntitySelectionCell(draft);
-    } else if (getSelectedDecorIndices(draft.interaction).length) {
-      updateDecorSelectionCell(draft);
-    } else if (getSelectedSoundIndices(draft.interaction, doc.sounds || []).length) {
-      updateSoundSelectionCell(draft);
-    } else if (!getSelectedEntityIndices(draft.interaction).length) {
-      draft.interaction.selectedCell = null;
-    }
-  };
-
   const moveDecorToCell = (draft, index, cell) => {
     const doc = draft.document.active;
     if (!doc) return false;
@@ -2768,6 +2778,7 @@ export function createEditorApp({
   const deleteSelectedEntity = (draft) => {
     const doc = draft.document.active;
     if (!doc) return false;
+    const interactionSnapshots = captureObjectLayerInteractionSnapshots(draft);
 
     const selectedEntries = getSelectedEntities(draft.interaction, doc.entities);
     if (!selectedEntries.length) {
@@ -2787,18 +2798,10 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
-    const deletedSet = new Set(selectedEntries.map(({ index }) => index));
-    const hoveredIndex = draft.interaction.hoveredEntityIndex;
-    clearEntitySelection(draft.interaction);
-    draft.interaction.selectedCell = null;
-    draft.interaction.entityDrag = null;
-    draft.interaction.hoveredEntityIndex =
-      Number.isInteger(hoveredIndex)
-        ? deletedSet.has(hoveredIndex)
-          ? null
-          : hoveredIndex - selectedEntries.filter((entry) => entry.index < hoveredIndex).length
-        : null;
-
+    reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, {
+      entity: { clearSelection: true, clearDrag: true, clearHover: true },
+      reason: "deleteSelectedEntity",
+    });
     return true;
   };
 
@@ -4255,22 +4258,12 @@ export function createEditorApp({
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
+      const interactionSnapshots = captureObjectLayerInteractionSnapshots(draft);
       const entry = undoTileEdit(doc, draft.history);
-      if (historyEntryContainsEntity(entry)) {
-        clearEntitySelection(draft.interaction);
-        draft.interaction.hoveredEntityIndex = null;
-        draft.interaction.entityDrag = null;
-      }
-      if (historyEntryContainsDecor(entry)) {
-        clearDecorSelection(draft.interaction);
-        draft.interaction.hoveredDecorIndex = null;
-        draft.interaction.decorDrag = null;
-      }
       if (historyEntryContainsSound(entry)) {
-        restoreHistorySoundSelection(draft, entry, "undo");
         suppressSoundPlacementPreview(draft, "undo");
       }
-      syncInteractionAfterHistoryChange(draft);
+      reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, getHistoryMutationInteractionOptions(entry, "undo"));
       appendSoundDebugEvent("Undo handled", historyEntryContainsSound(entry) ? "history entry touched sound layer" : "history entry touched non-sound data", beforeSnapshot, createSoundDebugSnapshot(draft));
     });
   };
@@ -4280,22 +4273,12 @@ export function createEditorApp({
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
+      const interactionSnapshots = captureObjectLayerInteractionSnapshots(draft);
       const entry = redoTileEdit(doc, draft.history);
-      if (historyEntryContainsEntity(entry)) {
-        clearEntitySelection(draft.interaction);
-        draft.interaction.hoveredEntityIndex = null;
-        draft.interaction.entityDrag = null;
-      }
-      if (historyEntryContainsDecor(entry)) {
-        clearDecorSelection(draft.interaction);
-        draft.interaction.hoveredDecorIndex = null;
-        draft.interaction.decorDrag = null;
-      }
       if (historyEntryContainsSound(entry)) {
-        restoreHistorySoundSelection(draft, entry, "redo");
         suppressSoundPlacementPreview(draft, "redo");
       }
-      syncInteractionAfterHistoryChange(draft);
+      reconcileObjectLayerInteractionAfterMutation(draft, interactionSnapshots, getHistoryMutationInteractionOptions(entry, "redo"));
       appendSoundDebugEvent("Redo handled", historyEntryContainsSound(entry) ? "history entry touched sound layer" : "history entry touched non-sound data", beforeSnapshot, createSoundDebugSnapshot(draft));
     });
   };
