@@ -32,7 +32,7 @@ function ensureDarknessRenderTarget(width, height) {
 export function renderEditorFrame(ctx, state) {
   const canvas = ctx.canvas;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const previewAndOverlayPassesEnabled = false;
+  const previewPassesEnabled = false;
 
   ctx.fillStyle = state.ui.workspaceBackground || "#0a0f1d";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -59,7 +59,8 @@ export function renderEditorFrame(ctx, state) {
 
   renderSounds(ctx, doc, state.viewport, state.interaction, state.scan);
   renderGrid(ctx, doc, state.viewport);
-  if (previewAndOverlayPassesEnabled) {
+  renderScanOverlay(ctx, doc, state.viewport, state.scan);
+  if (previewPassesEnabled) {
     renderSoundDragPreview(ctx, doc, state.viewport, state.interaction);
     renderEntityDragPreview(ctx, doc, state.viewport, state.interaction);
     renderBrushPreviewOverlay(ctx, doc, state.viewport, state.interaction, state.brush.activeDraft);
@@ -67,6 +68,5 @@ export function renderEditorFrame(ctx, state) {
     renderEntityPlacementPreview(ctx, doc, state.viewport, state.interaction, findEntityPresetById(state.interaction.activeEntityPresetId));
     renderSoundPlacementPreview(ctx, doc, state.viewport, state.interaction, findSoundPresetById(state.interaction.activeSoundPresetId));
     renderSelectionOverlay(ctx, doc, state.viewport, state.interaction);
-    renderScanOverlay(ctx, doc, state.viewport, state.scan);
   }
 }
