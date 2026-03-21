@@ -487,6 +487,32 @@ function getClientPointForCell(state, cell) {
   };
 }
 
+function dispatchUndoShortcut(fakeWindow) {
+  fakeWindow.dispatch("keydown", {
+    key: "z",
+    ctrlKey: true,
+    metaKey: false,
+    shiftKey: false,
+    altKey: false,
+    repeat: false,
+    code: "KeyZ",
+    target: null,
+  });
+}
+
+function dispatchRedoShortcut(fakeWindow) {
+  fakeWindow.dispatch("keydown", {
+    key: "z",
+    ctrlKey: true,
+    metaKey: false,
+    shiftKey: true,
+    altKey: false,
+    repeat: false,
+    code: "KeyZ",
+    target: null,
+  });
+}
+
 async function runLiveDecorPlacementRuntimeRegressionChecks() {
   const harness = await createEditorRuntimeHarness();
   const { canvas, fakeWindow, store } = harness;
@@ -935,6 +961,174 @@ async function runLiveSoundPlacementRuntimeRegressionChecks() {
       },
     );
     assert.equal(previewOperations.length, 0, "normal live usage should no longer render any legacy sound drag overlay or preview");
+  } finally {
+    harness.destroy();
+  }
+}
+
+async function runLiveCanonicalEntityMoveRuntimeRegressionChecks() {
+  const harness = await createEditorRuntimeHarness();
+  const { canvas, fakeWindow, store } = harness;
+
+  try {
+    store.setState((draft) => {
+      draft.interaction.activeTool = "inspect";
+      draft.interaction.activeLayer = "entities";
+      draft.interaction.canvasSelectionMode = "entity";
+      draft.interaction.activeEntityPresetId = "player-spawn";
+      draft.interaction.activeDecorPresetId = null;
+      draft.interaction.activeSoundPresetId = null;
+    });
+
+    const createCell = { x: 0, y: 3 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), createCell),
+      altKey: true,
+      button: 0,
+    });
+
+    const afterCreateState = store.getState();
+    const createdEntity = afterCreateState.document.active.entities.at(-1);
+    assert.ok(createdEntity, "canonical entity drag regression should create an authored entity before moving it");
+    assert.equal(afterCreateState.interaction.selectedEntityId, createdEntity.id, "entity placement should select the authored entity by stable id");
+
+    const moveTargetCell = { x: 2, y: 2 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(afterCreateState, createCell),
+      altKey: false,
+      button: 0,
+    });
+
+    const dragStartedState = store.getState();
+    assert.equal(dragStartedState.interaction.entityDrag?.active, true, "mousedown on the selected authored entity should arm canonical entity drag");
+    assert.equal(dragStartedState.interaction.entityDrag?.leadEntityId, createdEntity.id, "canonical entity drag should target the selected entity by stable id");
+    assert.equal("leadIndex" in dragStartedState.interaction.entityDrag, false, "canonical entity drag state should not revive legacy index targeting");
+    assert.deepEqual(
+      dragStartedState.interaction.entityDrag?.originPositions,
+      [{ entityId: createdEntity.id, x: createCell.x, y: createCell.y }],
+      "canonical entity drag state should keep only stable-id origin snapshots for authored entities",
+    );
+
+    canvas.dispatch("mousemove", {
+      ...getClientPointForCell(dragStartedState, moveTargetCell),
+      buttons: 1,
+    });
+
+    const dragPreviewState = store.getState();
+    assert.deepEqual(
+      dragPreviewState.interaction.entityDrag?.previewDelta,
+      { x: moveTargetCell.x - createCell.x, y: moveTargetCell.y - createCell.y },
+      "mousemove during canonical entity drag should track the live drag delta without mutating the authored entity yet",
+    );
+    assert.equal(
+      dragPreviewState.document.active.entities.find((entity) => entity.id === createdEntity.id)?.x,
+      createCell.x,
+      "canonical entity drag preview should not write through the old legacy mutation path before commit",
+    );
+
+    fakeWindow.dispatch("mouseup", {});
+
+    const afterMoveState = store.getState();
+    const movedEntity = afterMoveState.document.active.entities.find((entity) => entity.id === createdEntity.id);
+    assert.equal(movedEntity?.x, moveTargetCell.x, "mouseup should commit the authored entity x position through the canonical update lane");
+    assert.equal(movedEntity?.y, moveTargetCell.y, "mouseup should commit the authored entity y position through the canonical update lane");
+    assert.equal(afterMoveState.interaction.selectedEntityId, createdEntity.id, "selection should remain pinned to the moved authored entity id");
+    assert.deepEqual(afterMoveState.interaction.selectedEntityIds, [createdEntity.id], "entity move should stay single-select only in this pass");
+    assert.deepEqual(afterMoveState.interaction.selectedCell, moveTargetCell, "selection cell should stay truthful after canonical entity move commit");
+    assert.equal(afterMoveState.interaction.entityDrag, null, "entity drag state should clear immediately after canonical move commit");
+
+    dispatchUndoShortcut(fakeWindow);
+
+    const afterUndoState = store.getState();
+    const undoneEntity = afterUndoState.document.active.entities.find((entity) => entity.id === createdEntity.id);
+    assert.equal(undoneEntity?.x, createCell.x, "undo after canonical entity move should restore the previous authored x position");
+    assert.equal(undoneEntity?.y, createCell.y, "undo after canonical entity move should restore the previous authored y position");
+    assert.equal(afterUndoState.interaction.selectedEntityId, createdEntity.id, "undo after canonical entity move should reselect the same authored entity id");
+
+    dispatchRedoShortcut(fakeWindow);
+
+    const afterRedoState = store.getState();
+    const redoneEntity = afterRedoState.document.active.entities.find((entity) => entity.id === createdEntity.id);
+    assert.equal(redoneEntity?.x, moveTargetCell.x, "redo after canonical entity move should reapply the committed authored x position");
+    assert.equal(redoneEntity?.y, moveTargetCell.y, "redo after canonical entity move should reapply the committed authored y position");
+
+    store.setState((draft) => {
+      draft.interaction.activeLayer = "tiles";
+      draft.interaction.canvasSelectionMode = "entity";
+      draft.interaction.activeTool = "paint";
+      draft.brush.activeDraft.sprite = "grass_bt";
+      draft.interaction.activeEntityPresetId = null;
+    });
+
+    const paintedCell = { x: 1, y: 1 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), paintedCell),
+      button: 0,
+    });
+    fakeWindow.dispatch("mouseup", {});
+    const paintedTileValue = store.getState().document.active.tiles.base[paintedCell.y * store.getState().document.active.dimensions.width + paintedCell.x];
+    assert.notEqual(paintedTileValue, 0, "tile paint setup for mixed chronology should author a non-empty tile before undo checks");
+
+    store.setState((draft) => {
+      draft.interaction.activeTool = "inspect";
+      draft.interaction.activeLayer = "decor";
+      draft.interaction.canvasSelectionMode = "decor";
+      draft.interaction.activeDecorPresetId = "decor_flower_01";
+    });
+
+    const decorCell = { x: 3, y: 1 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), decorCell),
+      altKey: true,
+      button: 0,
+    });
+    const createdDecorId = store.getState().document.active.decor.at(-1)?.id;
+
+    store.setState((draft) => {
+      draft.interaction.activeLayer = "sound";
+      draft.interaction.canvasSelectionMode = "sound";
+      draft.interaction.activeSoundPresetId = "ambient-zone";
+      draft.interaction.activeDecorPresetId = null;
+    });
+
+    const soundCell = { x: 3, y: 2 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), soundCell),
+      altKey: true,
+      button: 0,
+    });
+    const createdSoundId = store.getState().document.active.sounds.at(-1)?.id;
+
+    dispatchUndoShortcut(fakeWindow);
+    let currentState = store.getState();
+    assert.equal(currentState.document.active.sounds.some((sound) => sound.id === createdSoundId), false, "mixed chronology undo should remove the most recent canonical sound action before entity move");
+
+    dispatchUndoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.decor.some((decor) => decor.id === createdDecorId), false, "mixed chronology undo should remove the most recent canonical decor action after sound");
+
+    dispatchUndoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.tiles.base[paintedCell.y * currentState.document.active.dimensions.width + paintedCell.x], 0, "mixed chronology undo should revert the tile paint before the earlier entity move");
+
+    dispatchUndoShortcut(fakeWindow);
+    currentState = store.getState();
+    const fullyUndoneEntity = currentState.document.active.entities.find((entity) => entity.id === createdEntity.id);
+    assert.equal(fullyUndoneEntity?.x, createCell.x, "mixed chronology undo should finally restore the earlier canonical entity move");
+    assert.equal(fullyUndoneEntity?.y, createCell.y, "mixed chronology undo should finally restore the earlier canonical entity move y position");
+
+    dispatchRedoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.entities.find((entity) => entity.id === createdEntity.id)?.x, moveTargetCell.x, "mixed chronology redo should reapply the canonical entity move first");
+    dispatchRedoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.tiles.base[paintedCell.y * currentState.document.active.dimensions.width + paintedCell.x], paintedTileValue, "mixed chronology redo should reapply the tile paint after the entity move");
+    dispatchRedoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.decor.some((decor) => decor.id === createdDecorId), true, "mixed chronology redo should restore the canonical decor action after tile paint");
+    dispatchRedoShortcut(fakeWindow);
+    currentState = store.getState();
+    assert.equal(currentState.document.active.sounds.some((sound) => sound.id === createdSoundId), true, "mixed chronology redo should restore the canonical sound action last");
   } finally {
     harness.destroy();
   }
@@ -3662,10 +3856,18 @@ function runSourceRegressionChecks() {
     "decor scatter should use the Alt/Option-gated placement flow",
   );
   assert.equal(
-    source.includes("CANONICAL ENTITY RUNTIME")
-      && source.includes("if (false && activeLayer === PANEL_LAYERS.ENTITIES && selectionMode === \"entity\" && hitEntityIndex >= 0) {"),
+    source.includes("const beginCleanRoomEntityDrag = (draft, entityId, anchorCell) => {")
+      && source.includes("leadEntityId: entityId,")
+      && source.includes("originPositions: [")
+      && source.includes("entityId,")
+      && source.includes("const commitCleanRoomEntityDrag = (draft, entityDrag) => {"),
     true,
-    "entity canvas selection should stay locked to the canonical path while the legacy inspect branch is disabled",
+    "entity drag restore should stay on the new canonical stable-id helpers instead of reviving the legacy inspect drag path",
+  );
+  assert.equal(
+    source.includes("moveEntitySelectionByDelta(draft, entityDrag.originPositions"),
+    false,
+    "entity mouseup should no longer commit through the legacy index-based move helper",
   );
   assert.equal(
     source.includes("TEMP ENTITY CLEAN PATH ACTIVE"),
@@ -3905,6 +4107,7 @@ async function main() {
   runCleanRoomDecorHistoryDeterminismRegressionChecks();
   runCleanRoomSoundHistoryDeterminismRegressionChecks();
   await runLiveDecorPlacementRuntimeRegressionChecks();
+  await runLiveCanonicalEntityMoveRuntimeRegressionChecks();
   await runLiveSoundPlacementRuntimeRegressionChecks();
   runObjectLayerStableIdentityHistoryRegressionChecks();
   runGlobalObjectLayerUndoRedoRegressionChecks();

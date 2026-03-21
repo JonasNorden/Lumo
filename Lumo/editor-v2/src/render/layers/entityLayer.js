@@ -161,6 +161,16 @@ export function renderEntities(ctx, doc, viewport, interaction) {
   const hoveredEntityId = typeof interaction.hoveredEntityId === "string" && interaction.hoveredEntityId.trim()
     ? interaction.hoveredEntityId
     : null;
+  const dragPreviewDelta = interaction.entityDrag?.active
+    ? interaction.entityDrag.previewDelta || { x: 0, y: 0 }
+    : null;
+  const draggedEntityOrigins = interaction.entityDrag?.active
+    ? new Map(
+        (interaction.entityDrag.originPositions || [])
+          .filter((origin) => typeof origin?.entityId === "string" && origin.entityId.trim())
+          .map((origin) => [origin.entityId, origin]),
+      )
+    : null;
 
   for (let i = 0; i < entities.length; i += 1) {
     const entity = entities[i];
@@ -168,7 +178,15 @@ export function renderEntities(ctx, doc, viewport, interaction) {
 
     if (isFogVolumeEntityType(entity.type)) continue;
 
-    const { x, y } = getEntityScreenCenter(entity, tileSize, viewport);
+    const dragOrigin = draggedEntityOrigins?.get(entity.id) || null;
+    const renderEntity = dragOrigin
+      ? {
+          ...entity,
+          x: dragOrigin.x + dragPreviewDelta.x,
+          y: dragOrigin.y + dragPreviewDelta.y,
+        }
+      : entity;
+    const { x, y } = getEntityScreenCenter(renderEntity, tileSize, viewport);
     drawEntityMarker(ctx, entity, x, y, viewport, {
       isSelected: selectedEntityIds.has(entity.id),
       isHovered: hoveredEntityId === entity.id,
