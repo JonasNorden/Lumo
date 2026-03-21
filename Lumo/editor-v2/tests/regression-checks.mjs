@@ -53,6 +53,12 @@ import {
 } from "../src/domain/placeables/objectInteractionReconciliation.js";
 import { captureObjectLayerAnchor } from "../src/domain/placeables/objectLayerHistory.js";
 import {
+  getSelectedDecorIds,
+  getSelectedDecorIndices,
+  setDecorSelection,
+  toggleDecorSelection,
+} from "../src/domain/decor/selection.js";
+import {
   findMatchingSoundIndices,
   getSelectedSoundIds,
   getSelectedSoundIndices,
@@ -1046,6 +1052,39 @@ function runObjectLayerInteractionReconciliationChecks() {
     reconciledEntityInteraction.drag?.leadIndex,
     1,
     "indexed object reconciliation should keep the drag lead attached to the surviving entity id",
+  );
+
+  const decorItems = [
+    { id: "decor-a", x: 0, y: 0, visible: true },
+    { id: "decor-b", x: 1, y: 0, visible: true },
+    { id: "decor-c", x: 2, y: 0, visible: true },
+  ];
+  const decorInteraction = {
+    selectedDecorIndices: [],
+    selectedDecorIndex: null,
+    selectedDecorIds: [],
+    selectedDecorId: null,
+  };
+  setDecorSelection(decorInteraction, [1, 2], 2, decorItems);
+  assert.deepEqual(
+    getSelectedDecorIds(decorInteraction),
+    ["decor-b", "decor-c"],
+    "decor selection should store stable ids for authored decor",
+  );
+  assert.deepEqual(
+    getSelectedDecorIndices(decorInteraction, decorItems.slice(1)),
+    [0, 1],
+    "decor selection should remap surviving ids onto their new indices after deletion",
+  );
+  assert.equal(
+    toggleDecorSelection(decorInteraction, 0, decorItems.slice(1)),
+    false,
+    "decor selection toggles should operate against stable ids instead of stale indices",
+  );
+  assert.deepEqual(
+    getSelectedDecorIds(decorInteraction),
+    ["decor-c"],
+    "decor toggle should remove the surviving authored decor by id",
   );
 
   const beforeSounds = [
@@ -2161,7 +2200,7 @@ function runSourceRegressionChecks() {
   assert.equal(
     source.includes("return deleteSelectedEntityCleanRoom(draft);"),
     true,
-    "entity deletion should stay pinned to the clean-room delete path before the next frame renders",
+    "entity deletion should stay pinned to the canonical stable-id delete path before the next frame renders",
   );
   assert.equal(
     source.includes("reconcileObjectLayerMutationState(draft, {}, \"deleteSelectedDecor\")"),
@@ -2194,11 +2233,27 @@ function runSourceRegressionChecks() {
     "decor scatter should use the Alt/Option-gated placement flow",
   );
   assert.equal(
-    source.includes("TEMP ENTITY CLEAN PATH ACTIVE")
-      && source.includes("OLD ENTITY PATH DISABLED")
+    source.includes("CANONICAL ENTITY RUNTIME")
       && source.includes("if (false && activeLayer === PANEL_LAYERS.ENTITIES && selectionMode === \"entity\" && hitEntityIndex >= 0) {"),
     true,
-    "entity canvas selection should stay locked to the clean-room path while the legacy inspect branch is disabled",
+    "entity canvas selection should stay locked to the canonical path while the legacy inspect branch is disabled",
+  );
+  assert.equal(
+    source.includes("TEMP ENTITY CLEAN PATH ACTIVE"),
+    false,
+    "editor-v2 should no longer render or label the old temporary entity runtime state in production UI code",
+  );
+  assert.equal(
+    source.includes("const statusLabel = state.ui.importStatus || `Layer: ${activeSelectionLabel} · ${selectedCount || 0} selected`;"),
+    true,
+    "top bar status should keep normal layer messaging without the removed temporary runtime banner",
+  );
+  assert.equal(
+    source.includes("const reconcileDecorInteractionState = (draft, snapshot = null, options = {}) => {")
+      && source.includes("leadDecorId: reconciled.drag.leadSoundId,")
+      && source.includes("const getDecorIndexById = (decorItems, decorId) => {"),
+    true,
+    "decor authored-object interaction should reconcile through stable decor ids during the first bypass step",
   );
   assert.equal(
     source.includes("additive: event.shiftKey,"),
