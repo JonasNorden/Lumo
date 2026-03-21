@@ -34,6 +34,22 @@ export function cloneObjectLayerItem(item) {
   return item ? { ...item, params: cloneEntityParams(item.params) } : item;
 }
 
+function createObjectLayerSnapshotFields(kind, snapshot) {
+  return {
+    snapshot,
+    [getObjectSnapshotKey(kind)]: snapshot,
+  };
+}
+
+function createObjectLayerUpdateFields(kind, previousSnapshot, nextSnapshot) {
+  return {
+    previousSnapshot,
+    nextSnapshot,
+    [getPreviousSnapshotKey(kind)]: previousSnapshot,
+    [getNextSnapshotKey(kind)]: nextSnapshot,
+  };
+}
+
 export function captureObjectLayerAnchor(items, index) {
   if (!Array.isArray(items)) {
     return {
@@ -81,15 +97,9 @@ export function createObjectLayerEditEntry(kind, mode, payload = {}) {
     objectId,
     anchor,
     index: Number.isInteger(payload.index) ? payload.index : anchor.index,
-    ...objectKeys,
     ...(mode === "update"
-      ? {
-        [getPreviousSnapshotKey(kind)]: objectKeys.previousSnapshot,
-        [getNextSnapshotKey(kind)]: objectKeys.nextSnapshot,
-      }
-      : {
-        [getObjectSnapshotKey(kind)]: objectKeys.snapshot,
-      }),
+      ? createObjectLayerUpdateFields(kind, objectKeys.previousSnapshot, objectKeys.nextSnapshot)
+      : createObjectLayerSnapshotFields(kind, objectKeys.snapshot)),
   };
 }
 
@@ -123,7 +133,21 @@ function ensureObjectBucket(doc, kind) {
   return doc[bucketName];
 }
 
-function upsertObjectById(items, snapshot, anchor) {
+function insertObjectSnapshot(items, snapshot, anchor) {
+  const objectId = getObjectLayerId(snapshot);
+  if (!objectId) return false;
+
+  const existingIndex = findObjectIndexById(items, objectId);
+  if (existingIndex >= 0) {
+    items.splice(existingIndex, 1);
+  }
+
+  const insertIndex = resolveInsertIndex(items, anchor);
+  items.splice(insertIndex, 0, cloneObjectLayerItem(snapshot));
+  return true;
+}
+
+function replaceObjectSnapshot(items, snapshot, anchor) {
   const objectId = getObjectLayerId(snapshot);
   if (!objectId) return false;
 
@@ -133,12 +157,10 @@ function upsertObjectById(items, snapshot, anchor) {
     return true;
   }
 
-  const insertIndex = resolveInsertIndex(items, anchor);
-  items.splice(insertIndex, 0, cloneObjectLayerItem(snapshot));
-  return true;
+  return insertObjectSnapshot(items, snapshot, anchor);
 }
 
-function removeObjectById(items, objectId, fallbackIndex = null) {
+function removeObjectSnapshot(items, objectId, fallbackIndex = null) {
   const existingIndex = findObjectIndexById(items, objectId);
   if (existingIndex >= 0) {
     items.splice(existingIndex, 1);
@@ -159,21 +181,21 @@ function applyObjectLayerEntry(doc, entry, direction) {
 
   if (entry.mode === "update") {
     const snapshot = direction === "undo" ? entry.previousSnapshot : entry.nextSnapshot;
-    return upsertObjectById(items, snapshot, entry.anchor);
+    return replaceObjectSnapshot(items, snapshot, entry.anchor);
   }
 
   if (entry.mode === "create") {
     if (direction === "undo") {
-      return removeObjectById(items, entry.objectId, entry.index);
+      return removeObjectSnapshot(items, entry.objectId, entry.index);
     }
-    return upsertObjectById(items, entry.snapshot, entry.anchor);
+    return insertObjectSnapshot(items, entry.snapshot, entry.anchor);
   }
 
   if (entry.mode === "delete") {
     if (direction === "undo") {
-      return upsertObjectById(items, entry.snapshot, entry.anchor);
+      return insertObjectSnapshot(items, entry.snapshot, entry.anchor);
     }
-    return removeObjectById(items, entry.objectId, entry.index);
+    return removeObjectSnapshot(items, entry.objectId, entry.index);
   }
 
   return false;
