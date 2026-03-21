@@ -78,6 +78,7 @@ import { createEditorApp } from "../src/app/createEditorApp.js";
 import { createEditorState } from "../src/state/createEditorState.js";
 import { createStore } from "../src/state/createStore.js";
 import { findSoundAtCanvasPoint, renderSoundDragPreview, renderSoundPlacementPreview, renderSounds } from "../src/render/layers/soundLayer.js";
+import { renderEditorFrame } from "../src/render/renderer.js";
 import { findSoundPresetById } from "../src/domain/sound/soundPresets.js";
 import {
   canRedoGlobalHistory,
@@ -182,6 +183,8 @@ function createPreviewTestContext() {
     textBaseline: "top",
     save() {},
     restore() {},
+    clearRect(...args) { operations.push(["clearRect", ...args]); },
+    drawImage(...args) { operations.push(["drawImage", ...args]); },
     createLinearGradient() { return gradient; },
     createRadialGradient() { return gradient; },
     fillRect(...args) { operations.push(["fillRect", ...args]); },
@@ -2573,6 +2576,61 @@ function runSoundTypeRenderRegressionChecks() {
   }
 }
 
+function runScanLineRenderRegressionChecks() {
+  const state = createEditorState();
+  state.document.active = {
+    ...createDoc(),
+    dimensions: {
+      width: 20,
+      height: 10,
+      tileSize: 16,
+    },
+  };
+  state.scan.playbackState = "playing";
+  state.scan.isPlaying = true;
+  state.scan.positionX = 6;
+  state.scan.startX = 2;
+  state.scan.endX = 12;
+
+  const { ctx, operations } = createPreviewTestContext();
+  renderEditorFrame(ctx, state);
+
+  assert.equal(
+    operations.some(([name, x, y, width, height]) => name === "fillRect" && x === 120 && y === 0 && width === 48 && height === ctx.canvas.height),
+    true,
+    "renderer should draw the scan-line glow band on the live canvas when scan playback is active",
+  );
+  assert.equal(
+    operations.some(([name, x, y, width, height]) => name === "roundRect" && x === 130.5 && y === 10 && width === 28 && height === 14),
+    true,
+    "renderer should draw the scan playhead cap from scan state instead of relying on removed debug UI",
+  );
+
+  const rendererSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/render/renderer.js"), "utf8");
+  assert.equal(
+    rendererSource.includes("renderScanOverlay(ctx, doc, state.viewport, state.scan);"),
+    true,
+    "renderer should keep a dedicated scan overlay pass in editor-v2",
+  );
+  assert.equal(
+    rendererSource.includes("const previewPassesEnabled = false;"),
+    true,
+    "renderer should keep the non-scan preview overlays disabled for this narrow fix",
+  );
+  assert.equal(
+    rendererSource.includes("previewAndOverlayPassesEnabled"),
+    false,
+    "renderer should not gate the scan overlay behind the disabled preview bundle anymore",
+  );
+
+  const bottomPanelSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/ui/bottomPanel.js"), "utf8");
+  assert.equal(
+    bottomPanelSource.includes("Scan Monitor") || bottomPanelSource.includes("Event Feed") || bottomPanelSource.includes("Latest event"),
+    false,
+    "scan-line restoration should not reintroduce the removed scan monitor debug/status UI",
+  );
+}
+
 function runSoundIdentityRegressionChecks() {
   const interaction = createSoundInteractionState();
   const sounds = [
@@ -4604,6 +4662,7 @@ async function main() {
   runObjectLayerInteractionReconciliationChecks();
   runDarknessPreviewRegressionChecks();
   runScanRegressionChecks();
+  runScanLineRenderRegressionChecks();
   runScanAudioPlaybackRegressionChecks();
   await runScanAudioAssetFallbackChecks();
   runUiRegressionChecks();
