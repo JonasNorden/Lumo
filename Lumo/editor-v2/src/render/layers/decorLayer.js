@@ -126,6 +126,14 @@ export function renderDecor(ctx, doc, viewport, interaction) {
   const decorItems = doc.decor || [];
   const tileSize = doc.dimensions.tileSize;
   const draggedSelection = new Set(interaction.decorDrag?.active ? getSelectedDecorIndices(interaction) : []);
+  const selectedDecorIds = new Set(
+    Array.isArray(interaction.selectedDecorIds)
+      ? interaction.selectedDecorIds.filter((decorId) => typeof decorId === "string" && decorId.trim())
+      : [],
+  );
+  const hoveredDecorId = typeof interaction.hoveredDecorId === "string" && interaction.hoveredDecorId.trim()
+    ? interaction.hoveredDecorId
+    : null;
 
   for (let i = 0; i < decorItems.length; i += 1) {
     const decor = decorItems[i];
@@ -133,8 +141,8 @@ export function renderDecor(ctx, doc, viewport, interaction) {
     if (draggedSelection.has(i)) continue;
 
     drawDecorMarker(ctx, decor, viewport, tileSize, {
-      selected: isDecorSelected(interaction, i),
-      hovered: interaction.hoveredDecorIndex === i,
+      selected: selectedDecorIds.size ? selectedDecorIds.has(decor.id) : isDecorSelected(interaction, i),
+      hovered: hoveredDecorId ? hoveredDecorId === decor.id : interaction.hoveredDecorIndex === i,
       alpha: draggedSelection.has(i) ? 0.34 : 1,
     });
   }

@@ -361,6 +361,85 @@ function runObjectLayerStableIdentityHistoryRegressionChecks() {
   );
 }
 
+function runGlobalObjectLayerUndoRedoRegressionChecks() {
+  const doc = createDoc();
+  const history = createHistoryState();
+
+  const entity = {
+    id: "entity-1",
+    name: "Entity",
+    type: "spawn",
+    x: 0,
+    y: 0,
+    visible: true,
+    params: { facing: "right" },
+  };
+  const decor = {
+    id: "decor-1",
+    name: "Decor",
+    type: "lamp",
+    x: 1,
+    y: 0,
+    visible: true,
+    variant: "gold",
+    params: { glow: 0.4 },
+  };
+  const sound = {
+    id: "sound-1",
+    name: "Sound",
+    type: "loop",
+    x: 2,
+    y: 0,
+    visible: true,
+    params: { volume: 0.8 },
+  };
+
+  doc.entities.push(entity);
+  pushHistoryEntry(history, createEntityEditEntry("create", { index: 0, entity }));
+  doc.decor.push(decor);
+  pushHistoryEntry(history, createDecorEditEntry("create", { index: 0, decor }));
+  doc.sounds.push(sound);
+  pushHistoryEntry(history, createSoundEditEntry("create", { index: 0, sound }));
+
+  doc.decor.splice(0, 1);
+  pushHistoryEntry(
+    history,
+    createDecorEditEntry("delete", {
+      index: 0,
+      anchor: captureObjectLayerAnchor([decor], 0),
+      decor: { ...decor, params: structuredClone(decor.params) },
+    }),
+  );
+
+  assert.equal(doc.entities.length, 1, "setup should preserve the entity before undo");
+  assert.equal(doc.decor.length, 0, "setup should remove the decor before undo");
+  assert.equal(doc.sounds.length, 1, "setup should preserve the sound before undo");
+
+  undoTileEdit(doc, history);
+  assert.deepEqual(doc.decor.map((item) => item.id), ["decor-1"], "first undo should restore the most recent decor deletion");
+
+  undoTileEdit(doc, history);
+  assert.equal(doc.sounds.length, 0, "second undo should remove the previously created sound");
+
+  undoTileEdit(doc, history);
+  assert.equal(doc.decor.length, 0, "third undo should remove the previously created decor");
+
+  undoTileEdit(doc, history);
+  assert.equal(doc.entities.length, 0, "fourth undo should remove the previously created entity");
+
+  redoTileEdit(doc, history);
+  assert.deepEqual(doc.entities.map((item) => item.id), ["entity-1"], "first redo should restore the earliest entity creation");
+
+  redoTileEdit(doc, history);
+  assert.deepEqual(doc.decor.map((item) => item.id), ["decor-1"], "second redo should restore the decor creation");
+
+  redoTileEdit(doc, history);
+  assert.deepEqual(doc.sounds.map((item) => item.id), ["sound-1"], "third redo should restore the sound creation");
+
+  redoTileEdit(doc, history);
+  assert.equal(doc.decor.length, 0, "fourth redo should reapply the most recent decor deletion");
+}
+
 function runFogVolumeRegressionChecks() {
   const normalized = validateLevelDocument({
     ...createDoc(),
@@ -2041,12 +2120,12 @@ function runSourceRegressionChecks() {
     "momentary placement should use Alt/Option",
   );
   assert.equal(
-    source.includes("const captureObjectLayerInteractionSnapshots = (draft) => ({"),
+    source.includes("const reconcileObjectLayerMutationState = (draft, selection = {}, reason = \"object mutation\") => {"),
     true,
-    "editor-v2 should snapshot shared object-layer interaction identities before object mutations",
+    "editor-v2 should use one shared stable-id object-layer mutation helper derived from the standalone demo",
   );
   assert.equal(
-    source.includes("const clearObjectMutationInteractionState = (draft, reason = \"object mutation\") => {"),
+    source.includes("const clearObjectLayerTransientInteractionState = (draft, reason = \"object mutation\") => {"),
     true,
     "editor-v2 should clear shared object-layer interaction state through one minimal post-mutation helper",
   );
@@ -2066,26 +2145,26 @@ function runSourceRegressionChecks() {
     "editor-v2 should detect undo/redo mutations across all shared object layers",
   );
   assert.equal(
-    source.includes("clearObjectMutationInteractionState(draft, \"deleteSelectedEntity\")")
-      && source.includes("clearObjectMutationInteractionState(draft, \"deleteSelectedDecor\")")
-      && source.includes("clearObjectMutationInteractionState(draft, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)")
+    source.includes("reconcileObjectLayerMutationState(draft, {}, \"deleteSelectedEntity\")")
+      && source.includes("reconcileObjectLayerMutationState(draft, {}, \"deleteSelectedDecor\")")
+      && source.includes("reconcileObjectLayerMutationState(draft, {}, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)")
       && source.includes("applyHistoryObjectMutationState(draft, entry, \"undo\")")
       && source.includes("applyHistoryObjectMutationState(draft, entry, \"redo\")"),
     true,
     "delete and history mutations should route through the new minimal shared object-layer mutation helpers",
   );
   assert.equal(
-    source.includes("clearObjectMutationInteractionState(draft, \"deleteSelectedEntity\")"),
+    source.includes("reconcileObjectLayerMutationState(draft, {}, \"deleteSelectedEntity\")"),
     true,
     "entity deletion should clear stale object-layer interaction state before the next frame renders",
   );
   assert.equal(
-    source.includes("clearObjectMutationInteractionState(draft, \"deleteSelectedDecor\")"),
+    source.includes("reconcileObjectLayerMutationState(draft, {}, \"deleteSelectedDecor\")"),
     true,
     "decor deletion should clear stale object-layer interaction state before the next frame renders",
   );
   assert.equal(
-    source.includes("clearObjectMutationInteractionState(draft, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)"),
+    source.includes("reconcileObjectLayerMutationState(draft, {}, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`)"),
     true,
     "sound deletion should clear stale object-layer interaction state before the next frame renders",
   );
@@ -2154,7 +2233,7 @@ function runSourceRegressionChecks() {
     "fog-specific finalize placement helpers should be removed from the editor app",
   );
 
-  const syncInteractionAfterHistoryChangeSection = source.match(/const reconcileObjectLayerInteractionAfterMutation = \(draft, snapshots = captureObjectLayerInteractionSnapshots\(draft\), options = \{\}\) => \{[\s\S]*?\n  \};/);
+  const syncInteractionAfterHistoryChangeSection = source.match(/const reconcileObjectLayerMutationState = \(draft, selection = \{\}, reason = "object mutation"\) => \{[\s\S]*?\n  \};/);
   assert.ok(syncInteractionAfterHistoryChangeSection, "shared object-layer post-mutation reconciliation should exist");
   assert.equal(
     syncInteractionAfterHistoryChangeSection[0].includes("specialVolumePlacement"),
@@ -2252,6 +2331,7 @@ async function main() {
   runEntityRegressionChecks();
   runDecorAndSoundDeletionRegressionChecks();
   runObjectLayerStableIdentityHistoryRegressionChecks();
+  runGlobalObjectLayerUndoRedoRegressionChecks();
   runFogVolumeRegressionChecks();
   runFogPlacementPreviewRegressionChecks();
   runObjectPlacementPreviewSuppressionRegressionChecks();

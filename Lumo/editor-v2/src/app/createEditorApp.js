@@ -62,9 +62,7 @@ import { DEFAULT_DECOR_PRESET_ID, findDecorPresetById, findDecorPresetByType } f
 import { isEntityLikeEditableType, normalizeEditableObjectType } from "../domain/placeables/editableObjectBuckets.js";
 import {
   captureIdObjectInteractionSnapshot,
-  captureIndexedObjectInteractionSnapshot,
   reconcileIdObjectInteraction,
-  reconcileIndexedObjectInteraction,
 } from "../domain/placeables/objectInteractionReconciliation.js";
 import { captureObjectLayerAnchor, getObjectLayerId } from "../domain/placeables/objectLayerHistory.js";
 import { DEFAULT_SOUND_PRESET_ID, findSoundPresetById, getSoundPresetDefaultParams, getSoundPresetForType } from "../domain/sound/soundPresets.js";
@@ -394,22 +392,6 @@ function collectHistoryEntries(entry, callback) {
     return;
   }
   callback(entry);
-}
-
-function collectHistoryObjectIds(entry, kind, mode, bucket = []) {
-  if (!entry) return bucket;
-  if (entry.type === "batch") {
-    for (const edit of entry.edits || []) {
-      collectHistoryObjectIds(edit, kind, mode, bucket);
-    }
-    return bucket;
-  }
-  if (entry.kind !== kind || entry.mode !== mode) return bucket;
-  const objectId = entry.sound?.id || entry.entity?.id || entry.decor?.id || entry.previousSound?.id || entry.nextSound?.id || entry.previousEntity?.id || entry.nextEntity?.id || entry.previousDecor?.id || entry.nextDecor?.id || null;
-  if (typeof objectId === "string" && objectId.trim()) {
-    bucket.push(objectId);
-  }
-  return bucket;
 }
 
 function escapeHtml(value) {
@@ -1326,9 +1308,8 @@ export function createEditorApp({
     draft.interaction.selectedDecorId = nextPrimaryId;
   };
 
-  const clearObjectMutationInteractionState = (draft, reason = "object mutation") => {
+  const clearObjectLayerTransientInteractionState = (draft, reason = "object mutation") => {
     draft.interaction.hoverCell = null;
-    draft.interaction.selectedCell = null;
     draft.interaction.boxSelection = null;
     draft.interaction.entityDrag = null;
     draft.interaction.decorDrag = null;
@@ -1339,15 +1320,12 @@ export function createEditorApp({
     draft.interaction.hoveredDecorIndex = null;
     draft.interaction.hoveredDecorId = null;
     clearHoveredSound(draft.interaction);
-    clearEntitySelection(draft.interaction);
-    clearDecorSelection(draft.interaction);
-    clearSoundSelection(draft.interaction);
     clearSoundPreviewState(draft);
     soundPreviewPlayback.stop();
     suppressObjectPlacementPreviews(draft, reason);
   };
 
-  const applyObjectMutationSelection = (draft, selection = {}) => {
+  const applyObjectLayerMutationSelection = (draft, selection = {}) => {
     setEntitySelectionByIds(draft, selection.entityIds || [], selection.entityPrimaryId ?? null);
     setDecorSelectionByIds(draft, selection.decorIds || [], selection.decorPrimaryId ?? null);
     setSoundSelection(
@@ -1372,6 +1350,11 @@ export function createEditorApp({
     draft.interaction.selectedCell = null;
   };
 
+  const reconcileObjectLayerMutationState = (draft, selection = {}, reason = "object mutation") => {
+    clearObjectLayerTransientInteractionState(draft, reason);
+    applyObjectLayerMutationSelection(draft, selection);
+  };
+
   const clearHoveredSound = (interaction) => {
     interaction.hoveredSoundIndex = null;
     interaction.hoveredSoundId = null;
@@ -1385,22 +1368,6 @@ export function createEditorApp({
     draft.interaction.hoveredSoundId = sound?.id || null;
   };
 
-  const captureEntityInteractionSnapshot = (draft) =>
-    captureIndexedObjectInteractionSnapshot(draft.document.active?.entities || [], {
-      selectedIndices: getSelectedEntityIndices(draft.interaction),
-      primarySelectedIndex: getPrimarySelectedEntityIndex(draft.interaction),
-      hoveredIndex: draft.interaction.hoveredEntityIndex,
-      drag: draft.interaction.entityDrag,
-    });
-
-  const captureDecorInteractionSnapshot = (draft) =>
-    captureIndexedObjectInteractionSnapshot(draft.document.active?.decor || [], {
-      selectedIndices: getSelectedDecorIndices(draft.interaction),
-      primarySelectedIndex: getPrimarySelectedDecorIndex(draft.interaction),
-      hoveredIndex: draft.interaction.hoveredDecorIndex,
-      drag: draft.interaction.decorDrag,
-    });
-
   const captureSoundInteractionSnapshot = (draft) =>
     captureIdObjectInteractionSnapshot({
       selectedIds: draft.interaction.selectedSoundIds,
@@ -1408,34 +1375,6 @@ export function createEditorApp({
       hoveredId: draft.interaction.hoveredSoundId,
       drag: draft.interaction.soundDrag,
     });
-
-  const captureObjectLayerInteractionSnapshots = (draft) => ({
-    entity: captureEntityInteractionSnapshot(draft),
-    decor: captureDecorInteractionSnapshot(draft),
-    sound: captureSoundInteractionSnapshot(draft),
-  });
-
-  const applyEntityInteractionSnapshot = (draft, snapshot = null, options = {}) => {
-    const entities = draft.document.active?.entities || [];
-    const reconciled = reconcileIndexedObjectInteraction(entities, snapshot || captureEntityInteractionSnapshot(draft), options);
-    setEntitySelection(draft.interaction, reconciled.selectedIndices, reconciled.primarySelectedIndex);
-    draft.interaction.selectedEntityIds = reconciled.selectedIds;
-    draft.interaction.selectedEntityId = reconciled.primarySelectedId;
-    draft.interaction.hoveredEntityIndex = reconciled.hoveredIndex;
-    draft.interaction.hoveredEntityId = reconciled.hoveredId;
-    draft.interaction.entityDrag = reconciled.drag;
-  };
-
-  const applyDecorInteractionSnapshot = (draft, snapshot = null, options = {}) => {
-    const decorItems = draft.document.active?.decor || [];
-    const reconciled = reconcileIndexedObjectInteraction(decorItems, snapshot || captureDecorInteractionSnapshot(draft), options);
-    setDecorSelection(draft.interaction, reconciled.selectedIndices, reconciled.primarySelectedIndex);
-    draft.interaction.selectedDecorIds = reconciled.selectedIds;
-    draft.interaction.selectedDecorId = reconciled.primarySelectedId;
-    draft.interaction.hoveredDecorIndex = reconciled.hoveredIndex;
-    draft.interaction.hoveredDecorId = reconciled.hoveredId;
-    draft.interaction.decorDrag = reconciled.drag;
-  };
 
   const suppressObjectPlacementPreviews = (draft, reason = "unspecified") => {
     const beforeSnapshot = createSoundDebugSnapshot(draft);
@@ -1552,50 +1491,6 @@ export function createEditorApp({
     reconcileCanvasHoverState(draft, reason);
   };
 
-  const reconcileObjectLayerInteractionAfterMutation = (draft, snapshots = captureObjectLayerInteractionSnapshots(draft), options = {}) => {
-    applyEntityInteractionSnapshot(draft, snapshots.entity, options.entity);
-    applyDecorInteractionSnapshot(draft, snapshots.decor, options.decor);
-    reconcileSoundInteractionState(draft, snapshots.sound, options.sound);
-    reconcileCanvasHoverState(draft, options.reason || "object mutation");
-
-    const doc = draft.document.active;
-    if (!doc) return;
-
-    if (getSelectedEntityIndices(draft.interaction).length) {
-      updateEntitySelectionCell(draft);
-    } else if (getSelectedDecorIndices(draft.interaction).length) {
-      updateDecorSelectionCell(draft);
-    } else if (getSelectedSoundIndices(draft.interaction, doc.sounds || []).length) {
-      updateSoundSelectionCell(draft);
-    } else {
-      draft.interaction.selectedCell = null;
-    }
-  };
-
-  const getHistoryMutationInteractionOptions = (entry, direction) => {
-    const restoredMode = direction === "undo" ? "delete" : "create";
-    const uniqueIds = (kind) => [...new Set(collectHistoryObjectIds(entry, kind, restoredMode))];
-    const entityIds = uniqueIds("entity");
-    const decorIds = uniqueIds("decor");
-    const soundIds = uniqueIds("sound");
-
-    return {
-      entity: {
-        ...(entityIds.length ? { selectedIds: entityIds, primarySelectedId: entityIds.at(-1) ?? null } : {}),
-        clearDrag: true,
-      },
-      decor: {
-        ...(decorIds.length ? { selectedIds: decorIds, primarySelectedId: decorIds.at(-1) ?? null } : {}),
-        clearDrag: true,
-      },
-      sound: {
-        ...(soundIds.length ? { selectedIds: soundIds, primarySelectedId: soundIds.at(-1) ?? null } : {}),
-        clearDrag: true,
-      },
-      reason: `history ${direction}`,
-    };
-  };
-
   const getObjectHistorySelection = (entry, direction) => {
     const shouldSelect = (mode) => {
       if (mode === "update") return true;
@@ -1640,8 +1535,7 @@ export function createEditorApp({
 
   const applyHistoryObjectMutationState = (draft, entry, direction) => {
     if (!historyEntryContainsObjectLayer(entry)) return;
-    clearObjectMutationInteractionState(draft, `history ${direction}`);
-    applyObjectMutationSelection(draft, getObjectHistorySelection(entry, direction));
+    reconcileObjectLayerMutationState(draft, getObjectHistorySelection(entry, direction), `history ${direction}`);
   };
 
   const isTopBarInputElement = (value) =>
@@ -2490,7 +2384,7 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
-    clearObjectMutationInteractionState(draft, "deleteSelectedDecor");
+    reconcileObjectLayerMutationState(draft, {}, "deleteSelectedDecor");
     return true;
   };
 
@@ -2627,7 +2521,7 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
-    clearObjectMutationInteractionState(draft, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`);
+    reconcileObjectLayerMutationState(draft, {}, `deleteSelectedSound ids=${formatSoundDebugList(deletedIds)}`);
     appendSoundDebugEvent(
       "sound delete mutation",
       `deleted ids ${formatSoundDebugList(deletedIds)}`,
@@ -2952,7 +2846,7 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
-    clearObjectMutationInteractionState(draft, "deleteSelectedEntity");
+    reconcileObjectLayerMutationState(draft, {}, "deleteSelectedEntity");
     return true;
   };
 

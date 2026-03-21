@@ -154,6 +154,14 @@ export function renderEntities(ctx, doc, viewport, interaction) {
   const entities = doc.entities || [];
   const tileSize = doc.dimensions.tileSize;
   const draggedSelection = new Set(interaction.entityDrag?.active ? getSelectedEntityIndices(interaction) : []);
+  const selectedEntityIds = new Set(
+    Array.isArray(interaction.selectedEntityIds)
+      ? interaction.selectedEntityIds.filter((entityId) => typeof entityId === "string" && entityId.trim())
+      : [],
+  );
+  const hoveredEntityId = typeof interaction.hoveredEntityId === "string" && interaction.hoveredEntityId.trim()
+    ? interaction.hoveredEntityId
+    : null;
 
   for (let i = 0; i < entities.length; i += 1) {
     const entity = entities[i];
@@ -164,8 +172,8 @@ export function renderEntities(ctx, doc, viewport, interaction) {
 
     const { x, y } = getEntityScreenCenter(entity, tileSize, viewport);
     drawEntityMarker(ctx, entity, x, y, viewport, {
-      isSelected: isEntitySelected(interaction, i),
-      isHovered: interaction.hoveredEntityIndex === i,
+      isSelected: selectedEntityIds.size ? selectedEntityIds.has(entity.id) : isEntitySelected(interaction, i),
+      isHovered: hoveredEntityId ? hoveredEntityId === entity.id : interaction.hoveredEntityIndex === i,
       alpha: 1,
     });
   }
