@@ -2609,26 +2609,106 @@ export function createEditorApp({
     );
   };
 
-  const applySoundFieldUpdate = (sound, field, value) => {
-    if (!sound) return null;
+  const unwrapCanonicalMutationValue = (rawValue) => {
+    if (rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && rawValue.__canonicalMutation === true) {
+      return {
+        itemId: typeof rawValue.itemId === "string" && rawValue.itemId.trim() ? rawValue.itemId.trim() : null,
+        value: rawValue.value,
+      };
+    }
+
+    return {
+      itemId: null,
+      value: rawValue,
+    };
+  };
+
+  const unwrapCanonicalParamMutationValue = (rawValue) => {
+    if (!rawValue || typeof rawValue !== "object" || Array.isArray(rawValue)) return null;
+    return {
+      ...rawValue,
+      itemId: typeof rawValue.itemId === "string" && rawValue.itemId.trim() ? rawValue.itemId.trim() : null,
+    };
+  };
+
+  const applyEntityFieldUpdate = (doc, entity, field, rawValue) => {
+    if (!doc || !entity) return null;
 
     if (field === "param") {
-      if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-      const key = typeof value.key === "string" ? value.key.trim() : "";
+      const value = unwrapCanonicalParamMutationValue(rawValue);
+      const key = typeof value?.key === "string" ? value.key.trim() : "";
       if (!key || !isSupportedEntityParamValue(value.value)) return null;
 
-      const nextParams = { ...cloneEntityParams(sound.params), [key]: value.value };
-      if (cloneEntityParams(sound.params)[key] === value.value) return null;
+      const currentParams = cloneEntityParams(entity.params);
+      if (currentParams[key] === value.value) return null;
+      return { ...entity, params: { ...currentParams, [key]: value.value } };
+    }
+
+    const { value } = unwrapCanonicalMutationValue(rawValue);
+
+    if (field === "name" || field === "type") {
+      const trimmed = String(value || "").trim();
+      const nextValue = trimmed || entity[field];
+      if (entity[field] === nextValue) return null;
+
+      if (field === "type") {
+        const preset = resolveEntityPlacementPreset(nextValue);
+        return {
+          ...entity,
+          type: preset?.type || nextValue,
+          params: {
+            ...getEntityPresetDefaultParams(preset?.id || DEFAULT_ENTITY_PRESET_ID),
+            ...cloneEntityParams(entity.params),
+          },
+        };
+      }
+
+      return { ...entity, name: nextValue, params: cloneEntityParams(entity.params) };
+    }
+
+    if (field === "visible") {
+      const nextVisible = Boolean(value);
+      if (entity.visible === nextVisible) return null;
+      return { ...entity, visible: nextVisible, params: cloneEntityParams(entity.params) };
+    }
+
+    if (field === "x" || field === "y") {
+      const parsed = Number.parseInt(String(value), 10);
+      if (!Number.isInteger(parsed)) return null;
+      const nextPosition = clampEntityPosition(
+        doc,
+        field === "x" ? parsed : entity.x,
+        field === "y" ? parsed : entity.y,
+      );
+      if (entity.x === nextPosition.x && entity.y === nextPosition.y) return null;
+      return { ...entity, x: nextPosition.x, y: nextPosition.y, params: cloneEntityParams(entity.params) };
+    }
+
+    return null;
+  };
+
+  const applySoundFieldUpdate = (doc, sound, field, value) => {
+    if (!doc || !sound) return null;
+
+    if (field === "param") {
+      const paramValue = unwrapCanonicalParamMutationValue(value);
+      const key = typeof paramValue?.key === "string" ? paramValue.key.trim() : "";
+      if (!key || !isSupportedEntityParamValue(paramValue?.value)) return null;
+
+      const nextParams = { ...cloneEntityParams(sound.params), [key]: paramValue.value };
+      if (cloneEntityParams(sound.params)[key] === paramValue.value) return null;
       return { ...sound, params: nextParams };
     }
 
+    const normalizedValue = unwrapCanonicalMutationValue(value).value;
+
     if (field === "name" || field === "type" || field === "source") {
-      const trimmed = String(value || "").trim();
+      const trimmed = String(normalizedValue || "").trim();
       const preset = field === "type" ? getSoundPresetForType(trimmed || sound[field]) : null;
       const nextValue = field === "type"
         ? normalizeSoundType(preset?.type || trimmed || sound[field])
         : field === "source"
-          ? normalizeSoundSourceValue(value)
+          ? normalizeSoundSourceValue(normalizedValue)
           : trimmed || sound[field];
       const previousValue = field === "source" ? sound.source || null : sound[field];
       if (previousValue === nextValue) return null;
@@ -2647,36 +2727,66 @@ export function createEditorApp({
     }
 
     if (field === "visible") {
-      const nextVisible = Boolean(value);
+      const nextVisible = Boolean(normalizedValue);
       if (sound.visible === nextVisible) return null;
       return { ...sound, visible: nextVisible, params: cloneEntityParams(sound.params) };
     }
 
+    if (field === "x" || field === "y") {
+      const parsed = Number.parseInt(String(normalizedValue), 10);
+      if (!Number.isInteger(parsed)) return null;
+      const nextPosition = clampSoundPosition(
+        doc,
+        field === "x" ? parsed : sound.x,
+        field === "y" ? parsed : sound.y,
+      );
+      if (sound.x === nextPosition.x && sound.y === nextPosition.y) return null;
+      return {
+        ...sound,
+        x: nextPosition.x,
+        y: nextPosition.y,
+        params: cloneEntityParams(sound.params),
+      };
+    }
+
     return null;
+  };
+
+  const applyCanonicalEntityUpdate = (draft, action) => {
+    const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
+    if (!changed) return false;
+    recordCleanRoomObjectAction("entity", action);
+    return true;
+  };
+
+  const applyCanonicalSoundUpdate = (draft, action) => {
+    const changed = applyCleanRoomSoundHistoryAction(draft, action, "forward");
+    if (!changed) return false;
+    recordCleanRoomObjectAction("sound", action);
+    return true;
   };
 
   const applyBatchSoundUpdate = (draft, indices, field, value) => {
     const doc = draft.document.active;
     if (!doc || !indices.length) return false;
 
-    let changed = false;
-    startHistoryBatch(draft.history, "sound-batch-edit");
+    const items = [];
     for (const index of indices) {
       const sound = doc.sounds?.[index];
-      const nextSound = applySoundFieldUpdate(sound, field, value);
+      const nextSound = applySoundFieldUpdate(doc, sound, field, value);
       if (!sound || !nextSound) continue;
-
-      doc.sounds.splice(index, 1, nextSound);
-      pushSoundUpdateHistory(
-        draft.history,
+      items.push({
         index,
-        { ...sound, params: cloneEntityParams(sound.params) },
-        { ...nextSound, params: cloneEntityParams(nextSound.params) },
-      );
-      changed = true;
+        previousSound: { ...sound, params: cloneEntityParams(sound.params) },
+        nextSound: { ...nextSound, params: cloneEntityParams(nextSound.params) },
+      });
     }
-    endHistoryBatch(draft.history);
-    return changed;
+    if (!items.length) return false;
+
+    return applyCanonicalSoundUpdate(draft, {
+      type: "update",
+      items,
+    });
   };
 
   const selectRelatedSounds = (draft, referenceIndex, mode) => {
@@ -3094,7 +3204,37 @@ export function createEditorApp({
         || field === "x"
         || field === "y"
       ) {
-        // CANONICAL SOUND RUNTIME ONLY: inspector/source mutation stays off until a stable-id edit lane exists.
+        if (index === -1) {
+          const selectedIds = Array.isArray(draft.interaction.selectedSoundIds)
+            ? draft.interaction.selectedSoundIds.filter((itemId) => typeof itemId === "string" && itemId.trim())
+            : [];
+          const indices = selectedIds
+            .map((itemId) => getSoundIndexById(soundItems, itemId))
+            .filter((itemIndex) => Number.isInteger(itemIndex) && itemIndex >= 0);
+          applyBatchSoundUpdate(draft, indices, field, value);
+          return;
+        }
+
+        const mutationItemId = unwrapCanonicalMutationValue(value).itemId
+          || unwrapCanonicalParamMutationValue(value)?.itemId
+          || draft.interaction.selectedSoundId
+          || soundItems[index]?.id
+          || null;
+        const resolvedIndex = mutationItemId ? getSoundIndexById(soundItems, mutationItemId) : index;
+        const sound = Number.isInteger(resolvedIndex) ? soundItems[resolvedIndex] : null;
+        const nextSound = applySoundFieldUpdate(doc, sound, field, value);
+        if (!sound || !nextSound) return;
+
+        applyCanonicalSoundUpdate(draft, {
+          type: "update",
+          items: [
+            {
+              index: resolvedIndex,
+              previousSound: { ...sound, params: cloneEntityParams(sound.params) },
+              nextSound: { ...nextSound, params: cloneEntityParams(nextSound.params) },
+            },
+          ],
+        });
         return;
       }
     });
@@ -3222,10 +3362,30 @@ export function createEditorApp({
         return;
       }
 
-      if (index >= 0 && index < entities.length) {
-        // CANONICAL ENTITY RUNTIME ONLY: inspector-driven entity mutation still routes through the disabled legacy
-        // entity history/reconcile engine. Keep the selected entity truthful in the panel, but block
-        // these edits from executing until the minimal clean entity path grows a new direct mutation path.
+      if (
+        field === "param"
+        || field === "name"
+        || field === "type"
+        || field === "visible"
+        || field === "x"
+        || field === "y"
+      ) {
+        const mutationItemId = unwrapCanonicalMutationValue(value).itemId
+          || unwrapCanonicalParamMutationValue(value)?.itemId
+          || draft.interaction.selectedEntityId
+          || entities[index]?.id
+          || null;
+        const resolvedIndex = mutationItemId ? getEntityIndexById(entities, mutationItemId) : index;
+        const entity = Number.isInteger(resolvedIndex) ? entities[resolvedIndex] : null;
+        const nextEntity = applyEntityFieldUpdate(doc, entity, field, value);
+        if (!entity || !nextEntity) return;
+
+        applyCanonicalEntityUpdate(draft, {
+          type: "update",
+          index: resolvedIndex,
+          previousEntity: { ...entity, params: cloneEntityParams(entity.params) },
+          nextEntity: { ...nextEntity, params: cloneEntityParams(nextEntity.params) },
+        });
       }
       return;
 

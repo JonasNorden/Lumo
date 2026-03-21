@@ -28,6 +28,16 @@ function insertSoundSnapshot(sounds, sound, index) {
 }
 
 function getCanonicalSoundActionItems(action) {
+  if (action?.type === "update" && Array.isArray(action?.items)) {
+    return action.items
+      .map((item) => ({
+        index: Number.isInteger(item?.index) ? item.index : null,
+        previousSound: cloneCanonicalSoundSnapshot(item?.previousSound),
+        nextSound: cloneCanonicalSoundSnapshot(item?.nextSound),
+      }))
+      .filter((item) => Number.isInteger(item.index) && item.previousSound?.id && item.nextSound?.id);
+  }
+
   if (Array.isArray(action?.items)) {
     return action.items
       .map((item) => ({
@@ -89,6 +99,25 @@ export function applyCanonicalSoundAction(doc, action, direction = "forward") {
     const selectedSoundIds = items.map((item) => item.sound.id);
     return {
       changed: true,
+      selectedSoundIds,
+      selectedSoundId: selectedSoundIds.at(-1) ?? null,
+    };
+  }
+
+  if (action.type === "update") {
+    let changed = false;
+    const selectedSoundIds = [];
+
+    for (const item of items) {
+      const snapshot = direction === "forward" ? item.nextSound : item.previousSound;
+      const inserted = insertSoundSnapshot(doc.sounds, snapshot, item.index);
+      if (!inserted) continue;
+      changed = true;
+      selectedSoundIds.push(inserted.id);
+    }
+
+    return {
+      changed,
       selectedSoundIds,
       selectedSoundId: selectedSoundIds.at(-1) ?? null,
     };

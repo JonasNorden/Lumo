@@ -58,16 +58,19 @@ function buildTrackedDataset(target) {
 
   const datasetKeys = [
     "entityField",
+    "entityId",
     "entityIndex",
     "entityParamKey",
     "entityParamPath",
     "entityParamType",
     "decorField",
+    "decorId",
     "decorIndex",
     "decorParamKey",
     "decorParamPath",
     "decorParamType",
     "soundField",
+    "soundId",
     "soundIndex",
     "soundParamKey",
     "soundParamPath",
@@ -147,22 +150,26 @@ function formatParamLabel(key) {
     .replace(/^./, (char) => char.toUpperCase());
 }
 
-function renderTextField(prefix, fieldKey, label, value, selectedIndex, className = "") {
+function renderObjectDatasetAttr(prefix, itemId = null) {
+  return itemId ? `data-${prefix}-id="${escapeHtml(itemId)}"` : "";
+}
+
+function renderTextField(prefix, fieldKey, label, value, selectedIndex, className = "", itemId = null) {
   const classes = ["fieldRow", "fieldRowCompact", "selectionInlineField", className].filter(Boolean).join(" ");
   return `
     <label class="${classes}">
       <span class="label">${escapeHtml(label)}</span>
-      <input type="text" value="${escapeHtml(value)}" data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}" />
+      <input type="text" value="${escapeHtml(value)}" data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}" ${renderObjectDatasetAttr(prefix, itemId)} />
     </label>
   `;
 }
 
-function renderSelectField(prefix, fieldKey, label, value, selectedIndex, options, className = "") {
+function renderSelectField(prefix, fieldKey, label, value, selectedIndex, options, className = "", itemId = null) {
   const classes = ["fieldRow", "fieldRowCompact", "selectionInlineField", className].filter(Boolean).join(" ");
   return `
     <label class="${classes}">
       <span class="label">${escapeHtml(label)}</span>
-      <select data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}">
+      <select data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}" ${renderObjectDatasetAttr(prefix, itemId)}>
         ${options
           .map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === value ? "selected" : ""}>${escapeHtml(option.label)}</option>`)
           .join("")}
@@ -171,7 +178,7 @@ function renderSelectField(prefix, fieldKey, label, value, selectedIndex, option
   `;
 }
 
-function renderMixedSelectField(prefix, fieldKey, label, value, selectedIndex, options, className = "", mixedLabel = "Mixed") {
+function renderMixedSelectField(prefix, fieldKey, label, value, selectedIndex, options, className = "", mixedLabel = "Mixed", itemId = null) {
   const normalizedOptions = value === MIXED_FIELD_VALUE
     ? [{ value: MIXED_FIELD_VALUE, label: mixedLabel, disabled: true }, ...options]
     : options;
@@ -179,7 +186,7 @@ function renderMixedSelectField(prefix, fieldKey, label, value, selectedIndex, o
   return `
     <label class="${classes}">
       <span class="label">${escapeHtml(label)}</span>
-      <select data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}">
+      <select data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}" ${renderObjectDatasetAttr(prefix, itemId)}>
         ${normalizedOptions
           .map((option) => `
             <option
@@ -196,12 +203,12 @@ function renderMixedSelectField(prefix, fieldKey, label, value, selectedIndex, o
   `;
 }
 
-function renderNumberField(prefix, fieldKey, label, value, selectedIndex, className = "") {
+function renderNumberField(prefix, fieldKey, label, value, selectedIndex, className = "", itemId = null) {
   const classes = ["fieldRow", "fieldRowCompact", "selectionInlineField", "selectionCoordField", className].filter(Boolean).join(" ");
   return `
     <label class="${classes}">
       <span class="label">${escapeHtml(label)}</span>
-      <input type="number" step="1" value="${value}" data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}" />
+      <input type="number" step="1" value="${value}" data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}" ${renderObjectDatasetAttr(prefix, itemId)} />
     </label>
   `;
 }
@@ -213,17 +220,17 @@ function formatNumericDisplay(value) {
   return numericValue.toFixed(3).replace(/\.?0+$/, "");
 }
 
-function renderCheckboxField(prefix, fieldKey, label, value, selectedIndex, className = "") {
+function renderCheckboxField(prefix, fieldKey, label, value, selectedIndex, className = "", itemId = null) {
   const classes = ["fieldRow", "compactInline", "compactBooleanField", "selectionInlineField", "selectionInlineCheckbox", className].filter(Boolean).join(" ");
   return `
     <label class="${classes}">
       <span class="label">${escapeHtml(label)}</span>
-      <input type="checkbox" ${value ? "checked" : ""} data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}" />
+      <input type="checkbox" ${value ? "checked" : ""} data-${prefix}-field="${escapeHtml(fieldKey)}" data-${prefix}-index="${selectedIndex}" ${renderObjectDatasetAttr(prefix, itemId)} />
     </label>
   `;
 }
 
-function renderParamField(prefix, paramKey, paramValue, selectedIndex) {
+function renderParamField(prefix, paramKey, paramValue, selectedIndex, itemId = null) {
   const inputType = getEntityParamInputType(paramValue);
   const escapedKey = escapeHtml(paramKey);
   const label = escapeHtml(formatParamLabel(paramKey));
@@ -238,6 +245,7 @@ function renderParamField(prefix, paramKey, paramValue, selectedIndex) {
           data-${prefix}-param-key="${escapedKey}"
           data-${prefix}-param-type="boolean"
           data-${prefix}-index="${selectedIndex}"
+          ${renderObjectDatasetAttr(prefix, itemId)}
         />
       </label>
     `;
@@ -253,6 +261,7 @@ function renderParamField(prefix, paramKey, paramValue, selectedIndex) {
           data-${prefix}-param-key="${escapedKey}"
           data-${prefix}-param-type="json"
           data-${prefix}-index="${selectedIndex}"
+          ${renderObjectDatasetAttr(prefix, itemId)}
         />
       </label>
     `;
@@ -268,14 +277,15 @@ function renderParamField(prefix, paramKey, paramValue, selectedIndex) {
         data-${prefix}-param-key="${escapedKey}"
         data-${prefix}-param-type="${inputType}"
         data-${prefix}-index="${selectedIndex}"
+        ${renderObjectDatasetAttr(prefix, itemId)}
       />
     </label>
   `;
 }
 
-function renderParamFields(prefix, params, selectedIndex) {
+function renderParamFields(prefix, params, selectedIndex, itemId = null) {
   return Object.entries(cloneEntityParams(params))
-    .map(([paramKey, paramValue]) => renderParamField(prefix, paramKey, paramValue, selectedIndex))
+    .map(([paramKey, paramValue]) => renderParamField(prefix, paramKey, paramValue, selectedIndex, itemId))
     .join("");
 }
 
@@ -339,7 +349,7 @@ function renderSoundTypeField(sound, selectedSoundIndex) {
   const soundTypeOptions = SOUND_PRESETS.map((preset) => ({ value: preset.type, label: preset.defaultName }));
   return `
     <div class="selectionInlineCluster selectionSoundTypeCluster">
-      ${renderSelectField("sound", "type", "Type", sound.type, selectedSoundIndex, soundTypeOptions, "selectionFieldType")}
+      ${renderSelectField("sound", "type", "Type", sound.type, selectedSoundIndex, soundTypeOptions, "selectionFieldType", sound?.id || null)}
     </div>
   `;
 }
@@ -391,7 +401,7 @@ function renderSoundSourceField(sound, selectedSoundIndex, previewState, scanSta
   const assetOptions = getSoundAssetOptionsForType(sound?.type);
 
   const fieldMarkup = !assetOptions.length
-    ? renderTextField("sound", "source", "Source", authoredSource, selectedSoundIndex, "selectionFieldVariant selectionParamField selectionSourceField")
+    ? renderTextField("sound", "source", "Source", authoredSource, selectedSoundIndex, "selectionFieldVariant selectionParamField selectionSourceField", sound?.id || null)
     : (() => {
       const optionMarkup = [];
 
@@ -419,7 +429,7 @@ function renderSoundSourceField(sound, selectedSoundIndex, previewState, scanSta
       return `
         <label class="fieldRow fieldRowCompact selectionInlineField selectionSourceField selectionSourcePickerField">
           <span class="label">Source</span>
-          <select data-sound-field="source" data-sound-index="${selectedSoundIndex}">
+          <select data-sound-field="source" data-sound-index="${selectedSoundIndex}" ${renderObjectDatasetAttr("sound", sound?.id || null)}>
             ${optionMarkup.join("")}
           </select>
         </label>
@@ -574,36 +584,36 @@ function renderBatchSoundEditor(selectedSounds, selectedSoundIndex) {
 
 function renderEntityEditor(entity, selectedEntityIndex) {
   return renderSelectionFields([
-    renderTextField("entity", "name", "Name", entity.name, selectedEntityIndex, "selectionFieldName"),
-    renderTextField("entity", "type", "Type", entity.type, selectedEntityIndex, "selectionFieldType"),
-    renderNumberField("entity", "x", "X", entity.x, selectedEntityIndex),
-    renderNumberField("entity", "y", "Y", entity.y, selectedEntityIndex),
-    renderCheckboxField("entity", "visible", "Visible", entity.visible, selectedEntityIndex, "selectionFieldToggle"),
-    renderParamFields("entity", entity?.params, selectedEntityIndex),
+    renderTextField("entity", "name", "Name", entity.name, selectedEntityIndex, "selectionFieldName", entity?.id || null),
+    renderTextField("entity", "type", "Type", entity.type, selectedEntityIndex, "selectionFieldType", entity?.id || null),
+    renderNumberField("entity", "x", "X", entity.x, selectedEntityIndex, "", entity?.id || null),
+    renderNumberField("entity", "y", "Y", entity.y, selectedEntityIndex, "", entity?.id || null),
+    renderCheckboxField("entity", "visible", "Visible", entity.visible, selectedEntityIndex, "selectionFieldToggle", entity?.id || null),
+    renderParamFields("entity", entity?.params, selectedEntityIndex, entity?.id || null),
   ].join(""));
 }
 
 function renderDecorEditor(decor, selectedDecorIndex) {
   return renderSelectionFields([
-    renderTextField("decor", "name", "Name", decor.name, selectedDecorIndex, "selectionFieldName"),
-    renderTextField("decor", "type", "Type", decor.type, selectedDecorIndex, "selectionFieldType"),
-    renderNumberField("decor", "x", "X", decor.x, selectedDecorIndex),
-    renderNumberField("decor", "y", "Y", decor.y, selectedDecorIndex),
-    renderCheckboxField("decor", "visible", "Visible", decor.visible, selectedDecorIndex, "selectionFieldToggle"),
-    renderTextField("decor", "variant", "Variant", decor.variant, selectedDecorIndex, "selectionFieldVariant selectionParamField"),
-    renderParamFields("decor", decor?.params, selectedDecorIndex),
+    renderTextField("decor", "name", "Name", decor.name, selectedDecorIndex, "selectionFieldName", decor?.id || null),
+    renderTextField("decor", "type", "Type", decor.type, selectedDecorIndex, "selectionFieldType", decor?.id || null),
+    renderNumberField("decor", "x", "X", decor.x, selectedDecorIndex, "", decor?.id || null),
+    renderNumberField("decor", "y", "Y", decor.y, selectedDecorIndex, "", decor?.id || null),
+    renderCheckboxField("decor", "visible", "Visible", decor.visible, selectedDecorIndex, "selectionFieldToggle", decor?.id || null),
+    renderTextField("decor", "variant", "Variant", decor.variant, selectedDecorIndex, "selectionFieldVariant selectionParamField", decor?.id || null),
+    renderParamFields("decor", decor?.params, selectedDecorIndex, decor?.id || null),
   ].join(""));
 }
 
 function renderSoundEditor(sound, selectedSoundIndex, previewState, scanState) {
   return renderSelectionFields([
-    renderTextField("sound", "name", "Name", sound.name, selectedSoundIndex, "selectionFieldName"),
+    renderTextField("sound", "name", "Name", sound.name, selectedSoundIndex, "selectionFieldName", sound?.id || null),
     renderSoundTypeField(sound, selectedSoundIndex),
     renderSoundSourceField(sound, selectedSoundIndex, previewState, scanState),
-    renderNumberField("sound", "x", "X", sound.x, selectedSoundIndex),
-    renderNumberField("sound", "y", "Y", sound.y, selectedSoundIndex),
-    renderCheckboxField("sound", "visible", "Visible", sound.visible, selectedSoundIndex, "selectionFieldToggle"),
-    renderParamFields("sound", sound?.params, selectedSoundIndex),
+    renderNumberField("sound", "x", "X", sound.x, selectedSoundIndex, "", sound?.id || null),
+    renderNumberField("sound", "y", "Y", sound.y, selectedSoundIndex, "", sound?.id || null),
+    renderCheckboxField("sound", "visible", "Visible", sound.visible, selectedSoundIndex, "selectionFieldToggle", sound?.id || null),
+    renderParamFields("sound", sound?.params, selectedSoundIndex, sound?.id || null),
   ].join(""));
 }
 
@@ -716,6 +726,9 @@ function applyParamChange(target, prefix, onUpdate, options = {}) {
   const index = Number.parseInt(target.dataset[`${prefix}Index`] || "", 10);
   const allowBatchSelection = Boolean(options.allowBatchSelection);
   if (!Number.isInteger(index) || (index < 0 && (!allowBatchSelection || index !== -1))) return false;
+  const itemId = typeof target.dataset[`${prefix}Id`] === "string" && target.dataset[`${prefix}Id`].trim()
+    ? target.dataset[`${prefix}Id`].trim()
+    : null;
 
   const paramType = target.dataset[`${prefix}ParamType`];
   if (paramType === "boolean") {
@@ -724,7 +737,7 @@ function applyParamChange(target, prefix, onUpdate, options = {}) {
       : target.value === "true";
     if (!isTextInputElement(target) && !isSelectElement(target)) return false;
     if (isSelectElement(target) && target.value === MIXED_FIELD_VALUE) return true;
-    onUpdate?.(index, "param", { key: paramKey, path: paramPath, value: nextValue });
+    onUpdate?.(index, "param", { __canonicalMutation: true, itemId, key: paramKey, path: paramPath, value: nextValue });
     return true;
   }
 
@@ -733,7 +746,7 @@ function applyParamChange(target, prefix, onUpdate, options = {}) {
     const parsed = Number.parseFloat(target.value);
     if (!Number.isFinite(parsed)) return true;
     const value = parsed;
-    onUpdate?.(index, "param", { key: paramKey, path: paramPath, value });
+    onUpdate?.(index, "param", { __canonicalMutation: true, itemId, key: paramKey, path: paramPath, value });
     return true;
   }
 
@@ -741,14 +754,14 @@ function applyParamChange(target, prefix, onUpdate, options = {}) {
     if (typeof target.value !== "string" || !target.value.trim()) return true;
     try {
       const parsed = JSON.parse(target.value);
-      onUpdate?.(index, "param", { key: paramKey, path: paramPath, value: parsed });
+      onUpdate?.(index, "param", { __canonicalMutation: true, itemId, key: paramKey, path: paramPath, value: parsed });
     } catch {
       return true;
     }
     return true;
   }
 
-  onUpdate?.(index, "param", { key: paramKey, path: paramPath, value: target.value });
+  onUpdate?.(index, "param", { __canonicalMutation: true, itemId, key: paramKey, path: paramPath, value: target.value });
   return true;
 }
 
@@ -830,9 +843,17 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const allowBatchSelection = Boolean(changeOptions.allowBatchSelection);
     if (!Number.isInteger(index) || (index < 0 && (!allowBatchSelection || index !== -1))) return false;
     if (isSelectElement(target) && target.value === MIXED_FIELD_VALUE) return true;
+    const itemId = typeof target.dataset[`${prefix}Id`] === "string" && target.dataset[`${prefix}Id`].trim()
+      ? target.dataset[`${prefix}Id`].trim()
+      : null;
+    const wrapMutationValue = (nextValue) => ({
+      __canonicalMutation: true,
+      itemId,
+      value: nextValue,
+    });
 
     if (field === "visible") {
-      onUpdate?.(index, "visible", target.checked);
+      onUpdate?.(index, "visible", wrapMutationValue(target.checked));
       return true;
     }
 
@@ -840,11 +861,11 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       const parsed = Number.parseInt(target.value, 10);
       if (!Number.isInteger(parsed)) return true;
       const value = parsed;
-      onUpdate?.(index, field, value);
+      onUpdate?.(index, field, wrapMutationValue(value));
       return true;
     }
 
-    onUpdate?.(index, field, target.value);
+    onUpdate?.(index, field, wrapMutationValue(target.value));
     return true;
   };
 

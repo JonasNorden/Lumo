@@ -53,12 +53,18 @@ function insertEntitySnapshot(entities, entity, index) {
 }
 
 export function applyCanonicalEntityAction(doc, action, direction = "forward") {
-  if (!doc || !Array.isArray(doc.entities) || !action?.entity?.id) {
+  if (!doc || !Array.isArray(doc.entities)) {
     return { changed: false, selectedEntityId: null };
   }
 
   const { entities } = doc;
-  const entityId = action.entity.id;
+  const entityId = action?.entity?.id
+    || action?.nextEntity?.id
+    || action?.previousEntity?.id
+    || null;
+  if (!entityId) {
+    return { changed: false, selectedEntityId: null };
+  }
 
   if (action.type === "create") {
     if (direction === "forward") {
@@ -80,6 +86,12 @@ export function applyCanonicalEntityAction(doc, action, direction = "forward") {
     return { changed: true, selectedEntityId: entityId };
   }
 
+  if (action.type === "update") {
+    const snapshot = direction === "forward" ? action.nextEntity : action.previousEntity;
+    const updated = insertEntitySnapshot(entities, snapshot, action.index);
+    return { changed: Boolean(updated), selectedEntityId: updated?.id || null };
+  }
+
   return { changed: false, selectedEntityId: null };
 }
 
@@ -90,6 +102,13 @@ export function createCanonicalEntityHistory() {
     undoStack: [],
     redoStack: [],
   };
+
+  const cloneAction = (action) => ({
+    ...action,
+    entity: cloneCanonicalEntitySnapshot(action.entity),
+    previousEntity: cloneCanonicalEntitySnapshot(action.previousEntity),
+    nextEntity: cloneCanonicalEntitySnapshot(action.nextEntity),
+  });
 
   return {
     get undoStack() {
@@ -103,10 +122,7 @@ export function createCanonicalEntityHistory() {
       history.redoStack.length = 0;
     },
     record(action) {
-      history.undoStack.push({
-        ...action,
-        entity: cloneCanonicalEntitySnapshot(action.entity),
-      });
+      history.undoStack.push(cloneAction(action));
       history.redoStack.length = 0;
     },
     canUndo() {
@@ -122,16 +138,10 @@ export function createCanonicalEntityHistory() {
       return history.redoStack.pop() || null;
     },
     pushUndo(action) {
-      history.undoStack.push({
-        ...action,
-        entity: cloneCanonicalEntitySnapshot(action.entity),
-      });
+      history.undoStack.push(cloneAction(action));
     },
     pushRedo(action) {
-      history.redoStack.push({
-        ...action,
-        entity: cloneCanonicalEntitySnapshot(action.entity),
-      });
+      history.redoStack.push(cloneAction(action));
     },
   };
 }
