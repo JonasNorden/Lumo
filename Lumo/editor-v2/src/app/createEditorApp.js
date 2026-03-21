@@ -2874,67 +2874,6 @@ export function createEditorApp({
     return changed;
   };
 
-  const moveEntitySelectionByDelta = (draft, originPositions, delta) => {
-    const doc = draft.document.active;
-    if (!doc) return false;
-
-    let changed = false;
-    startHistoryBatch(draft.history, "entity-move");
-    for (const origin of originPositions) {
-      const entity = doc.entities?.[origin.index];
-      if (!entity) continue;
-
-      const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
-      const nextEntity = isSpecialVolumeEntityType(entity.type)
-        ? shiftFogVolumeEntity(entity, delta.x, delta.y, doc.dimensions.tileSize)
-        : {
-          ...entity,
-          x: origin.x + delta.x,
-          y: origin.y + delta.y,
-        };
-
-      if (
-        previousEntity.x === nextEntity.x
-        && previousEntity.y === nextEntity.y
-        && JSON.stringify(previousEntity.params || {}) === JSON.stringify(nextEntity.params || {})
-      ) continue;
-      doc.entities.splice(origin.index, 1, nextEntity);
-      pushEntityUpdateHistory(draft.history, origin.index, previousEntity, nextEntity);
-      changed = true;
-    }
-    endHistoryBatch(draft.history);
-
-    updateEntitySelectionCell(draft, getPrimarySelectedEntityIndex(draft.interaction));
-    return changed;
-  };
-
-  const moveEntityToCell = (draft, index, cell) => {
-    const doc = draft.document.active;
-    if (!doc) return false;
-
-    const entity = doc.entities?.[index];
-    if (!entity || !cell) return false;
-
-    const next = clampEntityPosition(doc, cell.x, cell.y);
-    const nextEntity = isSpecialVolumeEntityType(entity.type)
-      ? shiftFogVolumeEntity(entity, next.x - entity.x, next.y - entity.y, doc.dimensions.tileSize)
-      : { ...entity, x: next.x, y: next.y };
-    const changed = entity.x !== nextEntity.x
-      || entity.y !== nextEntity.y
-      || JSON.stringify(entity.params || {}) !== JSON.stringify(nextEntity.params || {});
-    if (changed) {
-      const previousEntity = { ...entity, params: cloneEntityParams(entity.params) };
-      doc.entities.splice(index, 1, nextEntity);
-      pushEntityUpdateHistory(draft.history, index, previousEntity, nextEntity);
-    }
-    selectEntitiesByIds(draft, [nextEntity.id], nextEntity.id, {
-      clearHover: true,
-      clearHoverCell: true,
-      clearDrag: true,
-    });
-    return changed;
-  };
-
   const deleteSelectedDecorCleanRoom = (draft) => {
     const doc = draft.document.active;
     if (!doc) return false;
@@ -3783,6 +3722,73 @@ export function createEditorApp({
     syncCleanRoomEntitySelection(draft, entityId);
   };
 
+  const beginCleanRoomEntityDrag = (draft, entityId, anchorCell) => {
+    const doc = draft.document.active;
+    if (!doc || !anchorCell || typeof entityId !== "string" || !entityId.trim()) return false;
+
+    const selectedEntityIds = Array.isArray(draft.interaction.selectedEntityIds)
+      ? draft.interaction.selectedEntityIds.filter((selectedId) => typeof selectedId === "string" && selectedId.trim())
+      : [];
+    if (selectedEntityIds.length !== 1 || draft.interaction.selectedEntityId !== entityId) return false;
+
+    const entityIndex = getEntityIndexById(doc.entities || [], entityId);
+    const entity = Number.isInteger(entityIndex) ? doc.entities?.[entityIndex] : null;
+    if (!entity || isFogVolumeEntityType(entity.type)) return false;
+
+    draft.interaction.entityDrag = {
+      active: true,
+      leadEntityId: entityId,
+      anchorCell: { x: anchorCell.x, y: anchorCell.y },
+      previewDelta: { x: 0, y: 0 },
+      originPositions: [
+        {
+          entityId,
+          x: entity.x,
+          y: entity.y,
+        },
+      ],
+    };
+    draft.interaction.hoveredEntityIndex = entityIndex;
+    draft.interaction.hoveredEntityId = entityId;
+    draft.interaction.hoverCell = anchorCell;
+    draft.interaction.selectedCell = { x: entity.x, y: entity.y };
+    return true;
+  };
+
+  const commitCleanRoomEntityDrag = (draft, entityDrag) => {
+    const doc = draft.document.active;
+    if (!doc || !entityDrag?.active) return false;
+
+    const leadEntityId = typeof entityDrag.leadEntityId === "string" && entityDrag.leadEntityId.trim()
+      ? entityDrag.leadEntityId
+      : typeof entityDrag.originPositions?.[0]?.entityId === "string" && entityDrag.originPositions[0].entityId.trim()
+        ? entityDrag.originPositions[0].entityId
+        : null;
+    const origin = entityDrag.originPositions?.find((item) => item?.entityId === leadEntityId) || null;
+    if (!leadEntityId || !origin) return false;
+
+    const index = getEntityIndexById(doc.entities || [], leadEntityId);
+    const entity = Number.isInteger(index) ? doc.entities?.[index] : null;
+    if (!entity) return false;
+
+    const delta = entityDrag.previewDelta || { x: 0, y: 0 };
+    const nextPosition = clampEntityPosition(doc, origin.x + delta.x, origin.y + delta.y);
+    const nextEntity = {
+      ...entity,
+      x: nextPosition.x,
+      y: nextPosition.y,
+      params: cloneEntityParams(entity.params),
+    };
+    if (entity.x === nextEntity.x && entity.y === nextEntity.y) return false;
+
+    return applyCanonicalEntityUpdate(draft, {
+      type: "update",
+      index,
+      previousEntity: cloneCanonicalEntitySnapshot(entity),
+      nextEntity: cloneCanonicalEntitySnapshot(nextEntity),
+    });
+  };
+
   const handleCleanRoomEntityInspectMouseDown = (event, state, cell, point) => {
     if (!canUseCleanRoomEntityMode()) return false;
 
@@ -3807,6 +3813,10 @@ export function createEditorApp({
     store.setState((draft) => {
       const entityId = hitEntityIndex >= 0 ? draft.document.active?.entities?.[hitEntityIndex]?.id || null : null;
       draft.interaction.selectedCell = cell;
+      if (!event.shiftKey && entityId && draft.interaction.selectedEntityId === entityId) {
+        beginCleanRoomEntityDrag(draft, entityId, cell);
+        return;
+      }
       handleCleanRoomEntitySelectionHit(draft, entityId);
     });
     return true;
@@ -4102,8 +4112,7 @@ if (event.shiftKey) {
     updateHoveredCanvasState(event);
 
 
-    // CANONICAL ENTITY RUNTIME ONLY: ignore stale legacy entity drag state if anything managed to set it.
-    if (false && state.interaction.entityDrag?.active) {
+    if (state.interaction.entityDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
 
       const point = getCanvasPointFromMouseEvent(canvas, event);
@@ -4122,7 +4131,11 @@ if (event.shiftKey) {
           requestedDeltaY,
         );
         draft.interaction.hoverCell = cell;
-        draft.interaction.hoveredEntityIndex = entityDrag.leadIndex;
+        draft.interaction.hoveredEntityIndex = getEntityIndexById(
+          draft.document.active?.entities || [],
+          entityDrag.leadEntityId ?? entityDrag.originPositions?.[0]?.entityId ?? null,
+        );
+        draft.interaction.hoveredEntityId = entityDrag.leadEntityId ?? entityDrag.originPositions?.[0]?.entityId ?? null;
       });
       return;
     }
@@ -4250,14 +4263,13 @@ if (event.shiftKey) {
     }
 
 
-    // CANONICAL ENTITY RUNTIME ONLY: never commit legacy entity drag state on mouseup.
-    if (false && state.interaction.entityDrag?.active) {
+    if (state.interaction.entityDrag?.active) {
       store.setState((draft) => {
         const entityDrag = draft.interaction.entityDrag;
         if (!entityDrag?.active) return;
-        moveEntitySelectionByDelta(draft, entityDrag.originPositions, entityDrag.previewDelta || { x: 0, y: 0 });
+        commitCleanRoomEntityDrag(draft, entityDrag);
         draft.interaction.entityDrag = null;
-        updateEntitySelectionCell(draft, entityDrag.leadIndex);
+        updateEntitySelectionCell(draft);
       });
       return;
     }
