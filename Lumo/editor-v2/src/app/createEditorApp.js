@@ -93,7 +93,9 @@ import {
 import { createScanAudioPlaybackController } from "../domain/scan/scanAudioPlayback.js";
 import {
   clearDecorSelection,
+  getPrimarySelectedDecorId,
   getPrimarySelectedDecorIndex,
+  getSelectedDecorIds,
   getSelectedDecorIndices,
   pruneDecorSelection,
   setDecorSelection,
@@ -116,10 +118,10 @@ import {
   toggleSoundSelection,
 } from "../domain/sound/selection.js";
 import {
-  applyCleanRoomEntityAction,
-  CLEAN_ROOM_ENTITY_MODE_QUERY_PARAM,
-  cloneCleanRoomEntitySnapshot,
-  createCleanRoomEntityHistory,
+  applyCanonicalEntityAction,
+  CANONICAL_ENTITY_RUNTIME_QUERY_PARAM,
+  cloneCanonicalEntitySnapshot,
+  createCanonicalEntityHistory,
 } from "./cleanRoomEntityMode.js";
 
 const BATCH_EDITABLE_SOUND_PARAM_KEYS = new Set(["spatial", "volume", "pitch", "loop"]);
@@ -156,7 +158,7 @@ function renderCellHud(cellHud, state) {
   const activeTargetLabel = activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : "Tiles";
   const targetSelectionCount =
     activeLayer === PANEL_LAYERS.DECOR
-      ? getSelectedDecorIndices(state.interaction).length
+      ? getSelectedDecorIndices(state.interaction, state.document.active?.decor || []).length
       : activeLayer === PANEL_LAYERS.ENTITIES
         ? getSelectedEntityIndices(state.interaction).length
         : activeLayer === PANEL_LAYERS.SOUND
@@ -642,7 +644,7 @@ export function createEditorApp({
   topBarHelpMenu,
   bottomPanel,
   store,
-  cleanRoomEntityMode = { enabled: false, queryParam: CLEAN_ROOM_ENTITY_MODE_QUERY_PARAM, rawValue: null },
+  cleanRoomEntityMode = { enabled: false, queryParam: CANONICAL_ENTITY_RUNTIME_QUERY_PARAM, rawValue: null },
 }) {
   const ctx = canvas.getContext("2d");
   const minimapCtx = minimapCanvas.getContext("2d");
@@ -680,11 +682,11 @@ export function createEditorApp({
     lastPreviewSnapshot: null,
   };
 
-  // TEMP ENTITY CLEAN PATH ACTIVE: force the clean-room entity runtime on for every editor-v2 session.
-  // OLD ENTITY PATH DISABLED: do not allow the infected legacy V2 entity engine back onto the live path.
-  const cleanRoomEntityModeEnabled = true;
-  const cleanRoomEntityHistory = createCleanRoomEntityHistory();
-  const cleanRoomEntityModeLabel = "TEMP ENTITY CLEAN PATH ACTIVE · old entity runtime disabled";
+  // CANONICAL ENTITY RUNTIME: this stable-id clean-room path is now the only supported entity runtime in editor-v2.
+  // DO NOT re-enable legacy entity interaction, mutation, drag, history, or render branches from the old runtime.
+  // Future entity work must extend the canonical runtime below instead of reviving the disabled legacy entity engine.
+  const canonicalEntityRuntimeEnabled = true;
+  const canonicalEntityHistory = createCanonicalEntityHistory();
 
   const appendSoundDebugEvent = (title, details, beforeSnapshot = null, afterSnapshot = null) => {
     soundDebugState.sequence += 1;
@@ -1139,9 +1141,11 @@ export function createEditorApp({
         sound.y = Math.max(0, Math.min(nextHeight - 1, sound.y));
       }
 
-      pruneDecorSelection(draft.interaction, doc.decor?.length || 0);
-      if (Number.isInteger(draft.interaction.hoveredDecorIndex) && draft.interaction.hoveredDecorIndex >= (doc.decor?.length || 0)) {
-        draft.interaction.hoveredDecorIndex = null;
+      pruneDecorSelection(draft.interaction, doc.decor || []);
+      if (draft.interaction.hoveredDecorId && getDecorIndexById(doc.decor || [], draft.interaction.hoveredDecorId) === null) {
+        setHoveredDecor(draft, null);
+      } else if (Number.isInteger(draft.interaction.hoveredDecorIndex) && draft.interaction.hoveredDecorIndex >= (doc.decor?.length || 0)) {
+        setHoveredDecor(draft, null);
       }
 
       pruneEntitySelection(draft.interaction, doc.entities?.length || 0);
@@ -1325,16 +1329,29 @@ export function createEditorApp({
     return index >= 0 ? index : null;
   };
 
+  const getDecorIdAtIndex = (decorItems, index) =>
+    Number.isInteger(index) && index >= 0 && index < decorItems.length
+      ? getObjectLayerId(decorItems[index])
+      : null;
+
+  const getDecorIndexById = (decorItems, decorId) => {
+    if (!Array.isArray(decorItems) || typeof decorId !== "string" || !decorId.trim()) return null;
+    const index = decorItems.findIndex((decor) => decor?.id === decorId);
+    return index >= 0 ? index : null;
+  };
+
   const cloneEntitySnapshot = (entity) =>
     entity
       ? { ...entity, params: cloneEntityParams(entity.params) }
       : null;
 
 
-  const canUseCleanRoomEntityMode = () => cleanRoomEntityModeEnabled;
+  // Canonical entity runtime guard: entity authoring, selection, delete, and undo/redo must stay on the
+  // stable-id path below. The disabled legacy branches later in this file are intentionally unreachable.
+  const canUseCleanRoomEntityMode = () => canonicalEntityRuntimeEnabled;
 
   const clearCleanRoomEntityHistory = () => {
-    cleanRoomEntityHistory.clear();
+    canonicalEntityHistory.clear();
   };
 
   const syncCleanRoomEntitySelection = (draft, selectedEntityId = null) => {
@@ -1358,16 +1375,19 @@ export function createEditorApp({
   };
 
   const applyCleanRoomEntityHistoryAction = (draft, action, direction) => {
+    // Canonical entity history intentionally bypasses the shared legacy object-layer reconciliation path.
+    // Keep entity undo/redo/delete/create pinned to entity ids here so legacy entity indexing never re-enters.
     const doc = draft.document.active;
     if (!doc || !action) return false;
 
-    const result = applyCleanRoomEntityAction(doc, action, direction);
+    const result = applyCanonicalEntityAction(doc, action, direction);
     if (!result.changed) return false;
 
     syncCleanRoomEntitySelection(draft, result.selectedEntityId);
     clearDecorSelection(draft.interaction);
     clearSoundSelection(draft.interaction);
     draft.interaction.hoveredDecorIndex = null;
+    draft.interaction.hoveredDecorId = null;
     clearHoveredSound(draft.interaction);
     draft.interaction.decorDrag = null;
     draft.interaction.soundDrag = null;
@@ -1375,6 +1395,8 @@ export function createEditorApp({
   };
 
   const createCleanRoomEntityAtCell = (draft, cell, presetId = draft.interaction.activeEntityPresetId || DEFAULT_ENTITY_PRESET_ID) => {
+    // New entity features must build on this canonical create path; do not route authored entities back through
+    // the disabled legacy object-layer creation helpers.
     const doc = draft.document.active;
     if (!doc || !cell) return null;
 
@@ -1393,17 +1415,18 @@ export function createEditorApp({
     const action = {
       type: "create",
       index: createIndex,
-      entity: cloneCleanRoomEntitySnapshot(entity),
+      entity: cloneCanonicalEntitySnapshot(entity),
     };
 
     const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
     if (!changed) return null;
 
-    cleanRoomEntityHistory.record(action);
+    canonicalEntityHistory.record(action);
     return getEntityIndexById(doc.entities, entity.id);
   };
 
   const deleteSelectedEntityCleanRoom = (draft) => {
+    // Canonical entity deletion is stable-id only. Do not restore legacy entity delete or shared selection code here.
     const doc = draft.document.active;
     if (!doc) return false;
 
@@ -1419,31 +1442,31 @@ export function createEditorApp({
     const action = {
       type: "delete",
       index: deleteIndex,
-      entity: cloneCleanRoomEntitySnapshot(entity),
+      entity: cloneCanonicalEntitySnapshot(entity),
     };
 
     const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
     if (!changed) return false;
 
-    cleanRoomEntityHistory.record(action);
+    canonicalEntityHistory.record(action);
     return true;
   };
 
   const handleCleanRoomEntityUndo = (draft) => {
-    const action = cleanRoomEntityHistory.popUndo();
+    const action = canonicalEntityHistory.popUndo();
     if (!action) return false;
     const changed = applyCleanRoomEntityHistoryAction(draft, action, "backward");
     if (!changed) return false;
-    cleanRoomEntityHistory.pushRedo(action);
+    canonicalEntityHistory.pushRedo(action);
     return true;
   };
 
   const handleCleanRoomEntityRedo = (draft) => {
-    const action = cleanRoomEntityHistory.popRedo();
+    const action = canonicalEntityHistory.popRedo();
     if (!action) return false;
     const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
     if (!changed) return false;
-    cleanRoomEntityHistory.pushUndo(action);
+    canonicalEntityHistory.pushUndo(action);
     return true;
   };
 
@@ -1531,10 +1554,21 @@ export function createEditorApp({
     const decorItems = draft.document.active?.decor || [];
     const resolved = getObjectIndicesByIds(decorItems, ids);
     const nextPrimaryId = resolved.ids.includes(primaryId) ? primaryId : resolved.ids.at(-1) ?? null;
-    const primaryIndex = nextPrimaryId ? resolved.indices[resolved.ids.indexOf(nextPrimaryId)] ?? null : null;
-    setDecorSelection(draft.interaction, resolved.indices, primaryIndex);
+    setDecorSelection(draft.interaction, resolved.ids, nextPrimaryId, decorItems);
     draft.interaction.selectedDecorIds = resolved.ids;
     draft.interaction.selectedDecorId = nextPrimaryId;
+  };
+
+  const setHoveredDecor = (draft, decorRef = null) => {
+    const decorItems = draft.document.active?.decor || [];
+    const index = typeof decorRef === "string"
+      ? getDecorIndexById(decorItems, decorRef)
+      : Number.isInteger(decorRef)
+        ? decorRef
+        : null;
+    const decor = Number.isInteger(index) && index >= 0 && index < decorItems.length ? decorItems[index] : null;
+    draft.interaction.hoveredDecorIndex = decor ? index : null;
+    draft.interaction.hoveredDecorId = decor?.id || null;
   };
 
   const clearObjectLayerTransientInteractionState = (draft, reason = "object mutation") => {
@@ -1552,6 +1586,35 @@ export function createEditorApp({
     clearSoundPreviewState(draft);
     soundPreviewPlayback.stop();
     suppressObjectPlacementPreviews(draft, reason);
+  };
+
+  const captureDecorInteractionSnapshot = (draft) =>
+    captureIdObjectInteractionSnapshot({
+      selectedIds: draft.interaction.selectedDecorIds,
+      primarySelectedId: draft.interaction.selectedDecorId,
+      hoveredId: draft.interaction.hoveredDecorId,
+      drag: draft.interaction.decorDrag,
+    });
+
+  const reconcileDecorInteractionState = (draft, snapshot = null, options = {}) => {
+    const decorItems = draft.document.active?.decor || [];
+    const reconciled = reconcileIdObjectInteraction(decorItems, snapshot || captureDecorInteractionSnapshot(draft), options);
+    setDecorSelection(draft.interaction, reconciled.selectedIds, reconciled.primarySelectedId, decorItems);
+    setHoveredDecor(draft, reconciled.hoveredId);
+    draft.interaction.decorDrag = reconciled.drag
+      ? {
+        active: true,
+        leadDecorId: reconciled.drag.leadSoundId,
+        anchorCell: reconciled.drag.anchorCell,
+        previewDelta: reconciled.drag.previewDelta,
+        originPositions: (reconciled.drag.originPositions || []).map((origin) => ({
+          decorId: origin.soundId,
+          x: origin.x,
+          y: origin.y,
+        })),
+      }
+      : null;
+    updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction, decorItems));
   };
 
   const applyObjectLayerMutationSelection = (draft, selection = {}) => {
@@ -1573,7 +1636,10 @@ export function createEditorApp({
       return;
     }
     if (draft.interaction.selectedDecorIds?.length) {
-      updateDecorSelectionCell(draft);
+      reconcileDecorInteractionState(draft, null, {
+        clearHover: true,
+        clearDrag: true,
+      });
       return;
     }
     if (draft.interaction.selectedSoundIds?.length) {
@@ -1698,7 +1764,7 @@ export function createEditorApp({
       draft.interaction.hoverCell = null;
       draft.interaction.hoveredEntityIndex = null;
       draft.interaction.hoveredEntityId = null;
-      draft.interaction.hoveredDecorIndex = null;
+      setHoveredDecor(draft, null);
       clearHoveredSound(draft.interaction);
       const afterSnapshot = createSoundDebugSnapshot(draft);
       if (formatSoundDebugSnapshot(beforeSnapshot) !== formatSoundDebugSnapshot(afterSnapshot)) {
@@ -1713,7 +1779,7 @@ export function createEditorApp({
     const hoveredSoundIndex = findSoundAtCanvasPoint(doc, draft.viewport, point.x, point.y);
     draft.interaction.hoveredEntityIndex = hoveredEntityIndex >= 0 ? hoveredEntityIndex : null;
     draft.interaction.hoveredEntityId = hoveredEntityIndex >= 0 ? getEntityIdAtIndex(doc.entities || [], hoveredEntityIndex) : null;
-    draft.interaction.hoveredDecorIndex = hoveredDecorIndex >= 0 ? hoveredDecorIndex : null;
+    setHoveredDecor(draft, hoveredDecorIndex >= 0 ? hoveredDecorIndex : null);
     setHoveredSound(draft, hoveredSoundIndex >= 0 ? hoveredSoundIndex : null);
     const afterSnapshot = createSoundDebugSnapshot(draft);
     if (formatSoundDebugSnapshot(beforeSnapshot) !== formatSoundDebugSnapshot(afterSnapshot)) {
@@ -1897,20 +1963,20 @@ export function createEditorApp({
     const focusedTopBarField = captureFocusedTopBarField();
     const activeLayer = getActiveLayer(state.interaction);
     const selectedCount = activeLayer === PANEL_LAYERS.DECOR
-      ? getSelectedDecorIndices(state.interaction).length
+      ? getSelectedDecorIndices(state.interaction, state.document.active?.decor || []).length
       : activeLayer === PANEL_LAYERS.ENTITIES
         ? getSelectedEntityIndices(state.interaction).length
         : activeLayer === PANEL_LAYERS.SOUND
           ? getSelectedSoundIndices(state.interaction).length
           : 0;
     const activeSelectionLabel = activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : "Tiles";
-    const statusLabel = state.ui.importStatus || `${cleanRoomEntityModeLabel ? `${cleanRoomEntityModeLabel} · ` : ""}Layer: ${activeSelectionLabel} · ${selectedCount || 0} selected`;
+    const statusLabel = state.ui.importStatus || `Layer: ${activeSelectionLabel} · ${selectedCount || 0} selected`;
 
     topBarStatus.textContent = statusLabel;
     topBarStatus.dataset.target = activeLayer;
 
-    const undoEnabled = canUndo(state.history) || (cleanRoomEntityModeEnabled && cleanRoomEntityHistory.canUndo());
-    const redoEnabled = canRedo(state.history) || (cleanRoomEntityModeEnabled && cleanRoomEntityHistory.canRedo());
+    const undoEnabled = canUndo(state.history) || (canonicalEntityRuntimeEnabled && canonicalEntityHistory.canUndo());
+    const redoEnabled = canRedo(state.history) || (canonicalEntityRuntimeEnabled && canonicalEntityHistory.canRedo());
     const exportEnabled = Boolean(state.document.active);
 
     const actionButtons = topBar.querySelectorAll("[data-topbar-action]");
@@ -1991,7 +2057,7 @@ export function createEditorApp({
       draft.interaction.hoveredEntityIndex = null;
       clearHoveredSound(draft.interaction);
       updateDecorSelectionCell(draft);
-      if (!getSelectedDecorIndices(draft.interaction).length) {
+      if (!getSelectedDecorIndices(draft.interaction, draft.document.active?.decor || []).length) {
         draft.interaction.selectedCell = null;
       }
       return;
@@ -2001,7 +2067,7 @@ export function createEditorApp({
       clearEntitySelection(draft.interaction);
       clearDecorSelection(draft.interaction);
       draft.interaction.hoveredEntityIndex = null;
-      draft.interaction.hoveredDecorIndex = null;
+      setHoveredDecor(draft, null);
       reconcileSoundInteractionState(draft);
       if (!getSelectedSoundIndices(draft.interaction, draft.document.active?.sounds || []).length) {
         draft.interaction.selectedCell = null;
@@ -2011,7 +2077,7 @@ export function createEditorApp({
 
     clearDecorSelection(draft.interaction);
     clearSoundSelection(draft.interaction);
-    draft.interaction.hoveredDecorIndex = null;
+    setHoveredDecor(draft, null);
     clearHoveredSound(draft.interaction);
     updateEntitySelectionCell(draft);
     if (!getSelectedEntityIndices(draft.interaction).length) {
@@ -2025,7 +2091,7 @@ export function createEditorApp({
       clearDecorSelection(draft.interaction);
       clearSoundSelection(draft.interaction);
       draft.interaction.hoveredEntityIndex = null;
-      draft.interaction.hoveredDecorIndex = null;
+      setHoveredDecor(draft, null);
       clearHoveredSound(draft.interaction);
       draft.interaction.entityDrag = null;
       draft.interaction.decorDrag = null;
@@ -2047,7 +2113,7 @@ export function createEditorApp({
       clearEntitySelection(draft.interaction);
       clearDecorSelection(draft.interaction);
       draft.interaction.hoveredEntityIndex = null;
-      draft.interaction.hoveredDecorIndex = null;
+      setHoveredDecor(draft, null);
       clearHoveredSound(draft.interaction);
       draft.interaction.entityDrag = null;
       draft.interaction.decorDrag = null;
@@ -2056,7 +2122,7 @@ export function createEditorApp({
 
     clearDecorSelection(draft.interaction);
     clearSoundSelection(draft.interaction);
-    draft.interaction.hoveredDecorIndex = null;
+    setHoveredDecor(draft, null);
     clearHoveredSound(draft.interaction);
     draft.interaction.decorDrag = null;
     draft.interaction.soundDrag = null;
@@ -2068,8 +2134,13 @@ export function createEditorApp({
     variantMode: interaction.decorScatterSettings?.variantMode === "random" ? "random" : "fixed",
   });
 
-  const updateDecorSelectionCell = (draft, decorIndex = getPrimarySelectedDecorIndex(draft.interaction)) => {
-    const decor = Number.isInteger(decorIndex) ? draft.document.active?.decor?.[decorIndex] : null;
+  const updateDecorSelectionCell = (draft, decorIndex = getPrimarySelectedDecorIndex(draft.interaction, draft.document.active?.decor || [])) => {
+    const decorItems = draft.document.active?.decor || [];
+    const decor = getPrimarySelectedDecorId(draft.interaction)
+      ? decorItems.find((candidate) => candidate?.id === draft.interaction.selectedDecorId) || null
+      : Number.isInteger(decorIndex)
+        ? decorItems[decorIndex] || null
+        : null;
     draft.interaction.selectedCell = decor ? { x: decor.x, y: decor.y } : null;
   };
 
@@ -2246,7 +2317,7 @@ export function createEditorApp({
     getEntitySelectionIndices(interaction, entities).map((index) => ({ index, entity: entities[index] })).filter((entry) => entry.entity);
 
   const getDecorSelectionIndices = (interaction, decorItems) =>
-    getSelectedDecorIndices(interaction).filter((index) => index >= 0 && index < decorItems.length);
+    getSelectedDecorIndices(interaction, decorItems).filter((index) => index >= 0 && index < decorItems.length);
 
   const getSelectedDecor = (interaction, decorItems) =>
     getDecorSelectionIndices(interaction, decorItems).map((index) => ({ index, decor: decorItems[index] })).filter((entry) => entry.decor);
@@ -2482,6 +2553,7 @@ export function createEditorApp({
     clearEntitySelection(draft.interaction);
     clearDecorSelection(draft.interaction);
     draft.interaction.hoveredEntityIndex = null;
+    draft.interaction.hoveredDecorId = null;
     draft.interaction.hoveredDecorIndex = null;
     draft.interaction.entityDrag = null;
     draft.interaction.decorDrag = null;
@@ -2497,7 +2569,8 @@ export function createEditorApp({
     let changed = false;
     startHistoryBatch(draft.history, "decor-move");
     for (const origin of originPositions) {
-      const decor = doc.decor?.[origin.index];
+      const index = getDecorIndexById(doc.decor || [], origin.decorId);
+      const decor = Number.isInteger(index) ? doc.decor?.[index] : null;
       if (!decor) continue;
 
       const previousDecor = { ...decor };
@@ -2508,13 +2581,13 @@ export function createEditorApp({
       };
 
       if (previousDecor.x === nextDecor.x && previousDecor.y === nextDecor.y) continue;
-      doc.decor.splice(origin.index, 1, nextDecor);
-      pushDecorUpdateHistory(draft.history, origin.index, previousDecor, nextDecor);
+      doc.decor.splice(index, 1, nextDecor);
+      pushDecorUpdateHistory(draft.history, index, previousDecor, nextDecor);
       changed = true;
     }
     endHistoryBatch(draft.history);
 
-    const primaryIndex = getPrimarySelectedDecorIndex(draft.interaction);
+    const primaryIndex = getPrimarySelectedDecorIndex(draft.interaction, doc.decor || []);
     updateDecorSelectionCell(draft, primaryIndex);
     return changed;
   };
@@ -2669,9 +2742,11 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
-    const primaryIndex = duplicatedIndices[duplicatedIndices.length - 1] ?? null;
-    setDecorSelection(draft.interaction, duplicatedIndices, primaryIndex);
-    draft.interaction.hoveredDecorIndex = primaryIndex;
+    const duplicatedIds = duplicatedIndices.map((index) => getDecorIdAtIndex(doc.decor || [], index)).filter(Boolean);
+    const primaryId = duplicatedIds.at(-1) ?? null;
+    const primaryIndex = primaryId ? getDecorIndexById(doc.decor || [], primaryId) : null;
+    setDecorSelection(draft.interaction, duplicatedIds, primaryId, doc.decor || []);
+    setHoveredDecor(draft, primaryId);
     setCanvasSelectionMode(draft, "decor");
     updateDecorSelectionCell(draft, primaryIndex);
     draft.interaction.decorDrag = null;
@@ -2700,8 +2775,8 @@ export function createEditorApp({
         decor: { ...decor, params: cloneEntityParams(decor.params) },
       }),
     );
-    setDecorSelection(draft.interaction, [createdIndex], createdIndex);
-    draft.interaction.hoveredDecorIndex = createdIndex;
+    setDecorSelection(draft.interaction, [decor.id], decor.id, doc.decor || []);
+    setHoveredDecor(draft, decor.id);
     draft.interaction.selectedCell = { x: decor.x, y: decor.y };
     clearEntitySelection(draft.interaction);
     draft.interaction.hoveredEntityIndex = null;
@@ -2733,10 +2808,16 @@ export function createEditorApp({
     }
     endHistoryBatch(draft.history);
 
+    const selectedDecor = doc.decor[doc.decor.length - 1] || null;
     const selectedIndex = doc.decor.length - 1;
-    setDecorSelection(draft.interaction, [selectedIndex], selectedIndex);
-    draft.interaction.hoveredDecorIndex = selectedIndex;
-    draft.interaction.selectedCell = { x: doc.decor[selectedIndex].x, y: doc.decor[selectedIndex].y };
+    setDecorSelection(
+      draft.interaction,
+      selectedDecor?.id ? [selectedDecor.id] : [],
+      selectedDecor?.id || null,
+      doc.decor || [],
+    );
+    setHoveredDecor(draft, selectedDecor?.id || null);
+    draft.interaction.selectedCell = selectedDecor ? { x: selectedDecor.x, y: selectedDecor.y } : null;
     clearEntitySelection(draft.interaction);
     draft.interaction.entityDrag = null;
     draft.interaction.hoveredEntityIndex = null;
@@ -2822,6 +2903,7 @@ export function createEditorApp({
     clearEntitySelection(draft.interaction);
     clearDecorSelection(draft.interaction);
     draft.interaction.hoveredEntityIndex = null;
+    draft.interaction.hoveredDecorId = null;
     draft.interaction.hoveredDecorIndex = null;
     return true;
   };
@@ -2847,6 +2929,7 @@ export function createEditorApp({
     clearEntitySelection(draft.interaction);
     clearDecorSelection(draft.interaction);
     draft.interaction.hoveredEntityIndex = null;
+    draft.interaction.hoveredDecorId = null;
     draft.interaction.hoveredDecorIndex = null;
     draft.interaction.entityDrag = null;
     draft.interaction.decorDrag = null;
@@ -2933,6 +3016,7 @@ export function createEditorApp({
           clearEntitySelection(draft.interaction);
           clearDecorSelection(draft.interaction);
           draft.interaction.hoveredEntityIndex = null;
+          draft.interaction.hoveredDecorId = null;
           draft.interaction.hoveredDecorIndex = null;
           draft.interaction.entityDrag = null;
           draft.interaction.decorDrag = null;
@@ -3045,8 +3129,8 @@ export function createEditorApp({
     const next = clampDecorPosition(doc, cell.x, cell.y);
     const changed = decor.x !== next.x || decor.y !== next.y;
     if (!changed) {
-      setDecorSelection(draft.interaction, [index], index);
-      draft.interaction.hoveredDecorIndex = index;
+      setDecorSelection(draft.interaction, [decor.id], decor.id, doc.decor || []);
+      setHoveredDecor(draft, decor.id);
       clearEntitySelection(draft.interaction);
       draft.interaction.hoveredEntityIndex = null;
       setCanvasSelectionMode(draft, "decor");
@@ -3061,8 +3145,8 @@ export function createEditorApp({
     };
     doc.decor.splice(index, 1, nextDecor);
     pushDecorUpdateHistory(draft.history, index, previousDecor, nextDecor);
-    setDecorSelection(draft.interaction, [index], index);
-    draft.interaction.hoveredDecorIndex = index;
+    setDecorSelection(draft.interaction, [nextDecor.id], nextDecor.id, doc.decor || []);
+    setHoveredDecor(draft, nextDecor.id);
     clearEntitySelection(draft.interaction);
     draft.interaction.hoveredEntityIndex = null;
     setCanvasSelectionMode(draft, "decor");
@@ -3071,20 +3155,18 @@ export function createEditorApp({
   };
 
   const deleteSelectedEntity = (draft) => {
-    // TEMP ENTITY CLEAN PATH ACTIVE.
-    // OLD ENTITY PATH DISABLED: legacy entity delete/history reconciliation is off the live path.
+    // CANONICAL ENTITY RUNTIME ONLY: entity delete/history stays on the stable-id runtime.
     return deleteSelectedEntityCleanRoom(draft);
   };
 
   const duplicateSelectedEntity = (draft) => {
     void draft;
-    // OLD ENTITY PATH DISABLED: duplicate stays off until a clean-room entity mutation path exists.
+    // CANONICAL ENTITY RUNTIME ONLY: duplicate stays off until a stable-id canonical mutation path exists.
     return false;
   };
 
   const createEntityAtCell = (draft, cell, presetId = draft.interaction.activeEntityPresetId || DEFAULT_ENTITY_PRESET_ID) => {
-    // TEMP ENTITY CLEAN PATH ACTIVE.
-    // OLD ENTITY PATH DISABLED: legacy entity create/history wiring has been removed from live execution.
+    // CANONICAL ENTITY RUNTIME ONLY: entity create/history is routed through the stable-id runtime above.
     return createCleanRoomEntityAtCell(draft, cell, presetId);
   };
 
@@ -3123,7 +3205,7 @@ export function createEditorApp({
       }
 
       if (field === "duplicate") {
-        // OLD ENTITY PATH DISABLED: duplicate depended on the legacy entity mutation/history engine.
+        // CANONICAL ENTITY RUNTIME ONLY: duplicate depended on the disabled legacy entity mutation/history engine.
         duplicateSelectedEntity(draft);
         return;
       }
@@ -3155,7 +3237,7 @@ export function createEditorApp({
       }
 
       if (index >= 0 && index < entities.length) {
-        // OLD ENTITY PATH DISABLED: inspector-driven entity mutation still routes through the legacy
+        // CANONICAL ENTITY RUNTIME ONLY: inspector-driven entity mutation still routes through the disabled legacy
         // entity history/reconcile engine. Keep the selected entity truthful in the panel, but block
         // these edits from executing until the minimal clean entity path grows a new direct mutation path.
       }
@@ -3243,11 +3325,11 @@ export function createEditorApp({
       if (field === 'select') {
         if (index >= 0 && index < decorItems.length) {
           if (value?.toggle) {
-            toggleDecorSelection(draft.interaction, index);
+            toggleDecorSelection(draft.interaction, index, decorItems);
           } else {
-            setDecorSelection(draft.interaction, [index], index);
+            setDecorSelection(draft.interaction, [index], index, decorItems);
           }
-          draft.interaction.hoveredDecorIndex = index;
+          setHoveredDecor(draft, index);
           clearEntitySelection(draft.interaction);
           clearSoundSelection(draft.interaction);
           draft.interaction.hoveredEntityIndex = null;
@@ -3255,7 +3337,7 @@ export function createEditorApp({
           draft.interaction.entityDrag = null;
           draft.interaction.soundDrag = null;
           applyCanvasTarget(draft, "decor");
-          updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction));
+          updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction, decorItems));
         }
         return;
       }
@@ -3456,7 +3538,7 @@ export function createEditorApp({
       draft.interaction.hoveredEntityId = nextHoveredEntityIndex >= 0
         ? getEntityIdAtIndex(draft.document.active?.entities || [], nextHoveredEntityIndex)
         : null;
-      draft.interaction.hoveredDecorIndex = nextHoveredDecorIndex >= 0 ? nextHoveredDecorIndex : null;
+      setHoveredDecor(draft, nextHoveredDecorIndex >= 0 ? nextHoveredDecorIndex : null);
       setHoveredSound(draft, nextHoveredSoundIndex >= 0 ? nextHoveredSoundIndex : null);
       resumeObjectPlacementPreviews(draft, "canvas mousemove");
       appendSoundDebugEvent(
@@ -3479,7 +3561,7 @@ export function createEditorApp({
       draft.interaction.hoverCell = null;
       draft.interaction.hoveredEntityIndex = null;
       draft.interaction.hoveredEntityId = null;
-      draft.interaction.hoveredDecorIndex = null;
+      setHoveredDecor(draft, null);
       clearHoveredSound(draft.interaction);
       resumeObjectPlacementPreviews(draft);
     });
@@ -3612,7 +3694,7 @@ export function createEditorApp({
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
-        resumeObjectPlacementPreviews(draft, "clean-room entity placement");
+        resumeObjectPlacementPreviews(draft, "canonical entity placement");
         createCleanRoomEntityAtCell(draft, cell, activeEntityPresetId);
         draft.interaction.hoverCell = cell;
       });
@@ -3677,7 +3759,7 @@ export function createEditorApp({
       return true;
     }
 
-    // OLD ENTITY PATH DISABLED: entity click/select must never drop back into the legacy inspect path.
+    // CANONICAL ENTITY RUNTIME ONLY: entity click/select must never drop back into the disabled legacy inspect path.
     if (false && activeLayer === PANEL_LAYERS.ENTITIES && selectionMode === "entity" && hitEntityIndex >= 0) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
@@ -3753,32 +3835,33 @@ if (event.shiftKey) {
       event.preventDefault();
       store.setState((draft) => {
         const decor = draft.document.active?.decor?.[hitDecorIndex];
+        const decorItems = draft.document.active?.decor || [];
         applyCanvasTarget(draft, "decor");
-        draft.interaction.hoveredDecorIndex = hitDecorIndex;
+        setHoveredDecor(draft, hitDecorIndex);
         if (event.shiftKey) {
-          toggleDecorSelection(draft.interaction, hitDecorIndex);
-          updateDecorSelectionCell(draft);
+          toggleDecorSelection(draft.interaction, hitDecorIndex, decorItems);
+          updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction, decorItems));
           draft.interaction.decorDrag = null;
           return;
         } else {
-          const selectedIndices = getSelectedDecorIndices(draft.interaction);
+          const selectedIndices = getSelectedDecorIndices(draft.interaction, decorItems);
           const dragSelection = selectedIndices.includes(hitDecorIndex) ? selectedIndices : [hitDecorIndex];
-          setDecorSelection(draft.interaction, dragSelection, hitDecorIndex);
+          setDecorSelection(draft.interaction, dragSelection, hitDecorIndex, decorItems);
         }
-        const primaryDecorIndex = getPrimarySelectedDecorIndex(draft.interaction);
+        const primaryDecorIndex = getPrimarySelectedDecorIndex(draft.interaction, decorItems);
         updateDecorSelectionCell(draft, primaryDecorIndex);
         draft.interaction.decorDrag = {
           active: true,
-          leadIndex: hitDecorIndex,
+          leadDecorId: decor?.id || null,
           anchorCell: decor ? { x: decor.x, y: decor.y } : cell,
-          originPositions: getDecorSelectionIndices(draft.interaction, draft.document.active?.decor || []).map((index) => {
-            const selectedDecor = draft.document.active?.decor?.[index];
+          originPositions: getDecorSelectionIndices(draft.interaction, decorItems).map((index) => {
+            const selectedDecor = decorItems[index];
             return {
-              index,
+              decorId: selectedDecor?.id || null,
               x: selectedDecor?.x ?? 0,
               y: selectedDecor?.y ?? 0,
             };
-          }),
+          }).filter((origin) => origin.decorId),
           previewDelta: { x: 0, y: 0 },
         };
       });
@@ -3948,7 +4031,7 @@ if (event.shiftKey) {
     updateHoveredCanvasState(event);
 
 
-    // OLD ENTITY PATH DISABLED: ignore stale legacy entity drag state if anything managed to set it.
+    // CANONICAL ENTITY RUNTIME ONLY: ignore stale legacy entity drag state if anything managed to set it.
     if (false && state.interaction.entityDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
 
@@ -3992,7 +4075,7 @@ if (event.shiftKey) {
           requestedDeltaY,
         );
         draft.interaction.hoverCell = cell;
-        draft.interaction.hoveredDecorIndex = decorDrag.leadIndex;
+        setHoveredDecor(draft, decorDrag.leadDecorId);
       });
       return;
     }
@@ -4115,7 +4198,7 @@ if (event.shiftKey) {
     }
 
 
-    // OLD ENTITY PATH DISABLED: never commit legacy entity drag state on mouseup.
+    // CANONICAL ENTITY RUNTIME ONLY: never commit legacy entity drag state on mouseup.
     if (false && state.interaction.entityDrag?.active) {
       store.setState((draft) => {
         const entityDrag = draft.interaction.entityDrag;
@@ -4188,14 +4271,16 @@ if (event.shiftKey) {
 
       store.setState((draft) => {
         if (boxSelection.mode === "decor") {
-          const baseSelection = boxSelection.additive ? getSelectedDecorIndices(draft.interaction) : [];
+          const decorItems = draft.document.active?.decor || [];
+          const baseSelection = boxSelection.additive ? getSelectedDecorIndices(draft.interaction, decorItems) : [];
           applyCanvasTarget(draft, "decor");
           setDecorSelection(
             draft.interaction,
             boxSelection.additive ? [...baseSelection, ...nextSelection] : nextSelection,
-            nextSelection[nextSelection.length - 1] ?? getPrimarySelectedDecorIndex(draft.interaction),
+            nextSelection[nextSelection.length - 1] ?? getPrimarySelectedDecorIndex(draft.interaction, decorItems),
+            decorItems,
           );
-          updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction));
+          updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction, decorItems));
         } else if (boxSelection.mode === "sound") {
           const soundItems = draft.document.active?.sounds || [];
           const baseSelection = boxSelection.additive ? getSelectedSoundIndices(draft.interaction, soundItems) : [];
@@ -4321,14 +4406,15 @@ if (event.shiftKey) {
     const hitDecorIndex = findDecorAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     if (activeLayer === PANEL_LAYERS.DECOR && selectionMode === "decor" && hitDecorIndex >= 0) {
       store.setState((draft) => {
+        const decorItems = draft.document.active?.decor || [];
         applyCanvasTarget(draft, "decor");
         if (event.shiftKey) {
-          toggleDecorSelection(draft.interaction, hitDecorIndex);
+          toggleDecorSelection(draft.interaction, hitDecorIndex, decorItems);
         } else {
-          setDecorSelection(draft.interaction, [hitDecorIndex], hitDecorIndex);
+          setDecorSelection(draft.interaction, [hitDecorIndex], hitDecorIndex, decorItems);
         }
-        draft.interaction.hoveredDecorIndex = hitDecorIndex;
-        updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction));
+        setHoveredDecor(draft, hitDecorIndex);
+        updateDecorSelectionCell(draft, getPrimarySelectedDecorIndex(draft.interaction, decorItems));
       });
       return;
     }
@@ -4395,6 +4481,7 @@ if (event.shiftKey) {
     draft.interaction.hoveredEntityIndex = null;
     draft.interaction.hoveredEntityId = null;
     draft.interaction.hoveredDecorIndex = null;
+    draft.interaction.hoveredDecorId = null;
     clearHoveredSound(draft.interaction);
     clearDecorSelection(draft.interaction);
     clearEntitySelection(draft.interaction);
@@ -4476,9 +4563,9 @@ if (event.shiftKey) {
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
-      if (canUseCleanRoomEntityMode() && cleanRoomEntityHistory.canUndo()) {
+      if (canUseCleanRoomEntityMode() && canonicalEntityHistory.canUndo()) {
         handleCleanRoomEntityUndo(draft);
-        appendSoundDebugEvent("Undo handled", "clean-room entity history", beforeSnapshot, createSoundDebugSnapshot(draft));
+        appendSoundDebugEvent("Undo handled", "canonical entity history", beforeSnapshot, createSoundDebugSnapshot(draft));
         return;
       }
       const entry = undoTileEdit(doc, draft.history);
@@ -4492,9 +4579,9 @@ if (event.shiftKey) {
     store.setState((draft) => {
       const doc = draft.document.active;
       if (!doc) return;
-      if (canUseCleanRoomEntityMode() && cleanRoomEntityHistory.canRedo()) {
+      if (canUseCleanRoomEntityMode() && canonicalEntityHistory.canRedo()) {
         handleCleanRoomEntityRedo(draft);
-        appendSoundDebugEvent("Redo handled", "clean-room entity history", beforeSnapshot, createSoundDebugSnapshot(draft));
+        appendSoundDebugEvent("Redo handled", "canonical entity history", beforeSnapshot, createSoundDebugSnapshot(draft));
         return;
       }
       const entry = redoTileEdit(doc, draft.history);
@@ -4588,6 +4675,7 @@ if (event.shiftKey) {
       draft.interaction.soundDrag = null;
       draft.interaction.hoveredEntityIndex = null;
       draft.interaction.hoveredDecorIndex = null;
+      draft.interaction.hoveredDecorId = null;
       clearHoveredSound(draft.interaction);
       clearDecorScatterDrag(draft);
       clearEntitySelection(draft.interaction);
@@ -4658,7 +4746,7 @@ if (event.shiftKey) {
       const beforeSnapshot = createSoundDebugSnapshot(state);
       const hasSelection =
         activeLayer === PANEL_LAYERS.DECOR
-          ? getSelectedDecorIndices(state.interaction).length
+      ? getSelectedDecorIndices(state.interaction, state.document.active?.decor || []).length
           : activeLayer === PANEL_LAYERS.SOUND
             ? getSelectedSoundIndices(state.interaction).length
             : activeLayer === PANEL_LAYERS.ENTITIES
@@ -4915,6 +5003,7 @@ if (event.shiftKey) {
         state.interaction.hoveredEntityIndex = null;
         state.interaction.hoveredEntityId = null;
         state.interaction.hoveredDecorIndex = null;
+        state.interaction.hoveredDecorId = null;
         clearHoveredSound(state.interaction);
         state.interaction.activeLayer = PANEL_LAYERS.TILES;
         state.interaction.canvasSelectionMode = "entity";

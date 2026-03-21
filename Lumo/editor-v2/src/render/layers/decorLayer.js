@@ -125,7 +125,9 @@ export function findDecorAtCanvasPoint(doc, viewport, pointX, pointY, radius = 2
 export function renderDecor(ctx, doc, viewport, interaction) {
   const decorItems = doc.decor || [];
   const tileSize = doc.dimensions.tileSize;
-  const draggedSelection = new Set(interaction.decorDrag?.active ? getSelectedDecorIndices(interaction) : []);
+  // Decor migration seam: authored decor highlighting/hover now prefers stable ids so legacy index drift
+  // does not retarget already-authored objects after deletes, duplicates, or reordering.
+  const draggedSelection = new Set(interaction.decorDrag?.active ? getSelectedDecorIndices(interaction, decorItems) : []);
   const selectedDecorIds = new Set(
     Array.isArray(interaction.selectedDecorIds)
       ? interaction.selectedDecorIds.filter((decorId) => typeof decorId === "string" && decorId.trim())
@@ -155,7 +157,7 @@ export function renderDecorDragPreview(ctx, doc, viewport, interaction) {
   const delta = decorDrag.previewDelta || { x: 0, y: 0 };
 
   for (const origin of decorDrag.originPositions || []) {
-    const decor = doc.decor?.[origin.index];
+    const decor = (doc.decor || []).find((candidate) => candidate?.id === origin.decorId);
     if (!decor?.visible) continue;
 
     const previewDecor = {
