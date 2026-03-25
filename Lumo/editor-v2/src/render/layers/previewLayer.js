@@ -11,6 +11,10 @@ function isPreviewTool(activeTool) {
   );
 }
 
+function isTileStylePreviewLayer(activeLayer) {
+  return activeLayer === "tiles" || activeLayer === "background" || activeLayer == null;
+}
+
 function getPreviewStyle(activeTool) {
   if (activeTool === EDITOR_TOOLS.ERASE) {
     return {
@@ -91,6 +95,7 @@ function getPreviewAnchors(interaction, brushDraft) {
 
 export function renderBrushPreviewOverlay(ctx, doc, viewport, interaction, brushDraft) {
   if (!isPreviewTool(interaction.activeTool)) return;
+  if (!isTileStylePreviewLayer(interaction.activeLayer)) return;
   if (!interaction.hoverCell) return;
 
   const brushCells = getPreviewAnchors(interaction, brushDraft);
