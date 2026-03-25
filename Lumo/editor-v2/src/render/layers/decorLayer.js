@@ -3,13 +3,6 @@ import { getDecorHitRadius, getDecorVisual } from "../../domain/decor/decorVisua
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
 import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
-function getDecorScreenCenter(decor, tileSize, viewport) {
-  return {
-    x: viewport.offsetX + (decor.x + 0.5) * tileSize * viewport.zoom,
-    y: viewport.offsetY + (decor.y + 0.76) * tileSize * viewport.zoom,
-  };
-}
-
 export function getDecorDrawMetrics(decor, tileSize, viewport, visual) {
   const zoom = viewport.zoom;
   const scaledTile = tileSize * zoom;
@@ -19,24 +12,23 @@ export function getDecorDrawMetrics(decor, tileSize, viewport, visual) {
   const drawOffY = (visual.drawOffY || 0) * zoom;
   const tileLeft = viewport.offsetX + decor.x * scaledTile;
   const tileTop = viewport.offsetY + decor.y * scaledTile;
-  const center = getDecorScreenCenter(decor, tileSize, viewport);
   const footprintW = Math.max(1, Number.isFinite(visual.footprint?.w) ? Math.round(visual.footprint.w) : Math.ceil((visual.drawW || 24) / 24));
   const footprintH = Math.max(1, Number.isFinite(visual.footprint?.h) ? Math.round(visual.footprint.h) : Math.ceil((visual.drawH || 24) / 24));
 
-  const drawX = visual.drawAnchor === "TL"
-    ? tileLeft + drawOffX
-    : center.x - drawWidth / 2 + drawOffX;
-  const drawY = visual.drawAnchor === "TL"
-    ? tileTop + drawOffY
-    : center.y - drawHeight + (8 * zoom) + drawOffY;
+  const anchorX = tileLeft;
+  const anchorY = visual.drawAnchor === "TL" ? tileTop : tileTop + scaledTile;
+  const drawX = anchorX + drawOffX;
+  const drawY = (visual.drawAnchor === "TL" ? anchorY : anchorY - drawHeight) + drawOffY;
+  const focusX = drawX + drawWidth / 2;
+  const focusY = drawY + drawHeight / 2;
 
   return {
     drawX,
     drawY,
     drawWidth,
     drawHeight,
-    focusX: visual.drawAnchor === "TL" ? drawX + drawWidth / 2 : center.x,
-    focusY: visual.drawAnchor === "TL" ? drawY + drawHeight / 2 : center.y,
+    focusX,
+    focusY,
     focusRadius: Math.max(9, Math.max(drawWidth, drawHeight, footprintW * scaledTile, footprintH * scaledTile) * 0.32),
   };
 }

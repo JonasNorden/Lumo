@@ -2628,7 +2628,31 @@ function runDecorMetadataParityRegressionChecks() {
   assert.equal(flowerPreset.footprint.h >= 1, true, "decor preset normalization should derive a safe footprint");
 
   const boarVisual = getDecorVisual("boar");
-  assert.equal(boarVisual.drawAnchor, "BL", "grounded decor overrides should resolve boar to a bottom-left authoring anchor");
+  assert.equal(boarVisual.drawAnchor, "TL", "wall-mounted boar decor should resolve back to top-left anchor semantics");
+
+
+  const groundedVisual = getDecorVisual("decor_flower_01");
+  const groundedPreview = { type: "decor_flower_01", x: 3, y: 4 };
+  const groundedPreviewMetrics = getDecorDrawMetrics(groundedPreview, 24, { offsetX: 0, offsetY: 0, zoom: 1 }, groundedVisual);
+  const groundedPlacedMetrics = getDecorDrawMetrics({ ...groundedPreview }, 24, { offsetX: 0, offsetY: 0, zoom: 1 }, groundedVisual);
+  assert.equal(groundedVisual.drawAnchor, "BL", "grounded flower decor should keep bottom-left anchor semantics");
+  assert.equal(groundedPreviewMetrics.drawX, 72, "BL decor draw metrics should resolve X from the left edge of the authored placement tile");
+  assert.equal(groundedPreviewMetrics.drawY, 80, "BL decor draw metrics should resolve Y from the bottom edge of the authored placement tile");
+  assert.deepEqual(
+    {
+      drawX: groundedPreviewMetrics.drawX,
+      drawY: groundedPreviewMetrics.drawY,
+      drawWidth: groundedPreviewMetrics.drawWidth,
+      drawHeight: groundedPreviewMetrics.drawHeight,
+    },
+    {
+      drawX: groundedPlacedMetrics.drawX,
+      drawY: groundedPlacedMetrics.drawY,
+      drawWidth: groundedPlacedMetrics.drawWidth,
+      drawHeight: groundedPlacedMetrics.drawHeight,
+    },
+    "grounded BL decor preview and placed metrics should resolve through the same true bottom-left anchor path",
+  );
 
   const bannerVisual = getDecorVisual("banner");
   assert.equal(bannerVisual.drawW, 120, "decor visuals should consume authored catalog draw width when available");
@@ -2642,6 +2666,8 @@ function runDecorMetadataParityRegressionChecks() {
   const previewDecor = { type: "boar", x: 3, y: 4 };
   const previewMetrics = getDecorDrawMetrics(previewDecor, 24, { offsetX: 0, offsetY: 0, zoom: 1 }, boarVisual);
   const placedMetrics = getDecorDrawMetrics({ ...previewDecor }, 24, { offsetX: 0, offsetY: 0, zoom: 1 }, boarVisual);
+  assert.equal(previewMetrics.drawX, 72, "TL boar decor should resolve X from the tile's top-left origin");
+  assert.equal(previewMetrics.drawY, 96, "TL boar decor should resolve Y from the tile's top-left origin");
   assert.deepEqual(
     {
       drawX: previewMetrics.drawX,
@@ -3287,8 +3313,9 @@ function runCanvasRenderOrderRegressionChecks() {
   const { ctx, operations } = createPreviewTestContext();
   renderEditorFrame(ctx, state);
 
-  const decorFocusX = state.viewport.offsetX + (0.5 * doc.dimensions.tileSize * state.viewport.zoom);
-  const decorFocusY = state.viewport.offsetY + (0.76 * doc.dimensions.tileSize * state.viewport.zoom) + (1.5 / Math.max(0.001, state.viewport.zoom));
+  const decorMetrics = getDecorDrawMetrics(doc.decor[0], doc.dimensions.tileSize, state.viewport, getDecorVisual(doc.decor[0].type));
+  const decorFocusX = decorMetrics.focusX;
+  const decorFocusY = decorMetrics.focusY + (1.5 / Math.max(0.001, state.viewport.zoom));
   const tileScreenX = Math.floor(state.viewport.offsetX + doc.dimensions.tileSize * state.viewport.zoom) + 1;
   const tileScreenY = Math.floor(state.viewport.offsetY) + 1;
   const tileScreenSize = Math.ceil(doc.dimensions.tileSize * state.viewport.zoom - 1);
@@ -3329,8 +3356,9 @@ function runCanvasRenderOrderRegressionChecks() {
     },
   });
 
-  const draggedDecorFocusX = state.viewport.offsetX + (1.5 * doc.dimensions.tileSize * state.viewport.zoom);
-  const draggedDecorFocusY = decorFocusY;
+  const draggedDecorMetrics = getDecorDrawMetrics({ ...doc.decor[0], x: 1, y: 0 }, doc.dimensions.tileSize, state.viewport, getDecorVisual(doc.decor[0].type));
+  const draggedDecorFocusX = draggedDecorMetrics.focusX;
+  const draggedDecorFocusY = draggedDecorMetrics.focusY + (1.5 / Math.max(0.001, state.viewport.zoom));
   const draggedEntityCenterX = state.viewport.offsetX + (((2 * doc.dimensions.tileSize) + 12) * state.viewport.zoom);
   const draggedEntityCenterY = entityCenterY;
 

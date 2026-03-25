@@ -108,7 +108,7 @@ const DECOR_PRESET_FALLBACKS = [
     img: "../data/assets/sprites/decor/boar_01.png",
     drawW: 72,
     drawH: 96,
-    drawAnchor: "BL",
+    drawAnchor: "TL",
     drawOffX: 0,
     drawOffY: 0,
     footprint: { w: 3, h: 4 },
@@ -139,7 +139,7 @@ function normalizeAnchor(anchor) {
 
 const DECOR_ANCHOR_OVERRIDE_BY_ID = new Map([
   ["apple", "BL"],
-  ["boar", "BL"],
+  ["boar", "TL"],
   ["banner", "TL"],
   ["painting_01", "TL"],
   ["painting_02", "TL"],
