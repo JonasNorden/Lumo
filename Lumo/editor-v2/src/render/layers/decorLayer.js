@@ -10,7 +10,7 @@ function getDecorScreenCenter(decor, tileSize, viewport) {
   };
 }
 
-function getDecorDrawMetrics(decor, tileSize, viewport, visual) {
+export function getDecorDrawMetrics(decor, tileSize, viewport, visual) {
   const zoom = viewport.zoom;
   const scaledTile = tileSize * zoom;
   const drawWidth = (visual.drawW || 24) * zoom;

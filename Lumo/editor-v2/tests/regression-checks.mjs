@@ -78,7 +78,7 @@ import { findDecorPresetById } from "../src/domain/decor/decorPresets.js";
 import { getDecorVisual } from "../src/domain/decor/decorVisuals.js";
 import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
 import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
-import { findDecorAtCanvasPoint, renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
+import { findDecorAtCanvasPoint, getDecorDrawMetrics, renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
 import { applyCanonicalDecorAction, createCanonicalDecorHistory } from "../src/app/cleanRoomDecorMode.js";
 import { applyCanonicalEntityAction, cloneCanonicalEntitySnapshot, createCanonicalEntityHistory } from "../src/app/cleanRoomEntityMode.js";
 import { applyCanonicalSoundAction, cloneCanonicalSoundSnapshot, createCanonicalSoundHistory } from "../src/app/cleanRoomSoundMode.js";
@@ -2627,12 +2627,36 @@ function runDecorMetadataParityRegressionChecks() {
   assert.equal(flowerPreset.drawH, 40, "decor preset normalization should preserve authored draw height");
   assert.equal(flowerPreset.footprint.h >= 1, true, "decor preset normalization should derive a safe footprint");
 
+  const boarVisual = getDecorVisual("boar");
+  assert.equal(boarVisual.drawAnchor, "BL", "grounded decor overrides should resolve boar to a bottom-left authoring anchor");
+
   const bannerVisual = getDecorVisual("banner");
   assert.equal(bannerVisual.drawW, 120, "decor visuals should consume authored catalog draw width when available");
   assert.equal(bannerVisual.drawH, 288, "decor visuals should consume authored catalog draw height when available");
   assert.equal(bannerVisual.drawAnchor, "TL", "decor visuals should preserve authored anchors from catalog metadata");
   assert.equal(bannerVisual.footprint.w, 5, "decor visuals should derive footprint width from authored draw size");
   assert.equal(bannerVisual.footprint.h, 12, "decor visuals should derive footprint height from authored draw size");
+  assert.equal(getDecorVisual("banner").drawAnchor, "TL", "attached decor should continue to resolve to top-left anchor semantics");
+  assert.equal(getDecorVisual("decor_unknown_missing_anchor").drawAnchor, "BL", "decor visuals should keep a safe BL fallback for assets without explicit anchor truth");
+
+  const previewDecor = { type: "boar", x: 3, y: 4 };
+  const previewMetrics = getDecorDrawMetrics(previewDecor, 24, { offsetX: 0, offsetY: 0, zoom: 1 }, boarVisual);
+  const placedMetrics = getDecorDrawMetrics({ ...previewDecor }, 24, { offsetX: 0, offsetY: 0, zoom: 1 }, boarVisual);
+  assert.deepEqual(
+    {
+      drawX: previewMetrics.drawX,
+      drawY: previewMetrics.drawY,
+      drawWidth: previewMetrics.drawWidth,
+      drawHeight: previewMetrics.drawHeight,
+    },
+    {
+      drawX: placedMetrics.drawX,
+      drawY: placedMetrics.drawY,
+      drawWidth: placedMetrics.drawWidth,
+      drawHeight: placedMetrics.drawHeight,
+    },
+    "decor preview and placed metrics should resolve through the same anchor-aware draw math",
+  );
 
   const docs = createDoc();
   docs.dimensions.tileSize = 24;
@@ -2676,6 +2700,11 @@ function runDecorMetadataParityRegressionChecks() {
     panel.innerHTML.includes("Draw 120×288px"),
     true,
     "bottom panel decor editor should surface authored draw dimensions for selected decor assets",
+  );
+  assert.equal(
+    panel.innerHTML.includes("TL anchor"),
+    true,
+    "bottom panel decor editor should surface the resolved authoring anchor for selected decor assets",
   );
 }
 
