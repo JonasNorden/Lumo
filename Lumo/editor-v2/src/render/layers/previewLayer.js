@@ -1,4 +1,4 @@
-import { getBrushCells, resolveBrushSize } from "../../domain/tiles/brushSize.js";
+import { getBrushCells, resolveBrushSize, snapCellToBrushStep } from "../../domain/tiles/brushSize.js";
 import { EDITOR_TOOLS } from "../../domain/tiles/tools.js";
 import { getLineCells } from "../../domain/tiles/line.js";
 
@@ -41,12 +41,18 @@ function getRectPreviewCells(interaction, brushDraft) {
     return interaction.hoverCell ? getBrushCells(interaction.hoverCell, brushSize) : [];
   }
 
-  const bounds = getRectBounds(interaction.rectDrag.startCell, interaction.hoverCell);
+  const startCell = interaction.rectDrag.startCell;
+  const bounds = getRectBounds(startCell, interaction.hoverCell);
   const cells = [];
+  const seenAnchors = new Set();
 
   for (let y = bounds.minY; y <= bounds.maxY; y += 1) {
     for (let x = bounds.minX; x <= bounds.maxX; x += 1) {
-      cells.push(...getBrushCells({ x, y }, brushSize));
+      const anchor = snapCellToBrushStep({ x, y }, startCell, brushSize);
+      const key = `${anchor.x}:${anchor.y}`;
+      if (seenAnchors.has(key)) continue;
+      seenAnchors.add(key);
+      cells.push(...getBrushCells(anchor, brushSize));
     }
   }
 
@@ -61,10 +67,16 @@ function getLinePreviewCells(interaction, brushDraft) {
   }
 
   const cells = [];
-  const lineCells = getLineCells(interaction.lineDrag.startCell, interaction.hoverCell);
+  const startCell = interaction.lineDrag.startCell;
+  const lineCells = getLineCells(startCell, interaction.hoverCell);
+  const seenAnchors = new Set();
 
   for (const lineCell of lineCells) {
-    cells.push(...getBrushCells(lineCell, brushSize));
+    const anchor = snapCellToBrushStep(lineCell, startCell, brushSize);
+    const key = `${anchor.x}:${anchor.y}`;
+    if (seenAnchors.has(key)) continue;
+    seenAnchors.add(key);
+    cells.push(...getBrushCells(anchor, brushSize));
   }
 
   return cells;

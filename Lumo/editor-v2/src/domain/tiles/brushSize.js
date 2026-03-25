@@ -20,8 +20,8 @@ export function resolveBrushSize(brushDraft) {
 }
 
 export function getBrushCells(centerCell, brushSize) {
-  const startX = centerCell.x - Math.floor((brushSize.width - 1) * 0.5);
-  const startY = centerCell.y - Math.floor((brushSize.height - 1) * 0.5);
+  const startX = centerCell.x;
+  const startY = centerCell.y - (brushSize.height - 1);
 
   const cells = [];
   for (let offsetY = 0; offsetY < brushSize.height; offsetY += 1) {
@@ -34,4 +34,21 @@ export function getBrushCells(centerCell, brushSize) {
   }
 
   return cells;
+}
+
+export function snapCellToBrushStep(cell, anchorCell, brushSize) {
+  const widthStep = Math.max(1, brushSize?.width || 1);
+  const heightStep = Math.max(1, brushSize?.height || 1);
+  const originX = Number.isFinite(anchorCell?.x) ? anchorCell.x : 0;
+  const originY = Number.isFinite(anchorCell?.y) ? anchorCell.y : 0;
+  const deltaX = cell.x - originX;
+  const deltaY = cell.y - originY;
+  const alignDelta = (delta, step) => (delta >= 0
+    ? Math.floor(delta / step) * step
+    : Math.ceil(delta / step) * step);
+
+  return {
+    x: originX + alignDelta(deltaX, widthStep),
+    y: originY + alignDelta(deltaY, heightStep),
+  };
 }

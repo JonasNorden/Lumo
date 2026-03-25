@@ -25,7 +25,7 @@ import {
   sanitizeLevelDimension,
 } from "../data/createNewLevelDocument.js";
 import { resolveTileFromBrushDraft, paintSingleTile } from "../domain/tiles/paintTile.js";
-import { resolveBrushSize, getBrushCells } from "../domain/tiles/brushSize.js";
+import { resolveBrushSize, getBrushCells, snapCellToBrushStep } from "../domain/tiles/brushSize.js";
 import { eraseSingleTile } from "../domain/tiles/eraseTile.js";
 import { EDITOR_TOOLS } from "../domain/tiles/tools.js";
 import { getLineCells } from "../domain/tiles/line.js";
@@ -3730,15 +3730,35 @@ export function createEditorApp({
     return false;
   };
 
+  const getSteppedRectAnchors = (startCell, endCell, brushSize) => {
+    const minX = Math.min(startCell.x, endCell.x);
+    const maxX = Math.max(startCell.x, endCell.x);
+    const minY = Math.min(startCell.y, endCell.y);
+    const maxY = Math.max(startCell.y, endCell.y);
+    const anchors = [];
+    const seenAnchors = new Set();
+
+    for (let y = minY; y <= maxY; y += 1) {
+      for (let x = minX; x <= maxX; x += 1) {
+        const anchor = snapCellToBrushStep({ x, y }, startCell, brushSize);
+        const key = `${anchor.x}:${anchor.y}`;
+        if (seenAnchors.has(key)) continue;
+        seenAnchors.add(key);
+        anchors.push(anchor);
+      }
+    }
+
+    return anchors;
+  };
+
   const applyRectTool = (draft, startCell, endCell) => {
-    const bounds = getRectBounds(startCell, endCell);
+    const brushSize = resolveBrushSize(draft.brush.activeDraft);
     let changedAny = false;
 
-    for (let y = bounds.minY; y <= bounds.maxY; y += 1) {
-      for (let x = bounds.minX; x <= bounds.maxX; x += 1) {
-        if (applyTileToolAtCell(draft, { x, y })) {
-          changedAny = true;
-        }
+    const anchors = getSteppedRectAnchors(startCell, endCell, brushSize);
+    for (const anchor of anchors) {
+      if (applyTileToolAtCell(draft, anchor)) {
+        changedAny = true;
       }
     }
 
@@ -3763,35 +3783,39 @@ export function createEditorApp({
 
     let changedAny = false;
 
+    const brushSize = resolveBrushSize(draft.brush.activeDraft);
+    const fillCellKeys = new Set(fillCells.map((cell) => `${cell.x}:${cell.y}`));
+    const footprintAnchorByCell = new Map();
     for (const cell of fillCells) {
-      const index = getTileIndex(doc.dimensions.width, cell.x, cell.y);
-      if (isBackgroundLayer) {
-        const previousValue = doc.background.base[index] ?? null;
-        const changed = paintBackgroundMaterial(doc, cell, replacementValue);
-        if (!changed) continue;
-        const entry = createTileEditEntry(doc, cell, previousValue, replacementValue, "background");
-        pushTileEdit(draft.history, entry);
-        changedAny = true;
-        continue;
+      const anchor = snapCellToBrushStep(cell, startCell, brushSize);
+      const key = `${anchor.x}:${anchor.y}`;
+      if (!footprintAnchorByCell.has(key)) {
+        footprintAnchorByCell.set(key, anchor);
       }
+    }
 
-      const previousValue = doc.tiles.base[index];
-      const changed = paintSingleTile(doc, cell, replacementValue);
-      if (!changed) continue;
-
-      const entry = createTileEditEntry(doc, cell, previousValue, replacementValue);
-      pushTileEdit(draft.history, entry);
-      changedAny = true;
+    for (const anchor of footprintAnchorByCell.values()) {
+      const footprintCells = getBrushCells(anchor, brushSize);
+      if (!footprintCells.every((cell) => fillCellKeys.has(`${cell.x}:${cell.y}`))) continue;
+      if (applyTileToolAtCell(draft, anchor)) {
+        changedAny = true;
+      }
     }
 
     return changedAny;
   };
   const applyLineTool = (draft, startCell, endCell) => {
     const lineCells = getLineCells(startCell, endCell);
+    const brushSize = resolveBrushSize(draft.brush.activeDraft);
     let changedAny = false;
+    const seenAnchors = new Set();
 
     for (const cell of lineCells) {
-      if (applyTileToolAtCell(draft, cell)) {
+      const anchor = snapCellToBrushStep(cell, startCell, brushSize);
+      const key = `${anchor.x}:${anchor.y}`;
+      if (seenAnchors.has(key)) continue;
+      seenAnchors.add(key);
+      if (applyTileToolAtCell(draft, anchor)) {
         changedAny = true;
       }
     }
@@ -4187,6 +4211,8 @@ if (event.shiftKey) {
       draft.interaction.selectedCell = cell;
       draft.interaction.dragPaint = {
         active: true,
+        startCell: cell,
+        lastAppliedCell: cell,
       };
       startTileEditBatch(draft.history, `${draft.interaction.activeTool}-drag`);
       applyTileToolAtCell(draft, cell);
@@ -4379,8 +4405,18 @@ if (event.shiftKey) {
     if (!cell) return;
 
     store.setState((draft) => {
+      const dragPaint = draft.interaction.dragPaint;
+      if (!dragPaint?.active) return;
+      const brushSize = resolveBrushSize(draft.brush.activeDraft);
+      const startCell = dragPaint.startCell || cell;
+      const nextCell = snapCellToBrushStep(cell, startCell, brushSize);
+      if (dragPaint.lastAppliedCell?.x === nextCell.x && dragPaint.lastAppliedCell?.y === nextCell.y) {
+        draft.interaction.selectedCell = cell;
+        return;
+      }
       draft.interaction.selectedCell = cell;
-      applyTileToolAtCell(draft, cell);
+      applyTileToolAtCell(draft, nextCell);
+      dragPaint.lastAppliedCell = nextCell;
     });
   };
 
