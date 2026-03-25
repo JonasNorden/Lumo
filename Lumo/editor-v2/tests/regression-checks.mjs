@@ -1437,7 +1437,8 @@ function runSizedBrushSemanticsRegressionChecks() {
   const oneByOne = resolveBrushSize({ size: "1x1" });
   const twoByTwo = resolveBrushSize({ size: "2x2" });
   const threeByThree = resolveBrushSize({ size: "3x3" });
-  const restrictedStoneTwoByTwo = resolveBrushSize({ sprite: "stone_ct", size: "2x2" });
+  const stoneTwoByTwo = resolveBrushSize({ sprite: "stone_ct", size: "2x2" });
+  const stoneThreeByThree = resolveBrushSize({ sprite: "stone_ct", size: "3x3" });
 
   assert.deepEqual(getBrushCells({ x: 3, y: 3 }, oneByOne), [{ x: 3, y: 3 }], "1x1 footprints should paint exactly one authored cell");
   assert.deepEqual(
@@ -1466,9 +1467,14 @@ function runSizedBrushSemanticsRegressionChecks() {
     "negative drag stepping should align symmetrically to footprint increments",
   );
   assert.deepEqual(
-    restrictedStoneTwoByTwo,
-    { width: 1, height: 1 },
-    "tiles restricted to 1x1 should safely fall back even if an unsupported 2x2 size is selected",
+    stoneTwoByTwo,
+    { width: 2, height: 2 },
+    "Stone CT should support a 2x2 sized footprint",
+  );
+  assert.deepEqual(
+    stoneThreeByThree,
+    { width: 3, height: 3 },
+    "Stone CT should support a 3x3 sized footprint",
   );
   assert.deepEqual(
     getSupportedSizesForBrushSprite("soil_c"),
@@ -1477,13 +1483,13 @@ function runSizedBrushSemanticsRegressionChecks() {
   );
   assert.deepEqual(
     getSupportedSizesForBrushSprite("stone_ct"),
-    [1],
-    "Stone CT should explicitly opt into 1x1 only placement support",
+    [1, 2, 3],
+    "Stone CT should support the same 1x1/2x2/3x3 sizing as standard tiles",
   );
   assert.equal(
     isBrushSizeSupportedForSprite("3x3", "stone_ct"),
-    false,
-    "Stone CT should reject unsupported large sizes",
+    true,
+    "Stone CT should accept 3x3 size selections",
   );
 
   const stoneSprite = findBrushSpriteOptionByValue("stone_ct");
@@ -1500,13 +1506,13 @@ function runSizedBrushSemanticsRegressionChecks() {
   });
   assert.equal(
     panel.innerHTML.includes('option value="2x2"'),
-    false,
-    "brush panel size selector should hide unsupported sizes for restricted tiles",
+    true,
+    "brush panel size selector should show 2x2 for Stone CT",
   );
   assert.equal(
     panel.innerHTML.includes('option value="3x3"'),
-    false,
-    "brush panel size selector should hide 3x3 when the sprite does not support it",
+    true,
+    "brush panel size selector should show 3x3 for Stone CT",
   );
 
   const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/app/createEditorApp.js"), "utf8");
