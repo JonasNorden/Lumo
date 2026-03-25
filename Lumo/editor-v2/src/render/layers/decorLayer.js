@@ -33,6 +33,19 @@ export function getDecorDrawMetrics(decor, tileSize, viewport, visual) {
   };
 }
 
+function getDecorFootprintRect(decor, tileSize, viewport, visual) {
+  const footprintW = Math.max(1, Number.isFinite(visual.footprint?.w) ? Math.round(visual.footprint.w) : Math.ceil((visual.drawW || 24) / 24));
+  const footprintH = Math.max(1, Number.isFinite(visual.footprint?.h) ? Math.round(visual.footprint.h) : Math.ceil((visual.drawH || 24) / 24));
+  const zoomedTileSize = tileSize * viewport.zoom;
+  const topTileY = visual.drawAnchor === "TL" ? decor.y : decor.y - (footprintH - 1);
+  return {
+    x: viewport.offsetX + decor.x * zoomedTileSize,
+    y: viewport.offsetY + topTileY * zoomedTileSize,
+    width: footprintW * zoomedTileSize,
+    height: footprintH * zoomedTileSize,
+  };
+}
+
 function drawDecorFocus(ctx, x, y, radius, { selected = false, hovered = false, preview = false } = {}, scale = 1) {
   if (!selected && !hovered && !preview) return;
 
@@ -229,6 +242,21 @@ export function renderDecorPlacementPreview(ctx, doc, viewport, interaction, act
     x: interaction.hoverCell.x,
     y: interaction.hoverCell.y,
   };
+  const visual = getDecorVisual(previewDecor.type);
+  const footprintRect = getDecorFootprintRect(previewDecor, doc.dimensions.tileSize, viewport, visual);
+
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 214, 138, 0.12)";
+  ctx.fillRect(footprintRect.x, footprintRect.y, footprintRect.width, footprintRect.height);
+  ctx.strokeStyle = "rgba(255, 214, 138, 0.56)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(
+    footprintRect.x + 0.5,
+    footprintRect.y + 0.5,
+    Math.max(0, footprintRect.width - 1),
+    Math.max(0, footprintRect.height - 1),
+  );
+  ctx.restore();
 
   drawDecorMarker(ctx, previewDecor, viewport, doc.dimensions.tileSize, {
     preview: true,

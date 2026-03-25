@@ -1,12 +1,15 @@
 import { renderGrid } from "./layers/gridLayer.js";
 import { renderTiles } from "./layers/tileLayer.js";
 import { renderBackground } from "./layers/backgroundLayer.js";
-import { renderBrushPreviewOverlay } from "./layers/previewLayer.js";
+import { renderBrushPreviewOverlay, renderPlacementPreviewOverlay } from "./layers/previewLayer.js";
 import { renderEntities } from "./layers/entityLayer.js";
 import { renderDecor } from "./layers/decorLayer.js";
 import { renderSounds } from "./layers/soundLayer.js";
 import { renderScanOverlay } from "./layers/scanLayer.js";
 import { renderDarknessPreview } from "./darknessPreview.js";
+import { findDecorPresetById } from "../domain/decor/decorPresets.js";
+import { findEntityPresetById } from "../domain/entities/entityPresets.js";
+import { findSoundPresetById } from "../domain/sound/soundPresets.js";
 
 export const WORLD_RENDER_ORDER = Object.freeze(["background", "decor", "tiles", "entities"]);
 export const OVERLAY_RENDER_ORDER = Object.freeze(["sound", "grid", "scan"]);
@@ -58,5 +61,10 @@ export function renderEditorFrame(ctx, state) {
   renderSounds(ctx, doc, state.viewport, state.interaction, state.scan);
   renderGrid(ctx, doc, state.viewport);
   renderScanOverlay(ctx, doc, state.viewport, state.scan);
+  renderPlacementPreviewOverlay(ctx, doc, state.viewport, state.interaction, {
+    decor: findDecorPresetById(state.interaction.activeDecorPresetId) || null,
+    entity: findEntityPresetById(state.interaction.activeEntityPresetId) || null,
+    sound: findSoundPresetById(state.interaction.activeSoundPresetId) || null,
+  });
   renderBrushPreviewOverlay(ctx, doc, state.viewport, state.interaction, state.brush.activeDraft);
 }
