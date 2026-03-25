@@ -3680,6 +3680,7 @@ export function createEditorApp({
 
     if (
       draft.interaction.activeTool === EDITOR_TOOLS.PAINT ||
+      draft.interaction.activeTool === EDITOR_TOOLS.FILL ||
       draft.interaction.activeTool === EDITOR_TOOLS.RECT ||
       draft.interaction.activeTool === EDITOR_TOOLS.LINE
     ) {

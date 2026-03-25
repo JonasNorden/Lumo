@@ -1507,11 +1507,88 @@ function runSizedPlacementAuthoringRegressionChecks() {
     previewCtx,
     doc,
     { offsetX: 0, offsetY: 0, zoom: 1 },
-    { activeTool: "paint", hoverCell: { x: 1, y: 2 } },
+    { activeTool: "paint", activeLayer: "tiles", hoverCell: { x: 1, y: 2 } },
     { size: "3x3" },
   );
   const previewFill = previewOps.find((op) => op[0] === "fillRect");
   assert.deepEqual(previewFill?.slice(1), [24, 0, 72, 72], "preview should draw one 3x3 scaled overlay (72x72 at tileSize 24)");
+
+  const { ctx: tilesOneByOneCtx, operations: tilesOneByOnePreviewOps } = createPreviewTestContext();
+  renderBrushPreviewOverlay(
+    tilesOneByOneCtx,
+    doc,
+    { offsetX: 0, offsetY: 0, zoom: 1 },
+    { activeTool: "paint", activeLayer: "tiles", hoverCell: { x: 2, y: 2 } },
+    { size: "1x1" },
+  );
+  const { ctx: tilesTwoByTwoCtx, operations: tilesTwoByTwoPreviewOps } = createPreviewTestContext();
+  renderBrushPreviewOverlay(
+    tilesTwoByTwoCtx,
+    doc,
+    { offsetX: 0, offsetY: 0, zoom: 1 },
+    { activeTool: "paint", activeLayer: "tiles", hoverCell: { x: 2, y: 2 } },
+    { size: "2x2" },
+  );
+  const { ctx: backgroundThreeByThreeCtx, operations: backgroundThreeByThreePreviewOps } = createPreviewTestContext();
+  renderBrushPreviewOverlay(
+    backgroundThreeByThreeCtx,
+    doc,
+    { offsetX: 0, offsetY: 0, zoom: 1 },
+    { activeTool: "paint", activeLayer: "background", hoverCell: { x: 1, y: 2 } },
+    { size: "3x3" },
+  );
+  assert.deepEqual(
+    tilesOneByOnePreviewOps.find((op) => op[0] === "fillRect")?.slice(1),
+    [48, 48, 24, 24],
+    "tiles hover preview should render a truthful 1x1 footprint",
+  );
+  assert.deepEqual(
+    tilesTwoByTwoPreviewOps.find((op) => op[0] === "fillRect")?.slice(1),
+    [48, 24, 48, 48],
+    "tiles hover preview should render a truthful 2x2 bottom-left anchored footprint",
+  );
+  assert.deepEqual(
+    backgroundThreeByThreePreviewOps.find((op) => op[0] === "fillRect")?.slice(1),
+    [24, 0, 72, 72],
+    "background hover preview should render a truthful 3x3 bottom-left anchored footprint",
+  );
+
+  const { ctx: linePreviewCtx, operations: linePreviewOps } = createPreviewTestContext();
+  const linePreviewDoc = {
+    ...doc,
+    dimensions: { ...doc.dimensions, width: 8, height: 8, tileSize: 24 },
+  };
+  renderBrushPreviewOverlay(
+    linePreviewCtx,
+    linePreviewDoc,
+    { offsetX: 0, offsetY: 0, zoom: 1 },
+    {
+      activeTool: "line",
+      activeLayer: "tiles",
+      hoverCell: { x: 4, y: 4 },
+      lineDrag: { active: true, startCell: { x: 1, y: 1 } },
+    },
+    { size: "2x2" },
+  );
+  const lineFillRects = linePreviewOps.filter((op) => op[0] === "fillRect").map((op) => op.slice(1));
+  assert.deepEqual(
+    lineFillRects,
+    [
+      [24, 0, 48, 48],
+      [72, 48, 48, 48],
+    ],
+    "line preview should render stepped sized footprints that match final 2x2 line placement coverage",
+  );
+
+  const { ctx: nonTilePreviewCtx, operations: nonTilePreviewOps } = createPreviewTestContext();
+  renderBrushPreviewOverlay(
+    nonTilePreviewCtx,
+    doc,
+    { offsetX: 0, offsetY: 0, zoom: 1 },
+    { activeTool: "paint", activeLayer: "decor", hoverCell: { x: 2, y: 2 } },
+    { size: "3x3" },
+  );
+  assert.equal(nonTilePreviewOps.length, 0, "brush preview overlay should stay scoped to tiles/background layers");
 
   const tileRenderDoc = {
     ...doc,
@@ -1537,6 +1614,13 @@ function runSizedPlacementAuthoringRegressionChecks() {
   const bgFill = bgOps.find((op) => op[0] === "fillRect");
   assert.equal(bgFill?.[3], 72, "background render should draw a 3x3 placement as one 72px-wide sprite footprint");
   assert.equal(bgFill?.[4], 72, "background render should draw a 3x3 placement as one 72px-high sprite footprint");
+
+  const appSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/app/createEditorApp.js"), "utf8");
+  assert.equal(
+    appSource.includes("draft.interaction.activeTool === EDITOR_TOOLS.FILL"),
+    true,
+    "fill should run through the same sized tile/background placement lane as paint so F+click works again",
+  );
 }
 
 function runNewLevelDocumentRegressionChecks() {
@@ -2750,14 +2834,14 @@ function runScanLineRenderRegressionChecks() {
     "renderer should keep a dedicated scan overlay pass in editor-v2",
   );
   assert.equal(
-    rendererSource.includes("const previewPassesEnabled = false;"),
+    rendererSource.includes("renderBrushPreviewOverlay(ctx, doc, state.viewport, state.interaction, state.brush.activeDraft);"),
     true,
-    "renderer should keep the non-scan preview overlays disabled for this narrow fix",
+    "renderer should restore the tile/background brush preview pass on the live canvas",
   );
   assert.equal(
-    rendererSource.includes("previewAndOverlayPassesEnabled"),
+    rendererSource.includes("renderSoundPlacementPreview("),
     false,
-    "renderer should not gate the scan overlay behind the disabled preview bundle anymore",
+    "renderer should not re-enable legacy sound/decor/entity shared preview bundle in this pass",
   );
 
   const bottomPanelSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/ui/bottomPanel.js"), "utf8");
