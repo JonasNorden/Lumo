@@ -120,11 +120,11 @@ export function createEditorState() {
         error: null,
       },
       panelSections: {
-        tiles: true,
-        entities: true,
-        decor: true,
+        tiles: false,
+        entities: false,
+        decor: false,
         background: true,
-        sound: true,
+        sound: false,
       },
     },
   };
