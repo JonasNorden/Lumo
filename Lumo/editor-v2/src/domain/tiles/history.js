@@ -7,11 +7,11 @@ import {
   isObjectLayerKind,
 } from "../placeables/objectLayerHistory.js";
 
-export function createTileEditEntry(doc, cell, previousValue, nextValue) {
+export function createTileEditEntry(doc, cell, previousValue, nextValue, layer = "tiles") {
   const index = getTileIndex(doc.dimensions.width, cell.x, cell.y);
 
   return {
-    kind: "tile",
+    kind: layer === "background" ? "background" : "tile",
     index,
     cell: {
       x: cell.x,
@@ -43,6 +43,7 @@ function getHistoryEntryDomain(entry) {
   }
 
   if (isObjectLayerKind(entry?.kind)) return entry.kind;
+  if (entry?.kind === "background") return "background";
   return "tile";
 }
 
@@ -151,6 +152,11 @@ function applyUndoEntry(doc, entry) {
     return applyObjectLayerUndoEntry(doc, entry);
   }
 
+  if (entry.kind === "background") {
+    doc.background.base[entry.index] = entry.previousValue ?? null;
+    return true;
+  }
+
   doc.tiles.base[entry.index] = entry.previousValue;
   return true;
 }
@@ -167,6 +173,11 @@ function applyRedoEntry(doc, entry) {
 
   if (isObjectLayerKind(entry.kind)) {
     return applyObjectLayerRedoEntry(doc, entry);
+  }
+
+  if (entry.kind === "background") {
+    doc.background.base[entry.index] = entry.nextValue ?? null;
+    return true;
   }
 
   doc.tiles.base[entry.index] = entry.nextValue;

@@ -1,4 +1,5 @@
 import { createDefaultBackgroundLayer, validateLevelDocument } from "../domain/level/levelDocument.js";
+import { BACKGROUND_MATERIAL_OPTIONS, DEFAULT_BACKGROUND_MATERIAL_ID } from "../domain/background/materialCatalog.js";
 
 export const DEFAULT_NEW_LEVEL_WIDTH = 32;
 export const DEFAULT_NEW_LEVEL_HEIGHT = 18;
@@ -46,6 +47,11 @@ export function createNewLevelDocument(options = {}) {
           depth: 0,
         }),
       ],
+    },
+    background: {
+      base: new Array(width * height).fill(null),
+      materials: BACKGROUND_MATERIAL_OPTIONS.map((material) => ({ ...material })),
+      defaultMaterialId: DEFAULT_BACKGROUND_MATERIAL_ID,
     },
     decor: [],
     entities: [],

@@ -29,6 +29,21 @@ export function renderMinimap(ctx, state) {
   const originY = (viewHeight - contentHeight) * 0.5;
   const tiles = doc.tiles.base;
 
+  const backgroundCells = doc.background?.base || [];
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const materialId = backgroundCells[y * width + x];
+      if (!materialId) continue;
+      ctx.fillStyle = "rgba(62, 76, 108, 0.9)";
+      ctx.fillRect(
+        Math.floor(originX + x * contentScale),
+        Math.floor(originY + y * contentScale),
+        Math.max(1, Math.ceil(contentScale)),
+        Math.max(1, Math.ceil(contentScale)),
+      );
+    }
+  }
+
   for (const decor of doc.decor || []) {
     if (!decor?.visible) continue;
     const visual = getDecorVisual(decor.type);

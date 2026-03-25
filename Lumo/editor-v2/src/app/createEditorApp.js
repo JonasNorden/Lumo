@@ -44,6 +44,9 @@ import {
   canRedo,
 } from "../domain/tiles/history.js";
 import { createDefaultBackgroundLayer, getTileIndex } from "../domain/level/levelDocument.js";
+import { DEFAULT_BACKGROUND_MATERIAL_ID } from "../domain/background/materialCatalog.js";
+import { eraseBackgroundMaterial, paintBackgroundMaterial } from "../domain/background/paint.js";
+import { getBackgroundFloodFillCells } from "../domain/background/floodFill.js";
 import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
 import { findDecorAtCanvasPoint } from "../render/layers/decorLayer.js";
 import { findSoundAtCanvasPoint, getSoundPlacementPreviewDiagnostic } from "../render/layers/soundLayer.js";
@@ -172,7 +175,7 @@ function renderCellHud(cellHud, state) {
 
   const inspectedCell = getInspectedCell(state);
   const activeLayer = getActiveLayer(state.interaction);
-  const activeTargetLabel = activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : "Tiles";
+  const activeTargetLabel = activeLayer === PANEL_LAYERS.BACKGROUND ? "Background" : activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : "Tiles";
   const targetSelectionCount =
     activeLayer === PANEL_LAYERS.DECOR
       ? getSelectedDecorIndices(state.interaction, state.document.active?.decor || []).length
@@ -181,7 +184,7 @@ function renderCellHud(cellHud, state) {
         : activeLayer === PANEL_LAYERS.SOUND
           ? getSelectedSoundIndices(state.interaction).length
           : 0;
-  const targetSelectionLabel = activeLayer === PANEL_LAYERS.TILES
+  const targetSelectionLabel = activeLayer === PANEL_LAYERS.TILES || activeLayer === PANEL_LAYERS.BACKGROUND
     ? "Tile editing"
     : targetSelectionCount > 0
       ? `${targetSelectionCount} selected`
@@ -253,6 +256,7 @@ function formatScanEventSummary(event) {
 }
 
 const PANEL_LAYERS = {
+  BACKGROUND: "background",
   TILES: "tiles",
   ENTITIES: "entities",
   DECOR: "decor",
@@ -260,6 +264,7 @@ const PANEL_LAYERS = {
 };
 
 function getActiveLayer(interaction) {
+  if (interaction.activeLayer === PANEL_LAYERS.BACKGROUND) return PANEL_LAYERS.BACKGROUND;
   if (interaction.activeLayer === PANEL_LAYERS.DECOR) return PANEL_LAYERS.DECOR;
   if (interaction.activeLayer === PANEL_LAYERS.ENTITIES) return PANEL_LAYERS.ENTITIES;
   if (interaction.activeLayer === PANEL_LAYERS.SOUND) return PANEL_LAYERS.SOUND;
@@ -1073,6 +1078,7 @@ export function createEditorApp({
       if (currentWidth === nextWidth && currentHeight === nextHeight) return;
 
       const resizedTiles = new Array(nextWidth * nextHeight).fill(0);
+      const resizedBackground = new Array(nextWidth * nextHeight).fill(null);
       const copyWidth = Math.min(currentWidth, nextWidth);
       const copyHeight = Math.min(currentHeight, nextHeight);
 
@@ -1081,12 +1087,14 @@ export function createEditorApp({
           const sourceIndex = getTileIndex(currentWidth, x, y);
           const targetIndex = getTileIndex(nextWidth, x, y);
           resizedTiles[targetIndex] = doc.tiles.base[sourceIndex];
+          resizedBackground[targetIndex] = doc.background?.base?.[sourceIndex] ?? null;
         }
       }
 
       doc.dimensions.width = nextWidth;
       doc.dimensions.height = nextHeight;
       doc.tiles.base = resizedTiles;
+      doc.background.base = resizedBackground;
 
       for (const decor of doc.decor || []) {
         decor.x = Math.max(0, Math.min(nextWidth - 1, decor.x));
@@ -2068,6 +2076,7 @@ export function createEditorApp({
 
   const openLayerSection = (draft, layer) => {
     if (!draft.ui.panelSections) return;
+    if (layer === PANEL_LAYERS.BACKGROUND) draft.ui.panelSections.background = true;
     if (layer === PANEL_LAYERS.TILES) draft.ui.panelSections.tiles = true;
     if (layer === PANEL_LAYERS.ENTITIES) draft.ui.panelSections.entities = true;
     if (layer === PANEL_LAYERS.DECOR) draft.ui.panelSections.decor = true;
@@ -2075,7 +2084,9 @@ export function createEditorApp({
   };
 
   const setActiveLayer = (draft, layer) => {
-    draft.interaction.activeLayer = layer === PANEL_LAYERS.DECOR
+    draft.interaction.activeLayer = layer === PANEL_LAYERS.BACKGROUND
+      ? PANEL_LAYERS.BACKGROUND
+      : layer === PANEL_LAYERS.DECOR
       ? PANEL_LAYERS.DECOR
       : layer === PANEL_LAYERS.ENTITIES
         ? PANEL_LAYERS.ENTITIES
@@ -2095,7 +2106,7 @@ export function createEditorApp({
         : activeLayer === PANEL_LAYERS.SOUND
           ? getSelectedSoundIndices(state.interaction).length
           : 0;
-    const activeSelectionLabel = activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : "Tiles";
+    const activeSelectionLabel = activeLayer === PANEL_LAYERS.BACKGROUND ? "Background" : activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : "Tiles";
     const statusLabel = state.ui.importStatus || `Layer: ${activeSelectionLabel} · ${selectedCount || 0} selected`;
 
     topBarStatus.textContent = statusLabel;
@@ -3651,6 +3662,9 @@ export function createEditorApp({
     const brushSize = resolveBrushSize(draft.brush.activeDraft);
     const brushCells = getBrushCells(cell, brushSize);
     const { width, height } = doc.dimensions;
+    const activeLayer = getActiveLayer(draft.interaction);
+    const isBackgroundLayer = activeLayer === PANEL_LAYERS.BACKGROUND;
+    const nextBackgroundMaterialId = draft.interaction.activeBackgroundMaterialId || DEFAULT_BACKGROUND_MATERIAL_ID;
     let changedAny = false;
 
     if (
@@ -3663,6 +3677,17 @@ export function createEditorApp({
       for (const brushCell of brushCells) {
         if (brushCell.x < 0 || brushCell.y < 0 || brushCell.x >= width || brushCell.y >= height) continue;
         const index = getTileIndex(width, brushCell.x, brushCell.y);
+
+        if (isBackgroundLayer) {
+          const previousValue = doc.background.base[index] ?? null;
+          const changed = paintBackgroundMaterial(doc, brushCell, nextBackgroundMaterialId);
+          if (!changed) continue;
+          const entry = createTileEditEntry(doc, brushCell, previousValue, nextBackgroundMaterialId, "background");
+          pushTileEdit(draft.history, entry);
+          changedAny = true;
+          continue;
+        }
+
         const previousValue = doc.tiles.base[index];
         const changed = paintSingleTile(doc, brushCell, tileValue);
         if (!changed) continue;
@@ -3679,6 +3704,17 @@ export function createEditorApp({
       for (const brushCell of brushCells) {
         if (brushCell.x < 0 || brushCell.y < 0 || brushCell.x >= width || brushCell.y >= height) continue;
         const index = getTileIndex(width, brushCell.x, brushCell.y);
+
+        if (isBackgroundLayer) {
+          const previousValue = doc.background.base[index] ?? null;
+          const changed = eraseBackgroundMaterial(doc, brushCell);
+          if (!changed) continue;
+          const entry = createTileEditEntry(doc, brushCell, previousValue, null, "background");
+          pushTileEdit(draft.history, entry);
+          changedAny = true;
+          continue;
+        }
+
         const previousValue = doc.tiles.base[index];
         const changed = eraseSingleTile(doc, brushCell);
         if (!changed) continue;
@@ -3714,8 +3750,14 @@ export function createEditorApp({
     const doc = draft.document.active;
     if (!doc || !startCell) return false;
 
-    const replacementValue = resolveTileFromBrushDraft(draft.brush.activeDraft);
-    const fillCells = getFloodFillCells(doc, startCell, replacementValue);
+    const activeLayer = getActiveLayer(draft.interaction);
+    const isBackgroundLayer = activeLayer === PANEL_LAYERS.BACKGROUND;
+    const replacementValue = isBackgroundLayer
+      ? (draft.interaction.activeBackgroundMaterialId || DEFAULT_BACKGROUND_MATERIAL_ID)
+      : resolveTileFromBrushDraft(draft.brush.activeDraft);
+    const fillCells = isBackgroundLayer
+      ? getBackgroundFloodFillCells(doc, startCell, replacementValue)
+      : getFloodFillCells(doc, startCell, replacementValue);
 
     if (fillCells.length === 0) return false;
 
@@ -3723,6 +3765,16 @@ export function createEditorApp({
 
     for (const cell of fillCells) {
       const index = getTileIndex(doc.dimensions.width, cell.x, cell.y);
+      if (isBackgroundLayer) {
+        const previousValue = doc.background.base[index] ?? null;
+        const changed = paintBackgroundMaterial(doc, cell, replacementValue);
+        if (!changed) continue;
+        const entry = createTileEditEntry(doc, cell, previousValue, replacementValue, "background");
+        pushTileEdit(draft.history, entry);
+        changedAny = true;
+        continue;
+      }
+
       const previousValue = doc.tiles.base[index];
       const changed = paintSingleTile(doc, cell, replacementValue);
       if (!changed) continue;
@@ -3995,7 +4047,7 @@ if (event.shiftKey) {
       return true;
     }
 
-    if (activeLayer === PANEL_LAYERS.TILES) {
+    if (activeLayer === PANEL_LAYERS.TILES || activeLayer === PANEL_LAYERS.BACKGROUND) {
       return false;
     }
 
@@ -4611,6 +4663,7 @@ if (event.shiftKey) {
     draft.interaction.soundDrag = null;
     draft.interaction.scanDrag = null;
     draft.interaction.activeLayer = PANEL_LAYERS.TILES;
+    draft.interaction.activeBackgroundMaterialId = nextDocument?.background?.materials?.[0]?.id || DEFAULT_BACKGROUND_MATERIAL_ID;
     draft.interaction.canvasSelectionMode = "entity";
     draft.interaction.decorScatterMode = false;
     draft.interaction.decorScatterSettings = {
@@ -4865,7 +4918,7 @@ if (event.shiftKey) {
       draft.interaction.soundDrag = null;
       draft.interaction.boxSelection = null;
       clearDecorScatterDrag(draft);
-      if (tool !== EDITOR_TOOLS.INSPECT) {
+      if (tool !== EDITOR_TOOLS.INSPECT && ![PANEL_LAYERS.TILES, PANEL_LAYERS.BACKGROUND].includes(getActiveLayer(draft.interaction))) {
         setActiveLayer(draft, PANEL_LAYERS.TILES);
       }
     });
@@ -4895,7 +4948,7 @@ if (event.shiftKey) {
       }
 
       resumeObjectPlacementPreviews(draft, `panel layer ${layer}`);
-      setActiveLayer(draft, PANEL_LAYERS.TILES);
+      setActiveLayer(draft, layer === PANEL_LAYERS.BACKGROUND ? PANEL_LAYERS.BACKGROUND : PANEL_LAYERS.TILES);
       draft.interaction.activeEntityPresetId = null;
       draft.interaction.activeDecorPresetId = null;
       draft.interaction.activeSoundPresetId = null;
@@ -5237,6 +5290,7 @@ if (event.shiftKey) {
         state.interaction.hoveredDecorId = null;
         clearHoveredSound(state.interaction);
         state.interaction.activeLayer = PANEL_LAYERS.TILES;
+        state.interaction.activeBackgroundMaterialId = state.document.active?.background?.materials?.[0]?.id || DEFAULT_BACKGROUND_MATERIAL_ID;
         state.interaction.canvasSelectionMode = "entity";
         clearDecorSelection(state.interaction);
         clearSoundSelection(state.interaction);

@@ -1,91 +1,64 @@
-function hashSeed(value) {
-  const input = String(value || "layer");
-  let hash = 0;
+import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
+import { getBackgroundMaterialById } from "../../domain/background/materialCatalog.js";
 
-  for (let index = 0; index < input.length; index += 1) {
-    hash = (hash * 31 + input.charCodeAt(index)) >>> 0;
+function drawBackgroundPlaceholder(ctx, material, screenX, screenY, cellSize, zoom) {
+  const drawWidth = (Number.isFinite(material?.drawW) ? material.drawW : 24) * zoom;
+  const drawHeight = (Number.isFinite(material?.drawH) ? material.drawH : 24) * zoom;
+  const drawOffX = (Number.isFinite(material?.drawOffX) ? material.drawOffX : 0) * zoom;
+  const drawOffY = (Number.isFinite(material?.drawOffY) ? material.drawOffY : 0) * zoom;
+  const drawX = Math.floor(screenX + drawOffX);
+  const drawY = Math.floor(screenY + cellSize - drawHeight + drawOffY);
+
+  ctx.fillStyle = material?.fallbackColor || "#44546f";
+  ctx.fillRect(drawX, drawY, Math.round(drawWidth), Math.round(drawHeight));
+  ctx.strokeStyle = "rgba(8, 12, 18, 0.45)";
+  ctx.strokeRect(drawX + 0.5, drawY + 0.5, Math.max(1, Math.round(drawWidth) - 1), Math.max(1, Math.round(drawHeight) - 1));
+}
+
+function drawBackgroundMaterial(ctx, material, screenX, screenY, cellSize, zoom) {
+  if (!material) return;
+  const drawWidth = (Number.isFinite(material.drawW) ? material.drawW : 24) * zoom;
+  const drawHeight = (Number.isFinite(material.drawH) ? material.drawH : 24) * zoom;
+  const drawOffX = (Number.isFinite(material.drawOffX) ? material.drawOffX : 0) * zoom;
+  const drawOffY = (Number.isFinite(material.drawOffY) ? material.drawOffY : 0) * zoom;
+  const drawX = screenX + drawOffX;
+  const drawY = screenY + cellSize - drawHeight + drawOffY;
+
+  const image = material?.img ? getSpriteImage(material.img) : null;
+  if (!isSpriteReady(image)) {
+    drawBackgroundPlaceholder(ctx, material, screenX, screenY, cellSize, zoom);
+    return;
   }
 
-  return hash;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(image, Math.floor(drawX), Math.floor(drawY), Math.round(drawWidth), Math.round(drawHeight));
 }
 
-function getParallaxOffset(viewportOffset, depth, axisScale = 1) {
-  return viewportOffset * depth * axisScale;
-}
+export function renderBackground(ctx, doc, viewport) {
+  const { width, height, tileSize } = doc.dimensions;
+  const base = doc.background?.base;
+  if (!Array.isArray(base)) return;
 
-function getLayerBandMetrics(canvasHeight, index, depth) {
-  const bandBase = canvasHeight * (0.42 + Math.min(0.26, depth * 0.22));
-  const bandSpacing = Math.min(canvasHeight * 0.12, 42);
-  const topY = bandBase + index * bandSpacing;
-  const amplitude = 12 + depth * 26 + index * 4;
+  const cell = tileSize * viewport.zoom;
+  const authoredMaterials = doc.background?.materials || [];
 
-  return {
-    topY,
-    amplitude,
-  };
-}
-
-function createLayerProfile(layer, topY, amplitude) {
-  const seed = hashSeed(layer.id);
-  const profile = [];
-
-  for (let index = 0; index < 6; index += 1) {
-    const noise = ((seed >> ((index % 4) * 6)) & 0x3f) / 63;
-    const wave = Math.sin((index + 1) * (0.75 + layer.depth)) * 0.5 + 0.5;
-    const pointY = topY + (noise - 0.5) * amplitude * 0.8 + (wave - 0.5) * amplitude * 0.65;
-    profile.push(pointY);
-  }
-
-  return profile;
-}
-
-function renderColorLayer(ctx, canvas, layer, index, viewport) {
-  const depth = Number.isFinite(layer.depth) ? Math.max(0, Math.min(1, layer.depth)) : 0;
-  const color = layer.color || "#1b2436";
-  const parallaxX = getParallaxOffset(viewport.offsetX, depth, 0.65);
-  const parallaxY = getParallaxOffset(viewport.offsetY, depth, 0.18);
-  const bandMetrics = getLayerBandMetrics(canvas.height, index, depth);
-  const topY = bandMetrics.topY + parallaxY;
-  const profile = createLayerProfile(layer, topY, bandMetrics.amplitude);
-  const startX = -canvas.width * 0.3 + parallaxX;
-  const segmentWidth = (canvas.width * 1.6) / (profile.length - 1);
-
-  ctx.fillStyle = color;
-
-  if (index === 0) {
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-  }
-
-  ctx.beginPath();
-  ctx.moveTo(startX, canvas.height);
-
-  for (let profileIndex = 0; profileIndex < profile.length; profileIndex += 1) {
-    ctx.lineTo(startX + segmentWidth * profileIndex, profile[profileIndex]);
-  }
-
-  ctx.lineTo(startX + segmentWidth * (profile.length - 1), canvas.height);
-  ctx.closePath();
-  ctx.fill();
-}
-
-export function renderBackgroundLayers(ctx, doc, viewport) {
-  const layers = (doc.backgrounds?.layers || []).filter((layer) => layer?.visible);
-  if (!layers.length) return;
-
-  const canvasRect = ctx.canvas.getBoundingClientRect();
-  const canvas = {
-    width: canvasRect.width || ctx.canvas.width,
-    height: canvasRect.height || ctx.canvas.height,
-  };
-  const orderedLayers = [...layers].sort((left, right) => (left.depth ?? 0) - (right.depth ?? 0));
-
-  for (let index = 0; index < orderedLayers.length; index += 1) {
-    const layer = orderedLayers[index];
-
-    if (layer.type !== "color") {
-      continue;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const materialId = base[y * width + x];
+      if (!materialId) continue;
+      const material = getBackgroundMaterialById(materialId, authoredMaterials) || {
+        id: materialId,
+        label: materialId,
+        drawW: 24,
+        drawH: 24,
+        drawAnchor: "BL",
+        drawOffX: 0,
+        drawOffY: 0,
+        fallbackColor: "#5f6c82",
+      };
+      const screenX = viewport.offsetX + x * cell;
+      const screenY = viewport.offsetY + y * cell;
+      drawBackgroundMaterial(ctx, material, screenX, screenY, cell, viewport.zoom);
     }
-
-    renderColorLayer(ctx, canvas, layer, index, viewport);
   }
 }

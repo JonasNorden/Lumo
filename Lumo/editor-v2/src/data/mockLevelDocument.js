@@ -1,4 +1,5 @@
 import { getTileIndex } from "../domain/level/levelDocument.js";
+import { BACKGROUND_MATERIAL_OPTIONS } from "../domain/background/materialCatalog.js";
 
 const width = 40;
 const height = 22;
@@ -20,6 +21,15 @@ for (let y = 7; y < 13; y += 1) {
 
 for (let x = 26; x < 33; x += 1) {
   base[getTileIndex(width, x, 9)] = 3;
+}
+
+const backgroundBase = new Array(width * height).fill(null);
+for (let x = 0; x < width; x += 1) {
+  backgroundBase[getTileIndex(width, x, height - 1)] = "bg_stone_wall";
+  backgroundBase[getTileIndex(width, x, height - 2)] = "bg_stone_wall";
+}
+for (let x = 12; x < 20; x += 1) {
+  backgroundBase[getTileIndex(width, x, height - 4)] = "bg_arch";
 }
 
 export const mockLevelDocument = {
@@ -63,6 +73,10 @@ export const mockLevelDocument = {
         color: "#2f3d5d",
       },
     ],
+  },
+  background: {
+    base: backgroundBase,
+    materials: BACKGROUND_MATERIAL_OPTIONS.map((material) => ({ ...material })),
   },
   decor: [
     {

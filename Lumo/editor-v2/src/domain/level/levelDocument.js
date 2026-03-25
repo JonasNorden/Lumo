@@ -5,6 +5,7 @@ import { DEFAULT_SOUND_PRESET_ID, getSoundPresetDefaultParams, getSoundPresetFor
 import { isEntityLikeEditableType, normalizeEditableObjectType } from "../placeables/editableObjectBuckets.js";
 import { getAuthoredSoundSource } from "../sound/sourceReference.js";
 import { normalizeSoundType } from "../sound/soundVisuals.js";
+import { BACKGROUND_MATERIAL_OPTIONS, DEFAULT_BACKGROUND_MATERIAL_ID, normalizeBackgroundMaterial } from "../background/materialCatalog.js";
 
 const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
 const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
@@ -16,6 +17,7 @@ const DEFAULT_DECOR_VARIANT = "a";
  * @property {{width: number, height: number, tileSize: number}} dimensions
  * @property {{base: number[]}} tiles
  * @property {{layers: {id: string, name: string, type: string, depth: number, visible: boolean, color: string}[]}} backgrounds
+ * @property {{base: (string|null)[], materials: {id: string, label: string, img: string|null, drawW: number, drawH: number, drawAnchor: "BL", drawOffX: number, drawOffY: number, footprint: {w: number, h: number}, fallbackColor: string, group: string}[]}} background
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, variant: string, params: Record<string, string | number | boolean>}[]} decor
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} entities
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, source?: string, params: Record<string, string | number | boolean>}[]} sounds
@@ -51,6 +53,30 @@ export function createDefaultBackgroundLayer(index = 0, overrides = {}) {
 
 function normalizeBackgroundLayer(layer, index) {
   return createDefaultBackgroundLayer(index, layer);
+}
+
+
+function normalizeBackgroundDocument(background, expectedCount) {
+  const base = Array.isArray(background?.base)
+    ? background.base.slice(0, expectedCount).map((value) => (typeof value === "string" && value.trim() ? value.trim() : null))
+    : [];
+  while (base.length < expectedCount) base.push(null);
+
+  const authoredMaterials = Array.isArray(background?.materials)
+    ? background.materials.map((material, index) => normalizeBackgroundMaterial(material, index))
+    : [];
+
+  const fallbackMaterials = authoredMaterials.length
+    ? authoredMaterials
+    : BACKGROUND_MATERIAL_OPTIONS.map((material, index) => normalizeBackgroundMaterial(material, index));
+
+  const knownMaterialIds = new Set(fallbackMaterials.map((material) => material.id));
+  const sanitizedBase = base.map((value) => (value && knownMaterialIds.has(value) ? value : (value ? DEFAULT_BACKGROUND_MATERIAL_ID : null)));
+
+  return {
+    base: sanitizedBase,
+    materials: fallbackMaterials,
+  };
 }
 
 function normalizeDecor(decor, index) {
@@ -168,6 +194,8 @@ export function validateLevelDocument(doc) {
       .map((layer, index) => normalizeBackgroundLayer(layer, index))
       .sort((left, right) => left.depth - right.depth),
   };
+
+  doc.background = normalizeBackgroundDocument(doc.background, expectedCount);
 
   const rawDecor = Array.isArray(doc.decor) ? doc.decor : [];
   const normalizedDecor = rawDecor.map((decor, index) => normalizeDecor(decor, index));
