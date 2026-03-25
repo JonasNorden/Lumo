@@ -8,7 +8,12 @@ import { TOOL_OPTIONS, EDITOR_TOOLS, isEditorTool } from "../domain/tiles/tools.
 import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
 import { DECOR_PRESETS } from "../domain/decor/decorPresets.js";
 import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
-import { findBrushSpriteOptionByValue } from "../domain/tiles/tileSpriteCatalog.js";
+import {
+  findBrushSpriteOptionByValue,
+  getFallbackBrushSizeForSprite,
+  getSupportedSizesForBrushSprite,
+  isBrushSizeSupportedForSprite,
+} from "../domain/tiles/tileSpriteCatalog.js";
 import { BACKGROUND_MATERIAL_OPTIONS } from "../domain/background/materialCatalog.js";
 
 const PANEL_LAYERS = {
@@ -186,6 +191,14 @@ function renderTileField(label, field, options, selectedValue) {
   `;
 }
 
+function getTileSizeOptionsForSprite(spriteValue) {
+  const supportedSizes = getSupportedSizesForBrushSprite(spriteValue);
+  return BRUSH_SIZE_OPTIONS.filter((option) => {
+    const parsed = Number.parseInt(String(option.value).split("x")[0], 10);
+    return Number.isInteger(parsed) && supportedSizes.includes(parsed);
+  });
+}
+
 function renderTileSelectionSummary(activeTileSprite) {
   if (!activeTileSprite) return "";
 
@@ -314,6 +327,10 @@ function renderSoundSection(activePresetId) {
 
 export function renderBrushPanel(panel, state) {
   const brushDraft = state.brush.activeDraft;
+  const visibleSizeOptions = getTileSizeOptionsForSprite(brushDraft.sprite);
+  const selectedSize = isBrushSizeSupportedForSprite(brushDraft.size, brushDraft.sprite)
+    ? brushDraft.size
+    : getFallbackBrushSizeForSprite(brushDraft.sprite);
   const summary = getBrushDraftSummary(brushDraft);
   const activeTileSprite = findBrushSpriteOptionByValue(brushDraft.sprite);
   const panelSections = {
@@ -344,9 +361,9 @@ export function renderBrushPanel(panel, state) {
       </div>
       ${renderTileSelectionSummary(activeTileSprite)}
     `, "tilesSection", `
-      <span class="tilesPanelControls" aria-label="Tile brush controls">
+        <span class="tilesPanelControls" aria-label="Tile brush controls">
         ${renderTileField("Mode", "behavior", BRUSH_BEHAVIOR_OPTIONS, brushDraft.behavior)}
-        ${renderTileField("Size", "size", BRUSH_SIZE_OPTIONS, brushDraft.size)}
+        ${renderTileField("Size", "size", visibleSizeOptions, selectedSize)}
       </span>
     `)}
 
@@ -396,6 +413,10 @@ export function bindBrushPanel(panel, store, options = {}) {
         const nextLayer = draft.interaction.activeLayer === PANEL_LAYERS.BACKGROUND ? PANEL_LAYERS.BACKGROUND : PANEL_LAYERS.TILES;
         draft.interaction.activeLayer = nextLayer;
         draft.ui.panelSections[nextLayer] = true;
+        if (field === "size" && !isBrushSizeSupportedForSprite(target.value, draft.brush.activeDraft.sprite)) {
+          draft.brush.activeDraft.size = getFallbackBrushSizeForSprite(draft.brush.activeDraft.sprite);
+          return;
+        }
         draft.brush.activeDraft[field] = target.value;
       });
       return;
@@ -472,6 +493,9 @@ export function bindBrushPanel(panel, store, options = {}) {
         draft.interaction.activeLayer = nextLayer;
         draft.ui.panelSections[nextLayer] = true;
         draft.brush.activeDraft.sprite = nextSprite;
+        if (!isBrushSizeSupportedForSprite(draft.brush.activeDraft.size, nextSprite)) {
+          draft.brush.activeDraft.size = getFallbackBrushSizeForSprite(nextSprite);
+        }
       });
       return;
     }

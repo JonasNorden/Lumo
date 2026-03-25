@@ -2,6 +2,18 @@ const TILE_SCRIPT_CATALOG = typeof window !== "undefined" && Array.isArray(windo
   ? window.LUMO_CATALOG_TILES
   : [];
 
+const DEFAULT_SUPPORTED_TILE_SIZES = [1, 2, 3];
+
+const TILE_RULE_OVERRIDES = {
+  15: {
+    supportedSizes: [1],
+    drawW: 24,
+    drawH: 24,
+    drawAnchor: "TL",
+    footprint: { w: 1, h: 1 },
+  },
+};
+
 const TILE_DRAW_OVERRIDES = {
   0: {
     id: "void_1",
@@ -51,22 +63,50 @@ const TILE_DRAW_OVERRIDES = {
     drawH: 24,
     drawAnchor: "TL",
   },
+  15: {
+    id: "stone_ct",
+    name: "Stone CT",
+    img: "../data/assets/tiles/stone_ct.png",
+    drawW: 24,
+    drawH: 24,
+    drawAnchor: "TL",
+  },
 };
+
+function normalizeSupportedSizes(rawSupportedSizes) {
+  if (!Array.isArray(rawSupportedSizes) || rawSupportedSizes.length === 0) {
+    return [...DEFAULT_SUPPORTED_TILE_SIZES];
+  }
+
+  const normalized = rawSupportedSizes
+    .map((size) => Number.parseInt(size, 10))
+    .filter((size) => Number.isInteger(size) && size >= 1 && size <= 3);
+
+  return normalized.length ? [...new Set(normalized)].sort((a, b) => a - b) : [...DEFAULT_SUPPORTED_TILE_SIZES];
+}
 
 function normalizeTileEntry(entry) {
   if (!entry || !Number.isInteger(entry.tileId)) return null;
 
+  const tileRules = TILE_RULE_OVERRIDES[entry.tileId] || null;
   return {
     id: entry.id || `tile-${entry.tileId}`,
     tileId: entry.tileId,
     label: entry.name || entry.id || `Tile ${entry.tileId}`,
     img: entry.img ? `../${String(entry.img).replace(/^\.?\//, "")}` : null,
-    drawW: Number.isFinite(entry.drawW) ? entry.drawW : 24,
-    drawH: Number.isFinite(entry.drawH) ? entry.drawH : 24,
-    drawAnchor: entry.drawAnchor === "BL" ? "BL" : "TL",
+    drawW: Number.isFinite(tileRules?.drawW) ? tileRules.drawW : Number.isFinite(entry.drawW) ? entry.drawW : 24,
+    drawH: Number.isFinite(tileRules?.drawH) ? tileRules.drawH : Number.isFinite(entry.drawH) ? entry.drawH : 24,
+    drawAnchor: tileRules?.drawAnchor === "BL"
+      ? "BL"
+      : tileRules?.drawAnchor === "TL"
+        ? "TL"
+        : entry.drawAnchor === "BL"
+          ? "BL"
+          : "TL",
     drawOffX: Number.isFinite(entry.drawOffX) ? entry.drawOffX : 0,
     drawOffY: Number.isFinite(entry.drawOffY) ? entry.drawOffY : 0,
-    footprint: entry.footprint || { w: 1, h: 1 },
+    footprint: tileRules?.footprint || entry.footprint || { w: 1, h: 1 },
+    supportedSizes: normalizeSupportedSizes(tileRules?.supportedSizes || entry.supportedSizes),
     collisionType: entry.collisionType || null,
     group: entry.group || "Tiles",
   };
@@ -83,11 +123,13 @@ const TILE_ASSETS = new Map(
 for (const [tileId, override] of Object.entries(TILE_DRAW_OVERRIDES)) {
   const numericTileId = Number(tileId);
   if (TILE_ASSETS.has(numericTileId)) continue;
+  const tileRules = TILE_RULE_OVERRIDES[numericTileId] || null;
   TILE_ASSETS.set(numericTileId, {
     tileId: numericTileId,
     label: override.name,
     ...override,
-    footprint: { w: 1, h: 1 },
+    footprint: tileRules?.footprint || { w: 1, h: 1 },
+    supportedSizes: normalizeSupportedSizes(tileRules?.supportedSizes),
     drawOffX: 0,
     drawOffY: 0,
     group: "Core",
@@ -114,6 +156,7 @@ export const BRUSH_SPRITE_OPTIONS = [
     drawW: tileAsset?.drawW || 24,
     drawH: tileAsset?.drawH || 24,
     drawAnchor: tileAsset?.drawAnchor || "TL",
+    supportedSizes: normalizeSupportedSizes(tileAsset?.supportedSizes),
   };
 });
 
@@ -123,4 +166,30 @@ export function getTileAssetByTileValue(tileValue) {
 
 export function findBrushSpriteOptionByValue(value) {
   return BRUSH_SPRITE_OPTIONS.find((option) => option.value === value) || null;
+}
+
+function parseBrushSizeValue(sizeValue) {
+  if (typeof sizeValue !== "string") return null;
+  const [widthToken, heightToken] = sizeValue.toLowerCase().split("x");
+  const width = Number.parseInt(widthToken, 10);
+  const height = Number.parseInt(heightToken, 10);
+  if (!Number.isInteger(width) || width !== height || width < 1 || width > 3) return null;
+  return width;
+}
+
+export function getSupportedSizesForBrushSprite(spriteValue) {
+  const sprite = findBrushSpriteOptionByValue(spriteValue);
+  return normalizeSupportedSizes(sprite?.supportedSizes);
+}
+
+export function getFallbackBrushSizeForSprite(spriteValue) {
+  const supportedSizes = getSupportedSizesForBrushSprite(spriteValue);
+  const fallbackSize = supportedSizes.includes(1) ? 1 : supportedSizes[0] || 1;
+  return `${fallbackSize}x${fallbackSize}`;
+}
+
+export function isBrushSizeSupportedForSprite(sizeValue, spriteValue) {
+  const size = parseBrushSizeValue(sizeValue);
+  if (!Number.isInteger(size)) return false;
+  return getSupportedSizesForBrushSprite(spriteValue).includes(size);
 }

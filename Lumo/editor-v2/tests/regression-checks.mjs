@@ -20,6 +20,11 @@ import { eraseSingleTile } from "../src/domain/tiles/eraseTile.js";
 import { getBrushCells, resolveBrushSize, snapCellToBrushStep } from "../src/domain/tiles/brushSize.js";
 import { eraseSizedPlacementAtCell, paintSizedPlacement } from "../src/domain/tiles/sizedPlacements.js";
 import { renderBrushPanel } from "../src/ui/brushPanel.js";
+import {
+  findBrushSpriteOptionByValue,
+  getSupportedSizesForBrushSprite,
+  isBrushSizeSupportedForSprite,
+} from "../src/domain/tiles/tileSpriteCatalog.js";
 import { renderBottomPanel } from "../src/ui/bottomPanel.js";
 import { renderInspector } from "../src/ui/inspectorPanel.js";
 import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
@@ -1432,6 +1437,7 @@ function runSizedBrushSemanticsRegressionChecks() {
   const oneByOne = resolveBrushSize({ size: "1x1" });
   const twoByTwo = resolveBrushSize({ size: "2x2" });
   const threeByThree = resolveBrushSize({ size: "3x3" });
+  const restrictedStoneTwoByTwo = resolveBrushSize({ sprite: "stone_ct", size: "2x2" });
 
   assert.deepEqual(getBrushCells({ x: 3, y: 3 }, oneByOne), [{ x: 3, y: 3 }], "1x1 footprints should paint exactly one authored cell");
   assert.deepEqual(
@@ -1458,6 +1464,49 @@ function runSizedBrushSemanticsRegressionChecks() {
     snapCellToBrushStep({ x: 1, y: 1 }, { x: 3, y: 3 }, twoByTwo),
     { x: 1, y: 1 },
     "negative drag stepping should align symmetrically to footprint increments",
+  );
+  assert.deepEqual(
+    restrictedStoneTwoByTwo,
+    { width: 1, height: 1 },
+    "tiles restricted to 1x1 should safely fall back even if an unsupported 2x2 size is selected",
+  );
+  assert.deepEqual(
+    getSupportedSizesForBrushSprite("soil_c"),
+    [1, 2, 3],
+    "default tile sprites should preserve full 1x1/2x2/3x3 support",
+  );
+  assert.deepEqual(
+    getSupportedSizesForBrushSprite("stone_ct"),
+    [1],
+    "Stone CT should explicitly opt into 1x1 only placement support",
+  );
+  assert.equal(
+    isBrushSizeSupportedForSprite("3x3", "stone_ct"),
+    false,
+    "Stone CT should reject unsupported large sizes",
+  );
+
+  const stoneSprite = findBrushSpriteOptionByValue("stone_ct");
+  assert.equal(stoneSprite?.drawW, 24, "Stone CT should use a neutral 24px width baseline in editor-v2");
+  assert.equal(stoneSprite?.drawH, 24, "Stone CT should use a neutral 24px height baseline in editor-v2");
+  assert.equal(stoneSprite?.drawAnchor, "TL", "Stone CT should use the neutral top-left anchor baseline in editor-v2");
+
+  const panel = { innerHTML: "" };
+  renderBrushPanel(panel, {
+    brush: { activeDraft: { behavior: "solid", size: "3x3", sprite: "stone_ct" } },
+    interaction: { activeTool: "paint", activeLayer: "tiles" },
+    ui: { panelSections: {} },
+    document: { active: null },
+  });
+  assert.equal(
+    panel.innerHTML.includes('option value="2x2"'),
+    false,
+    "brush panel size selector should hide unsupported sizes for restricted tiles",
+  );
+  assert.equal(
+    panel.innerHTML.includes('option value="3x3"'),
+    false,
+    "brush panel size selector should hide 3x3 when the sprite does not support it",
   );
 
   const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/app/createEditorApp.js"), "utf8");

@@ -1,8 +1,17 @@
+import {
+  getFallbackBrushSizeForSprite,
+  isBrushSizeSupportedForSprite,
+} from "./tileSpriteCatalog.js";
+
 const FALLBACK_BRUSH_SIZE = 1;
 
 export function resolveBrushSize(brushDraft) {
-  const rawSize = typeof brushDraft?.size === "string" ? brushDraft.size : "";
-  const [widthToken, heightToken] = rawSize.toLowerCase().split("x");
+  const fallbackSizeValue = getFallbackBrushSizeForSprite(brushDraft?.sprite);
+  const rawSize = typeof brushDraft?.size === "string" ? brushDraft.size : fallbackSizeValue;
+  const sizeValue = isBrushSizeSupportedForSprite(rawSize, brushDraft?.sprite)
+    ? rawSize
+    : fallbackSizeValue;
+  const [widthToken, heightToken] = sizeValue.toLowerCase().split("x");
   const width = Number.parseInt(widthToken, 10);
   const height = Number.parseInt(heightToken, 10);
 
