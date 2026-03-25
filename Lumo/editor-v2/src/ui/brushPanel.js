@@ -261,6 +261,9 @@ function renderDecorSettings(state) {
     : scatterModeActive
       ? `${activePreset.defaultName} · Alt/Option + Drag · ${Math.round(scatterDensity * 100)}% density · ${Math.round(scatterRandomness * 100)}% randomness`
       : `${activePreset.defaultName} · Alt/Option + Click`;
+  const decorMeta = activePreset
+    ? `Size ${activePreset.sizeTiles?.w || 1}×${activePreset.sizeTiles?.h || 1}t · Footprint ${activePreset.footprint?.w || 1}×${activePreset.footprint?.h || 1}t · ${activePreset.drawAnchor || "BL"} anchor`
+    : "Decor asset metadata appears here";
 
   return `
     ${renderAssetPicker("Decor presets", "decor-preset-button", DECOR_PRESETS, activePresetId, "No decor selected", "assetPickerDecorCompact")}
@@ -309,6 +312,9 @@ function renderDecorSettings(state) {
 
       <div class="statusRow compactStatusRow decorScatterStatusRow">
         <span class="value">${escapeHtml(scatterStatus)}</span>
+      </div>
+      <div class="statusRow compactStatusRow decorScatterStatusRow">
+        <span class="value">${escapeHtml(decorMeta)}</span>
       </div>
     </div>
   `;

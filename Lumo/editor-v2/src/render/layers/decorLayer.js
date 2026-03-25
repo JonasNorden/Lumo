@@ -10,6 +10,37 @@ function getDecorScreenCenter(decor, tileSize, viewport) {
   };
 }
 
+function getDecorDrawMetrics(decor, tileSize, viewport, visual) {
+  const zoom = viewport.zoom;
+  const scaledTile = tileSize * zoom;
+  const drawWidth = (visual.drawW || 24) * zoom;
+  const drawHeight = (visual.drawH || 24) * zoom;
+  const drawOffX = (visual.drawOffX || 0) * zoom;
+  const drawOffY = (visual.drawOffY || 0) * zoom;
+  const tileLeft = viewport.offsetX + decor.x * scaledTile;
+  const tileTop = viewport.offsetY + decor.y * scaledTile;
+  const center = getDecorScreenCenter(decor, tileSize, viewport);
+  const footprintW = Math.max(1, Number.isFinite(visual.footprint?.w) ? Math.round(visual.footprint.w) : Math.ceil((visual.drawW || 24) / 24));
+  const footprintH = Math.max(1, Number.isFinite(visual.footprint?.h) ? Math.round(visual.footprint.h) : Math.ceil((visual.drawH || 24) / 24));
+
+  const drawX = visual.drawAnchor === "TL"
+    ? tileLeft + drawOffX
+    : center.x - drawWidth / 2 + drawOffX;
+  const drawY = visual.drawAnchor === "TL"
+    ? tileTop + drawOffY
+    : center.y - drawHeight + (8 * zoom) + drawOffY;
+
+  return {
+    drawX,
+    drawY,
+    drawWidth,
+    drawHeight,
+    focusX: visual.drawAnchor === "TL" ? drawX + drawWidth / 2 : center.x,
+    focusY: visual.drawAnchor === "TL" ? drawY + drawHeight / 2 : center.y,
+    focusRadius: Math.max(9, Math.max(drawWidth, drawHeight, footprintW * scaledTile, footprintH * scaledTile) * 0.32),
+  };
+}
+
 function drawDecorFocus(ctx, x, y, radius, { selected = false, hovered = false, preview = false } = {}, scale = 1) {
   if (!selected && !hovered && !preview) return;
 
@@ -50,17 +81,10 @@ function drawDecorFallback(ctx, x, y, scale, visual) {
   ctx.restore();
 }
 
-function drawDecorSprite(ctx, x, y, viewport, visual, options = {}) {
+function drawDecorSprite(ctx, metrics, viewport, visual, options = {}) {
   const image = getSpriteImage(visual.img);
   if (!isSpriteReady(image)) return false;
-
-  const zoom = viewport.zoom;
-  const drawWidth = (visual.drawW || 24) * zoom;
-  const drawHeight = (visual.drawH || 24) * zoom;
-  const drawX = x - drawWidth / 2;
-  const drawY = visual.drawAnchor === "BL"
-    ? y - drawHeight + (8 * zoom)
-    : y - drawHeight / 2;
+  const { drawX, drawY, drawWidth, drawHeight } = metrics;
 
   ctx.save();
   ctx.globalAlpha *= options.alpha ?? 1;
@@ -71,15 +95,15 @@ function drawDecorSprite(ctx, x, y, viewport, visual, options = {}) {
 }
 
 function drawDecorMarker(ctx, decor, viewport, tileSize, options = {}) {
-  const { x, y } = getDecorScreenCenter(decor, tileSize, viewport);
   const visual = getDecorVisual(decor.type);
+  const metrics = getDecorDrawMetrics(decor, tileSize, viewport, visual);
   const scale = 1 / Math.max(0.001, viewport.zoom);
 
   ctx.save();
   ctx.globalAlpha *= options.alpha ?? 1;
-  drawDecorFocus(ctx, x, y, Math.max(9, (visual.drawW || 24) * 0.42) * scale, options, scale);
-  if (!drawDecorSprite(ctx, x, y, viewport, visual, options)) {
-    drawDecorFallback(ctx, x, y, scale, visual);
+  drawDecorFocus(ctx, metrics.focusX, metrics.focusY, metrics.focusRadius * scale, options, scale);
+  if (!drawDecorSprite(ctx, metrics, viewport, visual, options)) {
+    drawDecorFallback(ctx, metrics.focusX, metrics.focusY, scale, visual);
   }
   ctx.restore();
 }
@@ -109,11 +133,20 @@ export function findDecorAtCanvasPoint(doc, viewport, pointX, pointY, radius = 2
     const decor = decorItems[i];
     if (!decor.visible) continue;
 
-    const center = getDecorScreenCenter(decor, tileSize, viewport);
-    const hitRadius = (getDecorHitRadius(decor.type) + radius) * viewport.zoom;
-    const dx = pointX - center.x;
-    const dy = pointY - center.y;
+    const visual = getDecorVisual(decor.type);
+    const metrics = getDecorDrawMetrics(decor, tileSize, viewport, visual);
+    const hitPadding = Math.max(2, radius * viewport.zoom);
+    const withinBounds = pointX >= (metrics.drawX - hitPadding)
+      && pointX <= (metrics.drawX + metrics.drawWidth + hitPadding)
+      && pointY >= (metrics.drawY - hitPadding)
+      && pointY <= (metrics.drawY + metrics.drawHeight + hitPadding);
+    if (withinBounds) {
+      return i;
+    }
 
+    const hitRadius = (getDecorHitRadius(decor.type) + radius) * viewport.zoom;
+    const dx = pointX - metrics.focusX;
+    const dy = pointY - metrics.focusY;
     if (dx * dx + dy * dy <= hitRadius * hitRadius) {
       return i;
     }

@@ -75,9 +75,10 @@ import {
 import { collectDarknessPreviewLights, getPreviewPlayerLight } from "../src/render/darknessPreview.js";
 import { createFogVolumeEntityFromWorldRect } from "../src/domain/entities/specialVolumeTypes.js";
 import { findDecorPresetById } from "../src/domain/decor/decorPresets.js";
+import { getDecorVisual } from "../src/domain/decor/decorVisuals.js";
 import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
 import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
-import { renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
+import { findDecorAtCanvasPoint, renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
 import { applyCanonicalDecorAction, createCanonicalDecorHistory } from "../src/app/cleanRoomDecorMode.js";
 import { applyCanonicalEntityAction, cloneCanonicalEntitySnapshot, createCanonicalEntityHistory } from "../src/app/cleanRoomEntityMode.js";
 import { applyCanonicalSoundAction, cloneCanonicalSoundSnapshot, createCanonicalSoundHistory } from "../src/app/cleanRoomSoundMode.js";
@@ -2617,6 +2618,65 @@ function runDecorRegressionChecks() {
   assert.equal(doc.decor[0].x, 1, "undo should restore decor drag positions");
   redoTileEdit(doc, history);
   assert.equal(doc.decor[0].x, 2, "redo should restore decor drag positions");
+}
+
+function runDecorMetadataParityRegressionChecks() {
+  const flowerPreset = findDecorPresetById("decor_flower_01");
+  assert.ok(flowerPreset, "decor preset catalog should still resolve the flower preset");
+  assert.equal(flowerPreset.drawW, 24, "decor preset normalization should preserve authored draw width");
+  assert.equal(flowerPreset.drawH, 40, "decor preset normalization should preserve authored draw height");
+  assert.equal(flowerPreset.footprint.h >= 1, true, "decor preset normalization should derive a safe footprint");
+
+  const bannerVisual = getDecorVisual("banner");
+  assert.equal(bannerVisual.drawW, 120, "decor visuals should consume authored catalog draw width when available");
+  assert.equal(bannerVisual.drawH, 288, "decor visuals should consume authored catalog draw height when available");
+  assert.equal(bannerVisual.drawAnchor, "TL", "decor visuals should preserve authored anchors from catalog metadata");
+  assert.equal(bannerVisual.footprint.w, 5, "decor visuals should derive footprint width from authored draw size");
+  assert.equal(bannerVisual.footprint.h, 12, "decor visuals should derive footprint height from authored draw size");
+
+  const docs = createDoc();
+  docs.dimensions.tileSize = 24;
+  docs.decor.push({
+    id: "decor-banner",
+    name: "Banner",
+    type: "banner",
+    x: 1,
+    y: 1,
+    visible: true,
+    variant: "a",
+    params: {},
+  });
+  assert.equal(
+    findDecorAtCanvasPoint(docs, { offsetX: 0, offsetY: 0, zoom: 1 }, 40, 40),
+    0,
+    "decor hit-testing should respect authored metadata bounds for larger/taller decor assets",
+  );
+
+  const panel = { innerHTML: "" };
+  const baseState = createEditorState();
+  const nextState = {
+    ...baseState,
+    document: { active: docs },
+    interaction: {
+      ...baseState.interaction,
+      activeLayer: "decor",
+      selectedDecorIds: ["decor-banner"],
+      selectedDecorId: "decor-banner",
+      selectedDecorIndices: [0],
+      selectedDecorIndex: 0,
+    },
+  };
+  renderBottomPanel(panel, nextState);
+  assert.equal(
+    panel.innerHTML.includes("Footprint 5×12t"),
+    true,
+    "bottom panel decor editor should surface footprint metadata for selected authored decor assets",
+  );
+  assert.equal(
+    panel.innerHTML.includes("Draw 120×288px"),
+    true,
+    "bottom panel decor editor should surface authored draw dimensions for selected decor assets",
+  );
 }
 
 function runSoundRegressionChecks() {
@@ -5165,6 +5225,7 @@ async function main() {
   runFogPlacementPreviewRegressionChecks();
   runObjectPlacementPreviewSuppressionRegressionChecks();
   runDecorRegressionChecks();
+  runDecorMetadataParityRegressionChecks();
   runSoundRegressionChecks();
   runSoundTypeRenderRegressionChecks();
   runSoundIdentityRegressionChecks();

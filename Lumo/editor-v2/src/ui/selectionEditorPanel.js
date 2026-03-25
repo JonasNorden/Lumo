@@ -1,5 +1,6 @@
 import { getPrimarySelectedEntityIndex, getSelectedEntityIndices } from "../domain/entities/selection.js";
 import { getPrimarySelectedDecorId, getPrimarySelectedDecorIndex, getSelectedDecorIndices } from "../domain/decor/selection.js";
+import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 import { getPrimarySelectedSoundId, getPrimarySelectedSoundIndex, getSelectedSoundIndices } from "../domain/sound/selection.js";
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
 import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
@@ -594,7 +595,22 @@ function renderEntityEditor(entity, selectedEntityIndex) {
 }
 
 function renderDecorEditor(decor, selectedDecorIndex) {
+  const decorVisual = getDecorVisual(decor?.type);
+  const sizeTiles = decorVisual?.sizeTiles
+    ? `${decorVisual.sizeTiles.w}×${decorVisual.sizeTiles.h}t`
+    : "n/a";
+  const footprint = decorVisual?.footprint
+    ? `${decorVisual.footprint.w}×${decorVisual.footprint.h}t`
+    : "n/a";
+  const drawSize = `${decorVisual?.drawW || 24}×${decorVisual?.drawH || 24}px`;
+  const anchor = decorVisual?.drawAnchor || "BL";
+
   return renderSelectionFields([
+    `<div class="statusCard assetSelectionCard assetSelectionCardCompact">
+      <div class="assetSelectionMeta">
+        <span class="statusCardMeta">Size ${escapeHtml(sizeTiles)} · Footprint ${escapeHtml(footprint)} · Draw ${escapeHtml(drawSize)} · ${escapeHtml(anchor)} anchor</span>
+      </div>
+    </div>`,
     renderTextField("decor", "name", "Name", decor.name, selectedDecorIndex, "selectionFieldName", decor?.id || null),
     renderTextField("decor", "type", "Type", decor.type, selectedDecorIndex, "selectionFieldType", decor?.id || null),
     renderNumberField("decor", "x", "X", decor.x, selectedDecorIndex, "", decor?.id || null),
