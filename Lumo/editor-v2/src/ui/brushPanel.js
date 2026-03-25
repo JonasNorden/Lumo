@@ -34,10 +34,11 @@ const VISIBLE_TOOL_OPTIONS = TOOL_OPTIONS.filter((option) => (
 const HIDDEN_ENTITY_PRESET_IDS = new Set(["player-spawn", "player-exit", "exit", "fog_volume"]);
 const PLACEABLE_ENTITY_PRESETS = ENTITY_PRESETS.filter((preset) => !HIDDEN_ENTITY_PRESET_IDS.has(preset.id));
 const COLLAPSIBLE_PANEL_DEFAULTS = {
-  tiles: true,
+  tiles: false,
   background: true,
-  decor: true,
-  entities: true,
+  decor: false,
+  entities: false,
+  sound: false,
 };
 
 function escapeHtml(value) {
@@ -320,15 +321,15 @@ function renderDecorSettings(state) {
   `;
 }
 
-function renderSoundSection(activePresetId) {
+function renderSoundSection(activePresetId, isOpen) {
   const activePreset = SOUND_PRESETS.find((preset) => preset.id === activePresetId) || null;
 
-  return renderInlineSection("SOUND", `
+  return renderSection("sound", "SOUND", isOpen, "", "soundSection", `
     <div class="soundPanelControls" aria-label="Sound controls">
       ${renderSelectorField("Select Sound", "sound-preset-select", SOUND_PRESETS, activePresetId, "No sound selected", "soundHeaderSelectField", false)}
       <button type="button" class="toolButton isSecondary soundClearButton" data-sound-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
     </div>
-  `, "soundSection");
+  `);
 }
 
 export function renderBrushPanel(panel, state) {
@@ -376,7 +377,7 @@ export function renderBrushPanel(panel, state) {
     ${state.document.active ? renderSection("background", "BACKGROUND", panelSections.background, renderBackgroundSettings(state)) : ""}
     ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
     ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
-    ${state.document.active ? renderSoundSection(state.interaction.activeSoundPresetId) : ""}
+    ${state.document.active ? renderSoundSection(state.interaction.activeSoundPresetId, panelSections.sound) : ""}
   `;
 }
 
