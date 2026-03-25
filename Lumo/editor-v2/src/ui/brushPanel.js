@@ -9,10 +9,12 @@ import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
 import { DECOR_PRESETS } from "../domain/decor/decorPresets.js";
 import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
 import { findBrushSpriteOptionByValue } from "../domain/tiles/tileSpriteCatalog.js";
+import { BACKGROUND_MATERIAL_OPTIONS } from "../domain/background/materialCatalog.js";
 
 const PANEL_LAYERS = {
   TOOLS: "tools",
   TILES: "tiles",
+  BACKGROUND: "background",
   ENTITIES: "entities",
   DECOR: "decor",
   SOUND: "sound",
@@ -28,6 +30,7 @@ const HIDDEN_ENTITY_PRESET_IDS = new Set(["player-spawn", "player-exit", "exit",
 const PLACEABLE_ENTITY_PRESETS = ENTITY_PRESETS.filter((preset) => !HIDDEN_ENTITY_PRESET_IDS.has(preset.id));
 const COLLAPSIBLE_PANEL_DEFAULTS = {
   tiles: true,
+  background: true,
   decor: true,
   entities: true,
 };
@@ -109,6 +112,7 @@ function renderLayerSection(state) {
 
   return `
     <div class="toolSwitch layerSwitch" role="group" aria-label="Active layer">
+      <button class="toolButton ${activeLayer === PANEL_LAYERS.BACKGROUND ? "isActive" : ""}" type="button" data-layer="background">Background</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.TILES ? "isActive" : ""}" type="button" data-layer="tiles">Tiles</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.ENTITIES ? "isActive" : ""}" type="button" data-layer="entities">Entities</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.DECOR ? "isActive" : ""}" type="button" data-layer="decor">Decor</button>
@@ -194,6 +198,23 @@ function renderTileSelectionSummary(activeTileSprite) {
           <span class="statusCardMeta">ID ${escapeHtml(String(activeTileSprite.tileId))} · ${escapeHtml(activeTileSprite.drawW)}×${escapeHtml(activeTileSprite.drawH)}</span>
         </div>
       </div>
+    </div>
+  `;
+}
+
+
+function renderBackgroundSettings(state) {
+  const activeMaterialId = state.interaction.activeBackgroundMaterialId;
+  const activeMaterial = BACKGROUND_MATERIAL_OPTIONS.find((material) => material.id === activeMaterialId) || null;
+  const status = activeMaterial
+    ? `${activeMaterial.label} · ${activeMaterial.drawW}×${activeMaterial.drawH} · BL anchor`
+    : "Select a background material";
+
+  return `
+    ${renderAssetPicker("Background materials", "background-material-button", BACKGROUND_MATERIAL_OPTIONS, activeMaterialId, "No background material selected", "assetPickerCompact")}
+    <div class="statusRow compactStatusRow tilesCurrentRow">
+      <span class="label">Current</span>
+      <span class="value">${escapeHtml(status)}</span>
     </div>
   `;
 }
@@ -329,6 +350,7 @@ export function renderBrushPanel(panel, state) {
       </span>
     `)}
 
+    ${state.document.active ? renderSection("background", "BACKGROUND", panelSections.background, renderBackgroundSettings(state)) : ""}
     ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
     ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
     ${state.document.active ? renderSoundSection(state.interaction.activeSoundPresetId) : ""}
@@ -371,8 +393,9 @@ export function bindBrushPanel(panel, store, options = {}) {
       if (!field) return;
 
       store.setState((draft) => {
-        draft.interaction.activeLayer = PANEL_LAYERS.TILES;
-        draft.ui.panelSections.tiles = true;
+        const nextLayer = draft.interaction.activeLayer === PANEL_LAYERS.BACKGROUND ? PANEL_LAYERS.BACKGROUND : PANEL_LAYERS.TILES;
+        draft.interaction.activeLayer = nextLayer;
+        draft.ui.panelSections[nextLayer] = true;
         draft.brush.activeDraft[field] = target.value;
       });
       return;
@@ -445,20 +468,34 @@ export function bindBrushPanel(panel, store, options = {}) {
       const nextSprite = brushSpriteButton.dataset.brushSpriteButton;
       if (!nextSprite) return;
       store.setState((draft) => {
-        draft.interaction.activeLayer = PANEL_LAYERS.TILES;
-        draft.ui.panelSections.tiles = true;
+        const nextLayer = draft.interaction.activeLayer === PANEL_LAYERS.BACKGROUND ? PANEL_LAYERS.BACKGROUND : PANEL_LAYERS.TILES;
+        draft.interaction.activeLayer = nextLayer;
+        draft.ui.panelSections[nextLayer] = true;
         draft.brush.activeDraft.sprite = nextSprite;
       });
       return;
     }
 
 
+
+    const backgroundMaterialButton = target.closest("[data-background-material-button]");
+    if (backgroundMaterialButton instanceof HTMLButtonElement) {
+      const materialId = backgroundMaterialButton.dataset.backgroundMaterialButton;
+      if (!materialId) return;
+      store.setState((draft) => {
+        draft.interaction.activeLayer = PANEL_LAYERS.BACKGROUND;
+        draft.ui.panelSections.background = true;
+        draft.interaction.activeBackgroundMaterialId = materialId;
+      });
+      return;
+    }
+
     const layerButton = target.closest("[data-layer]");
     if (layerButton instanceof HTMLButtonElement) {
       const nextLayer = layerButton.dataset.layer;
-      if (![PANEL_LAYERS.TILES, PANEL_LAYERS.ENTITIES, PANEL_LAYERS.DECOR, PANEL_LAYERS.SOUND].includes(nextLayer)) return;
+      if (![PANEL_LAYERS.BACKGROUND, PANEL_LAYERS.TILES, PANEL_LAYERS.ENTITIES, PANEL_LAYERS.DECOR, PANEL_LAYERS.SOUND].includes(nextLayer)) return;
       onLayerChange?.(nextLayer);
-      if (nextLayer !== PANEL_LAYERS.TILES) {
+      if (nextLayer === PANEL_LAYERS.DECOR || nextLayer === PANEL_LAYERS.SOUND || nextLayer === PANEL_LAYERS.ENTITIES) {
         onCanvasTargetChange?.(nextLayer === PANEL_LAYERS.DECOR ? "decor" : nextLayer === PANEL_LAYERS.SOUND ? "sound" : "entity");
       }
       return;
@@ -472,8 +509,9 @@ export function bindBrushPanel(panel, store, options = {}) {
 
     store.setState((draft) => {
       if (nextTool !== EDITOR_TOOLS.INSPECT) {
-        draft.interaction.activeLayer = PANEL_LAYERS.TILES;
-        draft.ui.panelSections.tiles = true;
+        const nextLayer = draft.interaction.activeLayer === PANEL_LAYERS.BACKGROUND ? PANEL_LAYERS.BACKGROUND : PANEL_LAYERS.TILES;
+        draft.interaction.activeLayer = nextLayer;
+        draft.ui.panelSections[nextLayer] = true;
       }
       draft.interaction.activeTool = nextTool;
     });

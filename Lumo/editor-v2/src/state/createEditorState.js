@@ -27,6 +27,7 @@ export function createEditorState() {
       activeEntityPresetId: null,
       activeDecorPresetId: null,
       activeSoundPresetId: null,
+      activeBackgroundMaterialId: null,
       objectPlacementPreviewSuppressed: false,
       decorScatterMode: false,
       decorScatterSettings: {
@@ -122,6 +123,7 @@ export function createEditorState() {
         tiles: true,
         entities: true,
         decor: true,
+        background: true,
         sound: true,
       },
     },

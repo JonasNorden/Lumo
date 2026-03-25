@@ -119,6 +119,24 @@ function createDoc() {
     backgrounds: {
       layers: [],
     },
+    background: {
+      base: new Array(16).fill(null),
+      materials: [
+        {
+          id: "bg_stone_wall",
+          label: "Stone Wall",
+          img: null,
+          drawW: 24,
+          drawH: 24,
+          drawAnchor: "BL",
+          drawOffX: 0,
+          drawOffY: 0,
+          footprint: { w: 1, h: 1 },
+          fallbackColor: "#324058",
+          group: "Core",
+        },
+      ],
+    },
     entities: [],
     decor: [],
     sounds: [],
@@ -2867,6 +2885,42 @@ function runObjectLayerInteractionReconciliationChecks() {
   );
 }
 
+
+function runBackgroundLayerRegressionChecks() {
+  const doc = createDoc();
+  const history = createHistoryState();
+  const cell = { x: 1, y: 1 };
+  const index = cell.y * doc.dimensions.width + cell.x;
+
+  doc.background.base[index] = null;
+  pushTileEdit(history, createTileEditEntry(doc, cell, null, "bg_stone_wall", "background"));
+  doc.background.base[index] = "bg_stone_wall";
+  assert.equal(doc.background.base[index], "bg_stone_wall", "background paint should author into the dedicated background payload");
+
+  undoTileEdit(doc, history);
+  assert.equal(doc.background.base[index], null, "background paint undo should restore the previous authored background material");
+
+  redoTileEdit(doc, history);
+  assert.equal(doc.background.base[index], "bg_stone_wall", "background paint redo should restore the authored background material");
+
+  const normalized = validateLevelDocument({
+    ...createDoc(),
+    background: {
+      base: [
+        "bg_missing_material", null, null, null,
+        null, null, null, null,
+        null, null, null, null,
+        null, null, null, null,
+      ],
+      materials: [],
+    },
+  });
+  assert.equal(Array.isArray(normalized.background.base), true, "background should normalize into a dedicated authored base array");
+  assert.equal(normalized.background.base[0], "bg_stone_wall", "missing background materials should gracefully map to the default placeholder id");
+  const exported = JSON.parse(serializeLevelDocument(normalized));
+  assert.equal(exported.background.base[0], "bg_stone_wall", "background import/export should preserve authored background values");
+}
+
 function runCanvasRenderOrderRegressionChecks() {
   const doc = createDoc();
   doc.tiles.base[1] = 1;
@@ -2945,7 +2999,7 @@ function runCanvasRenderOrderRegressionChecks() {
     "entity drag previews should keep resolving on the canonical entity lane",
   );
 
-  assert.deepEqual(WORLD_RENDER_ORDER, ["decor", "tiles", "entities"], "renderer should export the canonical world render order contract");
+  assert.deepEqual(WORLD_RENDER_ORDER, ["background", "decor", "tiles", "entities"], "renderer should export the canonical world render order contract");
   assert.deepEqual(OVERLAY_RENDER_ORDER, ["sound", "grid", "scan"], "renderer should keep sound/grid/scan on separate overlay lanes");
 }
 
@@ -2964,12 +3018,20 @@ function runMinimapRenderOrderRegressionChecks() {
   assert.ok(operations.length > 0, "minimap should still render after adopting the shared world layer contract");
 
   const minimapSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/render/minimap.js"), "utf8");
+  const backgroundLoopIndex = minimapSource.indexOf("const backgroundCells = doc.background?.base || [];");
+  const decorLoopIndex = minimapSource.indexOf("for (const decor of doc.decor || [])");
+  const tileLoopIndex = minimapSource.indexOf("for (let y = 0; y < height; y += 1)", decorLoopIndex);
+  const entityLoopIndex = minimapSource.indexOf("for (const entity of doc.entities || [])");
   assert.equal(
-    minimapSource.includes("for (const decor of doc.decor || [])")
-      && minimapSource.indexOf("for (const decor of doc.decor || [])") < minimapSource.indexOf("for (let y = 0; y < height; y += 1)")
-      && minimapSource.indexOf("for (let y = 0; y < height; y += 1)") < minimapSource.indexOf("for (const entity of doc.entities || [])"),
+    backgroundLoopIndex >= 0
+      && decorLoopIndex >= 0
+      && tileLoopIndex >= 0
+      && entityLoopIndex >= 0
+      && backgroundLoopIndex < decorLoopIndex
+      && decorLoopIndex < tileLoopIndex
+      && tileLoopIndex < entityLoopIndex,
     true,
-    "minimap should follow the same decor → tiles → entities ordering as the main world view",
+    "minimap should follow the same background → decor → tiles → entities ordering as the main world view",
   );
   assert.equal(
     minimapSource.indexOf("for (const sound of doc.sounds || [])") > minimapSource.indexOf("for (const entity of doc.entities || [])"),
@@ -4849,6 +4911,7 @@ async function main() {
   runSoundIdentityRegressionChecks();
   runSoundDragPreviewIdentityRegressionChecks();
   runObjectLayerInteractionReconciliationChecks();
+  runBackgroundLayerRegressionChecks();
   runCanvasRenderOrderRegressionChecks();
   runMinimapRenderOrderRegressionChecks();
   runDarknessPreviewRegressionChecks();
