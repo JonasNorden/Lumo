@@ -112,7 +112,7 @@ function renderLayerSection(state) {
 
   return `
     <div class="toolSwitch layerSwitch" role="group" aria-label="Active layer">
-      <button class="toolButton ${activeLayer === PANEL_LAYERS.BACKGROUND ? "isActive" : ""}" type="button" data-layer="background">Background</button>
+      <button class="toolButton ${activeLayer === PANEL_LAYERS.BACKGROUND ? "isActive" : ""}" type="button" data-layer="background">BG</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.TILES ? "isActive" : ""}" type="button" data-layer="tiles">Tiles</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.ENTITIES ? "isActive" : ""}" type="button" data-layer="entities">Entities</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.DECOR ? "isActive" : ""}" type="button" data-layer="decor">Decor</button>
