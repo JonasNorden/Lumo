@@ -6,7 +6,7 @@ const DEFAULT_SUPPORTED_TILE_SIZES = [1, 2, 3];
 
 const TILE_RULE_OVERRIDES = {
   15: {
-    supportedSizes: [1],
+    supportedSizes: [1, 2, 3],
     drawW: 24,
     drawH: 24,
     drawAnchor: "TL",
