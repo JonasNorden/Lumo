@@ -86,6 +86,34 @@ const DECOR_PRESET_FALLBACKS = [
     footprint: { w: 1, h: 1 },
   },
   {
+    id: "apple",
+    type: "apple",
+    defaultName: "Apple",
+    defaultVariant: "a",
+    variants: ["a"],
+    img: "../data/assets/sprites/decor/apple.png",
+    drawW: 24,
+    drawH: 48,
+    drawAnchor: "BL",
+    drawOffX: 0,
+    drawOffY: 0,
+    footprint: { w: 1, h: 2 },
+  },
+  {
+    id: "boar",
+    type: "boar",
+    defaultName: "Boar",
+    defaultVariant: "a",
+    variants: ["a"],
+    img: "../data/assets/sprites/decor/boar_01.png",
+    drawW: 72,
+    drawH: 96,
+    drawAnchor: "BL",
+    drawOffX: 0,
+    drawOffY: 0,
+    footprint: { w: 3, h: 4 },
+  },
+  {
     id: "banner",
     type: "banner",
     defaultName: "Banner",
@@ -109,6 +137,57 @@ function normalizeAnchor(anchor) {
   return String(anchor || "").trim().toUpperCase() === "TL" ? "TL" : "BL";
 }
 
+const DECOR_ANCHOR_OVERRIDE_BY_ID = new Map([
+  ["apple", "BL"],
+  ["boar", "BL"],
+  ["banner", "TL"],
+  ["painting_01", "TL"],
+  ["painting_02", "TL"],
+  ["painting_03", "TL"],
+  ["painting_04", "TL"],
+  ["painting_05", "TL"],
+  ["painting_06", "TL"],
+]);
+
+const DECOR_ANCHOR_ATTACHED_HINTS = [
+  "banner",
+  "painting",
+  "wall",
+  "ceiling",
+  "hanging",
+  "hang",
+  "mounted",
+  "mount",
+  "sign",
+];
+
+function resolveDecorAnchor(raw, normalized = {}) {
+  const idKey = typeof normalized.id === "string" ? normalized.id.trim().toLowerCase() : "";
+  const explicitOverride = DECOR_ANCHOR_OVERRIDE_BY_ID.get(idKey);
+  if (explicitOverride) return explicitOverride;
+
+  const explicitAnchor = raw?.drawAnchor ?? raw?.anchor;
+  if (typeof explicitAnchor === "string" && explicitAnchor.trim()) {
+    return normalizeAnchor(explicitAnchor);
+  }
+
+  const hintSource = [
+    normalized.type,
+    normalized.defaultName,
+    raw?.name,
+    raw?.group,
+    raw?.img,
+  ]
+    .filter((part) => typeof part === "string" && part.trim())
+    .join(" ")
+    .toLowerCase();
+  if (DECOR_ANCHOR_ATTACHED_HINTS.some((hint) => hintSource.includes(hint))) {
+    return "TL";
+  }
+
+  return "BL";
+}
+
 function normalizePixels(value, fallback = TILE_SIZE) {
   return Number.isFinite(value) ? Math.max(1, Math.round(value)) : fallback;
 }
@@ -127,19 +206,22 @@ function normalizeDecorPresetShape(raw, index = 0) {
   if (!raw) return null;
 
   const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : `decor_${index + 1}`;
+  const type = typeof raw.type === "string" && raw.type.trim() ? raw.type.trim() : id;
+  const defaultName = typeof raw.defaultName === "string" && raw.defaultName.trim()
+    ? raw.defaultName.trim()
+    : typeof raw.name === "string" && raw.name.trim()
+      ? raw.name.trim()
+      : `Decor ${index + 1}`;
   const drawW = normalizePixels(raw.drawW ?? raw.w, TILE_SIZE);
   const drawH = normalizePixels(raw.drawH ?? raw.h, TILE_SIZE);
   const footprintW = normalizePixels(raw.footprint?.w, Math.max(1, Math.ceil(drawW / TILE_SIZE)));
   const footprintH = normalizePixels(raw.footprint?.h, Math.max(1, Math.ceil(drawH / TILE_SIZE)));
+  const anchor = resolveDecorAnchor(raw, { id, type, defaultName });
 
   return {
     id,
-    type: typeof raw.type === "string" && raw.type.trim() ? raw.type.trim() : id,
-    defaultName: typeof raw.defaultName === "string" && raw.defaultName.trim()
-      ? raw.defaultName.trim()
-      : typeof raw.name === "string" && raw.name.trim()
-        ? raw.name.trim()
-        : `Decor ${index + 1}`,
+    type,
+    defaultName,
     defaultVariant: typeof raw.defaultVariant === "string" && raw.defaultVariant.trim() ? raw.defaultVariant.trim() : "a",
     variants: Array.isArray(raw.variants) && raw.variants.length
       ? raw.variants.filter((variant) => typeof variant === "string" && variant.trim()).map((variant) => variant.trim())
@@ -147,7 +229,7 @@ function normalizeDecorPresetShape(raw, index = 0) {
     img: normalizeImagePath(raw.img),
     drawW,
     drawH,
-    drawAnchor: normalizeAnchor(raw.drawAnchor ?? raw.anchor),
+    drawAnchor: anchor,
     drawOffX: Number.isFinite(raw.drawOffX ?? raw.offsetX) ? Math.round(raw.drawOffX ?? raw.offsetX) : 0,
     drawOffY: Number.isFinite(raw.drawOffY ?? raw.offsetY) ? Math.round(raw.drawOffY ?? raw.offsetY) : 0,
     footprint: { w: footprintW, h: footprintH },
