@@ -17,6 +17,7 @@ import {
 } from "../src/domain/tiles/history.js";
 import { paintSingleTile } from "../src/domain/tiles/paintTile.js";
 import { eraseSingleTile } from "../src/domain/tiles/eraseTile.js";
+import { getBrushCells, resolveBrushSize, snapCellToBrushStep } from "../src/domain/tiles/brushSize.js";
 import { renderBrushPanel } from "../src/ui/brushPanel.js";
 import { renderBottomPanel } from "../src/ui/bottomPanel.js";
 import { renderInspector } from "../src/ui/inspectorPanel.js";
@@ -1419,6 +1420,62 @@ function runTileRegressionChecks() {
 
   redoTileEdit(doc, history);
   assert.equal(doc.tiles.base[5], 0, "redo should reapply the tile erase");
+}
+
+function runSizedBrushSemanticsRegressionChecks() {
+  const oneByOne = resolveBrushSize({ size: "1x1" });
+  const twoByTwo = resolveBrushSize({ size: "2x2" });
+  const threeByThree = resolveBrushSize({ size: "3x3" });
+
+  assert.deepEqual(getBrushCells({ x: 3, y: 3 }, oneByOne), [{ x: 3, y: 3 }], "1x1 footprints should paint exactly one authored cell");
+  assert.deepEqual(
+    getBrushCells({ x: 3, y: 3 }, twoByTwo),
+    [{ x: 3, y: 2 }, { x: 4, y: 2 }, { x: 3, y: 3 }, { x: 4, y: 3 }],
+    "2x2 footprints should resolve from a bottom-left anchor instead of center spraying",
+  );
+  assert.deepEqual(
+    getBrushCells({ x: 3, y: 3 }, threeByThree),
+    [
+      { x: 3, y: 1 }, { x: 4, y: 1 }, { x: 5, y: 1 },
+      { x: 3, y: 2 }, { x: 4, y: 2 }, { x: 5, y: 2 },
+      { x: 3, y: 3 }, { x: 4, y: 3 }, { x: 5, y: 3 },
+    ],
+    "3x3 footprints should resolve from a bottom-left anchor instead of center spraying",
+  );
+
+  assert.deepEqual(
+    snapCellToBrushStep({ x: 6, y: 6 }, { x: 3, y: 3 }, twoByTwo),
+    { x: 5, y: 5 },
+    "positive drag stepping should align to footprint-width/height increments",
+  );
+  assert.deepEqual(
+    snapCellToBrushStep({ x: 1, y: 1 }, { x: 3, y: 3 }, twoByTwo),
+    { x: 1, y: 1 },
+    "negative drag stepping should align symmetrically to footprint increments",
+  );
+
+  const source = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/app/createEditorApp.js"), "utf8");
+  assert.equal(source.includes("const nextCell = snapCellToBrushStep(cell, startCell, brushSize);"), true, "drag paint should step in footprint increments");
+  assert.equal(source.includes("const anchors = getSteppedRectAnchors(startCell, endCell, brushSize);"), true, "rect placement should apply stepped footprint anchors");
+  assert.equal(source.includes("const anchor = snapCellToBrushStep(cell, startCell, brushSize);"), true, "line/fill placement should use stepped footprint anchors");
+  assert.equal(source.includes("if (!footprintCells.every((cell) => fillCellKeys.has"), true, "fill should commit whole footprints instead of partial spray fragments");
+
+  const doc = createDoc();
+  const history = createHistoryState();
+  startHistoryBatch(history, "sized-2x2-paint");
+  for (const cell of getBrushCells({ x: 1, y: 2 }, twoByTwo)) {
+    const index = cell.y * doc.dimensions.width + cell.x;
+    const previous = doc.tiles.base[index];
+    paintSingleTile(doc, cell, 9);
+    pushTileEdit(history, createTileEditEntry(doc, cell, previous, 9));
+  }
+  assert.equal(endHistoryBatch(history), true, "sized tile placement should be grouped as one logical history action");
+  assert.equal(history.undoStack.length, 1, "sized tile placement should record one undo step");
+  undoTileEdit(doc, history);
+  assert.equal(doc.tiles.base[5], 0, "undo should roll back sized tile footprint cell 1");
+  assert.equal(doc.tiles.base[6], 0, "undo should roll back sized tile footprint cell 2");
+  assert.equal(doc.tiles.base[9], 0, "undo should roll back sized tile footprint cell 3");
+  assert.equal(doc.tiles.base[10], 0, "undo should roll back sized tile footprint cell 4");
 }
 
 function runNewLevelDocumentRegressionChecks() {
@@ -4887,6 +4944,7 @@ function runSourceRegressionChecks() {
 
 async function main() {
   runTileRegressionChecks();
+  runSizedBrushSemanticsRegressionChecks();
   runNewLevelDocumentRegressionChecks();
   runEntityRegressionChecks();
   runDecorAndSoundDeletionRegressionChecks();
