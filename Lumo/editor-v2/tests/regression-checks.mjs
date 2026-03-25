@@ -548,6 +548,71 @@ function dispatchRedoShortcut(fakeWindow) {
   });
 }
 
+class FakeBlockedInputElement extends FakeElement {
+  closest(selector) {
+    if (selector.includes("input")) return this;
+    return null;
+  }
+}
+
+async function runArrowKeyPanRuntimeRegressionChecks() {
+  const harness = await createEditorRuntimeHarness();
+  const { fakeWindow, fakeDocument, store } = harness;
+
+  try {
+    const beforePan = { ...store.getState().viewport };
+    const rightPanEvent = fakeWindow.dispatch("keydown", {
+      key: "ArrowRight",
+      code: "ArrowRight",
+      shiftKey: false,
+      altKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      repeat: false,
+      target: null,
+    });
+    fakeWindow.dispatch("keyup", { key: "ArrowRight", code: "ArrowRight", shiftKey: false });
+    const afterPan = store.getState().viewport;
+    assert.equal(rightPanEvent.defaultPrevented, true, "arrow pan should suppress default browser scrolling when the canvas handles navigation");
+    assert.equal(afterPan.offsetX < beforePan.offsetX, true, "ArrowRight should pan the viewport horizontally");
+
+    const beforeShiftPan = { ...store.getState().viewport };
+    fakeWindow.dispatch("keydown", {
+      key: "ArrowLeft",
+      code: "ArrowLeft",
+      shiftKey: true,
+      altKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      repeat: false,
+      target: null,
+    });
+    fakeWindow.dispatch("keyup", { key: "ArrowLeft", code: "ArrowLeft", shiftKey: true });
+    const afterShiftPan = store.getState().viewport;
+    assert.equal(afterShiftPan.offsetX - beforeShiftPan.offsetX >= 40, true, "Shift+arrow pan should move faster than the base arrow-pan speed");
+
+    const blockedTarget = new FakeBlockedInputElement();
+    fakeDocument.activeElement = blockedTarget;
+    const beforeBlockedPan = { ...store.getState().viewport };
+    const blockedPanEvent = fakeWindow.dispatch("keydown", {
+      key: "ArrowUp",
+      code: "ArrowUp",
+      shiftKey: false,
+      altKey: false,
+      ctrlKey: false,
+      metaKey: false,
+      repeat: false,
+      target: blockedTarget,
+    });
+    fakeWindow.dispatch("keyup", { key: "ArrowUp", code: "ArrowUp", shiftKey: false });
+    const afterBlockedPan = store.getState().viewport;
+    assert.equal(blockedPanEvent.defaultPrevented, false, "arrow keys should not be hijacked while input focus is active");
+    assert.deepEqual(afterBlockedPan, beforeBlockedPan, "arrow pan should be ignored whenever an input field is focused");
+  } finally {
+    harness.destroy();
+  }
+}
+
 async function runLiveDecorPlacementRuntimeRegressionChecks() {
   const harness = await createEditorRuntimeHarness();
   const { canvas, fakeWindow, store } = harness;
@@ -5274,6 +5339,7 @@ async function main() {
   await runLiveCanonicalEntityMoveRuntimeRegressionChecks();
   await runLiveCanonicalSoundMoveRuntimeRegressionChecks();
   await runLiveSoundPlacementRuntimeRegressionChecks();
+  await runArrowKeyPanRuntimeRegressionChecks();
   runObjectLayerStableIdentityHistoryRegressionChecks();
   runGlobalObjectLayerUndoRedoRegressionChecks();
   runMixedLayerGlobalChronologyRegressionChecks();

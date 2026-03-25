@@ -148,6 +148,8 @@ import {
 
 const BATCH_EDITABLE_SOUND_PARAM_KEYS = new Set(["spatial", "volume", "pitch", "loop"]);
 const SOUND_DEBUG_MAX_EVENTS = 18;
+const ARROW_PAN_STEP_PX = 20;
+const ARROW_PAN_SHIFT_MULTIPLIER = 2;
 
 
 function getInspectedCell(state) {
@@ -675,6 +677,11 @@ export function createEditorApp({
   let minimapLayout = null;
   const interactionState = {
     panDrag: null,
+    arrowPan: {
+      rafId: 0,
+      activeKeys: new Set(),
+      speedMultiplier: 1,
+    },
     suppressNextClick: false,
     hoveringPausedScanHandle: false,
     lastCanvasPointer: {
@@ -1016,6 +1023,51 @@ export function createEditorApp({
 
     interactionState.panDrag = null;
     syncCanvasCursor();
+  };
+
+  const getArrowPanDelta = (activeKeys, speedMultiplier = 1) => {
+    const keys = activeKeys instanceof Set ? activeKeys : new Set(activeKeys || []);
+    if (!keys.size) return null;
+
+    let deltaX = 0;
+    let deltaY = 0;
+    if (keys.has("ArrowLeft")) deltaX += ARROW_PAN_STEP_PX;
+    if (keys.has("ArrowRight")) deltaX -= ARROW_PAN_STEP_PX;
+    if (keys.has("ArrowUp")) deltaY += ARROW_PAN_STEP_PX;
+    if (keys.has("ArrowDown")) deltaY -= ARROW_PAN_STEP_PX;
+    if (deltaX === 0 && deltaY === 0) return null;
+
+    const multiplier = Number.isFinite(speedMultiplier) ? Math.max(1, speedMultiplier) : 1;
+    return {
+      x: deltaX * multiplier,
+      y: deltaY * multiplier,
+    };
+  };
+
+  const applyArrowKeyPan = () => {
+    const arrowPanDelta = getArrowPanDelta(interactionState.arrowPan.activeKeys, interactionState.arrowPan.speedMultiplier);
+    if (!arrowPanDelta) return false;
+    store.setState((draft) => {
+      panViewportByDelta(draft.viewport, arrowPanDelta.x, arrowPanDelta.y);
+    });
+    return true;
+  };
+
+  const stopArrowPanLoop = () => {
+    if (interactionState.arrowPan.rafId) {
+      window.cancelAnimationFrame(interactionState.arrowPan.rafId);
+      interactionState.arrowPan.rafId = 0;
+    }
+  };
+
+  const scheduleArrowPanLoop = () => {
+    if (interactionState.arrowPan.rafId || !interactionState.arrowPan.activeKeys.size) return;
+    interactionState.arrowPan.rafId = window.requestAnimationFrame(() => {
+      interactionState.arrowPan.rafId = 0;
+      if (!interactionState.arrowPan.activeKeys.size) return;
+      applyArrowKeyPan();
+      scheduleArrowPanLoop();
+    });
   };
 
   const syncPausedScanHover = (state, point) => {
@@ -5063,6 +5115,16 @@ if (event.shiftKey) {
       return;
     }
 
+    if (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      if (isShortcutTargetBlocked(event.target)) return;
+      event.preventDefault();
+      interactionState.arrowPan.activeKeys.add(event.key);
+      interactionState.arrowPan.speedMultiplier = event.shiftKey ? ARROW_PAN_SHIFT_MULTIPLIER : 1;
+      applyArrowKeyPan();
+      scheduleArrowPanLoop();
+      return;
+    }
+
     if (event.repeat) return;
     if (isShortcutTargetBlocked(event.target)) return;
 
@@ -5142,6 +5204,20 @@ if (event.shiftKey) {
   };
 
   const handleGlobalKeyUp = (event) => {
+    if (event.key === "ArrowUp" || event.key === "ArrowDown" || event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      interactionState.arrowPan.activeKeys.delete(event.key);
+      interactionState.arrowPan.speedMultiplier = event.shiftKey ? ARROW_PAN_SHIFT_MULTIPLIER : 1;
+      if (!interactionState.arrowPan.activeKeys.size) {
+        stopArrowPanLoop();
+      }
+      return;
+    }
+
+    if (event.key === "Shift") {
+      interactionState.arrowPan.speedMultiplier = 1;
+      return;
+    }
+
     if (event.code !== "Space") return;
     updateSpacePanActive(false);
 
@@ -5472,5 +5548,6 @@ if (event.shiftKey) {
     floatingPanelHost.removeEventListener("change", handleFloatingPanelChange);
     floatingPanelHost.removeEventListener("submit", handleFloatingPanelSubmit);
     document.removeEventListener("pointerdown", handleDocumentPointerDown);
+    stopArrowPanLoop();
   };
 }
