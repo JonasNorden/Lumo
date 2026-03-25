@@ -24,15 +24,17 @@ import {
   MIN_LEVEL_DIMENSION,
   sanitizeLevelDimension,
 } from "../data/createNewLevelDocument.js";
-import { resolveTileFromBrushDraft, paintSingleTile } from "../domain/tiles/paintTile.js";
+import { resolveTileFromBrushDraft } from "../domain/tiles/paintTile.js";
 import { resolveBrushSize, getBrushCells, snapCellToBrushStep } from "../domain/tiles/brushSize.js";
 import { eraseSingleTile } from "../domain/tiles/eraseTile.js";
+import { eraseSizedPlacementAtCell, paintSizedPlacement } from "../domain/tiles/sizedPlacements.js";
 import { EDITOR_TOOLS } from "../domain/tiles/tools.js";
 import { getLineCells } from "../domain/tiles/line.js";
 import { getFloodFillCells } from "../domain/tiles/floodFill.js";
 import {
   createEntityEditEntry,
   createDecorEditEntry,
+  createSizedPlacementEditEntry,
   createTileEditEntry,
   startTileEditBatch,
   pushHistoryEntry,
@@ -45,7 +47,7 @@ import {
 } from "../domain/tiles/history.js";
 import { createDefaultBackgroundLayer, getTileIndex } from "../domain/level/levelDocument.js";
 import { DEFAULT_BACKGROUND_MATERIAL_ID } from "../domain/background/materialCatalog.js";
-import { eraseBackgroundMaterial, paintBackgroundMaterial } from "../domain/background/paint.js";
+import { eraseBackgroundMaterial } from "../domain/background/paint.js";
 import { getBackgroundFloodFillCells } from "../domain/background/floodFill.js";
 import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
 import { findDecorAtCanvasPoint } from "../render/layers/decorLayer.js";
@@ -1095,6 +1097,14 @@ export function createEditorApp({
       doc.dimensions.height = nextHeight;
       doc.tiles.base = resizedTiles;
       doc.background.base = resizedBackground;
+      doc.tiles.placements = (doc.tiles.placements || []).filter((placement) => {
+        const size = Number.isInteger(placement?.size) ? Math.max(1, placement.size) : 1;
+        return placement.x >= 0 && placement.y >= 0 && placement.x + size - 1 < nextWidth && placement.y - (size - 1) >= 0 && placement.y < nextHeight;
+      });
+      doc.background.placements = (doc.background.placements || []).filter((placement) => {
+        const size = Number.isInteger(placement?.size) ? Math.max(1, placement.size) : 1;
+        return placement.x >= 0 && placement.y >= 0 && placement.x + size - 1 < nextWidth && placement.y - (size - 1) >= 0 && placement.y < nextHeight;
+      });
 
       for (const decor of doc.decor || []) {
         decor.x = Math.max(0, Math.min(nextWidth - 1, decor.x));
@@ -3660,12 +3670,13 @@ export function createEditorApp({
     if (!doc) return false;
 
     const brushSize = resolveBrushSize(draft.brush.activeDraft);
-    const brushCells = getBrushCells(cell, brushSize);
+    const brushScale = Math.max(1, brushSize.width, brushSize.height);
     const { width, height } = doc.dimensions;
     const activeLayer = getActiveLayer(draft.interaction);
     const isBackgroundLayer = activeLayer === PANEL_LAYERS.BACKGROUND;
     const nextBackgroundMaterialId = draft.interaction.activeBackgroundMaterialId || DEFAULT_BACKGROUND_MATERIAL_ID;
-    let changedAny = false;
+
+    if (cell.x < 0 || cell.y < 0 || cell.x >= width || cell.y >= height) return false;
 
     if (
       draft.interaction.activeTool === EDITOR_TOOLS.PAINT ||
@@ -3673,58 +3684,85 @@ export function createEditorApp({
       draft.interaction.activeTool === EDITOR_TOOLS.LINE
     ) {
       const tileValue = resolveTileFromBrushDraft(draft.brush.activeDraft);
-
-      for (const brushCell of brushCells) {
-        if (brushCell.x < 0 || brushCell.y < 0 || brushCell.x >= width || brushCell.y >= height) continue;
-        const index = getTileIndex(width, brushCell.x, brushCell.y);
-
-        if (isBackgroundLayer) {
-          const previousValue = doc.background.base[index] ?? null;
-          const changed = paintBackgroundMaterial(doc, brushCell, nextBackgroundMaterialId);
-          if (!changed) continue;
-          const entry = createTileEditEntry(doc, brushCell, previousValue, nextBackgroundMaterialId, "background");
-          pushTileEdit(draft.history, entry);
-          changedAny = true;
-          continue;
-        }
-
-        const previousValue = doc.tiles.base[index];
-        const changed = paintSingleTile(doc, brushCell, tileValue);
-        if (!changed) continue;
-
-        const entry = createTileEditEntry(doc, brushCell, previousValue, tileValue);
-        pushTileEdit(draft.history, entry);
-        changedAny = true;
+      if (isBackgroundLayer) {
+        const previousPlacements = (doc.background.placements || []).map((placement) => ({ ...placement }));
+        const previousBase = doc.background.base.slice();
+        const changed = paintSizedPlacement(doc, "background", cell, brushScale, nextBackgroundMaterialId);
+        if (!changed) return false;
+        const entry = createSizedPlacementEditEntry(
+          "background",
+          previousPlacements,
+          (doc.background.placements || []).map((placement) => ({ ...placement })),
+          previousBase,
+          doc.background.base.slice(),
+        );
+        pushHistoryEntry(draft.history, entry);
+        return true;
       }
 
-      return changedAny;
+      const previousPlacements = (doc.tiles.placements || []).map((placement) => ({ ...placement }));
+      const previousBase = doc.tiles.base.slice();
+      const changed = paintSizedPlacement(doc, "tiles", cell, brushScale, tileValue);
+      if (!changed) return false;
+      const entry = createSizedPlacementEditEntry(
+        "tiles",
+        previousPlacements,
+        (doc.tiles.placements || []).map((placement) => ({ ...placement })),
+        previousBase,
+        doc.tiles.base.slice(),
+      );
+      pushHistoryEntry(draft.history, entry);
+      return true;
     }
 
     if (draft.interaction.activeTool === EDITOR_TOOLS.ERASE) {
-      for (const brushCell of brushCells) {
-        if (brushCell.x < 0 || brushCell.y < 0 || brushCell.x >= width || brushCell.y >= height) continue;
-        const index = getTileIndex(width, brushCell.x, brushCell.y);
-
-        if (isBackgroundLayer) {
-          const previousValue = doc.background.base[index] ?? null;
-          const changed = eraseBackgroundMaterial(doc, brushCell);
-          if (!changed) continue;
-          const entry = createTileEditEntry(doc, brushCell, previousValue, null, "background");
-          pushTileEdit(draft.history, entry);
-          changedAny = true;
-          continue;
+      if (isBackgroundLayer) {
+        const previousPlacements = (doc.background.placements || []).map((placement) => ({ ...placement }));
+        const previousBase = doc.background.base.slice();
+        const sizedChanged = eraseSizedPlacementAtCell(doc, "background", cell);
+        if (sizedChanged) {
+          const entry = createSizedPlacementEditEntry(
+            "background",
+            previousPlacements,
+            (doc.background.placements || []).map((placement) => ({ ...placement })),
+            previousBase,
+            doc.background.base.slice(),
+          );
+          pushHistoryEntry(draft.history, entry);
+          return true;
         }
 
-        const previousValue = doc.tiles.base[index];
-        const changed = eraseSingleTile(doc, brushCell);
-        if (!changed) continue;
-
-        const entry = createTileEditEntry(doc, brushCell, previousValue, 0);
+        const index = getTileIndex(width, cell.x, cell.y);
+        const previousValue = doc.background.base[index] ?? null;
+        const changed = eraseBackgroundMaterial(doc, cell);
+        if (!changed) return false;
+        const entry = createTileEditEntry(doc, cell, previousValue, null, "background");
         pushTileEdit(draft.history, entry);
-        changedAny = true;
+        return true;
       }
 
-      return changedAny;
+      const previousPlacements = (doc.tiles.placements || []).map((placement) => ({ ...placement }));
+      const previousBase = doc.tiles.base.slice();
+      const sizedChanged = eraseSizedPlacementAtCell(doc, "tiles", cell);
+      if (sizedChanged) {
+        const entry = createSizedPlacementEditEntry(
+          "tiles",
+          previousPlacements,
+          (doc.tiles.placements || []).map((placement) => ({ ...placement })),
+          previousBase,
+          doc.tiles.base.slice(),
+        );
+        pushHistoryEntry(draft.history, entry);
+        return true;
+      }
+
+      const index = getTileIndex(width, cell.x, cell.y);
+      const previousValue = doc.tiles.base[index];
+      const changed = eraseSingleTile(doc, cell);
+      if (!changed) return false;
+      const entry = createTileEditEntry(doc, cell, previousValue, 0);
+      pushTileEdit(draft.history, entry);
+      return true;
     }
 
     return false;

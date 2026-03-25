@@ -22,6 +22,16 @@ export function createTileEditEntry(doc, cell, previousValue, nextValue, layer =
   };
 }
 
+export function createSizedPlacementEditEntry(layer, previousPlacements, nextPlacements, previousBase, nextBase) {
+  return {
+    kind: layer === "background" ? "background-sized" : "tile-sized",
+    previousPlacements,
+    nextPlacements,
+    previousBase,
+    nextBase,
+  };
+}
+
 export function createDecorEditEntry(mode, payload) {
   return createObjectLayerEditEntry("decor", mode, payload);
 }
@@ -44,6 +54,7 @@ function getHistoryEntryDomain(entry) {
 
   if (isObjectLayerKind(entry?.kind)) return entry.kind;
   if (entry?.kind === "background") return "background";
+  if (entry?.kind === "background-sized") return "background";
   return "tile";
 }
 
@@ -156,6 +167,16 @@ function applyUndoEntry(doc, entry) {
     doc.background.base[entry.index] = entry.previousValue ?? null;
     return true;
   }
+  if (entry.kind === "background-sized") {
+    doc.background.placements = Array.isArray(entry.previousPlacements) ? entry.previousPlacements.map((placement) => ({ ...placement })) : [];
+    doc.background.base = Array.isArray(entry.previousBase) ? entry.previousBase.slice() : doc.background.base;
+    return true;
+  }
+  if (entry.kind === "tile-sized") {
+    doc.tiles.placements = Array.isArray(entry.previousPlacements) ? entry.previousPlacements.map((placement) => ({ ...placement })) : [];
+    doc.tiles.base = Array.isArray(entry.previousBase) ? entry.previousBase.slice() : doc.tiles.base;
+    return true;
+  }
 
   doc.tiles.base[entry.index] = entry.previousValue;
   return true;
@@ -177,6 +198,16 @@ function applyRedoEntry(doc, entry) {
 
   if (entry.kind === "background") {
     doc.background.base[entry.index] = entry.nextValue ?? null;
+    return true;
+  }
+  if (entry.kind === "background-sized") {
+    doc.background.placements = Array.isArray(entry.nextPlacements) ? entry.nextPlacements.map((placement) => ({ ...placement })) : [];
+    doc.background.base = Array.isArray(entry.nextBase) ? entry.nextBase.slice() : doc.background.base;
+    return true;
+  }
+  if (entry.kind === "tile-sized") {
+    doc.tiles.placements = Array.isArray(entry.nextPlacements) ? entry.nextPlacements.map((placement) => ({ ...placement })) : [];
+    doc.tiles.base = Array.isArray(entry.nextBase) ? entry.nextBase.slice() : doc.tiles.base;
     return true;
   }
 

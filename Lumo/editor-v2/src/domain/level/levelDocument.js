@@ -6,6 +6,7 @@ import { isEntityLikeEditableType, normalizeEditableObjectType } from "../placea
 import { getAuthoredSoundSource } from "../sound/sourceReference.js";
 import { normalizeSoundType } from "../sound/soundVisuals.js";
 import { BACKGROUND_MATERIAL_OPTIONS, DEFAULT_BACKGROUND_MATERIAL_ID, normalizeBackgroundMaterial } from "../background/materialCatalog.js";
+import { normalizeSizedPlacements } from "../tiles/sizedPlacements.js";
 
 const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
 const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
@@ -15,9 +16,9 @@ const DEFAULT_DECOR_VARIANT = "a";
  * @typedef LevelDocument
  * @property {{id: string, name: string, version: string}} meta
  * @property {{width: number, height: number, tileSize: number}} dimensions
- * @property {{base: number[]}} tiles
+ * @property {{base: number[], placements?: {x: number, y: number, size: number, value: number}[]}} tiles
  * @property {{layers: {id: string, name: string, type: string, depth: number, visible: boolean, color: string}[]}} backgrounds
- * @property {{base: (string|null)[], materials: {id: string, label: string, img: string|null, drawW: number, drawH: number, drawAnchor: "BL", drawOffX: number, drawOffY: number, footprint: {w: number, h: number}, fallbackColor: string, group: string}[]}} background
+ * @property {{base: (string|null)[], placements?: {x: number, y: number, size: number, materialId: string}[], materials: {id: string, label: string, img: string|null, drawW: number, drawH: number, drawAnchor: "BL", drawOffX: number, drawOffY: number, footprint: {w: number, h: number}, fallbackColor: string, group: string}[]}} background
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, variant: string, params: Record<string, string | number | boolean>}[]} decor
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} entities
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, source?: string, params: Record<string, string | number | boolean>}[]} sounds
@@ -75,6 +76,7 @@ function normalizeBackgroundDocument(background, expectedCount) {
 
   return {
     base: sanitizedBase,
+    placements: normalizeSizedPlacements(background?.placements, "background"),
     materials: fallbackMaterials,
   };
 }
@@ -186,6 +188,7 @@ export function validateLevelDocument(doc) {
   if (!doc.tiles.base.every((tile) => Number.isInteger(tile) && tile >= 0)) {
     throw new Error("Invalid V2 tile payload (tiles must be non-negative integers)");
   }
+  doc.tiles.placements = normalizeSizedPlacements(doc.tiles?.placements, "tiles");
 
   const rawLayers = doc.backgrounds?.layers;
   const layers = Array.isArray(rawLayers) ? rawLayers : [];

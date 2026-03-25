@@ -1,4 +1,4 @@
-import { getBrushCells, resolveBrushSize, snapCellToBrushStep } from "../../domain/tiles/brushSize.js";
+import { resolveBrushSize, snapCellToBrushStep } from "../../domain/tiles/brushSize.js";
 import { EDITOR_TOOLS } from "../../domain/tiles/tools.js";
 import { getLineCells } from "../../domain/tiles/line.js";
 
@@ -38,7 +38,7 @@ function getRectPreviewCells(interaction, brushDraft) {
   const brushSize = resolveBrushSize(brushDraft);
 
   if (interaction.activeTool !== EDITOR_TOOLS.RECT || !interaction.rectDrag?.active || !interaction.rectDrag.startCell || !interaction.hoverCell) {
-    return interaction.hoverCell ? getBrushCells(interaction.hoverCell, brushSize) : [];
+    return interaction.hoverCell ? [interaction.hoverCell] : [];
   }
 
   const startCell = interaction.rectDrag.startCell;
@@ -52,7 +52,7 @@ function getRectPreviewCells(interaction, brushDraft) {
       const key = `${anchor.x}:${anchor.y}`;
       if (seenAnchors.has(key)) continue;
       seenAnchors.add(key);
-      cells.push(...getBrushCells(anchor, brushSize));
+      cells.push(anchor);
     }
   }
 
@@ -63,7 +63,7 @@ function getLinePreviewCells(interaction, brushDraft) {
   const brushSize = resolveBrushSize(brushDraft);
 
   if (interaction.activeTool !== EDITOR_TOOLS.LINE || !interaction.lineDrag?.active || !interaction.lineDrag.startCell || !interaction.hoverCell) {
-    return interaction.hoverCell ? getBrushCells(interaction.hoverCell, brushSize) : [];
+    return interaction.hoverCell ? [interaction.hoverCell] : [];
   }
 
   const cells = [];
@@ -76,36 +76,46 @@ function getLinePreviewCells(interaction, brushDraft) {
     const key = `${anchor.x}:${anchor.y}`;
     if (seenAnchors.has(key)) continue;
     seenAnchors.add(key);
-    cells.push(...getBrushCells(anchor, brushSize));
+    cells.push(anchor);
   }
 
   return cells;
+}
+
+function getPreviewAnchors(interaction, brushDraft) {
+  if (interaction.activeTool === EDITOR_TOOLS.LINE) {
+    return getLinePreviewCells(interaction, brushDraft);
+  }
+  return getRectPreviewCells(interaction, brushDraft);
 }
 
 export function renderBrushPreviewOverlay(ctx, doc, viewport, interaction, brushDraft) {
   if (!isPreviewTool(interaction.activeTool)) return;
   if (!interaction.hoverCell) return;
 
-  const brushCells = interaction.activeTool === EDITOR_TOOLS.LINE
-    ? getLinePreviewCells(interaction, brushDraft)
-    : getRectPreviewCells(interaction, brushDraft);
+  const brushCells = getPreviewAnchors(interaction, brushDraft);
+  const brushSize = resolveBrushSize(brushDraft);
   const tileSize = doc.dimensions.tileSize;
   const { width, height } = doc.dimensions;
   const zoomedTileSize = tileSize * viewport.zoom;
+  const footprintWidth = Math.max(1, brushSize.width);
+  const footprintHeight = Math.max(1, brushSize.height);
   const style = getPreviewStyle(interaction.activeTool);
 
   for (const cell of brushCells) {
-    if (cell.x < 0 || cell.y < 0 || cell.x >= width || cell.y >= height) continue;
+    const minY = cell.y - (footprintHeight - 1);
+    if (cell.x < 0 || minY < 0 || cell.x + footprintWidth - 1 >= width || cell.y >= height) continue;
 
     const px = Math.floor(viewport.offsetX + cell.x * zoomedTileSize);
-    const py = Math.floor(viewport.offsetY + cell.y * zoomedTileSize);
-    const size = Math.ceil(zoomedTileSize);
+    const py = Math.floor(viewport.offsetY + minY * zoomedTileSize);
+    const widthPx = Math.ceil(zoomedTileSize * footprintWidth);
+    const heightPx = Math.ceil(zoomedTileSize * footprintHeight);
 
     ctx.fillStyle = style.fill;
-    ctx.fillRect(px, py, size, size);
+    ctx.fillRect(px, py, widthPx, heightPx);
 
     ctx.strokeStyle = style.stroke;
     ctx.lineWidth = 1;
-    ctx.strokeRect(px + 0.5, py + 0.5, size - 1, size - 1);
+    ctx.strokeRect(px + 0.5, py + 0.5, widthPx - 1, heightPx - 1);
   }
 }

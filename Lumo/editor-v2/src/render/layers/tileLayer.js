@@ -22,6 +22,35 @@ function drawTileSprite(ctx, asset, screenX, screenY, cellSize, zoom) {
   return true;
 }
 
+function drawTilePlacement(ctx, placement, viewport, tileSize) {
+  const size = Number.isInteger(placement?.size) ? Math.max(1, placement.size) : 1;
+  const cell = tileSize * viewport.zoom;
+  const tileAsset = getTileAssetByTileValue(placement.value);
+  const screenX = viewport.offsetX + placement.x * cell;
+  const screenY = viewport.offsetY + (placement.y - (size - 1)) * cell;
+  const footprintCellSize = cell * size;
+  const scaledAsset = tileAsset
+    ? {
+      ...tileAsset,
+      drawW: (Number.isFinite(tileAsset.drawW) ? tileAsset.drawW : 24) * size,
+      drawH: (Number.isFinite(tileAsset.drawH) ? tileAsset.drawH : 24) * size,
+      drawOffX: (Number.isFinite(tileAsset.drawOffX) ? tileAsset.drawOffX : 0),
+      drawOffY: (Number.isFinite(tileAsset.drawOffY) ? tileAsset.drawOffY : 0),
+    }
+    : null;
+
+  if (drawTileSprite(ctx, scaledAsset, screenX, screenY, footprintCellSize, viewport.zoom)) return;
+
+  const color = TILE_DEFINITIONS[placement.value]?.color || "#8f9bb4";
+  ctx.fillStyle = color;
+  ctx.fillRect(
+    Math.floor(screenX) + 1,
+    Math.floor(screenY) + 1,
+    Math.ceil(footprintCellSize - 1),
+    Math.ceil(footprintCellSize - 1)
+  );
+}
+
 export function renderTiles(ctx, doc, viewport) {
   const { width, height, tileSize } = doc.dimensions;
   const cell = tileSize * viewport.zoom;
@@ -48,5 +77,10 @@ export function renderTiles(ctx, doc, viewport) {
         Math.ceil(cell - 1)
       );
     }
+  }
+
+  const placements = doc.tiles?.placements || [];
+  for (const placement of placements) {
+    drawTilePlacement(ctx, placement, viewport, tileSize);
   }
 }

@@ -34,6 +34,30 @@ function drawBackgroundMaterial(ctx, material, screenX, screenY, cellSize, zoom)
   ctx.drawImage(image, Math.floor(drawX), Math.floor(drawY), Math.round(drawWidth), Math.round(drawHeight));
 }
 
+function drawBackgroundPlacement(ctx, placement, authoredMaterials, viewport, tileSize) {
+  const size = Number.isInteger(placement?.size) ? Math.max(1, placement.size) : 1;
+  const material = getBackgroundMaterialById(placement.materialId, authoredMaterials) || {
+    id: placement.materialId,
+    label: placement.materialId,
+    drawW: 24,
+    drawH: 24,
+    drawAnchor: "BL",
+    drawOffX: 0,
+    drawOffY: 0,
+    fallbackColor: "#5f6c82",
+  };
+  const cell = tileSize * viewport.zoom;
+  const screenX = viewport.offsetX + placement.x * cell;
+  const screenY = viewport.offsetY + (placement.y - (size - 1)) * cell;
+  const footprintCellSize = cell * size;
+  const scaledMaterial = {
+    ...material,
+    drawW: (Number.isFinite(material.drawW) ? material.drawW : 24) * size,
+    drawH: (Number.isFinite(material.drawH) ? material.drawH : 24) * size,
+  };
+  drawBackgroundMaterial(ctx, scaledMaterial, screenX, screenY, footprintCellSize, viewport.zoom);
+}
+
 export function renderBackground(ctx, doc, viewport) {
   const { width, height, tileSize } = doc.dimensions;
   const base = doc.background?.base;
@@ -60,5 +84,10 @@ export function renderBackground(ctx, doc, viewport) {
       const screenY = viewport.offsetY + y * cell;
       drawBackgroundMaterial(ctx, material, screenX, screenY, cell, viewport.zoom);
     }
+  }
+
+  const placements = doc.background?.placements || [];
+  for (const placement of placements) {
+    drawBackgroundPlacement(ctx, placement, authoredMaterials, viewport, tileSize);
   }
 }
