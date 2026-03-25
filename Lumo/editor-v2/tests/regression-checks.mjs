@@ -77,6 +77,7 @@ import { createFogVolumeEntityFromWorldRect } from "../src/domain/entities/speci
 import { findDecorPresetById } from "../src/domain/decor/decorPresets.js";
 import { getDecorVisual } from "../src/domain/decor/decorVisuals.js";
 import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
+import { getEntityVisual } from "../src/domain/entities/entityVisuals.js";
 import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
 import { findDecorAtCanvasPoint, getDecorDrawMetrics, renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
 import { applyCanonicalDecorAction, createCanonicalDecorHistory } from "../src/app/cleanRoomDecorMode.js";
@@ -2584,7 +2585,7 @@ function runObjectPlacementPreviewSuppressionRegressionChecks() {
     hoverCell: { x: 1, y: 1 },
     objectPlacementPreviewSuppressed: false,
   }, entityPreset);
-  assert.equal(visibleEntityPreview.operations.length, 0, "entity placement previews should stay fully disabled while the temporary clean entity path bypasses legacy preview/render-suppression logic");
+  assert.ok(visibleEntityPreview.operations.length > 0, "entity placement previews should render during normal placement workflow");
 
   const suppressedEntityPreview = createPreviewTestContext();
   renderEntityPlacementPreview(suppressedEntityPreview.ctx, doc, viewport, {
@@ -2593,7 +2594,54 @@ function runObjectPlacementPreviewSuppressionRegressionChecks() {
     hoverCell: { x: 1, y: 1 },
     objectPlacementPreviewSuppressed: true,
   }, entityPreset);
-  assert.equal(suppressedEntityPreview.operations.length, 0, "entity placement previews should stay disabled even when legacy shared preview suppression flips on");
+  assert.equal(suppressedEntityPreview.operations.length, 0, "entity placement previews should stay hidden while shared object preview suppression is active");
+
+  const anchorDecorPreview = createPreviewTestContext();
+  renderDecorPlacementPreview(anchorDecorPreview.ctx, doc, viewport, {
+    activeTool: "inspect",
+    activeLayer: "decor",
+    hoverCell: { x: 1, y: 3 },
+    decorScatterMode: false,
+    objectPlacementPreviewSuppressed: false,
+  }, decorPreset);
+  const decorVisual = getDecorVisual(decorPreset.type);
+  const decorFootprintWidth = Math.max(1, Number.isFinite(decorVisual.footprint?.w) ? Math.round(decorVisual.footprint.w) : Math.ceil((decorVisual.drawW || 24) / 24));
+  const decorFootprintHeight = Math.max(1, Number.isFinite(decorVisual.footprint?.h) ? Math.round(decorVisual.footprint.h) : Math.ceil((decorVisual.drawH || 24) / 24));
+  const decorFootprintTopY = decorVisual.drawAnchor === "TL" ? 3 : 3 - (decorFootprintHeight - 1);
+  assert.equal(
+    anchorDecorPreview.operations.some(
+      ([op, x, y, width, height]) => op === "fillRect"
+        && x === 16
+        && y === decorFootprintTopY * 16
+        && width === decorFootprintWidth * 16
+        && height === decorFootprintHeight * 16,
+    ),
+    true,
+    "decor placement preview footprint should align to the authored anchor and footprint metadata at placement time",
+  );
+
+  const anchorEntityPreview = createPreviewTestContext();
+  renderEntityPlacementPreview(anchorEntityPreview.ctx, doc, viewport, {
+    activeTool: "inspect",
+    activeLayer: "entities",
+    hoverCell: { x: 2, y: 2 },
+    objectPlacementPreviewSuppressed: false,
+  }, entityPreset);
+  const entityVisual = getEntityVisual(entityPreset.type);
+  const entityFootprintWidth = Math.max(1, Math.ceil((entityVisual.footprintW || entityVisual.drawW || 16) / 16));
+  const entityFootprintHeight = Math.max(1, Math.ceil((entityVisual.footprintH || entityVisual.drawH || 16) / 16));
+  const entityFootprintTopY = entityVisual.drawAnchor === "TL" ? 2 : 2 - (entityFootprintHeight - 1);
+  assert.equal(
+    anchorEntityPreview.operations.some(
+      ([op, x, y, width, height]) => op === "fillRect"
+        && x === 32
+        && y === entityFootprintTopY * 16
+        && width === entityFootprintWidth * 16
+        && height === entityFootprintHeight * 16,
+    ),
+    true,
+    "entity placement preview footprint should align to authored anchor and footprint sizing",
+  );
 
   const visibleDecorPreview = createPreviewTestContext();
   renderDecorPlacementPreview(visibleDecorPreview.ctx, doc, viewport, {
@@ -2632,6 +2680,24 @@ function runObjectPlacementPreviewSuppressionRegressionChecks() {
     objectPlacementPreviewSuppressed: true,
   }, soundPreset);
   assert.equal(suppressedSoundPreview.operations.length, 0, "sound placement previews should stay hidden while shared object preview suppression is active");
+
+  const fallbackEntityPreview = createPreviewTestContext();
+  renderEntityPlacementPreview(fallbackEntityPreview.ctx, doc, viewport, {
+    activeTool: "inspect",
+    activeLayer: "entities",
+    hoverCell: { x: 0, y: 0 },
+    objectPlacementPreviewSuppressed: false,
+  }, null);
+  assert.ok(fallbackEntityPreview.operations.length > 0, "entity placement preview should fall back to a generic footprint when preset metadata is unavailable");
+
+  const fallbackSoundPreview = createPreviewTestContext();
+  renderSoundPlacementPreview(fallbackSoundPreview.ctx, doc, viewport, {
+    activeTool: "inspect",
+    activeLayer: "sound",
+    hoverCell: { x: 0, y: 0 },
+    objectPlacementPreviewSuppressed: false,
+  }, null);
+  assert.ok(fallbackSoundPreview.operations.length > 0, "sound placement preview should fall back to a default marker when preset metadata is unavailable");
 }
 
 function runDecorRegressionChecks() {
@@ -3013,6 +3079,7 @@ function runSoundTypeRenderRegressionChecks() {
     const placementPreview = createPreviewTestContext();
     renderSoundPlacementPreview(placementPreview.ctx, doc, viewport, {
       activeTool: "inspect",
+      activeLayer: "sound",
       hoverCell: { x: 1, y: 1 },
       soundPlacementPreviewSuppressed: false,
     }, preset);
@@ -3021,6 +3088,7 @@ function runSoundTypeRenderRegressionChecks() {
     const suppressedPlacementPreview = createPreviewTestContext();
     renderSoundPlacementPreview(suppressedPlacementPreview.ctx, doc, viewport, {
       activeTool: "inspect",
+      activeLayer: "sound",
       hoverCell: { x: 1, y: 1 },
       soundPlacementPreviewSuppressed: true,
     }, preset);
@@ -3074,9 +3142,9 @@ function runScanLineRenderRegressionChecks() {
     "renderer should restore the tile/background brush preview pass on the live canvas",
   );
   assert.equal(
-    rendererSource.includes("renderSoundPlacementPreview("),
-    false,
-    "renderer should not re-enable legacy sound/decor/entity shared preview bundle in this pass",
+    rendererSource.includes("renderPlacementPreviewOverlay(ctx, doc, state.viewport, state.interaction, {"),
+    true,
+    "renderer should route decor/entity/sound placement previews through the shared preview-layer overlay pass",
   );
 
   const bottomPanelSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/ui/bottomPanel.js"), "utf8");

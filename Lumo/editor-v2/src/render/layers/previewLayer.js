@@ -1,6 +1,9 @@
 import { resolveBrushSize, snapCellToBrushStep } from "../../domain/tiles/brushSize.js";
 import { EDITOR_TOOLS } from "../../domain/tiles/tools.js";
 import { getLineCells } from "../../domain/tiles/line.js";
+import { renderDecorPlacementPreview } from "./decorLayer.js";
+import { renderEntityPlacementPreview } from "./entityLayer.js";
+import { renderSoundPlacementPreview } from "./soundLayer.js";
 
 function isPreviewTool(activeTool) {
   return (
@@ -123,4 +126,10 @@ export function renderBrushPreviewOverlay(ctx, doc, viewport, interaction, brush
     ctx.lineWidth = 1;
     ctx.strokeRect(px + 0.5, py + 0.5, widthPx - 1, heightPx - 1);
   }
+}
+
+export function renderPlacementPreviewOverlay(ctx, doc, viewport, interaction, presets) {
+  renderDecorPlacementPreview(ctx, doc, viewport, interaction, presets?.decor || null);
+  renderEntityPlacementPreview(ctx, doc, viewport, interaction, presets?.entity || null);
+  renderSoundPlacementPreview(ctx, doc, viewport, interaction, presets?.sound || null);
 }

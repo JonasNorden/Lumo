@@ -1,6 +1,7 @@
 import { getEntityHitRadius, getEntityVisual } from "../../domain/entities/entityVisuals.js";
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
 import { isFogVolumeEntityType } from "../../domain/entities/specialVolumeTypes.js";
+import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
 function getEntityCenter(entity, tileSize) {
   const visual = getEntityVisual(entity.type);
@@ -25,6 +26,20 @@ function getEntityScreenCenter(entity, tileSize, viewport) {
   return {
     x: viewport.offsetX + center.x * viewport.zoom,
     y: viewport.offsetY + center.y * viewport.zoom,
+  };
+}
+
+function getEntityFootprintRect(entity, tileSize, viewport) {
+  const visual = getEntityVisual(entity.type);
+  const footprintWidthCells = Math.max(1, Math.ceil((visual.footprintW || visual.drawW || tileSize) / tileSize));
+  const footprintHeightCells = Math.max(1, Math.ceil((visual.footprintH || visual.drawH || tileSize) / tileSize));
+  const topTileY = visual.drawAnchor === "TL" ? entity.y : entity.y - (footprintHeightCells - 1);
+  const zoomedTileSize = tileSize * viewport.zoom;
+  return {
+    x: viewport.offsetX + entity.x * zoomedTileSize,
+    y: viewport.offsetY + topTileY * zoomedTileSize,
+    width: footprintWidthCells * zoomedTileSize,
+    height: footprintHeightCells * zoomedTileSize,
   };
 }
 
@@ -204,10 +219,39 @@ export function renderEntityDragPreview(ctx, doc, viewport, interaction) {
 }
 
 export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, activePreset) {
-  void ctx;
-  void doc;
-  void viewport;
-  void interaction;
-  void activePreset;
-  // CANONICAL ENTITY RUNTIME: preview/render-suppression coupling stays removed from the live entity path.
+  if (interaction.activeTool !== "inspect") return;
+  if (interaction.activeLayer !== "entities") return;
+  if (isObjectPlacementPreviewSuppressed(interaction)) return;
+  if (!interaction.hoverCell) return;
+
+  const presetType = typeof activePreset?.type === "string" && activePreset.type.trim()
+    ? activePreset.type
+    : "generic";
+  if (isFogVolumeEntityType(presetType)) return;
+  const previewEntity = {
+    type: presetType,
+    x: interaction.hoverCell.x,
+    y: interaction.hoverCell.y,
+  };
+  const footprintRect = getEntityFootprintRect(previewEntity, doc.dimensions.tileSize, viewport);
+  const frameInset = 0.5;
+
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 214, 138, 0.12)";
+  ctx.fillRect(footprintRect.x, footprintRect.y, footprintRect.width, footprintRect.height);
+  ctx.strokeStyle = "rgba(255, 214, 138, 0.56)";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(
+    footprintRect.x + frameInset,
+    footprintRect.y + frameInset,
+    Math.max(0, footprintRect.width - 1),
+    Math.max(0, footprintRect.height - 1),
+  );
+  ctx.restore();
+
+  const { x, y } = getEntityScreenCenter(previewEntity, doc.dimensions.tileSize, viewport);
+  drawEntityMarker(ctx, previewEntity, x, y, viewport, {
+    preview: true,
+    alpha: 0.9,
+  });
 }

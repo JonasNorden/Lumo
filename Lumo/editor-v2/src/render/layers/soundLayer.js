@@ -657,14 +657,16 @@ export function getSoundPlacementPreviewDiagnostic(interaction, activePreset) {
 }
 
 export function renderSoundPlacementPreview(ctx, doc, viewport, interaction, activePreset) {
-  const previewDiagnostic = getSoundPlacementPreviewDiagnostic(interaction, activePreset);
+  if (interaction.activeLayer !== "sound") return;
+  const fallbackPreset = activePreset || { type: "spot", defaultParams: {} };
+  const previewDiagnostic = getSoundPlacementPreviewDiagnostic(interaction, fallbackPreset);
   if (!previewDiagnostic.eligible) return;
 
   drawSoundMarker(ctx, {
-    type: activePreset.type,
+    type: fallbackPreset.type,
     x: interaction.hoverCell.x,
     y: interaction.hoverCell.y,
-    params: activePreset.defaultParams,
+    params: fallbackPreset.defaultParams,
   }, viewport, doc.dimensions.tileSize, null, {
     preview: true,
     alpha: 0.9,
