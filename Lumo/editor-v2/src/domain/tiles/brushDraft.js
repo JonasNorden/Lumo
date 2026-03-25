@@ -3,6 +3,7 @@ import {
   BRUSH_SIZE_OPTIONS,
   BRUSH_SPRITE_OPTIONS,
 } from "./brushOptions.js";
+import { getFallbackBrushSizeForSprite, isBrushSizeSupportedForSprite } from "./tileSpriteCatalog.js";
 
 const DEFAULT_BRUSH_ID = "default-brush";
 
@@ -34,7 +35,10 @@ export function isBrushDraftValid(brushDraft) {
 
 export function getBrushDraftSummary(brushDraft) {
   const behaviorLabel = getOptionLabel(BRUSH_BEHAVIOR_OPTIONS, brushDraft.behavior);
-  const sizeLabel = getOptionLabel(BRUSH_SIZE_OPTIONS, brushDraft.size);
+  const resolvedSize = isBrushSizeSupportedForSprite(brushDraft.size, brushDraft.sprite)
+    ? brushDraft.size
+    : getFallbackBrushSizeForSprite(brushDraft.sprite);
+  const sizeLabel = getOptionLabel(BRUSH_SIZE_OPTIONS, resolvedSize);
   const spriteLabel = getOptionLabel(BRUSH_SPRITE_OPTIONS, brushDraft.sprite);
 
   return `${behaviorLabel} · ${sizeLabel} · ${spriteLabel}`;
