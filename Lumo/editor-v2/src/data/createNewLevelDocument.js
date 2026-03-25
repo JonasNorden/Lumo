@@ -37,6 +37,7 @@ export function createNewLevelDocument(options = {}) {
     },
     tiles: {
       base: new Array(width * height).fill(0),
+      placements: [],
     },
     backgrounds: {
       layers: [
@@ -50,6 +51,7 @@ export function createNewLevelDocument(options = {}) {
     },
     background: {
       base: new Array(width * height).fill(null),
+      placements: [],
       materials: BACKGROUND_MATERIAL_OPTIONS.map((material) => ({ ...material })),
       defaultMaterialId: DEFAULT_BACKGROUND_MATERIAL_ID,
     },

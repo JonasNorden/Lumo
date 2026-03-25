@@ -18,6 +18,7 @@ import {
 import { paintSingleTile } from "../src/domain/tiles/paintTile.js";
 import { eraseSingleTile } from "../src/domain/tiles/eraseTile.js";
 import { getBrushCells, resolveBrushSize, snapCellToBrushStep } from "../src/domain/tiles/brushSize.js";
+import { eraseSizedPlacementAtCell, paintSizedPlacement } from "../src/domain/tiles/sizedPlacements.js";
 import { renderBrushPanel } from "../src/ui/brushPanel.js";
 import { renderBottomPanel } from "../src/ui/bottomPanel.js";
 import { renderInspector } from "../src/ui/inspectorPanel.js";
@@ -80,6 +81,9 @@ import { createEditorState } from "../src/state/createEditorState.js";
 import { createStore } from "../src/state/createStore.js";
 import { findSoundAtCanvasPoint, renderSoundDragPreview, renderSoundPlacementPreview, renderSounds } from "../src/render/layers/soundLayer.js";
 import { renderEditorFrame, WORLD_RENDER_ORDER, OVERLAY_RENDER_ORDER } from "../src/render/renderer.js";
+import { renderTiles } from "../src/render/layers/tileLayer.js";
+import { renderBackground } from "../src/render/layers/backgroundLayer.js";
+import { renderBrushPreviewOverlay } from "../src/render/layers/previewLayer.js";
 import { renderMinimap } from "../src/render/minimap.js";
 import { findSoundPresetById } from "../src/domain/sound/soundPresets.js";
 import {
@@ -116,12 +120,14 @@ function createDoc() {
     },
     tiles: {
       base: new Array(16).fill(0),
+      placements: [],
     },
     backgrounds: {
       layers: [],
     },
     background: {
       base: new Array(16).fill(null),
+      placements: [],
       materials: [
         {
           id: "bg_stone_wall",
@@ -1476,6 +1482,61 @@ function runSizedBrushSemanticsRegressionChecks() {
   assert.equal(doc.tiles.base[6], 0, "undo should roll back sized tile footprint cell 2");
   assert.equal(doc.tiles.base[9], 0, "undo should roll back sized tile footprint cell 3");
   assert.equal(doc.tiles.base[10], 0, "undo should roll back sized tile footprint cell 4");
+}
+
+function runSizedPlacementAuthoringRegressionChecks() {
+  const doc = createDoc();
+  assert.equal(paintSizedPlacement(doc, "tiles", { x: 1, y: 2 }, 2, 9), true, "2x2 tile paint should author one sized placement");
+  assert.equal(doc.tiles.placements.length, 1, "2x2 tile paint should not stamp four authored 1x1 tiles");
+  assert.deepEqual(doc.tiles.placements[0], { x: 1, y: 2, size: 2, value: 9 }, "tiles should store the authored anchor, size, and tile value");
+
+  assert.equal(paintSizedPlacement(doc, "tiles", { x: 0, y: 2 }, 3, 4), true, "3x3 tile paint should author one sized placement");
+  assert.equal(doc.tiles.placements.length, 1, "3x3 tile paint should replace overlaps as one authored sized placement, not nine cells");
+  assert.deepEqual(doc.tiles.placements[0], { x: 0, y: 2, size: 3, value: 4 }, "3x3 tile placement should keep one authored record");
+
+  assert.equal(eraseSizedPlacementAtCell(doc, "tiles", { x: 1, y: 1 }), true, "erase should remove the single authored sized tile placement when any covered cell is erased");
+  assert.equal(doc.tiles.placements.length, 0, "tile erase should remove one authored placement, not many individual cells");
+
+  assert.equal(paintSizedPlacement(doc, "background", { x: 1, y: 2 }, 2, "bg_stone_wall"), true, "2x2 background paint should author one sized placement");
+  assert.equal(doc.background.placements.length, 1, "background sized paint should not stamp per-cell authored background entries");
+  assert.deepEqual(doc.background.placements[0], { x: 1, y: 2, size: 2, materialId: "bg_stone_wall" }, "background placement should store one authored sized item");
+  doc.dimensions.tileSize = 24;
+
+  const { ctx: previewCtx, operations: previewOps } = createPreviewTestContext();
+  renderBrushPreviewOverlay(
+    previewCtx,
+    doc,
+    { offsetX: 0, offsetY: 0, zoom: 1 },
+    { activeTool: "paint", hoverCell: { x: 1, y: 2 } },
+    { size: "3x3" },
+  );
+  const previewFill = previewOps.find((op) => op[0] === "fillRect");
+  assert.deepEqual(previewFill?.slice(1), [24, 0, 72, 72], "preview should draw one 3x3 scaled overlay (72x72 at tileSize 24)");
+
+  const tileRenderDoc = {
+    ...doc,
+    dimensions: { width: 8, height: 8, tileSize: 24 },
+    tiles: {
+      base: new Array(64).fill(0),
+      placements: [{ x: 1, y: 2, size: 2, value: 1 }],
+    },
+    background: {
+      base: new Array(64).fill(null),
+      placements: [{ x: 1, y: 2, size: 3, materialId: "bg_stone_wall" }],
+      materials: [{ id: "bg_stone_wall", label: "Wall", img: null, drawW: 24, drawH: 24, drawAnchor: "BL", drawOffX: 0, drawOffY: 0, footprint: { w: 1, h: 1 }, fallbackColor: "#44546f", group: "base" }],
+    },
+  };
+  const { ctx: tileCtx, operations: tileOps } = createPreviewTestContext();
+  renderTiles(tileCtx, tileRenderDoc, { offsetX: 0, offsetY: 0, zoom: 1 });
+  const tileFill = tileOps.find((op) => op[0] === "fillRect");
+  assert.equal(tileFill?.[3], 47, "tile render should draw a 2x2 placement as one scaled sprite footprint instead of four 1x1 tiles");
+  assert.equal(tileFill?.[4], 47, "tile render should draw a 2x2 placement as one scaled sprite footprint instead of four 1x1 tiles");
+
+  const { ctx: bgCtx, operations: bgOps } = createPreviewTestContext();
+  renderBackground(bgCtx, tileRenderDoc, { offsetX: 0, offsetY: 0, zoom: 1 });
+  const bgFill = bgOps.find((op) => op[0] === "fillRect");
+  assert.equal(bgFill?.[3], 72, "background render should draw a 3x3 placement as one 72px-wide sprite footprint");
+  assert.equal(bgFill?.[4], 72, "background render should draw a 3x3 placement as one 72px-high sprite footprint");
 }
 
 function runNewLevelDocumentRegressionChecks() {
@@ -4945,6 +5006,7 @@ function runSourceRegressionChecks() {
 async function main() {
   runTileRegressionChecks();
   runSizedBrushSemanticsRegressionChecks();
+  runSizedPlacementAuthoringRegressionChecks();
   runNewLevelDocumentRegressionChecks();
   runEntityRegressionChecks();
   runDecorAndSoundDeletionRegressionChecks();

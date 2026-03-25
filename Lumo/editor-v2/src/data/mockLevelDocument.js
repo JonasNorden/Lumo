@@ -45,6 +45,7 @@ export const mockLevelDocument = {
   },
   tiles: {
     base,
+    placements: [],
   },
   backgrounds: {
     layers: [
@@ -76,6 +77,7 @@ export const mockLevelDocument = {
   },
   background: {
     base: backgroundBase,
+    placements: [],
     materials: BACKGROUND_MATERIAL_OPTIONS.map((material) => ({ ...material })),
   },
   decor: [
