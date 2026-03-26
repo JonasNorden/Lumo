@@ -1,6 +1,6 @@
 import { getEntityHitRadius, getEntityVisual } from "../../domain/entities/entityVisuals.js";
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
-import { isFogVolumeEntityType } from "../../domain/entities/specialVolumeTypes.js";
+import { getFogVolumeRect, isFogVolumeEntityType } from "../../domain/entities/specialVolumeTypes.js";
 import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
 function getEntityCenter(entity, tileSize) {
@@ -186,6 +186,32 @@ export function renderEntities(ctx, doc, viewport, interaction) {
           .map((origin) => [origin.entityId, origin]),
       )
     : null;
+
+  for (let i = 0; i < entities.length; i += 1) {
+    const entity = entities[i];
+    if (!entity?.visible || !isFogVolumeEntityType(entity.type)) continue;
+    const rect = getFogVolumeRect(entity, tileSize);
+    const x = viewport.offsetX + rect.x0 * viewport.zoom;
+    const y = viewport.offsetY + rect.top * viewport.zoom;
+    const width = Math.max(1, rect.width * viewport.zoom);
+    const height = Math.max(1, rect.height * viewport.zoom);
+    const isSelected = selectedEntityIds.has(entity.id);
+    const isHovered = hoveredEntityId === entity.id;
+
+    ctx.save();
+    ctx.fillStyle = isSelected
+      ? "rgba(158, 198, 255, 0.30)"
+      : isHovered
+        ? "rgba(158, 198, 255, 0.24)"
+        : "rgba(158, 198, 255, 0.20)";
+    ctx.strokeStyle = isSelected
+      ? "rgba(255, 214, 138, 0.92)"
+      : "rgba(195, 223, 255, 0.88)";
+    ctx.lineWidth = isSelected ? 1.4 : 1.1;
+    ctx.fillRect(x, y, width, height);
+    ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
+    ctx.restore();
+  }
 
   for (let i = 0; i < entities.length; i += 1) {
     const entity = entities[i];

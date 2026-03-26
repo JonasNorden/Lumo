@@ -92,7 +92,7 @@ import {
   isExitEntityType,
   isSpawnEntityType,
 } from "../src/domain/entities/spawnExitRules.js";
-import { findEntityAtCanvasPoint, renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
+import { findEntityAtCanvasPoint, renderEntities, renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
 import { findDecorAtCanvasPoint, getDecorDrawMetrics, renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
 import { applyCanonicalDecorAction, createCanonicalDecorHistory } from "../src/app/cleanRoomDecorMode.js";
 import { applyCanonicalEntityAction, cloneCanonicalEntitySnapshot, createCanonicalEntityHistory } from "../src/app/cleanRoomEntityMode.js";
@@ -1151,6 +1151,25 @@ async function runFogVolumePlacementRuntimeRegressionChecks() {
     assert.equal(placedFog?.params?.area?.x1, (endCell.x + 1) * committed.document.active.dimensions.tileSize, "fog drag commit should extend the authored span horizontally to the dragged end tile footprint");
     assert.equal(placedFog?.params?.area?.y0, (startCell.y + 1) * committed.document.active.dimensions.tileSize, "fog drag commit should keep the authored fog baseline tied to the drag start row");
     assert.equal((placedFog?.params?.look?.thickness || 0) > 0, true, "fog drag commit should preserve fog baseline/thickness semantics from the special-volume path");
+    assert.equal(committed.interaction.activeLayer, "volumes", "fog drag commit should keep the active authoring layer on VOLUMES");
+    assert.equal(committed.ui.panelSections.volumes, true, "fog drag commit should keep the VOLUMES panel section available");
+    assert.equal(committed.ui.panelSections.entities, false, "fog drag commit should not force-open the ENTITIES panel section");
+
+    const fogSelectionId = typeof placedFog?.id === "string" ? placedFog.id : null;
+    assert.equal(committed.interaction.selectedEntityId, fogSelectionId, "fog drag commit should keep the placed fog volume selected for special-volume editing");
+
+    const committedFogOverlay = createPreviewTestContext();
+    renderEntities(
+      committedFogOverlay.ctx,
+      committed.document.active,
+      committed.viewport,
+      committed.interaction,
+    );
+    assert.equal(
+      committedFogOverlay.operations.some((operation) => operation[0] === "fillRect"),
+      true,
+      "fog drag commit should render a persistent authored fog band after mouseup",
+    );
   } finally {
     harness.destroy();
   }
@@ -2782,6 +2801,41 @@ function runFogPlacementPreviewRegressionChecks() {
     dragOverlay.operations.some((operation) => operation[0] === "arc"),
     false,
     "fog drag preview should not fall back to circular aggro/proximity visuals",
+  );
+
+  const persistedFogOverlay = createPreviewTestContext();
+  renderEntities(persistedFogOverlay.ctx, {
+    ...doc,
+    entities: [{
+      id: "entity-fog",
+      type: "fog_volume",
+      x: 1,
+      y: 1,
+      visible: true,
+      params: {
+        area: { x0: 16, x1: 112, y0: 32, falloff: 0 },
+        look: { thickness: 32 },
+      },
+    }],
+  }, viewport, {
+    selectedEntityIds: ["entity-fog"],
+    hoveredEntityId: null,
+    entityDrag: null,
+  });
+  assert.equal(
+    persistedFogOverlay.operations.some((operation) => operation[0] === "fillRect"),
+    true,
+    "committed fog volumes should render as persistent authored area fills",
+  );
+  assert.equal(
+    persistedFogOverlay.operations.some((operation) => operation[0] === "strokeRect"),
+    true,
+    "committed fog volumes should render a persistent authored frame",
+  );
+  assert.equal(
+    persistedFogOverlay.operations.some((operation) => operation[0] === "arc"),
+    false,
+    "committed fog volumes should not regress into circular aggro/proximity overlays",
   );
 }
 
@@ -5567,7 +5621,8 @@ function runSourceRegressionChecks() {
     source.includes("if (isFogVolumeEntityType(activeEntityPresetId)) {")
       && source.includes("draft.interaction.volumePlacementDrag = {")
       && source.includes("const fogRect = getFogVolumeWorldRectFromDragCells(")
-      && source.includes("if (fogRect) createFogVolumeAtWorldRect(draft, fogRect);"),
+      && source.includes("const createdIndex = createFogVolumeAtWorldRect(draft, fogRect);")
+      && source.includes("setActiveLayer(draft, PANEL_LAYERS.VOLUMES);"),
     true,
     "fog placement should use the dedicated drag-to-area special-volume entrypoint",
   );
