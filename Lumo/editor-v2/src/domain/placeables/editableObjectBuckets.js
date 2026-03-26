@@ -10,6 +10,12 @@ const SPECIAL_VOLUME_TYPES = new Set(["fog_volume"]);
 
 const EDITABLE_TYPE_ALIASES = new Map([
   ["lantern", "lantern_01"],
+  ["spawn", "player-spawn"],
+  ["player_spawn", "player-spawn"],
+  ["player spawn", "player-spawn"],
+  ["exit", "player-exit"],
+  ["player_exit", "player-exit"],
+  ["player exit", "player-exit"],
 ]);
 
 export function normalizeEditableObjectType(type) {

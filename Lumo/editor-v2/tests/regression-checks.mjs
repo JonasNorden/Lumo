@@ -78,6 +78,12 @@ import { findDecorPresetById } from "../src/domain/decor/decorPresets.js";
 import { getDecorVisual } from "../src/domain/decor/decorVisuals.js";
 import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
 import { getEntityVisual } from "../src/domain/entities/entityVisuals.js";
+import {
+  canCreateEntityType,
+  canDeleteEntity,
+  isExitEntityType,
+  isSpawnEntityType,
+} from "../src/domain/entities/spawnExitRules.js";
 import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
 import { findDecorAtCanvasPoint, getDecorDrawMetrics, renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
 import { applyCanonicalDecorAction, createCanonicalDecorHistory } from "../src/app/cleanRoomDecorMode.js";
@@ -1239,7 +1245,7 @@ async function runLiveCanonicalSoundMoveRuntimeRegressionChecks() {
       draft.interaction.activeTool = "inspect";
       draft.interaction.activeLayer = "entities";
       draft.interaction.canvasSelectionMode = "entity";
-      draft.interaction.activeEntityPresetId = "player-spawn";
+      draft.interaction.activeEntityPresetId = "generic";
       draft.interaction.activeDecorPresetId = null;
       draft.interaction.activeSoundPresetId = null;
     });
@@ -1311,7 +1317,7 @@ async function runLiveCanonicalEntityMoveRuntimeRegressionChecks() {
       draft.interaction.activeTool = "inspect";
       draft.interaction.activeLayer = "entities";
       draft.interaction.canvasSelectionMode = "entity";
-      draft.interaction.activeEntityPresetId = "player-spawn";
+      draft.interaction.activeEntityPresetId = "generic";
       draft.interaction.activeDecorPresetId = null;
       draft.interaction.activeSoundPresetId = null;
     });
@@ -1758,6 +1764,100 @@ function runNewLevelDocumentRegressionChecks() {
 
   assert.equal(sanitizeLevelDimension("5", DEFAULT_NEW_LEVEL_WIDTH), MIN_LEVEL_DIMENSION, "dimension sanitizing should clamp to the minimum");
   assert.equal(sanitizeLevelDimension("999", DEFAULT_NEW_LEVEL_WIDTH), MAX_LEVEL_DIMENSION, "dimension sanitizing should clamp to the maximum");
+}
+
+function runSpawnExitNormalizationRegressionChecks() {
+  const newDoc = createNewLevelDocument();
+  const newDocSpawnCount = newDoc.entities.filter((entity) => isSpawnEntityType(entity.type)).length;
+  const newDocExitCount = newDoc.entities.filter((entity) => isExitEntityType(entity.type)).length;
+  assert.equal(newDocSpawnCount, 1, "new levels should always include exactly one Spawn entity");
+  assert.equal(newDocExitCount >= 1, true, "new levels should always include at least one Exit entity");
+
+  const duplicateSpawnDoc = validateLevelDocument({
+    ...createDoc(),
+    entities: [
+      { id: "spawn-a", name: "Spawn A", type: "spawn", x: 1, y: 1, visible: true, params: {} },
+      { id: "spawn-b", name: "Spawn B", type: "player-spawn", x: 2, y: 1, visible: true, params: {} },
+      { id: "exit-a", name: "Exit A", type: "exit", x: 3, y: 1, visible: true, params: {} },
+    ],
+  });
+  assert.equal(duplicateSpawnDoc.entities.filter((entity) => isSpawnEntityType(entity.type)).length, 1, "document validation should enforce exactly one Spawn");
+  assert.equal(duplicateSpawnDoc.entities.filter((entity) => isExitEntityType(entity.type)).length, 1, "document validation should preserve authored Exit entities when present");
+
+  const missingSpecialsDoc = validateLevelDocument({
+    ...createDoc(),
+    entities: [{ id: "lantern-a", name: "Lantern", type: "lantern_01", x: 0, y: 0, visible: true, params: {} }],
+  });
+  assert.equal(missingSpecialsDoc.entities.some((entity) => isSpawnEntityType(entity.type)), true, "validation should inject Spawn on load when missing");
+  assert.equal(missingSpecialsDoc.entities.some((entity) => isExitEntityType(entity.type)), true, "validation should inject Exit on load when missing");
+
+  const spawn = newDoc.entities.find((entity) => isSpawnEntityType(entity.type));
+  const exits = newDoc.entities.filter((entity) => isExitEntityType(entity.type));
+  assert.equal(canCreateEntityType(newDoc.entities, "player-spawn"), false, "spawn rule should block creating additional Spawn entities");
+  assert.equal(canDeleteEntity(newDoc.entities, spawn.id), false, "spawn rule should block deleting Spawn entities");
+  assert.equal(canDeleteEntity([...newDoc.entities, { ...exits[0], id: "exit-2" }], exits[0].id), true, "exit rule should allow deleting an Exit when multiple exits exist");
+  assert.equal(canDeleteEntity(newDoc.entities, exits[0].id), false, "exit rule should prevent deleting the final Exit");
+
+  const doc = createDoc();
+  doc.entities = [{ id: "entity-generic", name: "Generic", type: "generic", x: 0, y: 0, visible: true, params: {} }];
+  const action = {
+    type: "update",
+    index: 0,
+    previousEntity: cloneCanonicalEntitySnapshot(doc.entities[0]),
+    nextEntity: cloneCanonicalEntitySnapshot({ ...doc.entities[0], x: 1, y: 2 }),
+  };
+  const forward = applyCanonicalEntityAction(doc, action, "forward");
+  assert.equal(forward.changed, true, "special Spawn/Exit guards should not regress canonical entity update behavior");
+  const backward = applyCanonicalEntityAction(doc, action, "backward");
+  assert.equal(backward.changed, true, "special Spawn/Exit guards should not regress canonical entity undo behavior");
+}
+
+async function runSpawnExitRuntimeRegressionChecks() {
+  const harness = await createEditorRuntimeHarness();
+  const { fakeWindow, store } = harness;
+  try {
+    const getSpawnId = () => store.getState().document.active.entities.find((entity) => isSpawnEntityType(entity.type))?.id || null;
+    const getExitIds = () => store.getState().document.active.entities.filter((entity) => isExitEntityType(entity.type)).map((entity) => entity.id);
+
+    const setSelectedEntity = (entityId) => {
+      store.setState((draft) => {
+        draft.interaction.activeLayer = "entities";
+        draft.interaction.canvasSelectionMode = "entity";
+        draft.interaction.selectedEntityId = entityId;
+        draft.interaction.selectedEntityIds = entityId ? [entityId] : [];
+      });
+    };
+
+    const spawnId = getSpawnId();
+    assert.ok(spawnId, "runtime document should include a Spawn");
+    setSelectedEntity(spawnId);
+    const spawnBeforeDelete = store.getState().document.active.entities.length;
+    fakeWindow.dispatch("keydown", { key: "Delete", code: "Delete", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, repeat: false, target: null });
+    assert.equal(store.getState().document.active.entities.length, spawnBeforeDelete, "delete should not remove Spawn");
+
+    fakeWindow.dispatch("keydown", { key: "d", code: "KeyD", ctrlKey: true, metaKey: false, shiftKey: false, altKey: false, repeat: false, target: null });
+    assert.equal(
+      store.getState().document.active.entities.filter((entity) => isSpawnEntityType(entity.type)).length,
+      1,
+      "duplicate shortcut should not create additional Spawn entities",
+    );
+
+    const initialExitIds = getExitIds();
+    assert.equal(initialExitIds.length >= 1, true, "runtime document should include at least one Exit");
+    setSelectedEntity(initialExitIds[0]);
+    fakeWindow.dispatch("keydown", { key: "Delete", code: "Delete", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, repeat: false, target: null });
+    assert.deepEqual(getExitIds(), initialExitIds, "delete should not remove the final Exit");
+
+    fakeWindow.dispatch("keydown", { key: "d", code: "KeyD", ctrlKey: true, metaKey: false, shiftKey: false, altKey: false, repeat: false, target: null });
+    const duplicatedExitIds = getExitIds();
+    assert.equal(duplicatedExitIds.length, initialExitIds.length + 1, "duplicate shortcut should create an additional Exit");
+
+    setSelectedEntity(duplicatedExitIds.at(-1));
+    fakeWindow.dispatch("keydown", { key: "Delete", code: "Delete", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, repeat: false, target: null });
+    assert.equal(getExitIds().length, initialExitIds.length, "delete should allow removing Exit only when more than one Exit remains");
+  } finally {
+    harness.destroy();
+  }
 }
 
 function runEntityRegressionChecks() {
@@ -2260,7 +2360,7 @@ async function runLiveCanonicalDecorMoveRuntimeRegressionChecks() {
       draft.interaction.activeTool = "inspect";
       draft.interaction.activeLayer = "entities";
       draft.interaction.canvasSelectionMode = "entity";
-      draft.interaction.activeEntityPresetId = "player-spawn";
+      draft.interaction.activeEntityPresetId = "generic";
       draft.interaction.activeSoundPresetId = null;
     });
 
@@ -2483,20 +2583,20 @@ function runFogVolumeRegressionChecks() {
     ],
   });
 
-  assert.equal(normalized.entities.length, 1, "fog volumes should stay in the entity list");
-  assert.equal(normalized.entities[0].type, "fog_volume", "fog volume validation should preserve the special type");
+  const normalizedFog = normalized.entities.find((entity) => entity.type === "fog_volume");
+  assert.equal(Boolean(normalizedFog), true, "fog volumes should stay in the entity list");
   assert.deepEqual(
-    normalized.entities[0].params.area,
+    normalizedFog.params.area,
     { x0: 48, x1: 144, y0: 48, falloff: 18 },
     "fog volume validation should sync area semantics to the authored anchor while preserving nested area fields",
   );
   assert.equal(
-    normalized.entities[0].params.look.thickness,
+    normalizedFog.params.look.thickness,
     36,
     "fog volume validation should preserve nested look params",
   );
   assert.equal(
-    normalized.entities[0].params.render.lumoBehindFog,
+    normalizedFog.params.render.lumoBehindFog,
     false,
     "fog volume validation should preserve nested render params",
   );
@@ -2971,12 +3071,15 @@ function runSoundRegressionChecks() {
 
   assert.equal(normalizedEntityBucketsDoc.decor.length, 1, "validation should keep flower decor in the decor bucket");
   assert.equal(normalizedEntityBucketsDoc.decor[0].type, "decor_flower_01", "validation should preserve flower decor types");
-  assert.equal(normalizedEntityBucketsDoc.entities.length, 2, "validation should migrate entity-like decor into entities");
-  assert.equal(normalizedEntityBucketsDoc.entities[0].type, "lantern_01", "validation should normalize lantern aliases into the entity workflow");
-  assert.equal(normalizedEntityBucketsDoc.entities[0].params.radius, 180, "validation should remap lantern light radius params");
-  assert.equal(normalizedEntityBucketsDoc.entities[1].type, "firefly_01", "validation should move fireflies into the entity workflow");
-  assert.equal(normalizedEntityBucketsDoc.entities[1].params.lightDiameter, 200, "validation should remap firefly radius params into editable defaults");
-  assert.equal(normalizedEntityBucketsDoc.entities[1].params.lightStrength, 0.8, "validation should seed firefly defaults for param editing");
+  assert.equal(normalizedEntityBucketsDoc.entities.some((entity) => entity.type === "lantern_01"), true, "validation should normalize lantern aliases into the entity workflow");
+  assert.equal(normalizedEntityBucketsDoc.entities.some((entity) => entity.type === "firefly_01"), true, "validation should move fireflies into the entity workflow");
+  assert.equal(normalizedEntityBucketsDoc.entities.filter((entity) => entity.type === "player-spawn").length, 1, "validation should ensure one Spawn while migrating entity-like decor");
+  assert.equal(normalizedEntityBucketsDoc.entities.filter((entity) => entity.type === "player-exit").length >= 1, true, "validation should ensure at least one Exit while migrating entity-like decor");
+  const migratedLantern = normalizedEntityBucketsDoc.entities.find((entity) => entity.type === "lantern_01");
+  const migratedFirefly = normalizedEntityBucketsDoc.entities.find((entity) => entity.type === "firefly_01");
+  assert.equal(migratedLantern?.params.radius, 180, "validation should remap lantern light radius params");
+  assert.equal(migratedFirefly?.params.lightDiameter, 200, "validation should remap firefly radius params into editable defaults");
+  assert.equal(migratedFirefly?.params.lightStrength, 0.8, "validation should seed firefly defaults for param editing");
 
   const normalizedSourceDoc = validateLevelDocument({
     ...createDoc(),
@@ -5435,6 +5538,7 @@ async function main() {
   runSizedBrushSemanticsRegressionChecks();
   runSizedPlacementAuthoringRegressionChecks();
   runNewLevelDocumentRegressionChecks();
+  runSpawnExitNormalizationRegressionChecks();
   runEntityRegressionChecks();
   runDecorAndSoundDeletionRegressionChecks();
   runCleanRoomDecorRuntimeRegressionChecks();
@@ -5444,6 +5548,7 @@ async function main() {
   await runLiveCanonicalDecorMoveRuntimeRegressionChecks();
   await runLiveCanonicalEntityMoveRuntimeRegressionChecks();
   await runLiveCanonicalSoundMoveRuntimeRegressionChecks();
+  await runSpawnExitRuntimeRegressionChecks();
   await runLiveSoundPlacementRuntimeRegressionChecks();
   await runArrowKeyPanRuntimeRegressionChecks();
   runObjectLayerStableIdentityHistoryRegressionChecks();

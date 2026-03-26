@@ -7,6 +7,7 @@ import { getAuthoredSoundSource } from "../sound/sourceReference.js";
 import { normalizeSoundType } from "../sound/soundVisuals.js";
 import { BACKGROUND_MATERIAL_OPTIONS, DEFAULT_BACKGROUND_MATERIAL_ID, normalizeBackgroundMaterial } from "../background/materialCatalog.js";
 import { normalizeSizedPlacements } from "../tiles/sizedPlacements.js";
+import { normalizeSpawnAndExitEntities } from "../entities/spawnExitRules.js";
 
 const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
 const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
@@ -222,7 +223,7 @@ export function validateLevelDocument(doc) {
     return false;
   });
 
-  doc.entities = [...normalizedEntities, ...migratedDecorEntities];
+  doc.entities = normalizeSpawnAndExitEntities(doc, [...normalizedEntities, ...migratedDecorEntities]);
 
   const rawSounds = Array.isArray(doc.sounds) ? doc.sounds : [];
   doc.sounds = rawSounds.map((sound, index) => normalizeSound(sound, index));
