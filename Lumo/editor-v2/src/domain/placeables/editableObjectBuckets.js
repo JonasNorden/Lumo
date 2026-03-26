@@ -1,3 +1,5 @@
+import { isSpecialVolumeEntityType, listSpecialVolumeTypes } from "../entities/specialVolumeTypes.js";
+
 const ENTITY_LIKE_EDITABLE_TYPES = new Set([
   "player-spawn",
   "player-exit",
@@ -5,10 +7,7 @@ const ENTITY_LIKE_EDITABLE_TYPES = new Set([
   "lantern_01",
   "dark_creature_01",
   "hover_void_01",
-  "fog_volume",
 ]);
-
-const SPECIAL_VOLUME_TYPES = new Set(["fog_volume"]);
 
 const EDITABLE_TYPE_ALIASES = new Map([
   ["lantern", "lantern_01"],
@@ -34,12 +33,13 @@ export function isDeferredSpecialVolumeType(type) {
 }
 
 export function isSpecialVolumeEditableType(type) {
-  return SPECIAL_VOLUME_TYPES.has(normalizeEditableObjectType(type));
+  return isSpecialVolumeEntityType(type);
 }
 
 export function isDecorEditableType(type) {
   const normalizedType = normalizeEditableObjectType(type);
+  const specialVolumeTypes = listSpecialVolumeTypes();
   return Boolean(normalizedType)
     && !ENTITY_LIKE_EDITABLE_TYPES.has(normalizedType)
-    && !SPECIAL_VOLUME_TYPES.has(normalizedType);
+    && !specialVolumeTypes.includes(normalizedType);
 }

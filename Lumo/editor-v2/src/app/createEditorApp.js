@@ -84,11 +84,10 @@ import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
 import { createSoundPreviewController, getSoundPreviewKey } from "../domain/sound/soundPreviewPlayback.js";
 import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
 import {
-  applyFogVolumeParamChange,
+  applySpecialVolumeParamChange,
   isFogVolumeEntityType,
   isSpecialVolumeEntityType,
-  shiftFogVolumeEntity,
-  syncFogVolumeEntityToAnchor,
+  syncSpecialVolumeEntityToAnchor,
 } from "../domain/entities/specialVolumeTypes.js";
 import {
   finishScanPlaybackState,
@@ -2517,7 +2516,7 @@ export function createEditorApp({
     };
 
     return isSpecialVolumeEntityType(entity.type)
-      ? syncFogVolumeEntityToAnchor(entity, doc.dimensions.tileSize)
+      ? syncSpecialVolumeEntityToAnchor(entity, doc.dimensions.tileSize)
       : entity;
   };
 
@@ -2695,11 +2694,20 @@ export function createEditorApp({
 
   const applyEntityFieldUpdate = (doc, entity, field, rawValue) => {
     if (!doc || !entity) return null;
+    const tileSize = doc.dimensions?.tileSize || 24;
+    const specialVolumeType = isSpecialVolumeEntityType(entity.type);
 
     if (field === "param") {
       const value = unwrapCanonicalParamMutationValue(rawValue);
       const key = typeof value?.key === "string" ? value.key.trim() : "";
-      if (!key || !isSupportedEntityParamValue(value.value)) return null;
+      const path = typeof value?.path === "string" ? value.path.trim() : "";
+      if (!key && !path) return null;
+      if (!isSupportedEntityParamValue(value.value)) return null;
+
+      if (specialVolumeType && path) {
+        const nextEntity = applySpecialVolumeParamChange(entity, path, value.value, tileSize);
+        return JSON.stringify(nextEntity.params) === JSON.stringify(entity.params) ? null : nextEntity;
+      }
 
       const currentParams = cloneEntityParams(entity.params);
       if (currentParams[key] === value.value) return null;
@@ -2743,7 +2751,10 @@ export function createEditorApp({
         field === "y" ? parsed : entity.y,
       );
       if (entity.x === nextPosition.x && entity.y === nextPosition.y) return null;
-      return { ...entity, x: nextPosition.x, y: nextPosition.y, params: cloneEntityParams(entity.params) };
+      const positionedEntity = { ...entity, x: nextPosition.x, y: nextPosition.y, params: cloneEntityParams(entity.params) };
+      return specialVolumeType
+        ? syncSpecialVolumeEntityToAnchor(positionedEntity, tileSize)
+        : positionedEntity;
     }
 
     return null;

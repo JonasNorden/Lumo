@@ -4,16 +4,18 @@ import {
   renderSelectionEditorPanel,
 } from "./selectionEditorPanel.js";
 import { bindScanControls, renderScanControls } from "./scanControls.js";
+import { getSpecialVolumeWorkbenchContent } from "./specialVolumeWorkbench.js";
 
 const SELECTION_PANEL_OPTIONS = {
   noDocumentMessage: "No document loaded.",
   emptyMessage: "No selection",
   soundMode: "full",
-  hideEntityTypes: ["fog_volume"],
+  hideEntityTypes: [],
 };
 
 function createBottomPanelMarkup(state) {
-  const { markup, isEmpty } = getSelectionEditorPanelContent(state, SELECTION_PANEL_OPTIONS);
+  const specialVolumeWorkbench = getSpecialVolumeWorkbenchContent(state);
+  const { markup, isEmpty } = specialVolumeWorkbench || getSelectionEditorPanelContent(state, SELECTION_PANEL_OPTIONS);
   return `
     <div class="bottomPanelLayout">
       <aside class="bottomPanelScanPane" data-bottom-panel-scan>
@@ -62,8 +64,15 @@ export function renderBottomPanel(panel, state) {
 
   panel.classList?.toggle?.("isEmpty", false);
   const { scanPane, editorPane } = layout;
+  const specialVolumeWorkbench = getSpecialVolumeWorkbenchContent(state);
 
   scanPane.innerHTML = renderScanControls(state, { compact: true });
+  if (specialVolumeWorkbench) {
+    editorPane.classList.toggle("isEmpty", false);
+    editorPane.innerHTML = specialVolumeWorkbench.markup;
+    return;
+  }
+
   renderSelectionEditorPanel(editorPane, state, SELECTION_PANEL_OPTIONS);
 }
 

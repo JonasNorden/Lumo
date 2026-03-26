@@ -1,6 +1,6 @@
 import { cloneEntityParams } from "../entities/entityParams.js";
 import { getEntityPresetParamsForType } from "../entities/entityPresets.js";
-import { isSpecialVolumeEntityType, syncFogVolumeEntityToAnchor } from "../entities/specialVolumeTypes.js";
+import { isSpecialVolumeEntityType, syncSpecialVolumeEntityToAnchor } from "../entities/specialVolumeTypes.js";
 import { DEFAULT_SOUND_PRESET_ID, getSoundPresetDefaultParams, getSoundPresetForType } from "../sound/soundPresets.js";
 import { isEntityLikeEditableType, normalizeEditableObjectType } from "../placeables/editableObjectBuckets.js";
 import { getAuthoredSoundSource } from "../sound/sourceReference.js";
@@ -125,7 +125,7 @@ function normalizeEntity(entity, index, tileSize = 24) {
   };
 
   if (isSpecialVolumeEntityType(nextType)) {
-    return syncFogVolumeEntityToAnchor(normalizedEntity, tileSize);
+    return syncSpecialVolumeEntityToAnchor(normalizedEntity, tileSize);
   }
 
   return normalizedEntity;

@@ -6,7 +6,6 @@ import {
 } from "./entityParams.js";
 import { getEntityPresetDefaultParams } from "./entityPresets.js";
 
-const SPECIAL_VOLUME_ENTITY_TYPES = new Set(["fog_volume"]);
 const DEFAULT_FOG_WIDTH_PX = 288;
 const DEFAULT_FOG_THICKNESS_PX = 44;
 const MIN_SPECIAL_VOLUME_PREVIEW_HEIGHT_PX = 12;
@@ -46,6 +45,17 @@ export const FOG_VOLUME_PARAM_SECTIONS = [
   { key: "render", title: "Render", fields: ["blend", "lumoBehindFog"] },
 ];
 
+const SPECIAL_VOLUME_DESCRIPTORS = Object.freeze({
+  fog_volume: Object.freeze({
+    type: "fog_volume",
+    label: "Fog Volume",
+    editorLayout: SPECIAL_VOLUME_EDITOR_LAYOUTS.fog_volume,
+    paramSections: FOG_VOLUME_PARAM_SECTIONS,
+  }),
+});
+
+const SPECIAL_VOLUME_ENTITY_TYPES = new Set(Object.keys(SPECIAL_VOLUME_DESCRIPTORS));
+
 function readNumber(value, fallback) {
   return Number.isFinite(Number(value)) ? Number(value) : fallback;
 }
@@ -56,6 +66,20 @@ function getFogDefaults() {
 
 export function isSpecialVolumeEntityType(type) {
   return SPECIAL_VOLUME_ENTITY_TYPES.has(String(type || "").trim().toLowerCase());
+}
+
+export function getSpecialVolumeType(type) {
+  const normalized = String(type || "").trim().toLowerCase();
+  return SPECIAL_VOLUME_ENTITY_TYPES.has(normalized) ? normalized : null;
+}
+
+export function getSpecialVolumeDescriptor(type) {
+  const specialType = getSpecialVolumeType(type);
+  return specialType ? SPECIAL_VOLUME_DESCRIPTORS[specialType] : null;
+}
+
+export function listSpecialVolumeTypes() {
+  return Array.from(SPECIAL_VOLUME_ENTITY_TYPES.values());
 }
 
 export function isFogVolumeEntityType(type) {
@@ -163,6 +187,24 @@ export function syncFogVolumeEntityToAnchor(entity, tileSize) {
   };
 }
 
+export function syncSpecialVolumeEntityToAnchor(entity, tileSize) {
+  if (!isSpecialVolumeEntityType(entity?.type)) {
+    return {
+      ...entity,
+      params: cloneEntityParams(entity?.params),
+    };
+  }
+
+  if (isFogVolumeEntityType(entity?.type)) {
+    return syncFogVolumeEntityToAnchor(entity, tileSize);
+  }
+
+  return {
+    ...entity,
+    params: cloneEntityParams(entity?.params),
+  };
+}
+
 export function shiftFogVolumeEntity(entity, deltaX, deltaY, tileSize) {
   if (!isFogVolumeEntityType(entity?.type)) {
     return {
@@ -231,5 +273,23 @@ export function applyFogVolumeParamChange(entity, path, value, tileSize) {
   return {
     ...normalized,
     params: nextParams,
+  };
+}
+
+export function applySpecialVolumeParamChange(entity, path, value, tileSize) {
+  if (!isSpecialVolumeEntityType(entity?.type)) {
+    return {
+      ...entity,
+      params: cloneEntityParams(entity?.params),
+    };
+  }
+
+  if (isFogVolumeEntityType(entity?.type)) {
+    return applyFogVolumeParamChange(entity, path, value, tileSize);
+  }
+
+  return {
+    ...entity,
+    params: cloneEntityParams(entity?.params),
   };
 }
