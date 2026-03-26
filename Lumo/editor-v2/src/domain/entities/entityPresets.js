@@ -20,7 +20,7 @@ export const ENTITY_PRESETS = [
     type: "player-exit",
     defaultName: "Exit",
     defaultParams: {},
-    img: "../data/assets/sprites/pickups/flare_pickup_01.png",
+    img: null,
     drawW: 24,
     drawH: 24,
     footprintW: 24,
