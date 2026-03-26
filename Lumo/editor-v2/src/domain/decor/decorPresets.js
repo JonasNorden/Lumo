@@ -1,4 +1,5 @@
 import { isDecorEditableType } from "../placeables/editableObjectBuckets.js";
+import { findEntityPresetByType } from "../entities/entityPresets.js";
 const TILE_SIZE = 24;
 const DECOR_CATALOG_DENYLIST = new Set([
   "start_01",
@@ -180,6 +181,7 @@ function isCatalogDecorEntryAllowed(entry = {}) {
   const resolvedType = resolveCatalogDecorType(entry);
   const normalizedType = String(resolvedType || "").trim().toLowerCase();
   if (!normalizedType || !isDecorEditableType(normalizedType)) return false;
+  if (findEntityPresetByType(normalizedType)) return false;
   if (DECOR_CATALOG_DENYLIST.has(normalizedType)) return false;
   if (hasCatalogDecorDenyHint(entry)) return false;
   if (entry?.behaviorProfileId || entry?.visualProfileId || entry?.paramMode) return false;
