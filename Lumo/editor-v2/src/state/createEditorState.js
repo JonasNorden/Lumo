@@ -64,6 +64,7 @@ export function createEditorState() {
       soundDrag: null,
       scanDrag: null,
       decorScatterDrag: null,
+      volumePlacementDrag: null,
       spacePanActive: false,
     },
     brush: {
@@ -124,6 +125,7 @@ export function createEditorState() {
         tiles: false,
         entities: false,
         decor: false,
+        volumes: false,
         background: true,
         sound: false,
       },
