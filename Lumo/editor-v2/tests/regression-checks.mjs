@@ -58,6 +58,7 @@ import {
   reconcileIdObjectInteraction,
   reconcileIndexedObjectInteraction,
 } from "../src/domain/placeables/objectInteractionReconciliation.js";
+import { isDecorEditableType } from "../src/domain/placeables/editableObjectBuckets.js";
 import { captureObjectLayerAnchor } from "../src/domain/placeables/objectLayerHistory.js";
 import {
   getSelectedDecorIds,
@@ -3942,7 +3943,14 @@ function runUiRegressionChecks() {
   assert.equal(/<span class=\"label\">Current<\/span>\s*<span class=\"value\">Entities<\/span>/.test(panel.innerHTML), false, "layer panel should not render a redundant current-layer row");
   assert.equal(panel.innerHTML.includes("Lantern · Alt/Option + Click"), true, "entity status row should carry the active preset and placement readiness summary");
   const entitiesMarkup = panel.innerHTML.match(/<section class="panelSection [^>]*" aria-label="ENTITIES section">[\s\S]*?<\/section>/)?.[0] || "";
+  const decorMarkup = panel.innerHTML.match(/<section class="panelSection [^>]*" aria-label="DECOR section">[\s\S]*?<\/section>/)?.[0] || "";
   assert.equal(entitiesMarkup.includes('statusCardLabel">Placement'), false, "entity panel should no longer render a separate placement status card");
+  assert.equal(entitiesMarkup.includes('data-entity-preset-button="player-spawn"'), false, "Spawn should not appear as a placeable entity preset in the entities workflow");
+  assert.equal(entitiesMarkup.includes('data-entity-preset-button="player-exit"'), true, "Exit should remain placeable from the entities workflow");
+  assert.equal(decorMarkup.includes('data-decor-preset-button="player-spawn"'), false, "Spawn should not appear in the decor catalog");
+  assert.equal(decorMarkup.includes('data-decor-preset-button="player-exit"'), false, "Exit should not appear in the decor catalog");
+  assert.equal(isDecorEditableType("player-spawn"), false, "Spawn should always resolve through entity-like placement buckets");
+  assert.equal(isDecorEditableType("player-exit"), false, "Exit should always resolve through entity-like placement buckets");
   const entityInactiveState = {
     ...baseState,
     interaction: {
@@ -4052,6 +4060,12 @@ function runUiRegressionChecks() {
   };
   renderBrushPanel(panel, decorInactiveState);
   assert.equal(panel.innerHTML.includes("Select a decor preset"), true, "decor status row should prompt for a preset when placement is not armed");
+  const spawnVisual = getEntityVisual("player-spawn");
+  const exitVisual = getEntityVisual("player-exit");
+  assert.equal(typeof spawnVisual.img, "string", "Spawn should keep using the existing Lumo sprite representation");
+  assert.equal(spawnVisual.img.includes("sprites/lumo/"), true, "Spawn should keep rendering with the temporary Lumo visual");
+  assert.equal(exitVisual.img, null, "Exit should use a neutral placeholder visual until a dedicated Exit sprite is available");
+  assert.equal(exitVisual.label, "Exit", "Exit visual fallback should keep an explicit Exit label to avoid misleading gameplay visuals");
   assert.equal(
     selectionPanelSource.includes("Batch editing is unavailable for this selection."),
     true,

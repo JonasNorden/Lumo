@@ -1,3 +1,4 @@
+import { isDecorEditableType } from "../placeables/editableObjectBuckets.js";
 const TILE_SIZE = 24;
 
 const DECOR_PRESET_FALLBACKS = [
@@ -130,7 +131,10 @@ const DECOR_PRESET_FALLBACKS = [
 ];
 
 const DECOR_SCRIPT_CATALOG = typeof window !== "undefined" && Array.isArray(window.LUMO_CATALOG_ENTITIES)
-  ? window.LUMO_CATALOG_ENTITIES.filter((entry) => String(entry?.category || "").trim().toLowerCase() === "decor")
+  ? window.LUMO_CATALOG_ENTITIES.filter((entry) => (
+    String(entry?.category || "").trim().toLowerCase() === "decor"
+    && isDecorEditableType(entry?.type)
+  ))
   : [];
 
 function normalizeAnchor(anchor) {
