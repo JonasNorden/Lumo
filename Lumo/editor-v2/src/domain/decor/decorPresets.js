@@ -1,5 +1,31 @@
 import { isDecorEditableType } from "../placeables/editableObjectBuckets.js";
 const TILE_SIZE = 24;
+const DECOR_CATALOG_DENYLIST = new Set([
+  "start_01",
+  "spawn",
+  "player-spawn",
+  "exit_01",
+  "exit",
+  "player-exit",
+  "checkpoint_01",
+  "checkpoint",
+  "lantern_01",
+  "lantern",
+  "trigger",
+  "generic",
+  "dark_creature_01",
+  "hover_void_01",
+]);
+
+const DECOR_CATALOG_DENY_HINTS = [
+  "spawn",
+  "exit",
+  "checkpoint",
+  "lantern",
+  "trigger",
+  "generic",
+  "dark creature",
+];
 
 const DECOR_PRESET_FALLBACKS = [
   {
@@ -130,11 +156,49 @@ const DECOR_PRESET_FALLBACKS = [
   },
 ];
 
+function resolveCatalogDecorType(entry = {}) {
+  const explicitType = typeof entry?.type === "string" && entry.type.trim() ? entry.type.trim() : null;
+  if (explicitType) return explicitType;
+  return typeof entry?.id === "string" && entry.id.trim() ? entry.id.trim() : "";
+}
+
+function hasCatalogDecorDenyHint(entry = {}) {
+  const hintSource = [
+    entry?.id,
+    entry?.type,
+    entry?.name,
+    entry?.group,
+  ]
+    .filter((part) => typeof part === "string" && part.trim())
+    .join(" ")
+    .toLowerCase();
+  return DECOR_CATALOG_DENY_HINTS.some((hint) => hintSource.includes(hint));
+}
+
+function isCatalogDecorEntryAllowed(entry = {}) {
+  if (String(entry?.category || "").trim().toLowerCase() !== "decor") return false;
+  const resolvedType = resolveCatalogDecorType(entry);
+  const normalizedType = String(resolvedType || "").trim().toLowerCase();
+  if (!normalizedType || !isDecorEditableType(normalizedType)) return false;
+  if (DECOR_CATALOG_DENYLIST.has(normalizedType)) return false;
+  if (hasCatalogDecorDenyHint(entry)) return false;
+  if (entry?.behaviorProfileId || entry?.visualProfileId || entry?.paramMode) return false;
+  if (Array.isArray(entry?.shownParams) && entry.shownParams.length) return false;
+  return true;
+}
+
+export function collectDecorCatalogPresets(catalogEntries = []) {
+  if (!Array.isArray(catalogEntries)) return [];
+  return catalogEntries
+    .filter((entry) => isCatalogDecorEntryAllowed(entry))
+    .map((entry) => ({
+      ...entry,
+      type: resolveCatalogDecorType(entry),
+    }));
+}
+
 const DECOR_SCRIPT_CATALOG = typeof window !== "undefined" && Array.isArray(window.LUMO_CATALOG_ENTITIES)
-  ? window.LUMO_CATALOG_ENTITIES.filter((entry) => (
-    String(entry?.category || "").trim().toLowerCase() === "decor"
-    && isDecorEditableType(entry?.type)
-  ))
+  ? collectDecorCatalogPresets(window.LUMO_CATALOG_ENTITIES)
   : [];
 
 function normalizeAnchor(anchor) {

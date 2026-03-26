@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -75,7 +76,7 @@ import {
 } from "../src/domain/sound/selection.js";
 import { collectDarknessPreviewLights, getPreviewPlayerLight } from "../src/render/darknessPreview.js";
 import { createFogVolumeEntityFromWorldRect } from "../src/domain/entities/specialVolumeTypes.js";
-import { findDecorPresetById } from "../src/domain/decor/decorPresets.js";
+import { collectDecorCatalogPresets, findDecorPresetById } from "../src/domain/decor/decorPresets.js";
 import { getDecorVisual } from "../src/domain/decor/decorVisuals.js";
 import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
 import { getEntityVisual } from "../src/domain/entities/entityVisuals.js";
@@ -2966,6 +2967,24 @@ function runDecorMetadataParityRegressionChecks() {
   );
 }
 
+function runDecorCatalogTruthRegressionChecks() {
+  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+  const catalogSource = fs.readFileSync(path.join(repoRoot, "../data/catalog_entities.js"), "utf8");
+  const sandbox = { window: {} };
+  vm.runInNewContext(catalogSource, sandbox);
+  const catalogEntries = sandbox.window.LUMO_CATALOG_ENTITIES || [];
+  const decorCatalog = collectDecorCatalogPresets(catalogEntries);
+  const decorPresetIds = new Set(decorCatalog.map((entry) => entry.id));
+
+  for (const presetId of ["painting_01", "painting_02", "painting_03", "painting_04", "painting_05", "painting_06"]) {
+    assert.equal(decorPresetIds.has(presetId), true, `${presetId} should remain exposed as truthful decor catalog content`);
+  }
+
+  for (const presetId of ["start_01", "exit_01", "checkpoint_01", "lantern_01", "dark_creature_01", "hover_void_01"]) {
+    assert.equal(decorPresetIds.has(presetId), false, `${presetId} should stay excluded from the decor catalog`);
+  }
+}
+
 function runSoundRegressionChecks() {
   const doc = createDoc();
   const history = createHistoryState();
@@ -5574,6 +5593,7 @@ async function main() {
   runObjectPlacementPreviewSuppressionRegressionChecks();
   runDecorRegressionChecks();
   runDecorMetadataParityRegressionChecks();
+  runDecorCatalogTruthRegressionChecks();
   runSoundRegressionChecks();
   runSoundTypeRenderRegressionChecks();
   runSoundIdentityRegressionChecks();
