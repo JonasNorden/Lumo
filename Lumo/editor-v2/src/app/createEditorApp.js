@@ -2211,6 +2211,11 @@ export function createEditorApp({
         button.classList.toggle("isActive", enabled);
         button.setAttribute("aria-pressed", enabled ? "true" : "false");
       }
+      if (action === "toggle-proximity-overlays") {
+        const enabled = state.ui.proximityOverlaysEnabled !== false;
+        button.classList.toggle("isActive", enabled);
+        button.setAttribute("aria-pressed", enabled ? "true" : "false");
+      }
     });
 
     const exportToggle = topBar.querySelector(`[data-topbar-menu-toggle="export"]`);
@@ -5345,6 +5350,9 @@ if (event.shiftKey) {
       if (action === "undo") handleUndo();
       if (action === "redo") handleRedo();
       if (action === "toggle-darkness") updatePreviewSettings("darkness", !store.getState().ui.darknessPreviewEnabled);
+      if (action === "toggle-proximity-overlays") {
+        updatePreviewSettings("proximity-overlays", store.getState().ui.proximityOverlaysEnabled === false);
+      }
       return;
     }
 
