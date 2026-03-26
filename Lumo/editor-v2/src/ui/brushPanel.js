@@ -258,17 +258,11 @@ function renderEntitiesSettings(state) {
 function renderVolumesSettings(state) {
   const activePresetId = state.interaction.activeEntityPresetId;
   const activeVolume = PLACEABLE_SPECIAL_VOLUME_PRESETS.find((preset) => preset.id === activePresetId) || null;
-  const placementStatus = activeVolume
-    ? `${activeVolume.defaultName} · Alt/Option + Drag`
-    : "Select a volume type";
 
   return `
     ${renderAssetPicker("Special volumes", "volume-preset-button", PLACEABLE_SPECIAL_VOLUME_PRESETS, activePresetId, "No volume type available")}
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton isSecondary" data-volume-action="clear-preset" ${activeVolume ? "" : "disabled"}>Clear</button>
-    </div>
-    <div class="statusRow compactStatusRow entityPlacementStatusRow">
-      <span class="value">${escapeHtml(placementStatus)}</span>
     </div>
   `;
 }

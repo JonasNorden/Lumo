@@ -154,6 +154,29 @@ export function createFogVolumeEntityFromWorldRect(entity, worldRect, tileSize) 
   }, tileSize);
 }
 
+export function getFogVolumeWorldRectFromDragCells(startCell, endCell, tileSize, thicknessPx = null) {
+  if (!startCell || !endCell || !Number.isFinite(tileSize) || tileSize <= 0) return null;
+
+  const startX = Math.round(readNumber(startCell.x, 0));
+  const startY = Math.round(readNumber(startCell.y, 0));
+  const endX = Math.round(readNumber(endCell.x, startX));
+  const defaults = getFogDefaults();
+  const defaultThickness = readNumber(defaults?.look?.thickness, DEFAULT_FOG_THICKNESS_PX);
+  const resolvedThicknessPx = readNumber(thicknessPx, defaultThickness);
+  const thicknessTiles = Math.max(1, Math.round(resolvedThicknessPx / tileSize));
+  const snappedThicknessPx = thicknessTiles * tileSize;
+  const minXCell = Math.min(startX, endX);
+  const maxXCell = Math.max(startX, endX);
+  const baselineY = (startY + 1) * tileSize;
+
+  return {
+    x0: minXCell * tileSize,
+    x1: (maxXCell + 1) * tileSize,
+    y0: baselineY - snappedThicknessPx,
+    y1: baselineY,
+  };
+}
+
 export function syncFogVolumeEntityToAnchor(entity, tileSize) {
   if (!isFogVolumeEntityType(entity?.type)) {
     return {
