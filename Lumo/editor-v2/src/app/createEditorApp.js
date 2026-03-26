@@ -85,6 +85,7 @@ import { createSoundPreviewController, getSoundPreviewKey } from "../domain/soun
 import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
 import {
   applySpecialVolumeParamChange,
+  createFogVolumeEntityFromWorldRect,
   isFogVolumeEntityType,
   isSpecialVolumeEntityType,
   syncSpecialVolumeEntityToAnchor,
@@ -1517,6 +1518,31 @@ export function createEditorApp({
     return getEntityIndexById(doc.entities, entity.id);
   };
 
+  const createFogVolumeAtWorldRect = (draft, worldRect) => {
+    const doc = draft.document.active;
+    if (!doc || !worldRect) return null;
+
+    const nextNumber = (doc.entities?.length || 0) + 1;
+    const fogPreset = findEntityPresetById("fog_volume");
+    if (!fogPreset) return null;
+
+    const seededEntity = createEntityDraft(doc, 0, 0, fogPreset.id, nextNumber);
+    const entity = createFogVolumeEntityFromWorldRect(seededEntity, worldRect, doc.dimensions.tileSize);
+    entity.id = getNextStringId(doc.entities || [], "id", "entity");
+    const createIndex = doc.entities.length;
+    const action = {
+      type: "create",
+      index: createIndex,
+      entity: cloneCanonicalEntitySnapshot(entity),
+    };
+
+    const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
+    if (!changed) return null;
+
+    recordCleanRoomObjectAction("entity", action);
+    return getEntityIndexById(doc.entities, entity.id);
+  };
+
   const deleteSelectedEntityCleanRoom = (draft) => {
     // Canonical entity deletion is stable-id only. Do not restore legacy entity delete or shared selection code here.
     const doc = draft.document.active;
@@ -2162,6 +2188,7 @@ export function createEditorApp({
     if (layer === PANEL_LAYERS.BACKGROUND) draft.ui.panelSections.background = true;
     if (layer === PANEL_LAYERS.TILES) draft.ui.panelSections.tiles = true;
     if (layer === PANEL_LAYERS.ENTITIES) draft.ui.panelSections.entities = true;
+    if (layer === PANEL_LAYERS.ENTITIES) draft.ui.panelSections.volumes = true;
     if (layer === PANEL_LAYERS.DECOR) draft.ui.panelSections.decor = true;
     if (layer === PANEL_LAYERS.SOUND) draft.ui.panelSections.sound = true;
   };
@@ -2274,6 +2301,7 @@ export function createEditorApp({
     draft.interaction.decorDrag = null;
     draft.interaction.soundDrag = null;
     draft.interaction.scanDrag = null;
+    draft.interaction.volumePlacementDrag = null;
     clearDecorScatterDrag(draft);
 
     if (nextMode === "decor") {
@@ -2383,7 +2411,7 @@ export function createEditorApp({
     const entityPreset = findEntityPresetById(normalizedPresetId)
       || findEntityPresetByType(normalizedPresetId);
 
-    if (entityPreset && !isFogVolumeEntityType(entityPreset.type)) return entityPreset;
+    if (entityPreset) return entityPreset;
 
     const decorPreset = findDecorPresetById(normalizedPresetId) || findDecorPresetByType(normalizedPresetId);
     if (decorPreset && isEntityLikeEditableType(decorPreset.type)) {
@@ -2392,7 +2420,7 @@ export function createEditorApp({
 
     if (isEntityLikeEditableType(normalizedPresetId)) {
       const entityLikePreset = getEntityPresetForType(normalizedPresetId);
-      return entityLikePreset && !isFogVolumeEntityType(entityLikePreset.type) ? entityLikePreset : null;
+      return entityLikePreset || null;
     }
 
     return null;
@@ -3507,6 +3535,33 @@ export function createEditorApp({
     });
   };
 
+  const updateVolume = (index, field, value) => {
+    void index;
+    store.setState((draft) => {
+      if (field === "preset") {
+        const nextPresetId = typeof value === "string" ? value : null;
+        const entityPreset = resolveEntityPlacementPreset(nextPresetId);
+        if (!entityPreset || !isSpecialVolumeEntityType(entityPreset.type)) {
+          draft.interaction.activeEntityPresetId = null;
+          return;
+        }
+        draft.interaction.activeEntityPresetId = draft.interaction.activeEntityPresetId === entityPreset.id ? null : entityPreset.id;
+        draft.interaction.activeDecorPresetId = null;
+        draft.interaction.activeSoundPresetId = null;
+        draft.interaction.activeTool = EDITOR_TOOLS.INSPECT;
+        draft.interaction.volumePlacementDrag = null;
+        applyCanvasTarget(draft, "entity");
+        draft.ui.panelSections.volumes = true;
+        return;
+      }
+
+      if (field === "clear-preset") {
+        draft.interaction.activeEntityPresetId = null;
+        draft.interaction.volumePlacementDrag = null;
+      }
+    });
+  };
+
   const updateDecor = (index, field, value) => {
     store.setState((draft) => {
       const doc = draft.document.active;
@@ -4105,6 +4160,31 @@ export function createEditorApp({
     const activeSoundPresetId = state.interaction.activeSoundPresetId;
 
     if (activeLayer === PANEL_LAYERS.ENTITIES && activeEntityPresetId && isMomentaryPlacementTrigger(event)) {
+      if (isFogVolumeEntityType(activeEntityPresetId)) {
+        interactionState.suppressNextClick = true;
+        event.preventDefault();
+        const worldPoint = getClampedWorldPointFromCanvasPoint(state.document.active, state.viewport, point);
+        store.setState((draft) => {
+          draft.interaction.hoverCell = cell;
+          draft.interaction.selectedCell = cell;
+          draft.interaction.volumePlacementDrag = {
+            active: true,
+            type: "fog_volume",
+            startCell: { ...cell },
+            endCell: { ...cell },
+            startWorldPoint: { ...worldPoint },
+            endWorldPoint: { ...worldPoint },
+          };
+          clearEntitySelection(draft.interaction);
+          clearDecorSelection(draft.interaction);
+          clearSoundSelection(draft.interaction);
+          draft.interaction.entityDrag = null;
+          draft.interaction.decorDrag = null;
+          draft.interaction.soundDrag = null;
+        });
+        return true;
+      }
+
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
@@ -4420,6 +4500,23 @@ if (event.shiftKey) {
       return;
     }
 
+    if (state.interaction.volumePlacementDrag?.active) {
+      if ((event.buttons & 1) !== 1) return;
+      const point = getCanvasPointFromMouseEvent(canvas, event);
+      const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+      if (!cell) return;
+      const worldPoint = getClampedWorldPointFromCanvasPoint(state.document.active, state.viewport, point);
+      store.setState((draft) => {
+        const volumePlacementDrag = draft.interaction.volumePlacementDrag;
+        if (!volumePlacementDrag?.active) return;
+        volumePlacementDrag.endCell = { ...cell };
+        volumePlacementDrag.endWorldPoint = { ...worldPoint };
+        draft.interaction.hoverCell = cell;
+        draft.interaction.selectedCell = cell;
+      });
+      return;
+    }
+
     if (state.interaction.decorDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
 
@@ -4597,6 +4694,23 @@ if (event.shiftKey) {
         commitCleanRoomEntityDrag(draft, entityDrag);
         draft.interaction.entityDrag = null;
         updateEntitySelectionCell(draft);
+      });
+      return;
+    }
+
+    if (state.interaction.volumePlacementDrag?.active) {
+      store.setState((draft) => {
+        const volumePlacementDrag = draft.interaction.volumePlacementDrag;
+        if (!volumePlacementDrag?.active) return;
+        if (volumePlacementDrag.type === "fog_volume") {
+          createFogVolumeAtWorldRect(draft, {
+            x0: volumePlacementDrag.startWorldPoint.x,
+            y0: volumePlacementDrag.startWorldPoint.y,
+            x1: volumePlacementDrag.endWorldPoint.x,
+            y1: volumePlacementDrag.endWorldPoint.y,
+          });
+        }
+        draft.interaction.volumePlacementDrag = null;
       });
       return;
     }
@@ -4854,6 +4968,7 @@ if (event.shiftKey) {
     draft.interaction.decorDrag = null;
     draft.interaction.soundDrag = null;
     draft.interaction.scanDrag = null;
+    draft.interaction.volumePlacementDrag = null;
     draft.interaction.activeLayer = PANEL_LAYERS.TILES;
     draft.interaction.activeBackgroundMaterialId = nextDocument?.background?.materials?.[0]?.id || DEFAULT_BACKGROUND_MATERIAL_ID;
     draft.interaction.canvasSelectionMode = "entity";
@@ -5108,6 +5223,7 @@ if (event.shiftKey) {
       draft.interaction.entityDrag = null;
       draft.interaction.decorDrag = null;
       draft.interaction.soundDrag = null;
+      draft.interaction.volumePlacementDrag = null;
       draft.interaction.boxSelection = null;
       clearDecorScatterDrag(draft);
       if (tool !== EDITOR_TOOLS.INSPECT && ![PANEL_LAYERS.TILES, PANEL_LAYERS.BACKGROUND].includes(getActiveLayer(draft.interaction))) {
@@ -5149,6 +5265,7 @@ if (event.shiftKey) {
       draft.interaction.entityDrag = null;
       draft.interaction.decorDrag = null;
       draft.interaction.soundDrag = null;
+      draft.interaction.volumePlacementDrag = null;
       draft.interaction.hoveredEntityIndex = null;
       draft.interaction.hoveredDecorIndex = null;
       draft.interaction.hoveredDecorId = null;
@@ -5521,6 +5638,7 @@ if (event.shiftKey) {
         state.interaction.decorDrag = null;
         state.interaction.soundDrag = null;
         state.interaction.scanDrag = null;
+        state.interaction.volumePlacementDrag = null;
         state.interaction.decorScatterMode = false;
         state.interaction.decorScatterDrag = null;
         state.interaction.activeEntityPresetId = null;
@@ -5560,6 +5678,7 @@ if (event.shiftKey) {
     onEntityUpdate: updateEntity,
     onDecorUpdate: updateDecor,
     onSoundUpdate: updateSound,
+    onVolumeUpdate: updateVolume,
     onCanvasTargetChange: setActiveCanvasTarget,
     onLayerChange: setActiveLayerFromPanel,
     onScanUpdate: updateScanControl,
