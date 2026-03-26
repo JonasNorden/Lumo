@@ -31,7 +31,7 @@ const VISIBLE_TOOL_OPTIONS = TOOL_OPTIONS.filter((option) => (
   || option.value === EDITOR_TOOLS.ERASE
 ));
 
-const HIDDEN_ENTITY_PRESET_IDS = new Set(["player-spawn", "fog_volume"]);
+const HIDDEN_ENTITY_PRESET_IDS = new Set(["player-spawn", "fog_volume", "trigger", "generic"]);
 const PLACEABLE_ENTITY_PRESETS = ENTITY_PRESETS.filter((preset) => !HIDDEN_ENTITY_PRESET_IDS.has(preset.id));
 const COLLAPSIBLE_PANEL_DEFAULTS = {
   tiles: false,

@@ -2987,7 +2987,23 @@ function runDecorCatalogTruthRegressionChecks() {
     assert.equal(decorPresetIds.has(presetId), true, `${presetId} should remain exposed as truthful decor catalog content`);
   }
 
-  for (const presetId of ["start_01", "exit_01", "checkpoint_01", "lantern_01", "dark_creature_01", "hover_void_01", "trigger", "generic", "checkpoint_variant"]) {
+  for (const presetId of [
+    "start_01",
+    "exit_01",
+    "checkpoint_01",
+    "lantern_01",
+    "dark_creature_01",
+    "hover_void_01",
+    "trigger",
+    "generic",
+    "grass",
+    "bush",
+    "rock",
+    "sign",
+    "powercell_01",
+    "flare_pickup_01",
+    "checkpoint_variant",
+  ]) {
     assert.equal(decorPresetIds.has(presetId), false, `${presetId} should stay excluded from the decor catalog`);
   }
   assert.equal(decorPresetIds.has("painting_variant"), true, "decor filtering should preserve legitimate painting decor entries");
@@ -4063,9 +4079,16 @@ function runUiRegressionChecks() {
   assert.equal(entitiesMarkup.includes('data-entity-preset-button="player-exit"'), true, "Exit should remain placeable from the entities workflow");
   assert.equal(decorMarkup.includes('data-decor-preset-button="player-spawn"'), false, "Spawn should not appear in the decor catalog");
   assert.equal(decorMarkup.includes('data-decor-preset-button="player-exit"'), false, "Exit should not appear in the decor catalog");
-  for (const presetId of ["checkpoint", "lantern_01", "dark_creature_01", "trigger", "generic"]) {
+  for (const presetId of ["checkpoint", "lantern_01", "dark_creature_01", "powercell_01", "flare_pickup_01"]) {
     assert.equal(entitiesMarkup.includes(`data-entity-preset-button="${presetId}"`), true, `${presetId} should remain exposed through Entities`);
     assert.equal(decorMarkup.includes(`data-decor-preset-button="${presetId}"`), false, `${presetId} should not be duplicated in Decor`);
+  }
+  for (const presetId of ["trigger", "generic"]) {
+    assert.equal(entitiesMarkup.includes(`data-entity-preset-button="${presetId}"`), false, `${presetId} should be removed from Entities catalog exposure`);
+    assert.equal(decorMarkup.includes(`data-decor-preset-button="${presetId}"`), false, `${presetId} should not be duplicated in Decor`);
+  }
+  for (const presetId of ["grass", "bush", "rock", "sign"]) {
+    assert.equal(decorMarkup.includes(`data-decor-preset-button="${presetId}"`), false, `${presetId} should be removed from Decor catalog exposure`);
   }
   assert.equal(isDecorEditableType("player-spawn"), false, "Spawn should always resolve through entity-like placement buckets");
   assert.equal(isDecorEditableType("player-exit"), false, "Exit should always resolve through entity-like placement buckets");
@@ -4160,13 +4183,13 @@ function runUiRegressionChecks() {
       ...baseState.interaction,
       activeLayer: "decor",
       activeEntityPresetId: null,
-      activeDecorPresetId: "grass",
+      activeDecorPresetId: "decor_flower_01",
       decorScatterMode: true,
     },
   };
   renderBrushPanel(panel, decorState);
   assert.equal(panel.innerHTML.includes("decorPlacementCard"), false, "decor panel should no longer render a separate placement status card");
-  assert.equal(panel.innerHTML.includes("Grass Tuft · Alt/Option + Drag · 30% density · 60% randomness"), true, "decor status row should carry the active preset and scatter readiness summary");
+  assert.equal(panel.innerHTML.includes("Flower · Alt/Option + Drag · 30% density · 60% randomness"), true, "decor status row should carry the active preset and scatter readiness summary");
 
   const decorInactiveState = {
     ...decorState,
