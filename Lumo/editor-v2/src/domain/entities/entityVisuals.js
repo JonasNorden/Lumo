@@ -7,6 +7,12 @@ const ENTITY_VISUALS = {
     stroke: "#8ef3ff",
     hitRadius: 8.5,
   },
+  "player-exit": {
+    key: "player-exit",
+    label: "Exit",
+    stroke: "#ffd68e",
+    hitRadius: 8.5,
+  },
   lantern_01: {
     key: "lantern_01",
     label: "Lantern",
@@ -62,6 +68,9 @@ const ENTITY_TYPE_ALIASES = new Map([
   ["spawn", "player-spawn"],
   ["player_spawn", "player-spawn"],
   ["player spawn", "player-spawn"],
+  ["exit", "player-exit"],
+  ["player_exit", "player-exit"],
+  ["player exit", "player-exit"],
   ["lantern", "lantern_01"],
 ]);
 

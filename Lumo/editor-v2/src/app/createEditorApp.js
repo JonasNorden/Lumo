@@ -145,6 +145,12 @@ import {
   cloneCanonicalSoundSnapshot,
   createCanonicalSoundHistory,
 } from "./cleanRoomSoundMode.js";
+import {
+  canCreateEntityType,
+  canDeleteEntity,
+  isExitEntityType,
+  isSpawnEntityType,
+} from "../domain/entities/spawnExitRules.js";
 
 const BATCH_EDITABLE_SOUND_PARAM_KEYS = new Set(["spatial", "volume", "pitch", "loop"]);
 const SOUND_DEBUG_MAX_EVENTS = 18;
@@ -1479,6 +1485,10 @@ export function createEditorApp({
 
     const entityPreset = resolveEntityPlacementPreset(presetId);
     if (!entityPreset) return null;
+    if (!canCreateEntityType(doc.entities || [], entityPreset.type)) {
+      const existingIndex = (doc.entities || []).findIndex((entity) => isSpawnEntityType(entity?.type));
+      return existingIndex >= 0 ? existingIndex : null;
+    }
 
     const nextNumber = (doc.entities?.length || 0) + 1;
     const entity = createEntityDraft(doc, cell.x, cell.y, entityPreset.id, nextNumber);
@@ -1510,6 +1520,7 @@ export function createEditorApp({
     const deleteIndex = getEntityIndexById(doc.entities, entityId);
     const entity = Number.isInteger(deleteIndex) ? doc.entities?.[deleteIndex] : null;
     if (!entity) return false;
+    if (!canDeleteEntity(doc.entities, entity.id)) return false;
 
     const action = {
       type: "delete",
@@ -3331,9 +3342,36 @@ export function createEditorApp({
   };
 
   const duplicateSelectedEntity = (draft) => {
-    void draft;
-    // CANONICAL ENTITY RUNTIME ONLY: duplicate stays off until a stable-id canonical mutation path exists.
-    return false;
+    const doc = draft.document.active;
+    if (!doc) return false;
+
+    const entityId = typeof draft.interaction.selectedEntityId === "string" && draft.interaction.selectedEntityId.trim()
+      ? draft.interaction.selectedEntityId
+      : null;
+    if (!entityId) return false;
+
+    const sourceIndex = getEntityIndexById(doc.entities, entityId);
+    const sourceEntity = Number.isInteger(sourceIndex) ? doc.entities?.[sourceIndex] : null;
+    if (!sourceEntity || isSpawnEntityType(sourceEntity.type) || !isExitEntityType(sourceEntity.type)) {
+      return false;
+    }
+
+    const nextNumber = (doc.entities?.length || 0) + 1;
+    const duplicated = createEntityDraft(doc, sourceEntity.x + 1, sourceEntity.y, sourceEntity.type, nextNumber);
+    duplicated.name = sourceEntity.name;
+    duplicated.visible = sourceEntity.visible;
+    duplicated.params = cloneEntityParams(sourceEntity.params);
+    duplicated.id = getNextStringId(doc.entities || [], "id", "entity");
+
+    const action = {
+      type: "create",
+      index: doc.entities.length,
+      entity: cloneCanonicalEntitySnapshot(duplicated),
+    };
+    const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
+    if (!changed) return false;
+    recordCleanRoomObjectAction("entity", action);
+    return true;
   };
 
   const createEntityAtCell = (draft, cell, presetId = draft.interaction.activeEntityPresetId || DEFAULT_ENTITY_PRESET_ID) => {
