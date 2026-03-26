@@ -269,6 +269,7 @@ const PANEL_LAYERS = {
   BACKGROUND: "background",
   TILES: "tiles",
   ENTITIES: "entities",
+  VOLUMES: "volumes",
   DECOR: "decor",
   SOUND: "sound",
 };
@@ -276,6 +277,7 @@ const PANEL_LAYERS = {
 function getActiveLayer(interaction) {
   if (interaction.activeLayer === PANEL_LAYERS.BACKGROUND) return PANEL_LAYERS.BACKGROUND;
   if (interaction.activeLayer === PANEL_LAYERS.DECOR) return PANEL_LAYERS.DECOR;
+  if (interaction.activeLayer === PANEL_LAYERS.VOLUMES) return PANEL_LAYERS.ENTITIES;
   if (interaction.activeLayer === PANEL_LAYERS.ENTITIES) return PANEL_LAYERS.ENTITIES;
   if (interaction.activeLayer === PANEL_LAYERS.SOUND) return PANEL_LAYERS.SOUND;
   return PANEL_LAYERS.TILES;
@@ -2188,7 +2190,7 @@ export function createEditorApp({
     if (layer === PANEL_LAYERS.BACKGROUND) draft.ui.panelSections.background = true;
     if (layer === PANEL_LAYERS.TILES) draft.ui.panelSections.tiles = true;
     if (layer === PANEL_LAYERS.ENTITIES) draft.ui.panelSections.entities = true;
-    if (layer === PANEL_LAYERS.ENTITIES) draft.ui.panelSections.volumes = true;
+    if (layer === PANEL_LAYERS.VOLUMES) draft.ui.panelSections.volumes = true;
     if (layer === PANEL_LAYERS.DECOR) draft.ui.panelSections.decor = true;
     if (layer === PANEL_LAYERS.SOUND) draft.ui.panelSections.sound = true;
   };
@@ -2198,6 +2200,8 @@ export function createEditorApp({
       ? PANEL_LAYERS.BACKGROUND
       : layer === PANEL_LAYERS.DECOR
       ? PANEL_LAYERS.DECOR
+      : layer === PANEL_LAYERS.VOLUMES
+        ? PANEL_LAYERS.VOLUMES
       : layer === PANEL_LAYERS.ENTITIES
         ? PANEL_LAYERS.ENTITIES
         : layer === PANEL_LAYERS.SOUND
@@ -4119,6 +4123,7 @@ export function createEditorApp({
     if (activeLayer !== PANEL_LAYERS.ENTITIES) return false;
 
     const activeEntityPresetId = state.interaction.activeEntityPresetId;
+    if (isFogVolumeEntityType(activeEntityPresetId)) return false;
     if (activeEntityPresetId && isMomentaryPlacementTrigger(event)) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
@@ -5251,6 +5256,12 @@ if (event.shiftKey) {
       }
 
       if (layer === PANEL_LAYERS.ENTITIES) {
+        applyCanvasTarget(draft, "entity");
+        return;
+      }
+
+      if (layer === PANEL_LAYERS.VOLUMES) {
+        setActiveLayer(draft, PANEL_LAYERS.VOLUMES);
         applyCanvasTarget(draft, "entity");
         return;
       }

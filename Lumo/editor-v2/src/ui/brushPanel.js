@@ -22,6 +22,7 @@ const PANEL_LAYERS = {
   TILES: "tiles",
   BACKGROUND: "background",
   ENTITIES: "entities",
+  VOLUMES: "volumes",
   DECOR: "decor",
   SOUND: "sound",
 };
@@ -496,7 +497,7 @@ export function bindBrushPanel(panel, store, options = {}) {
 
     const volumeActionButton = target.closest("[data-volume-action]");
     if (volumeActionButton instanceof HTMLButtonElement) {
-      onLayerChange?.(PANEL_LAYERS.ENTITIES);
+      onLayerChange?.(PANEL_LAYERS.VOLUMES);
       if (volumeActionButton.dataset.volumeAction === "clear-preset") onVolumeUpdate?.(-1, "clear-preset", null);
       return;
     }
@@ -524,7 +525,7 @@ export function bindBrushPanel(panel, store, options = {}) {
 
     const volumePresetButton = target.closest("[data-volume-preset-button]");
     if (volumePresetButton instanceof HTMLButtonElement) {
-      onLayerChange?.(PANEL_LAYERS.ENTITIES);
+      onLayerChange?.(PANEL_LAYERS.VOLUMES);
       onVolumeUpdate?.(-1, "preset", volumePresetButton.dataset.volumePresetButton || null);
       return;
     }
