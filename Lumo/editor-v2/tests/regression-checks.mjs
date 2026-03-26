@@ -1147,7 +1147,9 @@ async function runFogVolumePlacementRuntimeRegressionChecks() {
     assert.equal(committed.interaction.volumePlacementDrag, null, "fog drag should clear transient drag state after commit");
     assert.equal(committed.document.active.entities.length, baselineCount + 1, "fog drag mouseup should commit exactly one authored entity");
     assert.equal(placedFog?.type, "fog_volume", "fog drag mouseup should commit through the fog special-volume entity path");
-    assert.equal((placedFog?.params?.area?.x1 || 0) > (placedFog?.params?.area?.x0 || 0), true, "fog drag commit should author a positive area width");
+    assert.equal(placedFog?.params?.area?.x0, startCell.x * committed.document.active.dimensions.tileSize, "fog drag commit should anchor the authored span start to the drag start tile");
+    assert.equal(placedFog?.params?.area?.x1, (endCell.x + 1) * committed.document.active.dimensions.tileSize, "fog drag commit should extend the authored span horizontally to the dragged end tile footprint");
+    assert.equal(placedFog?.params?.area?.y0, (startCell.y + 1) * committed.document.active.dimensions.tileSize, "fog drag commit should keep the authored fog baseline tied to the drag start row");
     assert.equal((placedFog?.params?.look?.thickness || 0) > 0, true, "fog drag commit should preserve fog baseline/thickness semantics from the special-volume path");
   } finally {
     harness.destroy();
@@ -2755,12 +2757,13 @@ function runFogPlacementPreviewRegressionChecks() {
   );
 
   const dragOverlay = createPreviewTestContext();
-  renderFogVolumePlacementPreview(dragOverlay.ctx, viewport, {
+  renderFogVolumePlacementPreview(dragOverlay.ctx, doc, viewport, {
     volumePlacementDrag: {
       active: true,
       type: "fog_volume",
-      startWorldPoint: { x: 16, y: 24 },
-      endWorldPoint: { x: 96, y: 72 },
+      startCell: { x: 1, y: 1 },
+      endCell: { x: 6, y: 4 },
+      thicknessPx: 32,
     },
   });
   assert.equal(
@@ -2773,6 +2776,8 @@ function runFogPlacementPreviewRegressionChecks() {
     true,
     "fog drag preview should render an area frame while the volume span is being authored",
   );
+  const fillRectOperation = dragOverlay.operations.find((operation) => operation[0] === "fillRect") || [];
+  assert.equal(fillRectOperation[4], 32, "fog drag preview should render a horizontal fog band using snapped baseline thickness");
   assert.equal(
     dragOverlay.operations.some((operation) => operation[0] === "arc"),
     false,
@@ -3812,6 +3817,7 @@ function runProximityOverlayRegressionChecks() {
   doc.entities = [
     { id: "entity-aggro", type: "hover_void_01", x: 2, y: 1, visible: true, params: { aggroTiles: 4 } },
     { id: "entity-trigger", type: "trigger", x: 1, y: 2, visible: true, params: { radius: 2 } },
+    { id: "entity-fog", type: "fog_volume", x: 2, y: 2, visible: true, params: { aggroTiles: 10, triggerDistance: 6 } },
     { id: "entity-none", type: "generic", x: 3, y: 3, visible: true, params: {} },
   ];
   const viewport = { offsetX: 0, offsetY: 0, zoom: 1 };
@@ -3827,6 +3833,11 @@ function runProximityOverlayRegressionChecks() {
     enabledCtx.operations.some(([name]) => name === "fillRect"),
     true,
     "zone sounds should draw area overlays when enabled",
+  );
+  assert.equal(
+    enabledCtx.operations.filter(([name]) => name === "arc").length,
+    3,
+    "special volumes should be excluded from aggro/proximity circles even if params include radius-like fields",
   );
 
   const disabledCtx = createPreviewTestContext();
@@ -4190,6 +4201,7 @@ function runUiRegressionChecks() {
   assert.equal(entitiesMarkup.includes('data-entity-preset-button="player-spawn"'), false, "Spawn should not appear as a placeable entity preset in the entities workflow");
   assert.equal(entitiesMarkup.includes('data-entity-preset-button="fog_volume"'), false, "fog volumes should not appear in the normal entities catalog");
   assert.equal(volumesMarkup.includes('data-volume-preset-button="fog_volume"'), true, "fog volumes should expose a dedicated picker entry in the volumes panel");
+  assert.equal(volumesMarkup.includes("entityPlacementStatusRow"), false, "volumes panel should keep helper copy removed for a compact picker-only flow");
   assert.equal(volumesMarkup.includes("Fog Volume · Alt/Option + Drag"), false, "fog status should only show active placement copy when selected");
   assert.equal(entitiesMarkup.includes('data-entity-preset-button="player-exit"'), true, "Exit should remain placeable from the entities workflow");
   assert.equal(decorMarkup.includes('data-decor-preset-button="player-spawn"'), false, "Spawn should not appear in the decor catalog");
@@ -4216,7 +4228,7 @@ function runUiRegressionChecks() {
   };
   renderBrushPanel(panel, entityInactiveState);
   assert.equal(panel.innerHTML.includes("Select an entity preset"), true, "entity status row should prompt for a preset when placement is not armed");
-  assert.equal(panel.innerHTML.includes("Select a volume type"), true, "volumes status row should prompt for a volume type when placement is not armed");
+  assert.equal(panel.innerHTML.includes("Select a volume type"), false, "volumes status helper text should stay removed in compact mode");
   assert.equal(panel.innerHTML.includes('data-scan-action="play"'), false, "scan transport controls should move out of the left brush panel");
   assert.equal(panel.innerHTML.includes('data-scan-action="pause"'), false, "scan pause controls should move out of the left brush panel");
   assert.equal(panel.innerHTML.includes('data-scan-action="stop"'), false, "scan stop controls should move out of the left brush panel");
@@ -5532,6 +5544,7 @@ function runSourceRegressionChecks() {
   assert.equal(
     source.includes("const updateVolume = (index, field, value) => {")
       && source.includes("draft.ui.panelSections.volumes = true;")
+      && source.includes("setActiveLayer(draft, PANEL_LAYERS.VOLUMES);")
       && source.includes("onVolumeUpdate: updateVolume,"),
     true,
     "volumes should route through a dedicated panel update lane that arms fog placement without touching the entities catalog",
@@ -5545,14 +5558,16 @@ function runSourceRegressionChecks() {
   assert.equal(
     source.includes("if (layer === PANEL_LAYERS.VOLUMES) {")
       && source.includes("setActiveLayer(draft, PANEL_LAYERS.VOLUMES);")
-      && source.includes('applyCanvasTarget(draft, "entity");'),
+      && source.includes('setCanvasSelectionMode(draft, "entity");')
+      && !source.includes('if (layer === PANEL_LAYERS.VOLUMES) {\n        setActiveLayer(draft, PANEL_LAYERS.VOLUMES);\n        applyCanvasTarget(draft, "entity");'),
     true,
     "panel layer routing should keep volumes first-class while preserving entity-layer canvas targeting",
   );
   assert.equal(
     source.includes("if (isFogVolumeEntityType(activeEntityPresetId)) {")
       && source.includes("draft.interaction.volumePlacementDrag = {")
-      && source.includes("createFogVolumeAtWorldRect(draft, {"),
+      && source.includes("const fogRect = getFogVolumeWorldRectFromDragCells(")
+      && source.includes("if (fogRect) createFogVolumeAtWorldRect(draft, fogRect);"),
     true,
     "fog placement should use the dedicated drag-to-area special-volume entrypoint",
   );

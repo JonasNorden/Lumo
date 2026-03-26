@@ -86,6 +86,7 @@ import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entiti
 import {
   applySpecialVolumeParamChange,
   createFogVolumeEntityFromWorldRect,
+  getFogVolumeWorldRectFromDragCells,
   isFogVolumeEntityType,
   isSpecialVolumeEntityType,
   syncSpecialVolumeEntityToAnchor,
@@ -2144,23 +2145,6 @@ export function createEditorApp({
     replacementInput.setSelectionRange(clampedStart, clampedEnd, snapshot.selectionDirection || "none");
   };
 
-  const getWorldPointFromCanvasPoint = (viewport, point) => ({
-    x: (point.x - viewport.offsetX) / Math.max(0.0001, viewport.zoom),
-    y: (point.y - viewport.offsetY) / Math.max(0.0001, viewport.zoom),
-  });
-
-  const clampWorldPointToDocument = (doc, point) => {
-    const maxX = doc.dimensions.width * doc.dimensions.tileSize;
-    const maxY = doc.dimensions.height * doc.dimensions.tileSize;
-    return {
-      x: Math.max(0, Math.min(maxX, point.x)),
-      y: Math.max(0, Math.min(maxY, point.y)),
-    };
-  };
-
-  const getClampedWorldPointFromCanvasPoint = (doc, viewport, point) =>
-    clampWorldPointToDocument(doc, getWorldPointFromCanvasPoint(viewport, point));
-
   const getNextStringId = (items, field, fallbackPrefix) => {
     const takenIds = new Set(
       items
@@ -3554,7 +3538,10 @@ export function createEditorApp({
         draft.interaction.activeSoundPresetId = null;
         draft.interaction.activeTool = EDITOR_TOOLS.INSPECT;
         draft.interaction.volumePlacementDrag = null;
-        applyCanvasTarget(draft, "entity");
+        setCanvasSelectionMode(draft, "entity");
+        setActiveLayer(draft, PANEL_LAYERS.VOLUMES);
+        clearDecorSelection(draft.interaction);
+        clearSoundSelection(draft.interaction);
         draft.ui.panelSections.volumes = true;
         return;
       }
@@ -4168,8 +4155,8 @@ export function createEditorApp({
       if (isFogVolumeEntityType(activeEntityPresetId)) {
         interactionState.suppressNextClick = true;
         event.preventDefault();
-        const worldPoint = getClampedWorldPointFromCanvasPoint(state.document.active, state.viewport, point);
         store.setState((draft) => {
+          const fogDefaults = getEntityPresetDefaultParams("fog_volume");
           draft.interaction.hoverCell = cell;
           draft.interaction.selectedCell = cell;
           draft.interaction.volumePlacementDrag = {
@@ -4177,8 +4164,7 @@ export function createEditorApp({
             type: "fog_volume",
             startCell: { ...cell },
             endCell: { ...cell },
-            startWorldPoint: { ...worldPoint },
-            endWorldPoint: { ...worldPoint },
+            thicknessPx: Number(fogDefaults?.look?.thickness) || null,
           };
           clearEntitySelection(draft.interaction);
           clearDecorSelection(draft.interaction);
@@ -4510,12 +4496,10 @@ if (event.shiftKey) {
       const point = getCanvasPointFromMouseEvent(canvas, event);
       const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
       if (!cell) return;
-      const worldPoint = getClampedWorldPointFromCanvasPoint(state.document.active, state.viewport, point);
       store.setState((draft) => {
         const volumePlacementDrag = draft.interaction.volumePlacementDrag;
         if (!volumePlacementDrag?.active) return;
         volumePlacementDrag.endCell = { ...cell };
-        volumePlacementDrag.endWorldPoint = { ...worldPoint };
         draft.interaction.hoverCell = cell;
         draft.interaction.selectedCell = cell;
       });
@@ -4708,12 +4692,13 @@ if (event.shiftKey) {
         const volumePlacementDrag = draft.interaction.volumePlacementDrag;
         if (!volumePlacementDrag?.active) return;
         if (volumePlacementDrag.type === "fog_volume") {
-          createFogVolumeAtWorldRect(draft, {
-            x0: volumePlacementDrag.startWorldPoint.x,
-            y0: volumePlacementDrag.startWorldPoint.y,
-            x1: volumePlacementDrag.endWorldPoint.x,
-            y1: volumePlacementDrag.endWorldPoint.y,
-          });
+          const fogRect = getFogVolumeWorldRectFromDragCells(
+            volumePlacementDrag.startCell,
+            volumePlacementDrag.endCell,
+            draft.document.active?.dimensions?.tileSize,
+            volumePlacementDrag.thicknessPx,
+          );
+          if (fogRect) createFogVolumeAtWorldRect(draft, fogRect);
         }
         draft.interaction.volumePlacementDrag = null;
       });
@@ -5261,8 +5246,21 @@ if (event.shiftKey) {
       }
 
       if (layer === PANEL_LAYERS.VOLUMES) {
+        resumeObjectPlacementPreviews(draft, "panel layer volumes");
+        setCanvasSelectionMode(draft, "entity");
         setActiveLayer(draft, PANEL_LAYERS.VOLUMES);
-        applyCanvasTarget(draft, "entity");
+        draft.interaction.boxSelection = null;
+        draft.interaction.entityDrag = null;
+        draft.interaction.decorDrag = null;
+        draft.interaction.soundDrag = null;
+        draft.interaction.scanDrag = null;
+        draft.interaction.volumePlacementDrag = null;
+        clearDecorScatterDrag(draft);
+        clearDecorSelection(draft.interaction);
+        clearSoundSelection(draft.interaction);
+        draft.interaction.hoveredDecorIndex = null;
+        draft.interaction.hoveredDecorId = null;
+        clearHoveredSound(draft.interaction);
         return;
       }
 
