@@ -112,6 +112,7 @@ export function createEditorState() {
       importStatus: null,
       workspaceBackground: "#0a0f1d",
       darknessPreviewEnabled: false,
+      proximityOverlaysEnabled: true,
       topBarMenu: null,
       newLevelSize: {
         isOpen: false,

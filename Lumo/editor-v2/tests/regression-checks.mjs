@@ -86,7 +86,7 @@ import {
   isExitEntityType,
   isSpawnEntityType,
 } from "../src/domain/entities/spawnExitRules.js";
-import { renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
+import { findEntityAtCanvasPoint, renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
 import { findDecorAtCanvasPoint, getDecorDrawMetrics, renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
 import { applyCanonicalDecorAction, createCanonicalDecorHistory } from "../src/app/cleanRoomDecorMode.js";
 import { applyCanonicalEntityAction, cloneCanonicalEntitySnapshot, createCanonicalEntityHistory } from "../src/app/cleanRoomEntityMode.js";
@@ -95,6 +95,7 @@ import { createEditorApp } from "../src/app/createEditorApp.js";
 import { createEditorState } from "../src/state/createEditorState.js";
 import { createStore } from "../src/state/createStore.js";
 import { findSoundAtCanvasPoint, renderSoundDragPreview, renderSoundPlacementPreview, renderSounds } from "../src/render/layers/soundLayer.js";
+import { renderProximityOverlays } from "../src/render/layers/proximityOverlayLayer.js";
 import { renderEditorFrame, WORLD_RENDER_ORDER, OVERLAY_RENDER_ORDER } from "../src/render/renderer.js";
 import { renderTiles } from "../src/render/layers/tileLayer.js";
 import { renderBackground } from "../src/render/layers/backgroundLayer.js";
@@ -3630,7 +3631,74 @@ function runCanvasRenderOrderRegressionChecks() {
   );
 
   assert.deepEqual(WORLD_RENDER_ORDER, ["background", "decor", "tiles", "entities"], "renderer should export the canonical world render order contract");
-  assert.deepEqual(OVERLAY_RENDER_ORDER, ["sound", "grid", "scan"], "renderer should keep sound/grid/scan on separate overlay lanes");
+  assert.deepEqual(OVERLAY_RENDER_ORDER, ["proximity", "sound", "grid", "scan"], "renderer should keep proximity/sound/grid/scan on separate overlay lanes");
+}
+
+
+function runProximityOverlayRegressionChecks() {
+  const state = createEditorState();
+  assert.equal(state.ui.proximityOverlaysEnabled, true, "proximity overlays should default to enabled so the feature is discoverable");
+
+  const appSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/app/createEditorApp.js"), "utf8");
+  assert.equal(
+    appSource.includes('data-preview-field="proximity-overlays"'),
+    true,
+    "settings menu should expose a proximity overlay toggle",
+  );
+  assert.equal(
+    appSource.includes('if (field === "proximity-overlays")'),
+    true,
+    "preview settings updates should support the proximity overlay toggle",
+  );
+
+  const doc = createDoc();
+  doc.sounds = [
+    { id: "sound-spot", type: "spot", x: 1, y: 1, visible: true, params: { radius: 3 } },
+    { id: "sound-zone", type: "ambientZone", x: 0, y: 0, visible: true, params: { width: 2, height: 2 } },
+  ];
+  doc.entities = [
+    { id: "entity-aggro", type: "hover_void_01", x: 2, y: 1, visible: true, params: { aggroTiles: 4 } },
+    { id: "entity-trigger", type: "trigger", x: 1, y: 2, visible: true, params: { radius: 2 } },
+    { id: "entity-none", type: "generic", x: 3, y: 3, visible: true, params: {} },
+  ];
+  const viewport = { offsetX: 0, offsetY: 0, zoom: 1 };
+
+  const enabledCtx = createPreviewTestContext();
+  renderProximityOverlays(enabledCtx.ctx, doc, viewport, { proximityOverlaysEnabled: true });
+  assert.equal(
+    enabledCtx.operations.some(([name]) => name === "arc"),
+    true,
+    "sound/entity overlays should draw circular radii when enabled",
+  );
+  assert.equal(
+    enabledCtx.operations.some(([name]) => name === "fillRect"),
+    true,
+    "zone sounds should draw area overlays when enabled",
+  );
+
+  const disabledCtx = createPreviewTestContext();
+  renderProximityOverlays(disabledCtx.ctx, doc, viewport, { proximityOverlaysEnabled: false });
+  assert.equal(disabledCtx.operations.length, 0, "overlays should not render anything when the global toggle is disabled");
+
+  const beforeDocSnapshot = JSON.stringify(doc);
+  const entityHitBefore = findEntityAtCanvasPoint(doc, viewport, 60, 48, 4);
+  const soundHitBefore = findSoundAtCanvasPoint(doc, viewport, 36, 36, 4);
+  renderProximityOverlays(createPreviewTestContext().ctx, doc, viewport, { proximityOverlaysEnabled: true });
+  const entityHitAfter = findEntityAtCanvasPoint(doc, viewport, 60, 48, 4);
+  const soundHitAfter = findSoundAtCanvasPoint(doc, viewport, 36, 36, 4);
+  assert.equal(JSON.stringify(doc), beforeDocSnapshot, "overlay rendering should not mutate authored entity/sound data");
+  assert.equal(entityHitAfter, entityHitBefore, "overlay rendering should not interfere with entity selection hit-testing");
+  assert.equal(soundHitAfter, soundHitBefore, "overlay rendering should not interfere with sound selection hit-testing");
+
+  const rendererSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../src/render/renderer.js"), "utf8");
+  const entityIndex = rendererSource.indexOf("renderEntities(worldCtx, doc, state.viewport, state.interaction);");
+  const overlayIndex = rendererSource.indexOf("renderProximityOverlays(ctx, doc, state.viewport, state.ui);");
+  const soundIndex = rendererSource.indexOf("renderSounds(ctx, doc, state.viewport, state.interaction, state.scan);");
+  assert.equal(
+    entityIndex >= 0 && overlayIndex > entityIndex && soundIndex > overlayIndex,
+    true,
+    "proximity overlays should render in a separate pass after entities and before later overlay/UI passes",
+  );
 }
 
 function runMinimapRenderOrderRegressionChecks() {
@@ -5601,6 +5669,7 @@ async function main() {
   runObjectLayerInteractionReconciliationChecks();
   runBackgroundLayerRegressionChecks();
   runCanvasRenderOrderRegressionChecks();
+  runProximityOverlayRegressionChecks();
   runMinimapRenderOrderRegressionChecks();
   runDarknessPreviewRegressionChecks();
   runScanRegressionChecks();
