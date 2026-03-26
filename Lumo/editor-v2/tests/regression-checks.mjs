@@ -2974,16 +2974,23 @@ function runDecorCatalogTruthRegressionChecks() {
   const sandbox = { window: {} };
   vm.runInNewContext(catalogSource, sandbox);
   const catalogEntries = sandbox.window.LUMO_CATALOG_ENTITIES || [];
-  const decorCatalog = collectDecorCatalogPresets(catalogEntries);
+  const decorCatalog = collectDecorCatalogPresets([
+    ...catalogEntries,
+    { id: "trigger", category: "decor", name: "Trigger", group: "Core" },
+    { id: "generic", category: "decor", name: "Generic", group: "Core" },
+    { id: "checkpoint_variant", type: "checkpoint", category: "decor", name: "Checkpoint Variant", group: "Core" },
+    { id: "painting_variant", type: "painting_01", category: "decor", name: "Painting Variant", group: "Decor" },
+  ]);
   const decorPresetIds = new Set(decorCatalog.map((entry) => entry.id));
 
   for (const presetId of ["painting_01", "painting_02", "painting_03", "painting_04", "painting_05", "painting_06"]) {
     assert.equal(decorPresetIds.has(presetId), true, `${presetId} should remain exposed as truthful decor catalog content`);
   }
 
-  for (const presetId of ["start_01", "exit_01", "checkpoint_01", "lantern_01", "dark_creature_01", "hover_void_01"]) {
+  for (const presetId of ["start_01", "exit_01", "checkpoint_01", "lantern_01", "dark_creature_01", "hover_void_01", "trigger", "generic", "checkpoint_variant"]) {
     assert.equal(decorPresetIds.has(presetId), false, `${presetId} should stay excluded from the decor catalog`);
   }
+  assert.equal(decorPresetIds.has("painting_variant"), true, "decor filtering should preserve legitimate painting decor entries");
 }
 
 function runSoundRegressionChecks() {
@@ -4056,6 +4063,10 @@ function runUiRegressionChecks() {
   assert.equal(entitiesMarkup.includes('data-entity-preset-button="player-exit"'), true, "Exit should remain placeable from the entities workflow");
   assert.equal(decorMarkup.includes('data-decor-preset-button="player-spawn"'), false, "Spawn should not appear in the decor catalog");
   assert.equal(decorMarkup.includes('data-decor-preset-button="player-exit"'), false, "Exit should not appear in the decor catalog");
+  for (const presetId of ["checkpoint", "lantern_01", "dark_creature_01", "trigger", "generic"]) {
+    assert.equal(entitiesMarkup.includes(`data-entity-preset-button="${presetId}"`), true, `${presetId} should remain exposed through Entities`);
+    assert.equal(decorMarkup.includes(`data-decor-preset-button="${presetId}"`), false, `${presetId} should not be duplicated in Decor`);
+  }
   assert.equal(isDecorEditableType("player-spawn"), false, "Spawn should always resolve through entity-like placement buckets");
   assert.equal(isDecorEditableType("player-exit"), false, "Exit should always resolve through entity-like placement buckets");
   const entityInactiveState = {
