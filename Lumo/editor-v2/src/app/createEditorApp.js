@@ -511,6 +511,7 @@ function renderSettingsMenu(state) {
   const layers = [...(active?.backgrounds?.layers || [])].sort((left, right) => (left.depth ?? 0) - (right.depth ?? 0));
   const { gridVisible, gridOpacity, gridColor } = state.viewport;
   const darknessPreviewEnabled = Boolean(state.ui.darknessPreviewEnabled);
+  const proximityOverlaysEnabled = state.ui.proximityOverlaysEnabled !== false;
 
   return `
     <div class="topBarMenuSection">
@@ -518,6 +519,10 @@ function renderSettingsMenu(state) {
       <label class="fieldRow compactInline">
         <span class="label">Darkness Preview</span>
         <input type="checkbox" data-preview-field="darkness" ${darknessPreviewEnabled ? "checked" : ""} />
+      </label>
+      <label class="fieldRow compactInline">
+        <span class="label">Proximity Overlays</span>
+        <input type="checkbox" data-preview-field="proximity-overlays" ${proximityOverlaysEnabled ? "checked" : ""} />
       </label>
       <div class="fieldMeta">Darkens the level view while keeping editing overlays readable.</div>
     </div>
@@ -1249,8 +1254,14 @@ export function createEditorApp({
 
   const updatePreviewSettings = (field, value) => {
     store.setState((draft) => {
-      if (field !== "darkness") return;
-      draft.ui.darknessPreviewEnabled = Boolean(value);
+      if (field === "darkness") {
+        draft.ui.darknessPreviewEnabled = Boolean(value);
+        return;
+      }
+
+      if (field === "proximity-overlays") {
+        draft.ui.proximityOverlaysEnabled = Boolean(value);
+      }
     });
   };
 
@@ -5411,8 +5422,8 @@ if (event.shiftKey) {
     }
 
     const previewField = target.dataset.previewField;
-    if (previewField === "darkness") {
-      updatePreviewSettings("darkness", target.checked);
+    if (previewField === "darkness" || previewField === "proximity-overlays") {
+      updatePreviewSettings(previewField, target.checked);
       return true;
     }
 
