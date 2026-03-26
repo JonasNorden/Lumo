@@ -1157,13 +1157,85 @@ async function runFogVolumePlacementRuntimeRegressionChecks() {
 
     const fogSelectionId = typeof placedFog?.id === "string" ? placedFog.id : null;
     assert.equal(committed.interaction.selectedEntityId, fogSelectionId, "fog drag commit should keep the placed fog volume selected for special-volume editing");
+    const originalFogSnapshot = JSON.parse(JSON.stringify(placedFog));
+
+    const fogSelectCell = { x: startCell.x + 1, y: startCell.y };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), fogSelectCell),
+      button: 0,
+    });
+    fakeWindow.dispatch("mouseup", {
+      ...getClientPointForCell(store.getState(), fogSelectCell),
+      button: 0,
+    });
+
+    const afterFogSelect = store.getState();
+    assert.equal(afterFogSelect.interaction.selectedEntityId, fogSelectionId, "clicking an existing fog volume should keep that fog volume selected");
+    assert.equal(afterFogSelect.interaction.activeLayer, "volumes", "clicking an existing fog volume should keep ownership on the VOLUMES layer");
+    assert.equal(afterFogSelect.ui.panelSections.entities, false, "clicking an existing fog volume should not auto-open the ENTITIES panel");
+    assert.equal(afterFogSelect.ui.panelSections.volumes, true, "clicking an existing fog volume should keep the VOLUMES panel section active");
+
+    const fogDragStartCell = { x: startCell.x + 2, y: startCell.y };
+    const fogDragEndCell = { x: fogDragStartCell.x + 2, y: fogDragStartCell.y + 1 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), fogDragStartCell),
+      button: 0,
+    });
+
+    const fogDragStarted = store.getState();
+    assert.equal(fogDragStarted.interaction.entityDrag?.active, true, "mousedown on an already selected fog volume should arm canonical drag for fog movement");
+    assert.equal(fogDragStarted.interaction.entityDrag?.leadEntityId, fogSelectionId, "fog drag should keep stable-id ownership for the selected fog volume");
+
+    canvas.dispatch("mousemove", {
+      ...getClientPointForCell(store.getState(), fogDragEndCell),
+      buttons: 1,
+    });
+
+    const fogDragPreview = store.getState();
+    assert.deepEqual(
+      fogDragPreview.interaction.entityDrag?.previewDelta,
+      { x: 2, y: 1 },
+      "fog drag preview should track tile delta without mutating fog area params until commit",
+    );
+
+    fakeWindow.dispatch("mouseup", {
+      ...getClientPointForCell(store.getState(), fogDragEndCell),
+      button: 0,
+    });
+
+    const afterFogMove = store.getState();
+    const movedFog = afterFogMove.document.active.entities.find((entity) => entity.id === fogSelectionId);
+    const tileSize = afterFogMove.document.active.dimensions.tileSize;
+    assert.equal(afterFogMove.interaction.entityDrag, null, "fog drag commit should clear transient canonical drag state");
+    assert.ok(movedFog, "fog drag commit should preserve the authored fog entity");
+    assert.equal(movedFog.x, originalFogSnapshot.x + 2, "fog drag commit should move fog anchor X by the drag delta");
+    assert.equal(movedFog.y, originalFogSnapshot.y + 1, "fog drag commit should move fog anchor Y by the drag delta");
+    assert.equal(
+      movedFog.params.area.x0,
+      originalFogSnapshot.params.area.x0 + (2 * tileSize),
+      "fog drag commit should shift fog area.x0 by drag delta in pixels",
+    );
+    assert.equal(
+      movedFog.params.area.x1,
+      originalFogSnapshot.params.area.x1 + (2 * tileSize),
+      "fog drag commit should shift fog area.x1 by drag delta in pixels while preserving span width",
+    );
+    assert.equal(
+      movedFog.params.area.y0,
+      originalFogSnapshot.params.area.y0 + (1 * tileSize),
+      "fog drag commit should shift fog area.y0 by drag delta in pixels while preserving baseline semantics",
+    );
+    assert.equal(afterFogMove.interaction.activeLayer, "volumes", "fog move commit should keep the active path on VOLUMES");
+    assert.equal(afterFogMove.ui.panelSections.entities, false, "fog move commit should continue suppressing ENTITIES auto-open");
+    assert.equal(afterFogMove.ui.panelSections.volumes, true, "fog move commit should keep VOLUMES/workbench ownership active");
+    assert.equal(afterFogMove.interaction.selectedEntityId, fogSelectionId, "fog move commit should keep the moved fog volume selected");
 
     const committedFogOverlay = createPreviewTestContext();
     renderEntities(
       committedFogOverlay.ctx,
-      committed.document.active,
-      committed.viewport,
-      committed.interaction,
+      afterFogMove.document.active,
+      afterFogMove.viewport,
+      afterFogMove.interaction,
     );
     assert.equal(
       committedFogOverlay.operations.some((operation) => operation[0] === "fillRect"),
@@ -5627,7 +5699,7 @@ function runSourceRegressionChecks() {
     "fog placement should use the dedicated drag-to-area special-volume entrypoint",
   );
   assert.equal(
-    source.includes("if (isFogVolumeEntityType(activeEntityPresetId)) return false;"),
+    source.includes("if (isFogVolumeEntityType(activeEntityPresetId) && isMomentaryPlacementTrigger(event)) return false;"),
     true,
     "fog placement arming should bypass generic entity Alt+click placement so drag placement owns the flow",
   );

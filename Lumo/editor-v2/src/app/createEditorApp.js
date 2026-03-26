@@ -89,6 +89,7 @@ import {
   getFogVolumeWorldRectFromDragCells,
   isFogVolumeEntityType,
   isSpecialVolumeEntityType,
+  shiftFogVolumeEntity,
   syncSpecialVolumeEntityToAnchor,
 } from "../domain/entities/specialVolumeTypes.js";
 import {
@@ -1447,16 +1448,35 @@ export function createEditorApp({
   };
 
   const syncCleanRoomEntitySelection = (draft, selectedEntityId = null) => {
-    applyCanvasTarget(draft, "entity");
-    draft.interaction.entityDrag = null;
-    draft.interaction.hoveredEntityIndex = null;
-    draft.interaction.hoveredEntityId = null;
+    const entities = draft.document.active?.entities || [];
+    const selectedEntity = typeof selectedEntityId === "string" && selectedEntityId.trim()
+      ? entities.find((entity) => entity?.id === selectedEntityId) || null
+      : null;
+    const selectingSpecialVolume = Boolean(selectedEntity && isSpecialVolumeEntityType(selectedEntity.type));
+    if (selectingSpecialVolume) {
+      resumeObjectPlacementPreviews(draft, "special volume selection");
+      setCanvasSelectionMode(draft, "entity");
+      setActiveLayer(draft, PANEL_LAYERS.VOLUMES);
+      draft.interaction.boxSelection = null;
+      draft.interaction.entityDrag = null;
+      draft.interaction.decorDrag = null;
+      draft.interaction.soundDrag = null;
+      draft.interaction.scanDrag = null;
+      draft.interaction.volumePlacementDrag = null;
+      clearDecorScatterDrag(draft);
+    } else {
+      applyCanvasTarget(draft, "entity");
+      draft.interaction.entityDrag = null;
+      draft.interaction.hoveredEntityIndex = null;
+      draft.interaction.hoveredEntityId = null;
+    }
 
     if (typeof selectedEntityId === "string" && selectedEntityId.trim()) {
       selectEntitiesByIds(draft, [selectedEntityId], selectedEntityId, {
         clearHover: true,
         clearHoverCell: true,
         clearDrag: true,
+        preserveCanvasTarget: selectingSpecialVolume,
       });
       return;
     }
@@ -1644,7 +1664,9 @@ export function createEditorApp({
   };
 
   const selectEntitiesByIds = (draft, ids = [], primaryId = null, options = {}) => {
-    applyCanvasTarget(draft, "entity");
+    if (!options.preserveCanvasTarget) {
+      applyCanvasTarget(draft, "entity");
+    }
     reconcileEntitySelectionState(draft, {
       selectedIds: ids,
       primaryId,
@@ -4049,8 +4071,7 @@ export function createEditorApp({
 
     const entityIndex = getEntityIndexById(doc.entities || [], entityId);
     const entity = Number.isInteger(entityIndex) ? doc.entities?.[entityIndex] : null;
-    if (!entity || isFogVolumeEntityType(entity.type)) return false;
-
+    if (!entity) return false;
     draft.interaction.entityDrag = {
       active: true,
       leadEntityId: entityId,
@@ -4089,13 +4110,20 @@ export function createEditorApp({
 
     const delta = entityDrag.previewDelta || { x: 0, y: 0 };
     const nextPosition = clampEntityPosition(doc, origin.x + delta.x, origin.y + delta.y);
-    const nextEntity = {
-      ...entity,
-      x: nextPosition.x,
-      y: nextPosition.y,
-      params: cloneEntityParams(entity.params),
-    };
-    if (entity.x === nextEntity.x && entity.y === nextEntity.y) return false;
+    const nextEntity = isFogVolumeEntityType(entity.type)
+      ? shiftFogVolumeEntity(
+        entity,
+        nextPosition.x - origin.x,
+        nextPosition.y - origin.y,
+        doc.dimensions.tileSize,
+      )
+      : {
+        ...entity,
+        x: nextPosition.x,
+        y: nextPosition.y,
+        params: cloneEntityParams(entity.params),
+      };
+    if (JSON.stringify(nextEntity) === JSON.stringify(entity)) return false;
 
     return applyCanonicalEntityUpdate(draft, {
       type: "update",
@@ -4110,8 +4138,8 @@ export function createEditorApp({
     if (activeLayer !== PANEL_LAYERS.ENTITIES) return false;
 
     const activeEntityPresetId = state.interaction.activeEntityPresetId;
-    if (isFogVolumeEntityType(activeEntityPresetId)) return false;
-    if (activeEntityPresetId && isMomentaryPlacementTrigger(event)) {
+    if (isFogVolumeEntityType(activeEntityPresetId) && isMomentaryPlacementTrigger(event)) return false;
+    if (activeEntityPresetId && !isFogVolumeEntityType(activeEntityPresetId) && isMomentaryPlacementTrigger(event)) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {

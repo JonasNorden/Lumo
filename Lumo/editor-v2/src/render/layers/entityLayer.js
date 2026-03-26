@@ -148,7 +148,22 @@ export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 
     const entity = entities[i];
     if (!entity.visible) continue;
 
-    if (isFogVolumeEntityType(entity.type)) continue;
+    if (isFogVolumeEntityType(entity.type)) {
+      const rect = getFogVolumeRect(entity, tileSize);
+      const x = viewport.offsetX + rect.x0 * viewport.zoom;
+      const y = viewport.offsetY + rect.top * viewport.zoom;
+      const width = Math.max(1, rect.width * viewport.zoom);
+      const height = Math.max(1, rect.height * viewport.zoom);
+      const expandedRadius = Math.max(1, radius * viewport.zoom);
+      const minX = x - expandedRadius;
+      const maxX = x + width + expandedRadius;
+      const minY = y - expandedRadius;
+      const maxY = y + height + expandedRadius;
+      if (pointX >= minX && pointX <= maxX && pointY >= minY && pointY <= maxY) {
+        return i;
+      }
+      continue;
+    }
 
     const center = getEntityScreenCenter(entity, tileSize, viewport);
     const hitRadius = (getEntityHitRadius(entity.type) + radius) * viewport.zoom;
