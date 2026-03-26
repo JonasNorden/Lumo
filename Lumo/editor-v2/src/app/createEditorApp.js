@@ -4692,13 +4692,23 @@ if (event.shiftKey) {
         const volumePlacementDrag = draft.interaction.volumePlacementDrag;
         if (!volumePlacementDrag?.active) return;
         if (volumePlacementDrag.type === "fog_volume") {
+          const entitiesPanelWasOpen = draft.ui.panelSections?.entities === true;
           const fogRect = getFogVolumeWorldRectFromDragCells(
             volumePlacementDrag.startCell,
             volumePlacementDrag.endCell,
             draft.document.active?.dimensions?.tileSize,
             volumePlacementDrag.thicknessPx,
           );
-          if (fogRect) createFogVolumeAtWorldRect(draft, fogRect);
+          if (fogRect) {
+            const createdIndex = createFogVolumeAtWorldRect(draft, fogRect);
+            if (createdIndex != null) {
+              setCanvasSelectionMode(draft, "entity");
+              setActiveLayer(draft, PANEL_LAYERS.VOLUMES);
+              if (!entitiesPanelWasOpen && draft.ui.panelSections) {
+                draft.ui.panelSections.entities = false;
+              }
+            }
+          }
         }
         draft.interaction.volumePlacementDrag = null;
       });
