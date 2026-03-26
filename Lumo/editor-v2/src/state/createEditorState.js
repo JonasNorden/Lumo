@@ -127,6 +127,10 @@ export function createEditorState() {
         background: true,
         sound: false,
       },
+      specialVolumeWorkbench: {
+        mode: "idle",
+        activeType: null,
+      },
     },
   };
 }

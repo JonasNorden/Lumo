@@ -75,7 +75,13 @@ import {
   setSoundSelection,
 } from "../src/domain/sound/selection.js";
 import { collectDarknessPreviewLights, getPreviewPlayerLight } from "../src/render/darknessPreview.js";
-import { createFogVolumeEntityFromWorldRect } from "../src/domain/entities/specialVolumeTypes.js";
+import {
+  applySpecialVolumeParamChange,
+  createFogVolumeEntityFromWorldRect,
+  getSpecialVolumeDescriptor,
+  listSpecialVolumeTypes,
+  syncSpecialVolumeEntityToAnchor,
+} from "../src/domain/entities/specialVolumeTypes.js";
 import { collectDecorCatalogPresets, findDecorPresetById } from "../src/domain/decor/decorPresets.js";
 import { getDecorVisual } from "../src/domain/decor/decorVisuals.js";
 import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
@@ -2556,6 +2562,17 @@ function runGlobalObjectLayerUndoRedoRegressionChecks() {
 }
 
 function runFogVolumeRegressionChecks() {
+  assert.deepEqual(
+    listSpecialVolumeTypes(),
+    ["fog_volume"],
+    "special-volume registry should expose fog_volume as the active initial type",
+  );
+  assert.equal(
+    getSpecialVolumeDescriptor("fog_volume")?.label,
+    "Fog Volume",
+    "fog_volume should resolve through the dedicated special-volume descriptor path",
+  );
+
   const normalized = validateLevelDocument({
     ...createDoc(),
     entities: [
@@ -2630,6 +2647,17 @@ function runFogVolumeRegressionChecks() {
   assert.equal(dragPlaced.params.area.x1 - dragPlaced.params.area.x0, 116, "fog drag placement should preserve the dragged width");
   assert.equal(dragPlaced.params.area.y0, 80, "fog drag placement should place the fog baseline on the authored lower edge cell");
   assert.equal(dragPlaced.params.look.thickness, 56, "fog drag placement should derive initial thickness from the drag height");
+
+  const movedFog = syncSpecialVolumeEntityToAnchor({ ...dragPlaced, x: dragPlaced.x + 3 }, 16);
+  assert.equal(movedFog.params.area.x0, movedFog.x * 16, "special-volume anchor sync should preserve fog area/anchor coupling");
+  assert.equal(movedFog.params.area.y0, (movedFog.y + 1) * 16, "special-volume anchor sync should keep fog baseline tied to the anchor cell");
+
+  const patchedFog = applySpecialVolumeParamChange(movedFog, "render.lumoBehindFog", false, 16);
+  assert.equal(
+    patchedFog.params.render.lumoBehindFog,
+    false,
+    "special-volume param routing should preserve nested fog render params on the dedicated path",
+  );
 }
 
 function runFogPlacementPreviewRegressionChecks() {
@@ -4384,7 +4412,10 @@ function runBottomPanelFogVolumeRegressionChecks() {
 
   renderBottomPanel(panel, state);
   assert.equal(panel.innerHTML.includes("bottomPanelScanPane"), true, "bottom panel should keep the permanent scan pane even when the selection editor is empty");
-  assert.equal(panel.innerHTML.includes("selectionEditorEmptyState"), false, "bottom panel should keep the editor pane visually empty for hidden fog volume selections");
+  assert.equal(panel.innerHTML.includes("Special Volume Workbench"), true, "bottom panel should route fog selection into the dedicated special-volume workbench shell");
+  assert.equal(panel.innerHTML.includes('data-special-volume-workbench="fog_volume"'), true, "special-volume workbench shell should identify fog_volume as the active type");
+  assert.equal(panel.innerHTML.includes("specialVolumeWorkbenchSectionHeader"), true, "special-volume workbench should render sectioned nested fog controls");
+  assert.equal(panel.innerHTML.includes('data-entity-param-path="area.x0"'), true, "special-volume workbench should expose nested fog area params by explicit param paths");
 }
 
 function runInspectorFogRegressionChecks() {
