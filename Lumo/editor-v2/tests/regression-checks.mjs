@@ -3646,9 +3646,29 @@ function runProximityOverlayRegressionChecks() {
     "settings menu should expose a proximity overlay toggle",
   );
   assert.equal(
+    appSource.includes('action === "toggle-proximity-overlays"'),
+    true,
+    "topbar should expose a direct proximity overlays toggle",
+  );
+  assert.equal(
     appSource.includes('if (field === "proximity-overlays")'),
     true,
     "preview settings updates should support the proximity overlay toggle",
+  );
+  assert.equal(
+    appSource.includes('updatePreviewSettings("proximity-overlays"'),
+    true,
+    "both settings and topbar paths should route through shared preview settings updates",
+  );
+  assert.equal(
+    appSource.includes("draft.ui.proximityOverlaysEnabled = Boolean(value);"),
+    true,
+    "proximity overlay toggles should keep writing to the existing ui.proximityOverlaysEnabled state",
+  );
+  assert.equal(
+    appSource.includes("proximityOverlaysTopBarEnabled"),
+    false,
+    "topbar should not introduce any duplicate proximity overlay state",
   );
 
   const doc = createDoc();
