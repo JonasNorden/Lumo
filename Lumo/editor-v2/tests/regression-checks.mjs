@@ -1379,6 +1379,23 @@ async function runFogWorkbenchInteractionRegressionChecks() {
       true,
       "fog decrement stepper should continue repeating while held",
     );
+
+    const beforeMouseHold = Number(steppedInput.value);
+    floatingPanelHost.dispatch("mousedown", { target: stepButton, shiftKey: false, button: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    const mouseHoldValue = Number(steppedInput.value);
+    assert.equal(
+      mouseHoldValue > beforeMouseHold,
+      true,
+      "fog stepper should repeat during a real mouse press-and-hold lane",
+    );
+    fakeWindow.dispatch("mouseup", { button: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    assert.equal(
+      Number(steppedInput.value),
+      mouseHoldValue,
+      "fog mouse hold-to-repeat should stop immediately on mouseup release",
+    );
   } finally {
     harness.destroy();
   }
@@ -5938,9 +5955,14 @@ function runSourceRegressionChecks() {
     "escape handling should close the fog workbench when the fog modal is active",
   );
   assert.equal(
-    source.includes("if (event.button !== 0 || event.isPrimary === false) return;"),
+    source.includes("if (event.pointerType === \"mouse\") return;"),
     true,
-    "fog stepper holds should only start from primary-button pointer presses",
+    "fog stepper pointer handling should bypass duplicate mouse pointerdown events so one hold session is owned by mousedown",
+  );
+  assert.equal(
+    source.includes("if (event.button !== 0) return;"),
+    true,
+    "fog stepper holds should only start from left mouse button presses on the explicit step controls",
   );
   assert.equal(
     source.includes("const inputRef = { index, path, fallbackInput: input };"),
@@ -5951,6 +5973,11 @@ function runSourceRegressionChecks() {
     source.includes("window.addEventListener(\"blur\", stopFogStepperSession);"),
     true,
     "fog stepper hold-to-repeat should cancel immediately when focus is lost",
+  );
+  assert.equal(
+    source.includes("floatingPanelHost.addEventListener(\"mousedown\", handleFloatingPanelMouseDown);"),
+    true,
+    "fog stepper controls should bind a native mouse hold path for reliable runtime press-and-hold behavior",
   );
   assert.equal(
     source.includes("fogStepperSession.repeatTimeoutId = globalThis.setTimeout(repeat, 78);"),
@@ -5986,6 +6013,16 @@ function runSourceRegressionChecks() {
     stylesSource.includes("transform: translate3d(calc(100% - var(--fog-preview-lumo-width, 24px)), -1px, 0)"),
     true,
     "fog preview Lumo patrol should traverse the full authored span instead of idling near the start edge",
+  );
+  assert.equal(
+    stylesSource.includes("animation-delay: var(--fog-preview-motion-phase-ms, 0ms);"),
+    true,
+    "fog preview Lumo patrol animation should preserve runtime phase so rerenders do not visually reset movement",
+  );
+  assert.equal(
+    specialWorkbenchSource.includes("--fog-preview-motion-phase-ms:"),
+    true,
+    "fog preview markup should stamp a live animation phase offset so Lumo keeps visibly traversing the span",
   );
 
   const handleCanvasMouseDownSection = source.match(/const handleCanvasMouseDown = \(event\) => \{[\s\S]*?\n  \};/);

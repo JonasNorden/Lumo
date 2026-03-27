@@ -5660,14 +5660,6 @@ if (event.shiftKey) {
   const stopFogStepperSession = () => {
     if (!fogStepperSession) return;
     globalThis.clearTimeout(fogStepperSession.repeatTimeoutId);
-    if (
-      fogStepperSession.button instanceof HTMLElement
-      && typeof fogStepperSession.button.releasePointerCapture === "function"
-      && Number.isInteger(fogStepperSession.pointerId)
-      && fogStepperSession.button.hasPointerCapture?.(fogStepperSession.pointerId)
-    ) {
-      fogStepperSession.button.releasePointerCapture(fogStepperSession.pointerId);
-    }
     fogStepperSession = null;
   };
 
@@ -5718,13 +5710,12 @@ if (event.shiftKey) {
       fogStepperSession.repeatTimeoutId = globalThis.setTimeout(repeat, 78);
     };
     fogStepperSession = {
-      button,
-      pointerId: Number.isInteger(event.pointerId) ? event.pointerId : null,
       repeatTimeoutId: globalThis.setTimeout(repeat, 165),
     };
   };
 
   const handleFloatingPanelPointerDown = (event) => {
+    if (event.pointerType === "mouse") return;
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
     const stepButton = target.closest("[data-fog-step-direction]");
@@ -5733,9 +5724,20 @@ if (event.shiftKey) {
     const direction = Number.parseInt(stepButton.dataset.fogStepDirection || "", 10);
     if (direction !== -1 && direction !== 1) return;
     event.preventDefault();
-    if (typeof stepButton.setPointerCapture === "function" && Number.isInteger(event.pointerId)) {
-      stepButton.setPointerCapture(event.pointerId);
-    }
+    event.stopPropagation();
+    startFogStepperSession(stepButton, direction, event);
+  };
+
+  const handleFloatingPanelMouseDown = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const stepButton = target.closest("[data-fog-step-direction]");
+    if (!(stepButton instanceof HTMLButtonElement)) return;
+    if (event.button !== 0) return;
+    const direction = Number.parseInt(stepButton.dataset.fogStepDirection || "", 10);
+    if (direction !== -1 && direction !== 1) return;
+    event.preventDefault();
+    event.stopPropagation();
     startFogStepperSession(stepButton, direction, event);
   };
 
@@ -6012,6 +6014,7 @@ if (event.shiftKey) {
   floatingPanelHost.addEventListener("input", handleFloatingPanelInput);
   floatingPanelHost.addEventListener("change", handleFloatingPanelChange);
   floatingPanelHost.addEventListener("pointerdown", handleFloatingPanelPointerDown);
+  floatingPanelHost.addEventListener("mousedown", handleFloatingPanelMouseDown);
   floatingPanelHost.addEventListener("keydown", handleFloatingPanelKeyDown, true);
   floatingPanelHost.addEventListener("submit", handleFloatingPanelSubmit);
   document.addEventListener("pointerdown", handleDocumentPointerDown);
@@ -6052,6 +6055,7 @@ if (event.shiftKey) {
     floatingPanelHost.removeEventListener("input", handleFloatingPanelInput);
     floatingPanelHost.removeEventListener("change", handleFloatingPanelChange);
     floatingPanelHost.removeEventListener("pointerdown", handleFloatingPanelPointerDown);
+    floatingPanelHost.removeEventListener("mousedown", handleFloatingPanelMouseDown);
     floatingPanelHost.removeEventListener("keydown", handleFloatingPanelKeyDown, true);
     floatingPanelHost.removeEventListener("submit", handleFloatingPanelSubmit);
     document.removeEventListener("pointerdown", handleDocumentPointerDown);
