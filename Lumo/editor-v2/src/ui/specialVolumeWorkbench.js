@@ -158,6 +158,8 @@ function renderFogPreview(selection, rect) {
   const bulge = Math.min(12, Math.max(0, Number(interaction.bulge) || 0));
   const organicStrength = Math.min(4, Math.max(0, Number(organic.strength) || 0));
   const organicSpeed = Math.min(8, Math.max(0, Number(organic.speed) || 0));
+  const traverseDurationMs = Math.max(2200, (9.6 - Math.min(4.6, organicSpeed * 0.65)) * 1000);
+  const motionPhaseMs = -Math.round(Date.now() % traverseDurationMs);
   const falloffPx = Math.max(0, Number(area.falloff) || Number(rect?.falloff) || 0);
   const spanWidthPx = Math.max(1, Number(rect?.width) || Math.abs((Number(area.x1) || 0) - (Number(area.x0) || 0)) || 1);
   const spanCoverage = Math.max(0.32, Math.min(0.92, spanWidthPx / Math.max(spanWidthPx + (falloffPx * 2) + 240, 1)));
@@ -198,6 +200,8 @@ function renderFogPreview(selection, rect) {
           --fog-bulge:${bulge.toFixed(3)};
           --fog-organic:${organicStrength.toFixed(3)};
           --fog-organic-speed:${organicSpeed.toFixed(3)};
+          --fog-preview-traverse-duration:${(traverseDurationMs / 1000).toFixed(3)}s;
+          --fog-preview-motion-phase-ms:${motionPhaseMs}ms;
           --fog-blend:${escapeHtml(blend)};
         "
       >

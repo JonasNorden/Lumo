@@ -2124,11 +2124,13 @@ kbd {
 }
 
 .fogWorkbenchPreviewSurface.isAnimated .fogWorkbenchPreviewLumo {
-  animation: fogWorkbenchLumoTraverse calc(9.6s - min(4.6s, var(--fog-organic-speed, 0) * 0.65s)) linear infinite;
+  animation: fogWorkbenchLumoTraverse var(--fog-preview-traverse-duration, calc(9.6s - min(4.6s, var(--fog-organic-speed, 0) * 0.65s))) linear infinite;
+  animation-delay: var(--fog-preview-motion-phase-ms, 0ms);
 }
 
 .fogWorkbenchPreviewSurface.isAnimated .fogWorkbenchPreviewDisturbance {
-  animation: fogWorkbenchLumoTraverse calc(9.6s - min(4.6s, var(--fog-organic-speed, 0) * 0.65s)) linear infinite;
+  animation: fogWorkbenchLumoTraverse var(--fog-preview-traverse-duration, calc(9.6s - min(4.6s, var(--fog-organic-speed, 0) * 0.65s))) linear infinite;
+  animation-delay: var(--fog-preview-motion-phase-ms, 0ms);
 }
 
 .fogWorkbenchPreviewSurface.isAnimated .fogWorkbenchPreviewBands {
