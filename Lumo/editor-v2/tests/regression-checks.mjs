@@ -4954,12 +4954,12 @@ function runFloatingFogWorkbenchRegressionChecks() {
   const modalDense = getSpecialVolumeWorkbenchModalContent(denserState);
   assert.ok(modalDense, "floating fog workbench should stay available after param edits");
   assert.equal(
-    modal?.markup.includes("--fog-opacity:0.267;"),
+    modal?.markup.includes("--fog-opacity:0.259;"),
     true,
     "floating fog preview should encode current fog values as inline preview variables",
   );
   assert.equal(
-    modalDense?.markup.includes("--fog-opacity:0.950;"),
+    modalDense?.markup.includes("--fog-opacity:0.615;"),
     true,
     "floating fog preview should update computed preview variables when fog params change",
   );
@@ -4981,8 +4981,8 @@ function runFloatingFogWorkbenchRegressionChecks() {
   );
   assert.equal(
     modal.markup.includes("--fog-falloff-start-pct:"),
-    true,
-    "floating fog preview should encode a short start fade and long authored-end taper to match smooke span behavior",
+    false,
+    "floating fog preview should avoid synthetic start-fade controls and rely on authored-end taper only",
   );
   assert.equal(modal.markup.includes("--fog-radius:92.000;"), true, "fog preview should map interaction radius into runtime preview styling variables");
   assert.equal(modal.markup.includes("--fog-gate:70.000;"), true, "fog preview should map interaction gate into runtime preview styling variables");
@@ -5004,6 +5004,26 @@ function runFloatingFogWorkbenchRegressionChecks() {
     modal.markup.includes("--fog-ground-baseline:14px;"),
     true,
     "floating fog preview should keep Lumo anchored to a stable ground baseline while fog rises through thickness/lift",
+  );
+  assert.equal(
+    modal.markup.includes('data-entity-param-path="look.color"'),
+    false,
+    "floating fog modal controls should hide look.color until it is represented truthfully by the smooke-aligned preview",
+  );
+  assert.equal(
+    modal.markup.includes('data-entity-param-path="look.exposure"'),
+    false,
+    "floating fog modal controls should hide look.exposure until it is represented truthfully by the smooke-aligned preview",
+  );
+  assert.equal(
+    modal.markup.includes('data-entity-param-path="render.blend"'),
+    false,
+    "floating fog modal controls should hide render.blend until it is represented truthfully by the smooke-aligned preview",
+  );
+  assert.equal(
+    modal.markup.includes("Hidden (not yet truthful in Smooke preview):"),
+    true,
+    "floating fog modal should explicitly document intentionally hidden controls when preview parity is not yet truthful",
   );
 
   const closedState = JSON.parse(JSON.stringify(baseState));
