@@ -2012,11 +2012,10 @@ kbd {
 .fogWorkbenchPreviewDisturbance {
   mask-image: linear-gradient(
     90deg,
-    transparent 0%,
-    rgba(0, 0, 0, 0.05) calc(var(--fog-falloff-pct, 6%) * 0.45),
-    black var(--fog-falloff-pct, 6%),
+    rgba(0, 0, 0, 0.12) 0%,
+    black var(--fog-falloff-start-pct, 1.5%),
     black calc(100% - var(--fog-falloff-pct, 6%)),
-    rgba(0, 0, 0, 0.05) calc(100% - (var(--fog-falloff-pct, 6%) * 0.45)),
+    rgba(0, 0, 0, 0.12) calc(100% - (var(--fog-falloff-pct, 6%) * 0.42)),
     transparent 100%
   );
 }
@@ -2075,12 +2074,12 @@ kbd {
     linear-gradient(
       180deg,
       transparent 0%,
-      color-mix(in srgb, var(--fog-color, #E1EEFF) 34%, transparent) calc(30% + (var(--fog-sample-taper, 0.25) * 14%)),
+      color-mix(in srgb, var(--fog-color, #E1EEFF) 28%, transparent) calc(22% + (var(--fog-sample-taper, 0.25) * 16%)),
       color-mix(in srgb, var(--fog-color, #E1EEFF) 86%, white 14%) 100%
     );
-  filter: blur(calc(1.5px + (var(--fog-diffuse, 0) * 5px)));
+  filter: blur(calc(1.5px + (var(--fog-diffuse, 0) * 5px))) saturate(calc(0.9 + (var(--fog-sample-layer-jitter, 1) * 0.15)));
   mix-blend-mode: var(--fog-blend, screen);
-  opacity: calc(0.38 + (var(--fog-sample-edge, 1) * 0.6));
+  opacity: calc((0.34 + (var(--fog-sample-edge, 1) * 0.62)) * var(--fog-sample-layer-jitter, 1));
 }
 
 .fogWorkbenchPreviewSample::after {
@@ -2089,7 +2088,7 @@ kbd {
   bottom: calc(-6px - (var(--fog-push, 0) * 0.4px));
   background: radial-gradient(84% 98% at 50% 100%, color-mix(in srgb, var(--fog-color, #E1EEFF) 72%, transparent) 0%, transparent 100%);
   filter: blur(calc(5px + (var(--fog-diffuse, 0) * 10px)));
-  opacity: calc(0.26 + (var(--fog-noise, 0) * 0.28));
+  opacity: calc((0.21 + (var(--fog-noise, 0) * 0.3)) * (0.88 + (var(--fog-sample-layer-jitter, 1) * 0.12)));
 }
 
 .fogWorkbenchPreviewMist {
@@ -2125,7 +2124,7 @@ kbd {
   position: absolute;
   width: var(--fog-preview-lumo-width, 24px);
   height: var(--fog-preview-lumo-height, 24px);
-  bottom: clamp(8px, calc((var(--fog-thickness, 44px) * 0.18) + 5px - (var(--fog-lift, 0px) * 0.22)), 26px);
+  bottom: var(--fog-ground-baseline, 14px);
   left: 0;
   transform: translate3d(0, 0, 0);
   will-change: transform;
