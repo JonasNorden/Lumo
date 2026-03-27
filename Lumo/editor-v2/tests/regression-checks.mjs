@@ -28,7 +28,7 @@ import {
 } from "../src/domain/tiles/tileSpriteCatalog.js";
 import { renderBottomPanel } from "../src/ui/bottomPanel.js";
 import { renderInspector } from "../src/ui/inspectorPanel.js";
-import { getSpecialVolumeWorkbenchModalContent } from "../src/ui/specialVolumeWorkbench.js";
+import { getSpecialVolumeWorkbenchLauncherContent, getSpecialVolumeWorkbenchModalContent } from "../src/ui/specialVolumeWorkbench.js";
 import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
 import {
   createNewLevelDocument,
@@ -517,6 +517,7 @@ async function createEditorRuntimeHarness() {
 
   return {
     canvas,
+    floatingPanelHost,
     store,
     fakeWindow,
     fakeDocument,
@@ -1245,6 +1246,122 @@ async function runFogVolumePlacementRuntimeRegressionChecks() {
       true,
       "fog drag commit should render a persistent authored fog band after mouseup",
     );
+  } finally {
+    harness.destroy();
+  }
+}
+
+async function runFogWorkbenchInteractionRegressionChecks() {
+  const harness = await createEditorRuntimeHarness();
+  const { canvas, floatingPanelHost, fakeWindow, store } = harness;
+
+  try {
+    store.setState((draft) => {
+      draft.interaction.activeTool = "inspect";
+      draft.interaction.activeLayer = "volumes";
+      draft.interaction.canvasSelectionMode = "entity";
+      draft.interaction.activeEntityPresetId = "fog_volume";
+      draft.ui.panelSections.volumes = true;
+      draft.ui.panelSections.entities = false;
+    });
+
+    const startCell = { x: 1, y: 1 };
+    const endCell = { x: 3, y: 2 };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), startCell),
+      altKey: true,
+      button: 0,
+    });
+    canvas.dispatch("mousemove", {
+      ...getClientPointForCell(store.getState(), endCell),
+      buttons: 1,
+    });
+    fakeWindow.dispatch("mouseup", {
+      ...getClientPointForCell(store.getState(), endCell),
+      button: 0,
+    });
+
+    const placed = store.getState();
+    const fogEntityId = placed.interaction.selectedEntityId;
+    const fogIndex = placed.document.active.entities.findIndex((entity) => entity.id === fogEntityId);
+    assert.equal(placed.ui.specialVolumeWorkbench.openEntityId, null, "selecting freshly placed fog should not auto-open the modal");
+
+    const fogSelectCell = { x: startCell.x + 1, y: startCell.y };
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), fogSelectCell),
+      button: 0,
+      detail: 1,
+    });
+    fakeWindow.dispatch("mouseup", {
+      ...getClientPointForCell(store.getState(), fogSelectCell),
+      button: 0,
+    });
+    assert.equal(store.getState().ui.specialVolumeWorkbench.openEntityId, null, "single-click selecting fog should keep modal closed");
+
+    canvas.dispatch("mousedown", {
+      ...getClientPointForCell(store.getState(), fogSelectCell),
+      button: 0,
+      detail: 2,
+    });
+    fakeWindow.dispatch("mouseup", {
+      ...getClientPointForCell(store.getState(), fogSelectCell),
+      button: 0,
+    });
+    assert.equal(store.getState().ui.specialVolumeWorkbench.openEntityId, fogEntityId, "double-clicking a selected fog volume should intentionally open the workbench modal");
+
+    const selectedFog = store.getState().document.active.entities[fogIndex];
+    const baselineThickness = Number(selectedFog?.params?.look?.thickness) || 0;
+    const emptyInput = new FakeElement();
+    emptyInput.value = "";
+    emptyInput.dataset = {
+      entityParamPath: "look.thickness",
+      entityParamType: "number",
+      entityIndex: String(fogIndex),
+      entityId: fogEntityId,
+    };
+    floatingPanelHost.dispatch("input", { target: emptyInput });
+    const afterClearedInput = store.getState().document.active.entities[fogIndex];
+    assert.equal(
+      Number(afterClearedInput?.params?.look?.thickness) || 0,
+      baselineThickness,
+      "clearing a fog numeric field should not force-immediately commit a fallback value while typing",
+    );
+
+    const steppedInput = new FakeElement();
+    steppedInput.value = String(baselineThickness);
+    steppedInput.dataset = {
+      entityParamPath: "look.thickness",
+      entityParamType: "number",
+      entityIndex: String(fogIndex),
+      entityId: fogEntityId,
+      fogNumberStep: "1",
+      fogNumberMin: "1",
+      fogNumberMax: "240",
+    };
+    steppedInput.dispatchEvent = () => {};
+    steppedInput.focus = () => {};
+    steppedInput.select = () => {};
+    const stepRoot = new FakeElement();
+    stepRoot.querySelector = () => steppedInput;
+    const stepButton = new FakeElement();
+    stepButton.dataset = { fogStepDirection: "1" };
+    stepButton.closest = (selector) => {
+      if (selector === "[data-fog-step-direction]") return stepButton;
+      if (selector === "[data-fog-number-field]") return stepRoot;
+      return null;
+    };
+
+    floatingPanelHost.dispatch("pointerdown", { target: stepButton, shiftKey: false, button: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const immediateValue = Number(steppedInput.value);
+    assert.equal(immediateValue > baselineThickness, true, "fog stepper pointer hold should apply an immediate first increment");
+    await new Promise((resolve) => setTimeout(resolve, 320));
+    const repeatedValue = Number(steppedInput.value);
+    assert.equal(repeatedValue > immediateValue, true, "fog stepper pointer hold should continue repeating while held");
+    fakeWindow.dispatch("pointerup", { button: 0 });
+    const stoppedValue = Number(steppedInput.value);
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    assert.equal(Number(steppedInput.value), stoppedValue, "fog stepper repeat should stop cleanly on pointer release");
   } finally {
     harness.destroy();
   }
@@ -4760,6 +4877,7 @@ function runFloatingFogWorkbenchRegressionChecks() {
     ui: {
       specialVolumeWorkbench: {
         mode: "floating",
+        openEntityId: "entity-fog",
       },
     },
   };
@@ -4772,6 +4890,8 @@ function runFloatingFogWorkbenchRegressionChecks() {
   assert.equal(modal.markup.includes('data-fog-preview-root'), true, "floating fog workbench should render a dedicated live preview pane");
   assert.equal(modal.markup.includes('data-fog-workbench-action="save-defaults"'), true, "floating fog workbench should expose save-as-default action for future placements");
   assert.equal(modal.markup.includes('data-fog-workbench-action="done"'), true, "floating fog workbench should expose an explicit done action to close the modal");
+  assert.equal(modal.markup.includes('data-fog-step-direction="1"'), true, "floating fog numeric controls should render explicit increment steppers");
+  assert.equal(modal.markup.includes('data-fog-step-direction="-1"'), true, "floating fog numeric controls should render explicit decrement steppers");
   assert.equal(modal.markup.includes('data-volume-preview-span'), true, "floating fog preview should render a bounded authored span instead of an endless field");
   assert.equal(modal.markup.includes('data-fog-preview-stop="start"'), true, "floating fog preview should render an authored start stop marker");
   assert.equal(modal.markup.includes('data-fog-preview-stop="end"'), true, "floating fog preview should render an authored end stop marker");
@@ -4814,6 +4934,20 @@ function runFloatingFogWorkbenchRegressionChecks() {
     modalSoft?.markup.includes("--fog-falloff-pct:38.00%;"),
     true,
     "high falloff values should produce long soft fade variables in the preview output",
+  );
+
+  const closedState = JSON.parse(JSON.stringify(baseState));
+  closedState.ui.specialVolumeWorkbench.openEntityId = null;
+  assert.equal(
+    getSpecialVolumeWorkbenchModalContent(closedState),
+    null,
+    "floating fog workbench modal should remain closed until the user explicitly opens it",
+  );
+  const launcherMarkup = getSpecialVolumeWorkbenchLauncherContent(closedState);
+  assert.equal(
+    launcherMarkup.includes('data-fog-workbench-action="open"'),
+    true,
+    "selected fog volumes should expose an explicit launcher action when the modal is closed",
   );
 }
 
@@ -6203,6 +6337,7 @@ async function main() {
   await runSpawnExitRuntimeRegressionChecks();
   await runLiveSoundPlacementRuntimeRegressionChecks();
   await runFogVolumePlacementRuntimeRegressionChecks();
+  await runFogWorkbenchInteractionRegressionChecks();
   await runArrowKeyPanRuntimeRegressionChecks();
   runObjectLayerStableIdentityHistoryRegressionChecks();
   runGlobalObjectLayerUndoRedoRegressionChecks();
