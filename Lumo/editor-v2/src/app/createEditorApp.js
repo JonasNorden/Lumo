@@ -5660,12 +5660,30 @@ if (event.shiftKey) {
   const stopFogStepperSession = () => {
     if (!fogStepperSession) return;
     globalThis.clearTimeout(fogStepperSession.repeatTimeoutId);
+    if (
+      fogStepperSession.button instanceof HTMLElement
+      && typeof fogStepperSession.button.releasePointerCapture === "function"
+      && Number.isInteger(fogStepperSession.pointerId)
+      && fogStepperSession.button.hasPointerCapture?.(fogStepperSession.pointerId)
+    ) {
+      fogStepperSession.button.releasePointerCapture(fogStepperSession.pointerId);
+    }
     fogStepperSession = null;
   };
 
-  const nudgeFogNumberInput = (button, direction, options = null) => {
-    const root = button.closest("[data-fog-number-field]");
-    const input = root?.querySelector('input[data-entity-param-type="number"]');
+  const resolveFogStepperInput = (inputRef) => {
+    if (!inputRef || typeof inputRef.path !== "string") return null;
+    const escapeSelectorValue = (value) => String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+    const liveInput = floatingPanelHost.querySelector(
+      `input[data-entity-param-type="number"][data-entity-index="${escapeSelectorValue(inputRef.index)}"][data-entity-param-path="${escapeSelectorValue(inputRef.path)}"]`,
+    );
+    if (liveInput instanceof HTMLInputElement) return liveInput;
+    if (inputRef.fallbackInput instanceof HTMLInputElement) return inputRef.fallbackInput;
+    return null;
+  };
+
+  const nudgeFogNumberInput = (inputRef, direction, options = null) => {
+    const input = resolveFogStepperInput(inputRef);
     if (!(input instanceof HTMLInputElement)) return;
     const baseStep = Number.parseFloat(input.dataset.fogNumberStep || input.step || "1");
     const step = Number.isFinite(baseStep) && baseStep > 0 ? baseStep : 1;
@@ -5684,15 +5702,24 @@ if (event.shiftKey) {
   };
 
   const startFogStepperSession = (button, direction, event) => {
+    const root = button.closest("[data-fog-number-field]");
+    const input = root?.querySelector('input[data-entity-param-type="number"]');
+    if (!(input instanceof HTMLInputElement)) return;
+    const index = Number.parseInt(input.dataset.entityIndex || "", 10);
+    const path = typeof input.dataset.entityParamPath === "string" ? input.dataset.entityParamPath.trim() : "";
+    if (!Number.isInteger(index) || !path) return;
     stopFogStepperSession();
     const useLargeStep = Boolean(event?.shiftKey);
-    nudgeFogNumberInput(button, direction, { useLargeStep });
+    const inputRef = { index, path, fallbackInput: input };
+    nudgeFogNumberInput(inputRef, direction, { useLargeStep });
     const repeat = () => {
       if (!fogStepperSession) return;
-      nudgeFogNumberInput(button, direction, { useLargeStep });
+      nudgeFogNumberInput(inputRef, direction, { useLargeStep });
       fogStepperSession.repeatTimeoutId = globalThis.setTimeout(repeat, 78);
     };
     fogStepperSession = {
+      button,
+      pointerId: Number.isInteger(event.pointerId) ? event.pointerId : null,
       repeatTimeoutId: globalThis.setTimeout(repeat, 165),
     };
   };
@@ -5973,6 +6000,7 @@ if (event.shiftKey) {
   window.addEventListener("mouseup", stopFogStepperSession);
   window.addEventListener("pointerup", stopFogStepperSession);
   window.addEventListener("pointercancel", stopFogStepperSession);
+  window.addEventListener("blur", stopFogStepperSession);
   canvas.addEventListener("click", handleCanvasClick);
   minimapCanvas.addEventListener("click", handleMinimapClick);
   window.addEventListener("keydown", handleGlobalKeyDown);
@@ -6012,6 +6040,7 @@ if (event.shiftKey) {
     window.removeEventListener("mouseup", stopFogStepperSession);
     window.removeEventListener("pointerup", stopFogStepperSession);
     window.removeEventListener("pointercancel", stopFogStepperSession);
+    window.removeEventListener("blur", stopFogStepperSession);
     canvas.removeEventListener("click", handleCanvasClick);
     minimapCanvas.removeEventListener("click", handleMinimapClick);
     window.removeEventListener("keydown", handleGlobalKeyDown);

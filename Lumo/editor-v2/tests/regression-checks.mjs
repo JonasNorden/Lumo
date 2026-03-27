@@ -4913,6 +4913,11 @@ function runFloatingFogWorkbenchRegressionChecks() {
   assert.equal(modal.markup.includes('data-fog-preview-stop="start"'), true, "floating fog preview should render an authored start stop marker");
   assert.equal(modal.markup.includes('data-fog-preview-stop="end"'), true, "floating fog preview should render an authored end stop marker");
   assert.equal(modal.markup.includes('data-fog-preview-lumo'), true, "floating fog preview should include a representative Lumo actor in the span");
+  assert.equal(
+    modal.markup.includes("fogWorkbenchPreviewLumoSprite"),
+    true,
+    "floating fog preview should render the shared Lumo sprite representation used by spawn/start visuals",
+  );
   assert.equal(modal.markup.includes("isAnimated"), true, "floating fog preview should keep lightweight looped motion enabled for Lumo/fog interaction readability");
   assert.equal(modal.markup.includes(">Area<"), true, "floating fog workbench should preserve Area section grouping");
   assert.equal(modal.markup.includes(">Look<"), true, "floating fog workbench should preserve Look section grouping");
@@ -5938,6 +5943,16 @@ function runSourceRegressionChecks() {
     "fog stepper holds should only start from primary-button pointer presses",
   );
   assert.equal(
+    source.includes("const inputRef = { index, path, fallbackInput: input };"),
+    true,
+    "fog stepper repeat should resolve the current live field each tick so holds survive modal rerenders",
+  );
+  assert.equal(
+    source.includes("window.addEventListener(\"blur\", stopFogStepperSession);"),
+    true,
+    "fog stepper hold-to-repeat should cancel immediately when focus is lost",
+  );
+  assert.equal(
     source.includes("fogStepperSession.repeatTimeoutId = globalThis.setTimeout(repeat, 78);"),
     true,
     "fog stepper hold-to-repeat should continue through one active timeout loop while pressed",
@@ -5953,14 +5968,24 @@ function runSourceRegressionChecks() {
     "fog workbench styles should keep compact stepper sizing scoped to the modal numeric controls",
   );
   assert.equal(
-    stylesSource.includes("max-height: min(74vh, 680px);"),
+    stylesSource.includes("max-height: min(88vh, 860px);"),
     true,
-    "fog workbench modal should cap vertical growth so Save/Done remain reachable",
+    "fog workbench modal should expand vertically while still capping growth so Save/Done remain reachable",
   );
   assert.equal(
     stylesSource.includes("grid-template-rows: auto minmax(0, 1fr);"),
     true,
     "fog workbench modal should reserve bounded body space for stable two-pane footer visibility",
+  );
+  assert.equal(
+    stylesSource.includes(".specialVolumeWorkbenchNumberInput input::-webkit-inner-spin-button"),
+    true,
+    "fog workbench numeric fields should suppress native browser steppers when custom steppers are present",
+  );
+  assert.equal(
+    stylesSource.includes("transform: translate3d(calc(100% - var(--fog-preview-lumo-width, 24px)), -1px, 0)"),
+    true,
+    "fog preview Lumo patrol should traverse the full authored span instead of idling near the start edge",
   );
 
   const handleCanvasMouseDownSection = source.match(/const handleCanvasMouseDown = \(event\) => \{[\s\S]*?\n  \};/);
