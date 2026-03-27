@@ -28,12 +28,6 @@ import {
 } from "../src/domain/tiles/tileSpriteCatalog.js";
 import { renderBottomPanel } from "../src/ui/bottomPanel.js";
 import { renderInspector } from "../src/ui/inspectorPanel.js";
-import {
-  buildFogPreviewFieldProfile,
-  getFogPreviewPatrolPhase,
-  getSpecialVolumeWorkbenchLauncherContent,
-  getSpecialVolumeWorkbenchModalContent,
-} from "../src/ui/specialVolumeWorkbench.js";
 import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
 import {
   createNewLevelDocument,
@@ -81,15 +75,6 @@ import {
   setSoundSelection,
 } from "../src/domain/sound/selection.js";
 import { collectDarknessPreviewLights, getPreviewPlayerLight } from "../src/render/darknessPreview.js";
-import {
-  applySpecialVolumeParamChange,
-  createFogVolumeEntityFromWorldRect,
-  getFogVolumeParams,
-  getFogWorkbenchFieldMeta,
-  getSpecialVolumeDescriptor,
-  listSpecialVolumeTypes,
-  syncSpecialVolumeEntityToAnchor,
-} from "../src/domain/entities/specialVolumeTypes.js";
 import { collectDecorCatalogPresets, findDecorPresetById } from "../src/domain/decor/decorPresets.js";
 import { getDecorVisual } from "../src/domain/decor/decorVisuals.js";
 import { findEntityPresetById } from "../src/domain/entities/entityPresets.js";
@@ -113,7 +98,7 @@ import { renderProximityOverlays } from "../src/render/layers/proximityOverlayLa
 import { renderEditorFrame, WORLD_RENDER_ORDER, OVERLAY_RENDER_ORDER } from "../src/render/renderer.js";
 import { renderTiles } from "../src/render/layers/tileLayer.js";
 import { renderBackground } from "../src/render/layers/backgroundLayer.js";
-import { renderBrushPreviewOverlay, renderFogVolumePlacementPreview } from "../src/render/layers/previewLayer.js";
+import { renderBrushPreviewOverlay } from "../src/render/layers/previewLayer.js";
 import { renderMinimap } from "../src/render/minimap.js";
 import { findSoundPresetById } from "../src/domain/sound/soundPresets.js";
 import {
@@ -1101,306 +1086,6 @@ async function runLiveSoundPlacementRuntimeRegressionChecks() {
       },
     );
     assert.equal(previewOperations.length, 0, "normal live usage should no longer render any legacy sound drag overlay or preview");
-  } finally {
-    harness.destroy();
-  }
-}
-
-async function runFogVolumePlacementRuntimeRegressionChecks() {
-  const harness = await createEditorRuntimeHarness();
-  const { canvas, fakeWindow, store } = harness;
-
-  try {
-    const before = store.getState();
-    const baselineCount = before.document.active.entities.length;
-
-    store.setState((draft) => {
-      draft.interaction.activeTool = "inspect";
-      draft.interaction.activeLayer = "volumes";
-      draft.interaction.canvasSelectionMode = "entity";
-      draft.interaction.activeEntityPresetId = "fog_volume";
-      draft.interaction.activeDecorPresetId = null;
-      draft.interaction.activeSoundPresetId = null;
-      draft.ui.panelSections.entities = false;
-      draft.ui.panelSections.volumes = true;
-    });
-
-    const startCell = { x: 1, y: 1 };
-    const endCell = { x: 4, y: 3 };
-    canvas.dispatch("mousedown", {
-      ...getClientPointForCell(store.getState(), startCell),
-      altKey: true,
-      button: 0,
-    });
-
-    const dragStarted = store.getState();
-    assert.equal(dragStarted.interaction.volumePlacementDrag?.active, true, "Alt+mousedown with fog armed should start dedicated volume drag placement");
-    assert.equal(dragStarted.document.active.entities.length, baselineCount, "fog drag start should not commit a point-placement entity before mouseup");
-    assert.equal(dragStarted.interaction.entityDrag?.active, undefined, "fog drag start should not route through the canonical point-entity drag lane");
-
-    canvas.dispatch("mousemove", {
-      ...getClientPointForCell(store.getState(), endCell),
-      buttons: 1,
-    });
-
-    const dragMoved = store.getState();
-    assert.deepEqual(dragMoved.interaction.volumePlacementDrag?.endCell, endCell, "fog drag should update the authored drag span while the pointer moves");
-
-    fakeWindow.dispatch("mouseup", {
-      ...getClientPointForCell(store.getState(), endCell),
-      button: 0,
-    });
-
-    const committed = store.getState();
-    const placedFog = committed.document.active.entities.at(-1);
-    assert.equal(committed.interaction.volumePlacementDrag, null, "fog drag should clear transient drag state after commit");
-    assert.equal(committed.document.active.entities.length, baselineCount + 1, "fog drag mouseup should commit exactly one authored entity");
-    assert.equal(placedFog?.type, "fog_volume", "fog drag mouseup should commit through the fog special-volume entity path");
-    assert.equal(placedFog?.params?.area?.x0, startCell.x * committed.document.active.dimensions.tileSize, "fog drag commit should anchor the authored span start to the drag start tile");
-    assert.equal(placedFog?.params?.area?.x1, (endCell.x + 1) * committed.document.active.dimensions.tileSize, "fog drag commit should extend the authored span horizontally to the dragged end tile footprint");
-    assert.equal(placedFog?.params?.area?.y0, (startCell.y + 1) * committed.document.active.dimensions.tileSize, "fog drag commit should keep the authored fog baseline tied to the drag start row");
-    assert.equal((placedFog?.params?.look?.thickness || 0) > 0, true, "fog drag commit should preserve fog baseline/thickness semantics from the special-volume path");
-    assert.equal(committed.interaction.activeLayer, "volumes", "fog drag commit should keep the active authoring layer on VOLUMES");
-    assert.equal(committed.ui.panelSections.volumes, true, "fog drag commit should keep the VOLUMES panel section available");
-    assert.equal(committed.ui.panelSections.entities, false, "fog drag commit should not force-open the ENTITIES panel section");
-
-    const fogSelectionId = typeof placedFog?.id === "string" ? placedFog.id : null;
-    assert.equal(committed.interaction.selectedEntityId, fogSelectionId, "fog drag commit should keep the placed fog volume selected for special-volume editing");
-    const originalFogSnapshot = JSON.parse(JSON.stringify(placedFog));
-
-    const fogSelectCell = { x: startCell.x + 1, y: startCell.y };
-    canvas.dispatch("mousedown", {
-      ...getClientPointForCell(store.getState(), fogSelectCell),
-      button: 0,
-    });
-    fakeWindow.dispatch("mouseup", {
-      ...getClientPointForCell(store.getState(), fogSelectCell),
-      button: 0,
-    });
-
-    const afterFogSelect = store.getState();
-    assert.equal(afterFogSelect.interaction.selectedEntityId, fogSelectionId, "clicking an existing fog volume should keep that fog volume selected");
-    assert.equal(afterFogSelect.interaction.activeLayer, "volumes", "clicking an existing fog volume should keep ownership on the VOLUMES layer");
-    assert.equal(afterFogSelect.ui.panelSections.entities, false, "clicking an existing fog volume should not auto-open the ENTITIES panel");
-    assert.equal(afterFogSelect.ui.panelSections.volumes, true, "clicking an existing fog volume should keep the VOLUMES panel section active");
-
-    const fogDragStartCell = { x: startCell.x + 2, y: startCell.y };
-    const fogDragEndCell = { x: fogDragStartCell.x + 2, y: fogDragStartCell.y + 1 };
-    canvas.dispatch("mousedown", {
-      ...getClientPointForCell(store.getState(), fogDragStartCell),
-      button: 0,
-    });
-
-    const fogDragStarted = store.getState();
-    assert.equal(fogDragStarted.interaction.entityDrag?.active, true, "mousedown on an already selected fog volume should arm canonical drag for fog movement");
-    assert.equal(fogDragStarted.interaction.entityDrag?.leadEntityId, fogSelectionId, "fog drag should keep stable-id ownership for the selected fog volume");
-
-    canvas.dispatch("mousemove", {
-      ...getClientPointForCell(store.getState(), fogDragEndCell),
-      buttons: 1,
-    });
-
-    const fogDragPreview = store.getState();
-    assert.deepEqual(
-      fogDragPreview.interaction.entityDrag?.previewDelta,
-      { x: 2, y: 1 },
-      "fog drag preview should track tile delta without mutating fog area params until commit",
-    );
-
-    fakeWindow.dispatch("mouseup", {
-      ...getClientPointForCell(store.getState(), fogDragEndCell),
-      button: 0,
-    });
-
-    const afterFogMove = store.getState();
-    const movedFog = afterFogMove.document.active.entities.find((entity) => entity.id === fogSelectionId);
-    const tileSize = afterFogMove.document.active.dimensions.tileSize;
-    assert.equal(afterFogMove.interaction.entityDrag, null, "fog drag commit should clear transient canonical drag state");
-    assert.ok(movedFog, "fog drag commit should preserve the authored fog entity");
-    assert.equal(movedFog.x, originalFogSnapshot.x + 2, "fog drag commit should move fog anchor X by the drag delta");
-    assert.equal(movedFog.y, originalFogSnapshot.y + 1, "fog drag commit should move fog anchor Y by the drag delta");
-    assert.equal(
-      movedFog.params.area.x0,
-      originalFogSnapshot.params.area.x0 + (2 * tileSize),
-      "fog drag commit should shift fog area.x0 by drag delta in pixels",
-    );
-    assert.equal(
-      movedFog.params.area.x1,
-      originalFogSnapshot.params.area.x1 + (2 * tileSize),
-      "fog drag commit should shift fog area.x1 by drag delta in pixels while preserving span width",
-    );
-    assert.equal(
-      movedFog.params.area.y0,
-      originalFogSnapshot.params.area.y0 + (1 * tileSize),
-      "fog drag commit should shift fog area.y0 by drag delta in pixels while preserving baseline semantics",
-    );
-    assert.equal(afterFogMove.interaction.activeLayer, "volumes", "fog move commit should keep the active path on VOLUMES");
-    assert.equal(afterFogMove.ui.panelSections.entities, false, "fog move commit should continue suppressing ENTITIES auto-open");
-    assert.equal(afterFogMove.ui.panelSections.volumes, true, "fog move commit should keep VOLUMES/workbench ownership active");
-    assert.equal(afterFogMove.interaction.selectedEntityId, fogSelectionId, "fog move commit should keep the moved fog volume selected");
-
-    const committedFogOverlay = createPreviewTestContext();
-    renderEntities(
-      committedFogOverlay.ctx,
-      afterFogMove.document.active,
-      afterFogMove.viewport,
-      afterFogMove.interaction,
-    );
-    assert.equal(
-      committedFogOverlay.operations.some((operation) => operation[0] === "fillRect"),
-      true,
-      "fog drag commit should render a persistent authored fog band after mouseup",
-    );
-  } finally {
-    harness.destroy();
-  }
-}
-
-async function runFogWorkbenchInteractionRegressionChecks() {
-  const harness = await createEditorRuntimeHarness();
-  const { canvas, floatingPanelHost, fakeWindow, store } = harness;
-
-  try {
-    store.setState((draft) => {
-      draft.interaction.activeTool = "inspect";
-      draft.interaction.activeLayer = "volumes";
-      draft.interaction.canvasSelectionMode = "entity";
-      draft.interaction.activeEntityPresetId = "fog_volume";
-      draft.ui.panelSections.volumes = true;
-      draft.ui.panelSections.entities = false;
-    });
-
-    const startCell = { x: 1, y: 1 };
-    const endCell = { x: 3, y: 2 };
-    canvas.dispatch("mousedown", {
-      ...getClientPointForCell(store.getState(), startCell),
-      altKey: true,
-      button: 0,
-    });
-    canvas.dispatch("mousemove", {
-      ...getClientPointForCell(store.getState(), endCell),
-      buttons: 1,
-    });
-    fakeWindow.dispatch("mouseup", {
-      ...getClientPointForCell(store.getState(), endCell),
-      button: 0,
-    });
-
-    const placed = store.getState();
-    const fogEntityId = placed.interaction.selectedEntityId;
-    const fogIndex = placed.document.active.entities.findIndex((entity) => entity.id === fogEntityId);
-    assert.equal(placed.ui.specialVolumeWorkbench.openEntityId, null, "selecting freshly placed fog should not auto-open the modal");
-
-    const fogSelectCell = { x: startCell.x + 1, y: startCell.y };
-    canvas.dispatch("mousedown", {
-      ...getClientPointForCell(store.getState(), fogSelectCell),
-      button: 0,
-      detail: 1,
-    });
-    fakeWindow.dispatch("mouseup", {
-      ...getClientPointForCell(store.getState(), fogSelectCell),
-      button: 0,
-    });
-    assert.equal(store.getState().ui.specialVolumeWorkbench.openEntityId, null, "single-click selecting fog should keep modal closed");
-
-    canvas.dispatch("mousedown", {
-      ...getClientPointForCell(store.getState(), fogSelectCell),
-      button: 0,
-      detail: 2,
-    });
-    fakeWindow.dispatch("mouseup", {
-      ...getClientPointForCell(store.getState(), fogSelectCell),
-      button: 0,
-    });
-    assert.equal(store.getState().ui.specialVolumeWorkbench.openEntityId, fogEntityId, "double-clicking a selected fog volume should intentionally open the workbench modal");
-
-    const selectedFog = store.getState().document.active.entities[fogIndex];
-    const baselineThickness = Number(selectedFog?.params?.look?.thickness) || 0;
-    const emptyInput = new FakeElement();
-    emptyInput.value = "";
-    emptyInput.dataset = {
-      entityParamPath: "look.thickness",
-      entityParamType: "number",
-      entityIndex: String(fogIndex),
-      entityId: fogEntityId,
-    };
-    floatingPanelHost.dispatch("input", { target: emptyInput });
-    const afterClearedInput = store.getState().document.active.entities[fogIndex];
-    assert.equal(
-      Number(afterClearedInput?.params?.look?.thickness) || 0,
-      baselineThickness,
-      "clearing a fog numeric field should not force-immediately commit a fallback value while typing",
-    );
-
-    const steppedInput = new FakeElement();
-    steppedInput.value = String(baselineThickness);
-    steppedInput.dataset = {
-      entityParamPath: "look.thickness",
-      entityParamType: "number",
-      entityIndex: String(fogIndex),
-      entityId: fogEntityId,
-      fogNumberStep: "1",
-      fogNumberMin: "1",
-      fogNumberMax: "240",
-    };
-    steppedInput.dispatchEvent = () => {};
-    steppedInput.focus = () => {};
-    steppedInput.select = () => {};
-    const stepRoot = new FakeElement();
-    stepRoot.querySelector = () => steppedInput;
-    const stepButton = new FakeElement();
-    stepButton.dataset = { fogStepDirection: "1" };
-    stepButton.closest = (selector) => {
-      if (selector === "[data-fog-step-direction]") return stepButton;
-      if (selector === "[data-fog-number-field]") return stepRoot;
-      return null;
-    };
-
-    floatingPanelHost.dispatch("pointerdown", { target: stepButton, shiftKey: false, button: 0 });
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    const immediateValue = Number(steppedInput.value);
-    assert.equal(immediateValue > baselineThickness, true, "fog stepper pointer hold should apply an immediate first increment");
-    await new Promise((resolve) => setTimeout(resolve, 320));
-    const repeatedValue = Number(steppedInput.value);
-    assert.equal(repeatedValue > immediateValue, true, "fog stepper pointer hold should continue repeating while held");
-    fakeWindow.dispatch("mouseup", { button: 0 });
-    const stoppedValue = Number(steppedInput.value);
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    assert.equal(Number(steppedInput.value), stoppedValue, "fog stepper repeat should stop cleanly on pointer release");
-
-    const downStepButton = new FakeElement();
-    downStepButton.dataset = { fogStepDirection: "-1" };
-    downStepButton.closest = (selector) => {
-      if (selector === "[data-fog-step-direction]") return downStepButton;
-      if (selector === "[data-fog-number-field]") return stepRoot;
-      return null;
-    };
-    const beforeDownHold = Number(steppedInput.value);
-    floatingPanelHost.dispatch("pointerdown", { target: downStepButton, shiftKey: false, button: 0 });
-    await new Promise((resolve) => setTimeout(resolve, 220));
-    fakeWindow.dispatch("mouseup", { button: 0 });
-    assert.equal(
-      Number(steppedInput.value) < beforeDownHold,
-      true,
-      "fog decrement stepper should continue repeating while held",
-    );
-
-    const beforeMouseHold = Number(steppedInput.value);
-    floatingPanelHost.dispatch("mousedown", { target: stepButton, shiftKey: false, button: 0 });
-    await new Promise((resolve) => setTimeout(resolve, 260));
-    const mouseHoldValue = Number(steppedInput.value);
-    assert.equal(
-      mouseHoldValue > beforeMouseHold,
-      true,
-      "fog stepper should repeat during a real mouse press-and-hold lane",
-    );
-    fakeWindow.dispatch("mouseup", { button: 0 });
-    await new Promise((resolve) => setTimeout(resolve, 180));
-    assert.equal(
-      Number(steppedInput.value),
-      mouseHoldValue,
-      "fog mouse hold-to-repeat should stop immediately on mouseup release",
-    );
   } finally {
     harness.destroy();
   }
@@ -2868,136 +2553,6 @@ function runGlobalObjectLayerUndoRedoRegressionChecks() {
 
   redoTileEdit(doc, history);
   assert.equal(doc.decor.length, 0, "fourth redo should reapply the most recent decor deletion");
-}
-
-function runFogVolumeRegressionChecks() {
-  assert.deepEqual(
-    listSpecialVolumeTypes(),
-    ["fog_volume"],
-    "special-volume registry should expose fog_volume as the active initial type",
-  );
-  assert.equal(
-    getSpecialVolumeDescriptor("fog_volume")?.label,
-    "Fog Volume",
-    "fog_volume should resolve through the dedicated special-volume descriptor path",
-  );
-
-  const normalized = validateLevelDocument({
-    ...createDoc(),
-    entities: [
-      {
-        id: "entity-fog",
-        name: "Fog Volume",
-        type: "fog_volume",
-        x: 3,
-        y: 2,
-        visible: true,
-        params: {
-          area: {
-            x0: 48,
-            x1: 144,
-            y0: 48,
-            falloff: 18,
-          },
-          look: {
-            density: 0.22,
-            thickness: 36,
-          },
-          render: {
-            blend: "screen",
-            lumoBehindFog: false,
-          },
-        },
-      },
-    ],
-  });
-
-  const normalizedFog = normalized.entities.find((entity) => entity.type === "fog_volume");
-  assert.equal(Boolean(normalizedFog), true, "fog volumes should stay in the entity list");
-  assert.deepEqual(
-    normalizedFog.params.area,
-    { x0: 48, x1: 144, y0: 48, falloff: 18 },
-    "fog volume validation should sync area semantics to the authored anchor while preserving nested area fields",
-  );
-  assert.equal(
-    normalizedFog.params.look.thickness,
-    36,
-    "fog volume validation should preserve nested look params",
-  );
-  assert.equal(
-    normalizedFog.params.render.lumoBehindFog,
-    false,
-    "fog volume validation should preserve nested render params",
-  );
-
-  const serialized = serializeLevelDocument(normalized);
-  const roundTrip = JSON.parse(serialized);
-  assert.deepEqual(
-    roundTrip.entities[0].params.look,
-    normalized.entities[0].params.look,
-    "fog volume export should preserve nested look params",
-  );
-  assert.deepEqual(
-    roundTrip.entities[0].params.render,
-    normalized.entities[0].params.render,
-    "fog volume export should preserve nested render params",
-  );
-
-  const dragPlaced = createFogVolumeEntityFromWorldRect({
-    ...normalized.entities[0],
-    x: 0,
-    y: 0,
-  }, {
-    x0: 14,
-    y0: 18,
-    x1: 130,
-    y1: 74,
-  }, 16);
-  assert.equal(dragPlaced.params.area.x1 - dragPlaced.params.area.x0, 116, "fog drag placement should preserve the dragged width");
-  assert.equal(dragPlaced.params.area.y0, 80, "fog drag placement should place the fog baseline on the authored lower edge cell");
-  assert.equal(dragPlaced.params.look.thickness, 56, "fog drag placement should derive initial thickness from the drag height");
-
-  const movedFog = syncSpecialVolumeEntityToAnchor({ ...dragPlaced, x: dragPlaced.x + 3 }, 16);
-  assert.equal(movedFog.params.area.x0, movedFog.x * 16, "special-volume anchor sync should preserve fog area/anchor coupling");
-  assert.equal(movedFog.params.area.y0, (movedFog.y + 1) * 16, "special-volume anchor sync should keep fog baseline tied to the anchor cell");
-
-  const patchedFog = applySpecialVolumeParamChange(movedFog, "render.lumoBehindFog", false, 16);
-  assert.equal(
-    patchedFog.params.render.lumoBehindFog,
-    false,
-    "special-volume param routing should preserve nested fog render params on the dedicated path",
-  );
-
-  const clampedFog = applySpecialVolumeParamChange(movedFog, "look.density", 99, 16);
-  assert.equal(
-    clampedFog.params.look.density,
-    1,
-    "fog param updates should clamp out-of-range values to safe numeric bounds",
-  );
-  const resilientFog = applySpecialVolumeParamChange(
-    { ...movedFog, params: { ...movedFog.params, look: { ...movedFog.params.look, thickness: "bad-value", color: "definitely-not-a-color" } } },
-    "look.thickness",
-    Number.NaN,
-    16,
-  );
-  assert.equal(
-    Number.isFinite(resilientFog.params.look.thickness),
-    true,
-    "fog param updates should normalize malformed numeric writes without propagating NaN",
-  );
-  assert.equal(
-    resilientFog.params.look.color.startsWith("#"),
-    true,
-    "fog param updates should normalize malformed color writes to valid hex values",
-  );
-
-  const workbenchMeta = getFogWorkbenchFieldMeta("smoothing.visc");
-  assert.equal(workbenchMeta?.label, "Viscosity", "fog workbench metadata should provide normalized field labels");
-  assert.equal(workbenchMeta?.min, 0, "fog workbench metadata should expose numeric range safety hints");
-  assert.equal(workbenchMeta?.max, 1, "fog workbench metadata should expose numeric range ceilings");
-  const normalizedParams = getFogVolumeParams({ type: "fog_volume", params: { look: { density: "Infinity", thickness: -50 } } });
-  assert.equal(normalizedParams.look.density, 0.14, "fog param normalization should recover invalid density values to defaults");
-  assert.equal(normalizedParams.look.thickness, 1, "fog param normalization should clamp authored thickness to safe minimums");
 }
 
 function runFogPlacementPreviewRegressionChecks() {
@@ -6657,15 +6212,11 @@ async function main() {
   await runLiveCanonicalSoundMoveRuntimeRegressionChecks();
   await runSpawnExitRuntimeRegressionChecks();
   await runLiveSoundPlacementRuntimeRegressionChecks();
-  await runFogVolumePlacementRuntimeRegressionChecks();
-  await runFogWorkbenchInteractionRegressionChecks();
   await runArrowKeyPanRuntimeRegressionChecks();
   runObjectLayerStableIdentityHistoryRegressionChecks();
   runGlobalObjectLayerUndoRedoRegressionChecks();
   runMixedLayerGlobalChronologyRegressionChecks();
   runCanonicalParameterMutationRegressionChecks();
-  runFogVolumeRegressionChecks();
-  runFogPlacementPreviewRegressionChecks();
   runObjectPlacementPreviewSuppressionRegressionChecks();
   runDecorRegressionChecks();
   runDecorMetadataParityRegressionChecks();
@@ -6684,15 +6235,9 @@ async function main() {
   runScanLineRenderRegressionChecks();
   runScanAudioPlaybackRegressionChecks();
   await runScanAudioAssetFallbackChecks();
-  runUiRegressionChecks();
   runSoundBatchSelectionRegressionChecks();
   runBottomPanelBatchSoundRegressionChecks();
-  runBottomPanelFogVolumeRegressionChecks();
-  runFloatingFogWorkbenchRegressionChecks();
-  runFogPreviewMotionRegressionChecks();
-  runInspectorFogRegressionChecks();
   runInspectorSoundSummaryRegressionChecks();
-  runSourceRegressionChecks();
 
   console.log("editor-v2 regression checks passed");
 }

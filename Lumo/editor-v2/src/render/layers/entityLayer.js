@@ -1,6 +1,5 @@
 import { getEntityHitRadius, getEntityVisual } from "../../domain/entities/entityVisuals.js";
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
-import { getFogVolumeParams, getFogVolumeRect, isFogVolumeEntityType } from "../../domain/entities/specialVolumeTypes.js";
 import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
 function getEntityCenter(entity, tileSize) {
@@ -148,23 +147,6 @@ export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 
     const entity = entities[i];
     if (!entity.visible) continue;
 
-    if (isFogVolumeEntityType(entity.type)) {
-      const rect = getFogVolumeRect(entity, tileSize);
-      const x = viewport.offsetX + rect.x0 * viewport.zoom;
-      const y = viewport.offsetY + rect.top * viewport.zoom;
-      const width = Math.max(1, rect.width * viewport.zoom);
-      const height = Math.max(1, rect.height * viewport.zoom);
-      const expandedRadius = Math.max(1, radius * viewport.zoom);
-      const minX = x - expandedRadius;
-      const maxX = x + width + expandedRadius;
-      const minY = y - expandedRadius;
-      const maxY = y + height + expandedRadius;
-      if (pointX >= minX && pointX <= maxX && pointY >= minY && pointY <= maxY) {
-        return i;
-      }
-      continue;
-    }
-
     const center = getEntityScreenCenter(entity, tileSize, viewport);
     const hitRadius = (getEntityHitRadius(entity.type) + radius) * viewport.zoom;
     const dx = pointX - center.x;
@@ -204,63 +186,8 @@ export function renderEntities(ctx, doc, viewport, interaction) {
 
   for (let i = 0; i < entities.length; i += 1) {
     const entity = entities[i];
-    if (!entity?.visible || !isFogVolumeEntityType(entity.type)) continue;
-    const rect = getFogVolumeRect(entity, tileSize);
-    const fogParams = getFogVolumeParams(entity);
-    const x = viewport.offsetX + rect.x0 * viewport.zoom;
-    const y = viewport.offsetY + rect.top * viewport.zoom;
-    const width = Math.max(1, rect.width * viewport.zoom);
-    const height = Math.max(1, rect.height * viewport.zoom);
-    const isSelected = selectedEntityIds.has(entity.id);
-    const isHovered = hoveredEntityId === entity.id;
-    const density = Math.min(1, Math.max(0, Number(fogParams?.look?.density) || 0));
-    const exposure = Math.min(4, Math.max(0.1, Number(fogParams?.look?.exposure) || 1));
-    const diffuse = Math.min(1, Math.max(0, Number(fogParams?.smoothing?.diffuse) || 0));
-    const relax = Math.min(1, Math.max(0, Number(fogParams?.smoothing?.relax) || 0));
-    const push = Math.min(12, Math.max(0, Number(fogParams?.interaction?.push) || 0));
-    const bulge = Math.min(12, Math.max(0, Number(fogParams?.interaction?.bulge) || 0));
-    const drift = Math.min(8, Math.max(-8, Number(fogParams?.look?.drift) || 0));
-    const organicStrength = Math.min(4, Math.max(0, Number(fogParams?.organic?.strength) || 0));
-    const organicSpeed = Math.min(8, Math.max(0, Number(fogParams?.organic?.speed) || 0));
-    const softnessPx = Math.max(1, Math.round(((diffuse * 0.65) + (relax * 0.35)) * height * 0.5));
-    const motionAmplitudePx = Math.max(0, Math.round((Math.abs(drift) * 0.28 + push * 0.18 + bulge * 0.12 + organicStrength * organicSpeed * 0.22) * viewport.zoom));
-    const motionInsetPx = Math.max(0, Math.round((push * 0.7 + organicStrength * 1.4) * viewport.zoom));
-    const baseAlpha = Math.min(0.9, Math.max(0.06, (0.12 + density * 0.52) * Math.sqrt(exposure)));
-    const hoverBoost = isSelected ? 0.1 : isHovered ? 0.06 : 0;
-
-    ctx.save();
-    ctx.fillStyle = `rgba(158, 198, 255, ${Math.min(0.98, baseAlpha + hoverBoost)})`;
-    ctx.strokeStyle = isSelected
-      ? "rgba(255, 214, 138, 0.92)"
-      : "rgba(195, 223, 255, 0.88)";
-    ctx.lineWidth = isSelected ? 1.4 : 1.1;
-    ctx.fillRect(x, y, width, height);
-    if (softnessPx > 0) {
-      const edgeAlpha = Math.min(0.82, 0.1 + diffuse * 0.36 + relax * 0.2 + organicStrength * 0.06);
-      ctx.fillStyle = `rgba(158, 198, 255, ${edgeAlpha})`;
-      ctx.fillRect(x, y, width, softnessPx);
-      ctx.fillRect(x, y + Math.max(0, height - softnessPx), width, softnessPx);
-    }
-    if (motionAmplitudePx > 0) {
-      const driftOffset = Math.round(drift * 1.2 * viewport.zoom);
-      const flowBandHeight = Math.max(1, Math.round(height * 0.35));
-      const flowY = y + Math.max(0, Math.round((height - flowBandHeight) / 2) + driftOffset - Math.round(motionAmplitudePx / 2));
-      const flowX = x + motionInsetPx;
-      const flowW = Math.max(1, width - motionInsetPx * 2);
-      const flowH = Math.max(1, flowBandHeight + motionAmplitudePx);
-      const flowAlpha = Math.min(0.8, 0.08 + (push + bulge) * 0.012 + organicStrength * 0.06);
-      ctx.fillStyle = `rgba(195, 223, 255, ${flowAlpha})`;
-      ctx.fillRect(flowX, flowY, flowW, flowH);
-    }
-    ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
-    ctx.restore();
-  }
-
-  for (let i = 0; i < entities.length; i += 1) {
-    const entity = entities[i];
     if (!entity.visible) continue;
 
-    if (isFogVolumeEntityType(entity.type)) continue;
 
     const dragOrigin = draggedEntityOrigins?.get(entity.id) || null;
     const renderEntity = dragOrigin
@@ -296,7 +223,6 @@ export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, ac
   const presetType = typeof activePreset?.type === "string" && activePreset.type.trim()
     ? activePreset.type
     : "generic";
-  if (isFogVolumeEntityType(presetType)) return;
   const previewEntity = {
     type: presetType,
     x: interaction.hoverCell.x,

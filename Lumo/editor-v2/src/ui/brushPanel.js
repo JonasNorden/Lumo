@@ -8,7 +8,6 @@ import { TOOL_OPTIONS, EDITOR_TOOLS, isEditorTool } from "../domain/tiles/tools.
 import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
 import { DECOR_PRESETS } from "../domain/decor/decorPresets.js";
 import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
-import { listSpecialVolumeTypes } from "../domain/entities/specialVolumeTypes.js";
 import {
   findBrushSpriteOptionByValue,
   getFallbackBrushSizeForSprite,
@@ -22,7 +21,6 @@ const PANEL_LAYERS = {
   TILES: "tiles",
   BACKGROUND: "background",
   ENTITIES: "entities",
-  VOLUMES: "volumes",
   DECOR: "decor",
   SOUND: "sound",
 };
@@ -35,15 +33,11 @@ const VISIBLE_TOOL_OPTIONS = TOOL_OPTIONS.filter((option) => (
 
 const HIDDEN_ENTITY_PRESET_IDS = new Set(["player-spawn", "fog_volume", "trigger", "generic"]);
 const PLACEABLE_ENTITY_PRESETS = ENTITY_PRESETS.filter((preset) => !HIDDEN_ENTITY_PRESET_IDS.has(preset.id));
-const PLACEABLE_SPECIAL_VOLUME_PRESETS = listSpecialVolumeTypes()
-  .map((type) => ENTITY_PRESETS.find((preset) => preset.type === type || preset.id === type))
-  .filter(Boolean);
 const COLLAPSIBLE_PANEL_DEFAULTS = {
   tiles: false,
   background: true,
   decor: false,
   entities: false,
-  volumes: false,
   sound: false,
 };
 
@@ -255,18 +249,6 @@ function renderEntitiesSettings(state) {
   `;
 }
 
-function renderVolumesSettings(state) {
-  const activePresetId = state.interaction.activeEntityPresetId;
-  const activeVolume = PLACEABLE_SPECIAL_VOLUME_PRESETS.find((preset) => preset.id === activePresetId) || null;
-
-  return `
-    ${renderAssetPicker("Special volumes", "volume-preset-button", PLACEABLE_SPECIAL_VOLUME_PRESETS, activePresetId, "No volume type available")}
-    <div class="compactActionRow compactActionRowSingle">
-      <button type="button" class="toolButton isSecondary" data-volume-action="clear-preset" ${activeVolume ? "" : "disabled"}>Clear</button>
-    </div>
-  `;
-}
-
 function renderDecorSettings(state) {
   const activePresetId = state.interaction.activeDecorPresetId;
   const activePreset = DECOR_PRESETS.find((preset) => preset.id === activePresetId) || null;
@@ -395,13 +377,12 @@ export function renderBrushPanel(panel, state) {
     ${state.document.active ? renderSection("background", "BACKGROUND", panelSections.background, renderBackgroundSettings(state)) : ""}
     ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
     ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
-    ${state.document.active ? renderSection("volumes", "VOLUMES", panelSections.volumes, renderVolumesSettings(state)) : ""}
     ${state.document.active ? renderSoundSection(state.interaction.activeSoundPresetId, panelSections.sound) : ""}
   `;
 }
 
 export function bindBrushPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onVolumeUpdate, onCanvasTargetChange, onLayerChange } = options;
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onCanvasTargetChange, onLayerChange } = options;
 
   const onChange = (event) => {
     const target = event.target;
@@ -489,13 +470,6 @@ export function bindBrushPanel(panel, store, options = {}) {
       return;
     }
 
-    const volumeActionButton = target.closest("[data-volume-action]");
-    if (volumeActionButton instanceof HTMLButtonElement) {
-      onLayerChange?.(PANEL_LAYERS.VOLUMES);
-      if (volumeActionButton.dataset.volumeAction === "clear-preset") onVolumeUpdate?.(-1, "clear-preset", null);
-      return;
-    }
-
     const soundActionButton = target.closest("[data-sound-action]");
     if (soundActionButton instanceof HTMLButtonElement) {
       onLayerChange?.(PANEL_LAYERS.SOUND);
@@ -514,13 +488,6 @@ export function bindBrushPanel(panel, store, options = {}) {
     if (entityPresetButton instanceof HTMLButtonElement) {
       onLayerChange?.(PANEL_LAYERS.ENTITIES);
       onEntityUpdate?.(-1, "preset", entityPresetButton.dataset.entityPresetButton || null);
-      return;
-    }
-
-    const volumePresetButton = target.closest("[data-volume-preset-button]");
-    if (volumePresetButton instanceof HTMLButtonElement) {
-      onLayerChange?.(PANEL_LAYERS.VOLUMES);
-      onVolumeUpdate?.(-1, "preset", volumePresetButton.dataset.volumePresetButton || null);
       return;
     }
 
