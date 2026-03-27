@@ -1,5 +1,3 @@
-import { isSpecialVolumeEntityType } from "../../domain/entities/specialVolumeTypes.js";
-
 const SOUND_OVERLAY_STYLE = Object.freeze({
   stroke: "rgba(97, 191, 255, 0.78)",
   fill: "rgba(97, 191, 255, 0.12)",
@@ -84,7 +82,7 @@ function resolveEntityScreenCenter(entity, tileSize, viewport) {
 }
 
 function resolveEntityOverlayFromParams(entity, tileSize) {
-  if (isSpecialVolumeEntityType(entity?.type)) return null;
+  if (String(entity?.type || "").toLowerCase() === "fog_volume") return null;
   const params = entity?.params;
   if (!params || typeof params !== "object") return null;
 

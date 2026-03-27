@@ -1,7 +1,6 @@
 import { resolveBrushSize, snapCellToBrushStep } from "../../domain/tiles/brushSize.js";
 import { EDITOR_TOOLS } from "../../domain/tiles/tools.js";
 import { getLineCells } from "../../domain/tiles/line.js";
-import { getFogVolumeWorldRectFromDragCells } from "../../domain/entities/specialVolumeTypes.js";
 import { renderDecorPlacementPreview } from "./decorLayer.js";
 import { renderEntityPlacementPreview } from "./entityLayer.js";
 import { renderSoundPlacementPreview } from "./soundLayer.js";
@@ -130,30 +129,12 @@ export function renderBrushPreviewOverlay(ctx, doc, viewport, interaction, brush
 }
 
 export function renderPlacementPreviewOverlay(ctx, doc, viewport, interaction, presets) {
-  renderFogVolumePlacementPreview(ctx, doc, viewport, interaction);
   renderDecorPlacementPreview(ctx, doc, viewport, interaction, presets?.decor || null);
   renderEntityPlacementPreview(ctx, doc, viewport, interaction, presets?.entity || null);
   renderSoundPlacementPreview(ctx, doc, viewport, interaction, presets?.sound || null);
 }
 
-export function renderFogVolumePlacementPreview(ctx, doc, viewport, interaction) {
-  const drag = interaction?.volumePlacementDrag;
-  if (!drag?.active || drag.type !== "fog_volume") return;
-  const tileSize = doc?.dimensions?.tileSize;
-  const dragRect = getFogVolumeWorldRectFromDragCells(drag.startCell, drag.endCell, tileSize, drag.thicknessPx);
-  if (!dragRect) return;
-  const width = Math.max(1, (dragRect.x1 - dragRect.x0) * viewport.zoom);
-  const height = Math.max(1, (dragRect.y1 - dragRect.y0) * viewport.zoom);
-  const x = viewport.offsetX + dragRect.x0 * viewport.zoom;
-  const y = viewport.offsetY + dragRect.y0 * viewport.zoom;
 
-  ctx.save();
-  ctx.fillStyle = "rgba(158, 198, 255, 0.20)";
-  ctx.strokeStyle = "rgba(195, 223, 255, 0.92)";
-  ctx.lineWidth = 1.2;
-  ctx.setLineDash([7, 5]);
-  ctx.fillRect(x, y, width, height);
-  ctx.strokeRect(x + 0.5, y + 0.5, Math.max(0, width - 1), Math.max(0, height - 1));
-  ctx.setLineDash([]);
-  ctx.restore();
+export function renderFogVolumePlacementPreview() {
+  return;
 }
