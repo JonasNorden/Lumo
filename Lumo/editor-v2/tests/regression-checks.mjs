@@ -4985,6 +4985,11 @@ function runFloatingFogWorkbenchRegressionChecks() {
   assert.equal(modal.markup.includes("--fog-layers:28;"), true, "fog preview should map layer count into runtime preview styling variables");
   assert.equal(modal.markup.includes("--fog-lift:8.000px;"), true, "fog preview should map vertical lift into runtime preview styling variables");
   assert.equal(modal.markup.includes('data-fog-preview-field'), true, "fog preview should render sampled field geometry instead of a single flat gradient region");
+  assert.equal(
+    modal.markup.includes("--fog-sample-taper:"),
+    true,
+    "fog preview samples should emit vertical taper variables so falloff can visibly thin the fog shape toward height zero",
+  );
 
   const closedState = JSON.parse(JSON.stringify(baseState));
   closedState.ui.specialVolumeWorkbench.openEntityId = null;
@@ -5061,6 +5066,10 @@ function runFogPreviewMotionRegressionChecks() {
   });
   const sharpEdgeAverage = sharpProfile.samples.slice(0, 6).reduce((sum, sample) => sum + sample.opacity, 0) / 6;
   const softEdgeAverage = softProfile.samples.slice(0, 6).reduce((sum, sample) => sum + sample.opacity, 0) / 6;
+  const sharpEdgeHeightAverage = sharpProfile.samples.slice(0, 6).reduce((sum, sample) => sum + sample.coreHeightPx, 0) / 6;
+  const softEdgeHeightAverage = softProfile.samples.slice(0, 6).reduce((sum, sample) => sum + sample.coreHeightPx, 0) / 6;
+  const softCenterSample = softProfile.samples[Math.floor(softProfile.samples.length / 2)];
+  const softEdgeSample = softProfile.samples[0];
   const lowDensityAverage = lowDensity.samples.reduce((sum, sample) => sum + sample.opacity, 0) / lowDensity.samples.length;
   const highDensityAverage = highDensity.samples.reduce((sum, sample) => sum + sample.opacity, 0) / highDensity.samples.length;
   const thinHeightAverage = thinFog.samples.reduce((sum, sample) => sum + sample.coreHeightPx, 0) / thinFog.samples.length;
@@ -5069,6 +5078,21 @@ function runFogPreviewMotionRegressionChecks() {
     softEdgeAverage < sharpEdgeAverage,
     true,
     "higher falloff should soften edge density in the preview profile instead of keeping a hard uniform edge",
+  );
+  assert.equal(
+    softEdgeHeightAverage < sharpEdgeHeightAverage,
+    true,
+    "higher falloff should taper fog height near authored edges so the band thins toward zero instead of staying box-like",
+  );
+  assert.equal(
+    softCenterSample.coreHeightPx > softEdgeSample.coreHeightPx,
+    true,
+    "ground-fog preview samples should preserve a taller body away from span falloff so authored taper remains readable",
+  );
+  assert.equal(
+    softProfile.samples.every((sample) => sample.offsetY <= 0),
+    true,
+    "ground-fog preview samples should remain anchored to the baseline and only lift upward",
   );
   assert.equal(
     highDensityAverage > lowDensityAverage,
@@ -6150,6 +6174,16 @@ function runSourceRegressionChecks() {
     stylesSource.includes(".fogWorkbenchPreviewField"),
     true,
     "fog preview styles should include layered sampled field rendering instead of relying on one flat band",
+  );
+  assert.equal(
+    stylesSource.includes("radial-gradient(88% 96% at 50% 96%"),
+    true,
+    "fog preview sample cores should be bottom-weighted so visual density is strongest at the ground anchor",
+  );
+  assert.equal(
+    stylesSource.includes("transform: translate3d(-50%, min(0px, calc(var(--fog-sample-offset, 0px) + (var(--fog-relax, 0) * -6px))), 0);"),
+    true,
+    "fog preview samples should only shift upward from the baseline so the field does not float around a centerline",
   );
 
   const handleCanvasMouseDownSection = source.match(/const handleCanvasMouseDown = \(event\) => \{[\s\S]*?\n  \};/);

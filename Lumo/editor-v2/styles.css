@@ -2028,7 +2028,7 @@ kbd {
   opacity: var(--fog-opacity, 0.25);
   mix-blend-mode: var(--fog-blend, screen);
   background:
-    linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--fog-color, #E1EEFF) 20%, transparent) 20%, var(--fog-color, #E1EEFF) 56%, transparent 100%),
+    linear-gradient(180deg, transparent 0%, color-mix(in srgb, var(--fog-color, #E1EEFF) 8%, transparent) 18%, color-mix(in srgb, var(--fog-color, #E1EEFF) 52%, transparent) 62%, color-mix(in srgb, var(--fog-color, #E1EEFF) 88%, white 12%) 100%),
     repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.12) 0 12px, rgba(255, 255, 255, 0) 12px 24px);
   filter: blur(calc(6px + (var(--fog-diffuse, 0) * 10px)));
   transform: translate3d(0, calc(var(--fog-relax, 0) * -8px), 0) skewX(calc(var(--fog-drift, 0) * 0.3deg));
@@ -2052,7 +2052,8 @@ kbd {
   left: var(--fog-sample-x, 0%);
   bottom: 0;
   width: max(6px, calc(3px + (var(--fog-layers, 28) * 0.03px)));
-  transform: translate3d(-50%, calc(var(--fog-sample-offset, 0px) + (var(--fog-relax, 0) * -8px)), 0);
+  transform: translate3d(-50%, min(0px, calc(var(--fog-sample-offset, 0px) + (var(--fog-relax, 0) * -6px))), 0);
+  transform-origin: center bottom;
   opacity: var(--fog-sample-opacity, 0.24);
 }
 
@@ -2070,18 +2071,23 @@ kbd {
   height: var(--fog-sample-core, 18px);
   bottom: 0;
   background:
-    radial-gradient(60% 95% at 50% 18%, color-mix(in srgb, var(--fog-color, #E1EEFF) 90%, white 10%), transparent 88%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, color-mix(in srgb, var(--fog-color, #E1EEFF) 76%, transparent) 45%, transparent 100%);
+    radial-gradient(88% 96% at 50% 96%, color-mix(in srgb, var(--fog-color, #E1EEFF) 90%, white 10%), transparent 94%),
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      color-mix(in srgb, var(--fog-color, #E1EEFF) 34%, transparent) calc(30% + (var(--fog-sample-taper, 0.25) * 14%)),
+      color-mix(in srgb, var(--fog-color, #E1EEFF) 86%, white 14%) 100%
+    );
   filter: blur(calc(1.5px + (var(--fog-diffuse, 0) * 5px)));
   mix-blend-mode: var(--fog-blend, screen);
-  opacity: calc(0.45 + (var(--fog-sample-edge, 1) * 0.5));
+  opacity: calc(0.38 + (var(--fog-sample-edge, 1) * 0.6));
 }
 
 .fogWorkbenchPreviewSample::after {
   width: calc(16px + (var(--fog-diffuse, 0) * 24px));
   height: var(--fog-sample-haze, 24px);
   bottom: calc(-6px - (var(--fog-push, 0) * 0.4px));
-  background: radial-gradient(70% 95% at 50% 35%, color-mix(in srgb, var(--fog-color, #E1EEFF) 64%, transparent) 0%, transparent 100%);
+  background: radial-gradient(84% 98% at 50% 100%, color-mix(in srgb, var(--fog-color, #E1EEFF) 72%, transparent) 0%, transparent 100%);
   filter: blur(calc(5px + (var(--fog-diffuse, 0) * 10px)));
   opacity: calc(0.26 + (var(--fog-noise, 0) * 0.28));
 }
@@ -2089,9 +2095,9 @@ kbd {
 .fogWorkbenchPreviewMist {
   opacity: calc(0.15 + (var(--fog-noise, 0) * 0.45));
   background:
-    radial-gradient(circle at 12% 38%, rgba(255, 255, 255, 0.24), transparent 38%),
-    radial-gradient(circle at 64% 50%, rgba(255, 255, 255, 0.2), transparent 42%),
-    radial-gradient(circle at 84% 44%, rgba(255, 255, 255, 0.24), transparent 40%);
+    radial-gradient(circle at 12% 68%, rgba(255, 255, 255, 0.22), transparent 40%),
+    radial-gradient(circle at 64% 78%, rgba(255, 255, 255, 0.2), transparent 44%),
+    radial-gradient(circle at 84% 70%, rgba(255, 255, 255, 0.24), transparent 42%);
   filter: blur(calc(12px + (var(--fog-organic, 0) * 8px)));
 }
 
