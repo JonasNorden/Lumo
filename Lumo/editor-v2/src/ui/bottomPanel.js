@@ -14,7 +14,8 @@ const SELECTION_PANEL_OPTIONS = {
 };
 
 function createBottomPanelMarkup(state) {
-  const specialVolumeWorkbench = getSpecialVolumeWorkbenchContent(state);
+  const prefersFloatingWorkbench = state?.ui?.specialVolumeWorkbench?.mode === "floating";
+  const specialVolumeWorkbench = prefersFloatingWorkbench ? null : getSpecialVolumeWorkbenchContent(state);
   const { markup, isEmpty } = specialVolumeWorkbench || getSelectionEditorPanelContent(state, SELECTION_PANEL_OPTIONS);
   return `
     <div class="bottomPanelLayout">
@@ -64,7 +65,8 @@ export function renderBottomPanel(panel, state) {
 
   panel.classList?.toggle?.("isEmpty", false);
   const { scanPane, editorPane } = layout;
-  const specialVolumeWorkbench = getSpecialVolumeWorkbenchContent(state);
+  const prefersFloatingWorkbench = state?.ui?.specialVolumeWorkbench?.mode === "floating";
+  const specialVolumeWorkbench = prefersFloatingWorkbench ? null : getSpecialVolumeWorkbenchContent(state);
 
   scanPane.innerHTML = renderScanControls(state, { compact: true });
   if (specialVolumeWorkbench) {

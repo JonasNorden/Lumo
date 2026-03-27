@@ -13,6 +13,7 @@ import { getWorldPointFromMinimapPoint, renderMinimap } from "../render/minimap.
 import { renderInspector, bindInspectorPanel } from "../ui/inspectorPanel.js";
 import { renderBottomPanel, bindBottomPanel } from "../ui/bottomPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
+import { getSpecialVolumeWorkbenchModalContent, resolveSelectedSpecialVolume } from "../ui/specialVolumeWorkbench.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
 import {
@@ -86,6 +87,7 @@ import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entiti
 import {
   applySpecialVolumeParamChange,
   createFogVolumeEntityFromWorldRect,
+  getFogVolumeParams,
   getFogVolumeWorldRectFromDragCells,
   isFogVolumeEntityType,
   isSpecialVolumeEntityType,
@@ -158,6 +160,7 @@ const BATCH_EDITABLE_SOUND_PARAM_KEYS = new Set(["spatial", "volume", "pitch", "
 const SOUND_DEBUG_MAX_EVENTS = 18;
 const ARROW_PAN_STEP_PX = 20;
 const ARROW_PAN_SHIFT_MULTIPLIER = 2;
+const FOG_DEFAULTS_STORAGE_KEY = "lumo.editor-v2.fog-defaults";
 
 
 function getInspectedCell(state) {
@@ -443,6 +446,39 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function readFogDefaultsFromStorage() {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(FOG_DEFAULTS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return getFogVolumeParams({ type: "fog_volume", params: parsed });
+  } catch {
+    return null;
+  }
+}
+
+function writeFogDefaultsToStorage(params) {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(FOG_DEFAULTS_STORAGE_KEY, JSON.stringify(getFogVolumeParams({ type: "fog_volume", params })));
+  } catch {
+    // Storage write failures should not block authoring.
+  }
+}
+
+function parseEntityParamInputValue(target) {
+  const paramType = target?.dataset?.entityParamType;
+  if (paramType === "boolean") {
+    return Boolean(target.checked);
+  }
+  if (paramType === "number") {
+    const parsed = Number.parseFloat(target.value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return target.value;
 }
 
 function getNewLevelSizeValidationMessage(widthValue, heightValue) {
@@ -2279,7 +2315,10 @@ export function createEditorApp({
 
   const renderFloatingPanels = (state) => {
     const focusedField = document.activeElement instanceof HTMLInputElement
-      ? document.activeElement.dataset.newLevelField || null
+      ? document.activeElement.dataset.newLevelField || document.activeElement.dataset.entityParamPath || null
+      : null;
+    const focusedScope = document.activeElement instanceof HTMLInputElement
+      ? (document.activeElement.dataset.newLevelField ? "new-level" : document.activeElement.dataset.entityParamPath ? "fog-workbench" : null)
       : null;
     const selectionStart = focusedField && typeof document.activeElement.selectionStart === "number"
       ? document.activeElement.selectionStart
@@ -2290,9 +2329,18 @@ export function createEditorApp({
     const selectionDirection = focusedField && typeof document.activeElement.selectionDirection === "string"
       ? document.activeElement.selectionDirection
       : "none";
-    floatingPanelHost.innerHTML = renderNewLevelSizePopover(state);
-    if (!focusedField || !state.ui.newLevelSize?.isOpen) return;
-    const nextField = floatingPanelHost.querySelector(`[data-new-level-field="${focusedField}"]`);
+
+    const fogWorkbenchModal = getSpecialVolumeWorkbenchModalContent(state);
+    floatingPanelHost.innerHTML = `${renderNewLevelSizePopover(state)}${fogWorkbenchModal?.markup || ""}`;
+    floatingPanelHost.classList.toggle("hasSpecialVolumeWorkbench", Boolean(fogWorkbenchModal));
+
+    if (!focusedField) return;
+    const nextField = focusedScope === "new-level" && state.ui.newLevelSize?.isOpen
+      ? floatingPanelHost.querySelector(`[data-new-level-field="${focusedField}"]`)
+      : focusedScope === "fog-workbench" && fogWorkbenchModal
+        ? Array.from(floatingPanelHost.querySelectorAll("[data-entity-param-path]"))
+          .find((input) => input instanceof HTMLInputElement && input.dataset.entityParamPath === focusedField) || null
+        : null;
     if (nextField instanceof HTMLInputElement) {
       nextField.focus({ preventScroll: true });
       if (typeof selectionStart === "number" && typeof selectionEnd === "number") {
@@ -2552,6 +2600,13 @@ export function createEditorApp({
       visible: true,
       params: getEntityPresetParamsForType(preset?.type || DEFAULT_ENTITY_PRESET_ID, getEntityPresetDefaultParams(preset?.id || DEFAULT_ENTITY_PRESET_ID)),
     };
+
+    if (isFogVolumeEntityType(entity.type)) {
+      const fogDefaults = store.getState()?.ui?.specialVolumeWorkbench?.fogDefaults;
+      if (fogDefaults && typeof fogDefaults === "object") {
+        entity.params = getFogVolumeParams({ ...entity, params: fogDefaults });
+      }
+    }
 
     return isSpecialVolumeEntityType(entity.type)
       ? syncSpecialVolumeEntityToAnchor(entity, doc.dimensions.tileSize)
@@ -5471,6 +5526,23 @@ if (event.shiftKey) {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
 
+    const fogActionButton = target.closest("[data-fog-workbench-action]");
+    if (fogActionButton instanceof HTMLButtonElement) {
+      if (fogActionButton.dataset.fogWorkbenchAction === "save-defaults") {
+        const state = store.getState();
+        const selection = resolveSelectedSpecialVolume(state);
+        if (!selection || !isFogVolumeEntityType(selection.entity?.type)) return;
+        const nextDefaults = getFogVolumeParams(selection.entity);
+        store.setState((draft) => {
+          draft.ui.specialVolumeWorkbench.activeType = "fog_volume";
+          draft.ui.specialVolumeWorkbench.fogDefaults = nextDefaults;
+          draft.ui.importStatus = "Saved Fog defaults for future placements.";
+        });
+        writeFogDefaultsToStorage(nextDefaults);
+      }
+      return;
+    }
+
     const actionButton = target.closest("[data-new-level-action]");
     if (!(actionButton instanceof HTMLButtonElement)) return;
 
@@ -5488,6 +5560,19 @@ if (event.shiftKey) {
   const handleFloatingPanelInput = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
+    const paramPath = typeof target.dataset.entityParamPath === "string" ? target.dataset.entityParamPath.trim() : "";
+    if (paramPath) {
+      const index = Number.parseInt(target.dataset.entityIndex || "", 10);
+      if (!Number.isInteger(index) || index < 0) return;
+      updateEntity(index, "param", {
+        __canonicalMutation: true,
+        itemId: target.dataset.entityId || null,
+        key: paramPath,
+        path: paramPath,
+        value: parseEntityParamInputValue(target),
+      });
+      return;
+    }
     const field = target.dataset.newLevelField;
     updateNewLevelSizeField(field, target.value, { commit: false });
   };
@@ -5495,6 +5580,19 @@ if (event.shiftKey) {
   const handleFloatingPanelChange = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
+    const paramPath = typeof target.dataset.entityParamPath === "string" ? target.dataset.entityParamPath.trim() : "";
+    if (paramPath) {
+      const index = Number.parseInt(target.dataset.entityIndex || "", 10);
+      if (!Number.isInteger(index) || index < 0) return;
+      updateEntity(index, "param", {
+        __canonicalMutation: true,
+        itemId: target.dataset.entityId || null,
+        key: paramPath,
+        path: paramPath,
+        value: parseEntityParamInputValue(target),
+      });
+      return;
+    }
     const field = target.dataset.newLevelField;
     updateNewLevelSizeField(field, target.value, { commit: true });
   };
@@ -5709,6 +5807,14 @@ if (event.shiftKey) {
       });
     }
   };
+
+  const hydratedFogDefaults = readFogDefaultsFromStorage();
+  if (hydratedFogDefaults) {
+    store.setState((draft) => {
+      draft.ui.specialVolumeWorkbench.mode = "floating";
+      draft.ui.specialVolumeWorkbench.fogDefaults = hydratedFogDefaults;
+    });
+  }
 
   const unsubscribe = store.subscribe(draw);
   const unsubscribeScanAudio = store.subscribe(syncScanAudioPlayback);
