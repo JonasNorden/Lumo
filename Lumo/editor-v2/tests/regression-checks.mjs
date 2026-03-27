@@ -86,6 +86,7 @@ import {
   isSpawnEntityType,
 } from "../src/domain/entities/spawnExitRules.js";
 import { findEntityAtCanvasPoint, renderEntities, renderEntityPlacementPreview } from "../src/render/layers/entityLayer.js";
+import { getSpecialVolumeWorkbenchLauncherContent, getSpecialVolumeWorkbenchModalContent, getFogPreviewPatrolPhase, buildFogPreviewFieldProfile } from "../src/ui/specialVolumeWorkbench.js";
 import { findDecorAtCanvasPoint, getDecorDrawMetrics, renderDecorPlacementPreview } from "../src/render/layers/decorLayer.js";
 import { applyCanonicalDecorAction, createCanonicalDecorHistory } from "../src/app/cleanRoomDecorMode.js";
 import { applyCanonicalEntityAction, cloneCanonicalEntitySnapshot, createCanonicalEntityHistory } from "../src/app/cleanRoomEntityMode.js";
@@ -4437,7 +4438,7 @@ function runBottomPanelFogVolumeRegressionChecks() {
 }
 
 function runFloatingFogWorkbenchRegressionChecks() {
-  const baseState = {
+  const createFogState = (paramsPatch = {}, open = true) => ({
     document: {
       status: "ready",
       error: null,
@@ -4452,12 +4453,13 @@ function runFloatingFogWorkbenchRegressionChecks() {
             y: 1,
             visible: true,
             params: {
-              area: { x0: 32, x1: 128, y0: 32, falloff: 12 },
-              look: { density: 0.18, lift: 8, thickness: 36, layers: 28, noise: 0.1, drift: 0, color: "#E1EEFF", exposure: 1 },
-              smoothing: { diffuse: 0.24, relax: 0.24, visc: 0.94 },
-              interaction: { radius: 92, push: 2.4, bulge: 2.2, gate: 70 },
-              organic: { strength: 0.2, scale: 1, speed: 0.5 },
+              area: { x0: 32, x1: 128, y0: 32, falloff: 120 },
+              look: { density: 0.2, lift: 14, thickness: 56, layers: 20, noise: 0.14, drift: 0, color: "#E1EEFF", exposure: 1 },
+              smoothing: { diffuse: 0.2, relax: 0.22, visc: 0.9 },
+              interaction: { radius: 92, push: 2.2, bulge: 1.2, gate: 70 },
+              organic: { strength: 0.35, scale: 1, speed: 0.65 },
               render: { blend: "screen", lumoBehindFog: true },
+              ...paramsPatch,
             },
           },
         ],
@@ -4471,132 +4473,55 @@ function runFloatingFogWorkbenchRegressionChecks() {
     ui: {
       specialVolumeWorkbench: {
         mode: "floating",
-        openEntityId: "entity-fog",
+        openEntityId: open ? "entity-fog" : null,
       },
     },
-  };
+  });
 
-  const modal = getSpecialVolumeWorkbenchModalContent(baseState);
-  assert.ok(modal, "floating fog workbench should be available when a fog volume is selected");
-  assert.equal(modal.markup.includes('data-special-volume-modal="fog_volume"'), true, "floating fog workbench should identify fog_volume mode");
-  assert.equal(modal.markup.includes("specialVolumeWorkbenchModalBody"), true, "floating fog workbench should render a dedicated two-pane body");
-  assert.equal(modal.markup.includes('data-fog-workbench-controls'), true, "floating fog workbench should render grouped controls pane");
-  assert.equal(modal.markup.includes('data-fog-preview-root'), true, "floating fog workbench should render a dedicated live preview pane");
-  assert.equal(modal.markup.includes('data-fog-workbench-action="save-defaults"'), true, "floating fog workbench should expose save-as-default action for future placements");
-  assert.equal(modal.markup.includes('data-fog-workbench-action="done"'), true, "floating fog workbench should expose an explicit done action to close the modal");
-  assert.equal(modal.markup.includes('data-fog-step-direction="1"'), true, "floating fog numeric controls should render explicit increment steppers");
-  assert.equal(modal.markup.includes('data-fog-step-direction="-1"'), true, "floating fog numeric controls should render explicit decrement steppers");
-  assert.equal(modal.markup.includes('data-volume-preview-span'), true, "floating fog preview should render a bounded authored span instead of an endless field");
-  assert.equal(modal.markup.includes('data-fog-preview-stop="start"'), true, "floating fog preview should render an authored start stop marker");
-  assert.equal(modal.markup.includes('data-fog-preview-stop="end"'), true, "floating fog preview should render an authored end stop marker");
-  assert.equal(modal.markup.includes('data-fog-preview-lumo'), true, "floating fog preview should include a representative Lumo actor in the span");
-  assert.equal(
-    modal.markup.includes("fogWorkbenchPreviewLumoSprite"),
-    true,
-    "floating fog preview should render the shared Lumo sprite representation used by spawn/start visuals",
-  );
-  assert.equal(modal.markup.includes("isAnimated"), true, "floating fog preview should keep lightweight looped motion enabled for Lumo/fog interaction readability");
-  assert.equal(modal.markup.includes(">Area<"), true, "floating fog workbench should preserve Area section grouping");
-  assert.equal(modal.markup.includes(">Look<"), true, "floating fog workbench should preserve Look section grouping");
-  assert.equal(modal.markup.includes(">Smoothing<"), true, "floating fog workbench should preserve Smoothing section grouping");
-  assert.equal(modal.markup.includes(">Interaction<"), true, "floating fog workbench should preserve Interaction section grouping");
-  assert.equal(modal.markup.includes(">Organic<"), true, "floating fog workbench should preserve Organic section grouping");
-  assert.equal(modal.markup.includes(">Render<"), true, "floating fog workbench should preserve Render section grouping");
+  const state = createFogState();
+  const modal = getSpecialVolumeWorkbenchModalContent(state);
+  assert.ok(modal, "new fog modal should render when a selected fog volume is open");
+  assert.equal(modal.markup.includes("specialVolumeWorkbenchControlsTop"), true, "new fog modal should render grouped controls across the top");
+  assert.equal(modal.markup.includes("specialVolumeWorkbenchPreviewPaneWide"), true, "new fog modal should render a full-width preview region below controls");
+  assert.equal(modal.markup.includes("specialVolumeWorkbenchFooterPinned"), true, "new fog modal should pin save/done controls in the footer");
+  assert.equal(modal.markup.includes('data-fog-workbench-action="save-defaults"'), true, "new fog modal should expose save-as-default action");
+  assert.equal(modal.markup.includes('data-fog-workbench-action="done"'), true, "new fog modal should expose done action");
 
-  const denserState = JSON.parse(JSON.stringify(baseState));
-  denserState.document.active.entities[0].params.look.density = 0.72;
-  denserState.document.active.entities[0].params.look.exposure = 1.8;
-  const modalDense = getSpecialVolumeWorkbenchModalContent(denserState);
-  assert.ok(modalDense, "floating fog workbench should stay available after param edits");
-  assert.equal(
-    modal?.markup.includes("--fog-opacity:0.259;"),
-    true,
-    "floating fog preview should encode current fog values as inline preview variables",
-  );
-  assert.equal(
-    modalDense?.markup.includes("--fog-opacity:0.615;"),
-    true,
-    "floating fog preview should update computed preview variables when fog params change",
-  );
-  const sharperFalloffState = JSON.parse(JSON.stringify(baseState));
-  sharperFalloffState.document.active.entities[0].params.area.falloff = 3;
-  const softerFalloffState = JSON.parse(JSON.stringify(baseState));
-  softerFalloffState.document.active.entities[0].params.area.falloff = 112;
-  const modalSharpened = getSpecialVolumeWorkbenchModalContent(sharperFalloffState);
-  const modalSoft = getSpecialVolumeWorkbenchModalContent(softerFalloffState);
-  assert.equal(
-    modalSharpened?.markup.includes("--fog-falloff-pct:3.75%;"),
-    true,
-    "low falloff values should produce sharp edge fade variables in the preview output",
-  );
-  assert.equal(
-    modalSoft?.markup.includes("--fog-falloff-pct:38.00%;"),
-    true,
-    "high falloff values should produce long soft fade variables in the preview output",
-  );
-  assert.equal(
-    modal.markup.includes("--fog-falloff-start-pct:"),
-    false,
-    "floating fog preview should avoid synthetic start-fade controls and rely on authored-end taper only",
-  );
-  assert.equal(modal.markup.includes("--fog-radius:92.000;"), true, "fog preview should map interaction radius into runtime preview styling variables");
-  assert.equal(modal.markup.includes("--fog-gate:70.000;"), true, "fog preview should map interaction gate into runtime preview styling variables");
-  assert.equal(modal.markup.includes("--fog-organic-scale:1.000;"), true, "fog preview should map organic scale into runtime preview styling variables");
-  assert.equal(modal.markup.includes("--fog-layers:28;"), true, "fog preview should map layer count into runtime preview styling variables");
-  assert.equal(modal.markup.includes("--fog-lift:8.000px;"), true, "fog preview should map vertical lift into runtime preview styling variables");
-  assert.equal(modal.markup.includes('data-fog-preview-field'), true, "fog preview should render sampled field geometry instead of a single flat gradient region");
-  assert.equal(
-    modal.markup.includes("--fog-sample-taper:"),
-    true,
-    "fog preview samples should emit vertical taper variables so falloff can visibly thin the fog shape toward height zero",
-  );
-  assert.equal(
-    modal.markup.includes("--fog-sample-layer-jitter:"),
-    true,
-    "fog preview samples should emit layered jitter data so the body reads as volumetric instead of a flat box",
-  );
-  assert.equal(
-    modal.markup.includes("--fog-ground-baseline:14px;"),
-    true,
-    "floating fog preview should keep Lumo anchored to a stable ground baseline while fog rises through thickness/lift",
-  );
-  assert.equal(
-    modal.markup.includes('data-entity-param-path="look.color"'),
-    false,
-    "floating fog modal controls should hide look.color until it is represented truthfully by the smooke-aligned preview",
-  );
-  assert.equal(
-    modal.markup.includes('data-entity-param-path="look.exposure"'),
-    false,
-    "floating fog modal controls should hide look.exposure until it is represented truthfully by the smooke-aligned preview",
-  );
-  assert.equal(
-    modal.markup.includes('data-entity-param-path="render.blend"'),
-    false,
-    "floating fog modal controls should hide render.blend until it is represented truthfully by the smooke-aligned preview",
-  );
-  assert.equal(
-    modal.markup.includes("Hidden (not yet truthful in Smooke preview):"),
-    true,
-    "floating fog modal should explicitly document intentionally hidden controls when preview parity is not yet truthful",
-  );
+  const expectedControlPaths = [
+    "look.density",
+    "look.lift",
+    "area.falloff",
+    "organic.strength",
+    "organic.speed",
+    "interaction.push",
+    "smoothing.relax",
+    "smoothing.visc",
+  ];
+  expectedControlPaths.forEach((path) => {
+    assert.equal(modal.markup.includes(`data-entity-param-path="${path}"`), true, `new fog modal should expose first-pass control ${path}`);
+  });
 
-  const closedState = JSON.parse(JSON.stringify(baseState));
-  closedState.ui.specialVolumeWorkbench.openEntityId = null;
-  assert.equal(
-    getSpecialVolumeWorkbenchModalContent(closedState),
-    null,
-    "floating fog workbench modal should remain closed until the user explicitly opens it",
-  );
+  ["look.color", "render.blend", "look.exposure", "interaction.radius"].forEach((path) => {
+    assert.equal(modal.markup.includes(`data-entity-param-path="${path}"`), false, `new fog modal should hide non-goal control ${path} in first pass`);
+  });
+
+  assert.equal(modal.markup.includes("--fog-ground-baseline:14px;"), true, "preview should keep fog and Lumo anchored to baseline");
+  assert.equal(modal.markup.includes('data-fog-preview-field'), true, "preview should render sampled field geometry rather than a flat box");
+  assert.equal(modal.markup.includes('data-fog-preview-lumo'), true, "preview should include Lumo traversal actor");
+
+  const lowFalloffModal = getSpecialVolumeWorkbenchModalContent(createFogState({ area: { x0: 32, x1: 128, y0: 32, falloff: 25 } }));
+  const highFalloffModal = getSpecialVolumeWorkbenchModalContent(createFogState({ area: { x0: 32, x1: 128, y0: 32, falloff: 300 } }));
+  assert.equal(lowFalloffModal.markup.includes("--fog-falloff-pct:4.032%"), true, "low falloff should keep a tight authored-end taper");
+  assert.equal(highFalloffModal.markup.includes("--fog-falloff-pct:48.387%"), true, "high falloff should lengthen authored-end taper");
+
+  const closedState = createFogState({}, false);
+  assert.equal(getSpecialVolumeWorkbenchModalContent(closedState), null, "modal should stay closed until explicitly opened");
   const launcherMarkup = getSpecialVolumeWorkbenchLauncherContent(closedState);
-  assert.equal(
-    launcherMarkup.includes('data-fog-workbench-action="open"'),
-    true,
-    "selected fog volumes should expose an explicit launcher action when the modal is closed",
-  );
+  assert.equal(launcherMarkup.includes('data-fog-workbench-action="open"'), true, "closed modal should provide an explicit open action");
 }
 
 function runFogPreviewMotionRegressionChecks() {
+
   const start = getFogPreviewPatrolPhase(0, 4000);
   const quarter = getFogPreviewPatrolPhase(1000, 4000);
   const midpoint = getFogPreviewPatrolPhase(2000, 4000);
@@ -6238,6 +6163,8 @@ async function main() {
   runSoundBatchSelectionRegressionChecks();
   runBottomPanelBatchSoundRegressionChecks();
   runInspectorSoundSummaryRegressionChecks();
+  runFloatingFogWorkbenchRegressionChecks();
+  runFogPreviewMotionRegressionChecks();
 
   console.log("editor-v2 regression checks passed");
 }

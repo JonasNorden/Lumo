@@ -2284,3 +2284,74 @@ kbd {
 .decorScatterStatusRow .value {
   font-size: 11px;
 }
+
+/* New fog modal first rebuild pass */
+.specialVolumeWorkbenchModalBodyStacked {
+  display: grid;
+  grid-template-rows: auto minmax(280px, 1fr) auto;
+  gap: 10px;
+}
+
+.specialVolumeWorkbenchControlsTop {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border-radius: 11px;
+  border: 1px solid rgba(88, 115, 173, 0.42);
+  background: rgba(11, 17, 31, 0.82);
+}
+
+.specialVolumeWorkbenchControlField {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.specialVolumeWorkbenchControlField .label {
+  font-size: 11px;
+  color: rgba(220, 231, 250, 0.92);
+}
+
+.specialVolumeWorkbenchControlField input {
+  width: 100%;
+  min-width: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(90, 120, 180, 0.5);
+  background: rgba(8, 13, 24, 0.9);
+  color: #eef5ff;
+  padding: 6px 7px;
+}
+
+.specialVolumeWorkbenchPreviewPaneWide {
+  grid-template-rows: minmax(0, 1fr) auto;
+  padding: 10px;
+}
+
+.specialVolumeWorkbenchFooterPinned {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.fogWorkbenchPreviewSurface {
+  min-height: 290px;
+}
+
+.fogWorkbenchPreviewSpan {
+  left: 6%;
+  right: 6%;
+}
+
+.fogWorkbenchPreviewField {
+  top: calc(100% - var(--fog-thickness, 44px) - 28px - var(--fog-lift, 0px));
+  height: calc(var(--fog-thickness, 44px) + 62px);
+}
+
+@media (max-width: 1180px) {
+  .specialVolumeWorkbenchControlsTop {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
