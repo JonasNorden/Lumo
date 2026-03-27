@@ -188,7 +188,9 @@ export function buildFogPreviewFieldProfile(config = {}) {
     const u = sampleCount === 1 ? 0 : index / (sampleCount - 1);
     const pxFromEdge = Math.min(u * spanWidthPx, (1 - u) * spanWidthPx);
     const edgeFactor = falloffPx <= 0 ? 1 : clamp(pxFromEdge / effectiveFalloff, 0, 1);
-    const verticalWeight = 0.42 + (edgeFactor * 0.58);
+    const edgeHeightFactor = Math.pow(edgeFactor, 0.72);
+    const edgeDensityFactor = Math.pow(edgeFactor, 0.88);
+    const verticalWeight = 0.28 + (edgeHeightFactor * 0.72);
     const waveA = Math.sin((u * Math.PI * 2 * (1.2 / organicScale)) + (nowSeconds * (0.48 + organicSpeed * 0.07)));
     const waveB = Math.sin((u * Math.PI * 2 * (2.1 / organicScale)) - (nowSeconds * (0.38 + organicSpeed * 0.11)));
     const organicWave = organicStrength * ((waveA * 0.62) + (waveB * 0.38));
@@ -198,7 +200,7 @@ export function buildFogPreviewFieldProfile(config = {}) {
       : clamp(1 - (interactionDistance / Math.max(0.0001, radiusRatio)), 0, 1);
     const interactionWave = interactionInfluence * gateResponse * ((bulge * 0.16) - (push * 0.1));
     const smoothAmplitude = (1 - softening) * 0.72 + (visc * 0.28);
-    const normalizedDensity = density * (0.4 + edgeFactor * 0.6);
+    const normalizedDensity = density * (0.32 + edgeDensityFactor * 0.68);
     const layerInfluence = clamp(layers / 32, 0.2, 3);
     const coreHeightPx = clamp(
       ((thicknessPx * verticalWeight) + (thicknessPx * 0.25 * organicWave) + (thicknessPx * interactionWave * 0.22)) * smoothAmplitude,
@@ -207,7 +209,9 @@ export function buildFogPreviewFieldProfile(config = {}) {
     );
     const hazeHeightPx = clamp(coreHeightPx + thicknessPx * (0.28 + diffuse * 0.42 + relax * 0.2), 4, thicknessPx * 2.8);
     const opacity = clamp((normalizedDensity * (0.42 + layerInfluence * 0.18)) + (softening * 0.22), 0.06, 0.96);
-    const offsetY = ((organicWave * 0.6) + (interactionWave * 0.5) + (drift * 0.02)) * 8 - (lift * 0.05);
+    const upwardLift = clamp((Math.max(organicWave, 0) * 0.68) + (interactionWave * 0.45) + (Math.max(drift, 0) * 0.04), 0, 1.2);
+    const offsetY = -(((upwardLift * 8) + (lift * 0.05)) * (0.5 + edgeHeightFactor * 0.5));
+    const taper = clamp(0.1 + ((1 - edgeHeightFactor) * 0.9), 0, 1);
     samples.push({
       u,
       coreHeightPx: Number(coreHeightPx.toFixed(3)),
@@ -215,6 +219,7 @@ export function buildFogPreviewFieldProfile(config = {}) {
       opacity: Number(opacity.toFixed(3)),
       offsetY: Number(offsetY.toFixed(3)),
       edgeFactor: Number(edgeFactor.toFixed(3)),
+      taper: Number(taper.toFixed(3)),
     });
   }
   return { sampleCount, samples };
@@ -332,6 +337,7 @@ function renderFogPreview(selection, rect) {
                   --fog-sample-opacity:${sample.opacity.toFixed(3)};
                   --fog-sample-offset:${sample.offsetY.toFixed(3)}px;
                   --fog-sample-edge:${sample.edgeFactor.toFixed(3)};
+                  --fog-sample-taper:${sample.taper.toFixed(3)};
                 "
               ></span>
             `).join("")}
