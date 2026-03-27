@@ -4979,6 +4979,11 @@ function runFloatingFogWorkbenchRegressionChecks() {
     true,
     "high falloff values should produce long soft fade variables in the preview output",
   );
+  assert.equal(
+    modal.markup.includes("--fog-falloff-start-pct:"),
+    true,
+    "floating fog preview should encode a short start fade and long authored-end taper to match smooke span behavior",
+  );
   assert.equal(modal.markup.includes("--fog-radius:92.000;"), true, "fog preview should map interaction radius into runtime preview styling variables");
   assert.equal(modal.markup.includes("--fog-gate:70.000;"), true, "fog preview should map interaction gate into runtime preview styling variables");
   assert.equal(modal.markup.includes("--fog-organic-scale:1.000;"), true, "fog preview should map organic scale into runtime preview styling variables");
@@ -4989,6 +4994,16 @@ function runFloatingFogWorkbenchRegressionChecks() {
     modal.markup.includes("--fog-sample-taper:"),
     true,
     "fog preview samples should emit vertical taper variables so falloff can visibly thin the fog shape toward height zero",
+  );
+  assert.equal(
+    modal.markup.includes("--fog-sample-layer-jitter:"),
+    true,
+    "fog preview samples should emit layered jitter data so the body reads as volumetric instead of a flat box",
+  );
+  assert.equal(
+    modal.markup.includes("--fog-ground-baseline:14px;"),
+    true,
+    "floating fog preview should keep Lumo anchored to a stable ground baseline while fog rises through thickness/lift",
   );
 
   const closedState = JSON.parse(JSON.stringify(baseState));
@@ -5064,12 +5079,12 @@ function runFogPreviewMotionRegressionChecks() {
     ...previewProfileConfig,
     thicknessPx: 120,
   });
-  const sharpEdgeAverage = sharpProfile.samples.slice(0, 6).reduce((sum, sample) => sum + sample.opacity, 0) / 6;
-  const softEdgeAverage = softProfile.samples.slice(0, 6).reduce((sum, sample) => sum + sample.opacity, 0) / 6;
-  const sharpEdgeHeightAverage = sharpProfile.samples.slice(0, 6).reduce((sum, sample) => sum + sample.coreHeightPx, 0) / 6;
-  const softEdgeHeightAverage = softProfile.samples.slice(0, 6).reduce((sum, sample) => sum + sample.coreHeightPx, 0) / 6;
+  const sharpEdgeAverage = sharpProfile.samples.slice(-6).reduce((sum, sample) => sum + sample.opacity, 0) / 6;
+  const softEdgeAverage = softProfile.samples.slice(-6).reduce((sum, sample) => sum + sample.opacity, 0) / 6;
+  const sharpEdgeHeightAverage = sharpProfile.samples.slice(-6).reduce((sum, sample) => sum + sample.coreHeightPx, 0) / 6;
+  const softEdgeHeightAverage = softProfile.samples.slice(-6).reduce((sum, sample) => sum + sample.coreHeightPx, 0) / 6;
   const softCenterSample = softProfile.samples[Math.floor(softProfile.samples.length / 2)];
-  const softEdgeSample = softProfile.samples[0];
+  const softEdgeSample = softProfile.samples[softProfile.samples.length - 1];
   const lowDensityAverage = lowDensity.samples.reduce((sum, sample) => sum + sample.opacity, 0) / lowDensity.samples.length;
   const highDensityAverage = highDensity.samples.reduce((sum, sample) => sum + sample.opacity, 0) / highDensity.samples.length;
   const thinHeightAverage = thinFog.samples.reduce((sum, sample) => sum + sample.coreHeightPx, 0) / thinFog.samples.length;
@@ -5088,6 +5103,11 @@ function runFogPreviewMotionRegressionChecks() {
     softCenterSample.coreHeightPx > softEdgeSample.coreHeightPx,
     true,
     "ground-fog preview samples should preserve a taller body away from span falloff so authored taper remains readable",
+  );
+  assert.equal(
+    softProfile.samples[softProfile.samples.length - 1].coreHeightPx < softProfile.samples[0].coreHeightPx,
+    true,
+    "ground-fog preview should taper more strongly toward the authored end, following smooke's dOpen/falloff span logic",
   );
   assert.equal(
     softProfile.samples.every((sample) => sample.offsetY <= 0),
@@ -6171,6 +6191,11 @@ function runSourceRegressionChecks() {
     "fog preview modal should use a shared sampled-field profile builder for runtime-like layered fog behavior",
   );
   assert.equal(
+    specialWorkbenchSource.includes("const dOpenPx = (1 - u) * spanWidthPx;"),
+    true,
+    "fog preview profile should keep smooke-style end-distance falloff semantics rather than a centered two-sided box fade",
+  );
+  assert.equal(
     stylesSource.includes(".fogWorkbenchPreviewField"),
     true,
     "fog preview styles should include layered sampled field rendering instead of relying on one flat band",
@@ -6184,6 +6209,11 @@ function runSourceRegressionChecks() {
     stylesSource.includes("transform: translate3d(-50%, min(0px, calc(var(--fog-sample-offset, 0px) + (var(--fog-relax, 0) * -6px))), 0);"),
     true,
     "fog preview samples should only shift upward from the baseline so the field does not float around a centerline",
+  );
+  assert.equal(
+    stylesSource.includes("bottom: var(--fog-ground-baseline, 14px);"),
+    true,
+    "fog preview Lumo should stay ground-anchored so traversal remains readable through the smooke-style fog body",
   );
 
   const handleCanvasMouseDownSection = source.match(/const handleCanvasMouseDown = \(event\) => \{[\s\S]*?\n  \};/);

@@ -163,6 +163,7 @@ export function buildFogPreviewFieldProfile(config = {}) {
   const falloffPx = Math.max(0, Number(config.falloffPx) || 0);
   const thicknessPx = Math.max(1, Number(config.thicknessPx) || 44);
   const density = clamp(Number(config.density) || 0, 0, 1);
+  const noise = clamp(Number(config.noise) || 0, 0, 1);
   const diffuse = clamp(Number(config.diffuse) || 0, 0, 1);
   const relax = clamp(Number(config.relax) || 0, 0, 1);
   const visc = clamp(Number(config.visc) || 0, 0, 1);
@@ -182,15 +183,19 @@ export function buildFogPreviewFieldProfile(config = {}) {
   const effectiveFalloff = falloffPx <= 0 ? 1 : falloffPx;
   const radiusRatio = clamp(radius / Math.max(spanWidthPx, 1), 0, 1.5);
   const gateResponse = 1 - clamp(gate / 256, 0, 1);
+  const layeredDensityGain = clamp(0.6 + (layers / 54), 0.8, 2.3);
 
   const samples = [];
   for (let index = 0; index < sampleCount; index += 1) {
     const u = sampleCount === 1 ? 0 : index / (sampleCount - 1);
-    const pxFromEdge = Math.min(u * spanWidthPx, (1 - u) * spanWidthPx);
-    const edgeFactor = falloffPx <= 0 ? 1 : clamp(pxFromEdge / effectiveFalloff, 0, 1);
-    const edgeHeightFactor = Math.pow(edgeFactor, 0.72);
-    const edgeDensityFactor = Math.pow(edgeFactor, 0.88);
-    const verticalWeight = 0.28 + (edgeHeightFactor * 0.72);
+    // Mirrors editor-v2/dev/sandbox/smooke.html drawFog() where the authored span
+    // keeps a full body and applies a readable taper as x approaches x1.
+    const dOpenPx = (1 - u) * spanWidthPx;
+    const falloffMask = falloffPx <= 0 ? 1 : clamp(dOpenPx / effectiveFalloff, 0, 1);
+    const edgeFactor = Math.pow(falloffMask, 0.86);
+    const edgeHeightFactor = Math.pow(falloffMask, 0.78);
+    const edgeDensityFactor = Math.pow(falloffMask, 0.68);
+    const verticalWeight = 0.18 + (edgeHeightFactor * 0.82);
     const waveA = Math.sin((u * Math.PI * 2 * (1.2 / organicScale)) + (nowSeconds * (0.48 + organicSpeed * 0.07)));
     const waveB = Math.sin((u * Math.PI * 2 * (2.1 / organicScale)) - (nowSeconds * (0.38 + organicSpeed * 0.11)));
     const organicWave = organicStrength * ((waveA * 0.62) + (waveB * 0.38));
@@ -200,18 +205,22 @@ export function buildFogPreviewFieldProfile(config = {}) {
       : clamp(1 - (interactionDistance / Math.max(0.0001, radiusRatio)), 0, 1);
     const interactionWave = interactionInfluence * gateResponse * ((bulge * 0.16) - (push * 0.1));
     const smoothAmplitude = (1 - softening) * 0.72 + (visc * 0.28);
-    const normalizedDensity = density * (0.32 + edgeDensityFactor * 0.68);
-    const layerInfluence = clamp(layers / 32, 0.2, 3);
+    const normalizedDensity = density * (0.2 + edgeDensityFactor * 0.8) * layeredDensityGain;
+    const layerInfluence = clamp(layers / 32, 0.2, 3.4);
+    const bodyRiseFactor = 0.78 + (edgeHeightFactor * 0.36);
     const coreHeightPx = clamp(
-      ((thicknessPx * verticalWeight) + (thicknessPx * 0.25 * organicWave) + (thicknessPx * interactionWave * 0.22)) * smoothAmplitude,
+      ((thicknessPx * verticalWeight * bodyRiseFactor) + (thicknessPx * 0.22 * organicWave) + (thicknessPx * interactionWave * 0.2)) * smoothAmplitude,
       2,
       thicknessPx * 2.4,
     );
-    const hazeHeightPx = clamp(coreHeightPx + thicknessPx * (0.28 + diffuse * 0.42 + relax * 0.2), 4, thicknessPx * 2.8);
+    const hazeHeightPx = clamp(coreHeightPx + thicknessPx * (0.25 + diffuse * 0.46 + relax * 0.22), 4, thicknessPx * 2.8);
     const opacity = clamp((normalizedDensity * (0.42 + layerInfluence * 0.18)) + (softening * 0.22), 0.06, 0.96);
     const upwardLift = clamp((Math.max(organicWave, 0) * 0.68) + (interactionWave * 0.45) + (Math.max(drift, 0) * 0.04), 0, 1.2);
-    const offsetY = -(((upwardLift * 8) + (lift * 0.05)) * (0.5 + edgeHeightFactor * 0.5));
-    const taper = clamp(0.1 + ((1 - edgeHeightFactor) * 0.9), 0, 1);
+    const offsetY = -(((upwardLift * 8) + (lift * 0.05)) * (0.55 + edgeHeightFactor * 0.45));
+    const taper = clamp(0.12 + ((1 - edgeHeightFactor) * 0.88), 0, 1);
+    const layerPhase = (u * Math.PI * 2 * (1.3 + (layers * 0.012))) + (nowSeconds * (0.4 + organicSpeed * 0.09));
+    const layerWave = Math.sin(layerPhase) * 0.5 + 0.5;
+    const layerJitter = clamp((0.72 + (layerWave * 0.56)) * (0.7 + noise * 0.3), 0.4, 1.45);
     samples.push({
       u,
       coreHeightPx: Number(coreHeightPx.toFixed(3)),
@@ -220,6 +229,7 @@ export function buildFogPreviewFieldProfile(config = {}) {
       offsetY: Number(offsetY.toFixed(3)),
       edgeFactor: Number(edgeFactor.toFixed(3)),
       taper: Number(taper.toFixed(3)),
+      layerJitter: Number(layerJitter.toFixed(3)),
     });
   }
   return { sampleCount, samples };
@@ -258,6 +268,7 @@ function renderFogPreview(selection, rect) {
   const spanStartPct = (1 - spanCoverage) * 0.5;
   const spanEndPct = spanStartPct + spanCoverage;
   const edgeFadePct = Math.max(1.5, Math.min(38, (falloffPx / Math.max(spanWidthPx, 1)) * 120));
+  const edgeFadeStartPct = Math.max(0.45, Math.min(4, edgeFadePct * 0.25));
   const color = String(look.color || "#E1EEFF");
   const blend = String(render.blend || "screen");
   const lumoBehindFog = Boolean(render.lumoBehindFog);
@@ -267,6 +278,7 @@ function renderFogPreview(selection, rect) {
     falloffPx,
     thicknessPx: thickness,
     density,
+    noise,
     diffuse,
     relax,
     visc,
@@ -302,7 +314,9 @@ function renderFogPreview(selection, rect) {
           --fog-color:${escapeHtml(color)};
           --fog-opacity:${fogOpacity.toFixed(3)};
           --fog-thickness:${Math.round(thickness)}px;
+          --fog-ground-baseline:14px;
           --fog-falloff-pct:${edgeFadePct.toFixed(2)}%;
+          --fog-falloff-start-pct:${edgeFadeStartPct.toFixed(2)}%;
           --fog-noise:${noise.toFixed(3)};
           --fog-drift:${drift.toFixed(3)};
           --fog-diffuse:${diffuse.toFixed(3)};
@@ -338,6 +352,7 @@ function renderFogPreview(selection, rect) {
                   --fog-sample-offset:${sample.offsetY.toFixed(3)}px;
                   --fog-sample-edge:${sample.edgeFactor.toFixed(3)};
                   --fog-sample-taper:${sample.taper.toFixed(3)};
+                  --fog-sample-layer-jitter:${sample.layerJitter.toFixed(3)};
                 "
               ></span>
             `).join("")}
