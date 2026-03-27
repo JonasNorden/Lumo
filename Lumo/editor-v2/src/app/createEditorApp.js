@@ -2396,9 +2396,11 @@ export function createEditorApp({
     if (!fogPreviewMotion.startedAtMs) fogPreviewMotion.startedAtMs = timestampMs;
     const elapsedMs = timestampMs - fogPreviewMotion.startedAtMs;
     const patrol = getFogPreviewPatrolPhase(elapsedMs, fogPreviewMotion.durationMs);
-    fogPreviewMotion.lumo.style.transform = `translate3d(${patrol.xPct.toFixed(3)}%, -1px, 0) scaleX(${patrol.facing})`;
+    fogPreviewMotion.lumo.style.left = `${patrol.xPct.toFixed(3)}%`;
+    fogPreviewMotion.lumo.style.transform = `translate3d(-50%, -1px, 0) scaleX(${patrol.facing})`;
     if (fogPreviewMotion.disturbance) {
-      fogPreviewMotion.disturbance.style.transform = `translate3d(${patrol.xPct.toFixed(3)}%, 0, 0)`;
+      fogPreviewMotion.disturbance.style.left = `${patrol.xPct.toFixed(3)}%`;
+      fogPreviewMotion.disturbance.style.transform = "translate3d(-50%, 0, 0)";
     }
     fogPreviewMotion.rafId = globalThis.requestAnimationFrame(stepFogPreviewMotion);
   };

@@ -1988,7 +1988,7 @@ kbd {
 
 .fogWorkbenchPreviewSpanStop {
   position: absolute;
-  top: calc(100% - var(--fog-thickness, 44px) - 32px);
+  top: calc(100% - var(--fog-thickness, 44px) - 32px - var(--fog-lift, 0px));
   width: 2px;
   height: calc(var(--fog-thickness, 44px) + 44px + (var(--fog-falloff-pct, 6%) * 0.42));
   background: linear-gradient(180deg, rgba(196, 219, 255, 0.04), rgba(196, 219, 255, 0.7) 42%, rgba(196, 219, 255, 0.16));
@@ -2006,6 +2006,7 @@ kbd {
 
 .fogWorkbenchPreviewBands,
 .fogWorkbenchPreviewBands.isSecondary,
+.fogWorkbenchPreviewField,
 .fogWorkbenchPreviewMist,
 .fogWorkbenchPreviewWake,
 .fogWorkbenchPreviewDisturbance {
@@ -2022,7 +2023,7 @@ kbd {
 
 .fogWorkbenchPreviewBands,
 .fogWorkbenchPreviewBands.isSecondary {
-  top: calc(100% - var(--fog-thickness, 44px) - 24px);
+  top: calc(100% - var(--fog-thickness, 44px) - 24px - var(--fog-lift, 0px));
   height: calc(var(--fog-thickness, 44px) + 34px + (var(--fog-bulge, 0) * 2px));
   opacity: var(--fog-opacity, 0.25);
   mix-blend-mode: var(--fog-blend, screen);
@@ -2039,6 +2040,52 @@ kbd {
   transform: translate3d(calc(var(--fog-push, 0) * 0.8px), calc(var(--fog-relax, 0) * -3px), 0);
 }
 
+.fogWorkbenchPreviewField {
+  z-index: 2;
+  top: calc(100% - var(--fog-thickness, 44px) - 24px - var(--fog-lift, 0px));
+  height: calc(var(--fog-thickness, 44px) + 50px + (var(--fog-bulge, 0) * 2.6px));
+  pointer-events: none;
+}
+
+.fogWorkbenchPreviewSample {
+  position: absolute;
+  left: var(--fog-sample-x, 0%);
+  bottom: 0;
+  width: max(6px, calc(3px + (var(--fog-layers, 28) * 0.03px)));
+  transform: translate3d(-50%, calc(var(--fog-sample-offset, 0px) + (var(--fog-relax, 0) * -8px)), 0);
+  opacity: var(--fog-sample-opacity, 0.24);
+}
+
+.fogWorkbenchPreviewSample::before,
+.fogWorkbenchPreviewSample::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 999px;
+}
+
+.fogWorkbenchPreviewSample::before {
+  width: calc(8px + (var(--fog-visc, 0) * 13px));
+  height: var(--fog-sample-core, 18px);
+  bottom: 0;
+  background:
+    radial-gradient(60% 95% at 50% 18%, color-mix(in srgb, var(--fog-color, #E1EEFF) 90%, white 10%), transparent 88%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, color-mix(in srgb, var(--fog-color, #E1EEFF) 76%, transparent) 45%, transparent 100%);
+  filter: blur(calc(1.5px + (var(--fog-diffuse, 0) * 5px)));
+  mix-blend-mode: var(--fog-blend, screen);
+  opacity: calc(0.45 + (var(--fog-sample-edge, 1) * 0.5));
+}
+
+.fogWorkbenchPreviewSample::after {
+  width: calc(16px + (var(--fog-diffuse, 0) * 24px));
+  height: var(--fog-sample-haze, 24px);
+  bottom: calc(-6px - (var(--fog-push, 0) * 0.4px));
+  background: radial-gradient(70% 95% at 50% 35%, color-mix(in srgb, var(--fog-color, #E1EEFF) 64%, transparent) 0%, transparent 100%);
+  filter: blur(calc(5px + (var(--fog-diffuse, 0) * 10px)));
+  opacity: calc(0.26 + (var(--fog-noise, 0) * 0.28));
+}
+
 .fogWorkbenchPreviewMist {
   opacity: calc(0.15 + (var(--fog-noise, 0) * 0.45));
   background:
@@ -2049,7 +2096,7 @@ kbd {
 }
 
 .fogWorkbenchPreviewWake {
-  top: calc(100% - var(--fog-thickness, 44px) - 18px);
+  top: calc(100% - var(--fog-thickness, 44px) - 18px - var(--fog-lift, 0px));
   height: calc(var(--fog-thickness, 44px) + 16px);
   opacity: calc(0.15 + (var(--fog-push, 0) * 0.055));
   background:
@@ -2059,11 +2106,11 @@ kbd {
 }
 
 .fogWorkbenchPreviewDisturbance {
-  top: calc(100% - var(--fog-thickness, 44px) - 26px);
-  width: 54px;
+  top: calc(100% - var(--fog-thickness, 44px) - 26px - var(--fog-lift, 0px));
+  width: calc(24px + min(86px, var(--fog-radius, 0) * 0.42px));
   height: calc(var(--fog-thickness, 44px) + 28px + (var(--fog-bulge, 0) * 1.6px));
   left: 0;
-  opacity: calc(0.2 + (var(--fog-bulge, 0) * 0.06));
+  opacity: calc((0.2 + (var(--fog-bulge, 0) * 0.06)) * (1 - (var(--fog-gate, 0) / 320)));
   background: radial-gradient(circle at 40% 50%, rgba(243, 248, 255, 0.68), rgba(220, 237, 255, 0.2) 52%, transparent 82%);
   filter: blur(calc(5px + (var(--fog-push, 0) * 0.45px)));
 }
@@ -2072,7 +2119,7 @@ kbd {
   position: absolute;
   width: var(--fog-preview-lumo-width, 24px);
   height: var(--fog-preview-lumo-height, 24px);
-  bottom: clamp(8px, calc((var(--fog-thickness, 44px) * 0.18) + 5px), 26px);
+  bottom: clamp(8px, calc((var(--fog-thickness, 44px) * 0.18) + 5px - (var(--fog-lift, 0px) * 0.22)), 26px);
   left: 0;
   transform: translate3d(0, 0, 0);
   will-change: transform;
@@ -2117,6 +2164,7 @@ kbd {
 
 .fogWorkbenchPreviewBands,
 .fogWorkbenchPreviewBands.isSecondary,
+.fogWorkbenchPreviewField,
 .fogWorkbenchPreviewMist,
 .fogWorkbenchPreviewWake,
 .fogWorkbenchPreviewDisturbance {
