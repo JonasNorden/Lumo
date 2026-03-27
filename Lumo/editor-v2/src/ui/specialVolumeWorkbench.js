@@ -1,4 +1,5 @@
 import { getEntityParamInputType, getNestedEntityParam } from "../domain/entities/entityParams.js";
+import { getEntityVisual } from "../domain/entities/entityVisuals.js";
 import {
   getFogVolumeParams,
   getFogVolumeRect,
@@ -167,6 +168,10 @@ function renderFogPreview(selection, rect) {
   const blend = String(render.blend || "screen");
   const lumoBehindFog = Boolean(render.lumoBehindFog);
   const fogOpacity = Math.min(0.95, 0.15 + (density * 0.65 * exposure));
+  const lumoVisual = getEntityVisual("player-spawn");
+  const lumoSprite = typeof lumoVisual?.img === "string" && lumoVisual.img.trim()
+    ? lumoVisual.img.trim()
+    : "";
 
   return `
     <section class="specialVolumeWorkbenchPreviewPane" data-fog-preview-root>
@@ -206,7 +211,9 @@ function renderFogPreview(selection, rect) {
           <div class="fogWorkbenchPreviewWake"></div>
           <div class="fogWorkbenchPreviewDisturbance"></div>
           <div class="fogWorkbenchPreviewLumo ${lumoBehindFog ? "isBehindFog" : "isAheadOfFog"}" data-fog-preview-lumo>
-            <span class="fogWorkbenchPreviewLumoBody"></span>
+            ${lumoSprite
+    ? `<img class="fogWorkbenchPreviewLumoSprite" src="${escapeHtml(lumoSprite)}" alt="Lumo preview patrol" draggable="false" />`
+    : '<span class="fogWorkbenchPreviewLumoBody"></span>'}
             <span class="fogWorkbenchPreviewLumoGlow"></span>
           </div>
         </div>
