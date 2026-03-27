@@ -132,6 +132,7 @@ export function createEditorState() {
       specialVolumeWorkbench: {
         mode: "floating",
         activeType: null,
+        openEntityId: null,
         fogDefaults: null,
       },
     },

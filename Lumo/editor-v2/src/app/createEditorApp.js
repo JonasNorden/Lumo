@@ -13,7 +13,11 @@ import { getWorldPointFromMinimapPoint, renderMinimap } from "../render/minimap.
 import { renderInspector, bindInspectorPanel } from "../ui/inspectorPanel.js";
 import { renderBottomPanel, bindBottomPanel } from "../ui/bottomPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
-import { getSpecialVolumeWorkbenchModalContent, resolveSelectedSpecialVolume } from "../ui/specialVolumeWorkbench.js";
+import {
+  getSpecialVolumeWorkbenchLauncherContent,
+  getSpecialVolumeWorkbenchModalContent,
+  resolveSelectedSpecialVolume,
+} from "../ui/specialVolumeWorkbench.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
 import {
@@ -481,6 +485,15 @@ function parseEntityParamInputValue(target) {
   return target.value;
 }
 
+function parseEntityParamInputValueForLiveInput(target) {
+  const paramType = target?.dataset?.entityParamType;
+  if (paramType !== "number") return parseEntityParamInputValue(target);
+  const trimmed = String(target.value ?? "").trim();
+  if (!trimmed || trimmed === "-" || trimmed === "." || trimmed === "-.") return null;
+  const parsed = Number.parseFloat(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function getNewLevelSizeValidationMessage(widthValue, heightValue) {
   const parsedWidth = Number.parseInt(String(widthValue), 10);
   const parsedHeight = Number.parseInt(String(heightValue), 10);
@@ -741,6 +754,7 @@ export function createEditorApp({
       inside: false,
     },
   };
+  let fogStepperSession = null;
   const toolShortcutMap = {
     v: EDITOR_TOOLS.INSPECT,
     b: EDITOR_TOOLS.PAINT,
@@ -1508,6 +1522,9 @@ export function createEditorApp({
     }
 
     if (typeof selectedEntityId === "string" && selectedEntityId.trim()) {
+      if (draft.ui.specialVolumeWorkbench.openEntityId && draft.ui.specialVolumeWorkbench.openEntityId !== selectedEntityId) {
+        draft.ui.specialVolumeWorkbench.openEntityId = null;
+      }
       selectEntitiesByIds(draft, [selectedEntityId], selectedEntityId, {
         clearHover: true,
         clearHoverCell: true,
@@ -1518,6 +1535,7 @@ export function createEditorApp({
     }
 
     setEntitySelectionByIds(draft, [], null);
+    draft.ui.specialVolumeWorkbench.openEntityId = null;
     draft.interaction.selectedCell = null;
     draft.interaction.hoverCell = null;
   };
@@ -2331,7 +2349,8 @@ export function createEditorApp({
       : "none";
 
     const fogWorkbenchModal = getSpecialVolumeWorkbenchModalContent(state);
-    floatingPanelHost.innerHTML = `${renderNewLevelSizePopover(state)}${fogWorkbenchModal?.markup || ""}`;
+    const fogWorkbenchLauncher = getSpecialVolumeWorkbenchLauncherContent(state);
+    floatingPanelHost.innerHTML = `${renderNewLevelSizePopover(state)}${fogWorkbenchLauncher}${fogWorkbenchModal?.markup || ""}`;
     floatingPanelHost.classList.toggle("hasSpecialVolumeWorkbench", Boolean(fogWorkbenchModal));
 
     if (!focusedField) return;
@@ -4210,6 +4229,13 @@ export function createEditorApp({
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     store.setState((draft) => {
       const entityId = hitEntityIndex >= 0 ? draft.document.active?.entities?.[hitEntityIndex]?.id || null : null;
+      const hitEntity = hitEntityIndex >= 0 ? draft.document.active?.entities?.[hitEntityIndex] : null;
+      if (event.detail >= 2 && entityId && isFogVolumeEntityType(hitEntity?.type)) {
+        handleCleanRoomEntitySelectionHit(draft, entityId);
+        draft.ui.specialVolumeWorkbench.openEntityId = entityId;
+        draft.ui.specialVolumeWorkbench.activeType = "fog_volume";
+        return;
+      }
       draft.interaction.selectedCell = cell;
       if (!event.shiftKey && entityId && draft.interaction.selectedEntityId === entityId) {
         beginCleanRoomEntityDrag(draft, entityId, cell);
@@ -5393,6 +5419,7 @@ if (event.shiftKey) {
       if (selection && isFogVolumeEntityType(selection.entity?.type)) {
         event.preventDefault();
         store.setState((draft) => {
+          draft.ui.specialVolumeWorkbench.openEntityId = null;
           clearEntitySelection(draft.interaction);
           draft.interaction.selectedEntityId = null;
           draft.interaction.selectedEntityIds = [];
@@ -5541,8 +5568,18 @@ if (event.shiftKey) {
 
     const fogActionButton = target.closest("[data-fog-workbench-action]");
     if (fogActionButton instanceof HTMLButtonElement) {
+      if (fogActionButton.dataset.fogWorkbenchAction === "open") {
+        const selection = resolveSelectedSpecialVolume(store.getState());
+        if (!selection || !isFogVolumeEntityType(selection.entity?.type)) return;
+        store.setState((draft) => {
+          draft.ui.specialVolumeWorkbench.openEntityId = selection.entity.id;
+          draft.ui.specialVolumeWorkbench.activeType = "fog_volume";
+        });
+        return;
+      }
       if (fogActionButton.dataset.fogWorkbenchAction === "done") {
         store.setState((draft) => {
+          draft.ui.specialVolumeWorkbench.openEntityId = null;
           clearEntitySelection(draft.interaction);
           draft.interaction.selectedEntityId = null;
           draft.interaction.selectedEntityIds = [];
@@ -5585,12 +5622,14 @@ if (event.shiftKey) {
     if (paramPath) {
       const index = Number.parseInt(target.dataset.entityIndex || "", 10);
       if (!Number.isInteger(index) || index < 0) return;
+      const parsedValue = parseEntityParamInputValueForLiveInput(target);
+      if (parsedValue === null) return;
       updateEntity(index, "param", {
         __canonicalMutation: true,
         itemId: target.dataset.entityId || null,
         key: paramPath,
         path: paramPath,
-        value: parseEntityParamInputValue(target),
+        value: parsedValue,
       });
       return;
     }
@@ -5616,6 +5655,70 @@ if (event.shiftKey) {
     }
     const field = target.dataset.newLevelField;
     updateNewLevelSizeField(field, target.value, { commit: true });
+  };
+
+  const stopFogStepperSession = () => {
+    if (!fogStepperSession) return;
+    globalThis.clearTimeout(fogStepperSession.timeoutId);
+    globalThis.clearInterval(fogStepperSession.intervalId);
+    fogStepperSession = null;
+  };
+
+  const nudgeFogNumberInput = (button, direction, event = null) => {
+    const root = button.closest("[data-fog-number-field]");
+    const input = root?.querySelector('input[data-entity-param-type="number"]');
+    if (!(input instanceof HTMLInputElement)) return;
+    const baseStep = Number.parseFloat(input.dataset.fogNumberStep || input.step || "1");
+    const step = Number.isFinite(baseStep) && baseStep > 0 ? baseStep : 1;
+    const multiplier = event?.shiftKey ? 4 : 1;
+    const min = Number.parseFloat(input.dataset.fogNumberMin || input.min || "");
+    const max = Number.parseFloat(input.dataset.fogNumberMax || input.max || "");
+    const current = Number.parseFloat(input.value);
+    let nextValue = (Number.isFinite(current) ? current : 0) + (direction * step * multiplier);
+    if (Number.isFinite(min)) nextValue = Math.max(min, nextValue);
+    if (Number.isFinite(max)) nextValue = Math.min(max, nextValue);
+    const precision = step >= 1 ? 0 : Math.min(4, Math.max(0, String(step).split(".")[1]?.length || 0));
+    input.value = precision > 0 ? nextValue.toFixed(precision) : String(Math.round(nextValue));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.focus({ preventScroll: true });
+    input.select();
+  };
+
+  const startFogStepperSession = (button, direction, event) => {
+    stopFogStepperSession();
+    nudgeFogNumberInput(button, direction, event);
+    fogStepperSession = {
+      timeoutId: globalThis.setTimeout(() => {
+        fogStepperSession.intervalId = globalThis.setInterval(() => {
+          nudgeFogNumberInput(button, direction, event);
+        }, 85);
+      }, 240),
+      intervalId: null,
+    };
+  };
+
+  const handleFloatingPanelPointerDown = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const stepButton = target.closest("[data-fog-step-direction]");
+    if (!(stepButton instanceof HTMLButtonElement)) return;
+    const direction = Number.parseInt(stepButton.dataset.fogStepDirection || "", 10);
+    if (direction !== -1 && direction !== 1) return;
+    event.preventDefault();
+    startFogStepperSession(stepButton, direction, event);
+  };
+
+  const handleFloatingPanelKeyDown = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (!target.dataset.entityParamPath) return;
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      target.dispatchEvent(new Event("change", { bubbles: true }));
+      target.blur();
+    }
   };
 
   const handleFloatingPanelSubmit = (event) => {
@@ -5773,6 +5876,7 @@ if (event.shiftKey) {
     if (store.getState().ui.newLevelSize?.isOpen) {
       closeNewLevelSizeFlow();
     }
+    stopFogStepperSession();
   };
 
   const loadDocument = async () => {
@@ -5863,6 +5967,9 @@ if (event.shiftKey) {
   canvas.addEventListener("mousedown", handleCanvasMouseDown);
   canvas.addEventListener("wheel", handleCanvasWheel, { passive: false });
   window.addEventListener("mouseup", stopCanvasInteraction);
+  window.addEventListener("mouseup", stopFogStepperSession);
+  window.addEventListener("pointerup", stopFogStepperSession);
+  window.addEventListener("pointercancel", stopFogStepperSession);
   canvas.addEventListener("click", handleCanvasClick);
   minimapCanvas.addEventListener("click", handleMinimapClick);
   window.addEventListener("keydown", handleGlobalKeyDown);
@@ -5873,6 +5980,8 @@ if (event.shiftKey) {
   floatingPanelHost.addEventListener("click", handleFloatingPanelClick);
   floatingPanelHost.addEventListener("input", handleFloatingPanelInput);
   floatingPanelHost.addEventListener("change", handleFloatingPanelChange);
+  floatingPanelHost.addEventListener("pointerdown", handleFloatingPanelPointerDown);
+  floatingPanelHost.addEventListener("keydown", handleFloatingPanelKeyDown, true);
   floatingPanelHost.addEventListener("submit", handleFloatingPanelSubmit);
   document.addEventListener("pointerdown", handleDocumentPointerDown);
 
@@ -5897,6 +6006,9 @@ if (event.shiftKey) {
     canvas.removeEventListener("mousedown", handleCanvasMouseDown);
     canvas.removeEventListener("wheel", handleCanvasWheel);
     window.removeEventListener("mouseup", stopCanvasInteraction);
+    window.removeEventListener("mouseup", stopFogStepperSession);
+    window.removeEventListener("pointerup", stopFogStepperSession);
+    window.removeEventListener("pointercancel", stopFogStepperSession);
     canvas.removeEventListener("click", handleCanvasClick);
     minimapCanvas.removeEventListener("click", handleMinimapClick);
     window.removeEventListener("keydown", handleGlobalKeyDown);
@@ -5907,6 +6019,8 @@ if (event.shiftKey) {
     floatingPanelHost.removeEventListener("click", handleFloatingPanelClick);
     floatingPanelHost.removeEventListener("input", handleFloatingPanelInput);
     floatingPanelHost.removeEventListener("change", handleFloatingPanelChange);
+    floatingPanelHost.removeEventListener("pointerdown", handleFloatingPanelPointerDown);
+    floatingPanelHost.removeEventListener("keydown", handleFloatingPanelKeyDown, true);
     floatingPanelHost.removeEventListener("submit", handleFloatingPanelSubmit);
     document.removeEventListener("pointerdown", handleDocumentPointerDown);
     stopArrowPanLoop();

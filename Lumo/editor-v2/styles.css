@@ -1803,6 +1803,34 @@ kbd {
   font-size: 12px;
 }
 
+.specialVolumeWorkbenchNumberInput {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.specialVolumeWorkbenchNumberInput input {
+  flex: 1 1 auto;
+}
+
+.specialVolumeWorkbenchLauncher {
+  pointer-events: auto;
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(88, 115, 173, 0.42);
+  background: rgba(10, 16, 30, 0.9);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  font-size: 11px;
+  color: rgba(228, 238, 255, 0.82);
+  z-index: 6;
+}
+
 .specialVolumeWorkbenchModal {
   width: min(1120px, calc(100vw - 80px));
   max-height: min(78vh, 760px);
@@ -2055,11 +2083,11 @@ kbd {
 }
 
 .fogWorkbenchPreviewSurface.isAnimated .fogWorkbenchPreviewLumo {
-  animation: fogWorkbenchLumoTraverse calc(11s - min(5s, var(--fog-organic-speed, 0) * 0.7s)) ease-in-out infinite alternate;
+  animation: fogWorkbenchLumoTraverse calc(9.6s - min(4.6s, var(--fog-organic-speed, 0) * 0.65s)) linear infinite;
 }
 
 .fogWorkbenchPreviewSurface.isAnimated .fogWorkbenchPreviewDisturbance {
-  animation: fogWorkbenchLumoTraverse calc(11s - min(5s, var(--fog-organic-speed, 0) * 0.7s)) ease-in-out infinite alternate;
+  animation: fogWorkbenchLumoTraverse calc(9.6s - min(4.6s, var(--fog-organic-speed, 0) * 0.65s)) linear infinite;
 }
 
 .fogWorkbenchPreviewSurface.isAnimated .fogWorkbenchPreviewBands {
@@ -2079,9 +2107,10 @@ kbd {
 }
 
 @keyframes fogWorkbenchLumoTraverse {
-  0% { transform: translate3d(-12px, 0, 0); }
-  48% { transform: translate3d(calc(100% - 10px), -2px, 0); }
-  100% { transform: translate3d(calc(100% - 16px), 0, 0); }
+  0% { transform: translate3d(-14px, 0, 0); }
+  45% { transform: translate3d(calc(52% - 10px), -2px, 0); }
+  96% { transform: translate3d(calc(100% - 14px), 0, 0); }
+  100% { transform: translate3d(-14px, 0, 0); }
 }
 
 @keyframes fogWorkbenchFogSway {

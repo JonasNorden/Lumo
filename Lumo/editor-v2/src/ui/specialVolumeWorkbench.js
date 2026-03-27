@@ -79,20 +79,44 @@ function renderWorkbenchField(selection, path) {
   const renderedValue = inputType === "number"
     ? String(Number.isFinite(Number(value)) ? Number(value) : "")
     : String(value ?? "");
-
-  return `
-    <label class="fieldRow fieldRowCompact selectionInlineField selectionParamField">
-      <span class="label">${escapeHtml(label)}</span>
+  const numericInputMarkup = inputType === "number"
+    ? `
+      <div class="specialVolumeWorkbenchNumberInput" data-fog-number-field>
+        <input
+          type="number"
+          ${step} ${min} ${max}
+          value="${escapeHtml(renderedValue)}"
+          data-entity-param-path="${escapeHtml(path)}"
+          data-entity-param-type="number"
+          data-entity-index="${selection.index}"
+          data-entity-id="${escapeHtml(entityId)}"
+          data-fog-number-step="${escapeHtml(String(fieldMeta?.step ?? ""))}"
+          data-fog-number-min="${escapeHtml(String(fieldMeta?.min ?? ""))}"
+          data-fog-number-max="${escapeHtml(String(fieldMeta?.max ?? ""))}"
+          data-live-param="true"
+        />
+        <div class="selectionStepperButtons" data-fog-stepper-buttons>
+          <button type="button" class="selectionStepperButton" data-fog-step-direction="1" aria-label="Increase ${escapeHtml(label)}">▲</button>
+          <button type="button" class="selectionStepperButton" data-fog-step-direction="-1" aria-label="Decrease ${escapeHtml(label)}">▼</button>
+        </div>
+      </div>
+    `
+    : `
       <input
-        type="${inputType === "number" ? "number" : "text"}"
-        ${inputType === "number" ? `${step} ${min} ${max}` : ""}
+        type="text"
         value="${escapeHtml(renderedValue)}"
         data-entity-param-path="${escapeHtml(path)}"
-        data-entity-param-type="${escapeHtml(inputType === "number" ? "number" : "string")}"
+        data-entity-param-type="string"
         data-entity-index="${selection.index}"
         data-entity-id="${escapeHtml(entityId)}"
         data-live-param="true"
       />
+    `;
+
+  return `
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionParamField">
+      <span class="label">${escapeHtml(label)}</span>
+      ${numericInputMarkup}
     </label>
   `;
 }
@@ -239,6 +263,10 @@ export function getSpecialVolumeWorkbenchContent(state) {
 export function getSpecialVolumeWorkbenchModalContent(state) {
   const selection = resolveSelectedSpecialVolume(state);
   if (!selection || !isFogVolumeEntityType(selection.entity?.type)) return null;
+  const openEntityId = typeof state?.ui?.specialVolumeWorkbench?.openEntityId === "string"
+    ? state.ui.specialVolumeWorkbench.openEntityId
+    : null;
+  if (openEntityId !== selection.entity.id) return null;
 
   const descriptor = getSpecialVolumeDescriptor(selection.entity.type);
   if (!descriptor) return null;
@@ -281,4 +309,19 @@ export function getSpecialVolumeWorkbenchModalContent(state) {
       </section>
     `,
   };
+}
+
+export function getSpecialVolumeWorkbenchLauncherContent(state) {
+  const selection = resolveSelectedSpecialVolume(state);
+  if (!selection || !isFogVolumeEntityType(selection.entity?.type)) return "";
+  const openEntityId = typeof state?.ui?.specialVolumeWorkbench?.openEntityId === "string"
+    ? state.ui.specialVolumeWorkbench.openEntityId
+    : null;
+  if (openEntityId === selection.entity.id) return "";
+  return `
+    <section class="specialVolumeWorkbenchLauncher" data-special-volume-launcher>
+      <span>Fog selected. Open Workbench when ready to edit.</span>
+      <button type="button" class="toolButton isPrimary" data-fog-workbench-action="open">Edit Fog</button>
+    </section>
+  `;
 }
