@@ -28,7 +28,11 @@ import {
 } from "../src/domain/tiles/tileSpriteCatalog.js";
 import { renderBottomPanel } from "../src/ui/bottomPanel.js";
 import { renderInspector } from "../src/ui/inspectorPanel.js";
-import { getSpecialVolumeWorkbenchLauncherContent, getSpecialVolumeWorkbenchModalContent } from "../src/ui/specialVolumeWorkbench.js";
+import {
+  getFogPreviewPatrolPhase,
+  getSpecialVolumeWorkbenchLauncherContent,
+  getSpecialVolumeWorkbenchModalContent,
+} from "../src/ui/specialVolumeWorkbench.js";
 import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
 import {
   createNewLevelDocument,
@@ -4990,6 +4994,23 @@ function runFloatingFogWorkbenchRegressionChecks() {
   );
 }
 
+function runFogPreviewMotionRegressionChecks() {
+  const start = getFogPreviewPatrolPhase(0, 4000);
+  const quarter = getFogPreviewPatrolPhase(1000, 4000);
+  const threeQuarter = getFogPreviewPatrolPhase(3500, 4000);
+  const wrapped = getFogPreviewPatrolPhase(5000, 4000);
+
+  assert.equal(start.xPct, 0, "fog preview patrol should start at the authored span start");
+  assert.equal(quarter.xPct > start.xPct, true, "fog preview patrol should visibly advance across the span over time");
+  assert.equal(threeQuarter.xPct < quarter.xPct, true, "fog preview patrol should reverse after reaching the end of the span");
+  assert.equal(threeQuarter.facing, -1, "fog preview patrol should mirror Lumo facing when moving back across the span");
+  assert.equal(
+    wrapped.xPct >= 0 && wrapped.xPct <= 100,
+    true,
+    "fog preview patrol should stay bounded to the preview span even after repeated loops",
+  );
+}
+
 function runInspectorFogRegressionChecks() {
   globalThis.document = { activeElement: null };
 
@@ -6024,6 +6045,31 @@ function runSourceRegressionChecks() {
     true,
     "fog preview markup should stamp a live animation phase offset so Lumo keeps visibly traversing the span",
   );
+  assert.equal(
+    specialWorkbenchSource.includes('data-fog-preview-traverse-ms="${Math.round(traverseDurationMs)}"'),
+    true,
+    "fog preview markup should expose traverse duration metadata for runtime-driven patrol updates",
+  );
+  assert.equal(
+    source.includes("const syncFogPreviewMotionLoop = () => {"),
+    true,
+    "floating fog modal runtime should own a dedicated sync path for preview motion wiring",
+  );
+  assert.equal(
+    source.includes("fogPreviewMotion.rafId = globalThis.requestAnimationFrame(stepFogPreviewMotion);"),
+    true,
+    "fog preview runtime should drive Lumo motion through requestAnimationFrame for reliable visible movement",
+  );
+  assert.equal(
+    source.includes("fogPreviewMotion.lumo.style.animation = \"none\";"),
+    true,
+    "runtime-driven patrol should disable brittle CSS animation ownership on the Lumo preview node",
+  );
+  assert.equal(
+    source.includes("fogPreviewMotion.lumo.style.transform = `translate3d("),
+    true,
+    "fog preview runtime should mutate Lumo transform directly so position visibly changes over time",
+  );
 
   const handleCanvasMouseDownSection = source.match(/const handleCanvasMouseDown = \(event\) => \{[\s\S]*?\n  \};/);
   assert.ok(handleCanvasMouseDownSection, "handleCanvasMouseDown should exist");
@@ -6478,6 +6524,7 @@ async function main() {
   runBottomPanelBatchSoundRegressionChecks();
   runBottomPanelFogVolumeRegressionChecks();
   runFloatingFogWorkbenchRegressionChecks();
+  runFogPreviewMotionRegressionChecks();
   runInspectorFogRegressionChecks();
   runInspectorSoundSummaryRegressionChecks();
   runSourceRegressionChecks();

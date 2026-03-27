@@ -138,6 +138,21 @@ function renderWorkbenchSection(selection, section) {
   `;
 }
 
+export function getFogPreviewPatrolPhase(elapsedMs, durationMs) {
+  const safeDuration = Math.max(1200, Number(durationMs) || 0);
+  const normalized = (((Number(elapsedMs) || 0) % safeDuration) + safeDuration) % safeDuration;
+  const progress = normalized / safeDuration;
+  const forward = progress < 0.5;
+  const localProgress = forward ? progress / 0.5 : (progress - 0.5) / 0.5;
+  const clampedLocal = Math.max(0, Math.min(1, localProgress));
+  const xPct = forward ? clampedLocal * 100 : (1 - clampedLocal) * 100;
+  return {
+    xPct,
+    facing: forward ? 1 : -1,
+    progress,
+  };
+}
+
 function renderFogPreview(selection, rect) {
   const params = getFogVolumeParams(selection.entity);
   const area = params.area || {};
@@ -184,6 +199,7 @@ function renderFogPreview(selection, rect) {
       <div
         class="volumeWorkbenchPreviewSurface volumeWorkbenchPreviewSurface--span fogWorkbenchPreviewSurface isAnimated"
         data-fog-preview-surface
+        data-fog-preview-traverse-ms="${Math.round(traverseDurationMs)}"
         style="
           --volume-span-start:${(spanStartPct * 100).toFixed(2)}%;
           --volume-span-end:${(spanEndPct * 100).toFixed(2)}%;

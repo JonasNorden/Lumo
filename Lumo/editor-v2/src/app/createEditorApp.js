@@ -14,6 +14,7 @@ import { renderInspector, bindInspectorPanel } from "../ui/inspectorPanel.js";
 import { renderBottomPanel, bindBottomPanel } from "../ui/bottomPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
 import {
+  getFogPreviewPatrolPhase,
   getSpecialVolumeWorkbenchLauncherContent,
   getSpecialVolumeWorkbenchModalContent,
   resolveSelectedSpecialVolume,
@@ -755,6 +756,14 @@ export function createEditorApp({
     },
   };
   let fogStepperSession = null;
+  const fogPreviewMotion = {
+    rafId: 0,
+    startedAtMs: 0,
+    surface: null,
+    lumo: null,
+    disturbance: null,
+    durationMs: 9600,
+  };
   const toolShortcutMap = {
     v: EDITOR_TOOLS.INSPECT,
     b: EDITOR_TOOLS.PAINT,
@@ -2352,6 +2361,7 @@ export function createEditorApp({
     const fogWorkbenchLauncher = getSpecialVolumeWorkbenchLauncherContent(state);
     floatingPanelHost.innerHTML = `${renderNewLevelSizePopover(state)}${fogWorkbenchLauncher}${fogWorkbenchModal?.markup || ""}`;
     floatingPanelHost.classList.toggle("hasSpecialVolumeWorkbench", Boolean(fogWorkbenchModal));
+    syncFogPreviewMotionLoop();
 
     if (!focusedField) return;
     const nextField = focusedScope === "new-level" && state.ui.newLevelSize?.isOpen
@@ -2366,6 +2376,57 @@ export function createEditorApp({
         nextField.setSelectionRange(selectionStart, selectionEnd, selectionDirection);
       }
     }
+  };
+
+  const stopFogPreviewMotionLoop = () => {
+    if (fogPreviewMotion.rafId) {
+      globalThis.cancelAnimationFrame(fogPreviewMotion.rafId);
+      fogPreviewMotion.rafId = 0;
+    }
+    fogPreviewMotion.surface = null;
+    fogPreviewMotion.lumo = null;
+    fogPreviewMotion.disturbance = null;
+  };
+
+  const stepFogPreviewMotion = (timestampMs) => {
+    if (!fogPreviewMotion.surface?.isConnected || !fogPreviewMotion.lumo?.isConnected) {
+      stopFogPreviewMotionLoop();
+      return;
+    }
+    if (!fogPreviewMotion.startedAtMs) fogPreviewMotion.startedAtMs = timestampMs;
+    const elapsedMs = timestampMs - fogPreviewMotion.startedAtMs;
+    const patrol = getFogPreviewPatrolPhase(elapsedMs, fogPreviewMotion.durationMs);
+    fogPreviewMotion.lumo.style.transform = `translate3d(${patrol.xPct.toFixed(3)}%, -1px, 0) scaleX(${patrol.facing})`;
+    if (fogPreviewMotion.disturbance) {
+      fogPreviewMotion.disturbance.style.transform = `translate3d(${patrol.xPct.toFixed(3)}%, 0, 0)`;
+    }
+    fogPreviewMotion.rafId = globalThis.requestAnimationFrame(stepFogPreviewMotion);
+  };
+
+  const syncFogPreviewMotionLoop = () => {
+    const surface = floatingPanelHost.querySelector("[data-fog-preview-surface]");
+    const lumo = floatingPanelHost.querySelector("[data-fog-preview-lumo]");
+    const disturbance = floatingPanelHost.querySelector(".fogWorkbenchPreviewDisturbance");
+    if (!(surface instanceof HTMLElement) || !(lumo instanceof HTMLElement)) {
+      stopFogPreviewMotionLoop();
+      return;
+    }
+
+    const durationMs = Number.parseFloat(surface.dataset.fogPreviewTraverseMs || "");
+    if (fogPreviewMotion.surface === surface && fogPreviewMotion.lumo === lumo && fogPreviewMotion.rafId) {
+      fogPreviewMotion.durationMs = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 9600;
+      return;
+    }
+
+    stopFogPreviewMotionLoop();
+    fogPreviewMotion.surface = surface;
+    fogPreviewMotion.lumo = lumo;
+    fogPreviewMotion.disturbance = disturbance instanceof HTMLElement ? disturbance : null;
+    fogPreviewMotion.durationMs = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 9600;
+    fogPreviewMotion.startedAtMs = 0;
+    fogPreviewMotion.lumo.style.animation = "none";
+    if (fogPreviewMotion.disturbance) fogPreviewMotion.disturbance.style.animation = "none";
+    fogPreviewMotion.rafId = globalThis.requestAnimationFrame(stepFogPreviewMotion);
   };
 
   const applyCanvasTarget = (draft, mode) => {
@@ -6003,6 +6064,7 @@ if (event.shiftKey) {
   window.addEventListener("pointerup", stopFogStepperSession);
   window.addEventListener("pointercancel", stopFogStepperSession);
   window.addEventListener("blur", stopFogStepperSession);
+  window.addEventListener("blur", stopFogPreviewMotionLoop);
   canvas.addEventListener("click", handleCanvasClick);
   minimapCanvas.addEventListener("click", handleMinimapClick);
   window.addEventListener("keydown", handleGlobalKeyDown);
@@ -6044,6 +6106,7 @@ if (event.shiftKey) {
     window.removeEventListener("pointerup", stopFogStepperSession);
     window.removeEventListener("pointercancel", stopFogStepperSession);
     window.removeEventListener("blur", stopFogStepperSession);
+    window.removeEventListener("blur", stopFogPreviewMotionLoop);
     canvas.removeEventListener("click", handleCanvasClick);
     minimapCanvas.removeEventListener("click", handleMinimapClick);
     window.removeEventListener("keydown", handleGlobalKeyDown);
@@ -6060,5 +6123,6 @@ if (event.shiftKey) {
     floatingPanelHost.removeEventListener("submit", handleFloatingPanelSubmit);
     document.removeEventListener("pointerdown", handleDocumentPointerDown);
     stopArrowPanLoop();
+    stopFogPreviewMotionLoop();
   };
 }
