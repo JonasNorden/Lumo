@@ -1805,12 +1805,31 @@ kbd {
 
 .specialVolumeWorkbenchNumberInput {
   display: flex;
-  align-items: stretch;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
 }
 
 .specialVolumeWorkbenchNumberInput input {
   flex: 1 1 auto;
+}
+
+.specialVolumeWorkbenchNumberInput .selectionStepperButtons {
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  flex: 0 0 21px;
+  width: 21px;
+}
+
+.specialVolumeWorkbenchNumberInput .selectionStepperButton {
+  width: 21px;
+  min-width: 21px;
+  min-height: 11px;
+  height: 11px;
+  border-radius: 5px;
+  font-size: 9px;
+  line-height: 1;
+  padding: 0;
 }
 
 .specialVolumeWorkbenchLauncher {
@@ -1832,15 +1851,17 @@ kbd {
 }
 
 .specialVolumeWorkbenchModal {
-  width: min(1120px, calc(100vw - 80px));
-  max-height: min(78vh, 760px);
-  padding: 14px;
+  width: min(1020px, calc(100vw - 64px));
+  max-height: min(74vh, 680px);
+  padding: 12px;
   border-radius: 16px;
   border: 1px solid rgba(58, 78, 118, 0.95);
   background: linear-gradient(180deg, rgba(9, 14, 26, 0.98), rgba(7, 11, 21, 0.96));
   box-shadow: 0 24px 56px rgba(0, 0, 0, 0.46);
   backdrop-filter: blur(14px);
   overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .specialVolumeWorkbenchModalHeader {
@@ -1864,9 +1885,9 @@ kbd {
 
 .specialVolumeWorkbenchModalBody {
   display: grid;
-  grid-template-columns: minmax(320px, 0.95fr) minmax(360px, 1.05fr);
-  gap: 12px;
-  min-height: 440px;
+  grid-template-columns: minmax(300px, 0.95fr) minmax(320px, 1.05fr);
+  gap: 10px;
+  min-height: 0;
 }
 
 .specialVolumeWorkbenchControlsPane {
@@ -1880,7 +1901,7 @@ kbd {
 
 .specialVolumeWorkbenchControlSections {
   overflow: auto;
-  padding: 10px 11px;
+  padding: 8px 9px;
 }
 
 .specialVolumeWorkbenchControlsFooter {
@@ -1889,8 +1910,9 @@ kbd {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px;
+  padding: 8px 9px;
   border-top: 1px solid rgba(90, 120, 180, 0.3);
+  background: rgba(11, 17, 31, 0.96);
 }
 
 .specialVolumeWorkbenchFooterActions {

@@ -5659,18 +5659,17 @@ if (event.shiftKey) {
 
   const stopFogStepperSession = () => {
     if (!fogStepperSession) return;
-    globalThis.clearTimeout(fogStepperSession.timeoutId);
-    globalThis.clearInterval(fogStepperSession.intervalId);
+    globalThis.clearTimeout(fogStepperSession.repeatTimeoutId);
     fogStepperSession = null;
   };
 
-  const nudgeFogNumberInput = (button, direction, event = null) => {
+  const nudgeFogNumberInput = (button, direction, options = null) => {
     const root = button.closest("[data-fog-number-field]");
     const input = root?.querySelector('input[data-entity-param-type="number"]');
     if (!(input instanceof HTMLInputElement)) return;
     const baseStep = Number.parseFloat(input.dataset.fogNumberStep || input.step || "1");
     const step = Number.isFinite(baseStep) && baseStep > 0 ? baseStep : 1;
-    const multiplier = event?.shiftKey ? 4 : 1;
+    const multiplier = options?.useLargeStep ? 4 : 1;
     const min = Number.parseFloat(input.dataset.fogNumberMin || input.min || "");
     const max = Number.parseFloat(input.dataset.fogNumberMax || input.max || "");
     const current = Number.parseFloat(input.value);
@@ -5682,19 +5681,19 @@ if (event.shiftKey) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
     input.focus({ preventScroll: true });
-    input.select();
   };
 
   const startFogStepperSession = (button, direction, event) => {
     stopFogStepperSession();
-    nudgeFogNumberInput(button, direction, event);
+    const useLargeStep = Boolean(event?.shiftKey);
+    nudgeFogNumberInput(button, direction, { useLargeStep });
+    const repeat = () => {
+      if (!fogStepperSession) return;
+      nudgeFogNumberInput(button, direction, { useLargeStep });
+      fogStepperSession.repeatTimeoutId = globalThis.setTimeout(repeat, 78);
+    };
     fogStepperSession = {
-      timeoutId: globalThis.setTimeout(() => {
-        fogStepperSession.intervalId = globalThis.setInterval(() => {
-          nudgeFogNumberInput(button, direction, event);
-        }, 85);
-      }, 240),
-      intervalId: null,
+      repeatTimeoutId: globalThis.setTimeout(repeat, 165),
     };
   };
 
@@ -5703,9 +5702,13 @@ if (event.shiftKey) {
     if (!(target instanceof HTMLElement)) return;
     const stepButton = target.closest("[data-fog-step-direction]");
     if (!(stepButton instanceof HTMLButtonElement)) return;
+    if (event.button !== 0 || event.isPrimary === false) return;
     const direction = Number.parseInt(stepButton.dataset.fogStepDirection || "", 10);
     if (direction !== -1 && direction !== 1) return;
     event.preventDefault();
+    if (typeof stepButton.setPointerCapture === "function" && Number.isInteger(event.pointerId)) {
+      stepButton.setPointerCapture(event.pointerId);
+    }
     startFogStepperSession(stepButton, direction, event);
   };
 
