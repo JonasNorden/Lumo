@@ -138,6 +138,30 @@ function renderWorkbenchSection(selection, section) {
   `;
 }
 
+const FOG_MODAL_TRUTHFUL_PREVIEW_PATHS = new Set([
+  "area.x0",
+  "area.x1",
+  "area.y0",
+  "area.falloff",
+  "look.density",
+  "look.lift",
+  "look.thickness",
+  "look.layers",
+  "look.noise",
+  "look.drift",
+  "smoothing.diffuse",
+  "smoothing.relax",
+  "smoothing.visc",
+  "interaction.radius",
+  "interaction.push",
+  "interaction.bulge",
+  "interaction.gate",
+  "organic.strength",
+  "organic.scale",
+  "organic.speed",
+  "render.lumoBehindFog",
+]);
+
 export function getFogPreviewPatrolPhase(elapsedMs, durationMs) {
   const safeDuration = Math.max(1200, Number(durationMs) || 0);
   const normalized = (((Number(elapsedMs) || 0) % safeDuration) + safeDuration) % safeDuration;
@@ -158,9 +182,9 @@ function clamp(value, min, max) {
 }
 
 export function buildFogPreviewFieldProfile(config = {}) {
-  const sampleCount = Math.max(24, Math.min(72, Math.round(Number(config.sampleCount) || 48)));
+  const sampleCount = Math.max(28, Math.min(92, Math.round(Number(config.sampleCount) || 60)));
   const spanWidthPx = Math.max(1, Number(config.spanWidthPx) || 1);
-  const falloffPx = Math.max(0, Number(config.falloffPx) || 0);
+  const falloffPx = Math.max(10, Number(config.falloffPx) || 10);
   const thicknessPx = Math.max(1, Number(config.thicknessPx) || 44);
   const density = clamp(Number(config.density) || 0, 0, 1);
   const noise = clamp(Number(config.noise) || 0, 0, 1);
@@ -179,23 +203,21 @@ export function buildFogPreviewFieldProfile(config = {}) {
   const layers = clamp(Math.round(Number(config.layers) || 1), 1, 96);
   const nowSeconds = Number.isFinite(Number(config.nowSeconds)) ? Number(config.nowSeconds) : (Date.now() % 60000) / 1000;
   const interactionCenter = Number.isFinite(Number(config.interactionCenter)) ? Number(config.interactionCenter) : 0.5;
-  const softening = (diffuse * 0.46) + (relax * 0.26) + ((1 - visc) * 0.28);
-  const effectiveFalloff = falloffPx <= 0 ? 1 : falloffPx;
+  const softening = (diffuse * 0.45) + (relax * 0.25) + ((1 - visc) * 0.3);
   const radiusRatio = clamp(radius / Math.max(spanWidthPx, 1), 0, 1.5);
-  const gateResponse = 1 - clamp(gate / 256, 0, 1);
-  const layeredDensityGain = clamp(0.6 + (layers / 54), 0.8, 2.3);
+  const gateResponse = 1 - clamp(gate / 900, 0, 1);
+  const layeredDensityGain = clamp(0.62 + (layers / 60), 0.8, 2);
 
   const samples = [];
   for (let index = 0; index < sampleCount; index += 1) {
     const u = sampleCount === 1 ? 0 : index / (sampleCount - 1);
-    // Mirrors editor-v2/dev/sandbox/smooke.html drawFog() where the authored span
-    // keeps a full body and applies a readable taper as x approaches x1.
+    // Mirrors editor-v2/dev/sandbox/smooke.html drawFog(): dOpen = x1 - x with
+    // authored-end taper only near x1 while x0 keeps a full fog body.
     const dOpenPx = (1 - u) * spanWidthPx;
-    const falloffMask = falloffPx <= 0 ? 1 : clamp(dOpenPx / effectiveFalloff, 0, 1);
-    const edgeFactor = Math.pow(falloffMask, 0.86);
-    const edgeHeightFactor = Math.pow(falloffMask, 0.78);
-    const edgeDensityFactor = Math.pow(falloffMask, 0.68);
-    const verticalWeight = 0.18 + (edgeHeightFactor * 0.82);
+    const falloffMask = clamp(dOpenPx / falloffPx, 0, 1);
+    const edgeMask = falloffMask * falloffMask * (3 - 2 * falloffMask);
+    const edgeHeightFactor = Math.pow(edgeMask, 0.76);
+    const edgeDensityFactor = Math.pow(edgeMask, 0.62);
     const waveA = Math.sin((u * Math.PI * 2 * (1.2 / organicScale)) + (nowSeconds * (0.48 + organicSpeed * 0.07)));
     const waveB = Math.sin((u * Math.PI * 2 * (2.1 / organicScale)) - (nowSeconds * (0.38 + organicSpeed * 0.11)));
     const organicWave = organicStrength * ((waveA * 0.62) + (waveB * 0.38));
@@ -204,12 +226,13 @@ export function buildFogPreviewFieldProfile(config = {}) {
       ? 0
       : clamp(1 - (interactionDistance / Math.max(0.0001, radiusRatio)), 0, 1);
     const interactionWave = interactionInfluence * gateResponse * ((bulge * 0.16) - (push * 0.1));
-    const smoothAmplitude = (1 - softening) * 0.72 + (visc * 0.28);
+    const smoothAmplitude = (1 - softening) * 0.74 + (visc * 0.26);
     const normalizedDensity = density * (0.2 + edgeDensityFactor * 0.8) * layeredDensityGain;
     const layerInfluence = clamp(layers / 32, 0.2, 3.4);
-    const bodyRiseFactor = 0.78 + (edgeHeightFactor * 0.36);
+    const bodyRiseFactor = 0.7 + (edgeHeightFactor * 0.3);
+    const smookeBandWeight = 0.14 + (edgeHeightFactor * 0.86);
     const coreHeightPx = clamp(
-      ((thicknessPx * verticalWeight * bodyRiseFactor) + (thicknessPx * 0.22 * organicWave) + (thicknessPx * interactionWave * 0.2)) * smoothAmplitude,
+      ((thicknessPx * smookeBandWeight * bodyRiseFactor) + (thicknessPx * 0.2 * organicWave) + (thicknessPx * interactionWave * 0.2)) * smoothAmplitude,
       2,
       thicknessPx * 2.4,
     );
@@ -227,7 +250,7 @@ export function buildFogPreviewFieldProfile(config = {}) {
       hazeHeightPx: Number(hazeHeightPx.toFixed(3)),
       opacity: Number(opacity.toFixed(3)),
       offsetY: Number(offsetY.toFixed(3)),
-      edgeFactor: Number(edgeFactor.toFixed(3)),
+      edgeFactor: Number(edgeMask.toFixed(3)),
       taper: Number(taper.toFixed(3)),
       layerJitter: Number(layerJitter.toFixed(3)),
     });
@@ -244,7 +267,6 @@ function renderFogPreview(selection, rect) {
   const organic = params.organic || {};
   const render = params.render || {};
   const density = Math.min(1, Math.max(0, Number(look.density) || 0));
-  const exposure = Math.min(4, Math.max(0.1, Number(look.exposure) || 1));
   const thickness = Math.max(1, Math.min(240, Number(look.thickness) || 44));
   const noise = Math.min(1, Math.max(0, Number(look.noise) || 0));
   const drift = Math.min(8, Math.max(-8, Number(look.drift) || 0));
@@ -268,11 +290,8 @@ function renderFogPreview(selection, rect) {
   const spanStartPct = (1 - spanCoverage) * 0.5;
   const spanEndPct = spanStartPct + spanCoverage;
   const edgeFadePct = Math.max(1.5, Math.min(38, (falloffPx / Math.max(spanWidthPx, 1)) * 120));
-  const edgeFadeStartPct = Math.max(0.45, Math.min(4, edgeFadePct * 0.25));
-  const color = String(look.color || "#E1EEFF");
-  const blend = String(render.blend || "screen");
   const lumoBehindFog = Boolean(render.lumoBehindFog);
-  const fogOpacity = Math.min(0.95, 0.15 + (density * 0.65 * exposure));
+  const fogOpacity = Math.min(0.9, 0.14 + (density * 0.66));
   const previewFieldProfile = buildFogPreviewFieldProfile({
     spanWidthPx,
     falloffPx,
@@ -311,12 +330,10 @@ function renderFogPreview(selection, rect) {
         style="
           --volume-span-start:${(spanStartPct * 100).toFixed(2)}%;
           --volume-span-end:${(spanEndPct * 100).toFixed(2)}%;
-          --fog-color:${escapeHtml(color)};
           --fog-opacity:${fogOpacity.toFixed(3)};
           --fog-thickness:${Math.round(thickness)}px;
           --fog-ground-baseline:14px;
           --fog-falloff-pct:${edgeFadePct.toFixed(2)}%;
-          --fog-falloff-start-pct:${edgeFadeStartPct.toFixed(2)}%;
           --fog-noise:${noise.toFixed(3)};
           --fog-drift:${drift.toFixed(3)};
           --fog-diffuse:${diffuse.toFixed(3)};
@@ -333,7 +350,6 @@ function renderFogPreview(selection, rect) {
           --fog-layers:${layers};
           --fog-preview-traverse-duration:${(traverseDurationMs / 1000).toFixed(3)}s;
           --fog-preview-motion-phase-ms:${motionPhaseMs}ms;
-          --fog-blend:${escapeHtml(blend)};
         "
       >
         <div class="fogWorkbenchPreviewBackdrop"></div>
@@ -357,11 +373,8 @@ function renderFogPreview(selection, rect) {
               ></span>
             `).join("")}
           </div>
-          <div class="fogWorkbenchPreviewBands"></div>
-          <div class="fogWorkbenchPreviewBands isSecondary"></div>
-          <div class="fogWorkbenchPreviewMist"></div>
-          <div class="fogWorkbenchPreviewWake"></div>
-          <div class="fogWorkbenchPreviewDisturbance"></div>
+          <div class="fogWorkbenchPreviewVeil"></div>
+          <div class="fogWorkbenchPreviewVeil isSecondary"></div>
           <div class="fogWorkbenchPreviewLumo ${lumoBehindFog ? "isBehindFog" : "isAheadOfFog"}" data-fog-preview-lumo>
             ${lumoSprite
     ? `<img class="fogWorkbenchPreviewLumoSprite" src="${escapeHtml(lumoSprite)}" alt="Lumo preview patrol" draggable="false" />`
@@ -374,7 +387,7 @@ function renderFogPreview(selection, rect) {
         <span>Density {${density.toFixed(2)}}</span>
         <span>Falloff {${Math.round(falloffPx)}px}</span>
         <span>Thickness {${Math.round(thickness)}px}</span>
-        <span>Blend {${escapeHtml(blend)}}</span>
+        <span>Smooke model</span>
       </div>
     </section>
   `;
@@ -432,8 +445,21 @@ export function getSpecialVolumeWorkbenchModalContent(state) {
 
   const tileSize = state?.document?.active?.dimensions?.tileSize || 24;
   const rect = getFogVolumeRect(selection.entity, tileSize);
-  const sections = Array.isArray(descriptor.paramSections) ? descriptor.paramSections : [];
+  const sections = (Array.isArray(descriptor.paramSections) ? descriptor.paramSections : [])
+    .map((section) => {
+      const key = String(section?.key || "").trim();
+      const fields = Array.isArray(section?.fields)
+        ? section.fields.filter((field) => FOG_MODAL_TRUTHFUL_PREVIEW_PATHS.has(`${key}.${field}`))
+        : [];
+      return { ...section, fields };
+    })
+    .filter((section) => section.fields.length > 0);
   const fallbackHint = state?.ui?.specialVolumeWorkbench?.mode === "bottom-panel";
+  const hiddenControlNotes = [
+    "look.color",
+    "look.exposure",
+    "render.blend",
+  ];
 
   return {
     isEmpty: false,
@@ -460,6 +486,9 @@ export function getSpecialVolumeWorkbenchModalContent(state) {
                 <button type="button" class="toolButton" data-fog-workbench-action="save-defaults">Save as default for new Fog</button>
                 <button type="button" class="toolButton isPrimary" data-fog-workbench-action="done">Done</button>
               </div>
+              <span class="fieldMeta">
+                Hidden (not yet truthful in Smooke preview): ${hiddenControlNotes.join(", ")}.
+              </span>
               ${fallbackHint ? '<span class="fieldMeta">Bottom-panel path is active as fallback.</span>' : ""}
             </footer>
           </section>
