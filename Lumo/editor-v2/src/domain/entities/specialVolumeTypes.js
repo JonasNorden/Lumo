@@ -9,20 +9,44 @@ import { getEntityPresetDefaultParams } from "./entityPresets.js";
 const DEFAULT_FOG_WIDTH_PX = 288;
 const DEFAULT_FOG_THICKNESS_PX = 44;
 const MIN_SPECIAL_VOLUME_PREVIEW_HEIGHT_PX = 12;
+const MIN_FOG_THICKNESS_PX = 1;
+const MAX_FOG_THICKNESS_PX = 1024;
+const MIN_FOG_WORLD_COORDINATE = -131072;
+const MAX_FOG_WORLD_COORDINATE = 131072;
+
+const FOG_PARAM_FIELD_META = Object.freeze({
+  "area.x0": Object.freeze({ label: "Start X", min: MIN_FOG_WORLD_COORDINATE, max: MAX_FOG_WORLD_COORDINATE, step: 1 }),
+  "area.x1": Object.freeze({ label: "End X", min: MIN_FOG_WORLD_COORDINATE, max: MAX_FOG_WORLD_COORDINATE, step: 1 }),
+  "area.y0": Object.freeze({ label: "Baseline Y", min: MIN_FOG_WORLD_COORDINATE, max: MAX_FOG_WORLD_COORDINATE, step: 1 }),
+  "area.falloff": Object.freeze({ label: "Falloff", min: 0, max: 512, step: 1 }),
+  "look.density": Object.freeze({ label: "Density", min: 0, max: 1, step: 0.01 }),
+  "look.lift": Object.freeze({ label: "Lift", min: -256, max: 256, step: 1 }),
+  "look.thickness": Object.freeze({ label: "Thickness", min: MIN_FOG_THICKNESS_PX, max: MAX_FOG_THICKNESS_PX, step: 1 }),
+  "look.layers": Object.freeze({ label: "Layers", min: 1, max: 96, step: 1 }),
+  "look.noise": Object.freeze({ label: "Noise", min: 0, max: 1, step: 0.01 }),
+  "look.drift": Object.freeze({ label: "Drift", min: -8, max: 8, step: 0.01 }),
+  "look.color": Object.freeze({ label: "Color" }),
+  "look.exposure": Object.freeze({ label: "Exposure", min: 0.1, max: 4, step: 0.01 }),
+  "smoothing.diffuse": Object.freeze({ label: "Diffuse", min: 0, max: 1, step: 0.01 }),
+  "smoothing.relax": Object.freeze({ label: "Relax", min: 0, max: 1, step: 0.01 }),
+  "smoothing.visc": Object.freeze({ label: "Viscosity", min: 0, max: 1, step: 0.01 }),
+  "interaction.radius": Object.freeze({ label: "Radius", min: 0, max: 1024, step: 1 }),
+  "interaction.push": Object.freeze({ label: "Push", min: 0, max: 12, step: 0.1 }),
+  "interaction.bulge": Object.freeze({ label: "Bulge", min: 0, max: 12, step: 0.1 }),
+  "interaction.gate": Object.freeze({ label: "Gate", min: 0, max: 256, step: 1 }),
+  "organic.strength": Object.freeze({ label: "Strength", min: 0, max: 4, step: 0.01 }),
+  "organic.scale": Object.freeze({ label: "Scale", min: 0.1, max: 8, step: 0.01 }),
+  "organic.speed": Object.freeze({ label: "Speed", min: 0, max: 8, step: 0.01 }),
+  "render.blend": Object.freeze({ label: "Blend" }),
+  "render.lumoBehindFog": Object.freeze({ label: "Lumo Behind Fog" }),
+});
 
 export const SPECIAL_VOLUME_EDITOR_LAYOUTS = {
   fog_volume: {
     primarySections: [
       {
-        key: "volume",
-        title: "Volume",
-        description: "Direct authoring controls for the authored span and base shape.",
-        fields: ["fogWidth", "fogHeight", "area.falloff"],
-      },
-      {
         key: "look",
         title: "Look",
-        description: "Common fog look controls used during placement and tuning.",
         fields: ["look.density", "look.lift", "look.thickness", "look.color", "look.exposure"],
       },
     ],
@@ -60,6 +84,82 @@ function readNumber(value, fallback) {
   return Number.isFinite(Number(value)) ? Number(value) : fallback;
 }
 
+function clampNumber(value, min, max, fallback) {
+  const resolved = readNumber(value, fallback);
+  return Math.min(max, Math.max(min, resolved));
+}
+
+function clampFogParamValue(path, value, fallbackValue = value) {
+  const meta = FOG_PARAM_FIELD_META[path];
+  if (!meta) return value;
+  if (meta.min == null || meta.max == null) return value;
+  return clampNumber(value, meta.min, meta.max, fallbackValue);
+}
+
+function clampHexColor(value, fallback) {
+  const text = String(value ?? "").trim();
+  if (/^#[0-9a-f]{6}$/i.test(text) || /^#[0-9a-f]{3}$/i.test(text)) return text.toUpperCase();
+  return fallback;
+}
+
+function normalizeFogParams(params, defaults) {
+  const merged = mergeEntityParams(defaults, params);
+  const areaX0 = clampFogParamValue("area.x0", getNestedEntityParam(merged, "area.x0"), defaults?.area?.x0 ?? 0);
+  const areaX1Raw = clampFogParamValue("area.x1", getNestedEntityParam(merged, "area.x1"), defaults?.area?.x1 ?? DEFAULT_FOG_WIDTH_PX);
+  const areaY0 = clampFogParamValue("area.y0", getNestedEntityParam(merged, "area.y0"), defaults?.area?.y0 ?? 24);
+  const areaFalloff = clampFogParamValue("area.falloff", getNestedEntityParam(merged, "area.falloff"), defaults?.area?.falloff ?? 0);
+  const lookDensity = clampFogParamValue("look.density", getNestedEntityParam(merged, "look.density"), defaults?.look?.density ?? 0.14);
+  const lookLift = clampFogParamValue("look.lift", getNestedEntityParam(merged, "look.lift"), defaults?.look?.lift ?? 8);
+  const lookThickness = clampFogParamValue("look.thickness", getNestedEntityParam(merged, "look.thickness"), defaults?.look?.thickness ?? DEFAULT_FOG_THICKNESS_PX);
+  const lookLayers = Math.round(clampFogParamValue("look.layers", getNestedEntityParam(merged, "look.layers"), defaults?.look?.layers ?? 28));
+  const lookNoise = clampFogParamValue("look.noise", getNestedEntityParam(merged, "look.noise"), defaults?.look?.noise ?? 0);
+  const lookDrift = clampFogParamValue("look.drift", getNestedEntityParam(merged, "look.drift"), defaults?.look?.drift ?? 0);
+  const lookExposure = clampFogParamValue("look.exposure", getNestedEntityParam(merged, "look.exposure"), defaults?.look?.exposure ?? 1);
+  const lookColor = clampHexColor(getNestedEntityParam(merged, "look.color"), defaults?.look?.color ?? "#E1EEFF");
+  const smoothingDiffuse = clampFogParamValue("smoothing.diffuse", getNestedEntityParam(merged, "smoothing.diffuse"), defaults?.smoothing?.diffuse ?? 0.24);
+  const smoothingRelax = clampFogParamValue("smoothing.relax", getNestedEntityParam(merged, "smoothing.relax"), defaults?.smoothing?.relax ?? 0.24);
+  const smoothingVisc = clampFogParamValue("smoothing.visc", getNestedEntityParam(merged, "smoothing.visc"), defaults?.smoothing?.visc ?? 0.94);
+  const interactionRadius = clampFogParamValue("interaction.radius", getNestedEntityParam(merged, "interaction.radius"), defaults?.interaction?.radius ?? 92);
+  const interactionPush = clampFogParamValue("interaction.push", getNestedEntityParam(merged, "interaction.push"), defaults?.interaction?.push ?? 2.4);
+  const interactionBulge = clampFogParamValue("interaction.bulge", getNestedEntityParam(merged, "interaction.bulge"), defaults?.interaction?.bulge ?? 2.2);
+  const interactionGate = clampFogParamValue("interaction.gate", getNestedEntityParam(merged, "interaction.gate"), defaults?.interaction?.gate ?? 70);
+  const organicStrength = clampFogParamValue("organic.strength", getNestedEntityParam(merged, "organic.strength"), defaults?.organic?.strength ?? 0);
+  const organicScale = clampFogParamValue("organic.scale", getNestedEntityParam(merged, "organic.scale"), defaults?.organic?.scale ?? 1);
+  const organicSpeed = clampFogParamValue("organic.speed", getNestedEntityParam(merged, "organic.speed"), defaults?.organic?.speed ?? 1);
+  const renderBlend = String(getNestedEntityParam(merged, "render.blend") || defaults?.render?.blend || "screen");
+  const renderLumoBehindFog = Boolean(getNestedEntityParam(merged, "render.lumoBehindFog"));
+
+  const minArea = Math.min(areaX0, areaX1Raw);
+  const maxArea = Math.max(areaX0, areaX1Raw);
+  const areaX1 = Math.max(minArea + 1, maxArea);
+
+  let nextParams = setNestedEntityParam(merged, "area.x0", minArea);
+  nextParams = setNestedEntityParam(nextParams, "area.x1", areaX1);
+  nextParams = setNestedEntityParam(nextParams, "area.y0", areaY0);
+  nextParams = setNestedEntityParam(nextParams, "area.falloff", areaFalloff);
+  nextParams = setNestedEntityParam(nextParams, "look.density", lookDensity);
+  nextParams = setNestedEntityParam(nextParams, "look.lift", lookLift);
+  nextParams = setNestedEntityParam(nextParams, "look.thickness", lookThickness);
+  nextParams = setNestedEntityParam(nextParams, "look.layers", lookLayers);
+  nextParams = setNestedEntityParam(nextParams, "look.noise", lookNoise);
+  nextParams = setNestedEntityParam(nextParams, "look.drift", lookDrift);
+  nextParams = setNestedEntityParam(nextParams, "look.color", lookColor);
+  nextParams = setNestedEntityParam(nextParams, "look.exposure", lookExposure);
+  nextParams = setNestedEntityParam(nextParams, "smoothing.diffuse", smoothingDiffuse);
+  nextParams = setNestedEntityParam(nextParams, "smoothing.relax", smoothingRelax);
+  nextParams = setNestedEntityParam(nextParams, "smoothing.visc", smoothingVisc);
+  nextParams = setNestedEntityParam(nextParams, "interaction.radius", interactionRadius);
+  nextParams = setNestedEntityParam(nextParams, "interaction.push", interactionPush);
+  nextParams = setNestedEntityParam(nextParams, "interaction.bulge", interactionBulge);
+  nextParams = setNestedEntityParam(nextParams, "interaction.gate", interactionGate);
+  nextParams = setNestedEntityParam(nextParams, "organic.strength", organicStrength);
+  nextParams = setNestedEntityParam(nextParams, "organic.scale", organicScale);
+  nextParams = setNestedEntityParam(nextParams, "organic.speed", organicSpeed);
+  nextParams = setNestedEntityParam(nextParams, "render.blend", renderBlend);
+  nextParams = setNestedEntityParam(nextParams, "render.lumoBehindFog", renderLumoBehindFog);
+  return nextParams;
+}
+
 function getFogDefaults() {
   return getEntityPresetDefaultParams("fog_volume");
 }
@@ -87,7 +187,12 @@ export function isFogVolumeEntityType(type) {
 }
 
 export function getFogVolumeParams(entity) {
-  return mergeEntityParams(getFogDefaults(), entity?.params);
+  const defaults = getFogDefaults();
+  return normalizeFogParams(entity?.params, defaults);
+}
+
+export function getFogWorkbenchFieldMeta(path) {
+  return FOG_PARAM_FIELD_META[path] || null;
 }
 
 export function getFogVolumeRect(entity, tileSize) {
@@ -99,7 +204,7 @@ export function getFogVolumeRect(entity, tileSize) {
   const x0 = readNumber(area.x0, anchorX);
   const x1Raw = readNumber(area.x1, x0 + DEFAULT_FOG_WIDTH_PX);
   const y0 = readNumber(area.y0, anchorY);
-  const thickness = Math.max(1, readNumber(look.thickness, DEFAULT_FOG_THICKNESS_PX));
+  const thickness = Math.max(MIN_FOG_THICKNESS_PX, readNumber(look.thickness, DEFAULT_FOG_THICKNESS_PX));
   const falloff = Math.max(0, readNumber(area.falloff, 0));
   const minX = Math.min(x0, x1Raw);
   const maxX = Math.max(x0, x1Raw);
@@ -276,6 +381,7 @@ export function resizeFogVolumeEntity(entity, dimension, nextValue, tileSize) {
 export function applyFogVolumeParamChange(entity, path, value, tileSize) {
   const normalized = syncFogVolumeEntityToAnchor(entity, tileSize);
   let nextParams = setNestedEntityParam(normalized.params, path, value);
+  nextParams = normalizeFogParams(nextParams, getFogDefaults());
 
   if (path === "area.x0" || path === "area.y0") {
     const nextAnchor = getFogVolumeAnchorCell({ ...normalized, params: nextParams }, tileSize);
