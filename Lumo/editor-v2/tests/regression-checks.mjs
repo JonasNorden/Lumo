@@ -28,6 +28,7 @@ import {
 } from "../src/domain/tiles/tileSpriteCatalog.js";
 import { renderBottomPanel } from "../src/ui/bottomPanel.js";
 import { renderInspector } from "../src/ui/inspectorPanel.js";
+import { getSpecialVolumeWorkbenchModalContent } from "../src/ui/specialVolumeWorkbench.js";
 import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
 import {
   createNewLevelDocument,
@@ -4724,6 +4725,76 @@ function runBottomPanelFogVolumeRegressionChecks() {
   assert.equal(panel.innerHTML.includes('min="0" max="1"'), true, "special-volume workbench numeric fields should expose safe range bounds");
 }
 
+function runFloatingFogWorkbenchRegressionChecks() {
+  const baseState = {
+    document: {
+      status: "ready",
+      error: null,
+      active: {
+        ...createDoc(),
+        entities: [
+          {
+            id: "entity-fog",
+            name: "Fog Volume",
+            type: "fog_volume",
+            x: 2,
+            y: 1,
+            visible: true,
+            params: {
+              area: { x0: 32, x1: 128, y0: 32, falloff: 12 },
+              look: { density: 0.18, lift: 8, thickness: 36, layers: 28, noise: 0.1, drift: 0, color: "#E1EEFF", exposure: 1 },
+              smoothing: { diffuse: 0.24, relax: 0.24, visc: 0.94 },
+              interaction: { radius: 92, push: 2.4, bulge: 2.2, gate: 70 },
+              organic: { strength: 0.2, scale: 1, speed: 0.5 },
+              render: { blend: "screen", lumoBehindFog: true },
+            },
+          },
+        ],
+      },
+    },
+    interaction: {
+      selectedEntityIndices: [0],
+      selectedEntityIndex: 0,
+      selectedEntityId: "entity-fog",
+    },
+    ui: {
+      specialVolumeWorkbench: {
+        mode: "floating",
+      },
+    },
+  };
+
+  const modal = getSpecialVolumeWorkbenchModalContent(baseState);
+  assert.ok(modal, "floating fog workbench should be available when a fog volume is selected");
+  assert.equal(modal.markup.includes('data-special-volume-modal="fog_volume"'), true, "floating fog workbench should identify fog_volume mode");
+  assert.equal(modal.markup.includes("specialVolumeWorkbenchModalBody"), true, "floating fog workbench should render a dedicated two-pane body");
+  assert.equal(modal.markup.includes('data-fog-workbench-controls'), true, "floating fog workbench should render grouped controls pane");
+  assert.equal(modal.markup.includes('data-fog-preview-root'), true, "floating fog workbench should render a dedicated live preview pane");
+  assert.equal(modal.markup.includes('data-fog-workbench-action="save-defaults"'), true, "floating fog workbench should expose save-as-default action for future placements");
+  assert.equal(modal.markup.includes(">Area<"), true, "floating fog workbench should preserve Area section grouping");
+  assert.equal(modal.markup.includes(">Look<"), true, "floating fog workbench should preserve Look section grouping");
+  assert.equal(modal.markup.includes(">Smoothing<"), true, "floating fog workbench should preserve Smoothing section grouping");
+  assert.equal(modal.markup.includes(">Interaction<"), true, "floating fog workbench should preserve Interaction section grouping");
+  assert.equal(modal.markup.includes(">Organic<"), true, "floating fog workbench should preserve Organic section grouping");
+  assert.equal(modal.markup.includes(">Render<"), true, "floating fog workbench should preserve Render section grouping");
+
+  const denserState = JSON.parse(JSON.stringify(baseState));
+  denserState.document.active.entities[0].params.look.density = 0.72;
+  denserState.document.active.entities[0].params.look.exposure = 1.8;
+  const modalDense = getSpecialVolumeWorkbenchModalContent(denserState);
+  assert.ok(modalDense, "floating fog workbench should stay available after param edits");
+  assert.equal(
+    modal?.markup.includes("--fog-opacity:0.267;"),
+    true,
+    "floating fog preview should encode current fog values as inline preview variables",
+  );
+  assert.equal(
+    modalDense?.markup.includes("--fog-opacity:0.950;"),
+    true,
+    "floating fog preview should update computed preview variables when fog params change",
+  );
+}
+
 function runInspectorFogRegressionChecks() {
   globalThis.document = { activeElement: null };
 
@@ -5610,6 +5681,7 @@ function runSourceRegressionChecks() {
   const rendererSource = fs.readFileSync(path.join(repoRoot, "src/render/renderer.js"), "utf8");
   const decorLayerSource = fs.readFileSync(path.join(repoRoot, "src/render/layers/decorLayer.js"), "utf8");
   const selectionPanelSource = fs.readFileSync(path.join(repoRoot, "src/ui/selectionEditorPanel.js"), "utf8");
+  const specialWorkbenchSource = fs.readFileSync(path.join(repoRoot, "src/ui/specialVolumeWorkbench.js"), "utf8");
 
   assert.equal(
     indexSource.includes("<title>Lumo Editor</title>"),
@@ -5655,6 +5727,21 @@ function runSourceRegressionChecks() {
     mockLevelSource.includes('name: "V2 Demo Chamber"') || mockLevelSource.includes("Read-only prototype document for V2 rendering pipeline."),
     false,
     "mock editor content should not expose leftover prototype or V2-facing demo copy",
+  );
+  assert.equal(
+    source.includes("draft.ui.specialVolumeWorkbench.fogDefaults"),
+    true,
+    "fog placement should read authored fog defaults so save-as-default affects future fog placement only",
+  );
+  assert.equal(
+    specialWorkbenchSource.includes('data-fog-workbench-action="save-defaults"'),
+    true,
+    "fog workbench modal source should expose save-as-default controls",
+  );
+  assert.equal(
+    source.includes("writeFogDefaultsToStorage(nextDefaults)"),
+    true,
+    "fog save-as-default flow should persist defaults for future sessions",
   );
 
   const handleCanvasMouseDownSection = source.match(/const handleCanvasMouseDown = \(event\) => \{[\s\S]*?\n  \};/);
@@ -6108,6 +6195,7 @@ async function main() {
   runSoundBatchSelectionRegressionChecks();
   runBottomPanelBatchSoundRegressionChecks();
   runBottomPanelFogVolumeRegressionChecks();
+  runFloatingFogWorkbenchRegressionChecks();
   runInspectorFogRegressionChecks();
   runInspectorSoundSummaryRegressionChecks();
   runSourceRegressionChecks();

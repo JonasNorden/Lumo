@@ -130,8 +130,9 @@ export function createEditorState() {
         sound: false,
       },
       specialVolumeWorkbench: {
-        mode: "idle",
+        mode: "floating",
         activeType: null,
+        fogDefaults: null,
       },
     },
   };
