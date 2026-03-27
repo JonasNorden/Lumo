@@ -29,6 +29,7 @@ import {
 import { renderBottomPanel } from "../src/ui/bottomPanel.js";
 import { renderInspector } from "../src/ui/inspectorPanel.js";
 import {
+  buildFogPreviewFieldProfile,
   getFogPreviewPatrolPhase,
   getSpecialVolumeWorkbenchLauncherContent,
   getSpecialVolumeWorkbenchModalContent,
@@ -4978,6 +4979,12 @@ function runFloatingFogWorkbenchRegressionChecks() {
     true,
     "high falloff values should produce long soft fade variables in the preview output",
   );
+  assert.equal(modal.markup.includes("--fog-radius:92.000;"), true, "fog preview should map interaction radius into runtime preview styling variables");
+  assert.equal(modal.markup.includes("--fog-gate:70.000;"), true, "fog preview should map interaction gate into runtime preview styling variables");
+  assert.equal(modal.markup.includes("--fog-organic-scale:1.000;"), true, "fog preview should map organic scale into runtime preview styling variables");
+  assert.equal(modal.markup.includes("--fog-layers:28;"), true, "fog preview should map layer count into runtime preview styling variables");
+  assert.equal(modal.markup.includes("--fog-lift:8.000px;"), true, "fog preview should map vertical lift into runtime preview styling variables");
+  assert.equal(modal.markup.includes('data-fog-preview-field'), true, "fog preview should render sampled field geometry instead of a single flat gradient region");
 
   const closedState = JSON.parse(JSON.stringify(baseState));
   closedState.ui.specialVolumeWorkbench.openEntityId = null;
@@ -4997,17 +5004,81 @@ function runFloatingFogWorkbenchRegressionChecks() {
 function runFogPreviewMotionRegressionChecks() {
   const start = getFogPreviewPatrolPhase(0, 4000);
   const quarter = getFogPreviewPatrolPhase(1000, 4000);
+  const midpoint = getFogPreviewPatrolPhase(2000, 4000);
   const threeQuarter = getFogPreviewPatrolPhase(3500, 4000);
   const wrapped = getFogPreviewPatrolPhase(5000, 4000);
 
   assert.equal(start.xPct, 0, "fog preview patrol should start at the authored span start");
   assert.equal(quarter.xPct > start.xPct, true, "fog preview patrol should visibly advance across the span over time");
+  assert.equal(midpoint.xPct, 100, "fog preview patrol midpoint should reach the authored span end");
   assert.equal(threeQuarter.xPct < quarter.xPct, true, "fog preview patrol should reverse after reaching the end of the span");
   assert.equal(threeQuarter.facing, -1, "fog preview patrol should mirror Lumo facing when moving back across the span");
   assert.equal(
     wrapped.xPct >= 0 && wrapped.xPct <= 100,
     true,
     "fog preview patrol should stay bounded to the preview span even after repeated loops",
+  );
+
+  const previewProfileConfig = {
+    spanWidthPx: 320,
+    thicknessPx: 44,
+    density: 0.35,
+    falloffPx: 2,
+    diffuse: 0.25,
+    relax: 0.2,
+    visc: 0.9,
+    push: 1.5,
+    bulge: 1.3,
+    radius: 80,
+    gate: 70,
+    organicStrength: 0.2,
+    organicScale: 1,
+    organicSpeed: 0.5,
+    lift: 0,
+    layers: 20,
+    nowSeconds: 4,
+  };
+  const sharpProfile = buildFogPreviewFieldProfile(previewProfileConfig);
+  const softProfile = buildFogPreviewFieldProfile({
+    ...previewProfileConfig,
+    falloffPx: 110,
+  });
+  const lowDensity = buildFogPreviewFieldProfile({
+    ...previewProfileConfig,
+    density: 0.08,
+  });
+  const highDensity = buildFogPreviewFieldProfile({
+    ...previewProfileConfig,
+    density: 0.82,
+  });
+  const thinFog = buildFogPreviewFieldProfile({
+    ...previewProfileConfig,
+    thicknessPx: 20,
+  });
+  const thickFog = buildFogPreviewFieldProfile({
+    ...previewProfileConfig,
+    thicknessPx: 120,
+  });
+  const sharpEdgeAverage = sharpProfile.samples.slice(0, 6).reduce((sum, sample) => sum + sample.opacity, 0) / 6;
+  const softEdgeAverage = softProfile.samples.slice(0, 6).reduce((sum, sample) => sum + sample.opacity, 0) / 6;
+  const lowDensityAverage = lowDensity.samples.reduce((sum, sample) => sum + sample.opacity, 0) / lowDensity.samples.length;
+  const highDensityAverage = highDensity.samples.reduce((sum, sample) => sum + sample.opacity, 0) / highDensity.samples.length;
+  const thinHeightAverage = thinFog.samples.reduce((sum, sample) => sum + sample.coreHeightPx, 0) / thinFog.samples.length;
+  const thickHeightAverage = thickFog.samples.reduce((sum, sample) => sum + sample.coreHeightPx, 0) / thickFog.samples.length;
+  assert.equal(
+    softEdgeAverage < sharpEdgeAverage,
+    true,
+    "higher falloff should soften edge density in the preview profile instead of keeping a hard uniform edge",
+  );
+  assert.equal(
+    highDensityAverage > lowDensityAverage,
+    true,
+    "higher density should increase preview sample opacity across the simulated fog field",
+  );
+  assert.equal(
+    thickHeightAverage > thinHeightAverage,
+    true,
+    "higher thickness should increase preview sample heights across the simulated fog field",
   );
 }
 
@@ -6031,9 +6102,9 @@ function runSourceRegressionChecks() {
     "fog workbench numeric fields should suppress native browser steppers when custom steppers are present",
   );
   assert.equal(
-    stylesSource.includes("transform: translate3d(calc(100% - var(--fog-preview-lumo-width, 24px)), -1px, 0)"),
+    source.includes("fogPreviewMotion.lumo.style.left = `${patrol.xPct.toFixed(3)}%`;"),
     true,
-    "fog preview Lumo patrol should traverse the full authored span instead of idling near the start edge",
+    "fog preview Lumo patrol should traverse the full authored span by driving left position across 0..100%",
   );
   assert.equal(
     stylesSource.includes("animation-delay: var(--fog-preview-motion-phase-ms, 0ms);"),
@@ -6066,9 +6137,19 @@ function runSourceRegressionChecks() {
     "runtime-driven patrol should disable brittle CSS animation ownership on the Lumo preview node",
   );
   assert.equal(
-    source.includes("fogPreviewMotion.lumo.style.transform = `translate3d("),
+    source.includes("fogPreviewMotion.lumo.style.transform = `translate3d(-50%, -1px, 0) scaleX("),
     true,
-    "fog preview runtime should mutate Lumo transform directly so position visibly changes over time",
+    "fog preview runtime should keep Lumo centered on the patrol point while mirroring facing",
+  );
+  assert.equal(
+    specialWorkbenchSource.includes("buildFogPreviewFieldProfile"),
+    true,
+    "fog preview modal should use a shared sampled-field profile builder for runtime-like layered fog behavior",
+  );
+  assert.equal(
+    stylesSource.includes(".fogWorkbenchPreviewField"),
+    true,
+    "fog preview styles should include layered sampled field rendering instead of relying on one flat band",
   );
 
   const handleCanvasMouseDownSection = source.match(/const handleCanvasMouseDown = \(event\) => \{[\s\S]*?\n  \};/);

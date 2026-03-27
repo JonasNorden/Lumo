@@ -153,6 +153,73 @@ export function getFogPreviewPatrolPhase(elapsedMs, durationMs) {
   };
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function buildFogPreviewFieldProfile(config = {}) {
+  const sampleCount = Math.max(24, Math.min(72, Math.round(Number(config.sampleCount) || 48)));
+  const spanWidthPx = Math.max(1, Number(config.spanWidthPx) || 1);
+  const falloffPx = Math.max(0, Number(config.falloffPx) || 0);
+  const thicknessPx = Math.max(1, Number(config.thicknessPx) || 44);
+  const density = clamp(Number(config.density) || 0, 0, 1);
+  const diffuse = clamp(Number(config.diffuse) || 0, 0, 1);
+  const relax = clamp(Number(config.relax) || 0, 0, 1);
+  const visc = clamp(Number(config.visc) || 0, 0, 1);
+  const push = clamp(Number(config.push) || 0, 0, 12);
+  const bulge = clamp(Number(config.bulge) || 0, 0, 12);
+  const radius = clamp(Number(config.radius) || 0, 0, 1024);
+  const gate = clamp(Number(config.gate) || 0, 0, 256);
+  const organicStrength = clamp(Number(config.organicStrength) || 0, 0, 4);
+  const organicScale = clamp(Number(config.organicScale) || 1, 0.1, 8);
+  const organicSpeed = clamp(Number(config.organicSpeed) || 0, 0, 8);
+  const drift = clamp(Number(config.drift) || 0, -8, 8);
+  const lift = clamp(Number(config.lift) || 0, -256, 256);
+  const layers = clamp(Math.round(Number(config.layers) || 1), 1, 96);
+  const nowSeconds = Number.isFinite(Number(config.nowSeconds)) ? Number(config.nowSeconds) : (Date.now() % 60000) / 1000;
+  const interactionCenter = Number.isFinite(Number(config.interactionCenter)) ? Number(config.interactionCenter) : 0.5;
+  const softening = (diffuse * 0.46) + (relax * 0.26) + ((1 - visc) * 0.28);
+  const effectiveFalloff = falloffPx <= 0 ? 1 : falloffPx;
+  const radiusRatio = clamp(radius / Math.max(spanWidthPx, 1), 0, 1.5);
+  const gateResponse = 1 - clamp(gate / 256, 0, 1);
+
+  const samples = [];
+  for (let index = 0; index < sampleCount; index += 1) {
+    const u = sampleCount === 1 ? 0 : index / (sampleCount - 1);
+    const pxFromEdge = Math.min(u * spanWidthPx, (1 - u) * spanWidthPx);
+    const edgeFactor = falloffPx <= 0 ? 1 : clamp(pxFromEdge / effectiveFalloff, 0, 1);
+    const verticalWeight = 0.42 + (edgeFactor * 0.58);
+    const waveA = Math.sin((u * Math.PI * 2 * (1.2 / organicScale)) + (nowSeconds * (0.48 + organicSpeed * 0.07)));
+    const waveB = Math.sin((u * Math.PI * 2 * (2.1 / organicScale)) - (nowSeconds * (0.38 + organicSpeed * 0.11)));
+    const organicWave = organicStrength * ((waveA * 0.62) + (waveB * 0.38));
+    const interactionDistance = Math.abs(u - interactionCenter);
+    const interactionInfluence = radiusRatio <= 0
+      ? 0
+      : clamp(1 - (interactionDistance / Math.max(0.0001, radiusRatio)), 0, 1);
+    const interactionWave = interactionInfluence * gateResponse * ((bulge * 0.16) - (push * 0.1));
+    const smoothAmplitude = (1 - softening) * 0.72 + (visc * 0.28);
+    const normalizedDensity = density * (0.4 + edgeFactor * 0.6);
+    const layerInfluence = clamp(layers / 32, 0.2, 3);
+    const coreHeightPx = clamp(
+      ((thicknessPx * verticalWeight) + (thicknessPx * 0.25 * organicWave) + (thicknessPx * interactionWave * 0.22)) * smoothAmplitude,
+      2,
+      thicknessPx * 2.4,
+    );
+    const hazeHeightPx = clamp(coreHeightPx + thicknessPx * (0.28 + diffuse * 0.42 + relax * 0.2), 4, thicknessPx * 2.8);
+    const opacity = clamp((normalizedDensity * (0.42 + layerInfluence * 0.18)) + (softening * 0.22), 0.06, 0.96);
+    const offsetY = ((organicWave * 0.6) + (interactionWave * 0.5) + (drift * 0.02)) * 8 - (lift * 0.05);
+    samples.push({
+      u,
+      coreHeightPx: Number(coreHeightPx.toFixed(3)),
+      hazeHeightPx: Number(hazeHeightPx.toFixed(3)),
+      opacity: Number(opacity.toFixed(3)),
+      offsetY: Number(offsetY.toFixed(3)),
+      edgeFactor: Number(edgeFactor.toFixed(3)),
+    });
+  }
+  return { sampleCount, samples };
+}
+
 function renderFogPreview(selection, rect) {
   const params = getFogVolumeParams(selection.entity);
   const area = params.area || {};
@@ -171,8 +238,13 @@ function renderFogPreview(selection, rect) {
   const visc = Math.min(1, Math.max(0, Number(smoothing.visc) || 0));
   const push = Math.min(12, Math.max(0, Number(interaction.push) || 0));
   const bulge = Math.min(12, Math.max(0, Number(interaction.bulge) || 0));
+  const radius = Math.min(1024, Math.max(0, Number(interaction.radius) || 0));
+  const gate = Math.min(256, Math.max(0, Number(interaction.gate) || 0));
   const organicStrength = Math.min(4, Math.max(0, Number(organic.strength) || 0));
+  const organicScale = Math.min(8, Math.max(0.1, Number(organic.scale) || 1));
   const organicSpeed = Math.min(8, Math.max(0, Number(organic.speed) || 0));
+  const lift = Math.min(256, Math.max(-256, Number(look.lift) || 0));
+  const layers = Math.min(96, Math.max(1, Math.round(Number(look.layers) || 1)));
   const traverseDurationMs = Math.max(2200, (9.6 - Math.min(4.6, organicSpeed * 0.65)) * 1000);
   const motionPhaseMs = -Math.round(Date.now() % traverseDurationMs);
   const falloffPx = Math.max(0, Number(area.falloff) || Number(rect?.falloff) || 0);
@@ -185,6 +257,25 @@ function renderFogPreview(selection, rect) {
   const blend = String(render.blend || "screen");
   const lumoBehindFog = Boolean(render.lumoBehindFog);
   const fogOpacity = Math.min(0.95, 0.15 + (density * 0.65 * exposure));
+  const previewFieldProfile = buildFogPreviewFieldProfile({
+    spanWidthPx,
+    falloffPx,
+    thicknessPx: thickness,
+    density,
+    diffuse,
+    relax,
+    visc,
+    push,
+    bulge,
+    radius,
+    gate,
+    organicStrength,
+    organicScale,
+    organicSpeed,
+    drift,
+    lift,
+    layers,
+  });
   const lumoVisual = getEntityVisual("player-spawn");
   const lumoSprite = typeof lumoVisual?.img === "string" && lumoVisual.img.trim()
     ? lumoVisual.img.trim()
@@ -214,8 +305,13 @@ function renderFogPreview(selection, rect) {
           --fog-visc:${visc.toFixed(3)};
           --fog-push:${push.toFixed(3)};
           --fog-bulge:${bulge.toFixed(3)};
+          --fog-radius:${radius.toFixed(3)};
+          --fog-gate:${gate.toFixed(3)};
           --fog-organic:${organicStrength.toFixed(3)};
+          --fog-organic-scale:${organicScale.toFixed(3)};
           --fog-organic-speed:${organicSpeed.toFixed(3)};
+          --fog-lift:${lift.toFixed(3)}px;
+          --fog-layers:${layers};
           --fog-preview-traverse-duration:${(traverseDurationMs / 1000).toFixed(3)}s;
           --fog-preview-motion-phase-ms:${motionPhaseMs}ms;
           --fog-blend:${escapeHtml(blend)};
@@ -225,6 +321,21 @@ function renderFogPreview(selection, rect) {
         <div class="volumeWorkbenchPreviewSpan" data-volume-preview-span>
           <div class="fogWorkbenchPreviewSpanStop isStart" data-fog-preview-stop="start"></div>
           <div class="fogWorkbenchPreviewSpanStop isEnd" data-fog-preview-stop="end"></div>
+          <div class="fogWorkbenchPreviewField" data-fog-preview-field>
+            ${previewFieldProfile.samples.map((sample) => `
+              <span
+                class="fogWorkbenchPreviewSample"
+                style="
+                  --fog-sample-x:${(sample.u * 100).toFixed(3)}%;
+                  --fog-sample-core:${sample.coreHeightPx.toFixed(3)}px;
+                  --fog-sample-haze:${sample.hazeHeightPx.toFixed(3)}px;
+                  --fog-sample-opacity:${sample.opacity.toFixed(3)};
+                  --fog-sample-offset:${sample.offsetY.toFixed(3)}px;
+                  --fog-sample-edge:${sample.edgeFactor.toFixed(3)};
+                "
+              ></span>
+            `).join("")}
+          </div>
           <div class="fogWorkbenchPreviewBands"></div>
           <div class="fogWorkbenchPreviewBands isSecondary"></div>
           <div class="fogWorkbenchPreviewMist"></div>
