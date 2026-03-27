@@ -113,8 +113,9 @@ function renderWorkbenchSection(selection, section) {
   `;
 }
 
-function renderFogPreview(selection) {
+function renderFogPreview(selection, rect) {
   const params = getFogVolumeParams(selection.entity);
+  const area = params.area || {};
   const look = params.look || {};
   const smoothing = params.smoothing || {};
   const interaction = params.interaction || {};
@@ -132,11 +133,16 @@ function renderFogPreview(selection) {
   const bulge = Math.min(12, Math.max(0, Number(interaction.bulge) || 0));
   const organicStrength = Math.min(4, Math.max(0, Number(organic.strength) || 0));
   const organicSpeed = Math.min(8, Math.max(0, Number(organic.speed) || 0));
+  const falloffPx = Math.max(0, Number(area.falloff) || Number(rect?.falloff) || 0);
+  const spanWidthPx = Math.max(1, Number(rect?.width) || Math.abs((Number(area.x1) || 0) - (Number(area.x0) || 0)) || 1);
+  const spanCoverage = Math.max(0.32, Math.min(0.92, spanWidthPx / Math.max(spanWidthPx + (falloffPx * 2) + 240, 1)));
+  const spanStartPct = (1 - spanCoverage) * 0.5;
+  const spanEndPct = spanStartPct + spanCoverage;
+  const edgeFadePct = Math.max(1.5, Math.min(38, (falloffPx / Math.max(spanWidthPx, 1)) * 120));
   const color = String(look.color || "#E1EEFF");
   const blend = String(render.blend || "screen");
   const lumoBehindFog = Boolean(render.lumoBehindFog);
   const fogOpacity = Math.min(0.95, 0.15 + (density * 0.65 * exposure));
-  const animated = organicStrength > 0 || Math.abs(drift) > 0.05 || organicSpeed > 0.01;
 
   return `
     <section class="specialVolumeWorkbenchPreviewPane" data-fog-preview-root>
@@ -145,12 +151,15 @@ function renderFogPreview(selection) {
         <p>Responds instantly to Look, Smoothing, Interaction, Organic, and Render values.</p>
       </header>
       <div
-        class="fogWorkbenchPreviewSurface ${animated ? "isAnimated" : ""}"
+        class="volumeWorkbenchPreviewSurface volumeWorkbenchPreviewSurface--span fogWorkbenchPreviewSurface isAnimated"
         data-fog-preview-surface
         style="
+          --volume-span-start:${(spanStartPct * 100).toFixed(2)}%;
+          --volume-span-end:${(spanEndPct * 100).toFixed(2)}%;
           --fog-color:${escapeHtml(color)};
           --fog-opacity:${fogOpacity.toFixed(3)};
           --fog-thickness:${Math.round(thickness)}px;
+          --fog-falloff-pct:${edgeFadePct.toFixed(2)}%;
           --fog-noise:${noise.toFixed(3)};
           --fog-drift:${drift.toFixed(3)};
           --fog-diffuse:${diffuse.toFixed(3)};
@@ -164,13 +173,23 @@ function renderFogPreview(selection) {
         "
       >
         <div class="fogWorkbenchPreviewBackdrop"></div>
-        <div class="fogWorkbenchPreviewBands"></div>
-        <div class="fogWorkbenchPreviewBands isSecondary"></div>
-        <div class="fogWorkbenchPreviewMist"></div>
-        <div class="fogWorkbenchPreviewLumo ${lumoBehindFog ? "isBehindFog" : "isAheadOfFog"}"></div>
+        <div class="volumeWorkbenchPreviewSpan" data-volume-preview-span>
+          <div class="fogWorkbenchPreviewSpanStop isStart" data-fog-preview-stop="start"></div>
+          <div class="fogWorkbenchPreviewSpanStop isEnd" data-fog-preview-stop="end"></div>
+          <div class="fogWorkbenchPreviewBands"></div>
+          <div class="fogWorkbenchPreviewBands isSecondary"></div>
+          <div class="fogWorkbenchPreviewMist"></div>
+          <div class="fogWorkbenchPreviewWake"></div>
+          <div class="fogWorkbenchPreviewDisturbance"></div>
+          <div class="fogWorkbenchPreviewLumo ${lumoBehindFog ? "isBehindFog" : "isAheadOfFog"}" data-fog-preview-lumo>
+            <span class="fogWorkbenchPreviewLumoBody"></span>
+            <span class="fogWorkbenchPreviewLumoGlow"></span>
+          </div>
+        </div>
       </div>
       <div class="fogWorkbenchPreviewMeta">
         <span>Density {${density.toFixed(2)}}</span>
+        <span>Falloff {${Math.round(falloffPx)}px}</span>
         <span>Thickness {${Math.round(thickness)}px}</span>
         <span>Blend {${escapeHtml(blend)}}</span>
       </div>
@@ -250,11 +269,14 @@ export function getSpecialVolumeWorkbenchModalContent(state) {
               ${sections.map((section) => renderWorkbenchSection(selection, section)).join("")}
             </div>
             <footer class="specialVolumeWorkbenchControlsFooter">
-              <button type="button" class="toolButton" data-fog-workbench-action="save-defaults">Save as default for new Fog</button>
+              <div class="specialVolumeWorkbenchFooterActions">
+                <button type="button" class="toolButton" data-fog-workbench-action="save-defaults">Save as default for new Fog</button>
+                <button type="button" class="toolButton isPrimary" data-fog-workbench-action="done">Done</button>
+              </div>
               ${fallbackHint ? '<span class="fieldMeta">Bottom-panel path is active as fallback.</span>' : ""}
             </footer>
           </section>
-          ${renderFogPreview(selection)}
+          ${renderFogPreview(selection, rect)}
         </div>
       </section>
     `,
