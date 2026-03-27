@@ -1738,7 +1738,7 @@ kbd {
 .specialVolumeWorkbench {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 .specialVolumeWorkbenchHeader h3 {
@@ -1763,7 +1763,8 @@ kbd {
 
 .specialVolumeWorkbenchSection {
   border-top: 1px solid rgba(165, 189, 231, 0.2);
-  padding-top: 8px;
+  padding-top: 7px;
+  margin-top: 1px;
 }
 
 .specialVolumeWorkbenchSectionHeader {
@@ -1772,7 +1773,27 @@ kbd {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: rgba(228, 238, 255, 0.76);
-  margin-bottom: 6px;
+  margin-bottom: 5px;
+}
+
+.specialVolumeWorkbenchSectionFields {
+  gap: 6px;
+}
+
+.specialVolumeWorkbenchSectionFields .selectionParamField {
+  margin: 0;
+}
+
+.specialVolumeWorkbenchSectionFields .selectionParamField .label {
+  font-size: 11px;
+}
+
+.specialVolumeWorkbenchSectionFields .selectionParamField input,
+.specialVolumeWorkbenchSectionFields .selectionParamField select {
+  min-height: 26px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  font-size: 12px;
 }
 
 @media (max-width: 1280px) {

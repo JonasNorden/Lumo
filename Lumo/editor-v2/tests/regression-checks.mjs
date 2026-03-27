@@ -78,6 +78,8 @@ import { collectDarknessPreviewLights, getPreviewPlayerLight } from "../src/rend
 import {
   applySpecialVolumeParamChange,
   createFogVolumeEntityFromWorldRect,
+  getFogVolumeParams,
+  getFogWorkbenchFieldMeta,
   getSpecialVolumeDescriptor,
   listSpecialVolumeTypes,
   syncSpecialVolumeEntityToAnchor,
@@ -2808,6 +2810,37 @@ function runFogVolumeRegressionChecks() {
     false,
     "special-volume param routing should preserve nested fog render params on the dedicated path",
   );
+
+  const clampedFog = applySpecialVolumeParamChange(movedFog, "look.density", 99, 16);
+  assert.equal(
+    clampedFog.params.look.density,
+    1,
+    "fog param updates should clamp out-of-range values to safe numeric bounds",
+  );
+  const resilientFog = applySpecialVolumeParamChange(
+    { ...movedFog, params: { ...movedFog.params, look: { ...movedFog.params.look, thickness: "bad-value", color: "definitely-not-a-color" } } },
+    "look.thickness",
+    Number.NaN,
+    16,
+  );
+  assert.equal(
+    Number.isFinite(resilientFog.params.look.thickness),
+    true,
+    "fog param updates should normalize malformed numeric writes without propagating NaN",
+  );
+  assert.equal(
+    resilientFog.params.look.color.startsWith("#"),
+    true,
+    "fog param updates should normalize malformed color writes to valid hex values",
+  );
+
+  const workbenchMeta = getFogWorkbenchFieldMeta("smoothing.visc");
+  assert.equal(workbenchMeta?.label, "Viscosity", "fog workbench metadata should provide normalized field labels");
+  assert.equal(workbenchMeta?.min, 0, "fog workbench metadata should expose numeric range safety hints");
+  assert.equal(workbenchMeta?.max, 1, "fog workbench metadata should expose numeric range ceilings");
+  const normalizedParams = getFogVolumeParams({ type: "fog_volume", params: { look: { density: "Infinity", thickness: -50 } } });
+  assert.equal(normalizedParams.look.density, 0.14, "fog param normalization should recover invalid density values to defaults");
+  assert.equal(normalizedParams.look.thickness, 1, "fog param normalization should clamp authored thickness to safe minimums");
 }
 
 function runFogPlacementPreviewRegressionChecks() {
@@ -2908,6 +2941,36 @@ function runFogPlacementPreviewRegressionChecks() {
     persistedFogOverlay.operations.some((operation) => operation[0] === "arc"),
     false,
     "committed fog volumes should not regress into circular aggro/proximity overlays",
+  );
+  assert.equal(
+    persistedFogOverlay.operations.filter((operation) => operation[0] === "fillRect").length >= 2,
+    true,
+    "committed fog renders should include extra soft/motion bands so smoothing and interaction settings affect the preview shape",
+  );
+
+  const highDensityOverlay = createPreviewTestContext();
+  renderEntities(highDensityOverlay.ctx, {
+    ...doc,
+    entities: [{
+      id: "entity-fog-high",
+      type: "fog_volume",
+      x: 1,
+      y: 1,
+      visible: true,
+      params: {
+        area: { x0: 16, x1: 112, y0: 32, falloff: 0 },
+        look: { density: 0.8, thickness: 32, exposure: 1.8 },
+      },
+    }],
+  }, viewport, {
+    selectedEntityIds: [],
+    hoveredEntityId: null,
+    entityDrag: null,
+  });
+  assert.equal(
+    highDensityOverlay.operations.filter((operation) => operation[0] === "fillRect").length >= 1,
+    true,
+    "density/exposure updates should continue to render visible fog fills instead of collapsing the preview",
   );
 }
 
@@ -4651,6 +4714,14 @@ function runBottomPanelFogVolumeRegressionChecks() {
   assert.equal(panel.innerHTML.includes('data-special-volume-workbench="fog_volume"'), true, "special-volume workbench shell should identify fog_volume as the active type");
   assert.equal(panel.innerHTML.includes("specialVolumeWorkbenchSectionHeader"), true, "special-volume workbench should render sectioned nested fog controls");
   assert.equal(panel.innerHTML.includes('data-entity-param-path="area.x0"'), true, "special-volume workbench should expose nested fog area params by explicit param paths");
+  assert.equal(panel.innerHTML.includes(">Area<"), true, "special-volume workbench should keep the normalized Area section label");
+  assert.equal(panel.innerHTML.includes(">Look<"), true, "special-volume workbench should keep the normalized Look section label");
+  assert.equal(panel.innerHTML.includes(">Smoothing<"), true, "special-volume workbench should keep the normalized Smoothing section label");
+  assert.equal(panel.innerHTML.includes(">Interaction<"), true, "special-volume workbench should keep the normalized Interaction section label");
+  assert.equal(panel.innerHTML.includes(">Organic<"), true, "special-volume workbench should keep the normalized Organic section label");
+  assert.equal(panel.innerHTML.includes(">Render<"), true, "special-volume workbench should keep the normalized Render section label");
+  assert.equal(panel.innerHTML.includes('data-live-param="true"'), true, "special-volume workbench controls should flag live input updates for immediate preview feedback");
+  assert.equal(panel.innerHTML.includes('min="0" max="1"'), true, "special-volume workbench numeric fields should expose safe range bounds");
 }
 
 function runInspectorFogRegressionChecks() {

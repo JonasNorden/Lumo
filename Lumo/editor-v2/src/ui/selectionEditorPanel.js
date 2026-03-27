@@ -904,6 +904,10 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
   const onInput = (event) => {
     const target = event.target;
     if (!isTextInputElement(target) && !isSelectElement(target)) return;
+    if (isTextInputElement(target) && target.dataset.liveParam === "true") {
+      const changeEvent = new Event("change", { bubbles: true });
+      target.dispatchEvent(changeEvent);
+    }
     if (isTextInputElement(target) && target.dataset.numberCommit === "deferred") return;
     if (!isDraftableInput(target)) return;
     updateInputDraft(target);

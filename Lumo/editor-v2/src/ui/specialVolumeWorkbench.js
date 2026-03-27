@@ -1,6 +1,7 @@
 import { getEntityParamInputType, getNestedEntityParam } from "../domain/entities/entityParams.js";
 import {
   getFogVolumeRect,
+  getFogWorkbenchFieldMeta,
   getSpecialVolumeDescriptor,
   isSpecialVolumeEntityType,
 } from "../domain/entities/specialVolumeTypes.js";
@@ -45,8 +46,16 @@ function resolveSelectedSpecialVolume(state) {
 function renderWorkbenchField(selection, path) {
   const value = getNestedEntityParam(selection.entity?.params, path);
   const inputType = getEntityParamInputType(value);
-  const label = formatLabel(path.split(".").at(-1));
+  const fieldMeta = getFogWorkbenchFieldMeta(path);
+  const label = fieldMeta?.label || formatLabel(path.split(".").at(-1));
   const entityId = typeof selection.entity?.id === "string" ? selection.entity.id : "";
+  const min = Number.isFinite(Number(fieldMeta?.min)) ? `min="${Number(fieldMeta.min)}"` : "";
+  const max = Number.isFinite(Number(fieldMeta?.max)) ? `max="${Number(fieldMeta.max)}"` : "";
+  const step = Number.isFinite(Number(fieldMeta?.step))
+    ? `step="${Number(fieldMeta.step)}"`
+    : inputType === "number"
+      ? 'step="any"'
+      : "";
 
   if (inputType === "boolean") {
     return `
@@ -59,6 +68,7 @@ function renderWorkbenchField(selection, path) {
           data-entity-param-type="boolean"
           data-entity-index="${selection.index}"
           data-entity-id="${escapeHtml(entityId)}"
+          data-live-param="true"
         />
       </label>
     `;
@@ -73,12 +83,13 @@ function renderWorkbenchField(selection, path) {
       <span class="label">${escapeHtml(label)}</span>
       <input
         type="${inputType === "number" ? "number" : "text"}"
-        ${inputType === "number" ? 'step="any"' : ""}
+        ${inputType === "number" ? `${step} ${min} ${max}` : ""}
         value="${escapeHtml(renderedValue)}"
         data-entity-param-path="${escapeHtml(path)}"
         data-entity-param-type="${escapeHtml(inputType === "number" ? "number" : "string")}"
         data-entity-index="${selection.index}"
         data-entity-id="${escapeHtml(entityId)}"
+        data-live-param="true"
       />
     </label>
   `;
@@ -93,7 +104,7 @@ function renderWorkbenchSection(selection, section) {
   return `
     <section class="specialVolumeWorkbenchSection">
       <header class="specialVolumeWorkbenchSectionHeader">${escapeHtml(section.title || formatLabel(section.key || "section"))}</header>
-      <div class="selectionEditorFlow">
+      <div class="selectionEditorFlow specialVolumeWorkbenchSectionFields">
         ${sectionFields}
       </div>
     </section>
