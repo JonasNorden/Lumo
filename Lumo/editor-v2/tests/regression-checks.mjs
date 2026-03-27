@@ -1358,10 +1358,27 @@ async function runFogWorkbenchInteractionRegressionChecks() {
     await new Promise((resolve) => setTimeout(resolve, 320));
     const repeatedValue = Number(steppedInput.value);
     assert.equal(repeatedValue > immediateValue, true, "fog stepper pointer hold should continue repeating while held");
-    fakeWindow.dispatch("pointerup", { button: 0 });
+    fakeWindow.dispatch("mouseup", { button: 0 });
     const stoppedValue = Number(steppedInput.value);
-    await new Promise((resolve) => setTimeout(resolve, 260));
+    await new Promise((resolve) => setTimeout(resolve, 180));
     assert.equal(Number(steppedInput.value), stoppedValue, "fog stepper repeat should stop cleanly on pointer release");
+
+    const downStepButton = new FakeElement();
+    downStepButton.dataset = { fogStepDirection: "-1" };
+    downStepButton.closest = (selector) => {
+      if (selector === "[data-fog-step-direction]") return downStepButton;
+      if (selector === "[data-fog-number-field]") return stepRoot;
+      return null;
+    };
+    const beforeDownHold = Number(steppedInput.value);
+    floatingPanelHost.dispatch("pointerdown", { target: downStepButton, shiftKey: false, button: 0 });
+    await new Promise((resolve) => setTimeout(resolve, 220));
+    fakeWindow.dispatch("mouseup", { button: 0 });
+    assert.equal(
+      Number(steppedInput.value) < beforeDownHold,
+      true,
+      "fog decrement stepper should continue repeating while held",
+    );
   } finally {
     harness.destroy();
   }
@@ -5830,6 +5847,7 @@ function runCanonicalParameterMutationRegressionChecks() {
 function runSourceRegressionChecks() {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const source = fs.readFileSync(path.join(repoRoot, "src/app/createEditorApp.js"), "utf8");
+  const stylesSource = fs.readFileSync(path.join(repoRoot, "styles.css"), "utf8");
   const mainSource = fs.readFileSync(path.join(repoRoot, "src/main.js"), "utf8");
   const indexSource = fs.readFileSync(path.join(repoRoot, "index.html"), "utf8");
   const exportSource = fs.readFileSync(path.join(repoRoot, "src/data/exportLevelDocument.js"), "utf8");
@@ -5913,6 +5931,36 @@ function runSourceRegressionChecks() {
     source.includes("if (event.key === \"Escape\") {\n      const selection = resolveSelectedSpecialVolume(store.getState());"),
     true,
     "escape handling should close the fog workbench when the fog modal is active",
+  );
+  assert.equal(
+    source.includes("if (event.button !== 0 || event.isPrimary === false) return;"),
+    true,
+    "fog stepper holds should only start from primary-button pointer presses",
+  );
+  assert.equal(
+    source.includes("fogStepperSession.repeatTimeoutId = globalThis.setTimeout(repeat, 78);"),
+    true,
+    "fog stepper hold-to-repeat should continue through one active timeout loop while pressed",
+  );
+  assert.equal(
+    source.includes("globalThis.clearTimeout(fogStepperSession.repeatTimeoutId);"),
+    true,
+    "fog stepper hold-to-repeat should stop immediately by clearing the active timeout",
+  );
+  assert.equal(
+    stylesSource.includes(".specialVolumeWorkbenchNumberInput .selectionStepperButton"),
+    true,
+    "fog workbench styles should keep compact stepper sizing scoped to the modal numeric controls",
+  );
+  assert.equal(
+    stylesSource.includes("max-height: min(74vh, 680px);"),
+    true,
+    "fog workbench modal should cap vertical growth so Save/Done remain reachable",
+  );
+  assert.equal(
+    stylesSource.includes("grid-template-rows: auto minmax(0, 1fr);"),
+    true,
+    "fog workbench modal should reserve bounded body space for stable two-pane footer visibility",
   );
 
   const handleCanvasMouseDownSection = source.match(/const handleCanvasMouseDown = \(event\) => \{[\s\S]*?\n  \};/);
