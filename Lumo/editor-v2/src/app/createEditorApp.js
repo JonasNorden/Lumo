@@ -5388,6 +5388,19 @@ if (event.shiftKey) {
       }
     }
 
+    if (event.key === "Escape") {
+      const selection = resolveSelectedSpecialVolume(store.getState());
+      if (selection && isFogVolumeEntityType(selection.entity?.type)) {
+        event.preventDefault();
+        store.setState((draft) => {
+          clearEntitySelection(draft.interaction);
+          draft.interaction.selectedEntityId = null;
+          draft.interaction.selectedEntityIds = [];
+        });
+        return;
+      }
+    }
+
     if (hasBlockedShortcutFocus()) {
       return;
     }
@@ -5528,6 +5541,14 @@ if (event.shiftKey) {
 
     const fogActionButton = target.closest("[data-fog-workbench-action]");
     if (fogActionButton instanceof HTMLButtonElement) {
+      if (fogActionButton.dataset.fogWorkbenchAction === "done") {
+        store.setState((draft) => {
+          clearEntitySelection(draft.interaction);
+          draft.interaction.selectedEntityId = null;
+          draft.interaction.selectedEntityIds = [];
+        });
+        return;
+      }
       if (fogActionButton.dataset.fogWorkbenchAction === "save-defaults") {
         const state = store.getState();
         const selection = resolveSelectedSpecialVolume(state);

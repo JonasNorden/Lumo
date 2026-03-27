@@ -1865,6 +1865,12 @@ kbd {
   border-top: 1px solid rgba(90, 120, 180, 0.3);
 }
 
+.specialVolumeWorkbenchFooterActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .specialVolumeWorkbenchPreviewPane {
   min-height: 0;
   display: grid;
@@ -1889,7 +1895,7 @@ kbd {
   color: rgba(228, 238, 255, 0.72);
 }
 
-.fogWorkbenchPreviewSurface {
+.volumeWorkbenchPreviewSurface {
   position: relative;
   overflow: hidden;
   border-radius: 10px;
@@ -1897,15 +1903,63 @@ kbd {
   background: #0b1221;
 }
 
+.volumeWorkbenchPreviewSpan {
+  position: absolute;
+  left: var(--volume-span-start, 22%);
+  right: calc(100% - var(--volume-span-end, 78%));
+  top: 0;
+  bottom: 0;
+}
+
 .fogWorkbenchPreviewBackdrop,
 .fogWorkbenchPreviewBands,
-.fogWorkbenchPreviewMist {
+.fogWorkbenchPreviewMist,
+.fogWorkbenchPreviewWake,
+.fogWorkbenchPreviewDisturbance {
   position: absolute;
   inset: 0;
 }
 
 .fogWorkbenchPreviewBackdrop {
   background: radial-gradient(120% 100% at 50% 100%, rgba(35, 55, 96, 0.6), rgba(7, 14, 28, 0.96));
+}
+
+.fogWorkbenchPreviewSpan {
+  z-index: 2;
+}
+
+.fogWorkbenchPreviewSpanStop {
+  position: absolute;
+  top: calc(100% - var(--fog-thickness, 44px) - 32px);
+  width: 2px;
+  height: calc(var(--fog-thickness, 44px) + 44px + (var(--fog-falloff-pct, 6%) * 0.42));
+  background: linear-gradient(180deg, rgba(196, 219, 255, 0.04), rgba(196, 219, 255, 0.7) 42%, rgba(196, 219, 255, 0.16));
+  box-shadow: 0 0 8px rgba(144, 183, 243, 0.35);
+  opacity: 0.9;
+}
+
+.fogWorkbenchPreviewSpanStop.isStart {
+  left: 0;
+}
+
+.fogWorkbenchPreviewSpanStop.isEnd {
+  right: 0;
+}
+
+.fogWorkbenchPreviewBands,
+.fogWorkbenchPreviewBands.isSecondary,
+.fogWorkbenchPreviewMist,
+.fogWorkbenchPreviewWake,
+.fogWorkbenchPreviewDisturbance {
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.05) calc(var(--fog-falloff-pct, 6%) * 0.45),
+    black var(--fog-falloff-pct, 6%),
+    black calc(100% - var(--fog-falloff-pct, 6%)),
+    rgba(0, 0, 0, 0.05) calc(100% - (var(--fog-falloff-pct, 6%) * 0.45)),
+    transparent 100%
+  );
 }
 
 .fogWorkbenchPreviewBands,
@@ -1936,15 +1990,33 @@ kbd {
   filter: blur(calc(12px + (var(--fog-organic, 0) * 8px)));
 }
 
+.fogWorkbenchPreviewWake {
+  top: calc(100% - var(--fog-thickness, 44px) - 18px);
+  height: calc(var(--fog-thickness, 44px) + 16px);
+  opacity: calc(0.15 + (var(--fog-push, 0) * 0.055));
+  background:
+    radial-gradient(110px 34px at 32% 55%, rgba(219, 236, 255, 0.32), transparent 72%),
+    radial-gradient(80px 28px at 48% 62%, rgba(219, 236, 255, 0.24), transparent 74%);
+  filter: blur(calc(4px + (var(--fog-push, 0) * 0.55px)));
+}
+
+.fogWorkbenchPreviewDisturbance {
+  top: calc(100% - var(--fog-thickness, 44px) - 26px);
+  width: 72px;
+  height: calc(var(--fog-thickness, 44px) + 28px + (var(--fog-bulge, 0) * 1.6px));
+  left: 0;
+  opacity: calc(0.2 + (var(--fog-bulge, 0) * 0.06));
+  background: radial-gradient(circle at 40% 50%, rgba(243, 248, 255, 0.68), rgba(220, 237, 255, 0.2) 52%, transparent 82%);
+  filter: blur(calc(5px + (var(--fog-push, 0) * 0.45px)));
+}
+
 .fogWorkbenchPreviewLumo {
   position: absolute;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  bottom: 16px;
-  left: -22px;
-  background: radial-gradient(circle at 35% 30%, #fff6d7, #e4b46c 78%);
-  box-shadow: 0 0 0 1px rgba(255, 228, 171, 0.34), 0 0 16px rgba(255, 195, 106, 0.46);
+  width: 20px;
+  height: 26px;
+  bottom: calc(var(--fog-thickness, 44px) + 8px);
+  left: 0;
+  transform: translateX(-12px);
 }
 
 .fogWorkbenchPreviewLumo.isBehindFog {
@@ -1955,18 +2027,47 @@ kbd {
   z-index: 4;
 }
 
+.fogWorkbenchPreviewLumoBody {
+  position: absolute;
+  inset: 2px 3px 4px;
+  border-radius: 9px 9px 11px 11px;
+  background: radial-gradient(circle at 40% 28%, #fff8df, #f0ca88 55%, #cb985a 100%);
+  box-shadow: 0 0 0 1px rgba(251, 226, 175, 0.45);
+}
+
+.fogWorkbenchPreviewLumoGlow {
+  position: absolute;
+  left: -7px;
+  right: -7px;
+  top: -6px;
+  bottom: -3px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 214, 146, 0.42), rgba(255, 204, 120, 0.06) 72%, transparent 100%);
+  filter: blur(2px);
+}
+
 .fogWorkbenchPreviewBands,
 .fogWorkbenchPreviewBands.isSecondary,
-.fogWorkbenchPreviewMist {
+.fogWorkbenchPreviewMist,
+.fogWorkbenchPreviewWake,
+.fogWorkbenchPreviewDisturbance {
   z-index: 2;
 }
 
 .fogWorkbenchPreviewSurface.isAnimated .fogWorkbenchPreviewLumo {
-  animation: fogWorkbenchLumoTraverse calc(8s - min(4s, var(--fog-organic-speed, 0) * 0.5s)) linear infinite;
+  animation: fogWorkbenchLumoTraverse calc(11s - min(5s, var(--fog-organic-speed, 0) * 0.7s)) ease-in-out infinite alternate;
+}
+
+.fogWorkbenchPreviewSurface.isAnimated .fogWorkbenchPreviewDisturbance {
+  animation: fogWorkbenchLumoTraverse calc(11s - min(5s, var(--fog-organic-speed, 0) * 0.7s)) ease-in-out infinite alternate;
 }
 
 .fogWorkbenchPreviewSurface.isAnimated .fogWorkbenchPreviewBands {
   animation: fogWorkbenchFogSway calc(6s - min(2.4s, var(--fog-organic-speed, 0) * 0.3s)) ease-in-out infinite alternate;
+}
+
+.fogWorkbenchPreviewSurface.isAnimated .fogWorkbenchPreviewWake {
+  animation: fogWorkbenchWakeShift calc(7.2s - min(2s, var(--fog-organic-speed, 0) * 0.2s)) ease-in-out infinite alternate;
 }
 
 .fogWorkbenchPreviewMeta {
@@ -1978,14 +2079,19 @@ kbd {
 }
 
 @keyframes fogWorkbenchLumoTraverse {
-  0% { transform: translate3d(0, 0, 0); }
-  45% { transform: translate3d(190px, -2px, 0); }
-  100% { transform: translate3d(390px, 0, 0); }
+  0% { transform: translate3d(-12px, 0, 0); }
+  48% { transform: translate3d(calc(100% - 10px), -2px, 0); }
+  100% { transform: translate3d(calc(100% - 16px), 0, 0); }
 }
 
 @keyframes fogWorkbenchFogSway {
-  0% { transform: translate3d(0, 0, 0); }
-  100% { transform: translate3d(calc(var(--fog-drift, 0) * 3px), calc(var(--fog-organic, 0) * -4px), 0); }
+  0% { transform: translate3d(0, 0, 0) skewX(calc(var(--fog-drift, 0) * 0.2deg)); }
+  100% { transform: translate3d(calc(var(--fog-drift, 0) * 3px), calc(var(--fog-organic, 0) * -4px), 0) skewX(calc(var(--fog-drift, 0) * 0.45deg)); }
+}
+
+@keyframes fogWorkbenchWakeShift {
+  0% { transform: translate3d(calc(var(--fog-push, 0) * -0.1px), 0, 0); opacity: calc(0.12 + (var(--fog-push, 0) * 0.035)); }
+  100% { transform: translate3d(calc(var(--fog-push, 0) * 0.85px), calc(var(--fog-bulge, 0) * -0.3px), 0); opacity: calc(0.24 + (var(--fog-push, 0) * 0.05)); }
 }
 
 @media (max-width: 1280px) {

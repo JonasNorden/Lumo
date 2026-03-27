@@ -4771,6 +4771,12 @@ function runFloatingFogWorkbenchRegressionChecks() {
   assert.equal(modal.markup.includes('data-fog-workbench-controls'), true, "floating fog workbench should render grouped controls pane");
   assert.equal(modal.markup.includes('data-fog-preview-root'), true, "floating fog workbench should render a dedicated live preview pane");
   assert.equal(modal.markup.includes('data-fog-workbench-action="save-defaults"'), true, "floating fog workbench should expose save-as-default action for future placements");
+  assert.equal(modal.markup.includes('data-fog-workbench-action="done"'), true, "floating fog workbench should expose an explicit done action to close the modal");
+  assert.equal(modal.markup.includes('data-volume-preview-span'), true, "floating fog preview should render a bounded authored span instead of an endless field");
+  assert.equal(modal.markup.includes('data-fog-preview-stop="start"'), true, "floating fog preview should render an authored start stop marker");
+  assert.equal(modal.markup.includes('data-fog-preview-stop="end"'), true, "floating fog preview should render an authored end stop marker");
+  assert.equal(modal.markup.includes('data-fog-preview-lumo'), true, "floating fog preview should include a representative Lumo actor in the span");
+  assert.equal(modal.markup.includes("isAnimated"), true, "floating fog preview should keep lightweight looped motion enabled for Lumo/fog interaction readability");
   assert.equal(modal.markup.includes(">Area<"), true, "floating fog workbench should preserve Area section grouping");
   assert.equal(modal.markup.includes(">Look<"), true, "floating fog workbench should preserve Look section grouping");
   assert.equal(modal.markup.includes(">Smoothing<"), true, "floating fog workbench should preserve Smoothing section grouping");
@@ -4792,6 +4798,22 @@ function runFloatingFogWorkbenchRegressionChecks() {
     modalDense?.markup.includes("--fog-opacity:0.950;"),
     true,
     "floating fog preview should update computed preview variables when fog params change",
+  );
+  const sharperFalloffState = JSON.parse(JSON.stringify(baseState));
+  sharperFalloffState.document.active.entities[0].params.area.falloff = 3;
+  const softerFalloffState = JSON.parse(JSON.stringify(baseState));
+  softerFalloffState.document.active.entities[0].params.area.falloff = 112;
+  const modalSharpened = getSpecialVolumeWorkbenchModalContent(sharperFalloffState);
+  const modalSoft = getSpecialVolumeWorkbenchModalContent(softerFalloffState);
+  assert.equal(
+    modalSharpened?.markup.includes("--fog-falloff-pct:3.75%;"),
+    true,
+    "low falloff values should produce sharp edge fade variables in the preview output",
+  );
+  assert.equal(
+    modalSoft?.markup.includes("--fog-falloff-pct:38.00%;"),
+    true,
+    "high falloff values should produce long soft fade variables in the preview output",
   );
 }
 
@@ -5739,9 +5761,24 @@ function runSourceRegressionChecks() {
     "fog workbench modal source should expose save-as-default controls",
   );
   assert.equal(
+    specialWorkbenchSource.includes('data-fog-workbench-action="done"'),
+    true,
+    "fog workbench modal source should expose a done control for clear completion flow",
+  );
+  assert.equal(
     source.includes("writeFogDefaultsToStorage(nextDefaults)"),
     true,
     "fog save-as-default flow should persist defaults for future sessions",
+  );
+  assert.equal(
+    source.includes("fogActionButton.dataset.fogWorkbenchAction === \"done\""),
+    true,
+    "done action should be handled in floating panel click routing",
+  );
+  assert.equal(
+    source.includes("if (event.key === \"Escape\") {\n      const selection = resolveSelectedSpecialVolume(store.getState());"),
+    true,
+    "escape handling should close the fog workbench when the fog modal is active",
   );
 
   const handleCanvasMouseDownSection = source.match(/const handleCanvasMouseDown = \(event\) => \{[\s\S]*?\n  \};/);
