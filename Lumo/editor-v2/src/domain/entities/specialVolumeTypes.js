@@ -17,7 +17,7 @@ const WATER_DEFAULT_PARAMS = Object.freeze({
 const LAVA_DEFAULT_PARAMS = Object.freeze({
   area: { x0: 0, x1: 240, y0: 0, depth: 88 },
   flow: { speed: 0.55 },
-  look: { temperature: 0.72 },
+  look: { temperature: 0.72, crustAmount: 0.5 },
   hazard: { instantDeath: true },
 });
 
@@ -144,6 +144,7 @@ function normalizeLavaParams(rawParams = {}) {
     },
     look: {
       temperature: clamp(Number(lookInput.temperature), 0.2, 1),
+      crustAmount: clamp(Number(lookInput.crustAmount), 0, 1),
     },
     hazard: {
       instantDeath: Boolean(hazardInput.instantDeath ?? true),
