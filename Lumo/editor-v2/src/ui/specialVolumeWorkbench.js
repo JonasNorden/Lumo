@@ -297,7 +297,6 @@ function renderWaterModal(selection) {
 
 function renderLavaModal(selection) {
   const model = getLavaPreviewModel(selection.entity);
-  const lumoSpriteSrc = resolveLumoPreviewSpriteSrc();
   const readSpanLength = (entity) => {
     const params = getLavaVolumeParams(entity);
     return Math.max(24, Number(params.area.x1) - Number(params.area.x0));
@@ -330,7 +329,6 @@ function renderLavaModal(selection) {
               data-lava-preview-width="${PREVIEW_CANVAS_WIDTH_PX}"
               data-lava-preview-height="${PREVIEW_CANVAS_HEIGHT_PX}"
               data-lava-preview-traverse-ms="${Math.round(model.traverseDurationMs)}"
-              data-lava-preview-lumo-sprite="${escapeHtml(lumoSpriteSrc || "")}"
               data-lava-depth="${model.depthPx.toFixed(4)}"
               data-lava-flow-speed="${model.flowSpeed.toFixed(4)}"
               data-lava-temperature="${model.temperature.toFixed(4)}"

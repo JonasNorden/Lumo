@@ -3218,16 +3218,16 @@ export function createEditorApp({
       ctx2d.stroke();
     }
 
-    const crustFragmentCount = Math.max(5, Math.round(8 + (crustAmount * 18)));
+    const crustFragmentCount = Math.max(8, Math.round(10 + (crustAmount * 34)));
     for (let patch = 0; patch < crustFragmentCount; patch += 1) {
       const seed = (patch * 12.73) + 3.1;
       const u = sampleSmookeNoise(seed + 1.4);
-      const drift = (sampleSmookeNoise(seed + (elapsedSec * 0.05 * flowSpeed)) - 0.5) * (12 + (crustAmount * 22));
+      const drift = (sampleSmookeNoise(seed + (elapsedSec * 0.05 * flowSpeed)) - 0.5) * (8 + (crustAmount * 6));
       const px = laneStartX + (u * laneWidth) + drift;
       const topBias = Math.pow(sampleSmookeNoise(seed + 4.8), 0.62);
       const py = lavaTopBase + (depth * (0.08 + (topBias * 0.84))) + ((sampleSmookeNoise(seed + (elapsedSec * 0.08 * flowSpeed) + 8.1) - 0.5) * 11);
-      const fragmentWidth = 8 + (sampleSmookeNoise(seed + 10.3) * 20) + (crustAmount * 18);
-      const fragmentHeight = 4 + (sampleSmookeNoise(seed + 14.7) * 10) + (crustAmount * 8);
+      const fragmentWidth = 4.8 + (sampleSmookeNoise(seed + 10.3) * 7.9) + (crustAmount * 2.1);
+      const fragmentHeight = 2.5 + (sampleSmookeNoise(seed + 14.7) * 4.9) + (crustAmount * 1.4);
       const points = 6 + (patch % 3);
       const phase = elapsedSec * (0.09 + ((patch % 4) * 0.018)) * flowSpeed;
       const alphaPulse = 0.1 + (sampleSmookeNoise(seed + phase + 20.4) * (0.18 + (crustAmount * 0.22)));
@@ -3262,66 +3262,70 @@ export function createEditorApp({
     ctx2d.stroke();
     ctx2d.restore();
 
-    const glowHeight = 42 + (temperature * 22);
-    const heatGlow = ctx2d.createLinearGradient(0, surfaceCrestY - glowHeight, 0, surfaceCrestY + 3);
-    heatGlow.addColorStop(0, "rgba(255, 177, 86, 0)");
-    heatGlow.addColorStop(0.58, `rgba(255, ${Math.round(165 + (temperature * 60))}, ${Math.round(52 + (temperature * 45))}, ${0.08 + (temperature * 0.18)})`);
-    heatGlow.addColorStop(1, `rgba(255, ${Math.round(204 + (temperature * 38))}, ${Math.round(96 + (temperature * 35))}, ${0.22 + (temperature * 0.22)})`);
-    ctx2d.fillStyle = heatGlow;
-    ctx2d.fillRect(laneStartX, surfaceCrestY - glowHeight, laneEndX - laneStartX, glowHeight + 6);
+    const distortionHeight = 42 + (temperature * 34);
+    const heatEnvelopeTop = Math.max(0, surfaceCrestY - distortionHeight - 12);
+    const heatEnvelopeBottom = floorTop + 4;
 
-    const distortionHeight = 34 + (temperature * 36);
-    const distortionBands = Math.max(12, Math.round(14 + (temperature * 8)));
     ctx2d.save();
-    ctx2d.globalCompositeOperation = "screen";
+    ctx2d.beginPath();
+    ctx2d.moveTo(firstSurfaceSample.x, firstSurfaceSample.y);
+    for (let i = 1; i < surfaceSamples.length; i += 1) {
+      const sample = surfaceSamples[i];
+      ctx2d.lineTo(sample.x, sample.y);
+    }
+    for (let i = surfaceSamples.length - 1; i >= 0; i -= 1) {
+      const sample = surfaceSamples[i];
+      const waveA = sampleSmookeNoise((sample.x * 0.012) + (elapsedSec * 0.29 * flowSpeed));
+      const waveB = sampleSmookeNoise((sample.x * 0.027) + (elapsedSec * 0.17 * flowSpeed) + 14.8);
+      const crestLift = (waveA * 0.56 + waveB * 0.44) * (distortionHeight * (0.74 + (temperature * 0.21)));
+      const y = Math.max(heatEnvelopeTop, sample.y - crestLift);
+      ctx2d.lineTo(sample.x, y);
+    }
+    ctx2d.closePath();
+    ctx2d.clip();
+    const heatGlow = ctx2d.createLinearGradient(0, heatEnvelopeTop, 0, heatEnvelopeBottom);
+    heatGlow.addColorStop(0, "rgba(255, 177, 86, 0)");
+    heatGlow.addColorStop(0.5, `rgba(255, ${Math.round(171 + (temperature * 54))}, ${Math.round(70 + (temperature * 38))}, ${0.06 + (temperature * 0.09)})`);
+    heatGlow.addColorStop(1, `rgba(255, ${Math.round(204 + (temperature * 38))}, ${Math.round(96 + (temperature * 35))}, ${0.19 + (temperature * 0.2)})`);
+    ctx2d.fillStyle = heatGlow;
+    ctx2d.fillRect(laneStartX, heatEnvelopeTop, laneEndX - laneStartX, heatEnvelopeBottom - heatEnvelopeTop);
+    ctx2d.restore();
+
+    const distortionBands = Math.max(16, Math.round(20 + (temperature * 10)));
+    ctx2d.save();
+    ctx2d.globalCompositeOperation = "lighter";
     for (let band = 0; band < distortionBands; band += 1) {
       const seed = (band * 17.19) + 1.3;
       const centerU = sampleSmookeNoise(seed + 0.5);
       const baseX = laneStartX + (centerU * laneWidth);
-      const widthPx = 10 + (sampleSmookeNoise(seed + 4.3) * 28);
+      const widthPx = 3.8 + (sampleSmookeNoise(seed + 4.3) * 7.4);
       const speed = 0.26 + (sampleSmookeNoise(seed + 8.2) * 0.58);
       const phase = (elapsedSec * speed * flowSpeed) + (seed * 0.19);
-      const sway = (sampleSmookeNoise(seed + phase + 11.7) - 0.5) * (5 + (temperature * 10));
-      const alpha = 0.022 + (sampleSmookeNoise(seed + 15.4) * (0.04 + (temperature * 0.035)));
-      const driftY = phase * 10;
-      const segments = 7;
+      const sway = (sampleSmookeNoise(seed + phase + 11.7) - 0.5) * (4.4 + (temperature * 7.6));
+      const alpha = 0.03 + (sampleSmookeNoise(seed + 15.4) * (0.035 + (temperature * 0.03)));
+      const segments = 9;
       ctx2d.beginPath();
       for (let i = 0; i <= segments; i += 1) {
         const t = i / segments;
-        const worldX = baseX + sway + ((sampleSmookeNoise(seed + (t * 7.8) + phase) - 0.5) * (3.8 + (t * 8)));
+        const wavering = (sampleSmookeNoise(seed + (t * 7.8) + phase) - 0.5) * (2.8 + (t * 6.8));
+        const worldX = baseX + sway + wavering;
         const surfaceY = sampleSurfaceYAtX(worldX);
-        const y = surfaceY - ((t * distortionHeight) + (driftY % 12));
-        const half = widthPx * (0.68 + ((1 - t) * 0.36)) * (0.7 + (sampleSmookeNoise(seed + (t * 9.1) + 40.2) * 0.6));
-        if (i === 0) ctx2d.moveTo(worldX - half, y);
-        else ctx2d.lineTo(worldX - half, y);
+        const climb = t * distortionHeight * (0.46 + (sampleSmookeNoise(seed + (t * 5.9) + 24.7) * 0.62));
+        const y = surfaceY - climb;
+        if (i === 0) ctx2d.moveTo(worldX, y);
+        else ctx2d.lineTo(worldX, y);
       }
-      for (let i = segments; i >= 0; i -= 1) {
-        const t = i / segments;
-        const worldX = baseX + sway + ((sampleSmookeNoise(seed + (t * 7.8) + phase) - 0.5) * (3.8 + (t * 8)));
-        const surfaceY = sampleSurfaceYAtX(worldX);
-        const y = surfaceY - ((t * distortionHeight) + (driftY % 12));
-        const half = widthPx * (0.68 + ((1 - t) * 0.36)) * (0.7 + (sampleSmookeNoise(seed + (t * 9.1) + 40.2) * 0.6));
-        ctx2d.lineTo(worldX + half, y);
-      }
-      ctx2d.closePath();
-      const bandTopY = Math.max(0, surfaceCrestY - distortionHeight - 16);
-      const grad = ctx2d.createLinearGradient(0, bandTopY, 0, surfaceCrestY + 8);
-      grad.addColorStop(0, "rgba(255, 210, 140, 0)");
-      grad.addColorStop(0.52, `rgba(255, ${Math.round(186 + (temperature * 44))}, ${Math.round(90 + (temperature * 52))}, ${alpha})`);
-      grad.addColorStop(1, "rgba(255, 232, 164, 0)");
-      ctx2d.fillStyle = grad;
-      ctx2d.fill();
+      const grad = ctx2d.createLinearGradient(0, heatEnvelopeTop, 0, surfaceCrestY + 6);
+      grad.addColorStop(0, "rgba(255, 220, 170, 0)");
+      grad.addColorStop(0.68, `rgba(255, ${Math.round(188 + (temperature * 36))}, ${Math.round(106 + (temperature * 44))}, ${alpha})`);
+      grad.addColorStop(1, "rgba(255, 236, 188, 0)");
+      ctx2d.strokeStyle = grad;
+      ctx2d.lineWidth = widthPx;
+      ctx2d.lineCap = "round";
+      ctx2d.lineJoin = "round";
+      ctx2d.stroke();
     }
     ctx2d.restore();
-
-    const lumoX = lavaPreviewMotion.lumoX;
-    if (lavaPreviewMotion.lumoSprite instanceof HTMLImageElement && lavaPreviewMotion.lumoSprite.complete && lavaPreviewMotion.lumoSprite.naturalWidth > 0) {
-      ctx2d.save();
-      ctx2d.translate(lumoX, floorTop - 1);
-      ctx2d.scale(lavaPreviewMotion.lumoDirection, 1);
-      ctx2d.drawImage(lavaPreviewMotion.lumoSprite, -12, -24, 24, 24);
-      ctx2d.restore();
-    }
   };
 
   const stepLavaPreviewMotion = (timestampMs) => {
@@ -3331,9 +3335,6 @@ export function createEditorApp({
     }
     if (!lavaPreviewMotion.startedAtMs) lavaPreviewMotion.startedAtMs = timestampMs;
     const elapsedMs = timestampMs - lavaPreviewMotion.startedAtMs;
-    const patrol = fogPreviewPatrolAtElapsed(elapsedMs, lavaPreviewMotion.durationMs);
-    lavaPreviewMotion.lumoX = lavaPreviewMotion.bandStartX + ((lavaPreviewMotion.bandEndX - lavaPreviewMotion.bandStartX) * patrol.u);
-    lavaPreviewMotion.lumoDirection = patrol.facing;
     drawLavaPreviewCanvas(elapsedMs);
     lavaPreviewMotion.rafId = globalThis.requestAnimationFrame(stepLavaPreviewMotion);
   };
@@ -3366,17 +3367,9 @@ export function createEditorApp({
     lavaPreviewMotion.bandEndX = envMetrics.laneEndX;
     lavaPreviewMotion.durationMs = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 9600;
     lavaPreviewMotion.startedAtMs = 0;
-    lavaPreviewMotion.lumoX = (lavaPreviewMotion.bandStartX + lavaPreviewMotion.bandEndX) * 0.5;
+    lavaPreviewMotion.lumoX = 0;
     lavaPreviewMotion.lumoDirection = 1;
-    const lumoSpriteSrc = typeof surface.dataset.lavaPreviewLumoSprite === "string" ? surface.dataset.lavaPreviewLumoSprite.trim() : "";
-    if (lumoSpriteSrc) {
-      const sprite = new Image();
-      sprite.decoding = "async";
-      sprite.src = lumoSpriteSrc;
-      lavaPreviewMotion.lumoSprite = sprite;
-    } else {
-      lavaPreviewMotion.lumoSprite = null;
-    }
+    lavaPreviewMotion.lumoSprite = null;
     drawLavaPreviewCanvas(0);
     lavaPreviewMotion.rafId = globalThis.requestAnimationFrame(stepLavaPreviewMotion);
   };
