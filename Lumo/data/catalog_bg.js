@@ -12,7 +12,7 @@ window.LUMO_CATALOG_BG = [
     "id": "bg_rock_01",
     "name": "Cave Rock 01",
     "group": "Cave",
-    "img": "data/assets/tiles/bg/bg_rock_01.png",
+    "img": "data/assets/tiles/soil_c.png",
     "anchor": "TL",
     "visualProfileId": "visual.bg.tl",
     "themeTags": ["cave", "stone"]
