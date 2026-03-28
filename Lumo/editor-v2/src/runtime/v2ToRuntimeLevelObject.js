@@ -16,6 +16,45 @@ const SUPPORTED_RUNTIME_ENTITY_IDS = new Set([
 ]);
 
 const UNSUPPORTED_VOLUME_TYPES = new Set(["water_volume", "lava_volume", "bubbling_liquid_volume"]);
+const RUNTIME_BG_FALLBACK_ID = "bg_rock_01";
+const RUNTIME_BG_IDS = new Set([
+  "bg_void",
+  "bg_rock_01",
+  "void_t",
+  "void_tl",
+  "void_tr",
+  "void_c",
+  "root",
+  "port",
+  "window_01",
+  "pillar_01",
+  "valv",
+  "wall_5",
+  "wall_02",
+]);
+
+const V2_BACKGROUND_ID_TO_RUNTIME_ID = new Map([
+  ["bg_stone_wall", "bg_rock_01"],
+  ["bg_arch", "wall_02"],
+  ["bg_pillar", "pillar_01"],
+]);
+
+const RUNTIME_BG_IMAGE_BASENAME_TO_ID = new Map([
+  ["bg_void.png", "bg_void"],
+  ["bg_rock_01.png", "bg_rock_01"],
+  ["void_t.png", "void_t"],
+  ["void_tl.png", "void_tl"],
+  ["void_tr.png", "void_tr"],
+  ["void_c.png", "void_c"],
+  ["root.png", "root"],
+  ["port.png", "port"],
+  ["window_01.png", "window_01"],
+  ["pillar_01.png", "pillar_01"],
+  ["valv.png", "valv"],
+  ["wall_05.png", "wall_5"],
+  ["wall_5.png", "wall_5"],
+  ["wall_02.png", "wall_02"],
+]);
 
 function cloneParams(params) {
   if (!params || typeof params !== "object") return {};
@@ -29,6 +68,72 @@ function normalizeRuntimeEntityType(type) {
   if (normalized === "player-exit") return "exit_01";
   if (normalized === "checkpoint") return "checkpoint_01";
   return normalized;
+}
+
+function getBasename(input) {
+  const value = String(input || "").trim().toLowerCase();
+  if (!value) return "";
+  const normalized = value.replace(/\\/g, "/");
+  const slashIndex = normalized.lastIndexOf("/");
+  return slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
+}
+
+function isUnsupportedLiquidVolumeType(type) {
+  const normalized = String(type || "").trim().toLowerCase();
+  if (!normalized) return false;
+  if (UNSUPPORTED_VOLUME_TYPES.has(normalized)) return true;
+  return (
+    (normalized.includes("water") || normalized.includes("lava") || normalized.includes("bubbling"))
+    && (normalized.includes("volume") || normalized.includes("liquid"))
+  );
+}
+
+function createBackgroundRuntimeMaterialResolver(levelDocument) {
+  const authoredMaterials = Array.isArray(levelDocument?.background?.materials)
+    ? levelDocument.background.materials
+    : [];
+
+  const runtimeIdByMaterialId = new Map();
+  for (const material of authoredMaterials) {
+    const materialId = String(material?.id || "").trim();
+    if (!materialId) continue;
+    const normalizedMaterialId = materialId.toLowerCase();
+
+    if (RUNTIME_BG_IDS.has(normalizedMaterialId)) {
+      runtimeIdByMaterialId.set(materialId, normalizedMaterialId);
+      continue;
+    }
+
+    const mappedKnownId = V2_BACKGROUND_ID_TO_RUNTIME_ID.get(normalizedMaterialId);
+    if (mappedKnownId) {
+      runtimeIdByMaterialId.set(materialId, mappedKnownId);
+      continue;
+    }
+
+    const basename = getBasename(material?.img);
+    const mappedByImage = RUNTIME_BG_IMAGE_BASENAME_TO_ID.get(basename);
+    if (mappedByImage) {
+      runtimeIdByMaterialId.set(materialId, mappedByImage);
+    }
+  }
+
+  return (materialId) => {
+    const normalized = String(materialId || "").trim();
+    if (!normalized) return null;
+
+    const directNormalized = normalized.toLowerCase();
+    if (RUNTIME_BG_IDS.has(directNormalized)) return directNormalized;
+
+    const knownV2Id = V2_BACKGROUND_ID_TO_RUNTIME_ID.get(directNormalized);
+    if (knownV2Id) return knownV2Id;
+
+    if (runtimeIdByMaterialId.has(normalized)) return runtimeIdByMaterialId.get(normalized);
+
+    const byBaseName = RUNTIME_BG_IMAGE_BASENAME_TO_ID.get(getBasename(normalized));
+    if (byBaseName) return byBaseName;
+
+    return RUNTIME_BG_FALLBACK_ID;
+  };
 }
 
 function mapSoundToRuntimeEntity(sound, tileSize) {
@@ -113,9 +218,26 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
   const tileSize = Number(levelDocument?.dimensions?.tileSize) || 24;
   const expectedTileCount = width * height;
   const mainTiles = Array.isArray(levelDocument?.tiles?.base) ? levelDocument.tiles.base.slice(0, expectedTileCount) : [];
+  const resolveRuntimeBackgroundMaterial = createBackgroundRuntimeMaterialResolver(levelDocument);
+  const authoredBackgroundBase = Array.isArray(levelDocument?.background?.base)
+    ? levelDocument.background.base.slice(0, expectedTileCount)
+    : [];
+  let unknownBackgroundMaterialCount = 0;
+  const runtimeBackgroundBase = authoredBackgroundBase.map((materialId) => {
+    if (typeof materialId !== "string" || !materialId.trim()) return null;
+    const resolved = resolveRuntimeBackgroundMaterial(materialId);
+    if (resolved === RUNTIME_BG_FALLBACK_ID && String(materialId || "").trim().toLowerCase() !== RUNTIME_BG_FALLBACK_ID) {
+      unknownBackgroundMaterialCount += 1;
+    }
+    return resolved;
+  });
+  while (runtimeBackgroundBase.length < expectedTileCount) runtimeBackgroundBase.push(null);
 
   if (mainTiles.length !== expectedTileCount) {
     warnings.push(`Tile grid length mismatch: expected ${expectedTileCount}, received ${mainTiles.length}.`);
+  }
+  if (unknownBackgroundMaterialCount > 0) {
+    warnings.push(`Background paint remapped ${unknownBackgroundMaterialCount} cell(s) to '${RUNTIME_BG_FALLBACK_ID}' for runtime compatibility.`);
   }
 
   const runtimeLevel = {
@@ -129,12 +251,11 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
     },
     layers: {
       main: mainTiles,
+      bg: runtimeBackgroundBase,
       ents: [],
     },
     editor: {
-      bg: Array.isArray(levelDocument?.background?.base)
-        ? levelDocument.background.base.slice(0, expectedTileCount)
-        : new Array(expectedTileCount).fill(null),
+      bg: runtimeBackgroundBase.slice(0),
     },
   };
 
@@ -145,8 +266,8 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
 
     if (!runtimeId) continue;
 
-    if (UNSUPPORTED_VOLUME_TYPES.has(runtimeId)) {
-      unsupported.push(`Entity '${entityType}' is authored but runtime bridge v1 does not support this volume yet.`);
+    if (isUnsupportedLiquidVolumeType(runtimeId) || isUnsupportedLiquidVolumeType(entityType)) {
+      unsupported.push(`Omitted unsupported liquid volume '${entityType || runtimeId}' from runtime payload (PFH v1 has no water/lava/bubbling support).`);
       continue;
     }
 
