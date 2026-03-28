@@ -1,8 +1,10 @@
 import {
+  getBubblingLiquidVolumeParams,
   getFogVolumeParams,
   getLavaVolumeParams,
   getSpecialVolumeType,
   getWaterVolumeParams,
+  isBubblingLiquidVolumeEntityType,
   isFogVolumeEntityType,
   isLavaVolumeEntityType,
   isWaterVolumeEntityType,
@@ -54,7 +56,7 @@ function resolveSelectedEntity(state) {
 
 export function resolveSelectedSpecialVolume(state) {
   const entity = resolveSelectedEntity(state);
-  if (!entity || (!isFogVolumeEntityType(entity.type) && !isWaterVolumeEntityType(entity.type) && !isLavaVolumeEntityType(entity.type))) return null;
+  if (!entity || (!isFogVolumeEntityType(entity.type) && !isWaterVolumeEntityType(entity.type) && !isLavaVolumeEntityType(entity.type) && !isBubblingLiquidVolumeEntityType(entity.type))) return null;
   const entities = Array.isArray(state?.document?.active?.entities) ? state.document.active.entities : [];
   const index = entities.findIndex((entry) => entry?.id === entity.id);
   if (index < 0) return null;
@@ -140,6 +142,21 @@ function getLavaPreviewModel(entity, nowMs = Date.now()) {
     flowSpeed: clamp(Number(params.flow.speed), 0.1, 1.4),
     temperature: clamp(Number(params.look.temperature), 0.2, 1),
     crustAmount: clamp(Number(params.look.crustAmount), 0, 100),
+    traverseDurationMs,
+    phaseMs: Math.round(nowMs % traverseDurationMs),
+  };
+}
+
+function getBubblingLiquidPreviewModel(entity, nowMs = Date.now()) {
+  const params = getBubblingLiquidVolumeParams(entity);
+  const depthPx = clamp(Number(params.area.depth), 24, 164);
+  const traverseDurationMs = 9600;
+  return {
+    params,
+    depthPx,
+    surfaceActivity: clamp(Number(params.behavior.surfaceActivity), 0, 1),
+    bubbleAmount: clamp(Number(params.behavior.bubbleAmount), 0, 1),
+    fumeAmount: clamp(Number(params.behavior.fumeAmount), 0, 1),
     traverseDurationMs,
     phaseMs: Math.round(nowMs % traverseDurationMs),
   };
@@ -348,6 +365,69 @@ function renderLavaModal(selection) {
   };
 }
 
+function renderBubblingLiquidModal(selection) {
+  const model = getBubblingLiquidPreviewModel(selection.entity);
+  const readSpanLength = (entity) => {
+    const params = getBubblingLiquidVolumeParams(entity);
+    return Math.max(24, Number(params.area.x1) - Number(params.area.x0));
+  };
+  const numberFields = [
+    { label: "Length", path: "area.length", min: 24, max: 4000, step: 24, digits: 0, read: readSpanLength },
+    { label: "Depth", path: "area.depth", min: 24, max: 320, step: 1, digits: 0, read: (entity) => getBubblingLiquidVolumeParams(entity).area.depth },
+    { label: "Surface Activity", path: "behavior.surfaceActivity", min: 0, max: 1, step: 0.01, digits: 2, read: (entity) => getBubblingLiquidVolumeParams(entity).behavior.surfaceActivity },
+    { label: "Bubble Amount", path: "behavior.bubbleAmount", min: 0, max: 1, step: 0.01, digits: 2, read: (entity) => getBubblingLiquidVolumeParams(entity).behavior.bubbleAmount },
+    { label: "Fume Amount", path: "behavior.fumeAmount", min: 0, max: 1, step: 0.01, digits: 2, read: (entity) => getBubblingLiquidVolumeParams(entity).behavior.fumeAmount },
+  ];
+  return {
+    type: "bubbling_liquid_volume",
+    markup: `
+      <section class="specialVolumeWorkbenchModal panelSection" data-special-volume-modal="bubbling_liquid_volume">
+        <header class="specialVolumeWorkbenchModalHeader">
+          <div>
+            <h3>Liquid Acid / Swamp</h3>
+            <p>Bottom-anchored bubbling liquid with subtle surface popping and toxic swamp-like fumes.</p>
+          </div>
+        </header>
+        <div class="specialVolumeWorkbenchModalBody specialVolumeWorkbenchModalBodyStacked">
+          <section class="specialVolumeWorkbenchControlsTop" data-fog-workbench-controls>
+            ${numberFields.map((field) => renderNumberField(selection, field)).join("")}
+            <label class="specialVolumeWorkbenchControlField">
+              <span class="label">Top Color</span>
+              <input type="color" value="${escapeHtml(model.params.look.topColor)}" data-entity-index="${selection.index}" data-entity-id="${escapeHtml(selection.entity.id || "")}" data-entity-param-path="look.topColor" data-entity-param-type="string" />
+            </label>
+            <label class="specialVolumeWorkbenchControlField">
+              <span class="label">Bottom Color</span>
+              <input type="color" value="${escapeHtml(model.params.look.bottomColor)}" data-entity-index="${selection.index}" data-entity-id="${escapeHtml(selection.entity.id || "")}" data-entity-param-path="look.bottomColor" data-entity-param-type="string" />
+            </label>
+          </section>
+          <section class="specialVolumeWorkbenchPreviewPane specialVolumeWorkbenchPreviewPaneWide" data-fog-preview-root>
+            <div
+              class="volumeWorkbenchPreviewSurface fogWorkbenchPreviewSurface"
+              data-bubbling-liquid-preview-surface
+              data-bubbling-liquid-preview-width="${PREVIEW_CANVAS_WIDTH_PX}"
+              data-bubbling-liquid-preview-height="${PREVIEW_CANVAS_HEIGHT_PX}"
+              data-bubbling-liquid-preview-traverse-ms="${Math.round(model.traverseDurationMs)}"
+              data-bubbling-liquid-depth="${model.depthPx.toFixed(4)}"
+              data-bubbling-liquid-surface-activity="${model.surfaceActivity.toFixed(4)}"
+              data-bubbling-liquid-bubble-amount="${model.bubbleAmount.toFixed(4)}"
+              data-bubbling-liquid-fume-amount="${model.fumeAmount.toFixed(4)}"
+              data-bubbling-liquid-top-color="${escapeHtml(model.params.look.topColor)}"
+              data-bubbling-liquid-bottom-color="${escapeHtml(model.params.look.bottomColor)}"
+              data-volume-preview-environment="${VOLUME_PREVIEW_ENVIRONMENT}"
+              style="--fog-ground-baseline:${VOLUME_PREVIEW_GROUND_BASELINE_PX}px;--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
+            >
+              <canvas class="fogWorkbenchPreviewCanvas" data-bubbling-liquid-preview-canvas width="${PREVIEW_CANVAS_WIDTH_PX}" height="${PREVIEW_CANVAS_HEIGHT_PX}" aria-label="Liquid Acid / Swamp behavior preview"></canvas>
+            </div>
+          </section>
+          <footer class="specialVolumeWorkbenchFooterPinned">
+            <button type="button" class="specialVolumeWorkbenchActionButton isPrimary" data-fog-workbench-action="done">Done</button>
+          </footer>
+        </div>
+      </section>
+    `,
+  };
+}
+
 function resolveLumoPreviewSpriteSrc() {
   const spawnPreset = findEntityPresetById("player-spawn");
   if (!spawnPreset || typeof spawnPreset.img !== "string" || !spawnPreset.img.trim()) return null;
@@ -366,7 +446,9 @@ export function getSpecialVolumeWorkbenchLauncherContent(state) {
           ? "Water selected"
           : selection.type === "lava_volume"
             ? "Lava selected"
-            : "Fog selected"
+            : selection.type === "bubbling_liquid_volume"
+              ? "Liquid Acid / Swamp selected"
+              : "Fog selected"
       }</span>
       <button type="button" class="specialVolumeWorkbenchLauncherButton" data-fog-workbench-action="open">Adjust</button>
     </div>
@@ -380,6 +462,7 @@ export function getSpecialVolumeWorkbenchModalContent(state) {
   if (!isOpen) return null;
   if (selection.type === "water_volume") return renderWaterModal(selection);
   if (selection.type === "lava_volume") return renderLavaModal(selection);
+  if (selection.type === "bubbling_liquid_volume") return renderBubblingLiquidModal(selection);
   return renderFogModal(selection);
 }
 

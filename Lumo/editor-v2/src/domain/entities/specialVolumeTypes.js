@@ -20,11 +20,18 @@ const LAVA_DEFAULT_PARAMS = Object.freeze({
   look: { temperature: 0.72, crustAmount: 45 },
   hazard: { instantDeath: true },
 });
+const BUBBLING_LIQUID_DEFAULT_PARAMS = Object.freeze({
+  area: { x0: 0, x1: 240, y0: 0, depth: 92 },
+  look: { topColor: "#7FD12E", bottomColor: "#2F5E1C" },
+  behavior: { surfaceActivity: 0.45, bubbleAmount: 0.58, fumeAmount: 0.4 },
+  hazard: { instantDeath: true },
+});
 
 export const SPECIAL_VOLUME_EDITOR_LAYOUTS = Object.freeze({
   fog_volume: "floating",
   water_volume: "floating",
   lava_volume: "floating",
+  bubbling_liquid_volume: "floating",
 });
 
 export const FOG_VOLUME_PARAM_SECTIONS = Object.freeze([
@@ -32,13 +39,14 @@ export const FOG_VOLUME_PARAM_SECTIONS = Object.freeze([
 ]);
 
 export function isSpecialVolumeEntityType(type) {
-  return isFogVolumeEntityType(type) || isWaterVolumeEntityType(type) || isLavaVolumeEntityType(type);
+  return isFogVolumeEntityType(type) || isWaterVolumeEntityType(type) || isLavaVolumeEntityType(type) || isBubblingLiquidVolumeEntityType(type);
 }
 
 export function getSpecialVolumeType(type) {
   if (isFogVolumeEntityType(type)) return "fog_volume";
   if (isWaterVolumeEntityType(type)) return "water_volume";
   if (isLavaVolumeEntityType(type)) return "lava_volume";
+  if (isBubblingLiquidVolumeEntityType(type)) return "bubbling_liquid_volume";
   return null;
 }
 
@@ -64,11 +72,18 @@ export function getSpecialVolumeDescriptor(type) {
       layout: "floating",
     };
   }
+  if (isBubblingLiquidVolumeEntityType(type)) {
+    return {
+      type: "bubbling_liquid_volume",
+      label: "Liquid Acid / Swamp",
+      layout: "floating",
+    };
+  }
   return null;
 }
 
 export function listSpecialVolumeTypes() {
-  return ["fog_volume", "water_volume", "lava_volume"];
+  return ["fog_volume", "water_volume", "lava_volume", "bubbling_liquid_volume"];
 }
 
 export function isFogVolumeEntityType(type) {
@@ -81,6 +96,10 @@ export function isWaterVolumeEntityType(type) {
 
 export function isLavaVolumeEntityType(type) {
   return String(type || "").trim().toLowerCase() === "lava_volume";
+}
+
+export function isBubblingLiquidVolumeEntityType(type) {
+  return String(type || "").trim().toLowerCase() === "bubbling_liquid_volume";
 }
 
 function clamp(value, min, max) {
@@ -147,6 +166,39 @@ function normalizeLavaParams(rawParams = {}) {
     look: {
       temperature: clamp(Number(lookInput.temperature), 0.2, 1),
       crustAmount: clamp(normalizedCrustAmount, 0, 100),
+    },
+    hazard: {
+      instantDeath: Boolean(hazardInput.instantDeath ?? true),
+    },
+  };
+}
+
+function normalizeBubblingLiquidArea(area = {}) {
+  const x0 = Math.max(0, Number(area.x0) || 0);
+  const x1 = Math.max(x0 + 1, Number(area.x1) || x0 + 1);
+  return {
+    x0,
+    x1,
+    y0: Math.max(0, Number(area.y0) || 0),
+    depth: clamp(Number(area.depth), 24, 320),
+  };
+}
+
+function normalizeBubblingLiquidParams(rawParams = {}) {
+  const area = normalizeBubblingLiquidArea(rawParams.area || {});
+  const lookInput = rawParams.look || {};
+  const behaviorInput = rawParams.behavior || {};
+  const hazardInput = rawParams.hazard || {};
+  return {
+    area,
+    look: {
+      topColor: typeof lookInput.topColor === "string" && lookInput.topColor.trim() ? lookInput.topColor.trim() : BUBBLING_LIQUID_DEFAULT_PARAMS.look.topColor,
+      bottomColor: typeof lookInput.bottomColor === "string" && lookInput.bottomColor.trim() ? lookInput.bottomColor.trim() : BUBBLING_LIQUID_DEFAULT_PARAMS.look.bottomColor,
+    },
+    behavior: {
+      surfaceActivity: clamp(Number(behaviorInput.surfaceActivity), 0, 1),
+      bubbleAmount: clamp(Number(behaviorInput.bubbleAmount), 0, 1),
+      fumeAmount: clamp(Number(behaviorInput.fumeAmount), 0, 1),
     },
     hazard: {
       instantDeath: Boolean(hazardInput.instantDeath ?? true),
@@ -237,6 +289,11 @@ export function getLavaVolumeParams(entity) {
   return normalizeLavaParams(merged);
 }
 
+export function getBubblingLiquidVolumeParams(entity) {
+  const merged = deepMerge(BUBBLING_LIQUID_DEFAULT_PARAMS, cloneEntityParams(entity?.params));
+  return normalizeBubblingLiquidParams(merged);
+}
+
 export function getFogWorkbenchFieldMeta() {
   return {
     controls: [
@@ -287,6 +344,18 @@ export function getWaterVolumeRect(entity, tileSize = 24) {
 
 export function getLavaVolumeRect(entity, tileSize = 24) {
   const params = getLavaVolumeParams(entity);
+  const width = Math.max(tileSize, params.area.x1 - params.area.x0);
+  const depth = Math.max(tileSize, params.area.depth);
+  return {
+    x: params.area.x0,
+    y: Math.max(0, params.area.y0 - depth),
+    width,
+    height: depth,
+  };
+}
+
+export function getBubblingLiquidVolumeRect(entity, tileSize = 24) {
+  const params = getBubblingLiquidVolumeParams(entity);
   const width = Math.max(tileSize, params.area.x1 - params.area.x0);
   const depth = Math.max(tileSize, params.area.depth);
   return {
@@ -400,6 +469,38 @@ export function createLavaVolumeEntityFromWorldRect(entity, worldRect, tileSize 
   };
 }
 
+export function createBubblingLiquidVolumeEntityFromWorldRect(entity, worldRect, tileSize = 24) {
+  const width = Math.max(tileSize, Number(worldRect?.width) || tileSize);
+  const depth = Math.max(tileSize, Math.min(320, Number(worldRect?.height) || 92));
+  const x = Math.max(0, Number(worldRect?.x) || 0);
+  const y = Math.max(0, Number(worldRect?.y) || 0);
+  const params = getBubblingLiquidVolumeParams({
+    type: "bubbling_liquid_volume",
+    params: {
+      ...cloneEntityParams(entity?.params),
+      area: {
+        ...(entity?.params?.area || {}),
+        x0: x,
+        x1: x + width,
+        y0: y,
+        depth,
+      },
+      hazard: {
+        ...(entity?.params?.hazard || {}),
+        instantDeath: true,
+      },
+    },
+  });
+
+  return {
+    ...entity,
+    type: "bubbling_liquid_volume",
+    x: Math.round(x / tileSize),
+    y: Math.round(y / tileSize),
+    params,
+  };
+}
+
 export function getFogVolumeWorldRectFromDragCells(startCell, endCell, tileSize = 24, fallbackThicknessPx = null) {
   if (!startCell || !endCell) return null;
   const minX = Math.min(startCell.x, endCell.x);
@@ -444,6 +545,10 @@ export function getWaterVolumeWorldRectFromDragCells(startCell, endCell, tileSiz
 }
 
 export function getLavaVolumeWorldRectFromDragCells(startCell, endCell, tileSize = 24, fallbackDepthPx = null) {
+  return getWaterVolumeWorldRectFromDragCells(startCell, endCell, tileSize, fallbackDepthPx);
+}
+
+export function getBubblingLiquidVolumeWorldRectFromDragCells(startCell, endCell, tileSize = 24, fallbackDepthPx = null) {
   return getWaterVolumeWorldRectFromDragCells(startCell, endCell, tileSize, fallbackDepthPx);
 }
 
@@ -508,6 +613,26 @@ export function shiftLavaVolumeEntity(entity, deltaX = 0, deltaY = 0, tileSize =
   };
 }
 
+export function shiftBubblingLiquidVolumeEntity(entity, deltaX = 0, deltaY = 0, tileSize = 24) {
+  const params = getBubblingLiquidVolumeParams(entity);
+  const dx = (Number(deltaX) || 0) * tileSize;
+  const dy = (Number(deltaY) || 0) * tileSize;
+  return {
+    ...entity,
+    x: (Number(entity?.x) || 0) + (Number(deltaX) || 0),
+    y: (Number(entity?.y) || 0) + (Number(deltaY) || 0),
+    params: {
+      ...params,
+      area: {
+        ...params.area,
+        x0: Math.max(0, params.area.x0 + dx),
+        x1: Math.max(1, params.area.x1 + dx),
+        y0: Math.max(0, params.area.y0 + dy),
+      },
+    },
+  };
+}
+
 export function syncFogVolumeEntityToAnchor(entity, tileSize = 24) {
   const params = getFogVolumeParams(entity);
   const width = Math.max(tileSize, params.area.x1 - params.area.x0);
@@ -549,6 +674,24 @@ export function syncSpecialVolumeEntityToAnchor(entity, tileSize = 24) {
   }
   if (isLavaVolumeEntityType(entity?.type)) {
     const params = getLavaVolumeParams(entity);
+    const width = Math.max(tileSize, params.area.x1 - params.area.x0);
+    const x0 = Math.max(0, Math.round((Number(entity?.x) || 0) * tileSize));
+    const y0 = Math.max(0, Math.round((Number(entity?.y) || 0) * tileSize));
+    return {
+      ...entity,
+      params: {
+        ...params,
+        area: {
+          ...params.area,
+          x0,
+          x1: x0 + width,
+          y0,
+        },
+      },
+    };
+  }
+  if (isBubblingLiquidVolumeEntityType(entity?.type)) {
+    const params = getBubblingLiquidVolumeParams(entity);
     const width = Math.max(tileSize, params.area.x1 - params.area.x0);
     const x0 = Math.max(0, Math.round((Number(entity?.x) || 0) * tileSize));
     const y0 = Math.max(0, Math.round((Number(entity?.y) || 0) * tileSize));
@@ -647,6 +790,27 @@ export function applySpecialVolumeParamChange(entity, path, value) {
     return {
       ...entity,
       params: getLavaVolumeParams({ type: "lava_volume", params: patched }),
+    };
+  }
+  if (isBubblingLiquidVolumeEntityType(entity?.type)) {
+    const current = getBubblingLiquidVolumeParams(entity);
+    if (path === "area.length") {
+      const span = Math.max(24, Number(value) || 24);
+      const x0 = Math.max(0, Number(current.area.x0) || 0);
+      const patchedArea = {
+        ...current.area,
+        x0,
+        x1: x0 + span,
+      };
+      return {
+        ...entity,
+        params: getBubblingLiquidVolumeParams({ type: "bubbling_liquid_volume", params: { ...current, area: patchedArea } }),
+      };
+    }
+    const patched = setAtPath(current, path, value);
+    return {
+      ...entity,
+      params: getBubblingLiquidVolumeParams({ type: "bubbling_liquid_volume", params: patched }),
     };
   }
   return {

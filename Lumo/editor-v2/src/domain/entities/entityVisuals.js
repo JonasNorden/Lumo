@@ -70,6 +70,13 @@ const ENTITY_VISUALS = {
     hitRadius: 10,
     isVolume: true,
   },
+  bubbling_liquid_volume: {
+    key: "bubbling_liquid_volume",
+    label: "Liquid Acid / Swamp",
+    stroke: "#a7e66e",
+    hitRadius: 10,
+    isVolume: true,
+  },
   generic: {
     key: "generic",
     label: "Generic",

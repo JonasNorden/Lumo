@@ -83,7 +83,7 @@ function resolveEntityScreenCenter(entity, tileSize, viewport) {
 
 function resolveEntityOverlayFromParams(entity, tileSize) {
   const entityType = String(entity?.type || "").toLowerCase();
-  if (entityType === "fog_volume" || entityType === "water_volume" || entityType === "lava_volume") return null;
+  if (entityType === "fog_volume" || entityType === "water_volume" || entityType === "lava_volume" || entityType === "bubbling_liquid_volume") return null;
   const params = entity?.params;
   if (!params || typeof params !== "object") return null;
 

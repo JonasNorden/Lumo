@@ -2,6 +2,7 @@ import { resolveBrushSize, snapCellToBrushStep } from "../../domain/tiles/brushS
 import { EDITOR_TOOLS } from "../../domain/tiles/tools.js";
 import { getLineCells } from "../../domain/tiles/line.js";
 import {
+  getBubblingLiquidVolumeWorldRectFromDragCells,
   getFogVolumeWorldRectFromDragCells,
   getLavaVolumeWorldRectFromDragCells,
   getWaterVolumeWorldRectFromDragCells,
@@ -137,6 +138,7 @@ export function renderPlacementPreviewOverlay(ctx, doc, viewport, interaction, p
   renderFogVolumePlacementPreview(ctx, doc, viewport, interaction);
   renderWaterVolumePlacementPreview(ctx, doc, viewport, interaction);
   renderLavaVolumePlacementPreview(ctx, doc, viewport, interaction);
+  renderBubblingLiquidVolumePlacementPreview(ctx, doc, viewport, interaction);
   renderDecorPlacementPreview(ctx, doc, viewport, interaction, presets?.decor || null);
   renderEntityPlacementPreview(ctx, doc, viewport, interaction, presets?.entity || null);
   renderSoundPlacementPreview(ctx, doc, viewport, interaction, presets?.sound || null);
@@ -270,6 +272,44 @@ export function renderLavaVolumePlacementPreview(ctx, doc, viewport, interaction
   ctx.moveTo(screenX, screenY + 0.5);
   ctx.lineTo(screenX + screenWidth, screenY + 0.5);
   ctx.strokeStyle = "rgba(255, 214, 126, 0.96)";
+  ctx.lineWidth = Math.max(1, lineWidth);
+  ctx.stroke();
+  ctx.restore();
+}
+
+export function renderBubblingLiquidVolumePlacementPreview(ctx, doc, viewport, interaction) {
+  const drag = interaction?.volumePlacementDrag;
+  if (!drag?.active || drag.type !== "bubbling_liquid_volume") return;
+  if (!drag.startCell || !drag.endCell) return;
+  const liquidRect = getBubblingLiquidVolumeWorldRectFromDragCells(
+    drag.startCell,
+    drag.endCell,
+    doc?.dimensions?.tileSize || 24,
+    drag.depthPx,
+  );
+  if (!liquidRect) return;
+  const zoom = viewport?.zoom || 1;
+  const screenX = viewport.offsetX + liquidRect.x * zoom;
+  const screenY = viewport.offsetY + (liquidRect.y - liquidRect.height) * zoom;
+  const screenWidth = liquidRect.width * zoom;
+  const screenHeight = liquidRect.height * zoom;
+  const lineWidth = Math.max(1, 1.25 * (1 / Math.max(0.35, zoom)));
+
+  ctx.save();
+  const bodyGradient = ctx.createLinearGradient(screenX, screenY, screenX, screenY + screenHeight);
+  bodyGradient.addColorStop(0, "rgba(144, 216, 73, 0.52)");
+  bodyGradient.addColorStop(1, "rgba(55, 104, 31, 0.7)");
+  ctx.fillStyle = bodyGradient;
+  ctx.fillRect(screenX, screenY, screenWidth, screenHeight);
+  ctx.strokeStyle = "rgba(194, 242, 142, 0.88)";
+  ctx.lineWidth = lineWidth;
+  ctx.setLineDash([Math.max(8, 10 * zoom), Math.max(5, 6 * zoom)]);
+  ctx.strokeRect(screenX + lineWidth * 0.5, screenY + lineWidth * 0.5, Math.max(0, screenWidth - lineWidth), Math.max(0, screenHeight - lineWidth));
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(screenX, screenY + 0.5);
+  ctx.lineTo(screenX + screenWidth, screenY + 0.5);
+  ctx.strokeStyle = "rgba(230, 255, 194, 0.95)";
   ctx.lineWidth = Math.max(1, lineWidth);
   ctx.stroke();
   ctx.restore();

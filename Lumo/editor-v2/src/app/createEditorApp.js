@@ -91,9 +91,12 @@ import { createSoundPreviewController, getSoundPreviewKey } from "../domain/soun
 import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entities/entityParams.js";
 import {
   applySpecialVolumeParamChange,
+  createBubblingLiquidVolumeEntityFromWorldRect,
   createFogVolumeEntityFromWorldRect,
   createLavaVolumeEntityFromWorldRect,
   createWaterVolumeEntityFromWorldRect,
+  getBubblingLiquidVolumeParams,
+  getBubblingLiquidVolumeWorldRectFromDragCells,
   getFogVolumeParams,
   getFogVolumeWorldRectFromDragCells,
   getLavaVolumeParams,
@@ -101,10 +104,12 @@ import {
   getSpecialVolumeType,
   getWaterVolumeParams,
   getWaterVolumeWorldRectFromDragCells,
+  isBubblingLiquidVolumeEntityType,
   isFogVolumeEntityType,
   isLavaVolumeEntityType,
   isWaterVolumeEntityType,
   isSpecialVolumeEntityType,
+  shiftBubblingLiquidVolumeEntity,
   shiftFogVolumeEntity,
   shiftLavaVolumeEntity,
   shiftWaterVolumeEntity,
@@ -817,6 +822,19 @@ export function createEditorApp({
     lumoX: 0,
     lumoDirection: 1,
   };
+  const bubblingLiquidPreviewMotion = {
+    rafId: 0,
+    startedAtMs: 0,
+    surface: null,
+    canvas: null,
+    ctx: null,
+    lumoSprite: null,
+    worldWidth: 620,
+    worldHeight: 188,
+    bandStartX: 0,
+    bandEndX: 0,
+    durationMs: 9600,
+  };
   const fogPreviewTileSprites = new Map();
   const ensureFogPreviewTileSprite = (key, src) => {
     if (!key || !src) return null;
@@ -834,6 +852,9 @@ export function createEditorApp({
       }
       if (lavaPreviewMotion.surface?.isConnected) {
         drawLavaPreviewCanvas(0);
+      }
+      if (bubblingLiquidPreviewMotion.surface?.isConnected) {
+        drawBubblingLiquidPreviewCanvas(0);
       }
     });
     fogPreviewTileSprites.set(key, image);
@@ -1754,6 +1775,29 @@ export function createEditorApp({
     return getEntityIndexById(doc.entities, entity.id);
   };
 
+  const createBubblingLiquidVolumeAtWorldRect = (draft, worldRect) => {
+    const doc = draft.document.active;
+    if (!doc || !worldRect) return null;
+
+    const nextNumber = (doc.entities?.length || 0) + 1;
+    const preset = findEntityPresetById("bubbling_liquid_volume");
+    if (!preset) return null;
+
+    const seededEntity = createEntityDraft(doc, 0, 0, preset.id, nextNumber);
+    const entity = createBubblingLiquidVolumeEntityFromWorldRect(seededEntity, worldRect, doc.dimensions.tileSize);
+    entity.id = getNextStringId(doc.entities || [], "id", "entity");
+    const createIndex = doc.entities.length;
+    const action = {
+      type: "create",
+      index: createIndex,
+      entity: cloneCanonicalEntitySnapshot(entity),
+    };
+    const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
+    if (!changed) return null;
+    recordCleanRoomObjectAction("entity", action);
+    return getEntityIndexById(doc.entities, entity.id);
+  };
+
   const deleteSelectedEntityCleanRoom = (draft) => {
     // Canonical entity deletion is stable-id only. Do not restore legacy entity delete or shared selection code here.
     const doc = draft.document.active;
@@ -2486,6 +2530,7 @@ export function createEditorApp({
     syncFogPreviewMotionLoop();
     syncWaterPreviewMotionLoop();
     syncLavaPreviewMotionLoop();
+    syncBubblingLiquidPreviewMotionLoop();
 
     if (!focusedField) return;
     const nextField = focusedScope === "new-level" && state.ui.newLevelSize?.isOpen
@@ -3404,6 +3449,195 @@ export function createEditorApp({
     lavaPreviewMotion.rafId = globalThis.requestAnimationFrame(stepLavaPreviewMotion);
   };
 
+  const stopBubblingLiquidPreviewMotionLoop = () => {
+    if (bubblingLiquidPreviewMotion.rafId) {
+      globalThis.cancelAnimationFrame(bubblingLiquidPreviewMotion.rafId);
+      bubblingLiquidPreviewMotion.rafId = 0;
+    }
+    bubblingLiquidPreviewMotion.surface = null;
+    bubblingLiquidPreviewMotion.canvas = null;
+    bubblingLiquidPreviewMotion.ctx = null;
+  };
+
+  const drawBubblingLiquidPreviewCanvas = (elapsedMs) => {
+    if (!bubblingLiquidPreviewMotion.surface || !bubblingLiquidPreviewMotion.ctx) return;
+    const surfaceDataset = bubblingLiquidPreviewMotion.surface.dataset;
+    const ctx2d = bubblingLiquidPreviewMotion.ctx;
+    const width = bubblingLiquidPreviewMotion.worldWidth;
+    const height = bubblingLiquidPreviewMotion.worldHeight;
+    const { tileSize, floorTopY: floorTop, laneStartX, laneEndX } = getVolumePreviewEnvironmentMetrics(width, height);
+    const terrainTop = Math.max(24, Math.round(height * 0.36));
+    const leftBlockInnerX = Math.max(0, laneStartX - tileSize);
+    const rightBlockOuterX = Math.min(width, laneEndX + tileSize);
+    const soilTile = ensureFogPreviewTileSprite("soil", "../data/assets/tiles/soil_c.png");
+    const grassTile = ensureFogPreviewTileSprite("grass", "../data/assets/tiles/grass_bt.png");
+    const stoneTile = ensureFogPreviewTileSprite("stone", "../data/assets/tiles/stone_ct.png");
+    const drawTiledRect = (image, fallback, x, y, w, h) => {
+      if (w <= 0 || h <= 0) return;
+      if (image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0) {
+        for (let yy = y; yy < y + h; yy += tileSize) {
+          for (let xx = x; xx < x + w; xx += tileSize) {
+            const drawW = Math.min(tileSize, (x + w) - xx);
+            const drawH = Math.min(tileSize, (y + h) - yy);
+            ctx2d.drawImage(image, 0, 0, drawW, drawH, xx, yy, drawW, drawH);
+          }
+        }
+      } else {
+        ctx2d.fillStyle = fallback;
+        ctx2d.fillRect(x, y, w, h);
+      }
+    };
+    ctx2d.clearRect(0, 0, width, height);
+    ctx2d.fillStyle = "#050912";
+    ctx2d.fillRect(0, 0, width, height);
+    ctx2d.fillStyle = "rgba(8, 14, 26, 0.72)";
+    ctx2d.fillRect(0, 0, width, floorTop);
+    drawTiledRect(stoneTile, "#6a655e", 0, floorTop, width, tileSize);
+    drawTiledRect(soilTile, "#5b3a26", 0, terrainTop, leftBlockInnerX, Math.max(0, floorTop - terrainTop));
+    drawTiledRect(soilTile, "#5b3a26", rightBlockOuterX, terrainTop, Math.max(0, width - rightBlockOuterX), Math.max(0, floorTop - terrainTop));
+    drawTiledRect(grassTile, "#8ca86f", 0, terrainTop - tileSize, leftBlockInnerX, tileSize);
+    drawTiledRect(grassTile, "#8ca86f", rightBlockOuterX, terrainTop - tileSize, Math.max(0, width - rightBlockOuterX), tileSize);
+    drawTiledRect(stoneTile, "#66615a", leftBlockInnerX, terrainTop, tileSize, Math.max(0, floorTop - terrainTop));
+    drawTiledRect(stoneTile, "#66615a", laneEndX, terrainTop, tileSize, Math.max(0, floorTop - terrainTop));
+
+    const depth = clampFogPreview(Number.parseFloat(surfaceDataset.bubblingLiquidDepth || "") || 92, 24, 164);
+    const surfaceActivity = clampFogPreview(Number.parseFloat(surfaceDataset.bubblingLiquidSurfaceActivity || "") || 0.45, 0, 1);
+    const bubbleAmount = clampFogPreview(Number.parseFloat(surfaceDataset.bubblingLiquidBubbleAmount || "") || 0.58, 0, 1);
+    const fumeAmount = clampFogPreview(Number.parseFloat(surfaceDataset.bubblingLiquidFumeAmount || "") || 0.4, 0, 1);
+    const topColor = surfaceDataset.bubblingLiquidTopColor || "#7FD12E";
+    const bottomColor = surfaceDataset.bubblingLiquidBottomColor || "#2F5E1C";
+    const liquidTopBase = floorTop - depth;
+    const elapsedSec = elapsedMs * 0.001;
+    const laneWidth = Math.max(1, laneEndX - laneStartX);
+
+    const surfaceSamples = [];
+    for (let x = laneStartX; x <= laneEndX; x += 2) {
+      const subtle = Math.sin((x * 0.024) + (elapsedSec * 0.42)) * (0.7 + (surfaceActivity * 0.9));
+      const bubbling = sampleSmookeNoise((x * 0.021) + (elapsedSec * (0.55 + (surfaceActivity * 0.65)))) * (0.65 + (surfaceActivity * 1.4));
+      surfaceSamples.push({ x, y: liquidTopBase + subtle + bubbling });
+    }
+    const firstSurfaceSample = surfaceSamples[0];
+    const lastSurfaceSample = surfaceSamples[surfaceSamples.length - 1];
+    const surfaceCrestY = surfaceSamples.reduce((minY, sample) => Math.min(minY, sample.y), Number.POSITIVE_INFINITY);
+
+    ctx2d.save();
+    ctx2d.beginPath();
+    ctx2d.rect(laneStartX, liquidTopBase - 14, laneEndX - laneStartX, floorTop - liquidTopBase + 16);
+    ctx2d.clip();
+
+    const bodyGradient = ctx2d.createLinearGradient(0, surfaceCrestY, 0, floorTop);
+    bodyGradient.addColorStop(0, topColor);
+    bodyGradient.addColorStop(1, bottomColor);
+    ctx2d.fillStyle = bodyGradient;
+    ctx2d.beginPath();
+    ctx2d.moveTo(firstSurfaceSample.x, firstSurfaceSample.y);
+    for (let i = 1; i < surfaceSamples.length; i += 1) ctx2d.lineTo(surfaceSamples[i].x, surfaceSamples[i].y);
+    ctx2d.lineTo(lastSurfaceSample.x, floorTop);
+    ctx2d.lineTo(firstSurfaceSample.x, floorTop);
+    ctx2d.closePath();
+    ctx2d.fill();
+
+    const bubbleCount = Math.max(10, Math.round((laneWidth * 0.03) + (bubbleAmount * laneWidth * 0.08)));
+    for (let i = 0; i < bubbleCount; i += 1) {
+      const seed = 12.6 + (i * 9.2);
+      const baseU = sampleSmookeNoise(seed + 1.3);
+      const drift = (sampleSmookeNoise(seed + (elapsedSec * 0.24)) - 0.5) * 0.03;
+      const px = laneStartX + ((baseU + drift + 1) % 1) * laneWidth;
+      const rise = ((elapsedSec * (16 + (sampleSmookeNoise(seed + 2.5) * 24) + (surfaceActivity * 20))) + (sampleSmookeNoise(seed + 3.1) * depth)) % (depth + 16);
+      const py = floorTop - rise;
+      const radius = 1.2 + (sampleSmookeNoise(seed + 7.2) * 3.5);
+      const nearSurface = py <= (liquidTopBase + 7);
+      ctx2d.beginPath();
+      ctx2d.arc(px, py, radius, 0, Math.PI * 2);
+      ctx2d.fillStyle = `rgba(220, 255, 214, ${nearSurface ? 0.24 : 0.14})`;
+      ctx2d.fill();
+      ctx2d.strokeStyle = `rgba(230, 255, 224, ${nearSurface ? 0.58 : 0.24})`;
+      ctx2d.lineWidth = nearSurface ? 1.1 : 0.8;
+      ctx2d.stroke();
+      if (nearSurface && sampleSmookeNoise(seed + (elapsedSec * 2.8)) > 0.68 - (surfaceActivity * 0.24)) {
+        const crestY = liquidTopBase - Math.min(5, 1.4 + (surfaceActivity * 3.6));
+        ctx2d.beginPath();
+        ctx2d.arc(px, crestY, Math.max(0.9, radius * 0.55), 0, Math.PI * 2);
+        ctx2d.fillStyle = "rgba(236, 255, 226, 0.46)";
+        ctx2d.fill();
+      }
+    }
+    ctx2d.restore();
+
+    ctx2d.beginPath();
+    for (let i = 0; i < surfaceSamples.length; i += 1) {
+      const sample = surfaceSamples[i];
+      if (i === 0) ctx2d.moveTo(sample.x, sample.y);
+      else ctx2d.lineTo(sample.x, sample.y);
+    }
+    ctx2d.strokeStyle = "rgba(233, 255, 201, 0.94)";
+    ctx2d.lineWidth = 1.4;
+    ctx2d.stroke();
+
+    if (fumeAmount > 0.01) {
+      const plumeCount = Math.max(10, Math.round((laneWidth * 0.02) + (fumeAmount * 24)));
+      for (let i = 0; i < plumeCount; i += 1) {
+        const seed = 90.1 + (i * 7.7);
+        const px = laneStartX + (sampleSmookeNoise(seed) * laneWidth);
+        const puffHeight = 8 + (fumeAmount * 24) + (sampleSmookeNoise(seed + 1.4) * 20);
+        const drift = (sampleSmookeNoise(seed + (elapsedSec * 0.28)) - 0.5) * (4 + (fumeAmount * 9));
+        const alpha = 0.04 + (sampleSmookeNoise(seed + 5.8) * (0.09 + (fumeAmount * 0.12)));
+        const grad = ctx2d.createLinearGradient(0, liquidTopBase - puffHeight, 0, liquidTopBase + 4);
+        grad.addColorStop(0, "rgba(206, 227, 181, 0)");
+        grad.addColorStop(1, `rgba(206, 227, 181, ${alpha})`);
+        ctx2d.strokeStyle = grad;
+        ctx2d.lineWidth = 1 + (sampleSmookeNoise(seed + 9.1) * 1.9);
+        ctx2d.beginPath();
+        ctx2d.moveTo(px, liquidTopBase + 2);
+        ctx2d.quadraticCurveTo(px + drift, liquidTopBase - (puffHeight * 0.45), px + (drift * 0.6), liquidTopBase - puffHeight);
+        ctx2d.stroke();
+      }
+    }
+  };
+
+  const stepBubblingLiquidPreviewMotion = (timestampMs) => {
+    if (!bubblingLiquidPreviewMotion.surface?.isConnected || !bubblingLiquidPreviewMotion.canvas?.isConnected || !bubblingLiquidPreviewMotion.ctx) {
+      stopBubblingLiquidPreviewMotionLoop();
+      return;
+    }
+    if (!bubblingLiquidPreviewMotion.startedAtMs) bubblingLiquidPreviewMotion.startedAtMs = timestampMs;
+    const elapsedMs = timestampMs - bubblingLiquidPreviewMotion.startedAtMs;
+    drawBubblingLiquidPreviewCanvas(elapsedMs);
+    bubblingLiquidPreviewMotion.rafId = globalThis.requestAnimationFrame(stepBubblingLiquidPreviewMotion);
+  };
+
+  const syncBubblingLiquidPreviewMotionLoop = () => {
+    const surface = floatingPanelHost.querySelector("[data-bubbling-liquid-preview-surface]");
+    const canvasEl = floatingPanelHost.querySelector("[data-bubbling-liquid-preview-canvas]");
+    if (!(surface instanceof HTMLElement) || !(canvasEl instanceof HTMLCanvasElement)) {
+      stopBubblingLiquidPreviewMotionLoop();
+      return;
+    }
+    const ctx2d = canvasEl.getContext("2d");
+    if (!ctx2d) {
+      stopBubblingLiquidPreviewMotionLoop();
+      return;
+    }
+    const durationMs = Number.parseFloat(surface.dataset.bubblingLiquidPreviewTraverseMs || "");
+    if (bubblingLiquidPreviewMotion.surface === surface && bubblingLiquidPreviewMotion.canvas === canvasEl && bubblingLiquidPreviewMotion.rafId) {
+      bubblingLiquidPreviewMotion.durationMs = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 9600;
+      return;
+    }
+    stopBubblingLiquidPreviewMotionLoop();
+    bubblingLiquidPreviewMotion.surface = surface;
+    bubblingLiquidPreviewMotion.canvas = canvasEl;
+    bubblingLiquidPreviewMotion.ctx = ctx2d;
+    bubblingLiquidPreviewMotion.worldWidth = canvasEl.width;
+    bubblingLiquidPreviewMotion.worldHeight = canvasEl.height;
+    const envMetrics = getVolumePreviewEnvironmentMetrics(bubblingLiquidPreviewMotion.worldWidth, bubblingLiquidPreviewMotion.worldHeight);
+    bubblingLiquidPreviewMotion.bandStartX = envMetrics.laneStartX;
+    bubblingLiquidPreviewMotion.bandEndX = envMetrics.laneEndX;
+    bubblingLiquidPreviewMotion.durationMs = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 9600;
+    bubblingLiquidPreviewMotion.startedAtMs = 0;
+    drawBubblingLiquidPreviewCanvas(0);
+    bubblingLiquidPreviewMotion.rafId = globalThis.requestAnimationFrame(stepBubblingLiquidPreviewMotion);
+  };
+
   const applyCanvasTarget = (draft, mode) => {
     const nextMode = mode === "decor" ? "decor" : mode === "sound" ? "sound" : "entity";
     resumeObjectPlacementPreviews(draft, `canvas target ${nextMode}`);
@@ -3667,6 +3901,9 @@ export function createEditorApp({
     }
     if (isLavaVolumeEntityType(entity.type)) {
       entity.params = getLavaVolumeParams(entity);
+    }
+    if (isBubblingLiquidVolumeEntityType(entity.type)) {
+      entity.params = getBubblingLiquidVolumeParams(entity);
     }
 
     return isSpecialVolumeEntityType(entity.type)
@@ -4665,11 +4902,13 @@ export function createEditorApp({
     void index;
     void value;
     store.setState((draft) => {
-      if (field === "arm-fog" || field === "arm-water" || field === "arm-lava") {
+      if (field === "arm-fog" || field === "arm-water" || field === "arm-lava" || field === "arm-bubbling-liquid") {
         const targetType = field === "arm-water"
           ? "water_volume"
           : field === "arm-lava"
             ? "lava_volume"
+            : field === "arm-bubbling-liquid"
+              ? "bubbling_liquid_volume"
             : "fog_volume";
         const entityPreset = resolveEntityPlacementPreset(targetType);
         if (!entityPreset || !isSpecialVolumeEntityType(entityPreset.type)) return;
@@ -5283,6 +5522,13 @@ export function createEditorApp({
             nextPosition.y - origin.y,
             doc.dimensions.tileSize,
           )
+          : isBubblingLiquidVolumeEntityType(entity.type)
+            ? shiftBubblingLiquidVolumeEntity(
+              entity,
+              nextPosition.x - origin.x,
+              nextPosition.y - origin.y,
+              doc.dimensions.tileSize,
+            )
         : {
           ...entity,
           x: nextPosition.x,
@@ -5940,6 +6186,25 @@ if (event.shiftKey) {
           );
           if (lavaRect) {
             const createdIndex = createLavaVolumeAtWorldRect(draft, lavaRect);
+            if (createdIndex != null) {
+              setCanvasSelectionMode(draft, "entity");
+              setActiveLayer(draft, PANEL_LAYERS.ENTITIES);
+              if (!entitiesPanelWasOpen && draft.ui.panelSections) {
+                draft.ui.panelSections.entities = false;
+              }
+            }
+          }
+        }
+        if (volumePlacementDrag.type === "bubbling_liquid_volume") {
+          const entitiesPanelWasOpen = draft.ui.panelSections?.entities === true;
+          const liquidRect = getBubblingLiquidVolumeWorldRectFromDragCells(
+            volumePlacementDrag.startCell,
+            volumePlacementDrag.endCell,
+            draft.document.active?.dimensions?.tileSize,
+            volumePlacementDrag.depthPx,
+          );
+          if (liquidRect) {
+            const createdIndex = createBubblingLiquidVolumeAtWorldRect(draft, liquidRect);
             if (createdIndex != null) {
               setCanvasSelectionMode(draft, "entity");
               setActiveLayer(draft, PANEL_LAYERS.ENTITIES);
@@ -7110,6 +7375,7 @@ if (event.shiftKey) {
   window.addEventListener("blur", stopFogPreviewMotionLoop);
   window.addEventListener("blur", stopWaterPreviewMotionLoop);
   window.addEventListener("blur", stopLavaPreviewMotionLoop);
+  window.addEventListener("blur", stopBubblingLiquidPreviewMotionLoop);
   canvas.addEventListener("click", handleCanvasClick);
   minimapCanvas.addEventListener("click", handleMinimapClick);
   window.addEventListener("keydown", handleGlobalKeyDown);
@@ -7154,6 +7420,7 @@ if (event.shiftKey) {
     window.removeEventListener("blur", stopFogPreviewMotionLoop);
     window.removeEventListener("blur", stopWaterPreviewMotionLoop);
     window.removeEventListener("blur", stopLavaPreviewMotionLoop);
+    window.removeEventListener("blur", stopBubblingLiquidPreviewMotionLoop);
     canvas.removeEventListener("click", handleCanvasClick);
     minimapCanvas.removeEventListener("click", handleMinimapClick);
     window.removeEventListener("keydown", handleGlobalKeyDown);
@@ -7173,5 +7440,6 @@ if (event.shiftKey) {
     stopFogPreviewMotionLoop();
     stopWaterPreviewMotionLoop();
     stopLavaPreviewMotionLoop();
+    stopBubblingLiquidPreviewMotionLoop();
   };
 }
