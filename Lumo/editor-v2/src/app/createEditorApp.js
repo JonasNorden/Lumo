@@ -2399,8 +2399,17 @@ export function createEditorApp({
     fogPreviewMotion.lumo.style.left = `${patrol.xPct.toFixed(3)}%`;
     fogPreviewMotion.lumo.style.transform = `translate3d(-50%, -1px, 0) scaleX(${patrol.facing})`;
     if (fogPreviewMotion.disturbance) {
+      const surfaceStyle = globalThis.getComputedStyle(fogPreviewMotion.surface);
+      const strength = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-disturbance-strength")) || 0;
+      const rise = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-disturbance-rise")) || 0;
+      const relax = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-relax")) || 0.3;
+      const visc = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-visc")) || 0.85;
+      const jitter = Math.sin((elapsedMs / Math.max(300, fogPreviewMotion.durationMs * 0.12)) * Math.PI * 2) * (0.18 + strength * 0.18);
+      const risePx = rise * (0.62 + strength * 0.38) * (0.75 + (1 - visc) * 0.4);
       fogPreviewMotion.disturbance.style.left = `${patrol.xPct.toFixed(3)}%`;
-      fogPreviewMotion.disturbance.style.transform = "translate3d(-50%, 0, 0)";
+      fogPreviewMotion.disturbance.style.opacity = `${Math.max(0, Math.min(1, 0.14 + strength * 0.46))}`;
+      fogPreviewMotion.disturbance.style.transform = `translate3d(-50%, ${(-risePx + jitter).toFixed(3)}px, 0) scaleX(${(1 + strength * 0.22).toFixed(3)})`;
+      fogPreviewMotion.disturbance.style.transitionDuration = `${Math.round(180 + (relax * 320) + (visc * 180))}ms`;
     }
     fogPreviewMotion.rafId = globalThis.requestAnimationFrame(stepFogPreviewMotion);
   };

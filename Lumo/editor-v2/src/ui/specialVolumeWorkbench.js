@@ -95,6 +95,10 @@ function getFogPreviewModel(entity, nowMs = Date.now()) {
 
   const returnTime = clamp((1.1 - returnStrength) * 5.2, 0.2, 5.6);
   const traverseDurationMs = clamp(10800 - idleSpeed * 1800 - influenceAmount * 620, 3600, 14000);
+  const densityOpacity = clamp(0.18 + density * 0.72, 0.14, 0.92);
+  const disturbanceStrength = clamp((influenceAmount / 5) * (0.6 + idleAmount * 0.4), 0, 1.2);
+  const disturbanceWidthPct = clamp(7 + (influenceAmount * 5.8) + ((1 - viscosity) * 9), 8, 44);
+  const disturbanceRisePx = clamp(5 + (influenceAmount * 2.8) + (idleAmount * 5.2), 4, 34);
 
   const profile = buildFogPreviewFieldProfile({
     spanWidthPx: PREVIEW_SPAN_WIDTH_PX,
@@ -122,6 +126,11 @@ function getFogPreviewModel(entity, nowMs = Date.now()) {
     returnTime,
     viscosity,
     traverseDurationMs,
+    densityOpacity,
+    disturbanceStrength,
+    disturbanceWidthPct,
+    disturbanceRisePx,
+    returnRecoverMs: Math.round(returnTime * 1000),
     phaseMs: Math.round(nowMs % traverseDurationMs),
   };
 }
@@ -169,13 +178,14 @@ function renderFogModal(selection) {
               class="volumeWorkbenchPreviewSurface fogWorkbenchPreviewSurface"
               data-fog-preview-surface
               data-fog-preview-traverse-ms="${Math.round(model.traverseDurationMs)}"
-              style="--fog-ground-baseline:14px;--fog-lift:${model.liftPx.toFixed(2)}px;--fog-thickness:${model.thicknessPx.toFixed(2)}px;--fog-falloff-pct:${((model.falloffPx / PREVIEW_SPAN_WIDTH_PX) * 100).toFixed(3)}%;--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
+              style="--fog-ground-baseline:14px;--fog-lift:${model.liftPx.toFixed(2)}px;--fog-thickness:${model.thicknessPx.toFixed(2)}px;--fog-falloff-pct:${((model.falloffPx / PREVIEW_SPAN_WIDTH_PX) * 100).toFixed(3)}%;--fog-opacity:${model.densityOpacity.toFixed(4)};--fog-organic:${model.idleAmount.toFixed(4)};--fog-organic-speed:${model.idleSpeed.toFixed(4)};--fog-push:${model.influenceAmount.toFixed(4)};--fog-relax:${model.returnTime.toFixed(4)};--fog-visc:${model.viscosity.toFixed(4)};--fog-disturbance-strength:${model.disturbanceStrength.toFixed(4)};--fog-disturbance-width:${model.disturbanceWidthPct.toFixed(3)}%;--fog-disturbance-rise:${model.disturbanceRisePx.toFixed(2)}px;--fog-return-recover-ms:${model.returnRecoverMs}ms;--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
             >
               <div class="fogWorkbenchPreviewBackdrop"></div>
               <div class="volumeWorkbenchPreviewSpan fogWorkbenchPreviewSpan" data-volume-preview-span>
                 <div class="fogWorkbenchPreviewField" data-fog-preview-field>
                   ${renderFogPreviewSamples(model.profile.samples)}
                 </div>
+                <div class="fogWorkbenchPreviewDisturbance" aria-hidden="true"></div>
                 <div class="fogWorkbenchPreviewLumo isBehindFog" data-fog-preview-lumo>
                   <span class="fogWorkbenchPreviewLumoGlow"></span>
                   ${lumoSpriteSrc
@@ -188,7 +198,7 @@ function renderFogModal(selection) {
               <span>Ground anchored</span>
               <span>Upward rise only</span>
               <span>End taper only</span>
-              <span>Lumo span traversal</span>
+              <span>Live Lumo disturbance</span>
             </div>
           </section>
           <footer class="specialVolumeWorkbenchFooterPinned">
@@ -267,20 +277,22 @@ export function buildFogPreviewFieldProfile(config = {}) {
     const edgeEase = edgeMask * edgeMask * (3 - (2 * edgeMask));
 
     const idleWave = Math.sin((u * 4.6) + phase) * 0.5 + Math.sin((u * 9.1) - (phase * 0.65)) * 0.26;
-    const liftOnly = -Math.abs(idleWave) * (idleAmount * (2.8 + (1 - viscosity) * 3.4));
+    const idleLiftScale = idleAmount * (2.8 + (1 - viscosity) * 3.8);
+    const liftOnly = -Math.abs(idleWave) * idleLiftScale;
 
     const traversalPulse = Math.exp(-Math.pow((u - 0.5) / 0.22, 2));
     const influencePulse = influenceAmount * traversalPulse * (0.85 + (0.18 * Math.sin((phase * 0.8) + (u * 5))));
     const returnDrag = clamp(returnTime / 5.8, 0.05, 1.15);
+    const settleFactor = clamp(1.1 - returnDrag * 0.4, 0.45, 1.08);
 
     const coreHeightPx = Math.max(
       4,
-      (thicknessPx * edgeEase)
-      + (thicknessPx * 0.28 * influencePulse * (1 - returnDrag * 0.6))
-      + (Math.max(0, idleWave) * idleAmount * 10),
+      (thicknessPx * edgeEase * settleFactor)
+      + (thicknessPx * 0.16 * influencePulse * settleFactor)
+      + (Math.max(0, idleWave) * idleAmount * (8 + (1 - viscosity) * 6)),
     );
-    const hazeHeightPx = Math.max(coreHeightPx + 6, coreHeightPx * (1.28 + ((1 - viscosity) * 0.22)));
-    const opacity = clamp((density * (0.25 + edgeEase * 0.78)) + (influencePulse * 0.03), 0.03, 0.98);
+    const hazeHeightPx = Math.max(coreHeightPx + 6, coreHeightPx * (1.24 + ((1 - viscosity) * 0.35)));
+    const opacity = clamp((density * (0.2 + edgeEase * 0.9)) + (influencePulse * 0.02), 0.03, 0.98);
 
     samples.push({
       xPct: u * 100,
