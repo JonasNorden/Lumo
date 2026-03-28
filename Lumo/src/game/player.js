@@ -140,6 +140,15 @@
         fade: 1,
         rot: 0
       };
+      this._liquidDeath = {
+        active: false,
+        type: null,
+        t: 0,
+        duration: 0.95,
+        fadeDelay: 0.2,
+        fade: 1,
+        sinkSpeed: 125,
+      };
 
     }
 
@@ -220,12 +229,17 @@
     }
 
     isDeathAnimating(){
-      return !!((this._damage && this._damage.active) || (this._deathAnim && this._deathAnim.active));
+      return !!(
+        (this._damage && this._damage.active)
+        || (this._deathAnim && this._deathAnim.active)
+        || (this._liquidDeath && this._liquidDeath.active)
+      );
     }
 
     beginRespawn(){
       if (this.isRespawning()) return;
       if (this._damage.active || this._deathAnim.active) return;
+      if (this._liquidDeath && this._liquidDeath.active) return;
       if (this.lives <= 0) return;
 
       // lose life now, then run short hit + death reaction.
@@ -245,6 +259,28 @@
       this._deathAnim.fade = 1;
       this._deathAnim.rot = 0;
 
+      this.onGround = false;
+      this.onPlatform = null;
+    }
+
+    beginLiquidHazardDeath(contact = null){
+      if (this.isRespawning()) return;
+      if ((this._damage && this._damage.active) || (this._deathAnim && this._deathAnim.active)) return;
+      if (this._liquidDeath && this._liquidDeath.active) return;
+      if (this.lives <= 0) return;
+
+      this.lives = Math.max(0, this.lives - 1);
+
+      this._liquidDeath.active = true;
+      this._liquidDeath.type = String(contact?.type || "liquid_volume");
+      this._liquidDeath.t = 0;
+      this._liquidDeath.fade = 1;
+      this._liquidDeath.duration = 0.95;
+      this._liquidDeath.fadeDelay = 0.2;
+      this._liquidDeath.sinkSpeed = 125;
+
+      this.vx *= 0.16;
+      this.vy = Math.max(40, (contact?.submerge01 || 0) * 80);
       this.onGround = false;
       this.onPlatform = null;
     }
@@ -425,6 +461,28 @@
 
     update(dt, world){
       this._t = (this._t || 0) + dt;
+
+      if (this._liquidDeath && this._liquidDeath.active){
+        this._liquidDeath.t += dt;
+        const seqP = U().clamp(this._liquidDeath.t / Math.max(0.001, this._liquidDeath.duration), 0, 1);
+        const fadeP = U().clamp((this._liquidDeath.t - this._liquidDeath.fadeDelay) / Math.max(0.001, this._liquidDeath.duration - this._liquidDeath.fadeDelay), 0, 1);
+
+        this.vx *= Math.max(0, 1 - (7.5 * dt));
+        const sinkTarget = this._liquidDeath.sinkSpeed;
+        this.vy += (sinkTarget - this.vy) * Math.min(1, 5.5 * dt);
+        this.y += this.vy * dt;
+        this.x += this.vx * dt;
+        this._liquidDeath.fade = 1 - fadeP;
+
+        if (seqP >= 1){
+          this._liquidDeath.active = false;
+          this._liquidDeath.fade = 0;
+          if (this.lives > 0){
+            this._beginRespawnCountdown();
+          }
+        }
+        return;
+      }
 
       if (this._damage && this._damage.active){
         this._damage.t += dt;
@@ -906,6 +964,9 @@
       // === LUMO HEAD HALO (ALWAYS ON) — BEGIN ==================================
       // Remove this whole block between BEGIN/END to disable the constant head halo.
       {
+        if (this._liquidDeath && this._liquidDeath.active){
+          ctx.globalAlpha *= U().clamp(this._liquidDeath.fade, 0, 1);
+        }
         const HALO_ALPHA = 0.90;   // 0..1 (strength)
         const HALO_R0    = 1;      // inner radius (px)
         const HALO_R1    = 40;     // outer radius (px)
@@ -1064,6 +1125,9 @@
     getRenderLightRadius(){
       if (this._deathAnim && this._deathAnim.active){
         return Math.max(0, this.lightRadius * U().clamp(this._deathAnim.fade, 0, 1));
+      }
+      if (this._liquidDeath && this._liquidDeath.active){
+        return Math.max(0, this.lightRadius * U().clamp(this._liquidDeath.fade, 0, 1));
       }
       return this.lightRadius;
     }

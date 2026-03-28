@@ -8,6 +8,7 @@
       // Fog volumes (Smooke-style) — isolated, visual-only
       this._fogVolumes = [];
       this._fogFrame = 0;
+      this._liquidVolumes = [];
 
       // Catalog (optional): allows generic decor sizing/perch data from data/catalog_entities.js
       this._catById = null;
@@ -165,6 +166,7 @@
       this.items.length = 0;
       this._fogVolumes.length = 0;
       this._fogFrame = 0;
+      this._liquidVolumes.length = 0;
       this._autoSpawnedTestDarkCreature = false;
       this._hoverVoidAttackGlobalCd = 0;
       this._musicZones.length = 0;
@@ -427,6 +429,51 @@
             orgStrength, orgScale, orgSpeed,
             N, field, vel,
             t: 0,
+          });
+          return;
+        }
+
+        if (id === "water_volume" || id === "lava_volume" || id === "bubbling_liquid_volume"){
+          const P = (params.params && typeof params.params === "object") ? params.params : params;
+          const area = (P.area && typeof P.area === "object") ? P.area : {};
+          const ts = (levelObj && levelObj.meta && levelObj.meta.tileSize) ? levelObj.meta.tileSize : (Lumo.TILE || 24);
+
+          const hasRect = (typeof e.w === "number" && e.w > ts * 2) || (typeof e.h === "number" && e.h > ts * 2);
+          const rectX0 = hasRect ? (+e.x) : (tx * ts);
+          const rectW = hasRect ? (+e.w || 0) : (ts * 8);
+          const rectX1 = hasRect ? (rectX0 + rectW) : (rectX0 + rectW);
+          const rectY0 = hasRect ? (+e.y + (+e.h || ts)) : ((ty + 1) * ts);
+          const rectDepth = hasRect ? Math.max(ts, (+e.h || ts)) : (ts * 4);
+
+          const x0 = Number.isFinite(Number(area.x0)) ? Number(area.x0) : rectX0;
+          const x1 = Number.isFinite(Number(area.x1)) ? Number(area.x1) : rectX1;
+          const y0 = Number.isFinite(Number(area.y0)) ? Number(area.y0) : rectY0;
+          const depth = Math.max(ts * 0.5, Number.isFinite(Number(area.depth)) ? Number(area.depth) : rectDepth);
+
+          const left = Math.min(x0, x1);
+          const right = Math.max(x0, x1);
+          const top = y0 - depth;
+          const bottom = y0;
+
+          let bodyColor = "rgba(58,145,214,0.34)";
+          let surfaceColor = "rgba(135,212,255,0.9)";
+          if (id === "lava_volume"){
+            bodyColor = "rgba(224,95,32,0.40)";
+            surfaceColor = "rgba(255,182,84,0.95)";
+          } else if (id === "bubbling_liquid_volume"){
+            bodyColor = "rgba(98,170,58,0.36)";
+            surfaceColor = "rgba(187,255,130,0.92)";
+          }
+
+          this._liquidVolumes.push({
+            id,
+            x0: left,
+            x1: right,
+            yTop: top,
+            yBottom: bottom,
+            depth,
+            bodyColor,
+            surfaceColor,
           });
           return;
         }
@@ -2150,6 +2197,33 @@ if (e.type === "lantern"){
       return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
     }
 
+    getLethalLiquidContact(player){
+      if (!player || !this._liquidVolumes.length) return null;
+      const px0 = player.x;
+      const px1 = player.x + player.w;
+      const py0 = player.y;
+      const py1 = player.y + player.h;
+      const feetY = py1;
+
+      for (const v of this._liquidVolumes){
+        if (px1 <= v.x0 || px0 >= v.x1) continue;
+        if (py1 <= v.yTop || py0 >= v.yBottom) continue;
+
+        const submergePx = Math.max(0, Math.min(v.yBottom, feetY) - v.yTop);
+        return {
+          type: v.id,
+          x0: v.x0,
+          x1: v.x1,
+          yTop: v.yTop,
+          yBottom: v.yBottom,
+          depth: v.depth,
+          submergePx,
+          submerge01: Math.max(0, Math.min(1, submergePx / Math.max(1, v.depth))),
+        };
+      }
+      return null;
+    }
+
     _hoverVoidPalette(variant){
       const v = ((variant|0) % 4 + 4) % 4;
       const arr = [
@@ -2416,6 +2490,7 @@ if (e.type === "lantern"){
     }
 
     draw(ctx, cam){
+      this._drawLiquidVolumes(ctx, cam);
       for (const e of this.items){
         if (!e.active) continue;
         if (!this._isNearCamera(e, cam, 64)) continue;
@@ -2776,6 +2851,26 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
             ctx.fillRect(sx, sy, e.w, e.h);
           }
         }
+      }
+    }
+
+    _drawLiquidVolumes(ctx, cam){
+      if (!this._liquidVolumes.length) return;
+      for (const v of this._liquidVolumes){
+        const sx = Math.floor(v.x0 - cam.x);
+        const sy = Math.floor(v.yTop - cam.y);
+        const w = Math.max(1, Math.floor(v.x1 - v.x0));
+        const h = Math.max(1, Math.floor(v.yBottom - v.yTop));
+
+        ctx.fillStyle = v.bodyColor;
+        ctx.fillRect(sx, sy, w, h);
+
+        ctx.strokeStyle = v.surfaceColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(sx, Math.floor(v.yTop - cam.y) + 0.5);
+        ctx.lineTo(sx + w, Math.floor(v.yTop - cam.y) + 0.5);
+        ctx.stroke();
       }
     }
 

@@ -13,12 +13,14 @@ const SUPPORTED_RUNTIME_ENTITY_IDS = new Set([
   "hover_void_01",
   "decor_flower_01",
   "fog_volume",
+  "water_volume",
+  "lava_volume",
+  "bubbling_liquid_volume",
 ]);
 const FALLBACK_RUNTIME_CATALOG_DECOR_IDS = new Set([
   "decor_flower_01",
 ]);
 
-const UNSUPPORTED_VOLUME_TYPES = new Set(["water_volume", "lava_volume", "bubbling_liquid_volume"]);
 const RUNTIME_BG_FALLBACK_ID = "bg_rock_01";
 const RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED = new Map([
   ["bg_void", "bg_void"],
@@ -92,16 +94,6 @@ function getBasename(input) {
   const normalized = value.replace(/\\/g, "/");
   const slashIndex = normalized.lastIndexOf("/");
   return slashIndex >= 0 ? normalized.slice(slashIndex + 1) : normalized;
-}
-
-function isUnsupportedLiquidVolumeType(type) {
-  const normalized = String(type || "").trim().toLowerCase();
-  if (!normalized) return false;
-  if (UNSUPPORTED_VOLUME_TYPES.has(normalized)) return true;
-  return (
-    (normalized.includes("water") || normalized.includes("lava") || normalized.includes("bubbling"))
-    && (normalized.includes("volume") || normalized.includes("liquid"))
-  );
 }
 
 function createBackgroundRuntimeMaterialResolver(levelDocument) {
@@ -293,11 +285,6 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
 
     if (!runtimeId) {
       unsupported.push(`Entity '${authoredEntityId || "(missing-id)"}' omitted: missing/invalid type '${entityType || "(missing-type)"}'.`);
-      continue;
-    }
-
-    if (isUnsupportedLiquidVolumeType(runtimeId) || isUnsupportedLiquidVolumeType(entityType)) {
-      unsupported.push(`Entity '${authoredEntityId || "(missing-id)"}' (${entityType || runtimeId}) omitted: unsupported liquid volume (PFH v1 has no water/lava/bubbling support).`);
       continue;
     }
 
