@@ -4328,7 +4328,6 @@ export function createEditorApp({
         interactionState.suppressNextClick = true;
         event.preventDefault();
         store.setState((draft) => {
-          const fogDefaults = getEntityPresetDefaultParams("fog_volume");
           draft.interaction.hoverCell = cell;
           draft.interaction.selectedCell = cell;
           draft.interaction.volumePlacementDrag = {
@@ -4336,7 +4335,7 @@ export function createEditorApp({
             type: "fog_volume",
             startCell: { ...cell },
             endCell: { ...cell },
-            thicknessPx: Number(fogDefaults?.look?.thickness) || null,
+            thicknessPx: null,
           };
           clearEntitySelection(draft.interaction);
           clearDecorSelection(draft.interaction);

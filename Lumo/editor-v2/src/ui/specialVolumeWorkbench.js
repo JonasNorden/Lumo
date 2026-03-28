@@ -1,4 +1,5 @@
 import { getFogVolumeParams, isFogVolumeEntityType } from "../domain/entities/specialVolumeTypes.js";
+import { findEntityPresetById } from "../domain/entities/entityPresets.js";
 
 const PREVIEW_SPAN_WIDTH_PX = 620;
 const PREVIEW_SAMPLE_COUNT = 32;
@@ -128,6 +129,7 @@ function renderFogPreviewSamples(samples) {
 
 function renderFogModal(selection) {
   const model = getFogPreviewModel(selection.entity);
+  const lumoSpriteSrc = resolveLumoPreviewSpriteSrc();
   const numberFields = [
     { label: "Density", path: "look.density", min: 0.02, max: 1, step: 0.01, digits: 2, read: (entity) => getFogVolumeParams(entity).look.density },
     { label: "Height above ground", path: "look.lift", min: 0, max: 120, step: 1, digits: 0, read: (entity) => getFogVolumeParams(entity).look.lift },
@@ -146,7 +148,7 @@ function renderFogModal(selection) {
         <header class="specialVolumeWorkbenchModalHeader">
           <div>
             <h3>Fog Volume</h3>
-            <p>Grounded fog preview (smooke-aligned): right-end taper + full-span Lumo traversal.</p>
+            <p>Tune fog behavior and verify the playable silhouette pass.</p>
           </div>
         </header>
         <div class="specialVolumeWorkbenchModalBody specialVolumeWorkbenchModalBodyStacked">
@@ -167,7 +169,9 @@ function renderFogModal(selection) {
                 </div>
                 <div class="fogWorkbenchPreviewLumo isBehindFog" data-fog-preview-lumo>
                   <span class="fogWorkbenchPreviewLumoGlow"></span>
-                  <span class="fogWorkbenchPreviewLumoBody"></span>
+                  ${lumoSpriteSrc
+    ? `<img class="fogWorkbenchPreviewLumoSprite" src="${escapeHtml(lumoSpriteSrc)}" alt="Lumo preview sprite" />`
+    : '<span class="fogWorkbenchPreviewLumoBody"></span>'}
                 </div>
               </div>
             </div>
@@ -179,13 +183,19 @@ function renderFogModal(selection) {
             </div>
           </section>
           <footer class="specialVolumeWorkbenchFooterPinned">
-            <button type="button" class="buttonSecondary" data-fog-workbench-action="save-defaults">Save as default for future Fog placements</button>
-            <button type="button" class="buttonPrimary" data-fog-workbench-action="done">Done</button>
+            <button type="button" class="specialVolumeWorkbenchActionButton isSecondary" data-fog-workbench-action="save-defaults">Save as default</button>
+            <button type="button" class="specialVolumeWorkbenchActionButton isPrimary" data-fog-workbench-action="done">Done</button>
           </footer>
         </div>
       </section>
     `,
   };
+}
+
+function resolveLumoPreviewSpriteSrc() {
+  const spawnPreset = findEntityPresetById("player-spawn");
+  if (!spawnPreset || typeof spawnPreset.img !== "string" || !spawnPreset.img.trim()) return null;
+  return spawnPreset.img.trim();
 }
 
 export function getSpecialVolumeWorkbenchLauncherContent(state) {
@@ -195,8 +205,8 @@ export function getSpecialVolumeWorkbenchLauncherContent(state) {
   if (isOpen) return "";
   return `
     <div class="specialVolumeWorkbenchLauncher">
-      <span>Fog volume selected</span>
-      <button type="button" class="buttonSecondary" data-fog-workbench-action="open">Edit Fog</button>
+      <span class="specialVolumeWorkbenchLauncherLabel">Fog selected</span>
+      <button type="button" class="specialVolumeWorkbenchLauncherButton" data-fog-workbench-action="open">Adjust</button>
     </div>
   `;
 }
