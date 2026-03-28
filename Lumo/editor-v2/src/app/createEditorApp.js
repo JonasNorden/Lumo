@@ -775,6 +775,22 @@ export function createEditorApp({
     distancePerSecond: 140,
     lastElapsedMs: undefined,
   };
+  const fogPreviewTileSprites = new Map();
+  const ensureFogPreviewTileSprite = (key, src) => {
+    if (!key || !src) return null;
+    const cached = fogPreviewTileSprites.get(key);
+    if (cached) return cached;
+    const image = new Image();
+    image.decoding = "async";
+    image.src = src;
+    image.addEventListener("load", () => {
+      if (fogPreviewMotion.surface?.isConnected) {
+        drawFogPreviewCanvas(fogPreviewMotion.lastElapsedMs ?? 0);
+      }
+    });
+    fogPreviewTileSprites.set(key, image);
+    return image;
+  };
   const toolShortcutMap = {
     v: EDITOR_TOOLS.INSPECT,
     b: EDITOR_TOOLS.PAINT,
@@ -2459,8 +2475,19 @@ export function createEditorApp({
     const ctx2d = fogPreviewMotion.ctx;
     const width = fogPreviewMotion.worldWidth;
     const height = fogPreviewMotion.worldHeight;
+    const tileSize = 24;
     const groundBaseline = 14;
     const groundY = height - groundBaseline;
+    const floorTop = groundY - tileSize;
+    const terrainTop = Math.max(24, Math.round(height * 0.36));
+    const laneStartX = fogPreviewMotion.bandStartX;
+    const laneEndX = fogPreviewMotion.bandEndX;
+    const leftBlockInnerX = Math.max(0, laneStartX - tileSize);
+    const rightBlockOuterX = Math.min(width, laneEndX + tileSize);
+
+    const soilTile = ensureFogPreviewTileSprite("soil", "../data/assets/tiles/soil_c.png");
+    const grassTile = ensureFogPreviewTileSprite("grass", "../data/assets/tiles/grass_bt.png");
+    const stoneTile = ensureFogPreviewTileSprite("stone", "../data/assets/tiles/stone_ct.png");
 
     const density = Number.parseFloat(surfaceDataset.fogSmookeDensity || "") || 0.25;
     const noiseAmount = Number.parseFloat(surfaceDataset.fogSmookeNoise || "") || 0;
@@ -2478,23 +2505,43 @@ export function createEditorApp({
     const elapsedSeconds = elapsedMs * 0.001;
 
     ctx2d.clearRect(0, 0, width, height);
-    ctx2d.fillStyle = "#070917";
+    ctx2d.fillStyle = "#050912";
     ctx2d.fillRect(0, 0, width, height);
 
-    const bg = ctx2d.createLinearGradient(0, 0, 0, groundY);
-    bg.addColorStop(0, "rgba(68,100,170,0.16)");
-    bg.addColorStop(1, "rgba(12,16,25,0)");
-    ctx2d.fillStyle = bg;
-    ctx2d.fillRect(0, 0, width, groundY);
+    ctx2d.fillStyle = "rgba(8, 14, 26, 0.72)";
+    ctx2d.fillRect(0, 0, width, floorTop);
 
-    ctx2d.fillStyle = "rgba(22,28,39,0.75)";
-    ctx2d.fillRect(0, groundY, width, height - groundY);
-    ctx2d.fillStyle = "rgba(153,176,212,0.85)";
-    ctx2d.fillRect(0, groundY - 1, width, 1);
+    const drawTiledRect = (image, fallback, x, y, w, h) => {
+      if (w <= 0 || h <= 0) return;
+      if (image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0) {
+        for (let yy = y; yy < y + h; yy += tileSize) {
+          for (let xx = x; xx < x + w; xx += tileSize) {
+            const drawW = Math.min(tileSize, (x + w) - xx);
+            const drawH = Math.min(tileSize, (y + h) - yy);
+            ctx2d.drawImage(image, 0, 0, drawW, drawH, xx, yy, drawW, drawH);
+          }
+        }
+        return;
+      }
+      ctx2d.fillStyle = fallback;
+      ctx2d.fillRect(x, y, w, h);
+    };
+
+    drawTiledRect(stoneTile, "#6a655e", 0, floorTop, width, tileSize);
+    drawTiledRect(soilTile, "#5b3a26", 0, terrainTop, leftBlockInnerX, Math.max(0, floorTop - terrainTop));
+    drawTiledRect(soilTile, "#5b3a26", rightBlockOuterX, terrainTop, Math.max(0, width - rightBlockOuterX), Math.max(0, floorTop - terrainTop));
+    drawTiledRect(grassTile, "#8ca86f", 0, terrainTop - tileSize, leftBlockInnerX, tileSize);
+    drawTiledRect(grassTile, "#8ca86f", rightBlockOuterX, terrainTop - tileSize, Math.max(0, width - rightBlockOuterX), tileSize);
+    drawTiledRect(stoneTile, "#66615a", leftBlockInnerX, terrainTop, tileSize, Math.max(0, floorTop - terrainTop));
+    drawTiledRect(stoneTile, "#66615a", laneEndX, terrainTop, tileSize, Math.max(0, floorTop - terrainTop));
+
+    ctx2d.fillStyle = "rgba(0, 0, 0, 0.18)";
+    ctx2d.fillRect(leftBlockInnerX, terrainTop, 1, Math.max(0, floorTop - terrainTop));
+    ctx2d.fillRect(laneEndX + tileSize - 1, terrainTop, 1, Math.max(0, floorTop - terrainTop));
 
     ctx2d.save();
     ctx2d.beginPath();
-    ctx2d.rect(fogPreviewMotion.bandStartX, 0, fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX, groundY);
+    ctx2d.rect(laneStartX, 0, laneEndX - laneStartX, groundY);
     ctx2d.clip();
     ctx2d.globalCompositeOperation = "screen";
     ctx2d.globalAlpha = 0.82;
@@ -2508,13 +2555,13 @@ export function createEditorApp({
       if (alphaBase < 0.001) continue;
       ctx2d.beginPath();
       for (let index = 0; index < fogPreviewMotion.sampleCount; index += 1) {
-        const x = fogPreviewMotion.bandStartX + (index * pxPerCell);
-        const dOpen = fogPreviewMotion.bandEndX - x;
+        const x = laneStartX + (index * pxPerCell);
+        const dOpen = laneEndX - x;
         const edgeMask = smoothFogPreview01(clampFogPreview(dOpen / falloff, 0, 1));
         let yy = bottom;
         if (edgeMask > 0.0005) {
           const topWeight = smoothFogPreview01(clampFogPreview((0.55 - a) / 0.55, 0, 1));
-          const org = smookeOrganicMaskAtU((x - fogPreviewMotion.bandStartX) / Math.max(1, fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX), elapsedSeconds, organicStrength, organicScale, organicSpeed)
+          const org = smookeOrganicMaskAtU((x - laneStartX) / Math.max(1, laneEndX - laneStartX), elapsedSeconds, organicStrength, organicScale, organicSpeed)
             * (0.70 + (0.30 * topWeight));
           const dev = fogPreviewMotion.field[index];
           const bulge = Math.max(0, dev);
@@ -2529,8 +2576,8 @@ export function createEditorApp({
         if (index === 0) ctx2d.moveTo(x, yy);
         else ctx2d.lineTo(x, yy);
       }
-      ctx2d.lineTo(fogPreviewMotion.bandEndX, bottom);
-      ctx2d.lineTo(fogPreviewMotion.bandStartX, bottom);
+      ctx2d.lineTo(laneEndX, bottom);
+      ctx2d.lineTo(laneStartX, bottom);
       ctx2d.closePath();
       ctx2d.fillStyle = `rgba(225,238,255,${alphaBase})`;
       ctx2d.fill();
@@ -2542,12 +2589,12 @@ export function createEditorApp({
     ctx2d.lineJoin = "round";
     ctx2d.beginPath();
     for (let index = 0; index < fogPreviewMotion.sampleCount; index += 1) {
-      const x = fogPreviewMotion.bandStartX + (index * pxPerCell);
-      const dOpen = fogPreviewMotion.bandEndX - x;
+      const x = laneStartX + (index * pxPerCell);
+      const dOpen = laneEndX - x;
       const edgeMask = smoothFogPreview01(clampFogPreview(dOpen / falloff, 0, 1));
       let yy = bottom;
       if (edgeMask > 0.0005) {
-        const org = smookeOrganicMaskAtU((x - fogPreviewMotion.bandStartX) / Math.max(1, fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX), elapsedSeconds, organicStrength, organicScale, organicSpeed);
+        const org = smookeOrganicMaskAtU((x - laneStartX) / Math.max(1, laneEndX - laneStartX), elapsedSeconds, organicStrength, organicScale, organicSpeed);
         const dev = fogPreviewMotion.field[index];
         const bulge = Math.max(0, dev);
         const suction = Math.max(0, -dev);
@@ -2717,8 +2764,8 @@ export function createEditorApp({
     fogPreviewMotion.ctx = ctx2d;
     fogPreviewMotion.worldWidth = canvasEl.width;
     fogPreviewMotion.worldHeight = canvasEl.height;
-    fogPreviewMotion.bandStartX = Math.round(fogPreviewMotion.worldWidth * 0.06);
-    fogPreviewMotion.bandEndX = Math.round(fogPreviewMotion.worldWidth * 0.94);
+    fogPreviewMotion.bandStartX = Math.round(fogPreviewMotion.worldWidth * 0.14);
+    fogPreviewMotion.bandEndX = Math.round(fogPreviewMotion.worldWidth * 0.86);
     fogPreviewMotion.sampleCount = Math.max(260, Math.floor((fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX) / 1.4));
     fogPreviewMotion.field = new Float32Array(fogPreviewMotion.sampleCount);
     fogPreviewMotion.vel = new Float32Array(fogPreviewMotion.sampleCount);
