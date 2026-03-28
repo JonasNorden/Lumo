@@ -681,6 +681,30 @@
       return null;
     }
 
+    const bgLayer = Array.isArray(levelObj.layers.bg)
+      ? levelObj.layers.bg
+      : (Array.isArray(levelObj?.editor?.bg) ? levelObj.editor.bg : []);
+    const ents = Array.isArray(levelObj.layers.ents) ? levelObj.layers.ents : [];
+    const liquidCounts = { water_volume: 0, lava_volume: 0, bubbling_liquid_volume: 0 };
+    for (const entity of ents) {
+      const id = String(entity?.id || "").trim().toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(liquidCounts, id)) liquidCounts[id] += 1;
+    }
+    console.info("[PFH runtime] consumed session payload", {
+      levelId: levelObj?.meta?.id || "(no-id)",
+      levelName: levelObj?.meta?.name || "(untitled)",
+      dimensions: {
+        w: Number(levelObj?.meta?.w) || 0,
+        h: Number(levelObj?.meta?.h) || 0,
+        tileSize: Number(levelObj?.meta?.tileSize) || 24,
+      },
+      backgroundCells: bgLayer.length,
+      backgroundPaintedCells: bgLayer.reduce((count, cell) => (cell ? count + 1 : count), 0),
+      entitiesReceived: ents.length,
+      liquidsReceivedByType: liquidCounts,
+      spawnOverride,
+    });
+
     return { levelObj, spawnOverride };
   }
 

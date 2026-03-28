@@ -9,6 +9,12 @@
       this._fogVolumes = [];
       this._fogFrame = 0;
       this._liquidVolumes = [];
+      this._pfhLiquidDiag = {
+        loadLogged: false,
+        spawnedByType: new Set(),
+        drawLogged: false,
+        afterDarknessDrawLogged: false,
+      };
 
       // Catalog (optional): allows generic decor sizing/perch data from data/catalog_entities.js
       this._catById = null;
@@ -175,6 +181,12 @@
       this._prevPlayerCenterX = null;
       this.stopGameplayAudio();
       this._soundHandles.clear();
+      this._pfhLiquidDiag = {
+        loadLogged: false,
+        spawnedByType: new Set(),
+        drawLogged: false,
+        afterDarknessDrawLogged: false,
+      };
     }
 
     stopGameplayAudio(){
@@ -200,6 +212,16 @@
       const meta = levelObj && levelObj.meta ? levelObj.meta : {};
       const levelLabel = ((meta.id || "(no-id)") + (meta.name ? `:${meta.name}` : ""));
       const diag = { levelLabel, unknownEditorIds: new Set(), unknownRuntimeTypes: new Set() };
+      const incomingLiquidCounts = { water_volume: 0, lava_volume: 0, bubbling_liquid_volume: 0 };
+      for (const entity of list){
+        const id = String(entity?.id || entity?.type || "").trim().toLowerCase();
+        if (Object.prototype.hasOwnProperty.call(incomingLiquidCounts, id)) incomingLiquidCounts[id] += 1;
+      }
+      console.info("[PFH liquid] runtime loader received entities", {
+        levelLabel,
+        totalEntities: list.length,
+        liquidEntitiesByType: incomingLiquidCounts,
+      });
 
       if (listB && !listA){
         // If the level doesn't define spawn, derive it from start_01 (editor mandatory entity).
@@ -211,6 +233,19 @@
 
       for (const e of list){
         this.spawnFromDef(e, levelObj, diag);
+      }
+      if (!this._pfhLiquidDiag.loadLogged){
+        const spawnedCounts = { water_volume: 0, lava_volume: 0, bubbling_liquid_volume: 0 };
+        for (const volume of this._liquidVolumes){
+          const id = String(volume?.id || "").trim().toLowerCase();
+          if (Object.prototype.hasOwnProperty.call(spawnedCounts, id)) spawnedCounts[id] += 1;
+        }
+        console.info("[PFH liquid] loader spawn summary", {
+          levelLabel,
+          spawnedVolumeCount: this._liquidVolumes.length,
+          spawnedByType: spawnedCounts,
+        });
+        this._pfhLiquidDiag.loadLogged = true;
       }
 
       // If we got entities (either format), do NOT inject demo objects.
@@ -454,6 +489,14 @@
           const right = Math.max(x0, x1);
           const top = y0 - depth;
           const bottom = y0;
+          if (!(right > left)){
+            console.warn("[PFH liquid] spawn skipped: non-positive liquid width", { id, x0, x1, sourceEntity: { x: e.x, y: e.y } });
+            return;
+          }
+          if (!(bottom > top)){
+            console.warn("[PFH liquid] spawn skipped: non-positive liquid height", { id, y0, depth, sourceEntity: { x: e.x, y: e.y } });
+            return;
+          }
 
           let bodyColor = "rgba(58,145,214,0.34)";
           let surfaceColor = "rgba(135,212,255,0.9)";
@@ -483,6 +526,13 @@
             bodyColorAfterDarkness,
             surfaceColorAfterDarkness,
           });
+          if (!this._pfhLiquidDiag.spawnedByType.has(id)){
+            this._pfhLiquidDiag.spawnedByType.add(id);
+            console.info("[PFH liquid] spawned liquid type", {
+              id,
+              firstSpawnRect: { x0: left, x1: right, yTop: top, yBottom: bottom, depth },
+            });
+          }
           return;
         }
 
@@ -2864,6 +2914,18 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
 
     _drawLiquidVolumes(ctx, cam){
       if (!this._liquidVolumes.length) return;
+      if (!this._pfhLiquidDiag.drawLogged){
+        const counts = { water_volume: 0, lava_volume: 0, bubbling_liquid_volume: 0 };
+        for (const v of this._liquidVolumes){
+          const id = String(v?.id || "").trim().toLowerCase();
+          if (Object.prototype.hasOwnProperty.call(counts, id)) counts[id] += 1;
+        }
+        console.info("[PFH liquid] draw pass reached (pre-darkness)", {
+          volumeCount: this._liquidVolumes.length,
+          byType: counts,
+        });
+        this._pfhLiquidDiag.drawLogged = true;
+      }
       for (const v of this._liquidVolumes){
         const sx = Math.floor(v.x0 - cam.x);
         const sy = Math.floor(v.yTop - cam.y);
@@ -2884,6 +2946,12 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
 
     _drawLiquidVolumesAfterDarkness(ctx, cam){
       if (!this._liquidVolumes.length) return;
+      if (!this._pfhLiquidDiag.afterDarknessDrawLogged){
+        console.info("[PFH liquid] draw pass reached (after darkness)", {
+          volumeCount: this._liquidVolumes.length,
+        });
+        this._pfhLiquidDiag.afterDarknessDrawLogged = true;
+      }
       ctx.save();
       ctx.globalCompositeOperation = "screen";
       for (const v of this._liquidVolumes){
