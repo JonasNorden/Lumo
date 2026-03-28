@@ -762,7 +762,10 @@ export function createEditorApp({
     surface: null,
     lumo: null,
     disturbance: null,
+    samples: [],
+    sampleState: [],
     durationMs: 9600,
+    lastElapsedMs: undefined,
   };
   const toolShortcutMap = {
     v: EDITOR_TOOLS.INSPECT,
@@ -2386,6 +2389,9 @@ export function createEditorApp({
     fogPreviewMotion.surface = null;
     fogPreviewMotion.lumo = null;
     fogPreviewMotion.disturbance = null;
+    fogPreviewMotion.samples = [];
+    fogPreviewMotion.sampleState = [];
+    fogPreviewMotion.lastElapsedMs = undefined;
   };
 
   const stepFogPreviewMotion = (timestampMs) => {
@@ -2398,6 +2404,53 @@ export function createEditorApp({
     const patrol = getFogPreviewPatrolPhase(elapsedMs, fogPreviewMotion.durationMs);
     fogPreviewMotion.lumo.style.left = `${patrol.xPct.toFixed(3)}%`;
     fogPreviewMotion.lumo.style.transform = `translate3d(-50%, -1px, 0) scaleX(${patrol.facing})`;
+    if (Array.isArray(fogPreviewMotion.samples) && fogPreviewMotion.samples.length) {
+      const surfaceStyle = globalThis.getComputedStyle(fogPreviewMotion.surface);
+      const disturbanceStrength = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-disturbance-strength")) || 0;
+      const disturbanceWidth = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-disturbance-width")) || 20;
+      const returnTime = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-relax")) || 1;
+      const viscosity = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-visc")) || 0.85;
+      const idleAmount = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-organic")) || 0;
+      const idleSpeed = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-organic-speed")) || 1;
+      const idleDrift = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-idle-drift")) || 1;
+      const settle = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-stationary-settle")) || 1;
+      const lumoU = patrol.xPct / 100;
+      const radiusU = Math.max(0.05, disturbanceWidth / 100);
+      const dt = Math.min(0.05, fogPreviewMotion.lastElapsedMs === undefined ? (1 / 60) : Math.max(0.001, (elapsedMs - fogPreviewMotion.lastElapsedMs) / 1000));
+      fogPreviewMotion.lastElapsedMs = elapsedMs;
+      const decayPerSecond = 0.9 + (viscosity * 1.3) + (returnTime * 0.45);
+      const spring = 4.4 + (viscosity * 4.6) + (settle * 0.8);
+      const damper = 2.9 + ((1 - viscosity) * 2.5) + (1 / Math.max(0.18, returnTime));
+      const influencePeak = disturbanceStrength * (8.2 + idleAmount * 3.4);
+
+      fogPreviewMotion.samples.forEach((sample, index) => {
+        const state = fogPreviewMotion.sampleState[index];
+        if (!state) return;
+        const du = Math.abs(state.u - lumoU);
+        const influence = du >= radiusU ? 0 : 1 - (du / radiusU);
+        const influenceEase = influence * influence * (3 - (2 * influence));
+        const signed = state.u < lumoU ? -1 : 1;
+        const impulse = influenceEase * influencePeak * signed;
+        state.velocity += impulse * dt;
+        state.velocity -= state.displacement * spring * dt;
+        state.velocity *= Math.max(0.35, 1 - (damper * dt * 0.1));
+        state.displacement += state.velocity * dt;
+        state.displacement *= Math.max(0.25, 1 - (decayPerSecond * dt * 0.18));
+
+        const idleWave = Math.sin((elapsedMs * 0.001 * (0.85 + idleSpeed * 0.65)) + (state.u * 10.4)) * idleAmount;
+        const idleBias = Math.sin((elapsedMs * 0.001 * (0.45 + idleSpeed * 0.4)) - (state.u * 7.2)) * idleAmount * 0.5;
+        const idleOffset = -(Math.abs(idleWave + idleBias) * idleDrift);
+        const localOffset = Math.min(0, state.baseOffset + idleOffset - (Math.max(0, state.displacement) * 0.58));
+        const coreLift = Math.max(0, state.displacement * 0.72);
+        const hazeLift = Math.max(0, state.displacement * 0.95);
+        const opacityLift = Math.max(0, state.displacement * 0.012) + (influenceEase * disturbanceStrength * 0.04);
+
+        sample.style.setProperty("--fog-sample-offset", `${localOffset.toFixed(3)}px`);
+        sample.style.setProperty("--fog-sample-core", `${Math.max(3, state.baseCore + coreLift).toFixed(3)}px`);
+        sample.style.setProperty("--fog-sample-haze", `${Math.max(5, state.baseHaze + hazeLift).toFixed(3)}px`);
+        sample.style.setProperty("--fog-sample-opacity", `${Math.min(0.98, Math.max(0.02, state.baseOpacity + opacityLift)).toFixed(4)}`);
+      });
+    }
     if (fogPreviewMotion.disturbance) {
       const surfaceStyle = globalThis.getComputedStyle(fogPreviewMotion.surface);
       const strength = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-disturbance-strength")) || 0;
@@ -2433,8 +2486,23 @@ export function createEditorApp({
     fogPreviewMotion.surface = surface;
     fogPreviewMotion.lumo = lumo;
     fogPreviewMotion.disturbance = disturbance instanceof HTMLElement ? disturbance : null;
+    fogPreviewMotion.samples = Array.from(floatingPanelHost.querySelectorAll("[data-fog-preview-sample]"));
+    fogPreviewMotion.sampleState = fogPreviewMotion.samples.map((sample) => {
+      const u = Number.parseFloat(sample.dataset.fogSampleU || "0");
+      const readVar = (name) => Number.parseFloat(sample.style.getPropertyValue(name) || "0");
+      return {
+        u: Number.isFinite(u) ? u : 0,
+        baseOffset: readVar("--fog-sample-baseline-offset"),
+        baseCore: readVar("--fog-sample-baseline-core"),
+        baseHaze: readVar("--fog-sample-baseline-haze"),
+        baseOpacity: readVar("--fog-sample-baseline-opacity"),
+        displacement: 0,
+        velocity: 0,
+      };
+    });
     fogPreviewMotion.durationMs = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 9600;
     fogPreviewMotion.startedAtMs = 0;
+    fogPreviewMotion.lastElapsedMs = undefined;
     fogPreviewMotion.lumo.style.animation = "none";
     if (fogPreviewMotion.disturbance) fogPreviewMotion.disturbance.style.animation = "none";
     fogPreviewMotion.rafId = globalThis.requestAnimationFrame(stepFogPreviewMotion);

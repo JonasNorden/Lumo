@@ -94,11 +94,13 @@ function getFogPreviewModel(entity, nowMs = Date.now()) {
   const viscosity = clamp(Number(params.smoothing.visc), 0.35, 0.995);
 
   const returnTime = clamp((1.1 - returnStrength) * 5.2, 0.2, 5.6);
-  const traverseDurationMs = clamp(10800 - idleSpeed * 1800 - influenceAmount * 620, 3600, 14000);
+  const traverseDurationMs = clamp(16400 - idleSpeed * 1400 - influenceAmount * 480, 8400, 22000);
   const densityOpacity = clamp(0.18 + density * 0.72, 0.14, 0.92);
   const disturbanceStrength = clamp((influenceAmount / 5) * (0.6 + idleAmount * 0.4), 0, 1.2);
   const disturbanceWidthPct = clamp(7 + (influenceAmount * 5.8) + ((1 - viscosity) * 9), 8, 44);
   const disturbanceRisePx = clamp(5 + (influenceAmount * 2.8) + (idleAmount * 5.2), 4, 34);
+  const idleDriftPx = clamp(0.65 + (idleAmount * 3.5), 0.2, 5.5);
+  const stationarySettle = clamp(0.5 + (viscosity * 0.85) + (returnStrength * 0.45), 0.5, 1.8);
 
   const profile = buildFogPreviewFieldProfile({
     spanWidthPx: PREVIEW_SPAN_WIDTH_PX,
@@ -130,6 +132,8 @@ function getFogPreviewModel(entity, nowMs = Date.now()) {
     disturbanceStrength,
     disturbanceWidthPct,
     disturbanceRisePx,
+    idleDriftPx,
+    stationarySettle,
     returnRecoverMs: Math.round(returnTime * 1000),
     phaseMs: Math.round(nowMs % traverseDurationMs),
   };
@@ -139,7 +143,8 @@ function renderFogPreviewSamples(samples) {
   return samples.map((sample) => `
     <span
       class="fogWorkbenchPreviewSample"
-      style="--fog-sample-x:${sample.xPct.toFixed(3)}%;--fog-sample-core:${sample.coreHeightPx.toFixed(2)}px;--fog-sample-haze:${sample.hazeHeightPx.toFixed(2)}px;--fog-sample-opacity:${sample.opacity.toFixed(4)};--fog-sample-offset:${sample.offsetY.toFixed(3)}px;"
+      style="--fog-sample-x:${sample.xPct.toFixed(3)}%;--fog-sample-core:${sample.coreHeightPx.toFixed(2)}px;--fog-sample-haze:${sample.hazeHeightPx.toFixed(2)}px;--fog-sample-opacity:${sample.opacity.toFixed(4)};--fog-sample-offset:${sample.offsetY.toFixed(3)}px;--fog-sample-baseline-core:${sample.coreHeightPx.toFixed(2)}px;--fog-sample-baseline-haze:${sample.hazeHeightPx.toFixed(2)}px;--fog-sample-baseline-offset:${sample.offsetY.toFixed(3)}px;--fog-sample-baseline-opacity:${sample.opacity.toFixed(4)};"
+      data-fog-sample-u="${sample.u.toFixed(6)}"
       data-fog-preview-sample
     ></span>
   `).join("");
@@ -178,12 +183,19 @@ function renderFogModal(selection) {
               class="volumeWorkbenchPreviewSurface fogWorkbenchPreviewSurface"
               data-fog-preview-surface
               data-fog-preview-traverse-ms="${Math.round(model.traverseDurationMs)}"
-              style="--fog-ground-baseline:14px;--fog-lift:${model.liftPx.toFixed(2)}px;--fog-thickness:${model.thicknessPx.toFixed(2)}px;--fog-falloff-pct:${((model.falloffPx / PREVIEW_SPAN_WIDTH_PX) * 100).toFixed(3)}%;--fog-opacity:${model.densityOpacity.toFixed(4)};--fog-organic:${model.idleAmount.toFixed(4)};--fog-organic-speed:${model.idleSpeed.toFixed(4)};--fog-push:${model.influenceAmount.toFixed(4)};--fog-relax:${model.returnTime.toFixed(4)};--fog-visc:${model.viscosity.toFixed(4)};--fog-disturbance-strength:${model.disturbanceStrength.toFixed(4)};--fog-disturbance-width:${model.disturbanceWidthPct.toFixed(3)}%;--fog-disturbance-rise:${model.disturbanceRisePx.toFixed(2)}px;--fog-return-recover-ms:${model.returnRecoverMs}ms;--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
+              style="--fog-ground-baseline:14px;--fog-lift:${model.liftPx.toFixed(2)}px;--fog-thickness:${model.thicknessPx.toFixed(2)}px;--fog-falloff-pct:${((model.falloffPx / PREVIEW_SPAN_WIDTH_PX) * 100).toFixed(3)}%;--fog-opacity:${model.densityOpacity.toFixed(4)};--fog-organic:${model.idleAmount.toFixed(4)};--fog-organic-speed:${model.idleSpeed.toFixed(4)};--fog-push:${model.influenceAmount.toFixed(4)};--fog-relax:${model.returnTime.toFixed(4)};--fog-visc:${model.viscosity.toFixed(4)};--fog-disturbance-strength:${model.disturbanceStrength.toFixed(4)};--fog-disturbance-width:${model.disturbanceWidthPct.toFixed(3)}%;--fog-disturbance-rise:${model.disturbanceRisePx.toFixed(2)}px;--fog-idle-drift:${model.idleDriftPx.toFixed(3)}px;--fog-stationary-settle:${model.stationarySettle.toFixed(3)};--fog-return-recover-ms:${model.returnRecoverMs}ms;--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
             >
               <div class="fogWorkbenchPreviewBackdrop"></div>
               <div class="volumeWorkbenchPreviewSpan fogWorkbenchPreviewSpan" data-volume-preview-span>
+                <div class="fogWorkbenchPreviewContainer" aria-hidden="true">
+                  <div class="fogWorkbenchPreviewContainerCap"></div>
+                  <div class="fogWorkbenchPreviewContainerBody"></div>
+                  <div class="fogWorkbenchPreviewContainerBase"></div>
+                </div>
                 <div class="fogWorkbenchPreviewField" data-fog-preview-field>
-                  ${renderFogPreviewSamples(model.profile.samples)}
+                  <div class="fogWorkbenchPreviewFieldMass">
+                    ${renderFogPreviewSamples(model.profile.samples)}
+                  </div>
                 </div>
                 <div class="fogWorkbenchPreviewDisturbance" aria-hidden="true"></div>
                 <div class="fogWorkbenchPreviewLumo isBehindFog" data-fog-preview-lumo>
@@ -279,22 +291,20 @@ export function buildFogPreviewFieldProfile(config = {}) {
     const idleWave = Math.sin((u * 4.6) + phase) * 0.5 + Math.sin((u * 9.1) - (phase * 0.65)) * 0.26;
     const idleLiftScale = idleAmount * (2.8 + (1 - viscosity) * 3.8);
     const liftOnly = -Math.abs(idleWave) * idleLiftScale;
-
-    const traversalPulse = Math.exp(-Math.pow((u - 0.5) / 0.22, 2));
-    const influencePulse = influenceAmount * traversalPulse * (0.85 + (0.18 * Math.sin((phase * 0.8) + (u * 5))));
     const returnDrag = clamp(returnTime / 5.8, 0.05, 1.15);
     const settleFactor = clamp(1.1 - returnDrag * 0.4, 0.45, 1.08);
 
     const coreHeightPx = Math.max(
       4,
       (thicknessPx * edgeEase * settleFactor)
-      + (thicknessPx * 0.16 * influencePulse * settleFactor)
       + (Math.max(0, idleWave) * idleAmount * (8 + (1 - viscosity) * 6)),
     );
     const hazeHeightPx = Math.max(coreHeightPx + 6, coreHeightPx * (1.24 + ((1 - viscosity) * 0.35)));
-    const opacity = clamp((density * (0.2 + edgeEase * 0.9)) + (influencePulse * 0.02), 0.03, 0.98);
+    const influenceDensityLift = (influenceAmount / 5) * 0.045 * edgeEase;
+    const opacity = clamp((density * (0.2 + edgeEase * 0.9)) + influenceDensityLift, 0.03, 0.98);
 
     samples.push({
+      u,
       xPct: u * 100,
       xPx,
       dOpenPx,

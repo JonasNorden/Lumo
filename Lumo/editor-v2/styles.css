@@ -2007,6 +2007,51 @@ kbd {
   z-index: 2;
 }
 
+.fogWorkbenchPreviewContainer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% - var(--fog-thickness, 44px) - 34px - var(--fog-lift, 0px));
+  bottom: calc(var(--fog-ground-baseline, 14px) - 1px);
+  border-radius: 16px 16px 10px 10px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+  opacity: calc(0.58 + (var(--fog-opacity, 0.24) * 0.2));
+}
+
+.fogWorkbenchPreviewContainerCap,
+.fogWorkbenchPreviewContainerBody,
+.fogWorkbenchPreviewContainerBase {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.fogWorkbenchPreviewContainerCap {
+  top: 0;
+  height: clamp(10px, calc(var(--fog-thickness, 44px) * 0.22), 24px);
+  background:
+    linear-gradient(180deg, rgba(187, 214, 255, 0.26), rgba(187, 214, 255, 0.03)),
+    radial-gradient(140% 100% at 50% 0%, rgba(198, 224, 255, 0.34), transparent 86%);
+  border-top: 1px solid rgba(177, 204, 246, 0.42);
+  border-bottom: 1px solid rgba(177, 204, 246, 0.14);
+}
+
+.fogWorkbenchPreviewContainerBody {
+  top: calc(clamp(10px, calc(var(--fog-thickness, 44px) * 0.22), 24px) - 1px);
+  bottom: 8px;
+  background: linear-gradient(180deg, rgba(132, 161, 214, 0.12), rgba(83, 111, 163, 0.04) 42%, rgba(34, 56, 96, 0.02) 100%);
+}
+
+.fogWorkbenchPreviewContainerBase {
+  height: 9px;
+  bottom: 0;
+  background: linear-gradient(180deg, rgba(152, 191, 251, 0.36), rgba(87, 127, 193, 0.08));
+  box-shadow: 0 -1px 0 rgba(192, 221, 255, 0.2), 0 0 16px rgba(117, 157, 224, 0.2);
+}
+
 .fogWorkbenchPreviewSpanStop {
   position: absolute;
   top: calc(100% - var(--fog-thickness, 44px) - 32px - var(--fog-lift, 0px));
@@ -2062,6 +2107,11 @@ kbd {
   opacity: calc(0.45 + (var(--fog-opacity, 0.24) * 0.75));
 }
 
+.fogWorkbenchPreviewFieldMass {
+  position: absolute;
+  inset: 0;
+}
+
 .fogWorkbenchPreviewSample {
   position: absolute;
   left: var(--fog-sample-x, 0%);
@@ -2070,6 +2120,7 @@ kbd {
   transform: translate3d(-50%, min(0px, calc(var(--fog-sample-offset, 0px) + (var(--fog-relax, 0) * -6px))), 0);
   transform-origin: center bottom;
   opacity: var(--fog-sample-opacity, 0.24);
+  transition: transform 100ms linear, opacity 120ms linear;
 }
 
 .fogWorkbenchPreviewSample::before,
@@ -2105,6 +2156,7 @@ kbd {
   background: radial-gradient(84% 98% at 50% 100%, rgba(225, 238, 255, 0.72) 0%, transparent 100%);
   filter: blur(calc(5px + (var(--fog-diffuse, 0) * 10px)));
   opacity: calc((0.21 + (var(--fog-noise, 0) * 0.3)) * (0.88 + (var(--fog-sample-layer-jitter, 1) * 0.12)));
+  transition: height 120ms linear;
 }
 
 
