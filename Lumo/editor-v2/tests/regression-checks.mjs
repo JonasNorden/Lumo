@@ -4491,8 +4491,8 @@ function runFloatingFogWorkbenchRegressionChecks() {
   });
 
   assert.equal(modal.markup.includes("--fog-ground-baseline:14px;"), true, "preview should keep fog and Lumo anchored to baseline");
-  assert.equal(modal.markup.includes('data-fog-preview-field'), true, "preview should render sampled field geometry rather than a flat box");
-  assert.equal(modal.markup.includes('data-fog-preview-lumo'), true, "preview should include Lumo traversal actor");
+  assert.equal(modal.markup.includes('data-fog-preview-canvas'), true, "preview should use a dedicated canvas renderer");
+  assert.equal(modal.markup.includes('data-fog-preview-field'), false, "preview should not depend on DOM sampled field strips");
 
   const lowFalloffModal = getSpecialVolumeWorkbenchModalContent(createFogState({ area: { x0: 32, x1: 128, y0: 32, falloff: 25 } }));
   const highFalloffModal = getSpecialVolumeWorkbenchModalContent(createFogState({ area: { x0: 32, x1: 128, y0: 32, falloff: 300 } }));
