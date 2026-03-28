@@ -92,11 +92,17 @@ import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entiti
 import {
   applySpecialVolumeParamChange,
   createFogVolumeEntityFromWorldRect,
+  createWaterVolumeEntityFromWorldRect,
   getFogVolumeParams,
   getFogVolumeWorldRectFromDragCells,
+  getSpecialVolumeType,
+  getWaterVolumeParams,
+  getWaterVolumeWorldRectFromDragCells,
   isFogVolumeEntityType,
+  isWaterVolumeEntityType,
   isSpecialVolumeEntityType,
   shiftFogVolumeEntity,
+  shiftWaterVolumeEntity,
   syncSpecialVolumeEntityToAnchor,
 } from "../domain/entities/specialVolumeTypes.js";
 import {
@@ -775,6 +781,21 @@ export function createEditorApp({
     durationMs: 9600,
     distancePerSecond: 140,
     lastElapsedMs: undefined,
+  };
+  const waterPreviewMotion = {
+    rafId: 0,
+    startedAtMs: 0,
+    surface: null,
+    canvas: null,
+    ctx: null,
+    lumoSprite: null,
+    worldWidth: 620,
+    worldHeight: 188,
+    bandStartX: 0,
+    bandEndX: 0,
+    durationMs: 9600,
+    lumoX: 0,
+    lumoDirection: 1,
   };
   const fogPreviewTileSprites = new Map();
   const ensureFogPreviewTileSprite = (key, src) => {
@@ -1657,6 +1678,31 @@ export function createEditorApp({
     return getEntityIndexById(doc.entities, entity.id);
   };
 
+  const createWaterVolumeAtWorldRect = (draft, worldRect) => {
+    const doc = draft.document.active;
+    if (!doc || !worldRect) return null;
+
+    const nextNumber = (doc.entities?.length || 0) + 1;
+    const waterPreset = findEntityPresetById("water_volume");
+    if (!waterPreset) return null;
+
+    const seededEntity = createEntityDraft(doc, 0, 0, waterPreset.id, nextNumber);
+    const entity = createWaterVolumeEntityFromWorldRect(seededEntity, worldRect, doc.dimensions.tileSize);
+    entity.id = getNextStringId(doc.entities || [], "id", "entity");
+    const createIndex = doc.entities.length;
+    const action = {
+      type: "create",
+      index: createIndex,
+      entity: cloneCanonicalEntitySnapshot(entity),
+    };
+
+    const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
+    if (!changed) return null;
+
+    recordCleanRoomObjectAction("entity", action);
+    return getEntityIndexById(doc.entities, entity.id);
+  };
+
   const deleteSelectedEntityCleanRoom = (draft) => {
     // Canonical entity deletion is stable-id only. Do not restore legacy entity delete or shared selection code here.
     const doc = draft.document.active;
@@ -2387,6 +2433,7 @@ export function createEditorApp({
     floatingPanelHost.innerHTML = `${renderNewLevelSizePopover(state)}${fogWorkbenchLauncher}${fogWorkbenchModal?.markup || ""}`;
     floatingPanelHost.classList.toggle("hasSpecialVolumeWorkbench", Boolean(fogWorkbenchModal));
     syncFogPreviewMotionLoop();
+    syncWaterPreviewMotionLoop();
 
     if (!focusedField) return;
     const nextField = focusedScope === "new-level" && state.ui.newLevelSize?.isOpen
@@ -2794,6 +2841,172 @@ export function createEditorApp({
     fogPreviewMotion.rafId = globalThis.requestAnimationFrame(stepFogPreviewMotion);
   };
 
+  const stopWaterPreviewMotionLoop = () => {
+    if (waterPreviewMotion.rafId) {
+      globalThis.cancelAnimationFrame(waterPreviewMotion.rafId);
+      waterPreviewMotion.rafId = 0;
+    }
+    waterPreviewMotion.surface = null;
+    waterPreviewMotion.canvas = null;
+    waterPreviewMotion.ctx = null;
+    waterPreviewMotion.lumoSprite = null;
+  };
+
+  const drawWaterPreviewCanvas = (elapsedMs) => {
+    if (!waterPreviewMotion.surface || !waterPreviewMotion.ctx) return;
+    const surfaceDataset = waterPreviewMotion.surface.dataset;
+    const ctx2d = waterPreviewMotion.ctx;
+    const width = waterPreviewMotion.worldWidth;
+    const height = waterPreviewMotion.worldHeight;
+    const { tileSize, floorTopY: floorTop, laneStartX, laneEndX } = getVolumePreviewEnvironmentMetrics(width, height);
+    const terrainTop = Math.max(24, Math.round(height * 0.36));
+    const leftBlockInnerX = Math.max(0, laneStartX - tileSize);
+    const rightBlockOuterX = Math.min(width, laneEndX + tileSize);
+    const soilTile = ensureFogPreviewTileSprite("soil", "../data/assets/tiles/soil_c.png");
+    const grassTile = ensureFogPreviewTileSprite("grass", "../data/assets/tiles/grass_bt.png");
+    const stoneTile = ensureFogPreviewTileSprite("stone", "../data/assets/tiles/stone_ct.png");
+    const drawTiledRect = (image, fallback, x, y, w, h) => {
+      if (w <= 0 || h <= 0) return;
+      if (image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0) {
+        for (let yy = y; yy < y + h; yy += tileSize) {
+          for (let xx = x; xx < x + w; xx += tileSize) {
+            const drawW = Math.min(tileSize, (x + w) - xx);
+            const drawH = Math.min(tileSize, (y + h) - yy);
+            ctx2d.drawImage(image, 0, 0, drawW, drawH, xx, yy, drawW, drawH);
+          }
+        }
+      } else {
+        ctx2d.fillStyle = fallback;
+        ctx2d.fillRect(x, y, w, h);
+      }
+    };
+    ctx2d.clearRect(0, 0, width, height);
+    ctx2d.fillStyle = "#050912";
+    ctx2d.fillRect(0, 0, width, height);
+    ctx2d.fillStyle = "rgba(8, 14, 26, 0.72)";
+    ctx2d.fillRect(0, 0, width, floorTop);
+    drawTiledRect(stoneTile, "#6a655e", 0, floorTop, width, tileSize);
+    drawTiledRect(soilTile, "#5b3a26", 0, terrainTop, leftBlockInnerX, Math.max(0, floorTop - terrainTop));
+    drawTiledRect(soilTile, "#5b3a26", rightBlockOuterX, terrainTop, Math.max(0, width - rightBlockOuterX), Math.max(0, floorTop - terrainTop));
+    drawTiledRect(grassTile, "#8ca86f", 0, terrainTop - tileSize, leftBlockInnerX, tileSize);
+    drawTiledRect(grassTile, "#8ca86f", rightBlockOuterX, terrainTop - tileSize, Math.max(0, width - rightBlockOuterX), tileSize);
+    drawTiledRect(stoneTile, "#66615a", leftBlockInnerX, terrainTop, tileSize, Math.max(0, floorTop - terrainTop));
+    drawTiledRect(stoneTile, "#66615a", laneEndX, terrainTop, tileSize, Math.max(0, floorTop - terrainTop));
+
+    const depth = clampFogPreview(Number.parseFloat(surfaceDataset.waterDepth || "") || 96, 24, 164);
+    const waveAmount = clampFogPreview(Number.parseFloat(surfaceDataset.waterWaveAmount || "") || 0.35, 0, 1);
+    const waveSpeed = clampFogPreview(Number.parseFloat(surfaceDataset.waterWaveSpeed || "") || 0.9, 0.1, 3);
+    const topColor = surfaceDataset.waterTopColor || "#4EB8F2";
+    const bottomColor = surfaceDataset.waterBottomColor || "#0A4B93";
+    const waterTopBase = floorTop - depth;
+    const elapsedSec = elapsedMs * 0.001;
+
+    ctx2d.save();
+    ctx2d.beginPath();
+    ctx2d.rect(laneStartX, waterTopBase - 8, laneEndX - laneStartX, floorTop - waterTopBase + 8);
+    ctx2d.clip();
+    const bodyGradient = ctx2d.createLinearGradient(0, waterTopBase, 0, floorTop);
+    bodyGradient.addColorStop(0, topColor);
+    bodyGradient.addColorStop(1, bottomColor);
+    ctx2d.fillStyle = bodyGradient;
+    ctx2d.fillRect(laneStartX, waterTopBase, laneEndX - laneStartX, floorTop - waterTopBase);
+
+    for (let band = 0; band < 6; band += 1) {
+      const yRatio = (band + 1) / 7;
+      const yBase = waterTopBase + (depth * yRatio);
+      ctx2d.beginPath();
+      for (let x = laneStartX; x <= laneEndX; x += 5) {
+        const nx = ((x - laneStartX) * 0.018) + (elapsedSec * (0.25 + (band * 0.06) * waveSpeed));
+        const n = sampleSmookeNoise(nx) * 0.6 + sampleSmookeNoise(nx * 1.83 + 14.1) * 0.4;
+        const y = yBase + (n * (2.8 + (waveAmount * 3.5 * (1 - yRatio))));
+        if (x === laneStartX) ctx2d.moveTo(x, y);
+        else ctx2d.lineTo(x, y);
+      }
+      ctx2d.strokeStyle = `rgba(179, 226, 255, ${0.05 + ((1 - yRatio) * 0.06)})`;
+      ctx2d.lineWidth = 1;
+      ctx2d.stroke();
+    }
+
+    ctx2d.beginPath();
+    for (let x = laneStartX; x <= laneEndX; x += 2) {
+      const wave = Math.sin((x * 0.028) + (elapsedSec * 1.6 * waveSpeed)) * (2.4 * waveAmount)
+        + Math.sin((x * 0.056) + (elapsedSec * 0.86 * waveSpeed) + 1.2) * (1.5 * waveAmount);
+      const y = waterTopBase + wave;
+      if (x === laneStartX) ctx2d.moveTo(x, y);
+      else ctx2d.lineTo(x, y);
+    }
+    ctx2d.strokeStyle = "rgba(208, 244, 255, 0.95)";
+    ctx2d.lineWidth = 1.6;
+    ctx2d.stroke();
+    ctx2d.restore();
+
+    const lumoX = waterPreviewMotion.lumoX;
+    if (waterPreviewMotion.lumoSprite instanceof HTMLImageElement && waterPreviewMotion.lumoSprite.complete && waterPreviewMotion.lumoSprite.naturalWidth > 0) {
+      ctx2d.save();
+      ctx2d.translate(lumoX, floorTop - 1);
+      ctx2d.scale(waterPreviewMotion.lumoDirection, 1);
+      ctx2d.drawImage(waterPreviewMotion.lumoSprite, -12, -24, 24, 24);
+      ctx2d.restore();
+    }
+  };
+
+  const stepWaterPreviewMotion = (timestampMs) => {
+    if (!waterPreviewMotion.surface?.isConnected || !waterPreviewMotion.canvas?.isConnected || !waterPreviewMotion.ctx) {
+      stopWaterPreviewMotionLoop();
+      return;
+    }
+    if (!waterPreviewMotion.startedAtMs) waterPreviewMotion.startedAtMs = timestampMs;
+    const elapsedMs = timestampMs - waterPreviewMotion.startedAtMs;
+    const patrol = fogPreviewPatrolAtElapsed(elapsedMs, waterPreviewMotion.durationMs);
+    waterPreviewMotion.lumoX = waterPreviewMotion.bandStartX + ((waterPreviewMotion.bandEndX - waterPreviewMotion.bandStartX) * patrol.u);
+    waterPreviewMotion.lumoDirection = patrol.facing;
+    drawWaterPreviewCanvas(elapsedMs);
+    waterPreviewMotion.rafId = globalThis.requestAnimationFrame(stepWaterPreviewMotion);
+  };
+
+  const syncWaterPreviewMotionLoop = () => {
+    const surface = floatingPanelHost.querySelector("[data-water-preview-surface]");
+    const canvasEl = floatingPanelHost.querySelector("[data-water-preview-canvas]");
+    if (!(surface instanceof HTMLElement) || !(canvasEl instanceof HTMLCanvasElement)) {
+      stopWaterPreviewMotionLoop();
+      return;
+    }
+    const ctx2d = canvasEl.getContext("2d");
+    if (!ctx2d) {
+      stopWaterPreviewMotionLoop();
+      return;
+    }
+    const durationMs = Number.parseFloat(surface.dataset.waterPreviewTraverseMs || "");
+    if (waterPreviewMotion.surface === surface && waterPreviewMotion.canvas === canvasEl && waterPreviewMotion.rafId) {
+      waterPreviewMotion.durationMs = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 9600;
+      return;
+    }
+    stopWaterPreviewMotionLoop();
+    waterPreviewMotion.surface = surface;
+    waterPreviewMotion.canvas = canvasEl;
+    waterPreviewMotion.ctx = ctx2d;
+    waterPreviewMotion.worldWidth = canvasEl.width;
+    waterPreviewMotion.worldHeight = canvasEl.height;
+    const envMetrics = getVolumePreviewEnvironmentMetrics(waterPreviewMotion.worldWidth, waterPreviewMotion.worldHeight);
+    waterPreviewMotion.bandStartX = envMetrics.laneStartX;
+    waterPreviewMotion.bandEndX = envMetrics.laneEndX;
+    waterPreviewMotion.durationMs = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 9600;
+    waterPreviewMotion.startedAtMs = 0;
+    waterPreviewMotion.lumoX = (waterPreviewMotion.bandStartX + waterPreviewMotion.bandEndX) * 0.5;
+    waterPreviewMotion.lumoDirection = 1;
+    const lumoSpriteSrc = typeof surface.dataset.waterPreviewLumoSprite === "string" ? surface.dataset.waterPreviewLumoSprite.trim() : "";
+    if (lumoSpriteSrc) {
+      const sprite = new Image();
+      sprite.decoding = "async";
+      sprite.src = lumoSpriteSrc;
+      waterPreviewMotion.lumoSprite = sprite;
+    } else {
+      waterPreviewMotion.lumoSprite = null;
+    }
+    drawWaterPreviewCanvas(0);
+    waterPreviewMotion.rafId = globalThis.requestAnimationFrame(stepWaterPreviewMotion);
+  };
+
   const applyCanvasTarget = (draft, mode) => {
     const nextMode = mode === "decor" ? "decor" : mode === "sound" ? "sound" : "entity";
     resumeObjectPlacementPreviews(draft, `canvas target ${nextMode}`);
@@ -3052,6 +3265,9 @@ export function createEditorApp({
         entity.params = getFogVolumeParams({ ...entity, params: fogDefaults });
       }
     }
+    if (isWaterVolumeEntityType(entity.type)) {
+      entity.params = getWaterVolumeParams(entity);
+    }
 
     return isSpecialVolumeEntityType(entity.type)
       ? syncSpecialVolumeEntityToAnchor(entity, doc.dimensions.tileSize)
@@ -3121,7 +3337,7 @@ export function createEditorApp({
 
     return (doc.entities || [])
       .map((entity, index) => ({ entity, index }))
-      .filter(({ entity }) => entity?.visible && !isFogVolumeEntityType(entity?.type))
+      .filter(({ entity }) => entity?.visible && !isSpecialVolumeEntityType(entity?.type))
       .filter(({ entity }) => {
         const centerX = viewport.offsetX + (entity.x + 0.5) * tileSize * viewport.zoom;
         const centerY = viewport.offsetY + (entity.y + 0.5) * tileSize * viewport.zoom;
@@ -4049,8 +4265,9 @@ export function createEditorApp({
     void index;
     void value;
     store.setState((draft) => {
-      if (field === "arm-fog") {
-        const entityPreset = resolveEntityPlacementPreset("fog_volume");
+      if (field === "arm-fog" || field === "arm-water") {
+        const targetType = field === "arm-water" ? "water_volume" : "fog_volume";
+        const entityPreset = resolveEntityPlacementPreset(targetType);
         if (!entityPreset || !isSpecialVolumeEntityType(entityPreset.type)) return;
         const shouldArm = draft.interaction.activeEntityPresetId !== entityPreset.id;
         draft.interaction.activeEntityPresetId = shouldArm ? entityPreset.id : null;
@@ -4072,9 +4289,9 @@ export function createEditorApp({
         const selectedEntityId = draft.interaction.selectedEntityId;
         if (!selectedEntityId) return;
         const selectedEntity = draft.document.active?.entities?.find((entry) => entry?.id === selectedEntityId);
-        if (!isFogVolumeEntityType(selectedEntity?.type)) return;
+        if (!isSpecialVolumeEntityType(selectedEntity?.type)) return;
         draft.ui.specialVolumeWorkbench.openEntityId = selectedEntityId;
-        draft.ui.specialVolumeWorkbench.activeType = "fog_volume";
+        draft.ui.specialVolumeWorkbench.activeType = getSpecialVolumeType(selectedEntity?.type);
         setCanvasSelectionMode(draft, "entity");
         setActiveLayer(draft, PANEL_LAYERS.ENTITIES);
         return;
@@ -4648,12 +4865,19 @@ export function createEditorApp({
         nextPosition.y - origin.y,
         doc.dimensions.tileSize,
       )
-      : {
-        ...entity,
-        x: nextPosition.x,
-        y: nextPosition.y,
-        params: cloneEntityParams(entity.params),
-      };
+      : isWaterVolumeEntityType(entity.type)
+        ? shiftWaterVolumeEntity(
+          entity,
+          nextPosition.x - origin.x,
+          nextPosition.y - origin.y,
+          doc.dimensions.tileSize,
+        )
+        : {
+          ...entity,
+          x: nextPosition.x,
+          y: nextPosition.y,
+          params: cloneEntityParams(entity.params),
+        };
     if (JSON.stringify(nextEntity) === JSON.stringify(entity)) return false;
 
     return applyCanonicalEntityUpdate(draft, {
@@ -4669,8 +4893,8 @@ export function createEditorApp({
     if (activeLayer !== PANEL_LAYERS.ENTITIES) return false;
 
     const activeEntityPresetId = state.interaction.activeEntityPresetId;
-    if (isFogVolumeEntityType(activeEntityPresetId) && isMomentaryPlacementTrigger(event)) return false;
-    if (activeEntityPresetId && !isFogVolumeEntityType(activeEntityPresetId) && isMomentaryPlacementTrigger(event)) {
+    if (isSpecialVolumeEntityType(activeEntityPresetId) && isMomentaryPlacementTrigger(event)) return false;
+    if (activeEntityPresetId && !isSpecialVolumeEntityType(activeEntityPresetId) && isMomentaryPlacementTrigger(event)) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
       store.setState((draft) => {
@@ -4687,10 +4911,10 @@ export function createEditorApp({
     store.setState((draft) => {
       const entityId = hitEntityIndex >= 0 ? draft.document.active?.entities?.[hitEntityIndex]?.id || null : null;
       const hitEntity = hitEntityIndex >= 0 ? draft.document.active?.entities?.[hitEntityIndex] : null;
-      if (event.detail >= 2 && entityId && isFogVolumeEntityType(hitEntity?.type)) {
+      if (event.detail >= 2 && entityId && isSpecialVolumeEntityType(hitEntity?.type)) {
         handleCleanRoomEntitySelectionHit(draft, entityId);
         draft.ui.specialVolumeWorkbench.openEntityId = entityId;
-        draft.ui.specialVolumeWorkbench.activeType = "fog_volume";
+        draft.ui.specialVolumeWorkbench.activeType = getSpecialVolumeType(hitEntity?.type);
         return;
       }
       draft.interaction.selectedCell = cell;
@@ -4718,7 +4942,7 @@ export function createEditorApp({
     const activeSoundPresetId = state.interaction.activeSoundPresetId;
 
     if (activeLayer === PANEL_LAYERS.ENTITIES && activeEntityPresetId && isMomentaryPlacementTrigger(event)) {
-      if (isFogVolumeEntityType(activeEntityPresetId)) {
+      if (isSpecialVolumeEntityType(activeEntityPresetId)) {
         interactionState.suppressNextClick = true;
         event.preventDefault();
         store.setState((draft) => {
@@ -4726,10 +4950,11 @@ export function createEditorApp({
           draft.interaction.selectedCell = cell;
           draft.interaction.volumePlacementDrag = {
             active: true,
-            type: "fog_volume",
+            type: activeEntityPresetId,
             startCell: { ...cell },
             endCell: { ...cell },
             thicknessPx: null,
+            depthPx: null,
           };
           clearEntitySelection(draft.interaction);
           clearDecorSelection(draft.interaction);
@@ -5266,6 +5491,25 @@ if (event.shiftKey) {
           );
           if (fogRect) {
             const createdIndex = createFogVolumeAtWorldRect(draft, fogRect);
+            if (createdIndex != null) {
+              setCanvasSelectionMode(draft, "entity");
+              setActiveLayer(draft, PANEL_LAYERS.ENTITIES);
+              if (!entitiesPanelWasOpen && draft.ui.panelSections) {
+                draft.ui.panelSections.entities = false;
+              }
+            }
+          }
+        }
+        if (volumePlacementDrag.type === "water_volume") {
+          const entitiesPanelWasOpen = draft.ui.panelSections?.entities === true;
+          const waterRect = getWaterVolumeWorldRectFromDragCells(
+            volumePlacementDrag.startCell,
+            volumePlacementDrag.endCell,
+            draft.document.active?.dimensions?.tileSize,
+            volumePlacementDrag.depthPx,
+          );
+          if (waterRect) {
+            const createdIndex = createWaterVolumeAtWorldRect(draft, waterRect);
             if (createdIndex != null) {
               setCanvasSelectionMode(draft, "entity");
               setActiveLayer(draft, PANEL_LAYERS.ENTITIES);
@@ -5853,7 +6097,7 @@ if (event.shiftKey) {
 
     if (event.key === "Escape") {
       const selection = resolveSelectedSpecialVolume(store.getState());
-      if (selection && isFogVolumeEntityType(selection.entity?.type)) {
+      if (selection && isSpecialVolumeEntityType(selection.entity?.type)) {
         event.preventDefault();
         store.setState((draft) => {
           draft.ui.specialVolumeWorkbench.openEntityId = null;
@@ -6007,10 +6251,10 @@ if (event.shiftKey) {
     if (fogActionButton instanceof HTMLButtonElement) {
       if (fogActionButton.dataset.fogWorkbenchAction === "open") {
         const selection = resolveSelectedSpecialVolume(store.getState());
-        if (!selection || !isFogVolumeEntityType(selection.entity?.type)) return;
+        if (!selection || !isSpecialVolumeEntityType(selection.entity?.type)) return;
         store.setState((draft) => {
           draft.ui.specialVolumeWorkbench.openEntityId = selection.entity.id;
-          draft.ui.specialVolumeWorkbench.activeType = "fog_volume";
+          draft.ui.specialVolumeWorkbench.activeType = selection.type;
         });
         return;
       }
@@ -6434,6 +6678,7 @@ if (event.shiftKey) {
   window.addEventListener("pointercancel", stopFogStepperSession);
   window.addEventListener("blur", stopFogStepperSession);
   window.addEventListener("blur", stopFogPreviewMotionLoop);
+  window.addEventListener("blur", stopWaterPreviewMotionLoop);
   canvas.addEventListener("click", handleCanvasClick);
   minimapCanvas.addEventListener("click", handleMinimapClick);
   window.addEventListener("keydown", handleGlobalKeyDown);
@@ -6476,6 +6721,7 @@ if (event.shiftKey) {
     window.removeEventListener("pointercancel", stopFogStepperSession);
     window.removeEventListener("blur", stopFogStepperSession);
     window.removeEventListener("blur", stopFogPreviewMotionLoop);
+    window.removeEventListener("blur", stopWaterPreviewMotionLoop);
     canvas.removeEventListener("click", handleCanvasClick);
     minimapCanvas.removeEventListener("click", handleMinimapClick);
     window.removeEventListener("keydown", handleGlobalKeyDown);
@@ -6493,5 +6739,6 @@ if (event.shiftKey) {
     document.removeEventListener("pointerdown", handleDocumentPointerDown);
     stopArrowPanLoop();
     stopFogPreviewMotionLoop();
+    stopWaterPreviewMotionLoop();
   };
 }

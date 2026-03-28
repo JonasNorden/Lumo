@@ -1,7 +1,10 @@
 import { resolveBrushSize, snapCellToBrushStep } from "../../domain/tiles/brushSize.js";
 import { EDITOR_TOOLS } from "../../domain/tiles/tools.js";
 import { getLineCells } from "../../domain/tiles/line.js";
-import { getFogVolumeWorldRectFromDragCells } from "../../domain/entities/specialVolumeTypes.js";
+import {
+  getFogVolumeWorldRectFromDragCells,
+  getWaterVolumeWorldRectFromDragCells,
+} from "../../domain/entities/specialVolumeTypes.js";
 import { renderDecorPlacementPreview } from "./decorLayer.js";
 import { renderEntityPlacementPreview } from "./entityLayer.js";
 import { renderSoundPlacementPreview } from "./soundLayer.js";
@@ -131,6 +134,7 @@ export function renderBrushPreviewOverlay(ctx, doc, viewport, interaction, brush
 
 export function renderPlacementPreviewOverlay(ctx, doc, viewport, interaction, presets) {
   renderFogVolumePlacementPreview(ctx, doc, viewport, interaction);
+  renderWaterVolumePlacementPreview(ctx, doc, viewport, interaction);
   renderDecorPlacementPreview(ctx, doc, viewport, interaction, presets?.decor || null);
   renderEntityPlacementPreview(ctx, doc, viewport, interaction, presets?.entity || null);
   renderSoundPlacementPreview(ctx, doc, viewport, interaction, presets?.sound || null);
@@ -179,6 +183,45 @@ export function renderFogVolumePlacementPreview(ctx, doc, viewport, interaction)
   ctx.beginPath();
   ctx.moveTo(screenX, baselineY + 0.5);
   ctx.lineTo(screenX + screenWidth, baselineY + 0.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+export function renderWaterVolumePlacementPreview(ctx, doc, viewport, interaction) {
+  const drag = interaction?.volumePlacementDrag;
+  if (!drag?.active || drag.type !== "water_volume") return;
+  if (!drag.startCell || !drag.endCell) return;
+
+  const waterRect = getWaterVolumeWorldRectFromDragCells(
+    drag.startCell,
+    drag.endCell,
+    doc?.dimensions?.tileSize || 24,
+    drag.depthPx,
+  );
+  if (!waterRect) return;
+  const zoom = viewport?.zoom || 1;
+  const screenX = viewport.offsetX + waterRect.x * zoom;
+  const screenY = viewport.offsetY + (waterRect.y - waterRect.height) * zoom;
+  const screenWidth = waterRect.width * zoom;
+  const screenHeight = waterRect.height * zoom;
+  const lineWidth = Math.max(1, 1.25 * (1 / Math.max(0.35, zoom)));
+
+  ctx.save();
+  const bodyGradient = ctx.createLinearGradient(screenX, screenY, screenX, screenY + screenHeight);
+  bodyGradient.addColorStop(0, "rgba(98, 193, 255, 0.28)");
+  bodyGradient.addColorStop(1, "rgba(12, 91, 170, 0.38)");
+  ctx.fillStyle = bodyGradient;
+  ctx.fillRect(screenX, screenY, screenWidth, screenHeight);
+  ctx.strokeStyle = "rgba(152, 228, 255, 0.88)";
+  ctx.lineWidth = lineWidth;
+  ctx.setLineDash([Math.max(8, 10 * zoom), Math.max(5, 6 * zoom)]);
+  ctx.strokeRect(screenX + lineWidth * 0.5, screenY + lineWidth * 0.5, Math.max(0, screenWidth - lineWidth), Math.max(0, screenHeight - lineWidth));
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(screenX, screenY + 0.5);
+  ctx.lineTo(screenX + screenWidth, screenY + 0.5);
+  ctx.strokeStyle = "rgba(197, 243, 255, 0.94)";
+  ctx.lineWidth = Math.max(1, lineWidth);
   ctx.stroke();
   ctx.restore();
 }

@@ -8,9 +8,16 @@ const FOG_DEFAULT_PARAMS = Object.freeze({
   organic: { strength: 0.35, scale: 1, speed: 0.65 },
   render: { blend: "screen", lumoBehindFog: true },
 });
+const WATER_DEFAULT_PARAMS = Object.freeze({
+  area: { x0: 0, x1: 240, y0: 0, depth: 96 },
+  motion: { waveAmount: 0.35, waveSpeed: 0.9 },
+  look: { topColor: "#4EB8F2", bottomColor: "#0A4B93" },
+  hazard: { instantDeath: true },
+});
 
 export const SPECIAL_VOLUME_EDITOR_LAYOUTS = Object.freeze({
   fog_volume: "floating",
+  water_volume: "floating",
 });
 
 export const FOG_VOLUME_PARAM_SECTIONS = Object.freeze([
@@ -18,33 +25,81 @@ export const FOG_VOLUME_PARAM_SECTIONS = Object.freeze([
 ]);
 
 export function isSpecialVolumeEntityType(type) {
-  return isFogVolumeEntityType(type);
+  return isFogVolumeEntityType(type) || isWaterVolumeEntityType(type);
 }
 
 export function getSpecialVolumeType(type) {
-  return isSpecialVolumeEntityType(type) ? "fog_volume" : null;
+  if (isFogVolumeEntityType(type)) return "fog_volume";
+  if (isWaterVolumeEntityType(type)) return "water_volume";
+  return null;
 }
 
 export function getSpecialVolumeDescriptor(type) {
-  if (!isFogVolumeEntityType(type)) return null;
-  return {
-    type: "fog_volume",
-    label: "Fog Volume",
-    layout: "floating",
-  };
+  if (isFogVolumeEntityType(type)) {
+    return {
+      type: "fog_volume",
+      label: "Fog Volume",
+      layout: "floating",
+    };
+  }
+  if (isWaterVolumeEntityType(type)) {
+    return {
+      type: "water_volume",
+      label: "Water Volume",
+      layout: "floating",
+    };
+  }
+  return null;
 }
 
 export function listSpecialVolumeTypes() {
-  return ["fog_volume"];
+  return ["fog_volume", "water_volume"];
 }
 
 export function isFogVolumeEntityType(type) {
   return String(type || "").trim().toLowerCase() === "fog_volume";
 }
 
+export function isWaterVolumeEntityType(type) {
+  return String(type || "").trim().toLowerCase() === "water_volume";
+}
+
 function clamp(value, min, max) {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
+}
+
+function normalizeWaterArea(area = {}) {
+  const x0 = Math.max(0, Number(area.x0) || 0);
+  const x1 = Math.max(x0 + 1, Number(area.x1) || x0 + 1);
+  return {
+    x0,
+    x1,
+    y0: Math.max(0, Number(area.y0) || 0),
+    depth: clamp(Number(area.depth), 24, 320),
+  };
+}
+
+function normalizeWaterParams(rawParams = {}) {
+  const area = normalizeWaterArea(rawParams.area || {});
+  const motionInput = rawParams.motion || {};
+  const lookInput = rawParams.look || {};
+  const hazardInput = rawParams.hazard || {};
+
+  return {
+    area,
+    motion: {
+      waveAmount: clamp(Number(motionInput.waveAmount), 0, 1),
+      waveSpeed: clamp(Number(motionInput.waveSpeed), 0.1, 3),
+    },
+    look: {
+      topColor: typeof lookInput.topColor === "string" && lookInput.topColor.trim() ? lookInput.topColor.trim() : WATER_DEFAULT_PARAMS.look.topColor,
+      bottomColor: typeof lookInput.bottomColor === "string" && lookInput.bottomColor.trim() ? lookInput.bottomColor.trim() : WATER_DEFAULT_PARAMS.look.bottomColor,
+    },
+    hazard: {
+      instantDeath: Boolean(hazardInput.instantDeath ?? true),
+    },
+  };
 }
 
 function normalizeFogArea(area = {}) {
@@ -120,6 +175,11 @@ export function getFogVolumeParams(entity) {
   return normalizeFogParams(merged);
 }
 
+export function getWaterVolumeParams(entity) {
+  const merged = deepMerge(WATER_DEFAULT_PARAMS, cloneEntityParams(entity?.params));
+  return normalizeWaterParams(merged);
+}
+
 export function getFogWorkbenchFieldMeta() {
   return {
     controls: [
@@ -153,6 +213,18 @@ export function getFogVolumeRect(entity, tileSize = 24) {
     y: Math.max(0, params.area.y0 - height),
     width,
     height,
+  };
+}
+
+export function getWaterVolumeRect(entity, tileSize = 24) {
+  const params = getWaterVolumeParams(entity);
+  const width = Math.max(tileSize, params.area.x1 - params.area.x0);
+  const depth = Math.max(tileSize, params.area.depth);
+  return {
+    x: params.area.x0,
+    y: Math.max(0, params.area.y0 - depth),
+    width,
+    height: depth,
   };
 }
 
@@ -195,6 +267,38 @@ export function createFogVolumeEntityFromWorldRect(entity, worldRect, tileSize =
   };
 }
 
+export function createWaterVolumeEntityFromWorldRect(entity, worldRect, tileSize = 24) {
+  const width = Math.max(tileSize, Number(worldRect?.width) || tileSize);
+  const depth = Math.max(tileSize, Math.min(320, Number(worldRect?.height) || 96));
+  const x = Math.max(0, Number(worldRect?.x) || 0);
+  const y = Math.max(0, Number(worldRect?.y) || 0);
+  const params = getWaterVolumeParams({
+    type: "water_volume",
+    params: {
+      ...cloneEntityParams(entity?.params),
+      area: {
+        ...(entity?.params?.area || {}),
+        x0: x,
+        x1: x + width,
+        y0: y,
+        depth,
+      },
+      hazard: {
+        ...(entity?.params?.hazard || {}),
+        instantDeath: true,
+      },
+    },
+  });
+
+  return {
+    ...entity,
+    type: "water_volume",
+    x: Math.round(x / tileSize),
+    y: Math.round(y / tileSize),
+    params,
+  };
+}
+
 export function getFogVolumeWorldRectFromDragCells(startCell, endCell, tileSize = 24, fallbackThicknessPx = null) {
   if (!startCell || !endCell) return null;
   const minX = Math.min(startCell.x, endCell.x);
@@ -218,11 +322,51 @@ export function getFogVolumeWorldRectFromDragCells(startCell, endCell, tileSize 
   };
 }
 
+export function getWaterVolumeWorldRectFromDragCells(startCell, endCell, tileSize = 24, fallbackDepthPx = null) {
+  if (!startCell || !endCell) return null;
+  const minX = Math.min(startCell.x, endCell.x);
+  const maxX = Math.max(startCell.x, endCell.x);
+  const baselineCellY = Math.max(startCell.y, endCell.y);
+  const dragHeight = (Math.abs(endCell.y - startCell.y) + 1) * tileSize;
+  const resolvedFallbackDepth = Number.isFinite(Number(fallbackDepthPx)) && Number(fallbackDepthPx) > 0
+    ? Number(fallbackDepthPx)
+    : null;
+  const depth = dragHeight > tileSize
+    ? dragHeight
+    : (resolvedFallbackDepth || Math.max(tileSize * 2, dragHeight));
+  return {
+    x: minX * tileSize,
+    y: (baselineCellY + 1) * tileSize,
+    width: (maxX - minX + 1) * tileSize,
+    height: depth,
+  };
+}
+
 export function shiftFogVolumeEntity(entity, deltaX = 0, deltaY = 0, tileSize = 24) {
   const params = getFogVolumeParams(entity);
   const dx = (Number(deltaX) || 0) * tileSize;
   const dy = (Number(deltaY) || 0) * tileSize;
 
+  return {
+    ...entity,
+    x: (Number(entity?.x) || 0) + (Number(deltaX) || 0),
+    y: (Number(entity?.y) || 0) + (Number(deltaY) || 0),
+    params: {
+      ...params,
+      area: {
+        ...params.area,
+        x0: Math.max(0, params.area.x0 + dx),
+        x1: Math.max(1, params.area.x1 + dx),
+        y0: Math.max(0, params.area.y0 + dy),
+      },
+    },
+  };
+}
+
+export function shiftWaterVolumeEntity(entity, deltaX = 0, deltaY = 0, tileSize = 24) {
+  const params = getWaterVolumeParams(entity);
+  const dx = (Number(deltaX) || 0) * tileSize;
+  const dy = (Number(deltaY) || 0) * tileSize;
   return {
     ...entity,
     x: (Number(entity?.x) || 0) + (Number(deltaX) || 0),
@@ -260,6 +404,24 @@ export function syncFogVolumeEntityToAnchor(entity, tileSize = 24) {
 
 export function syncSpecialVolumeEntityToAnchor(entity, tileSize = 24) {
   if (isFogVolumeEntityType(entity?.type)) return syncFogVolumeEntityToAnchor(entity, tileSize);
+  if (isWaterVolumeEntityType(entity?.type)) {
+    const params = getWaterVolumeParams(entity);
+    const width = Math.max(tileSize, params.area.x1 - params.area.x0);
+    const x0 = Math.max(0, Math.round((Number(entity?.x) || 0) * tileSize));
+    const y0 = Math.max(0, Math.round((Number(entity?.y) || 0) * tileSize));
+    return {
+      ...entity,
+      params: {
+        ...params,
+        area: {
+          ...params.area,
+          x0,
+          x1: x0 + width,
+          y0,
+        },
+      },
+    };
+  }
   return {
     ...entity,
     params: cloneEntityParams(entity?.params),
@@ -281,30 +443,50 @@ function setAtPath(root, path, value) {
 }
 
 export function applySpecialVolumeParamChange(entity, path, value) {
-  if (!isFogVolumeEntityType(entity?.type)) {
+  if (isFogVolumeEntityType(entity?.type)) {
+    const current = getFogVolumeParams(entity);
+    if (path === "area.length") {
+      const span = Math.max(24, Number(value) || 24);
+      const x0 = Math.max(0, Number(current.area.x0) || 0);
+      const patchedArea = {
+        ...current.area,
+        x0,
+        x1: x0 + span,
+      };
+      return {
+        ...entity,
+        params: getFogVolumeParams({ type: "fog_volume", params: { ...current, area: patchedArea } }),
+      };
+    }
+    const patched = setAtPath(current, path, value);
     return {
       ...entity,
-      params: cloneEntityParams(entity?.params),
+      params: getFogVolumeParams({ type: "fog_volume", params: patched }),
     };
   }
-
-  const current = getFogVolumeParams(entity);
-  if (path === "area.length") {
-    const span = Math.max(24, Number(value) || 24);
-    const x0 = Math.max(0, Number(current.area.x0) || 0);
-    const patchedArea = {
-      ...current.area,
-      x0,
-      x1: x0 + span,
-    };
+  if (isWaterVolumeEntityType(entity?.type)) {
+    const current = getWaterVolumeParams(entity);
+    if (path === "area.length") {
+      const span = Math.max(24, Number(value) || 24);
+      const x0 = Math.max(0, Number(current.area.x0) || 0);
+      const patchedArea = {
+        ...current.area,
+        x0,
+        x1: x0 + span,
+      };
+      return {
+        ...entity,
+        params: getWaterVolumeParams({ type: "water_volume", params: { ...current, area: patchedArea } }),
+      };
+    }
+    const patched = setAtPath(current, path, value);
     return {
       ...entity,
-      params: getFogVolumeParams({ type: "fog_volume", params: { ...current, area: patchedArea } }),
+      params: getWaterVolumeParams({ type: "water_volume", params: patched }),
     };
   }
-  const patched = setAtPath(current, path, value);
   return {
     ...entity,
-    params: getFogVolumeParams({ type: "fog_volume", params: patched }),
+    params: cloneEntityParams(entity?.params),
   };
 }

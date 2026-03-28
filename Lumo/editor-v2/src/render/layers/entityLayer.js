@@ -1,6 +1,11 @@
 import { getEntityHitRadius, getEntityVisual } from "../../domain/entities/entityVisuals.js";
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
-import { getFogVolumeRect, isFogVolumeEntityType } from "../../domain/entities/specialVolumeTypes.js";
+import {
+  getFogVolumeRect,
+  getWaterVolumeRect,
+  isFogVolumeEntityType,
+  isWaterVolumeEntityType,
+} from "../../domain/entities/specialVolumeTypes.js";
 import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
 function getEntityCenter(entity, tileSize) {
@@ -152,6 +157,17 @@ function getFogVolumeScreenRect(entity, tileSize, viewport) {
   };
 }
 
+function getWaterVolumeScreenRect(entity, tileSize, viewport) {
+  const rect = getWaterVolumeRect(entity, tileSize);
+  const zoom = viewport.zoom;
+  return {
+    x: viewport.offsetX + rect.x * zoom,
+    y: viewport.offsetY + rect.y * zoom,
+    width: rect.width * zoom,
+    height: rect.height * zoom,
+  };
+}
+
 function drawFogVolumeRegion(ctx, entity, tileSize, viewport, { isSelected = false, isHovered = false, preview = false } = {}) {
   const rect = getFogVolumeScreenRect(entity, tileSize, viewport);
   if (rect.width < 1 || rect.height < 1) return;
@@ -200,6 +216,33 @@ function drawFogVolumeRegion(ctx, entity, tileSize, viewport, { isSelected = fal
   ctx.restore();
 }
 
+function drawWaterVolumeRegion(ctx, entity, tileSize, viewport, { isSelected = false, isHovered = false, preview = false } = {}) {
+  const rect = getWaterVolumeScreenRect(entity, tileSize, viewport);
+  if (rect.width < 1 || rect.height < 1) return;
+  const scale = 1 / Math.max(0.001, viewport.zoom);
+  const outlineWidth = (preview ? 1.9 : isSelected ? 1.7 : isHovered ? 1.35 : 1.1) * scale;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rect.x, rect.y, rect.width, rect.height);
+  const bodyGradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
+  bodyGradient.addColorStop(0, preview ? "rgba(97, 189, 255, 0.24)" : "rgba(97, 189, 255, 0.32)");
+  bodyGradient.addColorStop(1, preview ? "rgba(15, 75, 146, 0.28)" : "rgba(15, 75, 146, 0.42)");
+  ctx.fillStyle = bodyGradient;
+  ctx.fill();
+  ctx.strokeStyle = preview ? "rgba(255, 214, 138, 0.8)" : isSelected ? "rgba(147, 221, 255, 0.92)" : isHovered ? "rgba(173, 236, 255, 0.82)" : "rgba(130, 211, 255, 0.56)";
+  ctx.lineWidth = outlineWidth;
+  if (preview) ctx.setLineDash([6 * scale, 4 * scale]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(rect.x, rect.y + 0.5);
+  ctx.lineTo(rect.x + rect.width, rect.y + 0.5);
+  ctx.strokeStyle = preview ? "rgba(255, 230, 162, 0.92)" : "rgba(207, 245, 255, 0.92)";
+  ctx.lineWidth = Math.max(1, 1.2 * scale);
+  ctx.stroke();
+  ctx.restore();
+}
+
 export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 3) {
   const entities = doc.entities || [];
   const tileSize = doc.dimensions.tileSize;
@@ -207,8 +250,10 @@ export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 
   for (let i = entities.length - 1; i >= 0; i -= 1) {
     const entity = entities[i];
     if (!entity.visible) continue;
-    if (isFogVolumeEntityType(entity.type)) {
-      const rect = getFogVolumeScreenRect(entity, tileSize, viewport);
+    if (isFogVolumeEntityType(entity.type) || isWaterVolumeEntityType(entity.type)) {
+      const rect = isWaterVolumeEntityType(entity.type)
+        ? getWaterVolumeScreenRect(entity, tileSize, viewport)
+        : getFogVolumeScreenRect(entity, tileSize, viewport);
       const margin = Math.max(5, radius * viewport.zoom);
       const inBounds = pointX >= rect.x - margin
         && pointX <= rect.x + rect.width + margin
@@ -268,8 +313,9 @@ export function renderEntities(ctx, doc, viewport, interaction) {
           y: dragOrigin.y + dragPreviewDelta.y,
         }
       : entity;
-    if (isFogVolumeEntityType(renderEntity.type)) {
-      drawFogVolumeRegion(ctx, renderEntity, tileSize, viewport, {
+    if (isFogVolumeEntityType(renderEntity.type) || isWaterVolumeEntityType(renderEntity.type)) {
+      const drawVolume = isWaterVolumeEntityType(renderEntity.type) ? drawWaterVolumeRegion : drawFogVolumeRegion;
+      drawVolume(ctx, renderEntity, tileSize, viewport, {
         isSelected: selectedEntityIds.has(entity.id),
         isHovered: hoveredEntityId === entity.id,
       });
@@ -306,8 +352,9 @@ export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, ac
     x: interaction.hoverCell.x,
     y: interaction.hoverCell.y,
   };
-  if (isFogVolumeEntityType(previewEntity.type)) {
-    drawFogVolumeRegion(ctx, previewEntity, doc.dimensions.tileSize, viewport, {
+  if (isFogVolumeEntityType(previewEntity.type) || isWaterVolumeEntityType(previewEntity.type)) {
+    const drawVolume = isWaterVolumeEntityType(previewEntity.type) ? drawWaterVolumeRegion : drawFogVolumeRegion;
+    drawVolume(ctx, previewEntity, doc.dimensions.tileSize, viewport, {
       preview: true,
       isSelected: true,
     });
