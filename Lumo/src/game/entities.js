@@ -457,12 +457,18 @@
 
           let bodyColor = "rgba(58,145,214,0.34)";
           let surfaceColor = "rgba(135,212,255,0.9)";
+          let bodyColorAfterDarkness = "rgba(84,173,232,0.24)";
+          let surfaceColorAfterDarkness = "rgba(178,231,255,0.98)";
           if (id === "lava_volume"){
             bodyColor = "rgba(224,95,32,0.40)";
             surfaceColor = "rgba(255,182,84,0.95)";
+            bodyColorAfterDarkness = "rgba(240,120,52,0.30)";
+            surfaceColorAfterDarkness = "rgba(255,210,130,1)";
           } else if (id === "bubbling_liquid_volume"){
             bodyColor = "rgba(98,170,58,0.36)";
             surfaceColor = "rgba(187,255,130,0.92)";
+            bodyColorAfterDarkness = "rgba(132,205,88,0.26)";
+            surfaceColorAfterDarkness = "rgba(214,255,176,0.99)";
           }
 
           this._liquidVolumes.push({
@@ -474,6 +480,8 @@
             depth,
             bodyColor,
             surfaceColor,
+            bodyColorAfterDarkness,
+            surfaceColorAfterDarkness,
           });
           return;
         }
@@ -2874,6 +2882,31 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
       }
     }
 
+    _drawLiquidVolumesAfterDarkness(ctx, cam){
+      if (!this._liquidVolumes.length) return;
+      ctx.save();
+      ctx.globalCompositeOperation = "screen";
+      for (const v of this._liquidVolumes){
+        const sx = Math.floor(v.x0 - cam.x);
+        const sy = Math.floor(v.yTop - cam.y);
+        const w = Math.max(1, Math.floor(v.x1 - v.x0));
+        const h = Math.max(1, Math.floor(v.yBottom - v.yTop));
+
+        // Runtime visibility pass: keep liquids legible after darkness without
+        // changing gameplay collision/death behavior.
+        ctx.fillStyle = v.bodyColorAfterDarkness || "rgba(120,180,220,0.20)";
+        ctx.fillRect(sx, sy, w, h);
+
+        ctx.strokeStyle = v.surfaceColorAfterDarkness || "rgba(200,235,255,0.95)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(sx, sy + 0.5);
+        ctx.lineTo(sx + w, sy + 0.5);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     _drawHoverVoidEyes(ctx, e, cx, cy, alphaMul = 1){
       const eyeK = Math.max(0, Math.min(1, e.eyeBlend || 0));
       if (eyeK <= 0.01) return;
@@ -2948,6 +2981,7 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
 
     // Pass drawn AFTER darkness, for elements that should remain visible through darkness.
     drawAfterDarkness(ctx, cam){
+      this._drawLiquidVolumesAfterDarkness(ctx, cam);
       for (const e of this.items){
         if (!e.active || e.type !== "hoverVoid") continue;
         if (!e.awake) continue;

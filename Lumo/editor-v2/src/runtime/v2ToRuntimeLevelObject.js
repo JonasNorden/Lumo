@@ -66,6 +66,32 @@ function cloneParams(params) {
   return structuredClone(params);
 }
 
+function buildRuntimeTileVisualOverrides(levelDocument, tileSize) {
+  const overrides = {};
+  const placements = Array.isArray(levelDocument?.tiles?.placements) ? levelDocument.tiles.placements : [];
+  for (const placement of placements) {
+    const value = Number.isFinite(Number(placement?.value)) ? (Number(placement.value) | 0) : 0;
+    const size = Number.isFinite(Number(placement?.size)) ? (Number(placement.size) | 0) : 1;
+    const x = Number.isFinite(Number(placement?.x)) ? (Number(placement.x) | 0) : null;
+    const y = Number.isFinite(Number(placement?.y)) ? (Number(placement.y) | 0) : null;
+    if (!Number.isInteger(x) || !Number.isInteger(y)) continue;
+    if (size <= 0) continue;
+
+    // Runtime parity fix: stone_ct supports 1x1/2x2/3x3 authoring in editor-v2,
+    // but runtime catalog metadata is fixed to a legacy 2x2 draw profile.
+    // Inject per-anchor draw overrides so runtime uses authored brush size.
+    if (value === 15) {
+      const clampedSize = Math.max(1, Math.min(3, size));
+      overrides[`${x},${y}`] = {
+        drawW: clampedSize * tileSize,
+        drawH: clampedSize * tileSize,
+        drawAnchor: "BL",
+      };
+    }
+  }
+  return overrides;
+}
+
 function normalizeRuntimeEntityType(type) {
   const normalized = String(type || "").trim().toLowerCase();
   if (!normalized) return null;
@@ -270,6 +296,7 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
     layers: {
       main: mainTiles,
       bg: runtimeBackgroundBase,
+      tileVisualOverrides: buildRuntimeTileVisualOverrides(levelDocument, tileSize),
       ents: [],
     },
     editor: {
