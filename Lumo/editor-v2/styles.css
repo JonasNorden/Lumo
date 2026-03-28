@@ -2497,8 +2497,10 @@ kbd {
   align-items: stretch;
   justify-content: stretch;
   overflow: hidden;
-  background: #070917;
-  border-color: rgba(98, 118, 150, 0.55);
+  background: #050912;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .fogWorkbenchPreviewCanvas {
