@@ -2,6 +2,8 @@ import { getFogVolumeParams, isFogVolumeEntityType } from "../domain/entities/sp
 import { findEntityPresetById } from "../domain/entities/entityPresets.js";
 
 const PREVIEW_SPAN_WIDTH_PX = 620;
+const PREVIEW_CANVAS_WIDTH_PX = 620;
+const PREVIEW_CANVAS_HEIGHT_PX = 188;
 const PREVIEW_SAMPLE_COUNT = 32;
 
 function escapeHtml(value) {
@@ -84,22 +86,13 @@ function renderNumberField(selection, config) {
 function getFogPreviewModel(entity, nowMs = Date.now()) {
   const params = getFogVolumeParams(entity);
   const density = clamp(Number(params.look.density), 0.02, 1);
-  const thicknessPx = clamp(Number(params.look.thickness), 12, 220);
+  const thicknessPx = clamp(Number(params.look.thickness), 12, 160);
   const liftPx = clamp(Number(params.look.lift), 0, 120);
   const falloffPx = clamp(Number(params.area.falloff), 10, PREVIEW_SPAN_WIDTH_PX);
   const traverseDurationMs = 9600;
 
-  const profile = buildFogPreviewFieldProfile({
-    spanWidthPx: PREVIEW_SPAN_WIDTH_PX,
-    thicknessPx,
-    density,
-    falloffPx,
-    sampleCount: PREVIEW_SAMPLE_COUNT,
-  });
-
   return {
     params,
-    profile,
     density,
     thicknessPx,
     liftPx,
@@ -107,19 +100,6 @@ function getFogPreviewModel(entity, nowMs = Date.now()) {
     traverseDurationMs,
     phaseMs: Math.round(nowMs % traverseDurationMs),
   };
-}
-
-function renderFogPreviewSamples(samples) {
-  return samples.map((sample) => `
-    <span
-      class="fogWorkbenchPreviewSample"
-      style="--fog-sample-x:${sample.xPct.toFixed(3)}%;--fog-sample-core:${sample.coreHeightPx.toFixed(2)}px;--fog-sample-haze:${sample.hazeHeightPx.toFixed(2)}px;--fog-sample-opacity:${sample.opacity.toFixed(4)};--fog-sample-offset:${sample.offsetY.toFixed(3)}px;--fog-sample-baseline-core:${sample.coreHeightPx.toFixed(2)}px;--fog-sample-baseline-haze:${sample.hazeHeightPx.toFixed(2)}px;--fog-sample-baseline-offset:${sample.offsetY.toFixed(3)}px;--fog-sample-baseline-opacity:${sample.opacity.toFixed(4)};"
-      data-fog-sample-u="${sample.u.toFixed(6)}"
-      data-fog-sample-seed="${sample.seed.toFixed(6)}"
-      data-fog-sample-d-open="${sample.dOpenPx.toFixed(6)}"
-      data-fog-preview-sample
-    ></span>
-  `).join("");
 }
 
 function renderFogModal(selection) {
@@ -154,7 +134,10 @@ function renderFogModal(selection) {
             <div
               class="volumeWorkbenchPreviewSurface fogWorkbenchPreviewSurface"
               data-fog-preview-surface
+              data-fog-preview-width="${PREVIEW_CANVAS_WIDTH_PX}"
+              data-fog-preview-height="${PREVIEW_CANVAS_HEIGHT_PX}"
               data-fog-preview-traverse-ms="${Math.round(model.traverseDurationMs)}"
+              data-fog-preview-lumo-sprite="${escapeHtml(lumoSpriteSrc || "")}"
               data-fog-smooke-density="${model.params.look.density.toFixed(4)}"
               data-fog-smooke-noise="${model.params.look.noise.toFixed(4)}"
               data-fog-smooke-drift="${model.params.look.drift.toFixed(4)}"
@@ -169,23 +152,17 @@ function renderFogModal(selection) {
               data-fog-smooke-push="${model.params.interaction.push.toFixed(4)}"
               data-fog-smooke-bulge="${model.params.interaction.bulge.toFixed(4)}"
               data-fog-preview-falloff="${model.falloffPx.toFixed(4)}"
+              data-fog-thickness="${model.thicknessPx.toFixed(4)}"
+              data-fog-lift="${model.liftPx.toFixed(4)}"
               style="--fog-ground-baseline:14px;--fog-lift:${model.liftPx.toFixed(2)}px;--fog-thickness:${model.thicknessPx.toFixed(2)}px;--fog-falloff-pct:${((model.falloffPx / PREVIEW_SPAN_WIDTH_PX) * 100).toFixed(3)}%;--fog-opacity:${model.density.toFixed(4)};--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
             >
-              <div class="fogWorkbenchPreviewGround" aria-hidden="true">
-                <div class="fogWorkbenchPreviewGroundLine"></div>
-              </div>
-              <div class="volumeWorkbenchPreviewSpan fogWorkbenchPreviewSpan" data-volume-preview-span>
-                <div class="fogWorkbenchPreviewField" data-fog-preview-field>
-                  <div class="fogWorkbenchPreviewFieldMass">
-                    ${renderFogPreviewSamples(model.profile.samples)}
-                  </div>
-                </div>
-                <div class="fogWorkbenchPreviewLumo isBehindFog" data-fog-preview-lumo>
-                  ${lumoSpriteSrc
-    ? `<img class="fogWorkbenchPreviewLumoSprite" src="${escapeHtml(lumoSpriteSrc)}" alt="Lumo preview sprite" />`
-    : '<span class="fogWorkbenchPreviewLumoBody"></span>'}
-                </div>
-              </div>
+              <canvas
+                class="fogWorkbenchPreviewCanvas"
+                data-fog-preview-canvas
+                width="${PREVIEW_CANVAS_WIDTH_PX}"
+                height="${PREVIEW_CANVAS_HEIGHT_PX}"
+                aria-label="Fog behavior preview"
+              ></canvas>
             </div>
           </section>
           <footer class="specialVolumeWorkbenchFooterPinned">

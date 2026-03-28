@@ -14,7 +14,6 @@ import { renderInspector, bindInspectorPanel } from "../ui/inspectorPanel.js";
 import { renderBottomPanel, bindBottomPanel } from "../ui/bottomPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
 import {
-  getFogPreviewPatrolPhase,
   getSpecialVolumeWorkbenchLauncherContent,
   getSpecialVolumeWorkbenchModalContent,
   resolveSelectedSpecialVolume,
@@ -758,13 +757,20 @@ export function createEditorApp({
     rafId: 0,
     startedAtMs: 0,
     surface: null,
-    lumo: null,
-    samples: [],
-    sampleState: [],
+    canvas: null,
+    ctx: null,
+    lumoSprite: null,
     field: null,
     vel: null,
-    lastLumoXPct: null,
+    sampleCount: 0,
+    bandStartX: 0,
+    bandEndX: 0,
+    worldWidth: 620,
+    worldHeight: 188,
+    lumoX: 0,
+    lumoDirection: 1,
     durationMs: 9600,
+    distancePerSecond: 140,
     lastElapsedMs: undefined,
   };
   const toolShortcutMap = {
@@ -2384,12 +2390,12 @@ export function createEditorApp({
       fogPreviewMotion.rafId = 0;
     }
     fogPreviewMotion.surface = null;
-    fogPreviewMotion.lumo = null;
-    fogPreviewMotion.samples = [];
-    fogPreviewMotion.sampleState = [];
+    fogPreviewMotion.canvas = null;
+    fogPreviewMotion.ctx = null;
+    fogPreviewMotion.lumoSprite = null;
     fogPreviewMotion.field = null;
     fogPreviewMotion.vel = null;
-    fogPreviewMotion.lastLumoXPct = null;
+    fogPreviewMotion.sampleCount = 0;
     fogPreviewMotion.lastElapsedMs = undefined;
   };
 
@@ -2429,24 +2435,164 @@ export function createEditorApp({
     return 1 + ((m - 1) * strength);
   };
 
+  const fogPreviewPatrolAtElapsed = (elapsedMs, traverseDurationMs = 9600) => {
+    const duration = Number.isFinite(Number(traverseDurationMs)) && Number(traverseDurationMs) > 1200 ? Number(traverseDurationMs) : 9600;
+    const halfDuration = duration * 0.5;
+    const normalized = ((Math.max(0, Number(elapsedMs) || 0) % duration) + duration) % duration;
+    const forward = normalized <= halfDuration;
+    const pct = forward
+      ? (normalized / halfDuration)
+      : 1 - ((normalized - halfDuration) / halfDuration);
+    return {
+      u: clampFogPreview(pct, 0, 1),
+      facing: forward ? 1 : -1,
+    };
+  };
+
+  const drawFogPreviewCanvas = (elapsedMs) => {
+    if (!fogPreviewMotion.surface || !fogPreviewMotion.ctx || !(fogPreviewMotion.field instanceof Float32Array)) return;
+    const surfaceDataset = fogPreviewMotion.surface.dataset;
+    const ctx2d = fogPreviewMotion.ctx;
+    const width = fogPreviewMotion.worldWidth;
+    const height = fogPreviewMotion.worldHeight;
+    const groundBaseline = 14;
+    const groundY = height - groundBaseline;
+
+    const density = Number.parseFloat(surfaceDataset.fogSmookeDensity || "") || 0.25;
+    const noiseAmount = Number.parseFloat(surfaceDataset.fogSmookeNoise || "") || 0;
+    const organicStrength = Number.parseFloat(surfaceDataset.fogSmookeOrganicStrength || "") || 0;
+    const organicScale = Number.parseFloat(surfaceDataset.fogSmookeOrganicScale || "") || 1;
+    const organicSpeed = Number.parseFloat(surfaceDataset.fogSmookeOrganicSpeed || "") || 1;
+    const falloffPx = Number.parseFloat(surfaceDataset.fogPreviewFalloff || "") || 120;
+    const thicknessPx = Number.parseFloat(surfaceDataset.fogThickness || "") || 44;
+    const liftPx = Number.parseFloat(surfaceDataset.fogLift || "") || 0;
+
+    const topBase = groundY - liftPx;
+    const bottom = groundY;
+    const pxPerCell = (fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX) / Math.max(1, fogPreviewMotion.sampleCount - 1);
+    const falloff = Math.max(10, falloffPx);
+    const elapsedSeconds = elapsedMs * 0.001;
+
+    ctx2d.clearRect(0, 0, width, height);
+    ctx2d.fillStyle = "#070917";
+    ctx2d.fillRect(0, 0, width, height);
+
+    const bg = ctx2d.createLinearGradient(0, 0, 0, groundY);
+    bg.addColorStop(0, "rgba(68,100,170,0.16)");
+    bg.addColorStop(1, "rgba(12,16,25,0)");
+    ctx2d.fillStyle = bg;
+    ctx2d.fillRect(0, 0, width, groundY);
+
+    ctx2d.fillStyle = "rgba(22,28,39,0.75)";
+    ctx2d.fillRect(0, groundY, width, height - groundY);
+    ctx2d.fillStyle = "rgba(153,176,212,0.85)";
+    ctx2d.fillRect(0, groundY - 1, width, 1);
+
+    ctx2d.save();
+    ctx2d.beginPath();
+    ctx2d.rect(fogPreviewMotion.bandStartX, 0, fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX, groundY);
+    ctx2d.clip();
+    ctx2d.globalCompositeOperation = "screen";
+    ctx2d.globalAlpha = 0.82;
+
+    const layers = 24;
+    for (let li = 0; li < layers; li += 1) {
+      const a = li / Math.max(1, layers - 1);
+      const yBase = bottom - (a * thicknessPx);
+      const sliceAlpha = 1 - a;
+      const alphaBase = (density * 0.18) * (0.22 + (sliceAlpha * 0.98));
+      if (alphaBase < 0.001) continue;
+      ctx2d.beginPath();
+      for (let index = 0; index < fogPreviewMotion.sampleCount; index += 1) {
+        const x = fogPreviewMotion.bandStartX + (index * pxPerCell);
+        const dOpen = fogPreviewMotion.bandEndX - x;
+        const edgeMask = smoothFogPreview01(clampFogPreview(dOpen / falloff, 0, 1));
+        let yy = bottom;
+        if (edgeMask > 0.0005) {
+          const topWeight = smoothFogPreview01(clampFogPreview((0.55 - a) / 0.55, 0, 1));
+          const org = smookeOrganicMaskAtU((x - fogPreviewMotion.bandStartX) / Math.max(1, fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX), elapsedSeconds, organicStrength, organicScale, organicSpeed)
+            * (0.70 + (0.30 * topWeight));
+          const dev = fogPreviewMotion.field[index];
+          const bulge = Math.max(0, dev);
+          const n = sampleSmookeNoise((index * 0.22) + (elapsedSeconds * (0.95 + (a * 0.85))));
+          const wave = noiseAmount * (((n * 0.5) + 0.5) - 0.5) * (10 + ((1 - a) * 18));
+          const yyBaseRaw = yBase + wave - (bulge * (10 + ((1 - a) * 30)));
+          const yyOrg = bottom - ((bottom - yyBaseRaw) * org);
+          const yyBase = Math.min(yyOrg, groundY - 1);
+          yy = bottom - ((bottom - yyBase) * edgeMask);
+        }
+        if (index === 0) ctx2d.moveTo(x, yy);
+        else ctx2d.lineTo(x, yy);
+      }
+      ctx2d.lineTo(fogPreviewMotion.bandEndX, bottom);
+      ctx2d.lineTo(fogPreviewMotion.bandStartX, bottom);
+      ctx2d.closePath();
+      ctx2d.fillStyle = `rgba(225,238,255,${alphaBase})`;
+      ctx2d.fill();
+    }
+
+    ctx2d.globalAlpha *= 0.55;
+    ctx2d.strokeStyle = `rgba(210,228,255,${Math.min(0.30, density * 0.35)})`;
+    ctx2d.lineWidth = 18;
+    ctx2d.lineJoin = "round";
+    ctx2d.beginPath();
+    for (let index = 0; index < fogPreviewMotion.sampleCount; index += 1) {
+      const x = fogPreviewMotion.bandStartX + (index * pxPerCell);
+      const dOpen = fogPreviewMotion.bandEndX - x;
+      const edgeMask = smoothFogPreview01(clampFogPreview(dOpen / falloff, 0, 1));
+      let yy = bottom;
+      if (edgeMask > 0.0005) {
+        const org = smookeOrganicMaskAtU((x - fogPreviewMotion.bandStartX) / Math.max(1, fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX), elapsedSeconds, organicStrength, organicScale, organicSpeed);
+        const dev = fogPreviewMotion.field[index];
+        const bulge = Math.max(0, dev);
+        const n = sampleSmookeNoise((index * 0.22) + (elapsedSeconds * 1.05));
+        const wave = noiseAmount * (((n * 0.5) + 0.5) - 0.5) * 10;
+        const yyBaseRaw = topBase + wave - (bulge * 22);
+        const yyOrg = bottom - ((bottom - yyBaseRaw) * org);
+        const yyBase = Math.min(yyOrg, groundY - 1);
+        yy = bottom - ((bottom - yyBase) * edgeMask);
+      }
+      if (index === 0) ctx2d.moveTo(x, yy);
+      else ctx2d.lineTo(x, yy);
+    }
+    ctx2d.stroke();
+    ctx2d.restore();
+
+    const lumoW = 24;
+    const lumoH = 36;
+    const lumoX = fogPreviewMotion.lumoX;
+    if (fogPreviewMotion.lumoSprite instanceof HTMLImageElement && fogPreviewMotion.lumoSprite.complete && fogPreviewMotion.lumoSprite.naturalWidth > 0) {
+      ctx2d.save();
+      ctx2d.translate(lumoX, groundY - 1);
+      ctx2d.scale(fogPreviewMotion.lumoDirection, 1);
+      ctx2d.drawImage(fogPreviewMotion.lumoSprite, -12, -24, 24, 24);
+      ctx2d.restore();
+    } else {
+      ctx2d.save();
+      ctx2d.fillStyle = "rgba(17, 20, 30, 0.28)";
+      ctx2d.beginPath();
+      ctx2d.ellipse(lumoX, groundY + 2, lumoW * 0.28, lumoW * 0.12, 0, 0, Math.PI * 2);
+      ctx2d.fill();
+      ctx2d.fillStyle = "rgba(223, 214, 200, 0.95)";
+      ctx2d.fillRect(lumoX - 10, groundY - 18, 20, 18);
+      ctx2d.fillStyle = "rgba(252, 214, 103, 0.9)";
+      ctx2d.fillRect(lumoX - 8, groundY - 28, 16, 10);
+      ctx2d.restore();
+    }
+  };
+
   const stepFogPreviewMotion = (timestampMs) => {
-    if (!fogPreviewMotion.surface?.isConnected || !fogPreviewMotion.lumo?.isConnected) {
+    if (!fogPreviewMotion.surface?.isConnected || !fogPreviewMotion.canvas?.isConnected || !(fogPreviewMotion.field instanceof Float32Array) || !(fogPreviewMotion.vel instanceof Float32Array)) {
       stopFogPreviewMotionLoop();
       return;
     }
     if (!fogPreviewMotion.startedAtMs) fogPreviewMotion.startedAtMs = timestampMs;
     const elapsedMs = timestampMs - fogPreviewMotion.startedAtMs;
-    const patrol = getFogPreviewPatrolPhase(elapsedMs, fogPreviewMotion.durationMs);
-    fogPreviewMotion.lumo.style.left = `${patrol.xPct.toFixed(3)}%`;
-    fogPreviewMotion.lumo.style.transform = `translate3d(-50%, -1px, 0) scaleX(${patrol.facing})`;
-    if (
-      Array.isArray(fogPreviewMotion.samples)
-      && fogPreviewMotion.samples.length
-      && fogPreviewMotion.field instanceof Float32Array
-      && fogPreviewMotion.vel instanceof Float32Array
-    ) {
+    const patrol = fogPreviewPatrolAtElapsed(elapsedMs, fogPreviewMotion.durationMs);
+    fogPreviewMotion.lumoX = fogPreviewMotion.bandStartX + ((fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX) * patrol.u);
+    fogPreviewMotion.lumoDirection = patrol.facing;
+    {
       const density = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeDensity || "") || 0.25;
-      const noiseAmount = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeNoise || "") || 0;
       const drift = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeDrift || "") || 0;
       const diffuse = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeDiffuse || "") || 0.2;
       const relax = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeRelax || "") || 0.22;
@@ -2455,16 +2601,11 @@ export function createEditorApp({
       const radiusPx = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeRadius || "") || 92;
       const push = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookePush || "") || 2.2;
       const bulge = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeBulge || "") || 1.2;
-      const organicStrength = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeOrganicStrength || "") || 0;
-      const organicScale = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeOrganicScale || "") || 1;
-      const organicSpeed = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeOrganicSpeed || "") || 1;
-      const falloffPx = Number.parseFloat(fogPreviewMotion.surface.dataset.fogPreviewFalloff || "") || 120;
-      const lumoU = patrol.xPct / 100;
-      const sampleCount = fogPreviewMotion.samples.length;
+      const lumoU = patrol.u;
+      const sampleCount = fogPreviewMotion.sampleCount;
       const field = fogPreviewMotion.field;
       const vel = fogPreviewMotion.vel;
       const dt = Math.min(0.05, fogPreviewMotion.lastElapsedMs === undefined ? (1 / 60) : Math.max(0.001, (elapsedMs - fogPreviewMotion.lastElapsedMs) / 1000));
-      const elapsedSeconds = elapsedMs * 0.001;
       fogPreviewMotion.lastElapsedMs = elapsedMs;
 
       for (let index = 1; index < sampleCount - 1; index += 1) {
@@ -2479,10 +2620,7 @@ export function createEditorApp({
         field[index] = clampFogPreview(field[index], -2.2, 2.2);
       }
 
-      const previousLumoXPct = fogPreviewMotion.lastLumoXPct;
-      const lumoTravelPct = Number.isFinite(previousLumoXPct) ? patrol.xPct - previousLumoXPct : 0;
-      fogPreviewMotion.lastLumoXPct = patrol.xPct;
-      const lumoSpeedPxPerSecond = Math.abs((lumoTravelPct / 100) * 620 / Math.max(0.001, dt));
+      const lumoSpeedPxPerSecond = fogPreviewMotion.distancePerSecond;
       if (drift > 0.001) {
         const shift = drift * 0.85 * dt;
         if (Math.abs(shift) > 0.00001) {
@@ -2499,10 +2637,10 @@ export function createEditorApp({
         }
       }
 
-      if (lumoSpeedPxPerSecond > gate) {
+      if (lumoSpeedPxPerSecond > gate && density > 0.01) {
         const centerIndex = clampFogPreview(Math.round(lumoU * (sampleCount - 1)), 0, sampleCount - 1);
-        const radCells = Math.max(3, Math.floor(radiusPx / Math.max(1, (620 / Math.max(2, sampleCount - 1)))));
-        const dir = Math.sign(lumoTravelPct) || 1;
+        const radCells = Math.max(3, Math.floor(radiusPx / Math.max(1, ((fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX) / Math.max(2, sampleCount - 1)))));
+        const dir = patrol.facing || 1;
         const amp = Math.min(2.2, lumoSpeedPxPerSecond / 210);
         const aheadOffset = Math.max(2, Math.floor(radCells * 0.35));
         const bulgeCenter = centerIndex + (dir * aheadOffset);
@@ -2532,67 +2670,59 @@ export function createEditorApp({
         }
       }
 
-      fogPreviewMotion.samples.forEach((sample, index) => {
-        const state = fogPreviewMotion.sampleState[index];
-        if (!state) return;
-        const edgeMask = smoothFogPreview01(clampFogPreview(state.dOpenPx / Math.max(10, falloffPx), 0, 1));
-        const organic = smookeOrganicMaskAtU(state.u, elapsedSeconds, organicStrength, organicScale, organicSpeed);
-        const disturbanceValue = field[index];
-        const bulge = Math.max(0, disturbanceValue);
-        const wave = noiseAmount * (((sampleSmookeNoise((index * 0.22) + (elapsedSeconds * 1.05)) * 0.5) + 0.5) - 0.5) * 10;
-        const rise = bulge * 22;
-        const yRaw = state.baseCore + wave - rise;
-        const yOrganic = state.baseCore - ((state.baseCore - yRaw) * organic);
-        const yMasked = state.baseCore - ((state.baseCore - yOrganic) * edgeMask);
-        const localOffset = Math.min(0, -Math.max(0, state.baseCore - yMasked));
-
-        sample.style.setProperty("--fog-sample-offset", `${localOffset.toFixed(3)}px`);
-        sample.style.setProperty("--fog-sample-core", `${Math.max(3, yMasked).toFixed(3)}px`);
-        sample.style.setProperty("--fog-sample-haze", `${Math.max(3, yMasked + 2).toFixed(3)}px`);
-        sample.style.setProperty("--fog-sample-opacity", `${Math.min(0.98, Math.max(0.03, state.baseOpacity * density)).toFixed(4)}`);
-      });
     }
+    drawFogPreviewCanvas(elapsedMs);
     fogPreviewMotion.rafId = globalThis.requestAnimationFrame(stepFogPreviewMotion);
   };
 
   const syncFogPreviewMotionLoop = () => {
     const surface = floatingPanelHost.querySelector("[data-fog-preview-surface]");
-    const lumo = floatingPanelHost.querySelector("[data-fog-preview-lumo]");
-    if (!(surface instanceof HTMLElement) || !(lumo instanceof HTMLElement)) {
+    const canvasEl = floatingPanelHost.querySelector("[data-fog-preview-canvas]");
+    if (!(surface instanceof HTMLElement) || !(canvasEl instanceof HTMLCanvasElement)) {
+      stopFogPreviewMotionLoop();
+      return;
+    }
+    const ctx2d = canvasEl.getContext("2d");
+    if (!ctx2d) {
       stopFogPreviewMotionLoop();
       return;
     }
 
     const durationMs = Number.parseFloat(surface.dataset.fogPreviewTraverseMs || "");
-    if (fogPreviewMotion.surface === surface && fogPreviewMotion.lumo === lumo && fogPreviewMotion.rafId) {
+    if (fogPreviewMotion.surface === surface && fogPreviewMotion.canvas === canvasEl && fogPreviewMotion.rafId) {
       fogPreviewMotion.durationMs = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 9600;
       return;
     }
 
     stopFogPreviewMotionLoop();
     fogPreviewMotion.surface = surface;
-    fogPreviewMotion.lumo = lumo;
-    fogPreviewMotion.samples = Array.from(floatingPanelHost.querySelectorAll("[data-fog-preview-sample]"));
-    fogPreviewMotion.sampleState = fogPreviewMotion.samples.map((sample) => {
-      const u = Number.parseFloat(sample.dataset.fogSampleU || "0");
-      const readVar = (name) => Number.parseFloat(sample.style.getPropertyValue(name) || "0");
-      return {
-        u: Number.isFinite(u) ? u : 0,
-        baseOffset: readVar("--fog-sample-baseline-offset"),
-        baseCore: readVar("--fog-sample-baseline-core"),
-        baseHaze: readVar("--fog-sample-baseline-haze"),
-        baseOpacity: readVar("--fog-sample-baseline-opacity"),
-        seed: Number.parseFloat(sample.dataset.fogSampleSeed || "0"),
-        dOpenPx: Number.parseFloat(sample.dataset.fogSampleDOpen || "0"),
-      };
-    });
-    fogPreviewMotion.field = new Float32Array(fogPreviewMotion.samples.length);
-    fogPreviewMotion.vel = new Float32Array(fogPreviewMotion.samples.length);
+    fogPreviewMotion.canvas = canvasEl;
+    fogPreviewMotion.ctx = ctx2d;
+    fogPreviewMotion.worldWidth = canvasEl.width;
+    fogPreviewMotion.worldHeight = canvasEl.height;
+    fogPreviewMotion.bandStartX = Math.round(fogPreviewMotion.worldWidth * 0.06);
+    fogPreviewMotion.bandEndX = Math.round(fogPreviewMotion.worldWidth * 0.94);
+    fogPreviewMotion.sampleCount = Math.max(260, Math.floor((fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX) / 1.4));
+    fogPreviewMotion.field = new Float32Array(fogPreviewMotion.sampleCount);
+    fogPreviewMotion.vel = new Float32Array(fogPreviewMotion.sampleCount);
     fogPreviewMotion.durationMs = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 9600;
     fogPreviewMotion.startedAtMs = 0;
-    fogPreviewMotion.lastLumoXPct = null;
+    fogPreviewMotion.lumoX = (fogPreviewMotion.bandStartX + fogPreviewMotion.bandEndX) * 0.5;
+    fogPreviewMotion.lumoDirection = 1;
+    fogPreviewMotion.distancePerSecond = ((fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX) * 2) / Math.max(1, fogPreviewMotion.durationMs * 0.001);
     fogPreviewMotion.lastElapsedMs = undefined;
-    fogPreviewMotion.lumo.style.animation = "none";
+
+    const lumoSpriteSrc = typeof surface.dataset.fogPreviewLumoSprite === "string" ? surface.dataset.fogPreviewLumoSprite.trim() : "";
+    if (lumoSpriteSrc) {
+      const sprite = new Image();
+      sprite.decoding = "async";
+      sprite.src = lumoSpriteSrc;
+      fogPreviewMotion.lumoSprite = sprite;
+    } else {
+      fogPreviewMotion.lumoSprite = null;
+    }
+
+    drawFogPreviewCanvas(0);
     fogPreviewMotion.rafId = globalThis.requestAnimationFrame(stepFogPreviewMotion);
   };
 

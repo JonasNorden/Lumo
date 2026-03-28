@@ -2493,57 +2493,19 @@ kbd {
 
 .fogWorkbenchPreviewSurface {
   min-height: 320px;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  overflow: hidden;
   background: #070917;
   border-color: rgba(98, 118, 150, 0.55);
 }
 
-.fogWorkbenchPreviewSpan {
-  left: 6%;
-  right: 6%;
-}
-
-.fogWorkbenchPreviewField {
-  top: calc(100% - var(--fog-thickness, 44px) - 14px - var(--fog-lift, 0px));
-  height: calc(var(--fog-thickness, 44px) + 18px);
-  opacity: 1;
-}
-
-.fogWorkbenchPreviewGround {
-  background: linear-gradient(180deg, transparent 0 68%, rgba(32, 40, 52, 0.22) 68% 100%);
-}
-
-.fogWorkbenchPreviewGroundSoil,
-.fogWorkbenchPreviewGroundTileStrip,
-.fogWorkbenchPreviewBackdrop,
-.fogWorkbenchPreviewContainer,
-.fogWorkbenchPreviewMeta,
-.fogWorkbenchPreviewLumoGlow {
-  display: none;
-}
-
-.fogWorkbenchPreviewGroundLine {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: var(--fog-ground-baseline, 14px);
-  height: 1px;
-  background: rgba(158, 174, 197, 0.7);
-}
-
-.fogWorkbenchPreviewSample {
-  width: 8px;
-  transition: none;
-}
-
-.fogWorkbenchPreviewSample::before {
-  width: 8px;
-  background: linear-gradient(180deg, rgba(225, 238, 255, 0.22), rgba(225, 238, 255, 0.78));
-  filter: blur(1.8px);
-  opacity: 1;
-}
-
-.fogWorkbenchPreviewSample::after {
-  display: none;
+.fogWorkbenchPreviewCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: auto;
 }
 
 @media (max-width: 1180px) {
