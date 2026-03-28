@@ -119,6 +119,7 @@ function renderFogModal(selection) {
     { label: "Interaction Gate", path: "interaction.gate", min: 0, max: 260, step: 1, digits: 0, read: (entity) => getFogVolumeParams(entity).interaction.gate },
     { label: "Disturbance Radius", path: "interaction.radius", min: 10, max: 240, step: 1, digits: 0, read: (entity) => getFogVolumeParams(entity).interaction.radius },
     { label: "Lumo Influence Amount", path: "interaction.push", min: 0, max: 5, step: 0.05, digits: 2, read: (entity) => getFogVolumeParams(entity).interaction.push },
+    { label: "Wake", path: "interaction.behind", min: 0, max: 3, step: 0.05, digits: 2, read: (entity) => getFogVolumeParams(entity).interaction.behind },
     { label: "Front Bulge Strength", path: "interaction.bulge", min: 0, max: 4, step: 0.05, digits: 2, read: (entity) => getFogVolumeParams(entity).interaction.bulge },
     { label: "Organic/Noise Strength", path: "look.noise", min: 0, max: 1, step: 0.01, digits: 2, read: (entity) => getFogVolumeParams(entity).look.noise },
     { label: "Drift Amount", path: "look.drift", min: -3, max: 3, step: 0.05, digits: 2, read: (entity) => getFogVolumeParams(entity).look.drift },
@@ -160,6 +161,7 @@ function renderFogModal(selection) {
               data-fog-smooke-gate="${model.params.interaction.gate.toFixed(4)}"
               data-fog-smooke-radius="${model.params.interaction.radius.toFixed(4)}"
               data-fog-smooke-push="${model.params.interaction.push.toFixed(4)}"
+              data-fog-smooke-wake="${model.params.interaction.behind.toFixed(4)}"
               data-fog-smooke-bulge="${model.params.interaction.bulge.toFixed(4)}"
               data-fog-preview-falloff="${model.falloffPx.toFixed(4)}"
               data-fog-thickness="${model.thicknessPx.toFixed(4)}"

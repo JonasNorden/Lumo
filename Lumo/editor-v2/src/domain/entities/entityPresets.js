@@ -185,7 +185,7 @@ export const ENTITY_PRESETS = [
       area: { x0: 0, x1: 240, y0: 0, falloff: 120 },
       look: { density: 0.28, lift: 14, thickness: 56, layers: 20, noise: 0.14, drift: 0, color: "#E1EEFF", exposure: 1 },
       smoothing: { diffuse: 0.2, relax: 0.22, visc: 0.9 },
-      interaction: { radius: 92, push: 2.2, bulge: 1.2, gate: 70 },
+      interaction: { radius: 92, push: 2.2, behind: 1, bulge: 1.2, gate: 70 },
       organic: { strength: 0.35, scale: 1, speed: 0.65 },
       render: { blend: "screen", lumoBehindFog: true },
     },
