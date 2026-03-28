@@ -97,11 +97,10 @@ function getFogPreviewModel(entity, nowMs = Date.now()) {
   const returnTime = clamp((1.1 - returnStrength) * 5.2, 0.2, 5.6);
   const traverseDurationMs = clamp(16400 - idleSpeed * 1400 - influenceAmount * 480, 8400, 22000);
   const densityOpacity = clamp(0.18 + density * 0.72, 0.14, 0.92);
-  const disturbanceStrength = clamp((influenceAmount / 5) * (0.6 + idleAmount * 0.4), 0, 1.2);
-  const disturbanceWidthPct = clamp(7 + (influenceAmount * 5.8) + ((1 - viscosity) * 9), 8, 44);
-  const disturbanceRisePx = clamp(5 + (influenceAmount * 2.8) + (idleAmount * 5.2), 4, 34);
-  const idleDriftPx = clamp(0.65 + (idleAmount * 3.5), 0.2, 5.5);
-  const stationarySettle = clamp(0.5 + (viscosity * 0.85) + (returnStrength * 0.45), 0.5, 1.8);
+  const disturbanceStrength = clamp((influenceAmount / 5) * (0.55 + idleAmount * 0.45), 0, 1.35);
+  const disturbanceRadiusPct = clamp(6 + (influenceAmount * 4.8) + ((1 - viscosity) * 12), 7, 42);
+  const idleMotionAmount = clamp(idleAmount * (0.4 + (1 - viscosity) * 0.8), 0, 1.1);
+  const settleStrength = clamp(0.45 + (viscosity * 0.95) + (returnStrength * 0.65), 0.4, 2);
 
   const profile = buildFogPreviewFieldProfile({
     spanWidthPx: PREVIEW_SPAN_WIDTH_PX,
@@ -131,10 +130,9 @@ function getFogPreviewModel(entity, nowMs = Date.now()) {
     traverseDurationMs,
     densityOpacity,
     disturbanceStrength,
-    disturbanceWidthPct,
-    disturbanceRisePx,
-    idleDriftPx,
-    stationarySettle,
+    disturbanceRadiusPct,
+    idleMotionAmount,
+    settleStrength,
     returnRecoverMs: Math.round(returnTime * 1000),
     phaseMs: Math.round(nowMs % traverseDurationMs),
   };
@@ -147,6 +145,7 @@ function renderFogPreviewSamples(samples) {
       style="--fog-sample-x:${sample.xPct.toFixed(3)}%;--fog-sample-core:${sample.coreHeightPx.toFixed(2)}px;--fog-sample-haze:${sample.hazeHeightPx.toFixed(2)}px;--fog-sample-opacity:${sample.opacity.toFixed(4)};--fog-sample-offset:${sample.offsetY.toFixed(3)}px;--fog-sample-baseline-core:${sample.coreHeightPx.toFixed(2)}px;--fog-sample-baseline-haze:${sample.hazeHeightPx.toFixed(2)}px;--fog-sample-baseline-offset:${sample.offsetY.toFixed(3)}px;--fog-sample-baseline-opacity:${sample.opacity.toFixed(4)};"
       data-fog-sample-u="${sample.u.toFixed(6)}"
       data-fog-sample-seed="${sample.seed.toFixed(6)}"
+      data-fog-sample-d-open="${sample.dOpenPx.toFixed(6)}"
       data-fog-preview-sample
     ></span>
   `).join("");
@@ -187,7 +186,14 @@ function renderFogModal(selection) {
               class="volumeWorkbenchPreviewSurface fogWorkbenchPreviewSurface"
               data-fog-preview-surface
               data-fog-preview-traverse-ms="${Math.round(model.traverseDurationMs)}"
-              style="--fog-ground-baseline:14px;--fog-lift:${model.liftPx.toFixed(2)}px;--fog-thickness:${model.thicknessPx.toFixed(2)}px;--fog-falloff-pct:${((model.falloffPx / PREVIEW_SPAN_WIDTH_PX) * 100).toFixed(3)}%;--fog-opacity:${model.densityOpacity.toFixed(4)};--fog-organic:${model.idleAmount.toFixed(4)};--fog-organic-speed:${model.idleSpeed.toFixed(4)};--fog-push:${model.influenceAmount.toFixed(4)};--fog-relax:${model.returnTime.toFixed(4)};--fog-visc:${model.viscosity.toFixed(4)};--fog-disturbance-strength:${model.disturbanceStrength.toFixed(4)};--fog-disturbance-width:${model.disturbanceWidthPct.toFixed(3)}%;--fog-disturbance-rise:${model.disturbanceRisePx.toFixed(2)}px;--fog-idle-drift:${model.idleDriftPx.toFixed(3)}px;--fog-stationary-settle:${model.stationarySettle.toFixed(3)};--fog-return-recover-ms:${model.returnRecoverMs}ms;--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
+              data-fog-preview-influence="${model.influenceAmount.toFixed(4)}"
+              data-fog-preview-return-time="${model.returnTime.toFixed(4)}"
+              data-fog-preview-viscosity="${model.viscosity.toFixed(4)}"
+              data-fog-preview-idle-amount="${model.idleAmount.toFixed(4)}"
+              data-fog-preview-idle-speed="${model.idleSpeed.toFixed(4)}"
+              data-fog-preview-density="${model.density.toFixed(4)}"
+              data-fog-preview-falloff="${model.falloffPx.toFixed(4)}"
+              style="--fog-ground-baseline:14px;--fog-lift:${model.liftPx.toFixed(2)}px;--fog-thickness:${model.thicknessPx.toFixed(2)}px;--fog-falloff-pct:${((model.falloffPx / PREVIEW_SPAN_WIDTH_PX) * 100).toFixed(3)}%;--fog-opacity:${model.densityOpacity.toFixed(4)};--fog-organic:${model.idleAmount.toFixed(4)};--fog-organic-speed:${model.idleSpeed.toFixed(4)};--fog-push:${model.influenceAmount.toFixed(4)};--fog-relax:${model.returnTime.toFixed(4)};--fog-visc:${model.viscosity.toFixed(4)};--fog-disturbance-strength:${model.disturbanceStrength.toFixed(4)};--fog-disturbance-radius:${model.disturbanceRadiusPct.toFixed(3)}%;--fog-idle-motion:${model.idleMotionAmount.toFixed(4)};--fog-settle-strength:${model.settleStrength.toFixed(4)};--fog-return-recover-ms:${model.returnRecoverMs}ms;--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
             >
               <div class="fogWorkbenchPreviewBackdrop"></div>
               <div class="fogWorkbenchPreviewGround" aria-hidden="true">
@@ -213,7 +219,6 @@ function renderFogModal(selection) {
                     ${renderFogPreviewSamples(model.profile.samples)}
                   </div>
                 </div>
-                <div class="fogWorkbenchPreviewDisturbance" aria-hidden="true"></div>
                 <div class="fogWorkbenchPreviewLumo isBehindFog" data-fog-preview-lumo>
                   <span class="fogWorkbenchPreviewLumoGlow"></span>
                   ${lumoSpriteSrc
