@@ -1,6 +1,7 @@
 import { resolveBrushSize, snapCellToBrushStep } from "../../domain/tiles/brushSize.js";
 import { EDITOR_TOOLS } from "../../domain/tiles/tools.js";
 import { getLineCells } from "../../domain/tiles/line.js";
+import { getFogVolumeWorldRectFromDragCells } from "../../domain/entities/specialVolumeTypes.js";
 import { renderDecorPlacementPreview } from "./decorLayer.js";
 import { renderEntityPlacementPreview } from "./entityLayer.js";
 import { renderSoundPlacementPreview } from "./soundLayer.js";
@@ -129,12 +130,55 @@ export function renderBrushPreviewOverlay(ctx, doc, viewport, interaction, brush
 }
 
 export function renderPlacementPreviewOverlay(ctx, doc, viewport, interaction, presets) {
+  renderFogVolumePlacementPreview(ctx, doc, viewport, interaction);
   renderDecorPlacementPreview(ctx, doc, viewport, interaction, presets?.decor || null);
   renderEntityPlacementPreview(ctx, doc, viewport, interaction, presets?.entity || null);
   renderSoundPlacementPreview(ctx, doc, viewport, interaction, presets?.sound || null);
 }
 
+export function renderFogVolumePlacementPreview(ctx, doc, viewport, interaction) {
+  const drag = interaction?.volumePlacementDrag;
+  if (!drag?.active || drag.type !== "fog_volume") return;
+  if (!drag.startCell || !drag.endCell) return;
 
-export function renderFogVolumePlacementPreview() {
-  return;
+  const fogRect = getFogVolumeWorldRectFromDragCells(
+    drag.startCell,
+    drag.endCell,
+    doc?.dimensions?.tileSize || 24,
+    drag.thicknessPx,
+  );
+  if (!fogRect) return;
+
+  const zoom = viewport?.zoom || 1;
+  const screenX = viewport.offsetX + fogRect.x * zoom;
+  const screenY = viewport.offsetY + (fogRect.y - fogRect.height) * zoom;
+  const screenWidth = fogRect.width * zoom;
+  const screenHeight = fogRect.height * zoom;
+  const lineWidth = Math.max(1, 1.25 * (1 / Math.max(0.35, zoom)));
+
+  ctx.save();
+  ctx.fillStyle = "rgba(186, 215, 255, 0.14)";
+  ctx.fillRect(screenX, screenY, screenWidth, screenHeight);
+
+  const glow = ctx.createLinearGradient(screenX, screenY, screenX, screenY + screenHeight);
+  glow.addColorStop(0, "rgba(226, 239, 255, 0.18)");
+  glow.addColorStop(0.72, "rgba(200, 226, 255, 0.07)");
+  glow.addColorStop(1, "rgba(120, 156, 214, 0.02)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(screenX, screenY, screenWidth, screenHeight);
+
+  ctx.strokeStyle = "rgba(196, 227, 255, 0.9)";
+  ctx.lineWidth = lineWidth;
+  ctx.setLineDash([Math.max(8, 10 * zoom), Math.max(5, 6 * zoom)]);
+  ctx.strokeRect(screenX + lineWidth * 0.5, screenY + lineWidth * 0.5, Math.max(0, screenWidth - lineWidth), Math.max(0, screenHeight - lineWidth));
+  ctx.setLineDash([]);
+
+  const baselineY = viewport.offsetY + fogRect.y * zoom;
+  ctx.strokeStyle = "rgba(214, 236, 255, 0.6)";
+  ctx.lineWidth = Math.max(1, lineWidth * 0.9);
+  ctx.beginPath();
+  ctx.moveTo(screenX, baselineY + 0.5);
+  ctx.lineTo(screenX + screenWidth, baselineY + 0.5);
+  ctx.stroke();
+  ctx.restore();
 }

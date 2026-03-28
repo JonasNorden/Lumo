@@ -1847,20 +1847,44 @@ kbd {
   top: 14px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(88, 115, 173, 0.42);
-  background: rgba(10, 16, 30, 0.9);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  gap: 6px;
+  padding: 6px 8px 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(114, 144, 204, 0.48);
+  background: linear-gradient(180deg, rgba(13, 21, 39, 0.98), rgba(8, 15, 29, 0.95));
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.34);
   font-size: 11px;
-  color: rgba(228, 238, 255, 0.82);
+  color: rgba(231, 241, 255, 0.86);
   z-index: 6;
+}
+
+.specialVolumeWorkbenchLauncherLabel {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(208, 224, 252, 0.82);
+}
+
+.specialVolumeWorkbenchLauncherButton {
+  appearance: none;
+  border: 1px solid rgba(132, 173, 241, 0.52);
+  background: linear-gradient(180deg, rgba(86, 126, 194, 0.28), rgba(44, 82, 152, 0.4));
+  color: #e8f2ff;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+  cursor: pointer;
+}
+
+.specialVolumeWorkbenchLauncherButton:hover {
+  background: linear-gradient(180deg, rgba(106, 148, 219, 0.32), rgba(52, 95, 176, 0.48));
 }
 
 .specialVolumeWorkbenchModal {
   width: min(1160px, calc(100vw - 36px));
-  max-height: min(88vh, 860px);
+  max-height: min(88vh, 820px);
   padding: 14px;
   border-radius: 16px;
   border: 1px solid rgba(58, 78, 118, 0.95);
@@ -1888,7 +1912,7 @@ kbd {
 .specialVolumeWorkbenchModalHeader p {
   margin: 3px 0 0;
   font-size: 11px;
-  color: rgba(228, 238, 255, 0.72);
+  color: rgba(214, 228, 252, 0.76);
 }
 
 .specialVolumeWorkbenchModalBody {
@@ -2321,6 +2345,7 @@ kbd {
   background: rgba(8, 13, 24, 0.9);
   color: #eef5ff;
   padding: 6px 7px;
+  box-shadow: inset 0 1px 0 rgba(170, 195, 240, 0.1);
 }
 
 .specialVolumeWorkbenchPreviewPaneWide {
@@ -2333,11 +2358,48 @@ kbd {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  padding-top: 2px;
+  padding: 8px 4px 2px;
+  border-top: 1px solid rgba(84, 112, 170, 0.3);
+}
+
+.specialVolumeWorkbenchActionButton {
+  appearance: none;
+  border-radius: 10px;
+  border: 1px solid rgba(114, 142, 202, 0.45);
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.specialVolumeWorkbenchActionButton:hover {
+  transform: translateY(-1px);
+}
+
+.specialVolumeWorkbenchActionButton.isSecondary {
+  background: rgba(22, 33, 57, 0.94);
+  color: rgba(220, 232, 251, 0.96);
+}
+
+.specialVolumeWorkbenchActionButton.isSecondary:hover {
+  border-color: rgba(152, 185, 248, 0.6);
+  background: rgba(28, 42, 70, 0.96);
+}
+
+.specialVolumeWorkbenchActionButton.isPrimary {
+  border-color: rgba(141, 182, 248, 0.66);
+  background: linear-gradient(180deg, rgba(118, 160, 238, 0.44), rgba(71, 114, 196, 0.72));
+  color: #f3f8ff;
+}
+
+.specialVolumeWorkbenchActionButton.isPrimary:hover {
+  border-color: rgba(170, 203, 255, 0.86);
+  background: linear-gradient(180deg, rgba(128, 173, 255, 0.52), rgba(81, 128, 217, 0.78));
 }
 
 .fogWorkbenchPreviewSurface {
-  min-height: 290px;
+  min-height: 320px;
 }
 
 .fogWorkbenchPreviewSpan {

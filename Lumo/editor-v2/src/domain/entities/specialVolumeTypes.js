@@ -193,9 +193,12 @@ export function getFogVolumeWorldRectFromDragCells(startCell, endCell, tileSize 
   const maxY = Math.max(startCell.y, endCell.y);
   const width = (maxX - minX + 1) * tileSize;
   const dragHeight = (maxY - minY + 1) * tileSize;
-  const height = Number.isFinite(Number(fallbackThicknessPx)) && Number(fallbackThicknessPx) > 0
+  const resolvedFallbackThickness = Number.isFinite(Number(fallbackThicknessPx)) && Number(fallbackThicknessPx) > 0
     ? Number(fallbackThicknessPx)
-    : dragHeight;
+    : null;
+  const height = dragHeight > tileSize
+    ? dragHeight
+    : (resolvedFallbackThickness || dragHeight);
 
   return {
     x: minX * tileSize,
