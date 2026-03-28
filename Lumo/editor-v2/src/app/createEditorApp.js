@@ -18,6 +18,7 @@ import {
   getSpecialVolumeWorkbenchModalContent,
   resolveSelectedSpecialVolume,
 } from "../ui/specialVolumeWorkbench.js";
+import { getVolumePreviewEnvironmentMetrics } from "../ui/volumePreviewEnvironment.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
 import {
@@ -2475,13 +2476,13 @@ export function createEditorApp({
     const ctx2d = fogPreviewMotion.ctx;
     const width = fogPreviewMotion.worldWidth;
     const height = fogPreviewMotion.worldHeight;
-    const tileSize = 24;
-    const groundBaseline = 14;
-    const groundY = height - groundBaseline;
-    const floorTop = groundY - tileSize;
+    const {
+      tileSize,
+      floorTopY: floorTop,
+      laneStartX,
+      laneEndX,
+    } = getVolumePreviewEnvironmentMetrics(width, height);
     const terrainTop = Math.max(24, Math.round(height * 0.36));
-    const laneStartX = fogPreviewMotion.bandStartX;
-    const laneEndX = fogPreviewMotion.bandEndX;
     const leftBlockInnerX = Math.max(0, laneStartX - tileSize);
     const rightBlockOuterX = Math.min(width, laneEndX + tileSize);
 
@@ -2498,8 +2499,8 @@ export function createEditorApp({
     const thicknessPx = Number.parseFloat(surfaceDataset.fogThickness || "") || 44;
     const liftPx = Number.parseFloat(surfaceDataset.fogLift || "") || 0;
 
-    const topBase = groundY - liftPx;
-    const bottom = groundY;
+    const topBase = floorTop - liftPx;
+    const bottom = floorTop;
     const pxPerCell = (fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX) / Math.max(1, fogPreviewMotion.sampleCount - 1);
     const falloff = Math.max(10, falloffPx);
     const elapsedSeconds = elapsedMs * 0.001;
@@ -2541,7 +2542,7 @@ export function createEditorApp({
 
     ctx2d.save();
     ctx2d.beginPath();
-    ctx2d.rect(laneStartX, 0, laneEndX - laneStartX, groundY);
+    ctx2d.rect(laneStartX, 0, laneEndX - laneStartX, floorTop);
     ctx2d.clip();
     ctx2d.globalCompositeOperation = "screen";
     ctx2d.globalAlpha = 0.82;
@@ -2570,7 +2571,7 @@ export function createEditorApp({
           const wave = noiseAmount * (((n * 0.5) + 0.5) - 0.5) * (10 + ((1 - a) * 18));
           const yyBaseRaw = yBase + wave - (bulge * (10 + ((1 - a) * 30))) + (suction * (8 + ((1 - a) * 20)));
           const yyOrg = bottom - ((bottom - yyBaseRaw) * org);
-          const yyBase = Math.min(yyOrg, groundY - 1);
+          const yyBase = Math.min(yyOrg, floorTop - 1);
           yy = bottom - ((bottom - yyBase) * edgeMask);
         }
         if (index === 0) ctx2d.moveTo(x, yy);
@@ -2602,7 +2603,7 @@ export function createEditorApp({
         const wave = noiseAmount * (((n * 0.5) + 0.5) - 0.5) * 10;
         const yyBaseRaw = topBase + wave - (bulge * 22) + (suction * 18);
         const yyOrg = bottom - ((bottom - yyBaseRaw) * org);
-        const yyBase = Math.min(yyOrg, groundY - 1);
+        const yyBase = Math.min(yyOrg, floorTop - 1);
         yy = bottom - ((bottom - yyBase) * edgeMask);
       }
       if (index === 0) ctx2d.moveTo(x, yy);
@@ -2616,7 +2617,7 @@ export function createEditorApp({
     const lumoX = fogPreviewMotion.lumoX;
     if (fogPreviewMotion.lumoSprite instanceof HTMLImageElement && fogPreviewMotion.lumoSprite.complete && fogPreviewMotion.lumoSprite.naturalWidth > 0) {
       ctx2d.save();
-      ctx2d.translate(lumoX, groundY - 1);
+      ctx2d.translate(lumoX, floorTop - 1);
       ctx2d.scale(fogPreviewMotion.lumoDirection, 1);
       ctx2d.drawImage(fogPreviewMotion.lumoSprite, -12, -24, 24, 24);
       ctx2d.restore();
@@ -2624,12 +2625,12 @@ export function createEditorApp({
       ctx2d.save();
       ctx2d.fillStyle = "rgba(17, 20, 30, 0.28)";
       ctx2d.beginPath();
-      ctx2d.ellipse(lumoX, groundY + 2, lumoW * 0.28, lumoW * 0.12, 0, 0, Math.PI * 2);
+      ctx2d.ellipse(lumoX, floorTop + 2, lumoW * 0.28, lumoW * 0.12, 0, 0, Math.PI * 2);
       ctx2d.fill();
       ctx2d.fillStyle = "rgba(223, 214, 200, 0.95)";
-      ctx2d.fillRect(lumoX - 10, groundY - 18, 20, 18);
+      ctx2d.fillRect(lumoX - 10, floorTop - 18, 20, 18);
       ctx2d.fillStyle = "rgba(252, 214, 103, 0.9)";
-      ctx2d.fillRect(lumoX - 8, groundY - 28, 16, 10);
+      ctx2d.fillRect(lumoX - 8, floorTop - 28, 16, 10);
       ctx2d.restore();
     }
   };
@@ -2764,8 +2765,9 @@ export function createEditorApp({
     fogPreviewMotion.ctx = ctx2d;
     fogPreviewMotion.worldWidth = canvasEl.width;
     fogPreviewMotion.worldHeight = canvasEl.height;
-    fogPreviewMotion.bandStartX = Math.round(fogPreviewMotion.worldWidth * 0.14);
-    fogPreviewMotion.bandEndX = Math.round(fogPreviewMotion.worldWidth * 0.86);
+    const envMetrics = getVolumePreviewEnvironmentMetrics(fogPreviewMotion.worldWidth, fogPreviewMotion.worldHeight);
+    fogPreviewMotion.bandStartX = envMetrics.laneStartX;
+    fogPreviewMotion.bandEndX = envMetrics.laneEndX;
     fogPreviewMotion.sampleCount = Math.max(260, Math.floor((fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX) / 1.4));
     fogPreviewMotion.field = new Float32Array(fogPreviewMotion.sampleCount);
     fogPreviewMotion.vel = new Float32Array(fogPreviewMotion.sampleCount);

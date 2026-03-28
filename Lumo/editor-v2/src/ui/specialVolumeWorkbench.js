@@ -1,5 +1,9 @@
 import { getFogVolumeParams, isFogVolumeEntityType } from "../domain/entities/specialVolumeTypes.js";
 import { findEntityPresetById } from "../domain/entities/entityPresets.js";
+import {
+  VOLUME_PREVIEW_ENVIRONMENT,
+  VOLUME_PREVIEW_GROUND_BASELINE_PX,
+} from "./volumePreviewEnvironment.js";
 
 const PREVIEW_SPAN_WIDTH_PX = 620;
 const PREVIEW_CANVAS_WIDTH_PX = 620;
@@ -166,7 +170,8 @@ function renderFogModal(selection) {
               data-fog-preview-falloff="${model.falloffPx.toFixed(4)}"
               data-fog-thickness="${model.thicknessPx.toFixed(4)}"
               data-fog-lift="${model.liftPx.toFixed(4)}"
-              style="--fog-ground-baseline:14px;--fog-lift:${model.liftPx.toFixed(2)}px;--fog-thickness:${model.thicknessPx.toFixed(2)}px;--fog-falloff-pct:${((model.falloffPx / PREVIEW_SPAN_WIDTH_PX) * 100).toFixed(3)}%;--fog-opacity:${model.density.toFixed(4)};--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
+              data-volume-preview-environment="${VOLUME_PREVIEW_ENVIRONMENT}"
+              style="--fog-ground-baseline:${VOLUME_PREVIEW_GROUND_BASELINE_PX}px;--fog-lift:${model.liftPx.toFixed(2)}px;--fog-thickness:${model.thicknessPx.toFixed(2)}px;--fog-falloff-pct:${((model.falloffPx / PREVIEW_SPAN_WIDTH_PX) * 100).toFixed(3)}%;--fog-opacity:${model.density.toFixed(4)};--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
             >
               <canvas
                 class="fogWorkbenchPreviewCanvas"
