@@ -195,6 +195,7 @@
   const SAVE_STORAGE_KEY = "lumo.save.slot1.v1";
   const EDITOR_PLAY_LEVEL_KEY = "lumo.editorPlay.level.v1";
   const EDITOR_PLAY_SPAWN_KEY = "lumo.editorPlay.spawn.v1";
+  const PFH_RUNTIME_SESSION_FLAG = "__pfhRuntimeSession";
   const defaultAudioSettings = Object.freeze({
     musicVolume: 0.42,
     sfxVolume: 0.6
@@ -680,6 +681,8 @@
     if (!levelObj || !levelObj.meta || !levelObj.layers || !Array.isArray(levelObj.layers.main)){
       return null;
     }
+
+    levelObj[PFH_RUNTIME_SESSION_FLAG] = true;
 
     const bgLayer = Array.isArray(levelObj.layers.bg)
       ? levelObj.layers.bg
@@ -1623,6 +1626,13 @@
     }
 
     world.loadLevel(levelObj);
+
+    const isPfhRuntimeSession = Boolean(levelObj && levelObj[PFH_RUNTIME_SESSION_FLAG]);
+    if (isPfhRuntimeSession){
+      console.log("[PFH runtime] using layers.ents for entity load");
+      levelObj.entities = [];
+    }
+
     ents.loadFromLevel(levelObj);
     world._ents = ents;
     levelManager.remember(levelObj);
