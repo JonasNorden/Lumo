@@ -214,8 +214,12 @@
       //  B) levelObj.layers.ents: [{id, x, y, w, h, anchor, offsetX, offsetY, aggroRadius, params}] (LumoEditor export)
       const listA = (levelObj && Array.isArray(levelObj.entities)) ? levelObj.entities : null;
       const listB = (levelObj && levelObj.layers && Array.isArray(levelObj.layers.ents)) ? levelObj.layers.ents : null;
+      console.log("[PFH DEBUG] levelObj.entities:", levelObj && levelObj.entities);
+      console.log("[PFH DEBUG] levelObj.layers?.ents:", levelObj && levelObj.layers ? levelObj.layers.ents : undefined);
 
       const list = listA || listB || [];
+      console.log("[PFH DEBUG] selected list length:", list.length);
+      console.log("[PFH DEBUG] first entity:", list[0]);
       const meta = levelObj && levelObj.meta ? levelObj.meta : {};
       const levelLabel = ((meta.id || "(no-id)") + (meta.name ? `:${meta.name}` : ""));
       const diag = { levelLabel, unknownEditorIds: new Set(), unknownRuntimeTypes: new Set() };
@@ -275,6 +279,7 @@
 
     spawnFromDef(e, levelObj, diag){
       if (!e) return;
+      console.log("[PFH DEBUG] spawnFromDef id:", e.id);
 
       // Editor-export path (id-based)
       if (e.id){
