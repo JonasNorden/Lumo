@@ -309,11 +309,18 @@ function drawBubblingLiquidVolumeRegion(ctx, entity, tileSize, viewport, { isSel
   if (rect.width < 1 || rect.height < 1) return;
   const scale = 1 / Math.max(0.001, viewport.zoom);
   const outlineWidth = (preview ? 1.9 : isSelected ? 1.7 : isHovered ? 1.35 : 1.1) * scale;
-  const bubbleCount = Math.max(5, Math.min(24, Math.round((rect.width / (20 * scale)) + 5)));
+  const toDensity01 = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+    if (numeric <= 1) return Math.min(1, numeric);
+    return Math.min(1, numeric / 100);
+  };
+  const bubbleAmount = toDensity01(entity?.params?.behavior?.bubbleAmount);
+  const bubbleCount = Math.max(4, Math.min(48, Math.round((rect.width / (24 * scale)) + 2 + (bubbleAmount * 34))));
   const topColor = entity?.params?.look?.topColor || "#7FD12E";
   const bottomColor = entity?.params?.look?.bottomColor || "#2F5E1C";
   const surfaceActivity = Math.max(0, Math.min(1, Number(entity?.params?.behavior?.surfaceActivity) || 0));
-  const fumeAmount = Math.max(0, Math.min(1, Number(entity?.params?.behavior?.fumeAmount) || 0));
+  const fumeAmount = toDensity01(entity?.params?.behavior?.fumeAmount);
 
   ctx.save();
   ctx.beginPath();
@@ -346,10 +353,10 @@ function drawBubblingLiquidVolumeRegion(ctx, entity, tileSize, viewport, { isSel
   ctx.lineWidth = Math.max(1, 1.2 * scale);
   ctx.stroke();
   if (fumeAmount > 0.01) {
-    const fumeHeight = (10 + (fumeAmount * 18)) * scale;
+    const fumeHeight = (10 + (fumeAmount * 26)) * scale;
     const fumeGradient = ctx.createLinearGradient(0, rect.y - fumeHeight, 0, rect.y + 3 * scale);
     fumeGradient.addColorStop(0, "rgba(209, 232, 188, 0)");
-    fumeGradient.addColorStop(1, `rgba(209, 232, 188, ${0.14 + (fumeAmount * 0.2)})`);
+    fumeGradient.addColorStop(1, `rgba(209, 232, 188, ${0.14 + (fumeAmount * 0.24)})`);
     ctx.fillStyle = fumeGradient;
     ctx.fillRect(rect.x, rect.y - fumeHeight, rect.width, fumeHeight + (3 * scale));
   }

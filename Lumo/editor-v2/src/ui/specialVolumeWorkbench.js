@@ -1,4 +1,5 @@
 import {
+  BUBBLING_LIQUID_DENSITY_MAX,
   getBubblingLiquidVolumeParams,
   getFogVolumeParams,
   getLavaVolumeParams,
@@ -155,8 +156,8 @@ function getBubblingLiquidPreviewModel(entity, nowMs = Date.now()) {
     params,
     depthPx,
     surfaceActivity: clamp(Number(params.behavior.surfaceActivity), 0, 1),
-    bubbleAmount: clamp(Number(params.behavior.bubbleAmount), 0, 1),
-    fumeAmount: clamp(Number(params.behavior.fumeAmount), 0, 1),
+    bubbleAmount: clamp(Number(params.behavior.bubbleAmount), 0, BUBBLING_LIQUID_DENSITY_MAX),
+    fumeAmount: clamp(Number(params.behavior.fumeAmount), 0, BUBBLING_LIQUID_DENSITY_MAX),
     traverseDurationMs,
     phaseMs: Math.round(nowMs % traverseDurationMs),
   };
@@ -375,8 +376,8 @@ function renderBubblingLiquidModal(selection) {
     { label: "Length", path: "area.length", min: 24, max: 4000, step: 24, digits: 0, read: readSpanLength },
     { label: "Depth", path: "area.depth", min: 24, max: 320, step: 1, digits: 0, read: (entity) => getBubblingLiquidVolumeParams(entity).area.depth },
     { label: "Surface Activity", path: "behavior.surfaceActivity", min: 0, max: 1, step: 0.01, digits: 2, read: (entity) => getBubblingLiquidVolumeParams(entity).behavior.surfaceActivity },
-    { label: "Bubble Amount", path: "behavior.bubbleAmount", min: 0, max: 1, step: 0.01, digits: 2, read: (entity) => getBubblingLiquidVolumeParams(entity).behavior.bubbleAmount },
-    { label: "Fume Amount", path: "behavior.fumeAmount", min: 0, max: 1, step: 0.01, digits: 2, read: (entity) => getBubblingLiquidVolumeParams(entity).behavior.fumeAmount },
+    { label: "Bubble Amount", path: "behavior.bubbleAmount", min: 0, max: BUBBLING_LIQUID_DENSITY_MAX, step: 1, digits: 0, read: (entity) => getBubblingLiquidVolumeParams(entity).behavior.bubbleAmount },
+    { label: "Fume Amount", path: "behavior.fumeAmount", min: 0, max: BUBBLING_LIQUID_DENSITY_MAX, step: 1, digits: 0, read: (entity) => getBubblingLiquidVolumeParams(entity).behavior.fumeAmount },
   ];
   return {
     type: "bubbling_liquid_volume",
