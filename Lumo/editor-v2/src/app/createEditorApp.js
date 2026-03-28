@@ -2905,11 +2905,17 @@ export function createEditorApp({
     ctx2d.beginPath();
     ctx2d.rect(laneStartX, waterTopBase - 8, laneEndX - laneStartX, floorTop - waterTopBase + 8);
     ctx2d.clip();
-    const bodyGradient = ctx2d.createLinearGradient(0, waterTopBase, 0, floorTop);
+    const seamOverlapPx = 6;
+    const bodyGradient = ctx2d.createLinearGradient(0, waterTopBase - seamOverlapPx, 0, floorTop);
     bodyGradient.addColorStop(0, topColor);
     bodyGradient.addColorStop(1, bottomColor);
     ctx2d.fillStyle = bodyGradient;
-    ctx2d.fillRect(laneStartX, waterTopBase, laneEndX - laneStartX, floorTop - waterTopBase);
+    ctx2d.fillRect(
+      laneStartX,
+      waterTopBase - seamOverlapPx,
+      laneEndX - laneStartX,
+      (floorTop - waterTopBase) + seamOverlapPx,
+    );
 
     for (let band = 0; band < 6; band += 1) {
       const yRatio = (band + 1) / 7;
@@ -2927,13 +2933,35 @@ export function createEditorApp({
       ctx2d.stroke();
     }
 
-    ctx2d.beginPath();
+    const surfaceSamples = [];
     for (let x = laneStartX; x <= laneEndX; x += 2) {
       const wave = Math.sin((x * 0.028) + (elapsedSec * 1.6 * waveSpeed)) * (2.4 * waveAmount)
         + Math.sin((x * 0.056) + (elapsedSec * 0.86 * waveSpeed) + 1.2) * (1.5 * waveAmount);
-      const y = waterTopBase + wave;
-      if (x === laneStartX) ctx2d.moveTo(x, y);
-      else ctx2d.lineTo(x, y);
+      surfaceSamples.push({ x, y: waterTopBase + wave });
+    }
+
+    const seamBlendDepthPx = 4;
+    const seamGradient = ctx2d.createLinearGradient(0, waterTopBase - seamOverlapPx, 0, waterTopBase + seamBlendDepthPx);
+    seamGradient.addColorStop(0, "rgba(78, 184, 242, 0.24)");
+    seamGradient.addColorStop(1, "rgba(78, 184, 242, 0)");
+    ctx2d.fillStyle = seamGradient;
+    ctx2d.beginPath();
+    ctx2d.moveTo(surfaceSamples[0].x, surfaceSamples[0].y + seamOverlapPx);
+    for (let i = 1; i < surfaceSamples.length; i += 1) {
+      const sample = surfaceSamples[i];
+      ctx2d.lineTo(sample.x, sample.y + seamOverlapPx);
+    }
+    const lastSurfaceSample = surfaceSamples[surfaceSamples.length - 1];
+    ctx2d.lineTo(lastSurfaceSample.x, lastSurfaceSample.y + seamOverlapPx + seamBlendDepthPx);
+    ctx2d.lineTo(surfaceSamples[0].x, surfaceSamples[0].y + seamOverlapPx + seamBlendDepthPx);
+    ctx2d.closePath();
+    ctx2d.fill();
+
+    ctx2d.beginPath();
+    for (let i = 0; i < surfaceSamples.length; i += 1) {
+      const sample = surfaceSamples[i];
+      if (i === 0) ctx2d.moveTo(sample.x, sample.y);
+      else ctx2d.lineTo(sample.x, sample.y);
     }
     ctx2d.strokeStyle = "rgba(208, 244, 255, 0.95)";
     ctx2d.lineWidth = 1.6;
