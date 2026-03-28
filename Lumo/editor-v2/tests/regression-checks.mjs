@@ -4473,12 +4473,18 @@ function runFloatingFogWorkbenchRegressionChecks() {
   assert.equal(modal.markup.includes('data-fog-workbench-action="done"'), true, "new fog modal should expose done action");
 
   const expectedControlPaths = [
+    "area.length",
     "look.density",
     "look.lift",
     "area.falloff",
     "organic.strength",
     "organic.speed",
+    "interaction.gate",
+    "interaction.radius",
     "interaction.push",
+    "interaction.bulge",
+    "look.noise",
+    "look.drift",
     "smoothing.relax",
     "smoothing.visc",
   ];
@@ -4486,8 +4492,8 @@ function runFloatingFogWorkbenchRegressionChecks() {
     assert.equal(modal.markup.includes(`data-entity-param-path="${path}"`), true, `new fog modal should expose first-pass control ${path}`);
   });
 
-  ["look.color", "render.blend", "look.exposure", "interaction.radius"].forEach((path) => {
-    assert.equal(modal.markup.includes(`data-entity-param-path="${path}"`), false, `new fog modal should hide non-goal control ${path} in first pass`);
+  ["look.color", "render.blend", "look.exposure"].forEach((path) => {
+    assert.equal(modal.markup.includes(`data-entity-param-path="${path}"`), false, `new fog modal should hide non-goal control ${path} in focused pass`);
   });
 
   assert.equal(modal.markup.includes("--fog-ground-baseline:14px;"), true, "preview should keep fog and Lumo anchored to baseline");

@@ -105,13 +105,23 @@ function getFogPreviewModel(entity, nowMs = Date.now()) {
 function renderFogModal(selection) {
   const model = getFogPreviewModel(selection.entity);
   const lumoSpriteSrc = resolveLumoPreviewSpriteSrc();
+  const readSpanLength = (entity) => {
+    const params = getFogVolumeParams(entity);
+    return Math.max(24, Number(params.area.x1) - Number(params.area.x0));
+  };
   const numberFields = [
+    { label: "Length", path: "area.length", min: 24, max: 4000, step: 24, digits: 0, read: readSpanLength },
     { label: "Density", path: "look.density", min: 0.02, max: 1, step: 0.01, digits: 2, read: (entity) => getFogVolumeParams(entity).look.density },
     { label: "Height above ground", path: "look.lift", min: 0, max: 120, step: 1, digits: 0, read: (entity) => getFogVolumeParams(entity).look.lift },
     { label: "Falloff Distance", path: "area.falloff", min: 10, max: 520, step: 1, digits: 0, read: (entity) => getFogVolumeParams(entity).area.falloff },
     { label: "Idle Amount", path: "organic.strength", min: 0, max: 1, step: 0.01, digits: 2, read: (entity) => getFogVolumeParams(entity).organic.strength },
     { label: "Idle Speed", path: "organic.speed", min: 0.1, max: 3, step: 0.05, digits: 2, read: (entity) => getFogVolumeParams(entity).organic.speed },
+    { label: "Interaction Gate", path: "interaction.gate", min: 0, max: 260, step: 1, digits: 0, read: (entity) => getFogVolumeParams(entity).interaction.gate },
+    { label: "Disturbance Radius", path: "interaction.radius", min: 10, max: 240, step: 1, digits: 0, read: (entity) => getFogVolumeParams(entity).interaction.radius },
     { label: "Lumo Influence Amount", path: "interaction.push", min: 0, max: 5, step: 0.05, digits: 2, read: (entity) => getFogVolumeParams(entity).interaction.push },
+    { label: "Front Bulge Strength", path: "interaction.bulge", min: 0, max: 4, step: 0.05, digits: 2, read: (entity) => getFogVolumeParams(entity).interaction.bulge },
+    { label: "Organic/Noise Strength", path: "look.noise", min: 0, max: 1, step: 0.01, digits: 2, read: (entity) => getFogVolumeParams(entity).look.noise },
+    { label: "Drift Amount", path: "look.drift", min: -3, max: 3, step: 0.05, digits: 2, read: (entity) => getFogVolumeParams(entity).look.drift },
     { label: "Return Time", path: "smoothing.relax", min: 0.02, max: 1, step: 0.01, digits: 2, read: (entity) => getFogVolumeParams(entity).smoothing.relax },
     { label: "Viscosity", path: "smoothing.visc", min: 0.35, max: 0.995, step: 0.005, digits: 3, read: (entity) => getFogVolumeParams(entity).smoothing.visc },
   ];
