@@ -3149,7 +3149,8 @@ export function createEditorApp({
     const depth = clampFogPreview(Number.parseFloat(surfaceDataset.lavaDepth || "") || 88, 24, 164);
     const flowSpeed = clampFogPreview(Number.parseFloat(surfaceDataset.lavaFlowSpeed || "") || 0.55, 0.1, 1.4);
     const temperature = clampFogPreview(Number.parseFloat(surfaceDataset.lavaTemperature || "") || 0.72, 0.2, 1);
-    const crustAmount = clampFogPreview(Number.parseFloat(surfaceDataset.lavaCrustAmount || "") || 0.5, 0, 1);
+    const crustAmount = clampFogPreview(Number.parseFloat(surfaceDataset.lavaCrustAmount || "") || 45, 0, 100);
+    const crustDensity = crustAmount / 100;
     const lavaTopBase = floorTop - depth;
     const elapsedSec = elapsedMs * 0.001;
     const glowBoost = 0.55 + (temperature * 0.65);
@@ -3218,19 +3219,19 @@ export function createEditorApp({
       ctx2d.stroke();
     }
 
-    const crustFragmentCount = Math.max(8, Math.round(10 + (crustAmount * 34)));
+    const crustFragmentCount = Math.max(10, Math.round((laneWidth * 0.12) + (crustDensity * laneWidth * 0.62)));
     for (let patch = 0; patch < crustFragmentCount; patch += 1) {
       const seed = (patch * 12.73) + 3.1;
       const u = sampleSmookeNoise(seed + 1.4);
-      const drift = (sampleSmookeNoise(seed + (elapsedSec * 0.05 * flowSpeed)) - 0.5) * (8 + (crustAmount * 6));
+      const drift = (sampleSmookeNoise(seed + (elapsedSec * 0.05 * flowSpeed)) - 0.5) * (6 + (crustDensity * 7.5));
       const px = laneStartX + (u * laneWidth) + drift;
       const topBias = Math.pow(sampleSmookeNoise(seed + 4.8), 0.62);
       const py = lavaTopBase + (depth * (0.08 + (topBias * 0.84))) + ((sampleSmookeNoise(seed + (elapsedSec * 0.08 * flowSpeed) + 8.1) - 0.5) * 11);
-      const fragmentWidth = 4.8 + (sampleSmookeNoise(seed + 10.3) * 7.9) + (crustAmount * 2.1);
-      const fragmentHeight = 2.5 + (sampleSmookeNoise(seed + 14.7) * 4.9) + (crustAmount * 1.4);
+      const fragmentWidth = 2 + (sampleSmookeNoise(seed + 10.3) * 4.4) + (crustDensity * 1.1);
+      const fragmentHeight = 1.1 + (sampleSmookeNoise(seed + 14.7) * 2.9) + (crustDensity * 0.7);
       const points = 6 + (patch % 3);
       const phase = elapsedSec * (0.09 + ((patch % 4) * 0.018)) * flowSpeed;
-      const alphaPulse = 0.1 + (sampleSmookeNoise(seed + phase + 20.4) * (0.18 + (crustAmount * 0.22)));
+      const alphaPulse = 0.1 + (sampleSmookeNoise(seed + phase + 20.4) * (0.21 + (crustDensity * 0.26)));
       const colorBlend = sampleSmookeNoise(seed + 26.3);
       const red = Math.round(14 + (colorBlend * 34));
       const green = Math.round(8 + (colorBlend * 16));
@@ -3264,66 +3265,94 @@ export function createEditorApp({
 
     const distortionHeight = 42 + (temperature * 34);
     const heatEnvelopeTop = Math.max(0, surfaceCrestY - distortionHeight - 12);
-    const heatEnvelopeBottom = floorTop + 4;
+    const heatEnvelopeBottom = Math.ceil(surfaceCrestY + 1);
 
     ctx2d.save();
     ctx2d.beginPath();
+    ctx2d.rect(laneStartX, heatEnvelopeTop, laneEndX - laneStartX, heatEnvelopeBottom - heatEnvelopeTop);
     ctx2d.moveTo(firstSurfaceSample.x, firstSurfaceSample.y);
     for (let i = 1; i < surfaceSamples.length; i += 1) {
-      const sample = surfaceSamples[i];
-      ctx2d.lineTo(sample.x, sample.y);
+      ctx2d.lineTo(surfaceSamples[i].x, surfaceSamples[i].y);
     }
-    for (let i = surfaceSamples.length - 1; i >= 0; i -= 1) {
-      const sample = surfaceSamples[i];
-      const waveA = sampleSmookeNoise((sample.x * 0.012) + (elapsedSec * 0.29 * flowSpeed));
-      const waveB = sampleSmookeNoise((sample.x * 0.027) + (elapsedSec * 0.17 * flowSpeed) + 14.8);
-      const crestLift = (waveA * 0.56 + waveB * 0.44) * (distortionHeight * (0.74 + (temperature * 0.21)));
-      const y = Math.max(heatEnvelopeTop, sample.y - crestLift);
-      ctx2d.lineTo(sample.x, y);
-    }
+    ctx2d.lineTo(lastSurfaceSample.x, floorTop + 6);
+    ctx2d.lineTo(firstSurfaceSample.x, floorTop + 6);
     ctx2d.closePath();
-    ctx2d.clip();
+    ctx2d.clip("evenodd");
     const heatGlow = ctx2d.createLinearGradient(0, heatEnvelopeTop, 0, heatEnvelopeBottom);
     heatGlow.addColorStop(0, "rgba(255, 177, 86, 0)");
-    heatGlow.addColorStop(0.5, `rgba(255, ${Math.round(171 + (temperature * 54))}, ${Math.round(70 + (temperature * 38))}, ${0.06 + (temperature * 0.09)})`);
-    heatGlow.addColorStop(1, `rgba(255, ${Math.round(204 + (temperature * 38))}, ${Math.round(96 + (temperature * 35))}, ${0.19 + (temperature * 0.2)})`);
+    heatGlow.addColorStop(0.5, `rgba(255, ${Math.round(171 + (temperature * 54))}, ${Math.round(70 + (temperature * 38))}, ${0.045 + (temperature * 0.06)})`);
+    heatGlow.addColorStop(1, `rgba(255, ${Math.round(204 + (temperature * 38))}, ${Math.round(96 + (temperature * 35))}, ${0.08 + (temperature * 0.1)})`);
     ctx2d.fillStyle = heatGlow;
     ctx2d.fillRect(laneStartX, heatEnvelopeTop, laneEndX - laneStartX, heatEnvelopeBottom - heatEnvelopeTop);
-    ctx2d.restore();
 
-    const distortionBands = Math.max(16, Math.round(20 + (temperature * 10)));
-    ctx2d.save();
-    ctx2d.globalCompositeOperation = "lighter";
+    const distortionBands = Math.max(34, Math.round((laneWidth / 12) + (temperature * 16)));
+    ctx2d.globalCompositeOperation = "screen";
     for (let band = 0; band < distortionBands; band += 1) {
       const seed = (band * 17.19) + 1.3;
       const centerU = sampleSmookeNoise(seed + 0.5);
       const baseX = laneStartX + (centerU * laneWidth);
-      const widthPx = 3.8 + (sampleSmookeNoise(seed + 4.3) * 7.4);
-      const speed = 0.26 + (sampleSmookeNoise(seed + 8.2) * 0.58);
+      const widthPx = 0.8 + (sampleSmookeNoise(seed + 4.3) * 1.9);
+      const speed = 0.24 + (sampleSmookeNoise(seed + 8.2) * 0.54);
       const phase = (elapsedSec * speed * flowSpeed) + (seed * 0.19);
-      const sway = (sampleSmookeNoise(seed + phase + 11.7) - 0.5) * (4.4 + (temperature * 7.6));
-      const alpha = 0.03 + (sampleSmookeNoise(seed + 15.4) * (0.035 + (temperature * 0.03)));
-      const segments = 9;
+      const sway = (sampleSmookeNoise(seed + phase + 11.7) - 0.5) * (3.4 + (temperature * 5.2));
+      const alpha = 0.018 + (sampleSmookeNoise(seed + 15.4) * (0.03 + (temperature * 0.02)));
+      const segments = 12;
       ctx2d.beginPath();
       for (let i = 0; i <= segments; i += 1) {
         const t = i / segments;
-        const wavering = (sampleSmookeNoise(seed + (t * 7.8) + phase) - 0.5) * (2.8 + (t * 6.8));
+        const wavering = (sampleSmookeNoise(seed + (t * 9.4) + phase) - 0.5) * (1.8 + (t * 5.2));
         const worldX = baseX + sway + wavering;
         const surfaceY = sampleSurfaceYAtX(worldX);
-        const climb = t * distortionHeight * (0.46 + (sampleSmookeNoise(seed + (t * 5.9) + 24.7) * 0.62));
-        const y = surfaceY - climb;
+        const climb = t * distortionHeight * (0.52 + (sampleSmookeNoise(seed + (t * 5.9) + 24.7) * 0.5));
+        const y = Math.max(heatEnvelopeTop, surfaceY - climb);
         if (i === 0) ctx2d.moveTo(worldX, y);
         else ctx2d.lineTo(worldX, y);
       }
-      const grad = ctx2d.createLinearGradient(0, heatEnvelopeTop, 0, surfaceCrestY + 6);
+      const grad = ctx2d.createLinearGradient(0, heatEnvelopeTop, 0, heatEnvelopeBottom);
       grad.addColorStop(0, "rgba(255, 220, 170, 0)");
-      grad.addColorStop(0.68, `rgba(255, ${Math.round(188 + (temperature * 36))}, ${Math.round(106 + (temperature * 44))}, ${alpha})`);
+      grad.addColorStop(0.7, `rgba(255, ${Math.round(182 + (temperature * 30))}, ${Math.round(106 + (temperature * 32))}, ${alpha})`);
       grad.addColorStop(1, "rgba(255, 236, 188, 0)");
       ctx2d.strokeStyle = grad;
       ctx2d.lineWidth = widthPx;
       ctx2d.lineCap = "round";
       ctx2d.lineJoin = "round";
       ctx2d.stroke();
+    }
+    ctx2d.globalCompositeOperation = "source-over";
+    const shimmerColumns = Math.max(18, Math.round((laneWidth / 18) + (temperature * 10)));
+    for (let column = 0; column < shimmerColumns; column += 1) {
+      const seed = 88.3 + (column * 9.17);
+      const centerX = laneStartX + (sampleSmookeNoise(seed) * laneWidth);
+      const halfWidth = 2.2 + (sampleSmookeNoise(seed + 1.8) * 5.1);
+      const phase = elapsedSec * ((0.26 + (sampleSmookeNoise(seed + 2.4) * 0.45)) * flowSpeed) + seed;
+      const alpha = 0.014 + (sampleSmookeNoise(seed + 6.8) * (0.018 + (temperature * 0.012)));
+      const topLift = distortionHeight * (0.46 + (sampleSmookeNoise(seed + 4.1) * 0.54));
+      const colTop = Math.max(heatEnvelopeTop, surfaceCrestY - topLift);
+      const grad = ctx2d.createLinearGradient(0, colTop, 0, heatEnvelopeBottom);
+      grad.addColorStop(0, "rgba(255, 255, 255, 0)");
+      grad.addColorStop(0.4, `rgba(255, 244, 208, ${alpha})`);
+      grad.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx2d.fillStyle = grad;
+      ctx2d.beginPath();
+      for (let i = 0; i <= 10; i += 1) {
+        const t = i / 10;
+        const y = heatEnvelopeBottom - ((heatEnvelopeBottom - colTop) * t);
+        const spread = (1 - t) * halfWidth;
+        const offset = Math.sin((t * 8.2) + phase) * (0.9 + (t * 2.2));
+        const x = centerX + offset + spread;
+        if (i === 0) ctx2d.moveTo(x, y);
+        else ctx2d.lineTo(x, y);
+      }
+      for (let i = 10; i >= 0; i -= 1) {
+        const t = i / 10;
+        const y = heatEnvelopeBottom - ((heatEnvelopeBottom - colTop) * t);
+        const spread = (1 - t) * halfWidth;
+        const offset = Math.sin((t * 8.2) + phase) * (0.9 + (t * 2.2));
+        const x = centerX + offset - spread;
+        ctx2d.lineTo(x, y);
+      }
+      ctx2d.closePath();
+      ctx2d.fill();
     }
     ctx2d.restore();
   };

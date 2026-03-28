@@ -222,7 +222,7 @@ export const ENTITY_PRESETS = [
     defaultParams: {
       area: { x0: 0, x1: 240, y0: 0, depth: 88 },
       flow: { speed: 0.55 },
-      look: { temperature: 0.72, crustAmount: 0.5 },
+      look: { temperature: 0.72, crustAmount: 45 },
       hazard: { instantDeath: true },
     },
     img: null,
