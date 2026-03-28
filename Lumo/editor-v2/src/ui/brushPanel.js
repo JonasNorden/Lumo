@@ -21,7 +21,6 @@ const PANEL_LAYERS = {
   TILES: "tiles",
   BACKGROUND: "background",
   ENTITIES: "entities",
-  VOLUMES: "volumes",
   DECOR: "decor",
   SOUND: "sound",
 };
@@ -34,13 +33,11 @@ const VISIBLE_TOOL_OPTIONS = TOOL_OPTIONS.filter((option) => (
 
 const HIDDEN_ENTITY_PRESET_IDS = new Set(["player-spawn", "fog_volume", "trigger", "generic"]);
 const PLACEABLE_ENTITY_PRESETS = ENTITY_PRESETS.filter((preset) => !HIDDEN_ENTITY_PRESET_IDS.has(preset.id));
-const VOLUME_PRESETS = ENTITY_PRESETS.filter((preset) => preset.id === "fog_volume");
 const COLLAPSIBLE_PANEL_DEFAULTS = {
   tiles: false,
   background: true,
   decor: false,
   entities: false,
-  volumes: false,
   sound: false,
 };
 
@@ -124,7 +121,6 @@ function renderLayerSection(state) {
       <button class="toolButton ${activeLayer === PANEL_LAYERS.BACKGROUND ? "isActive" : ""}" type="button" data-layer="background">BG</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.TILES ? "isActive" : ""}" type="button" data-layer="tiles">Tiles</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.ENTITIES ? "isActive" : ""}" type="button" data-layer="entities">Entities</button>
-      <button class="toolButton ${activeLayer === PANEL_LAYERS.VOLUMES ? "isActive" : ""}" type="button" data-layer="volumes">Volumes</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.DECOR ? "isActive" : ""}" type="button" data-layer="decor">Decor</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.SOUND ? "isActive" : ""}" type="button" data-layer="sound">Sound</button>
     </div>
@@ -249,18 +245,6 @@ function renderEntitiesSettings(state) {
     </div>
     <div class="statusRow compactStatusRow entityPlacementStatusRow">
       <span class="value">${escapeHtml(placementStatus)}</span>
-    </div>
-  `;
-}
-
-function renderVolumesSettings(state) {
-  const activePresetId = state.interaction.activeEntityPresetId;
-  const activePreset = VOLUME_PRESETS.find((preset) => preset.id === activePresetId) || null;
-
-  return `
-    ${renderAssetPicker("Volume presets", "volume-preset-button", VOLUME_PRESETS, activePresetId, "No volume type selected", "assetPickerCompact")}
-    <div class="compactActionRow compactActionRowSingle">
-      <button type="button" class="toolButton isSecondary" data-volume-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
     </div>
   `;
 }
@@ -393,7 +377,6 @@ export function renderBrushPanel(panel, state) {
     ${state.document.active ? renderSection("background", "BACKGROUND", panelSections.background, renderBackgroundSettings(state)) : ""}
     ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
     ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
-    ${state.document.active ? renderSection("volumes", "VOLUMES", panelSections.volumes, renderVolumesSettings(state)) : ""}
     ${state.document.active ? renderSoundSection(state.interaction.activeSoundPresetId, panelSections.sound) : ""}
   `;
 }
@@ -508,12 +491,6 @@ export function bindBrushPanel(panel, store, options = {}) {
       return;
     }
 
-    const volumePresetButton = target.closest("[data-volume-preset-button]");
-    if (volumePresetButton instanceof HTMLButtonElement) {
-      onLayerChange?.(PANEL_LAYERS.VOLUMES);
-      onVolumeUpdate?.(-1, "preset", volumePresetButton.dataset.volumePresetButton || null);
-      return;
-    }
 
     const brushSpriteButton = target.closest("[data-brush-sprite-button]");
     if (brushSpriteButton instanceof HTMLButtonElement) {
@@ -531,14 +508,6 @@ export function bindBrushPanel(panel, store, options = {}) {
       return;
     }
 
-    const volumeActionButton = target.closest("[data-volume-action]");
-    if (volumeActionButton instanceof HTMLButtonElement) {
-      onLayerChange?.(PANEL_LAYERS.VOLUMES);
-      if (volumeActionButton.dataset.volumeAction === "clear-preset") onVolumeUpdate?.(-1, "clear-preset", null);
-      return;
-    }
-
-
 
     const backgroundMaterialButton = target.closest("[data-background-material-button]");
     if (backgroundMaterialButton instanceof HTMLButtonElement) {
@@ -555,7 +524,7 @@ export function bindBrushPanel(panel, store, options = {}) {
     const layerButton = target.closest("[data-layer]");
     if (layerButton instanceof HTMLButtonElement) {
       const nextLayer = layerButton.dataset.layer;
-      if (![PANEL_LAYERS.BACKGROUND, PANEL_LAYERS.TILES, PANEL_LAYERS.ENTITIES, PANEL_LAYERS.VOLUMES, PANEL_LAYERS.DECOR, PANEL_LAYERS.SOUND].includes(nextLayer)) return;
+      if (![PANEL_LAYERS.BACKGROUND, PANEL_LAYERS.TILES, PANEL_LAYERS.ENTITIES, PANEL_LAYERS.DECOR, PANEL_LAYERS.SOUND].includes(nextLayer)) return;
       onLayerChange?.(nextLayer);
       if (nextLayer === PANEL_LAYERS.DECOR || nextLayer === PANEL_LAYERS.SOUND || nextLayer === PANEL_LAYERS.ENTITIES) {
         onCanvasTargetChange?.(nextLayer === PANEL_LAYERS.DECOR ? "decor" : nextLayer === PANEL_LAYERS.SOUND ? "sound" : "entity");

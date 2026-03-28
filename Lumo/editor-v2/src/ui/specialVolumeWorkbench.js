@@ -1,6 +1,5 @@
 import { getFogVolumeParams, isFogVolumeEntityType } from "../domain/entities/specialVolumeTypes.js";
 import { findEntityPresetById } from "../domain/entities/entityPresets.js";
-import { getTileAssetByTileValue } from "../domain/tiles/tileSpriteCatalog.js";
 
 const PREVIEW_SPAN_WIDTH_PX = 620;
 const PREVIEW_SAMPLE_COUNT = 32;
@@ -88,31 +87,14 @@ function getFogPreviewModel(entity, nowMs = Date.now()) {
   const thicknessPx = clamp(Number(params.look.thickness), 12, 220);
   const liftPx = clamp(Number(params.look.lift), 0, 120);
   const falloffPx = clamp(Number(params.area.falloff), 10, PREVIEW_SPAN_WIDTH_PX);
-  const idleAmount = clamp(Number(params.organic.strength), 0, 1);
-  const idleSpeed = clamp(Number(params.organic.speed), 0.1, 3);
-  const influenceAmount = clamp(Number(params.interaction.push), 0, 5);
-  const returnStrength = clamp(Number(params.smoothing.relax), 0.02, 1);
-  const viscosity = clamp(Number(params.smoothing.visc), 0.35, 0.995);
-
-  const returnTime = clamp((1.1 - returnStrength) * 5.2, 0.2, 5.6);
-  const traverseDurationMs = clamp(16400 - idleSpeed * 1400 - influenceAmount * 480, 8400, 22000);
-  const densityOpacity = clamp(0.18 + density * 0.72, 0.14, 0.92);
-  const disturbanceStrength = clamp((influenceAmount / 5) * (0.55 + idleAmount * 0.45), 0, 1.35);
-  const disturbanceRadiusPct = clamp(6 + (influenceAmount * 4.8) + ((1 - viscosity) * 12), 7, 42);
-  const idleMotionAmount = clamp(idleAmount * (0.4 + (1 - viscosity) * 0.8), 0, 1.1);
-  const settleStrength = clamp(0.45 + (viscosity * 0.95) + (returnStrength * 0.65), 0.4, 2);
+  const traverseDurationMs = 9600;
 
   const profile = buildFogPreviewFieldProfile({
     spanWidthPx: PREVIEW_SPAN_WIDTH_PX,
     thicknessPx,
     density,
     falloffPx,
-    idleAmount,
-    idleSpeed,
-    influenceAmount,
-    returnTime,
-    viscosity,
-    nowSeconds: nowMs / 1000,
+    sampleCount: PREVIEW_SAMPLE_COUNT,
   });
 
   return {
@@ -122,18 +104,7 @@ function getFogPreviewModel(entity, nowMs = Date.now()) {
     thicknessPx,
     liftPx,
     falloffPx,
-    idleAmount,
-    idleSpeed,
-    influenceAmount,
-    returnTime,
-    viscosity,
     traverseDurationMs,
-    densityOpacity,
-    disturbanceStrength,
-    disturbanceRadiusPct,
-    idleMotionAmount,
-    settleStrength,
-    returnRecoverMs: Math.round(returnTime * 1000),
     phaseMs: Math.round(nowMs % traverseDurationMs),
   };
 }
@@ -154,8 +125,6 @@ function renderFogPreviewSamples(samples) {
 function renderFogModal(selection) {
   const model = getFogPreviewModel(selection.entity);
   const lumoSpriteSrc = resolveLumoPreviewSpriteSrc();
-  const groundTiles = resolveFogPreviewGroundTiles();
-  const groundTileSamples = Array.from({ length: 30 }, (_, index) => groundTiles[index % groundTiles.length]);
   const numberFields = [
     { label: "Density", path: "look.density", min: 0.02, max: 1, step: 0.01, digits: 2, read: (entity) => getFogVolumeParams(entity).look.density },
     { label: "Height above ground", path: "look.lift", min: 0, max: 120, step: 1, digits: 0, read: (entity) => getFogVolumeParams(entity).look.lift },
@@ -186,52 +155,37 @@ function renderFogModal(selection) {
               class="volumeWorkbenchPreviewSurface fogWorkbenchPreviewSurface"
               data-fog-preview-surface
               data-fog-preview-traverse-ms="${Math.round(model.traverseDurationMs)}"
-              data-fog-preview-influence="${model.influenceAmount.toFixed(4)}"
-              data-fog-preview-return-time="${model.returnTime.toFixed(4)}"
-              data-fog-preview-viscosity="${model.viscosity.toFixed(4)}"
-              data-fog-preview-idle-amount="${model.idleAmount.toFixed(4)}"
-              data-fog-preview-idle-speed="${model.idleSpeed.toFixed(4)}"
-              data-fog-preview-density="${model.density.toFixed(4)}"
+              data-fog-smooke-density="${model.params.look.density.toFixed(4)}"
+              data-fog-smooke-noise="${model.params.look.noise.toFixed(4)}"
+              data-fog-smooke-drift="${model.params.look.drift.toFixed(4)}"
+              data-fog-smooke-organic-strength="${model.params.organic.strength.toFixed(4)}"
+              data-fog-smooke-organic-scale="${model.params.organic.scale.toFixed(4)}"
+              data-fog-smooke-organic-speed="${model.params.organic.speed.toFixed(4)}"
+              data-fog-smooke-diffuse="${model.params.smoothing.diffuse.toFixed(4)}"
+              data-fog-smooke-relax="${model.params.smoothing.relax.toFixed(4)}"
+              data-fog-smooke-visc="${model.params.smoothing.visc.toFixed(4)}"
+              data-fog-smooke-gate="${model.params.interaction.gate.toFixed(4)}"
+              data-fog-smooke-radius="${model.params.interaction.radius.toFixed(4)}"
+              data-fog-smooke-push="${model.params.interaction.push.toFixed(4)}"
+              data-fog-smooke-bulge="${model.params.interaction.bulge.toFixed(4)}"
               data-fog-preview-falloff="${model.falloffPx.toFixed(4)}"
-              style="--fog-ground-baseline:14px;--fog-lift:${model.liftPx.toFixed(2)}px;--fog-thickness:${model.thicknessPx.toFixed(2)}px;--fog-falloff-pct:${((model.falloffPx / PREVIEW_SPAN_WIDTH_PX) * 100).toFixed(3)}%;--fog-opacity:${model.densityOpacity.toFixed(4)};--fog-organic:${model.idleAmount.toFixed(4)};--fog-organic-speed:${model.idleSpeed.toFixed(4)};--fog-push:${model.influenceAmount.toFixed(4)};--fog-relax:${model.returnTime.toFixed(4)};--fog-visc:${model.viscosity.toFixed(4)};--fog-disturbance-strength:${model.disturbanceStrength.toFixed(4)};--fog-disturbance-radius:${model.disturbanceRadiusPct.toFixed(3)}%;--fog-idle-motion:${model.idleMotionAmount.toFixed(4)};--fog-settle-strength:${model.settleStrength.toFixed(4)};--fog-return-recover-ms:${model.returnRecoverMs}ms;--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
+              style="--fog-ground-baseline:14px;--fog-lift:${model.liftPx.toFixed(2)}px;--fog-thickness:${model.thicknessPx.toFixed(2)}px;--fog-falloff-pct:${((model.falloffPx / PREVIEW_SPAN_WIDTH_PX) * 100).toFixed(3)}%;--fog-opacity:${model.density.toFixed(4)};--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
             >
-              <div class="fogWorkbenchPreviewBackdrop"></div>
               <div class="fogWorkbenchPreviewGround" aria-hidden="true">
-                <div class="fogWorkbenchPreviewGroundSoil"></div>
-                <div class="fogWorkbenchPreviewGroundTileStrip">
-                  ${groundTileSamples.map((tile, index) => `
-                    <span
-                      class="fogWorkbenchPreviewGroundTile"
-                      style="--fog-ground-tile-index:${index};--fog-ground-tile-src:url('${escapeHtml(tile.src)}')"
-                      title="${escapeHtml(tile.label)}"
-                    ></span>
-                  `).join("")}
-                </div>
+                <div class="fogWorkbenchPreviewGroundLine"></div>
               </div>
               <div class="volumeWorkbenchPreviewSpan fogWorkbenchPreviewSpan" data-volume-preview-span>
-                <div class="fogWorkbenchPreviewContainer" aria-hidden="true">
-                  <div class="fogWorkbenchPreviewContainerCap"></div>
-                  <div class="fogWorkbenchPreviewContainerBody"></div>
-                  <div class="fogWorkbenchPreviewContainerBase"></div>
-                </div>
                 <div class="fogWorkbenchPreviewField" data-fog-preview-field>
                   <div class="fogWorkbenchPreviewFieldMass">
                     ${renderFogPreviewSamples(model.profile.samples)}
                   </div>
                 </div>
                 <div class="fogWorkbenchPreviewLumo isBehindFog" data-fog-preview-lumo>
-                  <span class="fogWorkbenchPreviewLumoGlow"></span>
                   ${lumoSpriteSrc
     ? `<img class="fogWorkbenchPreviewLumoSprite" src="${escapeHtml(lumoSpriteSrc)}" alt="Lumo preview sprite" />`
     : '<span class="fogWorkbenchPreviewLumoBody"></span>'}
                 </div>
               </div>
-            </div>
-            <div class="fogWorkbenchPreviewMeta">
-              <span>Ground anchored</span>
-              <span>Upward rise only</span>
-              <span>End taper only</span>
-              <span>Live Lumo disturbance</span>
             </div>
           </section>
           <footer class="specialVolumeWorkbenchFooterPinned">
@@ -242,23 +196,6 @@ function renderFogModal(selection) {
       </section>
     `,
   };
-}
-
-function resolveFogPreviewGroundTiles() {
-  const tileIds = [6, 1, 15];
-  const fallback = [
-    { src: "../data/assets/tiles/grass_bt.png", label: "Grass" },
-    { src: "../data/assets/tiles/soil_c.png", label: "Dirt" },
-    { src: "../data/assets/tiles/stone_ct.png", label: "Stone" },
-  ];
-  return tileIds.map((tileId, index) => {
-    const tile = getTileAssetByTileValue(tileId);
-    const src = typeof tile?.img === "string" && tile.img.trim() ? tile.img.trim() : fallback[index].src;
-    return {
-      src,
-      label: tile?.label || fallback[index].label,
-    };
-  });
 }
 
 function resolveLumoPreviewSpriteSrc() {
@@ -308,16 +245,9 @@ export function buildFogPreviewFieldProfile(config = {}) {
   const thicknessPx = clamp(Number(config.thicknessPx), 8, 240);
   const density = clamp(Number(config.density), 0.02, 1);
   const falloffPx = clamp(Number(config.falloffPx), 10, spanWidthPx);
-  const idleAmount = clamp(Number(config.idleAmount), 0, 1);
-  const idleSpeed = clamp(Number(config.idleSpeed), 0.1, 3);
-  const influenceAmount = clamp(Number(config.influenceAmount), 0, 5);
-  const returnTime = clamp(Number(config.returnTime), 0.2, 8);
-  const viscosity = clamp(Number(config.viscosity), 0.35, 0.995);
-  const nowSeconds = Number.isFinite(Number(config.nowSeconds)) ? Number(config.nowSeconds) : 0;
   const sampleCount = Math.max(12, Math.round(config.sampleCount || PREVIEW_SAMPLE_COUNT));
 
   const samples = [];
-  const phase = nowSeconds * idleSpeed;
 
   for (let index = 0; index < sampleCount; index += 1) {
     const u = sampleCount <= 1 ? 0 : index / (sampleCount - 1);
@@ -325,22 +255,9 @@ export function buildFogPreviewFieldProfile(config = {}) {
     const dOpenPx = (1 - u) * spanWidthPx;
     const edgeMask = clamp(dOpenPx / falloffPx, 0, 1);
     const edgeEase = edgeMask * edgeMask * (3 - (2 * edgeMask));
-
-    const shapeSeed = Math.sin((u * 6.2) + 0.45) * 0.52 + Math.sin((u * 13.7) + 1.4) * 0.24;
-    const idlePulse = (Math.sin((phase * 0.95) + (u * 1.6)) * 0.5) + 0.5;
-    const idleLiftScale = idleAmount * (2.4 + (1 - viscosity) * 2.9);
-    const liftOnly = -Math.max(0, shapeSeed * idlePulse) * idleLiftScale;
-    const returnDrag = clamp(returnTime / 5.8, 0.05, 1.15);
-    const settleFactor = clamp(1.1 - returnDrag * 0.4, 0.45, 1.08);
-
-    const coreHeightPx = Math.max(
-      4,
-      (thicknessPx * edgeEase * settleFactor)
-      + (Math.max(0, shapeSeed * idlePulse) * idleAmount * (8 + (1 - viscosity) * 6)),
-    );
-    const hazeHeightPx = Math.max(coreHeightPx + 6, coreHeightPx * (1.24 + ((1 - viscosity) * 0.35)));
-    const influenceDensityLift = (influenceAmount / 5) * 0.045 * edgeEase;
-    const opacity = clamp((density * (0.2 + edgeEase * 0.9)) + influenceDensityLift, 0.03, 0.98);
+    const coreHeightPx = Math.max(6, thicknessPx * edgeEase);
+    const hazeHeightPx = Math.max(coreHeightPx, coreHeightPx + 2);
+    const opacity = clamp(density * (0.22 + edgeEase * 0.78), 0.03, 0.98);
 
     samples.push({
       u,
@@ -351,8 +268,8 @@ export function buildFogPreviewFieldProfile(config = {}) {
       coreHeightPx,
       hazeHeightPx,
       opacity,
-      offsetY: Math.min(0, liftOnly),
-      seed: shapeSeed,
+      offsetY: 0,
+      seed: 0,
     });
   }
 

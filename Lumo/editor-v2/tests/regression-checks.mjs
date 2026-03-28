@@ -4089,7 +4089,6 @@ function runUiRegressionChecks() {
   assert.equal(tilesControlMarkup.includes('class="tilesPanelControls" aria-label="Tile brush controls"'), true, "tiles controls should render inline with the section header metadata");
   assert.equal(panel.innerHTML.includes('data-section-toggle="decor"'), true, "decor section should still render a collapse toggle");
   assert.equal(panel.innerHTML.includes('data-section-toggle="entities"'), true, "entities section should still render a collapse toggle");
-  assert.equal(panel.innerHTML.includes('data-section-toggle="volumes"'), true, "volumes section should render a dedicated collapse toggle");
   assert.equal(panel.innerHTML.includes('data-section-toggle="sound"'), true, "sound section should render a collapse toggle");
   assert.equal(panel.innerHTML.includes('data-section-toggle="scan"'), false, "scan section should no longer render in the left brush panel");
   assert.equal(panel.innerHTML.includes('sectionEyebrow'), false, "panel headers should no longer render the redundant section eyebrow label");
@@ -4097,14 +4096,10 @@ function runUiRegressionChecks() {
   assert.equal(/<span class=\"label\">Current<\/span>\s*<span class=\"value\">Entities<\/span>/.test(panel.innerHTML), false, "layer panel should not render a redundant current-layer row");
   assert.equal(panel.innerHTML.includes("Lantern · Alt/Option + Click"), true, "entity status row should carry the active preset and placement readiness summary");
   const entitiesMarkup = panel.innerHTML.match(/<section class="panelSection [^>]*" aria-label="ENTITIES section">[\s\S]*?<\/section>/)?.[0] || "";
-  const volumesMarkup = panel.innerHTML.match(/<section class="panelSection [^>]*" aria-label="VOLUMES section">[\s\S]*?<\/section>/)?.[0] || "";
   const decorMarkup = panel.innerHTML.match(/<section class="panelSection [^>]*" aria-label="DECOR section">[\s\S]*?<\/section>/)?.[0] || "";
   assert.equal(entitiesMarkup.includes('statusCardLabel">Placement'), false, "entity panel should no longer render a separate placement status card");
   assert.equal(entitiesMarkup.includes('data-entity-preset-button="player-spawn"'), false, "Spawn should not appear as a placeable entity preset in the entities workflow");
   assert.equal(entitiesMarkup.includes('data-entity-preset-button="fog_volume"'), false, "fog volumes should not appear in the normal entities catalog");
-  assert.equal(volumesMarkup.includes('data-volume-preset-button="fog_volume"'), true, "fog volumes should expose a dedicated picker entry in the volumes panel");
-  assert.equal(volumesMarkup.includes("entityPlacementStatusRow"), false, "volumes panel should keep helper copy removed for a compact picker-only flow");
-  assert.equal(volumesMarkup.includes("Fog Volume · Alt/Option + Drag"), false, "fog status should only show active placement copy when selected");
   assert.equal(entitiesMarkup.includes('data-entity-preset-button="player-exit"'), true, "Exit should remain placeable from the entities workflow");
   assert.equal(decorMarkup.includes('data-decor-preset-button="player-spawn"'), false, "Spawn should not appear in the decor catalog");
   assert.equal(decorMarkup.includes('data-decor-preset-button="player-exit"'), false, "Exit should not appear in the decor catalog");
@@ -4130,7 +4125,6 @@ function runUiRegressionChecks() {
   };
   renderBrushPanel(panel, entityInactiveState);
   assert.equal(panel.innerHTML.includes("Select an entity preset"), true, "entity status row should prompt for a preset when placement is not armed");
-  assert.equal(panel.innerHTML.includes("Select a volume type"), false, "volumes status helper text should stay removed in compact mode");
   assert.equal(panel.innerHTML.includes('data-scan-action="play"'), false, "scan transport controls should move out of the left brush panel");
   assert.equal(panel.innerHTML.includes('data-scan-action="pause"'), false, "scan pause controls should move out of the left brush panel");
   assert.equal(panel.innerHTML.includes('data-scan-action="stop"'), false, "scan stop controls should move out of the left brush panel");
@@ -4169,7 +4163,6 @@ function runUiRegressionChecks() {
     {
       tiles: false,
       entities: false,
-      volumes: false,
       decor: false,
       background: true,
       sound: false,
@@ -4183,7 +4176,6 @@ function runUiRegressionChecks() {
   assert.equal(/panelSection\s+tilesSection\s+isCollapsed/.test(panel.innerHTML), true, "tiles should be collapsed by default on first render");
   assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="DECOR section">/.test(panel.innerHTML), true, "decor should be collapsed by default on first render");
   assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="ENTITIES section">/.test(panel.innerHTML), true, "entities should be collapsed by default on first render");
-  assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="VOLUMES section">/.test(panel.innerHTML), true, "volumes should be collapsed by default on first render");
   assert.equal(/panelSection\s+soundSection\s+isCollapsed/.test(panel.innerHTML), true, "sound should be collapsed by default on first render");
   assert.equal(panel.innerHTML.includes('aria-label="TOOLS section"'), true, "tools should remain visible on first render");
   assert.equal(panel.innerHTML.includes('aria-label="LAYER section"'), true, "layer should remain visible on first render");
@@ -4194,7 +4186,6 @@ function runUiRegressionChecks() {
         tiles: true,
         decor: true,
         entities: true,
-        volumes: true,
         sound: true,
       },
     },
@@ -4202,7 +4193,6 @@ function runUiRegressionChecks() {
   assert.equal(/panelSection\s+tilesSection\s+isCollapsed/.test(panel.innerHTML), false, "tiles should still expand when section state is toggled open");
   assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="DECOR section">/.test(panel.innerHTML), false, "decor should still expand when section state is toggled open");
   assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="ENTITIES section">/.test(panel.innerHTML), false, "entities should still expand when section state is toggled open");
-  assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="VOLUMES section">/.test(panel.innerHTML), false, "volumes should still expand when section state is toggled open");
   assert.equal(/panelSection\s+soundSection\s+isCollapsed/.test(panel.innerHTML), false, "sound should still expand when section state is toggled open");
   assert.equal(brushPanelSource.includes('const sectionToggleButton = target.closest("[data-section-toggle]");'), true, "brush panel should bind click handling for collapsible section toggles");
   assert.equal(brushPanelSource.includes('function togglePanelSection(store, sectionId) {'), true, "brush panel should centralize collapsible section state updates");
@@ -4210,11 +4200,6 @@ function runUiRegressionChecks() {
   assert.equal(brushPanelSource.includes('if (isInteractiveHeaderControl(target, sectionToggleButton)) return;'), true, "header-row toggles should ignore compact inline controls like the sound selector");
   assert.equal(brushPanelSource.includes('if (event.key !== "Enter" && event.key !== " ") return;'), true, "header-row toggles should remain keyboard accessible");
   assert.equal(brushPanelSource.includes('panelSections[sectionId] = !isOpen;'), true, "brush panel toggle handler should invert stored open/closed state");
-  assert.equal(
-    brushPanelSource.includes("onLayerChange?.(PANEL_LAYERS.VOLUMES);"),
-    true,
-    "volume preset interactions should activate the dedicated volumes lane instead of forcing entities open",
-  );
 
   const decorState = {
     ...baseState,
@@ -5799,39 +5784,24 @@ function runSourceRegressionChecks() {
   );
   assert.equal(
     source.includes("const updateVolume = (index, field, value) => {")
-      && source.includes("draft.ui.panelSections.volumes = true;")
-      && source.includes("setActiveLayer(draft, PANEL_LAYERS.VOLUMES);")
+      && source.includes("setActiveLayer(draft, PANEL_LAYERS.ENTITIES);")
       && source.includes("onVolumeUpdate: updateVolume,"),
     true,
-    "volumes should route through a dedicated panel update lane that arms fog placement without touching the entities catalog",
-  );
-  assert.equal(
-    source.includes('if (layer === PANEL_LAYERS.VOLUMES) draft.ui.panelSections.volumes = true;')
-      && !source.includes('if (layer === PANEL_LAYERS.ENTITIES) draft.ui.panelSections.volumes = true;'),
-    true,
-    "opening the volumes authoring lane should keep the volumes panel primary without auto-expanding entities",
-  );
-  assert.equal(
-    source.includes("if (layer === PANEL_LAYERS.VOLUMES) {")
-      && source.includes("setActiveLayer(draft, PANEL_LAYERS.VOLUMES);")
-      && source.includes('setCanvasSelectionMode(draft, "entity");')
-      && !source.includes('if (layer === PANEL_LAYERS.VOLUMES) {\n        setActiveLayer(draft, PANEL_LAYERS.VOLUMES);\n        applyCanvasTarget(draft, "entity");'),
-    true,
-    "panel layer routing should keep volumes first-class while preserving entity-layer canvas targeting",
+    "special fog placement should remain entity-layer owned while using the dedicated updateVolume workflow",
   );
   assert.equal(
     source.includes("if (isFogVolumeEntityType(activeEntityPresetId)) {")
       && source.includes("draft.interaction.volumePlacementDrag = {")
       && source.includes("const fogRect = getFogVolumeWorldRectFromDragCells(")
       && source.includes("const createdIndex = createFogVolumeAtWorldRect(draft, fogRect);")
-      && source.includes("setActiveLayer(draft, PANEL_LAYERS.VOLUMES);")
+      && source.includes("setActiveLayer(draft, PANEL_LAYERS.ENTITIES);")
       && source.includes("draft.ui.panelSections.entities = false;"),
     true,
     "fog placement should use the dedicated drag-to-area special-volume entrypoint",
   );
   assert.equal(
     source.includes("const selectingSpecialVolume = Boolean(selectedEntity && isSpecialVolumeEntityType(selectedEntity.type));")
-      && source.includes("setActiveLayer(draft, PANEL_LAYERS.VOLUMES);")
+      && source.includes("setActiveLayer(draft, PANEL_LAYERS.ENTITIES);")
       && source.includes("preserveCanvasTarget: selectingSpecialVolume,"),
     true,
     "special-volume selection should stay routed through the volumes lane without forcing the entities panel open",
