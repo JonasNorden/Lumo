@@ -14,23 +14,26 @@ const SUPPORTED_RUNTIME_ENTITY_IDS = new Set([
   "decor_flower_01",
   "fog_volume",
 ]);
+const FALLBACK_RUNTIME_CATALOG_DECOR_IDS = new Set([
+  "decor_flower_01",
+]);
 
 const UNSUPPORTED_VOLUME_TYPES = new Set(["water_volume", "lava_volume", "bubbling_liquid_volume"]);
 const RUNTIME_BG_FALLBACK_ID = "bg_rock_01";
-const RUNTIME_BG_IDS = new Set([
-  "bg_void",
-  "bg_rock_01",
-  "void_t",
-  "void_tl",
-  "void_tr",
-  "void_c",
-  "root",
-  "port",
-  "window_01",
-  "pillar_01",
-  "valv",
-  "wall_5",
-  "wall_02",
+const RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED = new Map([
+  ["bg_void", "bg_void"],
+  ["bg_rock_01", "bg_rock_01"],
+  ["void_t", "Void_t"],
+  ["void_tl", "Void_tl"],
+  ["void_tr", "Void_tr"],
+  ["void_c", "Void_c"],
+  ["root", "root"],
+  ["port", "port"],
+  ["window_01", "window_01"],
+  ["pillar_01", "pillar_01"],
+  ["valv", "valv"],
+  ["wall_5", "wall_5"],
+  ["wall_02", "wall_02"],
 ]);
 
 const V2_BACKGROUND_ID_TO_RUNTIME_ID = new Map([
@@ -70,6 +73,19 @@ function normalizeRuntimeEntityType(type) {
   return normalized;
 }
 
+function getRuntimeCatalogDecorIdSet() {
+  const entries = globalThis?.window?.LUMO_CATALOG_ENTITIES;
+  if (!Array.isArray(entries)) return FALLBACK_RUNTIME_CATALOG_DECOR_IDS;
+  const ids = new Set();
+  for (const entry of entries) {
+    const id = String(entry?.id || "").trim().toLowerCase();
+    const category = String(entry?.category || "").trim().toLowerCase();
+    if (!id || category !== "decor") continue;
+    ids.add(id);
+  }
+  return ids.size ? ids : FALLBACK_RUNTIME_CATALOG_DECOR_IDS;
+}
+
 function getBasename(input) {
   const value = String(input || "").trim().toLowerCase();
   if (!value) return "";
@@ -99,8 +115,8 @@ function createBackgroundRuntimeMaterialResolver(levelDocument) {
     if (!materialId) continue;
     const normalizedMaterialId = materialId.toLowerCase();
 
-    if (RUNTIME_BG_IDS.has(normalizedMaterialId)) {
-      runtimeIdByMaterialId.set(materialId, normalizedMaterialId);
+    if (RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED.has(normalizedMaterialId)) {
+      runtimeIdByMaterialId.set(materialId, RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED.get(normalizedMaterialId));
       continue;
     }
 
@@ -122,7 +138,9 @@ function createBackgroundRuntimeMaterialResolver(levelDocument) {
     if (!normalized) return null;
 
     const directNormalized = normalized.toLowerCase();
-    if (RUNTIME_BG_IDS.has(directNormalized)) return directNormalized;
+    if (RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED.has(directNormalized)) {
+      return RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED.get(directNormalized);
+    }
 
     const knownV2Id = V2_BACKGROUND_ID_TO_RUNTIME_ID.get(directNormalized);
     if (knownV2Id) return knownV2Id;
@@ -209,6 +227,14 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
   const warnings = [];
   const unsupported = [];
 
+  const runtimeCatalogDecorIds = getRuntimeCatalogDecorIdSet();
+  const isRuntimeSupportedId = (runtimeId) => {
+    const normalizedId = String(runtimeId || "").trim().toLowerCase();
+    if (!normalizedId) return false;
+    if (SUPPORTED_RUNTIME_ENTITY_IDS.has(normalizedId)) return true;
+    return runtimeCatalogDecorIds.has(normalizedId);
+  };
+
   if (!levelDocument || typeof levelDocument !== "object") {
     throw new Error("v2ToRuntimeLevelObject requires a valid LevelDocument");
   }
@@ -262,17 +288,21 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
   const entities = Array.isArray(levelDocument.entities) ? levelDocument.entities : [];
   for (const entity of entities) {
     const runtimeId = normalizeRuntimeEntityType(entity?.type);
+    const authoredEntityId = String(entity?.id || "").trim();
     const entityType = String(entity?.type || "").trim();
 
-    if (!runtimeId) continue;
-
-    if (isUnsupportedLiquidVolumeType(runtimeId) || isUnsupportedLiquidVolumeType(entityType)) {
-      unsupported.push(`Omitted unsupported liquid volume '${entityType || runtimeId}' from runtime payload (PFH v1 has no water/lava/bubbling support).`);
+    if (!runtimeId) {
+      unsupported.push(`Entity '${authoredEntityId || "(missing-id)"}' omitted: missing/invalid type '${entityType || "(missing-type)"}'.`);
       continue;
     }
 
-    if (!SUPPORTED_RUNTIME_ENTITY_IDS.has(runtimeId)) {
-      unsupported.push(`Entity '${entityType}' is not mapped because runtime loader does not support it on the editor-play bridge path.`);
+    if (isUnsupportedLiquidVolumeType(runtimeId) || isUnsupportedLiquidVolumeType(entityType)) {
+      unsupported.push(`Entity '${authoredEntityId || "(missing-id)"}' (${entityType || runtimeId}) omitted: unsupported liquid volume (PFH v1 has no water/lava/bubbling support).`);
+      continue;
+    }
+
+    if (!isRuntimeSupportedId(runtimeId)) {
+      unsupported.push(`Entity '${authoredEntityId || "(missing-id)"}' (${entityType || runtimeId}) is not mapped because runtime loader does not support it on the editor-play bridge path.`);
       continue;
     }
 
@@ -281,6 +311,36 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
       x: Number.isFinite(entity?.x) ? (entity.x | 0) : 0,
       y: Number.isFinite(entity?.y) ? (entity.y | 0) : 0,
       params: cloneParams(entity?.params),
+    });
+  }
+
+  const decorItems = Array.isArray(levelDocument.decor) ? levelDocument.decor : [];
+  for (const decor of decorItems) {
+    const decorId = String(decor?.id || "").trim();
+    const decorType = String(decor?.type || "").trim();
+    const runtimeId = normalizeRuntimeEntityType(decorType);
+    const visible = decor?.visible !== false;
+
+    if (!visible) continue;
+    if (!runtimeId) {
+      unsupported.push(`Decor '${decorId || "(missing-id)"}' omitted: missing/invalid type '${decorType || "(missing-type)"}'.`);
+      continue;
+    }
+    if (!isRuntimeSupportedId(runtimeId)) {
+      unsupported.push(`Decor '${decorId || "(missing-id)"}' (${decorType || runtimeId}) is not mapped because runtime loader does not support it on the editor-play bridge path.`);
+      continue;
+    }
+
+    runtimeLevel.layers.ents.push({
+      id: runtimeId,
+      x: Number.isFinite(decor?.x) ? (decor.x | 0) : 0,
+      y: Number.isFinite(decor?.y) ? (decor.y | 0) : 0,
+      params: {
+        ...cloneParams(decor?.params),
+        ...(typeof decor?.variant === "string" && decor.variant.trim()
+          ? { variant: decor.variant.trim() }
+          : {}),
+      },
     });
   }
 

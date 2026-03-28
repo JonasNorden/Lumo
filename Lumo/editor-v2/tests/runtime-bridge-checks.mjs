@@ -39,13 +39,17 @@ function createMockLevelDocument() {
       { id: "water", name: "Water", type: "water_volume", x: 0, y: 0, visible: true, params: {} },
       { id: "water-legacy", name: "Water Legacy", type: "waterVolume", x: 1, y: 0, visible: true, params: {} },
       { id: "lava-legacy", name: "Lava Legacy", type: "lavaVolume", x: 2, y: 0, visible: true, params: {} },
+      { id: "bad-entity", name: "Bad Entity", type: "unknown_runtime_thing", x: 0, y: 1, visible: true, params: {} },
     ],
     sounds: [
       { id: "spot", name: "Spot", type: "spot", x: 1, y: 1, visible: true, source: "data/assets/audio/spot/test.ogg", params: { radius: 5, volume: 0.8, fadeDistance: 2 } },
       { id: "trg", name: "Trigger", type: "trigger", x: 2, y: 1, visible: true, source: "data/assets/audio/events/test.ogg", params: { loop: false, volume: 1 } },
       { id: "music", name: "Music", type: "musicZone", x: 0, y: 0, visible: true, source: "data/assets/audio/music/test.mp3", params: { width: 6, volume: 0.6, fadeDistance: 3 } },
     ],
-    decor: [],
+    decor: [
+      { id: "decor-1", name: "Flower", type: "decor_flower_01", x: 1, y: 0, visible: true, variant: "d", params: {} },
+      { id: "decor-unsupported", name: "Unsupported Decor", type: "not_real_decor_type", x: 0, y: 0, visible: true, params: {} },
+    ],
     extra: {},
   };
 }
@@ -71,6 +75,9 @@ function runAdapterChecks() {
   assert.ok(runtimeLevel.layers.ents.find((entity) => entity.id === "trigger_sound"), "trigger sound should map to trigger_sound entity");
   assert.ok(runtimeLevel.layers.ents.find((entity) => entity.id === "music_zone"), "music sound should map to music_zone entity");
   assert.ok(runtimeLevel.layers.ents.find((entity) => entity.id === "fog_volume"), "fog_volume should bridge via runtime entity path");
+  const flowerDecor = runtimeLevel.layers.ents.find((entity) => entity.id === "decor_flower_01");
+  assert.ok(flowerDecor, "supported decor should bridge via runtime entity path");
+  assert.equal(flowerDecor?.params?.variant, "d", "decor variant should map to runtime params for runtime sprite variant selection");
 
   assert.equal(
     unsupported.some((entry) => entry.includes("water_volume")),
@@ -86,6 +93,16 @@ function runAdapterChecks() {
     runtimeLevel.layers.ents.some((entity) => /water|lava|bubbling/i.test(entity.id)),
     false,
     "unsupported liquid volumes should never be emitted as runtime entities",
+  );
+  assert.equal(
+    unsupported.some((entry) => entry.includes("bad-entity") && entry.includes("unknown_runtime_thing")),
+    true,
+    "unsupported authored entities should be diagnosed with authored id and type",
+  );
+  assert.equal(
+    unsupported.some((entry) => entry.includes("decor-unsupported") && entry.includes("not_real_decor_type")),
+    true,
+    "unsupported authored decor should be diagnosed with authored id and type",
   );
 }
 
