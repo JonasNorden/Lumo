@@ -522,11 +522,35 @@
           let surfaceColorAfterDarkness = "rgba(178,231,255,0.98)";
           let waveAmount = 0.35;
           let waveSpeed = 0.9;
+          let lavaTemperature = 0.72;
+          let lavaCrustAmount = 45;
+          let lavaFlowSpeed = 0.55;
           if (id === "lava_volume"){
-            bodyColor = "rgba(224,95,32,0.40)";
-            surfaceColor = "rgba(255,182,84,0.95)";
-            bodyColorAfterDarkness = "rgba(240,120,52,0.30)";
-            surfaceColorAfterDarkness = "rgba(255,210,130,1)";
+            const flow = (P.flow && typeof P.flow === "object") ? P.flow : {};
+            const look = (P.look && typeof P.look === "object") ? P.look : {};
+            const authoredTemp = Number(look.temperature);
+            const authoredCrustRaw = Number(look.crustAmount);
+            const authoredCrust = Number.isFinite(authoredCrustRaw)
+              ? ((authoredCrustRaw <= 1) ? (authoredCrustRaw * 100) : authoredCrustRaw)
+              : 45;
+            const authoredFlowSpeed = Number(flow.speed);
+            lavaTemperature = Number.isFinite(authoredTemp) ? Math.max(0.2, Math.min(1, authoredTemp)) : 0.72;
+            lavaCrustAmount = Number.isFinite(authoredCrust) ? Math.max(0, Math.min(100, authoredCrust)) : 45;
+            lavaFlowSpeed = Number.isFinite(authoredFlowSpeed) ? Math.max(0.1, Math.min(1.4, authoredFlowSpeed)) : 0.55;
+
+            const tempMix = (lavaTemperature - 0.2) / 0.8;
+            const hotR = Math.round(240 + (15 * tempMix));
+            const hotG = Math.round(112 + (82 * tempMix));
+            const hotB = Math.round(22 + (26 * tempMix));
+            const deepR = Math.round(84 + (34 * tempMix));
+            const deepG = Math.round(24 + (16 * tempMix));
+            const deepB = Math.round(8 + (7 * tempMix));
+            bodyColor = `rgba(${deepR},${deepG},${deepB},0.94)`;
+            surfaceColor = `rgba(${hotR},${hotG},${hotB},0.98)`;
+            bodyColorAfterDarkness = `rgba(${Math.min(255, deepR + 42)},${Math.min(255, deepG + 30)},${Math.min(255, deepB + 18)},0.40)`;
+            surfaceColorAfterDarkness = `rgba(${Math.min(255, hotR + 8)},${Math.min(255, hotG + 16)},${Math.min(255, hotB + 18)},1)`;
+            waveAmount = 0.2 + (tempMix * 0.15);
+            waveSpeed = 0.35 + (lavaFlowSpeed * 0.5);
           } else if (id === "bubbling_liquid_volume"){
             bodyColor = "rgba(98,170,58,0.36)";
             surfaceColor = "rgba(187,255,130,0.92)";
@@ -560,6 +584,9 @@
             surfaceColorAfterDarkness,
             waveAmount,
             waveSpeed,
+            lavaTemperature,
+            lavaCrustAmount,
+            lavaFlowSpeed,
           });
           if (!this._pfhLiquidDiag.spawnedByType.has(id)){
             this._pfhLiquidDiag.spawnedByType.add(id);
@@ -2967,6 +2994,101 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
         const sy = Math.floor(v.yTop - cam.y);
         const w = Math.max(1, Math.floor(v.x1 - v.x0));
         const h = Math.max(1, Math.floor(v.yBottom - v.yTop));
+        if (v.id === "lava_volume"){
+          const flowSpeed = Math.max(0.1, Number(v.lavaFlowSpeed) || 0.55);
+          const temperature = Math.max(0.2, Math.min(1, Number(v.lavaTemperature) || 0.72));
+          const crustAmount = Math.max(0, Math.min(100, Number(v.lavaCrustAmount) || 45));
+          const crustDensity = crustAmount / 100;
+          const t = this._liquidAnimT * flowSpeed;
+          const waveAmpPx = Math.max(1, Math.min(h * 0.07, 1.2 + (temperature * 2.2)));
+          const step = 14;
+          const yBottom = sy + h;
+          const yTopBase = sy;
+          const yGlowTop = sy - Math.round(10 + (temperature * 10));
+
+          const bodyGrad = ctx.createLinearGradient(0, yTopBase - waveAmpPx, 0, yBottom);
+          bodyGrad.addColorStop(0, `rgba(255,${Math.round(122 + (temperature * 68))},${Math.round(28 + (temperature * 26))},0.98)`);
+          bodyGrad.addColorStop(0.36, `rgba(194,${Math.round(66 + (temperature * 48))},${Math.round(18 + (temperature * 16))},0.96)`);
+          bodyGrad.addColorStop(1, v.bodyColor || "rgba(102,30,12,0.94)");
+
+          ctx.beginPath();
+          ctx.moveTo(sx, yBottom);
+          for (let px = 0; px <= w; px += step){
+            const p = px / Math.max(1, w);
+            const wave = Math.sin((p * Math.PI * 1.45) + (t * 0.95))
+              + (Math.sin((p * Math.PI * 3.1) - (t * 0.62)) * 0.28);
+            const yWave = yTopBase + (wave * waveAmpPx * 0.5);
+            ctx.lineTo(sx + px, yWave);
+          }
+          if ((w % step) !== 0){
+            const p = 1;
+            const wave = Math.sin((p * Math.PI * 1.45) + (t * 0.95))
+              + (Math.sin((p * Math.PI * 3.1) - (t * 0.62)) * 0.28);
+            ctx.lineTo(sx + w, yTopBase + (wave * waveAmpPx * 0.5));
+          }
+          ctx.lineTo(sx + w, yBottom);
+          ctx.closePath();
+          ctx.fillStyle = bodyGrad;
+          ctx.fill();
+
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(sx, sy, w, h);
+          ctx.clip();
+
+          for (let band = 0; band < 3; band += 1){
+            const yBand = sy + h * (0.2 + band * 0.24) + (Math.sin((t * (0.42 + band * 0.16)) + (sx * 0.01)) * (1.5 + band * 0.7));
+            const alpha = 0.07 + (temperature * 0.08) - (band * 0.015);
+            const g = ctx.createLinearGradient(sx, yBand - 8, sx, yBand + 8);
+            g.addColorStop(0, "rgba(255,180,70,0)");
+            g.addColorStop(0.5, `rgba(255,${Math.round(154 + (temperature * 70))},${Math.round(45 + (temperature * 26))},${Math.max(0.02, alpha)})`);
+            g.addColorStop(1, "rgba(255,180,70,0)");
+            ctx.fillStyle = g;
+            ctx.fillRect(sx, yBand - 8, w, 16);
+          }
+
+          const crustFragments = Math.max(6, Math.round((w / 26) + (crustDensity * (w / 10))));
+          for (let i = 0; i < crustFragments; i += 1){
+            const seed = (i + 1) * 0.173 + (v.x0 * 0.0019);
+            const pxRatio = (Math.sin(seed * 93.17) * 0.5) + 0.5;
+            const px = sx + (pxRatio * w) + (Math.sin((t * 0.18) + (seed * 7.1)) * (2.8 + crustDensity * 4.2));
+            const py = sy + (h * (0.06 + (Math.abs(Math.sin(seed * 57.3)) * 0.24))) + (Math.cos((t * 0.24) + (seed * 4.3)) * 1.2);
+            const fragW = 2 + (Math.abs(Math.sin(seed * 41.5)) * 5.6) + (crustDensity * 1.2);
+            const fragH = 1 + (Math.abs(Math.cos(seed * 29.1)) * 2.5) + (crustDensity * 0.7);
+            const alpha = 0.16 + (crustDensity * 0.28) + (Math.sin((t * 0.29) + (seed * 6.2)) * 0.04);
+            ctx.fillStyle = `rgba(${Math.round(55 + (temperature * 25))},${Math.round(36 + (temperature * 20))},${Math.round(24 + (temperature * 10))},${Math.max(0.08, Math.min(0.55, alpha))})`;
+            ctx.fillRect(px, py, fragW, fragH);
+          }
+          ctx.restore();
+
+          const heatGlow = ctx.createLinearGradient(0, yGlowTop, 0, sy + 3);
+          heatGlow.addColorStop(0, "rgba(255,120,40,0)");
+          heatGlow.addColorStop(0.62, `rgba(255,${Math.round(130 + (temperature * 42))},${Math.round(48 + (temperature * 25))},${0.045 + (temperature * 0.05)})`);
+          heatGlow.addColorStop(1, `rgba(255,${Math.round(180 + (temperature * 45))},${Math.round(80 + (temperature * 35))},${0.08 + (temperature * 0.08)})`);
+          ctx.fillStyle = heatGlow;
+          ctx.fillRect(sx, yGlowTop, w, Math.max(4, sy - yGlowTop + 3));
+
+          ctx.strokeStyle = v.surfaceColor || "rgba(255,180,80,0.95)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          for (let px = 0; px <= w; px += step){
+            const p = px / Math.max(1, w);
+            const wave = Math.sin((p * Math.PI * 1.45) + (t * 0.95))
+              + (Math.sin((p * Math.PI * 3.1) - (t * 0.62)) * 0.28);
+            const yWave = yTopBase + (wave * waveAmpPx * 0.5);
+            if (px === 0) ctx.moveTo(sx + px, yWave + 0.5);
+            else ctx.lineTo(sx + px, yWave + 0.5);
+          }
+          if ((w % step) !== 0){
+            const p = 1;
+            const wave = Math.sin((p * Math.PI * 1.45) + (t * 0.95))
+              + (Math.sin((p * Math.PI * 3.1) - (t * 0.62)) * 0.28);
+            ctx.lineTo(sx + w, yTopBase + (wave * waveAmpPx * 0.5) + 0.5);
+          }
+          ctx.stroke();
+          continue;
+        }
+
         if (v.id !== "water_volume"){
           ctx.fillStyle = v.bodyColor;
           ctx.fillRect(sx, sy, w, h);
@@ -3068,6 +3190,41 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
 
         // Runtime visibility pass: keep liquids legible after darkness without
         // changing gameplay collision/death behavior.
+        if (v.id === "lava_volume"){
+          const flowSpeed = Math.max(0.1, Number(v.lavaFlowSpeed) || 0.55);
+          const temperature = Math.max(0.2, Math.min(1, Number(v.lavaTemperature) || 0.72));
+          const t = this._liquidAnimT * flowSpeed;
+          const waveAmpPx = Math.max(1, Math.min(h * 0.06, 1 + (temperature * 1.8)));
+          const step = 16;
+
+          const glowGrad = ctx.createLinearGradient(0, sy - 10, 0, sy + h);
+          glowGrad.addColorStop(0, `rgba(255,${Math.round(150 + (temperature * 44))},${Math.round(70 + (temperature * 26))},0.16)`);
+          glowGrad.addColorStop(0.25, v.bodyColorAfterDarkness || "rgba(236,126,52,0.38)");
+          glowGrad.addColorStop(1, "rgba(120,46,20,0.16)");
+          ctx.fillStyle = glowGrad;
+          ctx.fillRect(sx, sy - 10, w, h + 10);
+
+          ctx.strokeStyle = v.surfaceColorAfterDarkness || "rgba(255,210,130,1)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          for (let px = 0; px <= w; px += step){
+            const p = px / Math.max(1, w);
+            const wave = Math.sin((p * Math.PI * 1.45) + (t * 0.95))
+              + (Math.sin((p * Math.PI * 3.1) - (t * 0.62)) * 0.28);
+            const yWave = sy + (wave * waveAmpPx * 0.5) + 0.5;
+            if (px === 0) ctx.moveTo(sx + px, yWave);
+            else ctx.lineTo(sx + px, yWave);
+          }
+          if ((w % step) !== 0){
+            const p = 1;
+            const wave = Math.sin((p * Math.PI * 1.45) + (t * 0.95))
+              + (Math.sin((p * Math.PI * 3.1) - (t * 0.62)) * 0.28);
+            ctx.lineTo(sx + w, sy + (wave * waveAmpPx * 0.5) + 0.5);
+          }
+          ctx.stroke();
+          continue;
+        }
+
         if (v.id !== "water_volume"){
           ctx.fillStyle = v.bodyColorAfterDarkness || "rgba(120,180,220,0.20)";
           ctx.fillRect(sx, sy, w, h);
