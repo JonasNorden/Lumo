@@ -122,12 +122,18 @@ export function getFogVolumeParams(entity) {
 export function getFogWorkbenchFieldMeta() {
   return {
     controls: [
+      "area.length",
       "look.density",
       "look.lift",
       "area.falloff",
       "organic.strength",
       "organic.speed",
+      "interaction.gate",
+      "interaction.radius",
       "interaction.push",
+      "interaction.bulge",
+      "look.noise",
+      "look.drift",
       "smoothing.relax",
       "smoothing.visc",
     ],
@@ -281,6 +287,19 @@ export function applySpecialVolumeParamChange(entity, path, value) {
   }
 
   const current = getFogVolumeParams(entity);
+  if (path === "area.length") {
+    const span = Math.max(24, Number(value) || 24);
+    const x0 = Math.max(0, Number(current.area.x0) || 0);
+    const patchedArea = {
+      ...current.area,
+      x0,
+      x1: x0 + span,
+    };
+    return {
+      ...entity,
+      params: getFogVolumeParams({ type: "fog_volume", params: { ...current, area: patchedArea } }),
+    };
+  }
   const patched = setAtPath(current, path, value);
   return {
     ...entity,

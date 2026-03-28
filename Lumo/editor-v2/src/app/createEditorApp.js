@@ -3979,7 +3979,39 @@ export function createEditorApp({
 
   const updateVolume = (index, field, value) => {
     void index;
+    void value;
     store.setState((draft) => {
+      if (field === "arm-fog") {
+        const entityPreset = resolveEntityPlacementPreset("fog_volume");
+        if (!entityPreset || !isSpecialVolumeEntityType(entityPreset.type)) return;
+        const shouldArm = draft.interaction.activeEntityPresetId !== entityPreset.id;
+        draft.interaction.activeEntityPresetId = shouldArm ? entityPreset.id : null;
+        draft.interaction.activeDecorPresetId = null;
+        draft.interaction.activeSoundPresetId = null;
+        draft.interaction.activeTool = EDITOR_TOOLS.INSPECT;
+        draft.interaction.volumePlacementDrag = null;
+        setCanvasSelectionMode(draft, "entity");
+        setActiveLayer(draft, PANEL_LAYERS.ENTITIES);
+        clearDecorSelection(draft.interaction);
+        clearSoundSelection(draft.interaction);
+        if (!shouldArm) {
+          draft.ui.specialVolumeWorkbench.openEntityId = null;
+        }
+        return;
+      }
+
+      if (field === "open-fog-workbench") {
+        const selectedEntityId = draft.interaction.selectedEntityId;
+        if (!selectedEntityId) return;
+        const selectedEntity = draft.document.active?.entities?.find((entry) => entry?.id === selectedEntityId);
+        if (!isFogVolumeEntityType(selectedEntity?.type)) return;
+        draft.ui.specialVolumeWorkbench.openEntityId = selectedEntityId;
+        draft.ui.specialVolumeWorkbench.activeType = "fog_volume";
+        setCanvasSelectionMode(draft, "entity");
+        setActiveLayer(draft, PANEL_LAYERS.ENTITIES);
+        return;
+      }
+
       if (field === "preset") {
         const nextPresetId = typeof value === "string" ? value : null;
         const entityPreset = resolveEntityPlacementPreset(nextPresetId);
