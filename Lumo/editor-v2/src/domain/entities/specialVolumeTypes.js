@@ -137,10 +137,12 @@ export function getFogWorkbenchFieldMeta() {
 export function getFogVolumeRect(entity, tileSize = 24) {
   const params = getFogVolumeParams(entity);
   const width = Math.max(tileSize, params.area.x1 - params.area.x0);
-  const height = Math.max(tileSize, params.look.thickness + params.look.lift);
+  const fogBodyHeight = Math.max(tileSize * 0.5, params.look.thickness);
+  const liftHeight = Math.max(0, params.look.lift);
+  const height = Math.max(tileSize, fogBodyHeight + liftHeight);
   return {
     x: params.area.x0,
-    y: Math.max(0, params.area.y0 - params.look.lift),
+    y: Math.max(0, params.area.y0 - height),
     width,
     height,
   };
@@ -189,10 +191,10 @@ export function getFogVolumeWorldRectFromDragCells(startCell, endCell, tileSize 
   if (!startCell || !endCell) return null;
   const minX = Math.min(startCell.x, endCell.x);
   const maxX = Math.max(startCell.x, endCell.x);
-  const minY = Math.min(startCell.y, endCell.y);
-  const maxY = Math.max(startCell.y, endCell.y);
+  const topCellY = Math.min(startCell.y, endCell.y);
+  const bottomCellY = Math.max(startCell.y, endCell.y);
   const width = (maxX - minX + 1) * tileSize;
-  const dragHeight = (maxY - minY + 1) * tileSize;
+  const dragHeight = (bottomCellY - topCellY + 1) * tileSize;
   const resolvedFallbackThickness = Number.isFinite(Number(fallbackThicknessPx)) && Number(fallbackThicknessPx) > 0
     ? Number(fallbackThicknessPx)
     : null;
@@ -202,7 +204,7 @@ export function getFogVolumeWorldRectFromDragCells(startCell, endCell, tileSize 
 
   return {
     x: minX * tileSize,
-    y: (maxY + 1) * tileSize,
+    y: (bottomCellY + 1) * tileSize,
     width,
     height,
   };
