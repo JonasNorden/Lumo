@@ -6795,10 +6795,16 @@ if (event.shiftKey) {
     const diagnostics = [];
     if (unsupportedCount) diagnostics.push(`${unsupportedCount} unsupported`);
     if (warningsCount) diagnostics.push(`${warningsCount} warning${warningsCount === 1 ? "" : "s"}`);
+    const liquidOmissionDiagnostics = bridgeResult.unsupported
+      .filter((entry) => /unsupported liquid volume/i.test(String(entry)))
+      .slice(0, 2);
+    const liquidSuffix = liquidOmissionDiagnostics.length
+      ? ` Omitted liquid volumes: ${liquidOmissionDiagnostics.join(" ")}`
+      : "";
 
     store.setState((draft) => {
       draft.ui.importStatus = diagnostics.length
-        ? `Play From Here launched (authored spawn). Bridge diagnostics: ${diagnostics.join(", ")}.`
+        ? `Play From Here launched (authored spawn). Bridge diagnostics: ${diagnostics.join(", ")}.${liquidSuffix}`
         : "Play From Here launched from authored spawn.";
     });
   };

@@ -26,13 +26,19 @@ function createMockLevelDocument() {
       layers: [{ id: "bg-1", name: "Sky", type: "color", depth: 0, visible: true, color: "#000000" }],
     },
     background: {
-      base: new Array(12).fill(null),
+      base: new Array(12).fill("bg_stone_wall"),
+      materials: [
+        { id: "bg_stone_wall", img: "../data/assets/tiles/soil_c.png" },
+        { id: "bg_arch", img: "../data/assets/tiles/stone_02.png" },
+      ],
     },
     entities: [
       { id: "spawn", name: "Spawn", type: "player-spawn", x: 1, y: 2, visible: true, params: {} },
       { id: "exit", name: "Exit", type: "player-exit", x: 3, y: 2, visible: true, params: {} },
       { id: "fog", name: "Fog", type: "fog_volume", x: 2, y: 1, visible: true, params: { area: { x0: 0, x1: 48, y0: 24 } } },
       { id: "water", name: "Water", type: "water_volume", x: 0, y: 0, visible: true, params: {} },
+      { id: "water-legacy", name: "Water Legacy", type: "waterVolume", x: 1, y: 0, visible: true, params: {} },
+      { id: "lava-legacy", name: "Lava Legacy", type: "lavaVolume", x: 2, y: 0, visible: true, params: {} },
     ],
     sounds: [
       { id: "spot", name: "Spot", type: "spot", x: 1, y: 1, visible: true, source: "data/assets/audio/spot/test.ogg", params: { radius: 5, volume: 0.8, fadeDistance: 2 } },
@@ -52,6 +58,9 @@ function runAdapterChecks() {
   assert.equal(runtimeLevel.meta.h, 3);
   assert.equal(runtimeLevel.layers.main.length, 12);
   assert.deepEqual(runtimeLevel.layers.main, doc.tiles.base);
+  assert.equal(runtimeLevel.layers.bg.length, 12);
+  assert.equal(runtimeLevel.layers.bg[0], "bg_rock_01", "background base should map to runtime-supported bg ids");
+  assert.deepEqual(runtimeLevel.layers.bg, runtimeLevel.editor.bg, "runtime bg should be mirrored on editor.bg fallback path");
 
   const spawn = runtimeLevel.layers.ents.find((entity) => entity.id === "start_01");
   const exit = runtimeLevel.layers.ents.find((entity) => entity.id === "exit_01");
@@ -67,6 +76,16 @@ function runAdapterChecks() {
     unsupported.some((entry) => entry.includes("water_volume")),
     true,
     "water_volume should be reported as unsupported in bridge diagnostics",
+  );
+  assert.equal(
+    unsupported.filter((entry) => entry.includes("unsupported liquid volume")).length >= 2,
+    true,
+    "liquid omission diagnostics should be explicit for unsupported runtime volumes",
+  );
+  assert.equal(
+    runtimeLevel.layers.ents.some((entity) => /water|lava|bubbling/i.test(entity.id)),
+    false,
+    "unsupported liquid volumes should never be emitted as runtime entities",
   );
 }
 
