@@ -17,6 +17,10 @@
       this.bg = [];
       this._bgDefMap = null;
       this._bgImg = new Map();
+      this._pfhBackgroundDiag = {
+        loadLogged: false,
+        drawLogged: false,
+      };
 
       // --- Tile visuals (catalog-driven PNG rendering) ---
       this._tileDefById = null;      // tileId -> catalog def
@@ -209,6 +213,25 @@
 
       this.bg = bg;
       this._bgDefMap = null;
+      this._pfhBackgroundDiag = {
+        loadLogged: false,
+        drawLogged: false,
+      };
+      const backgroundUniqueIds = new Set();
+      let paintedCells = 0;
+      for (const cell of bg){
+        if (!cell) continue;
+        paintedCells += 1;
+        backgroundUniqueIds.add(String(cell));
+      }
+      console.info("[PFH background] runtime load received background layer", {
+        levelId: meta.id || "(no-id)",
+        levelName: meta.name || "(untitled)",
+        expectedCells: needBG,
+        receivedCells: bg.length,
+        paintedCells,
+        uniqueIds: Array.from(backgroundUniqueIds).slice(0, 20),
+      });
 
       // Reset tile catalog mapping between levels
       this._tileDefById = null;
@@ -359,18 +382,43 @@
     _drawBG(ctx, cam, x0, y0, x1, y1){
       if (!this.bg || !this.bg.length) return;
       const cat = window.LUMO_CATALOG_BG;
-      if (!Array.isArray(cat) || !cat.length) return;
+      if (!Array.isArray(cat) || !cat.length){
+        if (!this._pfhBackgroundDiag?.drawLogged){
+          console.warn("[PFH background] draw skipped: runtime catalog_bg is unavailable/empty.");
+          this._pfhBackgroundDiag.drawLogged = true;
+        }
+        return;
+      }
 
       if (!this._bgDefMap){
         this._bgDefMap = new Map();
         for (const d of cat){
           if (!d) continue;
           const key = d.id || d.key || d.name;
-          if (key) this._bgDefMap.set(key, d);
+          if (key){
+            this._bgDefMap.set(String(key), d);
+            this._bgDefMap.set(String(key).toLowerCase(), d);
+          }
         }
       }
 
       const ts = this.tileSize;
+      if (!this._pfhBackgroundDiag?.drawLogged){
+        let paintedCells = 0;
+        let missingDefCells = 0;
+        for (const bid of this.bg){
+          if (!bid) continue;
+          paintedCells += 1;
+          const def = this._bgDefMap.get(bid) || this._bgDefMap.get(String(bid).toLowerCase());
+          if (!def || !def.img) missingDefCells += 1;
+        }
+        console.info("[PFH background] draw pass diagnostics", {
+          paintedCells,
+          missingDefinitionCells: missingDefCells,
+          drawableCells: Math.max(0, paintedCells - missingDefCells),
+        });
+        this._pfhBackgroundDiag.drawLogged = true;
+      }
 
       for (let ty = y0; ty <= y1; ty++){
         for (let tx = x0; tx <= x1; tx++){
@@ -378,7 +426,7 @@
           const bid = this.bg[i];
           if (!bid) continue;
 
-          const def = this._bgDefMap.get(bid);
+          const def = this._bgDefMap.get(bid) || this._bgDefMap.get(String(bid).toLowerCase());
           if (!def || !def.img) continue;
 
           let img = this._bgImg.get(def.img);

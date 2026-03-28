@@ -98,6 +98,11 @@ function normalizeRuntimeEntityType(type) {
   if (normalized === "player-spawn") return "start_01";
   if (normalized === "player-exit") return "exit_01";
   if (normalized === "checkpoint") return "checkpoint_01";
+  if (normalized === "watervolume") return "water_volume";
+  if (normalized === "lavavolume") return "lava_volume";
+  if (normalized === "bubblingliquidvolume" || normalized === "acid_swamp_volume" || normalized === "acidswampvolume") {
+    return "bubbling_liquid_volume";
+  }
   return normalized;
 }
 
@@ -304,6 +309,42 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
     },
   };
 
+  const authoredEntities = Array.isArray(levelDocument.entities) ? levelDocument.entities : [];
+  const authoredLiquidTypeCounts = {
+    water_volume: 0,
+    lava_volume: 0,
+    bubbling_liquid_volume: 0,
+  };
+  for (const entity of authoredEntities) {
+    const runtimeType = normalizeRuntimeEntityType(entity?.type);
+    if (runtimeType && Object.prototype.hasOwnProperty.call(authoredLiquidTypeCounts, runtimeType)) {
+      authoredLiquidTypeCounts[runtimeType] += 1;
+    }
+  }
+  const authoredBackgroundPaintCount = authoredBackgroundBase.reduce((count, materialId) => {
+    if (typeof materialId !== "string" || !materialId.trim()) return count;
+    return count + 1;
+  }, 0);
+  console.info(
+    "[PFH bridge] export summary",
+    {
+      levelId: runtimeLevel.meta.id || "(no-id)",
+      levelName: runtimeLevel.meta.name || "(untitled)",
+      dimensions: { w: width, h: height, tileSize },
+      background: {
+        authoredThemeLayerCount: Array.isArray(levelDocument?.backgrounds?.layers) ? levelDocument.backgrounds.layers.length : 0,
+        authoredCells: authoredBackgroundBase.length,
+        authoredPaintedCells: authoredBackgroundPaintCount,
+        exportedCells: runtimeBackgroundBase.length,
+        exportedPaintedCells: runtimeBackgroundBase.reduce((count, id) => (id ? count + 1 : count), 0),
+        unknownRemappedToFallback: unknownBackgroundMaterialCount,
+      },
+      liquids: {
+        authoredByType: authoredLiquidTypeCounts,
+      },
+    },
+  );
+
   const entities = Array.isArray(levelDocument.entities) ? levelDocument.entities : [];
   for (const entity of entities) {
     const runtimeId = normalizeRuntimeEntityType(entity?.type);
@@ -374,6 +415,24 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
   if (hasUnsupportedBackgroundLayers) {
     unsupported.push("Background theme/parallax layers are not bridged into runtime in v1; only background.base is mapped to editor.bg.");
   }
+
+  const exportedLiquidTypeCounts = {
+    water_volume: 0,
+    lava_volume: 0,
+    bubbling_liquid_volume: 0,
+  };
+  for (const entity of runtimeLevel.layers.ents) {
+    const runtimeId = String(entity?.id || "").trim().toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(exportedLiquidTypeCounts, runtimeId)) {
+      exportedLiquidTypeCounts[runtimeId] += 1;
+    }
+  }
+  console.info("[PFH bridge] exported runtime entity summary", {
+    totalEntities: runtimeLevel.layers.ents.length,
+    exportedLiquidByType: exportedLiquidTypeCounts,
+    warningsCount: warnings.length,
+    unsupportedCount: unsupported.length,
+  });
 
   return {
     runtimeLevel,
