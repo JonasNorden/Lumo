@@ -56,6 +56,13 @@ const ENTITY_VISUALS = {
     hitRadius: 10,
     isVolume: true,
   },
+  water_volume: {
+    key: "water_volume",
+    label: "Water Volume",
+    stroke: "#76cbff",
+    hitRadius: 10,
+    isVolume: true,
+  },
   generic: {
     key: "generic",
     label: "Generic",

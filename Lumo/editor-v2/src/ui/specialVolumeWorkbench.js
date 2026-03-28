@@ -1,4 +1,10 @@
-import { getFogVolumeParams, isFogVolumeEntityType } from "../domain/entities/specialVolumeTypes.js";
+import {
+  getFogVolumeParams,
+  getSpecialVolumeType,
+  getWaterVolumeParams,
+  isFogVolumeEntityType,
+  isWaterVolumeEntityType,
+} from "../domain/entities/specialVolumeTypes.js";
 import { findEntityPresetById } from "../domain/entities/entityPresets.js";
 import {
   VOLUME_PREVIEW_ENVIRONMENT,
@@ -46,11 +52,13 @@ function resolveSelectedEntity(state) {
 
 export function resolveSelectedSpecialVolume(state) {
   const entity = resolveSelectedEntity(state);
-  if (!entity || !isFogVolumeEntityType(entity.type)) return null;
+  if (!entity || (!isFogVolumeEntityType(entity.type) && !isWaterVolumeEntityType(entity.type))) return null;
   const entities = Array.isArray(state?.document?.active?.entities) ? state.document.active.entities : [];
   const index = entities.findIndex((entry) => entry?.id === entity.id);
   if (index < 0) return null;
-  return { entity, index, type: "fog_volume" };
+  const type = getSpecialVolumeType(entity.type);
+  if (!type) return null;
+  return { entity, index, type };
 }
 
 export function getSpecialVolumeWorkbenchContent() {
@@ -101,6 +109,20 @@ function getFogPreviewModel(entity, nowMs = Date.now()) {
     thicknessPx,
     liftPx,
     falloffPx,
+    traverseDurationMs,
+    phaseMs: Math.round(nowMs % traverseDurationMs),
+  };
+}
+
+function getWaterPreviewModel(entity, nowMs = Date.now()) {
+  const params = getWaterVolumeParams(entity);
+  const depthPx = clamp(Number(params.area.depth), 24, 164);
+  const traverseDurationMs = 9600;
+  return {
+    params,
+    depthPx,
+    waveAmount: clamp(Number(params.motion.waveAmount), 0, 1),
+    waveSpeed: clamp(Number(params.motion.waveSpeed), 0.1, 3),
     traverseDurationMs,
     phaseMs: Math.round(nowMs % traverseDurationMs),
   };
@@ -192,6 +214,70 @@ function renderFogModal(selection) {
   };
 }
 
+function renderWaterModal(selection) {
+  const model = getWaterPreviewModel(selection.entity);
+  const lumoSpriteSrc = resolveLumoPreviewSpriteSrc();
+  const readSpanLength = (entity) => {
+    const params = getWaterVolumeParams(entity);
+    return Math.max(24, Number(params.area.x1) - Number(params.area.x0));
+  };
+  const numberFields = [
+    { label: "Length", path: "area.length", min: 24, max: 4000, step: 24, digits: 0, read: readSpanLength },
+    { label: "Depth", path: "area.depth", min: 24, max: 320, step: 1, digits: 0, read: (entity) => getWaterVolumeParams(entity).area.depth },
+    { label: "Wave Amount", path: "motion.waveAmount", min: 0, max: 1, step: 0.01, digits: 2, read: (entity) => getWaterVolumeParams(entity).motion.waveAmount },
+    { label: "Wave Speed", path: "motion.waveSpeed", min: 0.1, max: 3, step: 0.05, digits: 2, read: (entity) => getWaterVolumeParams(entity).motion.waveSpeed },
+  ];
+  const params = model.params;
+  return {
+    type: "water_volume",
+    markup: `
+      <section class="specialVolumeWorkbenchModal panelSection" data-special-volume-modal="water_volume">
+        <header class="specialVolumeWorkbenchModalHeader">
+          <div>
+            <h3>Water Volume</h3>
+            <p>Filled, bottom-anchored water with surface waves and calm internal flow.</p>
+          </div>
+        </header>
+        <div class="specialVolumeWorkbenchModalBody specialVolumeWorkbenchModalBodyStacked">
+          <section class="specialVolumeWorkbenchControlsTop" data-fog-workbench-controls>
+            ${numberFields.map((field) => renderNumberField(selection, field)).join("")}
+            <label class="specialVolumeWorkbenchControlField">
+              <span class="label">Top Color</span>
+              <input type="color" value="${escapeHtml(params.look.topColor)}" data-entity-index="${selection.index}" data-entity-id="${escapeHtml(selection.entity.id || "")}" data-entity-param-path="look.topColor" data-entity-param-type="string" />
+            </label>
+            <label class="specialVolumeWorkbenchControlField">
+              <span class="label">Bottom Color</span>
+              <input type="color" value="${escapeHtml(params.look.bottomColor)}" data-entity-index="${selection.index}" data-entity-id="${escapeHtml(selection.entity.id || "")}" data-entity-param-path="look.bottomColor" data-entity-param-type="string" />
+            </label>
+          </section>
+          <section class="specialVolumeWorkbenchPreviewPane specialVolumeWorkbenchPreviewPaneWide" data-fog-preview-root>
+            <div
+              class="volumeWorkbenchPreviewSurface fogWorkbenchPreviewSurface"
+              data-water-preview-surface
+              data-water-preview-width="${PREVIEW_CANVAS_WIDTH_PX}"
+              data-water-preview-height="${PREVIEW_CANVAS_HEIGHT_PX}"
+              data-water-preview-traverse-ms="${Math.round(model.traverseDurationMs)}"
+              data-water-preview-lumo-sprite="${escapeHtml(lumoSpriteSrc || "")}"
+              data-water-depth="${model.depthPx.toFixed(4)}"
+              data-water-wave-amount="${model.waveAmount.toFixed(4)}"
+              data-water-wave-speed="${model.waveSpeed.toFixed(4)}"
+              data-water-top-color="${escapeHtml(params.look.topColor)}"
+              data-water-bottom-color="${escapeHtml(params.look.bottomColor)}"
+              data-volume-preview-environment="${VOLUME_PREVIEW_ENVIRONMENT}"
+              style="--fog-ground-baseline:${VOLUME_PREVIEW_GROUND_BASELINE_PX}px;--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
+            >
+              <canvas class="fogWorkbenchPreviewCanvas" data-water-preview-canvas width="${PREVIEW_CANVAS_WIDTH_PX}" height="${PREVIEW_CANVAS_HEIGHT_PX}" aria-label="Water behavior preview"></canvas>
+            </div>
+          </section>
+          <footer class="specialVolumeWorkbenchFooterPinned">
+            <button type="button" class="specialVolumeWorkbenchActionButton isPrimary" data-fog-workbench-action="done">Done</button>
+          </footer>
+        </div>
+      </section>
+    `,
+  };
+}
+
 function resolveLumoPreviewSpriteSrc() {
   const spawnPreset = findEntityPresetById("player-spawn");
   if (!spawnPreset || typeof spawnPreset.img !== "string" || !spawnPreset.img.trim()) return null;
@@ -205,7 +291,7 @@ export function getSpecialVolumeWorkbenchLauncherContent(state) {
   if (isOpen) return "";
   return `
     <div class="specialVolumeWorkbenchLauncher">
-      <span class="specialVolumeWorkbenchLauncherLabel">Fog selected</span>
+      <span class="specialVolumeWorkbenchLauncherLabel">${selection.type === "water_volume" ? "Water selected" : "Fog selected"}</span>
       <button type="button" class="specialVolumeWorkbenchLauncherButton" data-fog-workbench-action="open">Adjust</button>
     </div>
   `;
@@ -216,7 +302,7 @@ export function getSpecialVolumeWorkbenchModalContent(state) {
   if (!selection) return null;
   const isOpen = state?.ui?.specialVolumeWorkbench?.openEntityId === selection.entity.id;
   if (!isOpen) return null;
-  return renderFogModal(selection);
+  return selection.type === "water_volume" ? renderWaterModal(selection) : renderFogModal(selection);
 }
 
 export function getFogPreviewPatrolPhase(elapsedMs, traverseDurationMs = 9600) {
