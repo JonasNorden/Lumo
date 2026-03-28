@@ -1632,7 +1632,7 @@
     console.log("[PFH DEBUG] is PFH:", isPfhRuntimeSession);
     if (isPfhRuntimeSession){
       console.log("[PFH runtime] using layers.ents for entity load");
-      levelObj.entities = [];
+      levelObj.entities = undefined;
     }
 
     ents.loadFromLevel(levelObj);
