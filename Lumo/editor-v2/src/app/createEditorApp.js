@@ -2605,6 +2605,7 @@ export function createEditorApp({
       const gate = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeGate || "") || 70;
       const radiusPx = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeRadius || "") || 92;
       const push = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookePush || "") || 2.2;
+      const wakeStrength = clampFogPreview(Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeWake || "") || 1, 0, 3);
       const bulge = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeBulge || "") || 1.2;
       const lumoU = patrol.u;
       const sampleCount = fogPreviewMotion.sampleCount;
@@ -2680,7 +2681,7 @@ export function createEditorApp({
           const backMask = smoothFogPreview01((-u) + 0.10);
           const q = 1 - (Math.abs(k) / radCells);
           const w = q * q;
-          const wake = push * amp * w * (0.25 + (0.75 * backMask));
+          const wake = push * wakeStrength * amp * w * (0.25 + (0.75 * backMask));
           field[i] -= wake * 0.46;
           vel[i] += dir * wake * 0.0022;
         }

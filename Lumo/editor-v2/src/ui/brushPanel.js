@@ -6,7 +6,6 @@ import {
 import { getBrushDraftSummary } from "../domain/tiles/brushDraft.js";
 import { TOOL_OPTIONS, EDITOR_TOOLS, isEditorTool } from "../domain/tiles/tools.js";
 import { ENTITY_PRESETS } from "../domain/entities/entityPresets.js";
-import { isFogVolumeEntityType } from "../domain/entities/specialVolumeTypes.js";
 import { DECOR_PRESETS } from "../domain/decor/decorPresets.js";
 import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
 import {
@@ -251,28 +250,9 @@ function renderEntitiesSettings(state) {
   `;
 }
 
-function resolveSelectedFogVolumeSummary(state) {
-  const doc = state?.document?.active;
-  const entities = Array.isArray(doc?.entities) ? doc.entities : [];
-  if (!entities.length) return null;
-  const interaction = state?.interaction || {};
-  const selectedIndex = Number.isInteger(interaction.selectedEntityIndex)
-    ? interaction.selectedEntityIndex
-    : Array.isArray(interaction.selectedEntityIndices)
-      ? interaction.selectedEntityIndices[0]
-      : null;
-  const selectedByIndex = Number.isInteger(selectedIndex) ? entities[selectedIndex] : null;
-  const selectedById = typeof interaction.selectedEntityId === "string"
-    ? entities.find((entity) => entity?.id === interaction.selectedEntityId)
-    : null;
-  const selectedEntity = selectedByIndex || selectedById || null;
-  return isFogVolumeEntityType(selectedEntity?.type) ? selectedEntity : null;
-}
-
 function renderFogVolumeSettings(state) {
   const fogArmed = state?.interaction?.activeLayer === PANEL_LAYERS.ENTITIES
     && state?.interaction?.activeEntityPresetId === "fog_volume";
-  const selectedFog = resolveSelectedFogVolumeSummary(state);
   return `
     <div class="compactActionRow compactActionRowSingle">
       <button
@@ -280,14 +260,6 @@ function renderFogVolumeSettings(state) {
         class="toolButton ${fogArmed ? "isActive" : ""}"
         data-volume-action="arm-fog"
       >${fogArmed ? "Fog placement armed" : "Create Fog Volume"}</button>
-    </div>
-    <div class="compactActionRow compactActionRowSingle">
-      <button
-        type="button"
-        class="toolButton isSecondary"
-        data-volume-action="open-fog-workbench"
-        ${selectedFog ? "" : "disabled"}
-      >${selectedFog ? "Edit selected fog" : "Select fog to edit"}</button>
     </div>
   `;
 }
