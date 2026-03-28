@@ -279,7 +279,6 @@ const PANEL_LAYERS = {
   BACKGROUND: "background",
   TILES: "tiles",
   ENTITIES: "entities",
-  VOLUMES: "volumes",
   DECOR: "decor",
   SOUND: "sound",
 };
@@ -287,7 +286,6 @@ const PANEL_LAYERS = {
 function getActiveLayer(interaction) {
   if (interaction.activeLayer === PANEL_LAYERS.BACKGROUND) return PANEL_LAYERS.BACKGROUND;
   if (interaction.activeLayer === PANEL_LAYERS.DECOR) return PANEL_LAYERS.DECOR;
-  if (interaction.activeLayer === PANEL_LAYERS.VOLUMES) return PANEL_LAYERS.ENTITIES;
   if (interaction.activeLayer === PANEL_LAYERS.ENTITIES) return PANEL_LAYERS.ENTITIES;
   if (interaction.activeLayer === PANEL_LAYERS.SOUND) return PANEL_LAYERS.SOUND;
   return PANEL_LAYERS.TILES;
@@ -1520,7 +1518,7 @@ export function createEditorApp({
     if (selectingSpecialVolume) {
       resumeObjectPlacementPreviews(draft, "special volume selection");
       setCanvasSelectionMode(draft, "entity");
-      setActiveLayer(draft, PANEL_LAYERS.VOLUMES);
+      setActiveLayer(draft, PANEL_LAYERS.ENTITIES);
       draft.interaction.boxSelection = null;
       draft.interaction.entityDrag = null;
       draft.interaction.decorDrag = null;
@@ -2264,7 +2262,6 @@ export function createEditorApp({
     if (layer === PANEL_LAYERS.BACKGROUND) draft.ui.panelSections.background = true;
     if (layer === PANEL_LAYERS.TILES) draft.ui.panelSections.tiles = true;
     if (layer === PANEL_LAYERS.ENTITIES) draft.ui.panelSections.entities = true;
-    if (layer === PANEL_LAYERS.VOLUMES) draft.ui.panelSections.volumes = true;
     if (layer === PANEL_LAYERS.DECOR) draft.ui.panelSections.decor = true;
     if (layer === PANEL_LAYERS.SOUND) draft.ui.panelSections.sound = true;
   };
@@ -2274,8 +2271,6 @@ export function createEditorApp({
       ? PANEL_LAYERS.BACKGROUND
       : layer === PANEL_LAYERS.DECOR
       ? PANEL_LAYERS.DECOR
-      : layer === PANEL_LAYERS.VOLUMES
-        ? PANEL_LAYERS.VOLUMES
       : layer === PANEL_LAYERS.ENTITIES
         ? PANEL_LAYERS.ENTITIES
         : layer === PANEL_LAYERS.SOUND
@@ -2408,6 +2403,32 @@ export function createEditorApp({
     return x * x * (3 - (2 * x));
   };
 
+  const sampleSmookeNoise = (x) => {
+    const xi = Math.floor(x);
+    const xf = x - xi;
+    const hash = (n) => {
+      const nn = (n << 13) ^ n;
+      return 1 - ((((nn * ((nn * nn * 15731) + 789221)) + 1376312589) & 0x7fffffff) / 1073741824);
+    };
+    const a = hash(xi);
+    const b = hash(xi + 1);
+    const u = xf * xf * (3 - (2 * xf));
+    return (a * (1 - u)) + (b * u);
+  };
+
+  const smookeOrganicMaskAtU = (u, elapsedSeconds, strength, scale, speed) => {
+    if (strength <= 0.0001) return 1;
+    const x = u * 620;
+    const t = elapsedSeconds;
+    const p = (x * 0.004 * scale) + (t * (0.10 * speed));
+    const n1 = sampleSmookeNoise(p);
+    const n2 = sampleSmookeNoise((p * 1.7) + 12.3);
+    const n3 = sampleSmookeNoise((p * 0.65) - 7.1);
+    const mix = ((n1 * 0.55) + (n2 * 0.30) + (n3 * 0.15)) * 0.5 + 0.5;
+    const m = 0.75 + (mix * 0.55);
+    return 1 + ((m - 1) * strength);
+  };
+
   const stepFogPreviewMotion = (timestampMs) => {
     if (!fogPreviewMotion.surface?.isConnected || !fogPreviewMotion.lumo?.isConnected) {
       stopFogPreviewMotionLoop();
@@ -2424,93 +2445,111 @@ export function createEditorApp({
       && fogPreviewMotion.field instanceof Float32Array
       && fogPreviewMotion.vel instanceof Float32Array
     ) {
-      const surfaceStyle = globalThis.getComputedStyle(fogPreviewMotion.surface);
-      const influenceAmount = Number.parseFloat(fogPreviewMotion.surface.dataset.fogPreviewInfluence || "") || 0;
-      const returnTime = Number.parseFloat(fogPreviewMotion.surface.dataset.fogPreviewReturnTime || "") || 1;
-      const viscosity = Number.parseFloat(fogPreviewMotion.surface.dataset.fogPreviewViscosity || "") || 0.85;
-      const idleAmount = Number.parseFloat(fogPreviewMotion.surface.dataset.fogPreviewIdleAmount || "") || 0;
-      const idleSpeed = Number.parseFloat(fogPreviewMotion.surface.dataset.fogPreviewIdleSpeed || "") || 1;
-      const density = Number.parseFloat(fogPreviewMotion.surface.dataset.fogPreviewDensity || "") || 0.25;
+      const density = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeDensity || "") || 0.25;
+      const noiseAmount = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeNoise || "") || 0;
+      const drift = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeDrift || "") || 0;
+      const diffuse = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeDiffuse || "") || 0.2;
+      const relax = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeRelax || "") || 0.22;
+      const visc = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeVisc || "") || 0.9;
+      const gate = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeGate || "") || 70;
+      const radiusPx = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeRadius || "") || 92;
+      const push = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookePush || "") || 2.2;
+      const bulge = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeBulge || "") || 1.2;
+      const organicStrength = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeOrganicStrength || "") || 0;
+      const organicScale = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeOrganicScale || "") || 1;
+      const organicSpeed = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeOrganicSpeed || "") || 1;
       const falloffPx = Number.parseFloat(fogPreviewMotion.surface.dataset.fogPreviewFalloff || "") || 120;
-      const disturbanceStrength = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-disturbance-strength")) || 0;
-      const disturbanceRadiusPct = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-disturbance-radius")) || 16;
-      const idleMotion = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-idle-motion")) || 0;
-      const settleStrength = Number.parseFloat(surfaceStyle.getPropertyValue("--fog-settle-strength")) || 1;
       const lumoU = patrol.xPct / 100;
       const sampleCount = fogPreviewMotion.samples.length;
       const field = fogPreviewMotion.field;
       const vel = fogPreviewMotion.vel;
       const dt = Math.min(0.05, fogPreviewMotion.lastElapsedMs === undefined ? (1 / 60) : Math.max(0.001, (elapsedMs - fogPreviewMotion.lastElapsedMs) / 1000));
+      const elapsedSeconds = elapsedMs * 0.001;
       fogPreviewMotion.lastElapsedMs = elapsedMs;
-
-      const diffuse = clampFogPreview(0.075 + ((1 - viscosity) * 0.28) + (idleAmount * 0.05), 0.05, 0.42);
-      const relax = clampFogPreview((1 / Math.max(0.25, returnTime)) * 0.85, 0.14, 4.2);
-      const damping = clampFogPreview(1 - ((1 - viscosity) * 0.08), 0.9, 0.999);
 
       for (let index = 1; index < sampleCount - 1; index += 1) {
         const laplacian = field[index - 1] - (2 * field[index]) + field[index + 1];
         vel[index] += laplacian * diffuse * 120 * dt;
       }
 
-      const idlePhase = elapsedMs * 0.001 * (0.2 + idleSpeed * 0.7);
       for (let index = 0; index < sampleCount; index += 1) {
-        const state = fogPreviewMotion.sampleState[index];
-        if (!state) continue;
-        const worldSeed = Number.isFinite(state.seed) ? state.seed : 0;
-        const sway = Math.sin((index * 0.35) + idlePhase + (worldSeed * 3.7));
-        const ripple = Math.sin((index * 0.11) - (idlePhase * 0.58) + (worldSeed * 1.9));
-        vel[index] += (sway + ripple * 0.65) * idleMotion * 0.055 * dt;
+        vel[index] += (0 - field[index]) * relax * 120 * dt;
+        vel[index] *= visc;
+        field[index] += vel[index] * dt;
+        field[index] = clampFogPreview(field[index], -2.2, 2.2);
       }
 
       const previousLumoXPct = fogPreviewMotion.lastLumoXPct;
       const lumoTravelPct = Number.isFinite(previousLumoXPct) ? patrol.xPct - previousLumoXPct : 0;
       fogPreviewMotion.lastLumoXPct = patrol.xPct;
       const lumoSpeedPxPerSecond = Math.abs((lumoTravelPct / 100) * 620 / Math.max(0.001, dt));
-      const movementGate = 18;
-      if (lumoSpeedPxPerSecond > movementGate && influenceAmount > 0.001) {
-        const centerIndex = clampFogPreview(Math.round(lumoU * (sampleCount - 1)), 0, sampleCount - 1);
-        const radiusCells = Math.max(2, Math.floor((disturbanceRadiusPct / 100) * sampleCount));
-        const influencePeak = disturbanceStrength * (0.9 + influenceAmount * 0.32) * Math.min(1.8, lumoSpeedPxPerSecond / 120);
-        for (let offset = -radiusCells; offset <= radiusCells; offset += 1) {
-          const sampleIndex = centerIndex + offset;
-          if (sampleIndex < 0 || sampleIndex >= sampleCount) continue;
-          const q = 1 - Math.abs(offset) / Math.max(1, radiusCells);
-          const weight = q * q;
-          field[sampleIndex] += influencePeak * weight * 0.045;
-          vel[sampleIndex] += influencePeak * weight * 0.012;
+      if (drift > 0.001) {
+        const shift = drift * 0.85 * dt;
+        if (Math.abs(shift) > 0.00001) {
+          const shifted = new Float32Array(sampleCount);
+          for (let index = 0; index < sampleCount; index += 1) {
+            const src = index - shift;
+            const i0 = Math.floor(src);
+            const f = src - i0;
+            const a = field[Math.max(0, Math.min(sampleCount - 1, i0))];
+            const b = field[Math.max(0, Math.min(sampleCount - 1, i0 + 1))];
+            shifted[index] = (a * (1 - f)) + (b * f);
+          }
+          field.set(shifted);
         }
       }
 
-      for (let index = 0; index < sampleCount; index += 1) {
-        vel[index] += (0 - field[index]) * relax * settleStrength * 120 * dt;
-        vel[index] *= damping;
-        field[index] += vel[index] * dt;
-        field[index] = clampFogPreview(field[index], -2.1, 2.1);
+      if (lumoSpeedPxPerSecond > gate) {
+        const centerIndex = clampFogPreview(Math.round(lumoU * (sampleCount - 1)), 0, sampleCount - 1);
+        const radCells = Math.max(3, Math.floor(radiusPx / Math.max(1, (620 / Math.max(2, sampleCount - 1)))));
+        const dir = Math.sign(lumoTravelPct) || 1;
+        const amp = Math.min(2.2, lumoSpeedPxPerSecond / 210);
+        const aheadOffset = Math.max(2, Math.floor(radCells * 0.35));
+        const bulgeCenter = centerIndex + (dir * aheadOffset);
+        const behindOffset = Math.max(1, Math.floor(radCells * 0.15));
+        const clearCenter = centerIndex - (dir * behindOffset);
+
+        for (let k = -radCells; k <= radCells; k += 1) {
+          const i = bulgeCenter + k;
+          if (i < 0 || i >= sampleCount) continue;
+          const u = (k / radCells) * dir;
+          const frontMask = smoothFogPreview01(u + 0.05);
+          const q = 1 - (Math.abs(k) / radCells);
+          const w = q * q;
+          const ridge = bulge * amp * w * (0.18 + (0.82 * frontMask));
+          field[i] += ridge * 0.32;
+        }
+        for (let k = -radCells; k <= radCells; k += 1) {
+          const i = clearCenter + k;
+          if (i < 0 || i >= sampleCount) continue;
+          const u = (k / radCells) * dir;
+          const backMask = smoothFogPreview01((-u) + 0.10);
+          const q = 1 - (Math.abs(k) / radCells);
+          const w = q * q;
+          const wake = push * amp * w * (0.25 + (0.75 * backMask));
+          field[i] -= wake * 0.46;
+          vel[i] += dir * wake * 0.0022;
+        }
       }
 
       fogPreviewMotion.samples.forEach((sample, index) => {
         const state = fogPreviewMotion.sampleState[index];
         if (!state) return;
+        const edgeMask = smoothFogPreview01(clampFogPreview(state.dOpenPx / Math.max(10, falloffPx), 0, 1));
+        const organic = smookeOrganicMaskAtU(state.u, elapsedSeconds, organicStrength, organicScale, organicSpeed);
         const disturbanceValue = field[index];
-        const opening = Math.max(0, disturbanceValue);
-        const bulge = Math.max(0, -disturbanceValue);
-        const edgeAttenuation = clampFogPreview(state.dOpenPx / Math.max(12, falloffPx), 0, 1);
-        const edgeEase = smoothFogPreview01(edgeAttenuation);
-        const coreDrop = opening * (1.2 + (1 - viscosity) * 0.85);
-        const hazeDrop = opening * (1.45 + (1 - viscosity) * 1.1);
-        const coreLift = bulge * (0.72 + idleAmount * 0.35) * edgeEase;
-        const hazeLift = bulge * (1.05 + idleAmount * 0.55) * edgeEase;
-        const opacityShift = (bulge * 0.014) - (opening * (0.02 + disturbanceStrength * 0.006));
-        const localOffset = Math.min(0, state.baseOffset - (opening * 0.78) + (bulge * 0.42));
-        const densityOpacityScale = 0.65 + density * 0.62;
+        const bulge = Math.max(0, disturbanceValue);
+        const wave = noiseAmount * (((sampleSmookeNoise((index * 0.22) + (elapsedSeconds * 1.05)) * 0.5) + 0.5) - 0.5) * 10;
+        const rise = bulge * 22;
+        const yRaw = state.baseCore + wave - rise;
+        const yOrganic = state.baseCore - ((state.baseCore - yRaw) * organic);
+        const yMasked = state.baseCore - ((state.baseCore - yOrganic) * edgeMask);
+        const localOffset = Math.min(0, -Math.max(0, state.baseCore - yMasked));
 
         sample.style.setProperty("--fog-sample-offset", `${localOffset.toFixed(3)}px`);
-        sample.style.setProperty("--fog-sample-core", `${Math.max(2.1, state.baseCore - coreDrop + coreLift).toFixed(3)}px`);
-        sample.style.setProperty("--fog-sample-haze", `${Math.max(3.8, state.baseHaze - hazeDrop + hazeLift).toFixed(3)}px`);
-        sample.style.setProperty(
-          "--fog-sample-opacity",
-          `${Math.min(0.98, Math.max(0.015, (state.baseOpacity + opacityShift) * densityOpacityScale)).toFixed(4)}`,
-        );
+        sample.style.setProperty("--fog-sample-core", `${Math.max(3, yMasked).toFixed(3)}px`);
+        sample.style.setProperty("--fog-sample-haze", `${Math.max(3, yMasked + 2).toFixed(3)}px`);
+        sample.style.setProperty("--fog-sample-opacity", `${Math.min(0.98, Math.max(0.03, state.baseOpacity * density)).toFixed(4)}`);
       });
     }
     fogPreviewMotion.rafId = globalThis.requestAnimationFrame(stepFogPreviewMotion);
@@ -3824,10 +3863,9 @@ export function createEditorApp({
         draft.interaction.activeTool = EDITOR_TOOLS.INSPECT;
         draft.interaction.volumePlacementDrag = null;
         setCanvasSelectionMode(draft, "entity");
-        setActiveLayer(draft, PANEL_LAYERS.VOLUMES);
+        setActiveLayer(draft, PANEL_LAYERS.ENTITIES);
         clearDecorSelection(draft.interaction);
         clearSoundSelection(draft.interaction);
-        draft.ui.panelSections.volumes = true;
         return;
       }
 
@@ -5000,7 +5038,7 @@ if (event.shiftKey) {
             const createdIndex = createFogVolumeAtWorldRect(draft, fogRect);
             if (createdIndex != null) {
               setCanvasSelectionMode(draft, "entity");
-              setActiveLayer(draft, PANEL_LAYERS.VOLUMES);
+              setActiveLayer(draft, PANEL_LAYERS.ENTITIES);
               if (!entitiesPanelWasOpen && draft.ui.panelSections) {
                 draft.ui.panelSections.entities = false;
               }
@@ -5549,25 +5587,6 @@ if (event.shiftKey) {
 
       if (layer === PANEL_LAYERS.ENTITIES) {
         applyCanvasTarget(draft, "entity");
-        return;
-      }
-
-      if (layer === PANEL_LAYERS.VOLUMES) {
-        resumeObjectPlacementPreviews(draft, "panel layer volumes");
-        setCanvasSelectionMode(draft, "entity");
-        setActiveLayer(draft, PANEL_LAYERS.VOLUMES);
-        draft.interaction.boxSelection = null;
-        draft.interaction.entityDrag = null;
-        draft.interaction.decorDrag = null;
-        draft.interaction.soundDrag = null;
-        draft.interaction.scanDrag = null;
-        draft.interaction.volumePlacementDrag = null;
-        clearDecorScatterDrag(draft);
-        clearDecorSelection(draft.interaction);
-        clearSoundSelection(draft.interaction);
-        draft.interaction.hoveredDecorIndex = null;
-        draft.interaction.hoveredDecorId = null;
-        clearHoveredSound(draft.interaction);
         return;
       }
 

@@ -123,7 +123,6 @@ export function createEditorState() {
       panelSections: {
         tiles: false,
         entities: false,
-        volumes: false,
         decor: false,
         background: true,
         sound: false,
