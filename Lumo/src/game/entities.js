@@ -9,8 +9,14 @@
       this._fogVolumes = [];
       this._fogFrame = 0;
       this._liquidVolumes = [];
+      this._registeredRuntimeEntityIds = new Set([
+        "water_volume",
+        "lava_volume",
+        "bubbling_liquid_volume",
+      ]);
       this._pfhLiquidDiag = {
         loadLogged: false,
+        registrationLogged: false,
         spawnedByType: new Set(),
         drawLogged: false,
         afterDarknessDrawLogged: false,
@@ -183,6 +189,7 @@
       this._soundHandles.clear();
       this._pfhLiquidDiag = {
         loadLogged: false,
+        registrationLogged: false,
         spawnedByType: new Set(),
         drawLogged: false,
         afterDarknessDrawLogged: false,
@@ -222,6 +229,10 @@
         totalEntities: list.length,
         liquidEntitiesByType: incomingLiquidCounts,
       });
+      if (!this._pfhLiquidDiag.registrationLogged){
+        console.info("[PFH liquid] registered runtime entity types: " + Array.from(this._registeredRuntimeEntityIds).join(", "));
+        this._pfhLiquidDiag.registrationLogged = true;
+      }
 
       if (listB && !listA){
         // If the level doesn't define spawn, derive it from start_01 (editor mandatory entity).
@@ -267,7 +278,8 @@
 
       // Editor-export path (id-based)
       if (e.id){
-        const id = String(e.id);
+        const rawId = String(e.id);
+        const id = rawId.trim().toLowerCase();
         const tx = e.x|0, ty = e.y|0;
         const offX = (typeof e.offsetX === "number") ? e.offsetX : 0;
         const offY = (typeof e.offsetY === "number") ? e.offsetY : 0;
