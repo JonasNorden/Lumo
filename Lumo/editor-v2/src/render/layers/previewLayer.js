@@ -3,6 +3,7 @@ import { EDITOR_TOOLS } from "../../domain/tiles/tools.js";
 import { getLineCells } from "../../domain/tiles/line.js";
 import {
   getFogVolumeWorldRectFromDragCells,
+  getLavaVolumeWorldRectFromDragCells,
   getWaterVolumeWorldRectFromDragCells,
 } from "../../domain/entities/specialVolumeTypes.js";
 import { renderDecorPlacementPreview } from "./decorLayer.js";
@@ -135,6 +136,7 @@ export function renderBrushPreviewOverlay(ctx, doc, viewport, interaction, brush
 export function renderPlacementPreviewOverlay(ctx, doc, viewport, interaction, presets) {
   renderFogVolumePlacementPreview(ctx, doc, viewport, interaction);
   renderWaterVolumePlacementPreview(ctx, doc, viewport, interaction);
+  renderLavaVolumePlacementPreview(ctx, doc, viewport, interaction);
   renderDecorPlacementPreview(ctx, doc, viewport, interaction, presets?.decor || null);
   renderEntityPlacementPreview(ctx, doc, viewport, interaction, presets?.entity || null);
   renderSoundPlacementPreview(ctx, doc, viewport, interaction, presets?.sound || null);
@@ -221,6 +223,53 @@ export function renderWaterVolumePlacementPreview(ctx, doc, viewport, interactio
   ctx.moveTo(screenX, screenY + 0.5);
   ctx.lineTo(screenX + screenWidth, screenY + 0.5);
   ctx.strokeStyle = "rgba(197, 243, 255, 0.94)";
+  ctx.lineWidth = Math.max(1, lineWidth);
+  ctx.stroke();
+  ctx.restore();
+}
+
+export function renderLavaVolumePlacementPreview(ctx, doc, viewport, interaction) {
+  const drag = interaction?.volumePlacementDrag;
+  if (!drag?.active || drag.type !== "lava_volume") return;
+  if (!drag.startCell || !drag.endCell) return;
+  const lavaRect = getLavaVolumeWorldRectFromDragCells(
+    drag.startCell,
+    drag.endCell,
+    doc?.dimensions?.tileSize || 24,
+    drag.depthPx,
+  );
+  if (!lavaRect) return;
+  const zoom = viewport?.zoom || 1;
+  const screenX = viewport.offsetX + lavaRect.x * zoom;
+  const screenY = viewport.offsetY + (lavaRect.y - lavaRect.height) * zoom;
+  const screenWidth = lavaRect.width * zoom;
+  const screenHeight = lavaRect.height * zoom;
+  const lineWidth = Math.max(1, 1.25 * (1 / Math.max(0.35, zoom)));
+
+  ctx.save();
+  const bodyGradient = ctx.createLinearGradient(screenX, screenY, screenX, screenY + screenHeight);
+  bodyGradient.addColorStop(0, "rgba(255, 157, 49, 0.54)");
+  bodyGradient.addColorStop(0.58, "rgba(223, 84, 12, 0.76)");
+  bodyGradient.addColorStop(1, "rgba(28, 11, 4, 0.94)");
+  ctx.fillStyle = bodyGradient;
+  ctx.fillRect(screenX, screenY, screenWidth, screenHeight);
+
+  const heatGlow = ctx.createLinearGradient(0, screenY - (18 * zoom), 0, screenY + (5 * zoom));
+  heatGlow.addColorStop(0, "rgba(255, 156, 59, 0)");
+  heatGlow.addColorStop(1, "rgba(255, 193, 112, 0.28)");
+  ctx.fillStyle = heatGlow;
+  ctx.fillRect(screenX, screenY - (18 * zoom), screenWidth, 22 * zoom);
+
+  ctx.strokeStyle = "rgba(255, 191, 96, 0.9)";
+  ctx.lineWidth = lineWidth;
+  ctx.setLineDash([Math.max(8, 10 * zoom), Math.max(5, 6 * zoom)]);
+  ctx.strokeRect(screenX + lineWidth * 0.5, screenY + lineWidth * 0.5, Math.max(0, screenWidth - lineWidth), Math.max(0, screenHeight - lineWidth));
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  ctx.moveTo(screenX, screenY + 0.5);
+  ctx.lineTo(screenX + screenWidth, screenY + 0.5);
+  ctx.strokeStyle = "rgba(255, 214, 126, 0.96)";
   ctx.lineWidth = Math.max(1, lineWidth);
   ctx.stroke();
   ctx.restore();

@@ -14,10 +14,17 @@ const WATER_DEFAULT_PARAMS = Object.freeze({
   look: { topColor: "#4EB8F2", bottomColor: "#0A4B93" },
   hazard: { instantDeath: true },
 });
+const LAVA_DEFAULT_PARAMS = Object.freeze({
+  area: { x0: 0, x1: 240, y0: 0, depth: 88 },
+  flow: { speed: 0.55 },
+  look: { temperature: 0.72 },
+  hazard: { instantDeath: true },
+});
 
 export const SPECIAL_VOLUME_EDITOR_LAYOUTS = Object.freeze({
   fog_volume: "floating",
   water_volume: "floating",
+  lava_volume: "floating",
 });
 
 export const FOG_VOLUME_PARAM_SECTIONS = Object.freeze([
@@ -25,12 +32,13 @@ export const FOG_VOLUME_PARAM_SECTIONS = Object.freeze([
 ]);
 
 export function isSpecialVolumeEntityType(type) {
-  return isFogVolumeEntityType(type) || isWaterVolumeEntityType(type);
+  return isFogVolumeEntityType(type) || isWaterVolumeEntityType(type) || isLavaVolumeEntityType(type);
 }
 
 export function getSpecialVolumeType(type) {
   if (isFogVolumeEntityType(type)) return "fog_volume";
   if (isWaterVolumeEntityType(type)) return "water_volume";
+  if (isLavaVolumeEntityType(type)) return "lava_volume";
   return null;
 }
 
@@ -49,11 +57,18 @@ export function getSpecialVolumeDescriptor(type) {
       layout: "floating",
     };
   }
+  if (isLavaVolumeEntityType(type)) {
+    return {
+      type: "lava_volume",
+      label: "Lava Volume",
+      layout: "floating",
+    };
+  }
   return null;
 }
 
 export function listSpecialVolumeTypes() {
-  return ["fog_volume", "water_volume"];
+  return ["fog_volume", "water_volume", "lava_volume"];
 }
 
 export function isFogVolumeEntityType(type) {
@@ -62,6 +77,10 @@ export function isFogVolumeEntityType(type) {
 
 export function isWaterVolumeEntityType(type) {
   return String(type || "").trim().toLowerCase() === "water_volume";
+}
+
+export function isLavaVolumeEntityType(type) {
+  return String(type || "").trim().toLowerCase() === "lava_volume";
 }
 
 function clamp(value, min, max) {
@@ -95,6 +114,36 @@ function normalizeWaterParams(rawParams = {}) {
     look: {
       topColor: typeof lookInput.topColor === "string" && lookInput.topColor.trim() ? lookInput.topColor.trim() : WATER_DEFAULT_PARAMS.look.topColor,
       bottomColor: typeof lookInput.bottomColor === "string" && lookInput.bottomColor.trim() ? lookInput.bottomColor.trim() : WATER_DEFAULT_PARAMS.look.bottomColor,
+    },
+    hazard: {
+      instantDeath: Boolean(hazardInput.instantDeath ?? true),
+    },
+  };
+}
+
+function normalizeLavaArea(area = {}) {
+  const x0 = Math.max(0, Number(area.x0) || 0);
+  const x1 = Math.max(x0 + 1, Number(area.x1) || x0 + 1);
+  return {
+    x0,
+    x1,
+    y0: Math.max(0, Number(area.y0) || 0),
+    depth: clamp(Number(area.depth), 24, 320),
+  };
+}
+
+function normalizeLavaParams(rawParams = {}) {
+  const area = normalizeLavaArea(rawParams.area || {});
+  const flowInput = rawParams.flow || {};
+  const lookInput = rawParams.look || {};
+  const hazardInput = rawParams.hazard || {};
+  return {
+    area,
+    flow: {
+      speed: clamp(Number(flowInput.speed), 0.1, 1.4),
+    },
+    look: {
+      temperature: clamp(Number(lookInput.temperature), 0.2, 1),
     },
     hazard: {
       instantDeath: Boolean(hazardInput.instantDeath ?? true),
@@ -180,6 +229,11 @@ export function getWaterVolumeParams(entity) {
   return normalizeWaterParams(merged);
 }
 
+export function getLavaVolumeParams(entity) {
+  const merged = deepMerge(LAVA_DEFAULT_PARAMS, cloneEntityParams(entity?.params));
+  return normalizeLavaParams(merged);
+}
+
 export function getFogWorkbenchFieldMeta() {
   return {
     controls: [
@@ -218,6 +272,18 @@ export function getFogVolumeRect(entity, tileSize = 24) {
 
 export function getWaterVolumeRect(entity, tileSize = 24) {
   const params = getWaterVolumeParams(entity);
+  const width = Math.max(tileSize, params.area.x1 - params.area.x0);
+  const depth = Math.max(tileSize, params.area.depth);
+  return {
+    x: params.area.x0,
+    y: Math.max(0, params.area.y0 - depth),
+    width,
+    height: depth,
+  };
+}
+
+export function getLavaVolumeRect(entity, tileSize = 24) {
+  const params = getLavaVolumeParams(entity);
   const width = Math.max(tileSize, params.area.x1 - params.area.x0);
   const depth = Math.max(tileSize, params.area.depth);
   return {
@@ -299,6 +365,38 @@ export function createWaterVolumeEntityFromWorldRect(entity, worldRect, tileSize
   };
 }
 
+export function createLavaVolumeEntityFromWorldRect(entity, worldRect, tileSize = 24) {
+  const width = Math.max(tileSize, Number(worldRect?.width) || tileSize);
+  const depth = Math.max(tileSize, Math.min(320, Number(worldRect?.height) || 88));
+  const x = Math.max(0, Number(worldRect?.x) || 0);
+  const y = Math.max(0, Number(worldRect?.y) || 0);
+  const params = getLavaVolumeParams({
+    type: "lava_volume",
+    params: {
+      ...cloneEntityParams(entity?.params),
+      area: {
+        ...(entity?.params?.area || {}),
+        x0: x,
+        x1: x + width,
+        y0: y,
+        depth,
+      },
+      hazard: {
+        ...(entity?.params?.hazard || {}),
+        instantDeath: true,
+      },
+    },
+  });
+
+  return {
+    ...entity,
+    type: "lava_volume",
+    x: Math.round(x / tileSize),
+    y: Math.round(y / tileSize),
+    params,
+  };
+}
+
 export function getFogVolumeWorldRectFromDragCells(startCell, endCell, tileSize = 24, fallbackThicknessPx = null) {
   if (!startCell || !endCell) return null;
   const minX = Math.min(startCell.x, endCell.x);
@@ -342,6 +440,10 @@ export function getWaterVolumeWorldRectFromDragCells(startCell, endCell, tileSiz
   };
 }
 
+export function getLavaVolumeWorldRectFromDragCells(startCell, endCell, tileSize = 24, fallbackDepthPx = null) {
+  return getWaterVolumeWorldRectFromDragCells(startCell, endCell, tileSize, fallbackDepthPx);
+}
+
 export function shiftFogVolumeEntity(entity, deltaX = 0, deltaY = 0, tileSize = 24) {
   const params = getFogVolumeParams(entity);
   const dx = (Number(deltaX) || 0) * tileSize;
@@ -383,6 +485,26 @@ export function shiftWaterVolumeEntity(entity, deltaX = 0, deltaY = 0, tileSize 
   };
 }
 
+export function shiftLavaVolumeEntity(entity, deltaX = 0, deltaY = 0, tileSize = 24) {
+  const params = getLavaVolumeParams(entity);
+  const dx = (Number(deltaX) || 0) * tileSize;
+  const dy = (Number(deltaY) || 0) * tileSize;
+  return {
+    ...entity,
+    x: (Number(entity?.x) || 0) + (Number(deltaX) || 0),
+    y: (Number(entity?.y) || 0) + (Number(deltaY) || 0),
+    params: {
+      ...params,
+      area: {
+        ...params.area,
+        x0: Math.max(0, params.area.x0 + dx),
+        x1: Math.max(1, params.area.x1 + dx),
+        y0: Math.max(0, params.area.y0 + dy),
+      },
+    },
+  };
+}
+
 export function syncFogVolumeEntityToAnchor(entity, tileSize = 24) {
   const params = getFogVolumeParams(entity);
   const width = Math.max(tileSize, params.area.x1 - params.area.x0);
@@ -406,6 +528,24 @@ export function syncSpecialVolumeEntityToAnchor(entity, tileSize = 24) {
   if (isFogVolumeEntityType(entity?.type)) return syncFogVolumeEntityToAnchor(entity, tileSize);
   if (isWaterVolumeEntityType(entity?.type)) {
     const params = getWaterVolumeParams(entity);
+    const width = Math.max(tileSize, params.area.x1 - params.area.x0);
+    const x0 = Math.max(0, Math.round((Number(entity?.x) || 0) * tileSize));
+    const y0 = Math.max(0, Math.round((Number(entity?.y) || 0) * tileSize));
+    return {
+      ...entity,
+      params: {
+        ...params,
+        area: {
+          ...params.area,
+          x0,
+          x1: x0 + width,
+          y0,
+        },
+      },
+    };
+  }
+  if (isLavaVolumeEntityType(entity?.type)) {
+    const params = getLavaVolumeParams(entity);
     const width = Math.max(tileSize, params.area.x1 - params.area.x0);
     const x0 = Math.max(0, Math.round((Number(entity?.x) || 0) * tileSize));
     const y0 = Math.max(0, Math.round((Number(entity?.y) || 0) * tileSize));
@@ -483,6 +623,27 @@ export function applySpecialVolumeParamChange(entity, path, value) {
     return {
       ...entity,
       params: getWaterVolumeParams({ type: "water_volume", params: patched }),
+    };
+  }
+  if (isLavaVolumeEntityType(entity?.type)) {
+    const current = getLavaVolumeParams(entity);
+    if (path === "area.length") {
+      const span = Math.max(24, Number(value) || 24);
+      const x0 = Math.max(0, Number(current.area.x0) || 0);
+      const patchedArea = {
+        ...current.area,
+        x0,
+        x1: x0 + span,
+      };
+      return {
+        ...entity,
+        params: getLavaVolumeParams({ type: "lava_volume", params: { ...current, area: patchedArea } }),
+      };
+    }
+    const patched = setAtPath(current, path, value);
+    return {
+      ...entity,
+      params: getLavaVolumeParams({ type: "lava_volume", params: patched }),
     };
   }
   return {

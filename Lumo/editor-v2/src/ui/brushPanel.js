@@ -31,7 +31,7 @@ const VISIBLE_TOOL_OPTIONS = TOOL_OPTIONS.filter((option) => (
   || option.value === EDITOR_TOOLS.ERASE
 ));
 
-const HIDDEN_ENTITY_PRESET_IDS = new Set(["player-spawn", "fog_volume", "water_volume", "trigger", "generic"]);
+const HIDDEN_ENTITY_PRESET_IDS = new Set(["player-spawn", "fog_volume", "water_volume", "lava_volume", "trigger", "generic"]);
 const PLACEABLE_ENTITY_PRESETS = ENTITY_PRESETS.filter((preset) => !HIDDEN_ENTITY_PRESET_IDS.has(preset.id));
 const COLLAPSIBLE_PANEL_DEFAULTS = {
   tiles: false,
@@ -255,6 +255,8 @@ function renderFogVolumeSettings(state) {
     && state?.interaction?.activeEntityPresetId === "fog_volume";
   const waterArmed = state?.interaction?.activeLayer === PANEL_LAYERS.ENTITIES
     && state?.interaction?.activeEntityPresetId === "water_volume";
+  const lavaArmed = state?.interaction?.activeLayer === PANEL_LAYERS.ENTITIES
+    && state?.interaction?.activeEntityPresetId === "lava_volume";
   return `
     <div class="statusRow compactStatusRow">
       <span class="label">Fog Volume</span>
@@ -275,6 +277,16 @@ function renderFogVolumeSettings(state) {
         class="toolButton ${waterArmed ? "isActive" : ""}"
         data-volume-action="arm-water"
       >${waterArmed ? "Water placement armed" : "Create Water Volume"}</button>
+    </div>
+    <div class="statusRow compactStatusRow">
+      <span class="label">Lava Volume</span>
+    </div>
+    <div class="compactActionRow compactActionRowSingle">
+      <button
+        type="button"
+        class="toolButton ${lavaArmed ? "isActive" : ""}"
+        data-volume-action="arm-lava"
+      >${lavaArmed ? "Lava placement armed" : "Create Lava Volume"}</button>
     </div>
   `;
 }

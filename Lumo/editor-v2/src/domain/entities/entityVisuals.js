@@ -63,6 +63,13 @@ const ENTITY_VISUALS = {
     hitRadius: 10,
     isVolume: true,
   },
+  lava_volume: {
+    key: "lava_volume",
+    label: "Lava Volume",
+    stroke: "#ff9347",
+    hitRadius: 10,
+    isVolume: true,
+  },
   generic: {
     key: "generic",
     label: "Generic",
