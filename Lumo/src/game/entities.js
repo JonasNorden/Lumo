@@ -525,6 +525,9 @@
           let lavaTemperature = 0.72;
           let lavaCrustAmount = 45;
           let lavaFlowSpeed = 0.55;
+          let bubblingSurfaceActivity = 0.45;
+          let bubblingBubbleAmount = 58;
+          let bubblingFumeAmount = 40;
           if (id === "lava_volume"){
             const flow = (P.flow && typeof P.flow === "object") ? P.flow : {};
             const look = (P.look && typeof P.look === "object") ? P.look : {};
@@ -552,10 +555,35 @@
             waveAmount = 0.2 + (tempMix * 0.15);
             waveSpeed = 0.35 + (lavaFlowSpeed * 0.5);
           } else if (id === "bubbling_liquid_volume"){
-            bodyColor = "rgba(98,170,58,0.36)";
-            surfaceColor = "rgba(187,255,130,0.92)";
+            const look = (P.look && typeof P.look === "object") ? P.look : {};
+            const behavior = (P.behavior && typeof P.behavior === "object") ? P.behavior : {};
+            const motion = (P.motion && typeof P.motion === "object") ? P.motion : {};
+            if (typeof look.topColor === "string" && look.topColor.trim()) surfaceColor = look.topColor.trim();
+            else surfaceColor = "rgba(187,255,130,0.92)";
+            if (typeof look.bottomColor === "string" && look.bottomColor.trim()) bodyColor = look.bottomColor.trim();
+            else bodyColor = "rgba(98,170,58,0.36)";
+
+            const authoredSurfaceActivity = Number(behavior.surfaceActivity);
+            const fallbackSurfaceActivity = Number(look.surfaceActivity);
+            const authoredBubbleAmount = Number(behavior.bubbleAmount);
+            const fallbackBubbleAmount = Number(motion.bubbleAmount);
+            const authoredFumeAmount = Number(behavior.fumeAmount);
+            const fallbackFumeAmount = Number(motion.fumeAmount);
+            bubblingSurfaceActivity = Number.isFinite(authoredSurfaceActivity)
+              ? Math.max(0, Math.min(1, authoredSurfaceActivity))
+              : (Number.isFinite(fallbackSurfaceActivity) ? Math.max(0, Math.min(1, fallbackSurfaceActivity)) : 0.45);
+            bubblingBubbleAmount = Number.isFinite(authoredBubbleAmount)
+              ? Math.max(0, Math.min(100, authoredBubbleAmount))
+              : (Number.isFinite(fallbackBubbleAmount) ? Math.max(0, Math.min(100, fallbackBubbleAmount)) : 58);
+            bubblingFumeAmount = Number.isFinite(authoredFumeAmount)
+              ? Math.max(0, Math.min(100, authoredFumeAmount))
+              : (Number.isFinite(fallbackFumeAmount) ? Math.max(0, Math.min(100, fallbackFumeAmount)) : 40);
+
+            const depthFactor = Math.max(0.35, Math.min(1, depth / Math.max(ts * 2, 96)));
             bodyColorAfterDarkness = "rgba(132,205,88,0.26)";
             surfaceColorAfterDarkness = "rgba(214,255,176,0.99)";
+            waveAmount = 0.1 + (bubblingSurfaceActivity * 0.18 * depthFactor);
+            waveSpeed = 0.35 + (bubblingSurfaceActivity * 0.45);
           } else if (id === "water_volume"){
             const motion = (P.motion && typeof P.motion === "object") ? P.motion : {};
             const look = (P.look && typeof P.look === "object") ? P.look : {};
@@ -587,6 +615,10 @@
             lavaTemperature,
             lavaCrustAmount,
             lavaFlowSpeed,
+            bubblingSurfaceActivity,
+            bubblingBubbleAmount,
+            bubblingFumeAmount,
+            bubblingSeed: ((left * 0.019) + (top * 0.031) + (right * 0.013)) % 1000,
           });
           if (!this._pfhLiquidDiag.spawnedByType.has(id)){
             this._pfhLiquidDiag.spawnedByType.add(id);
@@ -2975,6 +3007,207 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
       }
     }
 
+    _buildBubblingSurfaceSamples(v, sx, sy, w){
+      const activity = Math.max(0, Math.min(1, Number(v.bubblingSurfaceActivity) || 0.45));
+      const t = this._liquidAnimT;
+      const step = 4;
+      const amplitude = 0.6 + (activity * 2.6);
+      const samples = [];
+      for (let px = 0; px <= w; px += step){
+        const p = px / Math.max(1, w);
+        const phaseSeed = (Number(v.bubblingSeed) || 0) + (p * 7.9);
+        const rippleA = Math.sin((p * Math.PI * 3.4) + (t * (0.7 + (activity * 0.4))) + phaseSeed) * (0.28 + (activity * 0.34));
+        const rippleB = Math.sin((p * Math.PI * 8.6) - (t * (0.52 + (activity * 0.6))) + (phaseSeed * 1.9)) * (0.12 + (activity * 0.24));
+        const jitter = Math.sin((p * Math.PI * 15.2) + (t * 1.7) + (phaseSeed * 2.4)) * 0.18;
+        const y = sy + ((rippleA + rippleB + jitter) * amplitude);
+        samples.push({ x: sx + px, y });
+      }
+      if ((w % step) !== 0){
+        const p = 1;
+        const phaseSeed = (Number(v.bubblingSeed) || 0) + 7.9;
+        const rippleA = Math.sin((p * Math.PI * 3.4) + (t * (0.7 + (activity * 0.4))) + phaseSeed) * (0.28 + (activity * 0.34));
+        const rippleB = Math.sin((p * Math.PI * 8.6) - (t * (0.52 + (activity * 0.6))) + (phaseSeed * 1.9)) * (0.12 + (activity * 0.24));
+        const jitter = Math.sin((p * Math.PI * 15.2) + (t * 1.7) + (phaseSeed * 2.4)) * 0.18;
+        const y = sy + ((rippleA + rippleB + jitter) * amplitude);
+        samples.push({ x: sx + w, y });
+      }
+      return samples;
+    }
+
+    _sampleBubblingSurfaceY(samples, x, fallback){
+      if (!Array.isArray(samples) || samples.length < 1) return fallback;
+      if (samples.length === 1) return Number.isFinite(samples[0].y) ? samples[0].y : fallback;
+      if (x <= samples[0].x) return samples[0].y;
+      for (let i = 1; i < samples.length; i += 1){
+        const left = samples[i - 1];
+        const right = samples[i];
+        if (x <= right.x){
+          const span = Math.max(0.001, right.x - left.x);
+          const blend = (x - left.x) / span;
+          return left.y + ((right.y - left.y) * blend);
+        }
+      }
+      return samples[samples.length - 1].y;
+    }
+
+    _drawBubblingLiquidVolume(ctx, v, sx, sy, w, h, afterDarkness = false){
+      const activity = Math.max(0, Math.min(1, Number(v.bubblingSurfaceActivity) || 0.45));
+      const bubbleIntensity = Math.max(0, Math.min(1, (Number(v.bubblingBubbleAmount) || 58) / 100));
+      const fumeIntensity = Math.max(0, Math.min(1, (Number(v.bubblingFumeAmount) || 40) / 100));
+      const t = this._liquidAnimT;
+      const yBottom = sy + h;
+      const samples = this._buildBubblingSurfaceSamples(v, sx, sy, w);
+      const first = samples[0] || { x: sx, y: sy };
+      const last = samples[samples.length - 1] || { x: sx + w, y: sy };
+      let surfaceCrestY = first.y;
+      for (let i = 1; i < samples.length; i += 1) if (samples[i].y < surfaceCrestY) surfaceCrestY = samples[i].y;
+
+      const bodyGrad = ctx.createLinearGradient(0, surfaceCrestY - 2, 0, yBottom);
+      if (!afterDarkness){
+        bodyGrad.addColorStop(0, v.surfaceColor || "rgba(187,255,130,0.92)");
+        bodyGrad.addColorStop(0.22, "rgba(168,226,110,0.45)");
+        bodyGrad.addColorStop(1, v.bodyColor || "rgba(98,170,58,0.36)");
+      } else {
+        bodyGrad.addColorStop(0, v.surfaceColorAfterDarkness || "rgba(214,255,176,0.99)");
+        bodyGrad.addColorStop(0.25, "rgba(168,230,132,0.28)");
+        bodyGrad.addColorStop(1, v.bodyColorAfterDarkness || "rgba(132,205,88,0.26)");
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(first.x, yBottom);
+      for (let i = 0; i < samples.length; i += 1) ctx.lineTo(samples[i].x, samples[i].y);
+      ctx.lineTo(last.x, yBottom);
+      ctx.closePath();
+      ctx.fillStyle = bodyGrad;
+      ctx.fill();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(sx, sy - 16, w, h + 20);
+      ctx.clip();
+
+      const bubbleCount = Math.max(4, Math.round((w * 0.012) + (Math.pow(bubbleIntensity, 1.04) * w * 0.22)));
+      const popEvents = [];
+      for (let i = 0; i < bubbleCount; i += 1){
+        const seed = (Number(v.bubblingSeed) || 0) + (13.2 + (i * 9.1));
+        const u = (Math.sin(seed * 12.71) * 0.5) + 0.5;
+        const px = sx + (u * w) + (Math.sin((t * (0.34 + (activity * 0.22))) + (seed * 1.7)) * (0.8 + (bubbleIntensity * 2.2)));
+        const startDepthRatio = 0.3 + (((Math.sin(seed * 8.23) * 0.5) + 0.5) * 0.64);
+        const speed = 0.05 + (((Math.sin(seed * 4.37) * 0.5) + 0.5) * 0.05) + (activity * 0.055) + (bubbleIntensity * 0.04);
+        const cycle = ((t * speed) + ((Math.sin(seed * 2.81) * 0.5) + 0.5)) % 1;
+        const risePhase = 0.76;
+        const interactPhase = 0.15;
+        const popPhase = 1 - risePhase - interactPhase;
+        const baseRadius = 0.8 + (((Math.sin(seed * 6.11) * 0.5) + 0.5) * (1.6 + (bubbleIntensity * 1.9)));
+        const surfaceY = this._sampleBubblingSurfaceY(samples, px, sy);
+        let py = yBottom - (h * startDepthRatio);
+        let radius = baseRadius;
+        let bubbleAlpha = (afterDarkness ? 0.11 : 0.14) + (bubbleIntensity * (afterDarkness ? 0.06 : 0.10));
+        let rimAlpha = (afterDarkness ? 0.16 : 0.2) + (bubbleIntensity * (afterDarkness ? 0.12 : 0.20));
+
+        if (cycle <= risePhase){
+          const k = cycle / risePhase;
+          const eased = (k * k) * (3 - (2 * k));
+          py = yBottom - ((h * startDepthRatio) * eased);
+        } else if (cycle <= (risePhase + interactPhase)){
+          const k = (cycle - risePhase) / interactPhase;
+          py = surfaceY - (0.4 + (k * (1.3 + (activity * 2.4))));
+          radius = baseRadius * (1 + (k * 0.35));
+          bubbleAlpha += k * 0.09;
+          rimAlpha += k * 0.18;
+        } else {
+          const k = Math.max(0, Math.min(1, (cycle - risePhase - interactPhase) / Math.max(0.001, popPhase)));
+          const eased = (k * k) * (3 - (2 * k));
+          py = surfaceY - (1.7 + (eased * (2.4 + (activity * 2.2))));
+          radius = baseRadius * (1 - (eased * 0.78));
+          bubbleAlpha *= (1 - eased);
+          rimAlpha *= (1 - eased);
+          popEvents.push({
+            x: px,
+            y: surfaceY - 0.35,
+            ringRadius: (0.7 + (baseRadius * 0.9)) + (eased * (3 + (activity * 2.8))),
+            ringAlpha: ((afterDarkness ? 0.2 : 0.24) + (activity * 0.16)) * (1 - eased),
+          });
+        }
+        if (radius <= 0.35 || bubbleAlpha <= 0.01) continue;
+        ctx.beginPath();
+        ctx.arc(px, py, radius, 0, Math.PI * 2);
+        ctx.fillStyle = afterDarkness
+          ? `rgba(226,255,206,${bubbleAlpha})`
+          : `rgba(220,255,214,${bubbleAlpha})`;
+        ctx.fill();
+        ctx.strokeStyle = afterDarkness
+          ? `rgba(232,255,224,${rimAlpha})`
+          : `rgba(234,255,224,${rimAlpha})`;
+        ctx.lineWidth = py <= surfaceY + 1 ? 1.0 : 0.75;
+        ctx.stroke();
+      }
+
+      if (!afterDarkness){
+        for (let band = 0; band < 2; band += 1){
+          const yBand = sy + h * (0.24 + (band * 0.3)) + (Math.sin((t * (0.45 + (band * 0.12))) + (sx * 0.02)) * (1.4 + band));
+          const alpha = 0.05 + (activity * 0.06) - (band * 0.012);
+          const glowBand = ctx.createLinearGradient(sx, yBand - 8, sx, yBand + 8);
+          glowBand.addColorStop(0, "rgba(206,240,172,0)");
+          glowBand.addColorStop(0.5, `rgba(206,240,172,${Math.max(0.01, alpha)})`);
+          glowBand.addColorStop(1, "rgba(206,240,172,0)");
+          ctx.fillStyle = glowBand;
+          ctx.fillRect(sx, yBand - 8, w, 16);
+        }
+      }
+      ctx.restore();
+
+      ctx.beginPath();
+      for (let i = 0; i < samples.length; i += 1){
+        const sample = samples[i];
+        if (i === 0) ctx.moveTo(sample.x, sample.y + 0.5);
+        else ctx.lineTo(sample.x, sample.y + 0.5);
+      }
+      ctx.strokeStyle = afterDarkness
+        ? (v.surfaceColorAfterDarkness || "rgba(214,255,176,0.99)")
+        : (v.surfaceColor || "rgba(187,255,130,0.92)");
+      ctx.lineWidth = afterDarkness ? 1.7 : 1.8;
+      ctx.stroke();
+
+      for (let i = 0; i < popEvents.length; i += 1){
+        const pop = popEvents[i];
+        if (pop.ringAlpha <= 0.01) continue;
+        ctx.beginPath();
+        ctx.arc(pop.x, pop.y, pop.ringRadius, 0, Math.PI * 2);
+        ctx.strokeStyle = afterDarkness
+          ? `rgba(239,255,228,${pop.ringAlpha})`
+          : `rgba(242,255,226,${pop.ringAlpha})`;
+        ctx.lineWidth = 0.95;
+        ctx.stroke();
+      }
+
+      const fumeCount = Math.max(0, Math.round((w * 0.009) + (Math.pow(fumeIntensity, 1.07) * 34)));
+      if (fumeCount > 0){
+        for (let i = 0; i < fumeCount; i += 1){
+          const seed = (Number(v.bubblingSeed) || 0) + 91.2 + (i * 7.4);
+          const px = sx + ((((Math.sin(seed * 5.1) * 0.5) + 0.5) * w));
+          const puffHeight = 8 + (fumeIntensity * 30) + (((Math.sin(seed * 3.3) * 0.5) + 0.5) * (13 + (fumeIntensity * 18)));
+          const drift = ((Math.sin((seed * 2.4) + (t * 0.32)) * 0.5) + 0.5 - 0.5) * (4 + (fumeIntensity * 15));
+          const alpha = (afterDarkness ? 0.04 : 0.03) + (((Math.sin(seed * 7.9) * 0.5) + 0.5) * ((afterDarkness ? 0.11 : 0.09) + (fumeIntensity * (afterDarkness ? 0.24 : 0.18))));
+          const topY = sy - puffHeight;
+          const grad = ctx.createLinearGradient(0, topY, 0, sy + 4);
+          if (!afterDarkness){
+            grad.addColorStop(0, "rgba(206,227,181,0)");
+            grad.addColorStop(1, `rgba(206,227,181,${Math.max(0.01, alpha)})`);
+          } else {
+            grad.addColorStop(0, "rgba(228,245,210,0)");
+            grad.addColorStop(1, `rgba(228,245,210,${Math.max(0.01, alpha)})`);
+          }
+          ctx.strokeStyle = grad;
+          ctx.lineWidth = 1 + (((Math.sin(seed * 11.1) * 0.5) + 0.5) * 1.9);
+          ctx.beginPath();
+          ctx.moveTo(px, sy + 2);
+          ctx.quadraticCurveTo(px + drift, sy - (puffHeight * 0.45), px + (drift * 0.62), topY);
+          ctx.stroke();
+        }
+      }
+    }
+
     _drawLiquidVolumes(ctx, cam){
       if (!this._liquidVolumes.length) return;
       if (!this._pfhLiquidDiag.drawLogged){
@@ -3086,6 +3319,11 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
             ctx.lineTo(sx + w, yTopBase + (wave * waveAmpPx * 0.5) + 0.5);
           }
           ctx.stroke();
+          continue;
+        }
+
+        if (v.id === "bubbling_liquid_volume"){
+          this._drawBubblingLiquidVolume(ctx, v, sx, sy, w, h, false);
           continue;
         }
 
@@ -3222,6 +3460,11 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
             ctx.lineTo(sx + w, sy + (wave * waveAmpPx * 0.5) + 0.5);
           }
           ctx.stroke();
+          continue;
+        }
+
+        if (v.id === "bubbling_liquid_volume"){
+          this._drawBubblingLiquidVolume(ctx, v, sx, sy, w, h, true);
           continue;
         }
 
