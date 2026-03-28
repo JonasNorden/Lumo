@@ -1736,6 +1736,23 @@
       !(player.isRespawning && player.isRespawning()) &&
       !(typeof player.isDeathAnimating === "function" && player.isDeathAnimating())
     ){
+      const liquidContact = (ents && typeof ents.getLethalLiquidContact === "function")
+        ? ents.getLethalLiquidContact(player)
+        : null;
+      if (liquidContact){
+        if (checkpoint){
+          if (typeof player.beginLiquidHazardDeath === "function") player.beginLiquidHazardDeath(liquidContact);
+          else player.beginRespawn();
+          hudDebug.textContent = `Lethal liquid (${liquidContact.type}) → sink`;
+        }
+      }
+    }
+
+    if (
+      (player.invuln || 0) <= 0 &&
+      !(player.isRespawning && player.isRespawning()) &&
+      !(typeof player.isDeathAnimating === "function" && player.isDeathAnimating())
+    ){
       const tiles = world.queryTiles(player.x, player.y, player.w, player.h);
       for (const t of tiles){
         if (t.def.hazard){
