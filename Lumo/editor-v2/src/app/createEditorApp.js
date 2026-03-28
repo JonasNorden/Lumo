@@ -3179,6 +3179,7 @@ export function createEditorApp({
     const firstSurfaceSample = surfaceSamples[0];
     const lastSurfaceSample = surfaceSamples[surfaceSamples.length - 1];
     const surfaceCrestY = surfaceSamples.reduce((minY, sample) => Math.min(minY, sample.y), Number.POSITIVE_INFINITY);
+    const surfaceTroughY = surfaceSamples.reduce((maxY, sample) => Math.max(maxY, sample.y), Number.NEGATIVE_INFINITY);
     const laneWidth = Math.max(1, laneEndX - laneStartX);
 
     ctx2d.save();
@@ -3265,7 +3266,7 @@ export function createEditorApp({
 
     const distortionHeight = 42 + (temperature * 34);
     const heatEnvelopeTop = Math.max(0, surfaceCrestY - distortionHeight - 12);
-    const heatEnvelopeBottom = Math.ceil(surfaceCrestY + 1);
+    const heatEnvelopeBottom = Math.ceil(surfaceTroughY + 2);
 
     ctx2d.save();
     ctx2d.beginPath();
