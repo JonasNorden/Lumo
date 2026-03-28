@@ -5682,17 +5682,7 @@ if (event.shiftKey) {
     if (!(target instanceof HTMLInputElement)) return;
     const paramPath = typeof target.dataset.entityParamPath === "string" ? target.dataset.entityParamPath.trim() : "";
     if (paramPath) {
-      const index = Number.parseInt(target.dataset.entityIndex || "", 10);
-      if (!Number.isInteger(index) || index < 0) return;
-      const parsedValue = parseEntityParamInputValueForLiveInput(target);
-      if (parsedValue === null) return;
-      updateEntity(index, "param", {
-        __canonicalMutation: true,
-        itemId: target.dataset.entityId || null,
-        key: paramPath,
-        path: paramPath,
-        value: parsedValue,
-      });
+      event.stopPropagation();
       return;
     }
     const field = target.dataset.newLevelField;
@@ -5808,6 +5798,9 @@ if (event.shiftKey) {
     if (!(target instanceof HTMLInputElement)) return;
     if (!target.dataset.entityParamPath) return;
     event.stopPropagation();
+    if (event.key === "Delete" || event.key === "Backspace" || event.key === "z" || event.key === "Z" || event.key === "d" || event.key === "D") {
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
       target.dispatchEvent(new Event("change", { bubbles: true }));

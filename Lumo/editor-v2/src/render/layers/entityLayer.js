@@ -1,5 +1,6 @@
 import { getEntityHitRadius, getEntityVisual } from "../../domain/entities/entityVisuals.js";
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
+import { getFogVolumeRect, isFogVolumeEntityType } from "../../domain/entities/specialVolumeTypes.js";
 import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
 function getEntityCenter(entity, tileSize) {
@@ -139,6 +140,66 @@ function drawEntityMarker(ctx, entity, x, y, viewport, { isSelected, isHovered, 
   ctx.restore();
 }
 
+function getFogVolumeScreenRect(entity, tileSize, viewport) {
+  const rect = getFogVolumeRect(entity, tileSize);
+  const zoom = viewport.zoom;
+  return {
+    x: viewport.offsetX + rect.x * zoom,
+    y: viewport.offsetY + rect.y * zoom,
+    width: rect.width * zoom,
+    height: rect.height * zoom,
+    baselineY: viewport.offsetY + (rect.y + rect.height) * zoom,
+  };
+}
+
+function drawFogVolumeRegion(ctx, entity, tileSize, viewport, { isSelected = false, isHovered = false, preview = false } = {}) {
+  const rect = getFogVolumeScreenRect(entity, tileSize, viewport);
+  if (rect.width < 1 || rect.height < 1) return;
+  const scale = 1 / Math.max(0.001, viewport.zoom);
+  const cornerRadius = Math.max(2.5 * scale, Math.min(8 * scale, rect.height * 0.16));
+  const outlineWidth = (preview ? 1.9 : isSelected ? 1.7 : isHovered ? 1.35 : 1.1) * scale;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(rect.x, rect.y, rect.width, rect.height, cornerRadius);
+  const bodyGradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
+  bodyGradient.addColorStop(0, preview ? "rgba(214, 232, 255, 0.06)" : "rgba(214, 232, 255, 0.10)");
+  bodyGradient.addColorStop(0.7, preview ? "rgba(214, 232, 255, 0.12)" : "rgba(214, 232, 255, 0.18)");
+  bodyGradient.addColorStop(1, preview ? "rgba(214, 232, 255, 0.20)" : "rgba(214, 232, 255, 0.27)");
+  ctx.fillStyle = bodyGradient;
+  ctx.fill();
+
+  ctx.strokeStyle = preview ? "rgba(255, 214, 138, 0.8)" : isSelected ? "rgba(147, 190, 255, 0.92)" : isHovered ? "rgba(130, 216, 255, 0.76)" : "rgba(192, 223, 255, 0.46)";
+  ctx.lineWidth = outlineWidth;
+  if (preview) ctx.setLineDash([6 * scale, 4 * scale]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const baselineY = rect.baselineY;
+  ctx.beginPath();
+  ctx.moveTo(rect.x, baselineY);
+  ctx.lineTo(rect.x + rect.width, baselineY);
+  ctx.strokeStyle = preview ? "rgba(255, 214, 138, 0.56)" : "rgba(198, 223, 255, 0.48)";
+  ctx.lineWidth = Math.max(1, 1.15 * scale);
+  ctx.stroke();
+
+  if (isSelected && !preview) {
+    const frameInset = 2.2 * scale;
+    ctx.beginPath();
+    ctx.roundRect(
+      rect.x - frameInset,
+      rect.y - frameInset,
+      rect.width + frameInset * 2,
+      rect.height + frameInset * 2,
+      Math.max(2, cornerRadius + frameInset * 0.65),
+    );
+    ctx.strokeStyle = "rgba(255, 189, 106, 0.58)";
+    ctx.lineWidth = Math.max(1.05 * scale, 1);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 3) {
   const entities = doc.entities || [];
   const tileSize = doc.dimensions.tileSize;
@@ -146,6 +207,16 @@ export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 
   for (let i = entities.length - 1; i >= 0; i -= 1) {
     const entity = entities[i];
     if (!entity.visible) continue;
+    if (isFogVolumeEntityType(entity.type)) {
+      const rect = getFogVolumeScreenRect(entity, tileSize, viewport);
+      const margin = Math.max(5, radius * viewport.zoom);
+      const inBounds = pointX >= rect.x - margin
+        && pointX <= rect.x + rect.width + margin
+        && pointY >= rect.y - margin
+        && pointY <= rect.y + rect.height + margin;
+      if (inBounds) return i;
+      continue;
+    }
 
     const center = getEntityScreenCenter(entity, tileSize, viewport);
     const hitRadius = (getEntityHitRadius(entity.type) + radius) * viewport.zoom;
@@ -197,6 +268,13 @@ export function renderEntities(ctx, doc, viewport, interaction) {
           y: dragOrigin.y + dragPreviewDelta.y,
         }
       : entity;
+    if (isFogVolumeEntityType(renderEntity.type)) {
+      drawFogVolumeRegion(ctx, renderEntity, tileSize, viewport, {
+        isSelected: selectedEntityIds.has(entity.id),
+        isHovered: hoveredEntityId === entity.id,
+      });
+      continue;
+    }
     const { x, y } = getEntityScreenCenter(renderEntity, tileSize, viewport);
     drawEntityMarker(ctx, entity, x, y, viewport, {
       isSelected: selectedEntityIds.has(entity.id),
@@ -228,6 +306,13 @@ export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, ac
     x: interaction.hoverCell.x,
     y: interaction.hoverCell.y,
   };
+  if (isFogVolumeEntityType(previewEntity.type)) {
+    drawFogVolumeRegion(ctx, previewEntity, doc.dimensions.tileSize, viewport, {
+      preview: true,
+      isSelected: true,
+    });
+    return;
+  }
   const footprintRect = getEntityFootprintRect(previewEntity, doc.dimensions.tileSize, viewport);
   const frameInset = 0.5;
 
