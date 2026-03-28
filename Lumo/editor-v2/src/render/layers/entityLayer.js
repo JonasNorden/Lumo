@@ -1,9 +1,11 @@
 import { getEntityHitRadius, getEntityVisual } from "../../domain/entities/entityVisuals.js";
 import { getSpriteImage, isSpriteReady } from "../../domain/assets/imageAssets.js";
 import {
+  getBubblingLiquidVolumeRect,
   getFogVolumeRect,
   getLavaVolumeRect,
   getWaterVolumeRect,
+  isBubblingLiquidVolumeEntityType,
   isFogVolumeEntityType,
   isLavaVolumeEntityType,
   isWaterVolumeEntityType,
@@ -181,6 +183,17 @@ function getLavaVolumeScreenRect(entity, tileSize, viewport) {
   };
 }
 
+function getBubblingLiquidVolumeScreenRect(entity, tileSize, viewport) {
+  const rect = getBubblingLiquidVolumeRect(entity, tileSize);
+  const zoom = viewport.zoom;
+  return {
+    x: viewport.offsetX + rect.x * zoom,
+    y: viewport.offsetY + rect.y * zoom,
+    width: rect.width * zoom,
+    height: rect.height * zoom,
+  };
+}
+
 function drawFogVolumeRegion(ctx, entity, tileSize, viewport, { isSelected = false, isHovered = false, preview = false } = {}) {
   const rect = getFogVolumeScreenRect(entity, tileSize, viewport);
   if (rect.width < 1 || rect.height < 1) return;
@@ -291,6 +304,58 @@ function drawLavaVolumeRegion(ctx, entity, tileSize, viewport, { isSelected = fa
   ctx.restore();
 }
 
+function drawBubblingLiquidVolumeRegion(ctx, entity, tileSize, viewport, { isSelected = false, isHovered = false, preview = false } = {}) {
+  const rect = getBubblingLiquidVolumeScreenRect(entity, tileSize, viewport);
+  if (rect.width < 1 || rect.height < 1) return;
+  const scale = 1 / Math.max(0.001, viewport.zoom);
+  const outlineWidth = (preview ? 1.9 : isSelected ? 1.7 : isHovered ? 1.35 : 1.1) * scale;
+  const bubbleCount = Math.max(5, Math.min(24, Math.round((rect.width / (20 * scale)) + 5)));
+  const topColor = entity?.params?.look?.topColor || "#7FD12E";
+  const bottomColor = entity?.params?.look?.bottomColor || "#2F5E1C";
+  const surfaceActivity = Math.max(0, Math.min(1, Number(entity?.params?.behavior?.surfaceActivity) || 0));
+  const fumeAmount = Math.max(0, Math.min(1, Number(entity?.params?.behavior?.fumeAmount) || 0));
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(rect.x, rect.y, rect.width, rect.height);
+  const bodyGradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, rect.y + rect.height);
+  bodyGradient.addColorStop(0, topColor);
+  bodyGradient.addColorStop(1, bottomColor);
+  ctx.globalAlpha *= preview ? 0.62 : 0.88;
+  ctx.fillStyle = bodyGradient;
+  ctx.fill();
+  ctx.globalAlpha = 1;
+  for (let i = 0; i < bubbleCount; i += 1) {
+    const px = rect.x + ((i + 0.5) / bubbleCount) * rect.width;
+    const py = rect.y + rect.height * (0.22 + (((i * 37) % 100) / 100) * 0.72);
+    const radius = Math.max(1.2 * scale, (1.2 + ((i * 13) % 9) * 0.25) * scale);
+    ctx.beginPath();
+    ctx.arc(px, py, radius, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(227, 255, 212, 0.25)";
+    ctx.fill();
+  }
+  ctx.strokeStyle = preview ? "rgba(255, 214, 138, 0.84)" : isSelected ? "rgba(204, 246, 162, 0.96)" : isHovered ? "rgba(221, 255, 186, 0.86)" : "rgba(177, 228, 134, 0.62)";
+  ctx.lineWidth = outlineWidth;
+  if (preview) ctx.setLineDash([6 * scale, 4 * scale]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath();
+  ctx.moveTo(rect.x, rect.y + 0.5);
+  ctx.lineTo(rect.x + rect.width, rect.y + 0.5);
+  ctx.strokeStyle = `rgba(236, 255, 210, ${0.7 + (surfaceActivity * 0.25)})`;
+  ctx.lineWidth = Math.max(1, 1.2 * scale);
+  ctx.stroke();
+  if (fumeAmount > 0.01) {
+    const fumeHeight = (10 + (fumeAmount * 18)) * scale;
+    const fumeGradient = ctx.createLinearGradient(0, rect.y - fumeHeight, 0, rect.y + 3 * scale);
+    fumeGradient.addColorStop(0, "rgba(209, 232, 188, 0)");
+    fumeGradient.addColorStop(1, `rgba(209, 232, 188, ${0.14 + (fumeAmount * 0.2)})`);
+    ctx.fillStyle = fumeGradient;
+    ctx.fillRect(rect.x, rect.y - fumeHeight, rect.width, fumeHeight + (3 * scale));
+  }
+  ctx.restore();
+}
+
 export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 3) {
   const entities = doc.entities || [];
   const tileSize = doc.dimensions.tileSize;
@@ -298,11 +363,13 @@ export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 
   for (let i = entities.length - 1; i >= 0; i -= 1) {
     const entity = entities[i];
     if (!entity.visible) continue;
-    if (isFogVolumeEntityType(entity.type) || isWaterVolumeEntityType(entity.type) || isLavaVolumeEntityType(entity.type)) {
+    if (isFogVolumeEntityType(entity.type) || isWaterVolumeEntityType(entity.type) || isLavaVolumeEntityType(entity.type) || isBubblingLiquidVolumeEntityType(entity.type)) {
       const rect = isWaterVolumeEntityType(entity.type)
         ? getWaterVolumeScreenRect(entity, tileSize, viewport)
         : isLavaVolumeEntityType(entity.type)
           ? getLavaVolumeScreenRect(entity, tileSize, viewport)
+          : isBubblingLiquidVolumeEntityType(entity.type)
+            ? getBubblingLiquidVolumeScreenRect(entity, tileSize, viewport)
           : getFogVolumeScreenRect(entity, tileSize, viewport);
       const margin = Math.max(5, radius * viewport.zoom);
       const inBounds = pointX >= rect.x - margin
@@ -363,11 +430,13 @@ export function renderEntities(ctx, doc, viewport, interaction) {
           y: dragOrigin.y + dragPreviewDelta.y,
         }
       : entity;
-    if (isFogVolumeEntityType(renderEntity.type) || isWaterVolumeEntityType(renderEntity.type) || isLavaVolumeEntityType(renderEntity.type)) {
+    if (isFogVolumeEntityType(renderEntity.type) || isWaterVolumeEntityType(renderEntity.type) || isLavaVolumeEntityType(renderEntity.type) || isBubblingLiquidVolumeEntityType(renderEntity.type)) {
       const drawVolume = isWaterVolumeEntityType(renderEntity.type)
         ? drawWaterVolumeRegion
         : isLavaVolumeEntityType(renderEntity.type)
           ? drawLavaVolumeRegion
+          : isBubblingLiquidVolumeEntityType(renderEntity.type)
+            ? drawBubblingLiquidVolumeRegion
           : drawFogVolumeRegion;
       drawVolume(ctx, renderEntity, tileSize, viewport, {
         isSelected: selectedEntityIds.has(entity.id),
@@ -406,11 +475,13 @@ export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, ac
     x: interaction.hoverCell.x,
     y: interaction.hoverCell.y,
   };
-  if (isFogVolumeEntityType(previewEntity.type) || isWaterVolumeEntityType(previewEntity.type) || isLavaVolumeEntityType(previewEntity.type)) {
+  if (isFogVolumeEntityType(previewEntity.type) || isWaterVolumeEntityType(previewEntity.type) || isLavaVolumeEntityType(previewEntity.type) || isBubblingLiquidVolumeEntityType(previewEntity.type)) {
     const drawVolume = isWaterVolumeEntityType(previewEntity.type)
       ? drawWaterVolumeRegion
       : isLavaVolumeEntityType(previewEntity.type)
         ? drawLavaVolumeRegion
+        : isBubblingLiquidVolumeEntityType(previewEntity.type)
+          ? drawBubblingLiquidVolumeRegion
         : drawFogVolumeRegion;
     drawVolume(ctx, previewEntity, doc.dimensions.tileSize, viewport, {
       preview: true,
