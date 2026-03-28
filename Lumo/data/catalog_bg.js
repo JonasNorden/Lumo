@@ -3,7 +3,7 @@ window.LUMO_CATALOG_BG = [
     "id": "bg_void",
     "name": "Void (placeholder)",
     "group": "Base",
-    "img": "data/assets/tiles/bg/bg_void.png",
+    "img": "data/assets/sprites/bg/void_c.png",
     "anchor": "TL",
     "visualProfileId": "visual.bg.tl",
     "themeTags": ["void", "dark"]
@@ -12,7 +12,7 @@ window.LUMO_CATALOG_BG = [
     "id": "bg_rock_01",
     "name": "Cave Rock 01",
     "group": "Cave",
-    "img": "data/assets/tiles/soil_c.png",
+    "img": "data/assets/sprites/bg/wall_05.png",
     "anchor": "TL",
     "visualProfileId": "visual.bg.tl",
     "themeTags": ["cave", "stone"]
