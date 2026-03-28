@@ -1,8 +1,10 @@
 import {
   getFogVolumeParams,
+  getLavaVolumeParams,
   getSpecialVolumeType,
   getWaterVolumeParams,
   isFogVolumeEntityType,
+  isLavaVolumeEntityType,
   isWaterVolumeEntityType,
 } from "../domain/entities/specialVolumeTypes.js";
 import { findEntityPresetById } from "../domain/entities/entityPresets.js";
@@ -52,7 +54,7 @@ function resolveSelectedEntity(state) {
 
 export function resolveSelectedSpecialVolume(state) {
   const entity = resolveSelectedEntity(state);
-  if (!entity || (!isFogVolumeEntityType(entity.type) && !isWaterVolumeEntityType(entity.type))) return null;
+  if (!entity || (!isFogVolumeEntityType(entity.type) && !isWaterVolumeEntityType(entity.type) && !isLavaVolumeEntityType(entity.type))) return null;
   const entities = Array.isArray(state?.document?.active?.entities) ? state.document.active.entities : [];
   const index = entities.findIndex((entry) => entry?.id === entity.id);
   if (index < 0) return null;
@@ -123,6 +125,20 @@ function getWaterPreviewModel(entity, nowMs = Date.now()) {
     depthPx,
     waveAmount: clamp(Number(params.motion.waveAmount), 0, 1),
     waveSpeed: clamp(Number(params.motion.waveSpeed), 0.1, 3),
+    traverseDurationMs,
+    phaseMs: Math.round(nowMs % traverseDurationMs),
+  };
+}
+
+function getLavaPreviewModel(entity, nowMs = Date.now()) {
+  const params = getLavaVolumeParams(entity);
+  const depthPx = clamp(Number(params.area.depth), 24, 164);
+  const traverseDurationMs = 9600;
+  return {
+    params,
+    depthPx,
+    flowSpeed: clamp(Number(params.flow.speed), 0.1, 1.4),
+    temperature: clamp(Number(params.look.temperature), 0.2, 1),
     traverseDurationMs,
     phaseMs: Math.round(nowMs % traverseDurationMs),
   };
@@ -278,6 +294,59 @@ function renderWaterModal(selection) {
   };
 }
 
+function renderLavaModal(selection) {
+  const model = getLavaPreviewModel(selection.entity);
+  const lumoSpriteSrc = resolveLumoPreviewSpriteSrc();
+  const readSpanLength = (entity) => {
+    const params = getLavaVolumeParams(entity);
+    return Math.max(24, Number(params.area.x1) - Number(params.area.x0));
+  };
+  const numberFields = [
+    { label: "Length", path: "area.length", min: 24, max: 4000, step: 24, digits: 0, read: readSpanLength },
+    { label: "Depth", path: "area.depth", min: 24, max: 320, step: 1, digits: 0, read: (entity) => getLavaVolumeParams(entity).area.depth },
+    { label: "Flow Speed", path: "flow.speed", min: 0.1, max: 1.4, step: 0.01, digits: 2, read: (entity) => getLavaVolumeParams(entity).flow.speed },
+    { label: "Temperature", path: "look.temperature", min: 0.2, max: 1, step: 0.01, digits: 2, read: (entity) => getLavaVolumeParams(entity).look.temperature },
+  ];
+  return {
+    type: "lava_volume",
+    markup: `
+      <section class="specialVolumeWorkbenchModal panelSection" data-special-volume-modal="lava_volume">
+        <header class="specialVolumeWorkbenchModalHeader">
+          <div>
+            <h3>Lava Volume</h3>
+            <p>Dense molten mass with slow internal flow, cooling crust, and radiant heat above the surface.</p>
+          </div>
+        </header>
+        <div class="specialVolumeWorkbenchModalBody specialVolumeWorkbenchModalBodyStacked">
+          <section class="specialVolumeWorkbenchControlsTop" data-fog-workbench-controls>
+            ${numberFields.map((field) => renderNumberField(selection, field)).join("")}
+          </section>
+          <section class="specialVolumeWorkbenchPreviewPane specialVolumeWorkbenchPreviewPaneWide" data-fog-preview-root>
+            <div
+              class="volumeWorkbenchPreviewSurface fogWorkbenchPreviewSurface"
+              data-lava-preview-surface
+              data-lava-preview-width="${PREVIEW_CANVAS_WIDTH_PX}"
+              data-lava-preview-height="${PREVIEW_CANVAS_HEIGHT_PX}"
+              data-lava-preview-traverse-ms="${Math.round(model.traverseDurationMs)}"
+              data-lava-preview-lumo-sprite="${escapeHtml(lumoSpriteSrc || "")}"
+              data-lava-depth="${model.depthPx.toFixed(4)}"
+              data-lava-flow-speed="${model.flowSpeed.toFixed(4)}"
+              data-lava-temperature="${model.temperature.toFixed(4)}"
+              data-volume-preview-environment="${VOLUME_PREVIEW_ENVIRONMENT}"
+              style="--fog-ground-baseline:${VOLUME_PREVIEW_GROUND_BASELINE_PX}px;--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
+            >
+              <canvas class="fogWorkbenchPreviewCanvas" data-lava-preview-canvas width="${PREVIEW_CANVAS_WIDTH_PX}" height="${PREVIEW_CANVAS_HEIGHT_PX}" aria-label="Lava behavior preview"></canvas>
+            </div>
+          </section>
+          <footer class="specialVolumeWorkbenchFooterPinned">
+            <button type="button" class="specialVolumeWorkbenchActionButton isPrimary" data-fog-workbench-action="done">Done</button>
+          </footer>
+        </div>
+      </section>
+    `,
+  };
+}
+
 function resolveLumoPreviewSpriteSrc() {
   const spawnPreset = findEntityPresetById("player-spawn");
   if (!spawnPreset || typeof spawnPreset.img !== "string" || !spawnPreset.img.trim()) return null;
@@ -291,7 +360,13 @@ export function getSpecialVolumeWorkbenchLauncherContent(state) {
   if (isOpen) return "";
   return `
     <div class="specialVolumeWorkbenchLauncher">
-      <span class="specialVolumeWorkbenchLauncherLabel">${selection.type === "water_volume" ? "Water selected" : "Fog selected"}</span>
+      <span class="specialVolumeWorkbenchLauncherLabel">${
+        selection.type === "water_volume"
+          ? "Water selected"
+          : selection.type === "lava_volume"
+            ? "Lava selected"
+            : "Fog selected"
+      }</span>
       <button type="button" class="specialVolumeWorkbenchLauncherButton" data-fog-workbench-action="open">Adjust</button>
     </div>
   `;
@@ -302,7 +377,9 @@ export function getSpecialVolumeWorkbenchModalContent(state) {
   if (!selection) return null;
   const isOpen = state?.ui?.specialVolumeWorkbench?.openEntityId === selection.entity.id;
   if (!isOpen) return null;
-  return selection.type === "water_volume" ? renderWaterModal(selection) : renderFogModal(selection);
+  if (selection.type === "water_volume") return renderWaterModal(selection);
+  if (selection.type === "lava_volume") return renderLavaModal(selection);
+  return renderFogModal(selection);
 }
 
 export function getFogPreviewPatrolPhase(elapsedMs, traverseDurationMs = 9600) {

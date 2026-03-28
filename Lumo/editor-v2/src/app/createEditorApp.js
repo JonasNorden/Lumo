@@ -92,16 +92,21 @@ import { cloneEntityParams, isSupportedEntityParamValue } from "../domain/entiti
 import {
   applySpecialVolumeParamChange,
   createFogVolumeEntityFromWorldRect,
+  createLavaVolumeEntityFromWorldRect,
   createWaterVolumeEntityFromWorldRect,
   getFogVolumeParams,
   getFogVolumeWorldRectFromDragCells,
+  getLavaVolumeParams,
+  getLavaVolumeWorldRectFromDragCells,
   getSpecialVolumeType,
   getWaterVolumeParams,
   getWaterVolumeWorldRectFromDragCells,
   isFogVolumeEntityType,
+  isLavaVolumeEntityType,
   isWaterVolumeEntityType,
   isSpecialVolumeEntityType,
   shiftFogVolumeEntity,
+  shiftLavaVolumeEntity,
   shiftWaterVolumeEntity,
   syncSpecialVolumeEntityToAnchor,
 } from "../domain/entities/specialVolumeTypes.js";
@@ -797,6 +802,21 @@ export function createEditorApp({
     lumoX: 0,
     lumoDirection: 1,
   };
+  const lavaPreviewMotion = {
+    rafId: 0,
+    startedAtMs: 0,
+    surface: null,
+    canvas: null,
+    ctx: null,
+    lumoSprite: null,
+    worldWidth: 620,
+    worldHeight: 188,
+    bandStartX: 0,
+    bandEndX: 0,
+    durationMs: 9600,
+    lumoX: 0,
+    lumoDirection: 1,
+  };
   const fogPreviewTileSprites = new Map();
   const ensureFogPreviewTileSprite = (key, src) => {
     if (!key || !src) return null;
@@ -808,6 +828,12 @@ export function createEditorApp({
     image.addEventListener("load", () => {
       if (fogPreviewMotion.surface?.isConnected) {
         drawFogPreviewCanvas(fogPreviewMotion.lastElapsedMs ?? 0);
+      }
+      if (waterPreviewMotion.surface?.isConnected) {
+        drawWaterPreviewCanvas(0);
+      }
+      if (lavaPreviewMotion.surface?.isConnected) {
+        drawLavaPreviewCanvas(0);
       }
     });
     fogPreviewTileSprites.set(key, image);
@@ -1703,6 +1729,31 @@ export function createEditorApp({
     return getEntityIndexById(doc.entities, entity.id);
   };
 
+  const createLavaVolumeAtWorldRect = (draft, worldRect) => {
+    const doc = draft.document.active;
+    if (!doc || !worldRect) return null;
+
+    const nextNumber = (doc.entities?.length || 0) + 1;
+    const lavaPreset = findEntityPresetById("lava_volume");
+    if (!lavaPreset) return null;
+
+    const seededEntity = createEntityDraft(doc, 0, 0, lavaPreset.id, nextNumber);
+    const entity = createLavaVolumeEntityFromWorldRect(seededEntity, worldRect, doc.dimensions.tileSize);
+    entity.id = getNextStringId(doc.entities || [], "id", "entity");
+    const createIndex = doc.entities.length;
+    const action = {
+      type: "create",
+      index: createIndex,
+      entity: cloneCanonicalEntitySnapshot(entity),
+    };
+
+    const changed = applyCleanRoomEntityHistoryAction(draft, action, "forward");
+    if (!changed) return null;
+
+    recordCleanRoomObjectAction("entity", action);
+    return getEntityIndexById(doc.entities, entity.id);
+  };
+
   const deleteSelectedEntityCleanRoom = (draft) => {
     // Canonical entity deletion is stable-id only. Do not restore legacy entity delete or shared selection code here.
     const doc = draft.document.active;
@@ -2434,6 +2485,7 @@ export function createEditorApp({
     floatingPanelHost.classList.toggle("hasSpecialVolumeWorkbench", Boolean(fogWorkbenchModal));
     syncFogPreviewMotionLoop();
     syncWaterPreviewMotionLoop();
+    syncLavaPreviewMotionLoop();
 
     if (!focusedField) return;
     const nextField = focusedScope === "new-level" && state.ui.newLevelSize?.isOpen
@@ -3041,6 +3093,232 @@ export function createEditorApp({
     waterPreviewMotion.rafId = globalThis.requestAnimationFrame(stepWaterPreviewMotion);
   };
 
+  const stopLavaPreviewMotionLoop = () => {
+    if (lavaPreviewMotion.rafId) {
+      globalThis.cancelAnimationFrame(lavaPreviewMotion.rafId);
+      lavaPreviewMotion.rafId = 0;
+    }
+    lavaPreviewMotion.surface = null;
+    lavaPreviewMotion.canvas = null;
+    lavaPreviewMotion.ctx = null;
+    lavaPreviewMotion.lumoSprite = null;
+  };
+
+  const drawLavaPreviewCanvas = (elapsedMs) => {
+    if (!lavaPreviewMotion.surface || !lavaPreviewMotion.ctx) return;
+    const surfaceDataset = lavaPreviewMotion.surface.dataset;
+    const ctx2d = lavaPreviewMotion.ctx;
+    const width = lavaPreviewMotion.worldWidth;
+    const height = lavaPreviewMotion.worldHeight;
+    const { tileSize, floorTopY: floorTop, laneStartX, laneEndX } = getVolumePreviewEnvironmentMetrics(width, height);
+    const terrainTop = Math.max(24, Math.round(height * 0.36));
+    const leftBlockInnerX = Math.max(0, laneStartX - tileSize);
+    const rightBlockOuterX = Math.min(width, laneEndX + tileSize);
+    const soilTile = ensureFogPreviewTileSprite("soil", "../data/assets/tiles/soil_c.png");
+    const grassTile = ensureFogPreviewTileSprite("grass", "../data/assets/tiles/grass_bt.png");
+    const stoneTile = ensureFogPreviewTileSprite("stone", "../data/assets/tiles/stone_ct.png");
+    const drawTiledRect = (image, fallback, x, y, w, h) => {
+      if (w <= 0 || h <= 0) return;
+      if (image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0) {
+        for (let yy = y; yy < y + h; yy += tileSize) {
+          for (let xx = x; xx < x + w; xx += tileSize) {
+            const drawW = Math.min(tileSize, (x + w) - xx);
+            const drawH = Math.min(tileSize, (y + h) - yy);
+            ctx2d.drawImage(image, 0, 0, drawW, drawH, xx, yy, drawW, drawH);
+          }
+        }
+      } else {
+        ctx2d.fillStyle = fallback;
+        ctx2d.fillRect(x, y, w, h);
+      }
+    };
+
+    ctx2d.clearRect(0, 0, width, height);
+    ctx2d.fillStyle = "#050912";
+    ctx2d.fillRect(0, 0, width, height);
+    ctx2d.fillStyle = "rgba(8, 14, 26, 0.72)";
+    ctx2d.fillRect(0, 0, width, floorTop);
+    drawTiledRect(stoneTile, "#6a655e", 0, floorTop, width, tileSize);
+    drawTiledRect(soilTile, "#5b3a26", 0, terrainTop, leftBlockInnerX, Math.max(0, floorTop - terrainTop));
+    drawTiledRect(soilTile, "#5b3a26", rightBlockOuterX, terrainTop, Math.max(0, width - rightBlockOuterX), Math.max(0, floorTop - terrainTop));
+    drawTiledRect(grassTile, "#8ca86f", 0, terrainTop - tileSize, leftBlockInnerX, tileSize);
+    drawTiledRect(grassTile, "#8ca86f", rightBlockOuterX, terrainTop - tileSize, Math.max(0, width - rightBlockOuterX), tileSize);
+    drawTiledRect(stoneTile, "#66615a", leftBlockInnerX, terrainTop, tileSize, Math.max(0, floorTop - terrainTop));
+    drawTiledRect(stoneTile, "#66615a", laneEndX, terrainTop, tileSize, Math.max(0, floorTop - terrainTop));
+
+    const depth = clampFogPreview(Number.parseFloat(surfaceDataset.lavaDepth || "") || 88, 24, 164);
+    const flowSpeed = clampFogPreview(Number.parseFloat(surfaceDataset.lavaFlowSpeed || "") || 0.55, 0.1, 1.4);
+    const temperature = clampFogPreview(Number.parseFloat(surfaceDataset.lavaTemperature || "") || 0.72, 0.2, 1);
+    const lavaTopBase = floorTop - depth;
+    const elapsedSec = elapsedMs * 0.001;
+    const glowBoost = 0.55 + (temperature * 0.65);
+    const crustAmount = (1 - temperature) * 0.75;
+
+    const surfaceSamples = [];
+    for (let x = laneStartX; x <= laneEndX; x += 2) {
+      const bulge = Math.sin((x * 0.018) + (elapsedSec * 0.2 * flowSpeed)) * (2.6 + (temperature * 1.2));
+      const sag = Math.sin((x * 0.033) + (elapsedSec * 0.11 * flowSpeed) + 1.2) * 1.7;
+      const denseWarp = sampleSmookeNoise((x * 0.009) + (elapsedSec * 0.12 * flowSpeed)) * 2.4;
+      surfaceSamples.push({ x, y: lavaTopBase + bulge + sag + denseWarp });
+    }
+    const firstSurfaceSample = surfaceSamples[0];
+    const lastSurfaceSample = surfaceSamples[surfaceSamples.length - 1];
+    const surfaceCrestY = surfaceSamples.reduce((minY, sample) => Math.min(minY, sample.y), Number.POSITIVE_INFINITY);
+
+    ctx2d.save();
+    ctx2d.beginPath();
+    ctx2d.rect(laneStartX, lavaTopBase - 30, laneEndX - laneStartX, floorTop - lavaTopBase + 34);
+    ctx2d.clip();
+
+    const bodyGradient = ctx2d.createLinearGradient(0, surfaceCrestY, 0, floorTop);
+    bodyGradient.addColorStop(0, `rgba(255, ${Math.round(137 + (temperature * 38))}, ${Math.round(34 + (temperature * 20))}, 1)`);
+    bodyGradient.addColorStop(0.62, "rgba(207, 71, 10, 1)");
+    bodyGradient.addColorStop(1, "rgba(17, 7, 3, 1)");
+    ctx2d.fillStyle = bodyGradient;
+    ctx2d.beginPath();
+    ctx2d.moveTo(firstSurfaceSample.x, firstSurfaceSample.y);
+    for (let i = 1; i < surfaceSamples.length; i += 1) {
+      ctx2d.lineTo(surfaceSamples[i].x, surfaceSamples[i].y);
+    }
+    ctx2d.lineTo(lastSurfaceSample.x, floorTop);
+    ctx2d.lineTo(firstSurfaceSample.x, floorTop);
+    ctx2d.closePath();
+    ctx2d.fill();
+
+    for (let band = 0; band < 8; band += 1) {
+      const yRatio = (band + 1) / 9;
+      const yBase = lavaTopBase + (depth * yRatio);
+      ctx2d.beginPath();
+      for (let x = laneStartX; x <= laneEndX; x += 4) {
+        const nx = ((x - laneStartX) * 0.014) + (elapsedSec * (0.18 + (band * 0.036)) * flowSpeed);
+        const swirl = sampleSmookeNoise(nx) * 0.58 + sampleSmookeNoise((nx * 1.67) + 27.8) * 0.42;
+        const y = yBase + (swirl * (2.1 + ((1 - yRatio) * 3.8)));
+        if (x === laneStartX) ctx2d.moveTo(x, y);
+        else ctx2d.lineTo(x, y);
+      }
+      const alpha = 0.03 + ((1 - yRatio) * 0.05 * glowBoost);
+      ctx2d.strokeStyle = `rgba(255, ${Math.round(140 + (temperature * 70))}, ${Math.round(24 + (temperature * 28))}, ${alpha})`;
+      ctx2d.lineWidth = 1.15;
+      ctx2d.stroke();
+    }
+
+    for (let patch = 0; patch < 9; patch += 1) {
+      const seed = patch * 9.27;
+      const u = (patch + 0.5) / 9;
+      const drift = sampleSmookeNoise((elapsedSec * 0.06 * flowSpeed) + seed);
+      const px = laneStartX + ((laneEndX - laneStartX) * u) + (drift * 24);
+      const py = lavaTopBase + (depth * (0.15 + ((patch % 5) / 8))) + (sampleSmookeNoise(seed + elapsedSec * 0.09 * flowSpeed) * 9);
+      const rx = 16 + (sampleSmookeNoise(seed + 4.1) * 10) + (crustAmount * 8);
+      const ry = 6 + (sampleSmookeNoise(seed + 8.2) * 4) + (crustAmount * 6);
+      ctx2d.fillStyle = `rgba(19, 10, 6, ${0.14 + (crustAmount * 0.34)})`;
+      ctx2d.beginPath();
+      ctx2d.ellipse(px, py, Math.max(8, rx), Math.max(4, ry), drift * 0.25, 0, Math.PI * 2);
+      ctx2d.fill();
+    }
+
+    ctx2d.beginPath();
+    for (let i = 0; i < surfaceSamples.length; i += 1) {
+      const sample = surfaceSamples[i];
+      if (i === 0) ctx2d.moveTo(sample.x, sample.y);
+      else ctx2d.lineTo(sample.x, sample.y);
+    }
+    ctx2d.strokeStyle = `rgba(255, ${Math.round(195 + (temperature * 45))}, ${Math.round(95 + (temperature * 55))}, 0.96)`;
+    ctx2d.lineWidth = 1.55;
+    ctx2d.stroke();
+    ctx2d.restore();
+
+    const glowHeight = 42 + (temperature * 22);
+    const heatGlow = ctx2d.createLinearGradient(0, surfaceCrestY - glowHeight, 0, surfaceCrestY + 3);
+    heatGlow.addColorStop(0, "rgba(255, 177, 86, 0)");
+    heatGlow.addColorStop(0.58, `rgba(255, ${Math.round(165 + (temperature * 60))}, ${Math.round(52 + (temperature * 45))}, ${0.08 + (temperature * 0.18)})`);
+    heatGlow.addColorStop(1, `rgba(255, ${Math.round(204 + (temperature * 38))}, ${Math.round(96 + (temperature * 35))}, ${0.22 + (temperature * 0.22)})`);
+    ctx2d.fillStyle = heatGlow;
+    ctx2d.fillRect(laneStartX, surfaceCrestY - glowHeight, laneEndX - laneStartX, glowHeight + 6);
+
+    const shimmerBands = 3;
+    for (let band = 0; band < shimmerBands; band += 1) {
+      const yOffset = 8 + (band * 8);
+      const yBase = surfaceCrestY - yOffset;
+      ctx2d.beginPath();
+      for (let x = laneStartX; x <= laneEndX; x += 5) {
+        const nx = (x * 0.026) + (elapsedSec * (0.35 + (band * 0.14)) * flowSpeed);
+        const shimmer = (sampleSmookeNoise(nx) - 0.5) * (1.8 + (temperature * 1.4));
+        const y = yBase + shimmer;
+        if (x === laneStartX) ctx2d.moveTo(x, y);
+        else ctx2d.lineTo(x, y);
+      }
+      ctx2d.strokeStyle = `rgba(255, ${Math.round(198 + (temperature * 35))}, ${Math.round(117 + (temperature * 30))}, ${0.07 + (temperature * 0.06)})`;
+      ctx2d.lineWidth = 1;
+      ctx2d.stroke();
+    }
+
+    const lumoX = lavaPreviewMotion.lumoX;
+    if (lavaPreviewMotion.lumoSprite instanceof HTMLImageElement && lavaPreviewMotion.lumoSprite.complete && lavaPreviewMotion.lumoSprite.naturalWidth > 0) {
+      ctx2d.save();
+      ctx2d.translate(lumoX, floorTop - 1);
+      ctx2d.scale(lavaPreviewMotion.lumoDirection, 1);
+      ctx2d.drawImage(lavaPreviewMotion.lumoSprite, -12, -24, 24, 24);
+      ctx2d.restore();
+    }
+  };
+
+  const stepLavaPreviewMotion = (timestampMs) => {
+    if (!lavaPreviewMotion.surface?.isConnected || !lavaPreviewMotion.canvas?.isConnected || !lavaPreviewMotion.ctx) {
+      stopLavaPreviewMotionLoop();
+      return;
+    }
+    if (!lavaPreviewMotion.startedAtMs) lavaPreviewMotion.startedAtMs = timestampMs;
+    const elapsedMs = timestampMs - lavaPreviewMotion.startedAtMs;
+    const patrol = fogPreviewPatrolAtElapsed(elapsedMs, lavaPreviewMotion.durationMs);
+    lavaPreviewMotion.lumoX = lavaPreviewMotion.bandStartX + ((lavaPreviewMotion.bandEndX - lavaPreviewMotion.bandStartX) * patrol.u);
+    lavaPreviewMotion.lumoDirection = patrol.facing;
+    drawLavaPreviewCanvas(elapsedMs);
+    lavaPreviewMotion.rafId = globalThis.requestAnimationFrame(stepLavaPreviewMotion);
+  };
+
+  const syncLavaPreviewMotionLoop = () => {
+    const surface = floatingPanelHost.querySelector("[data-lava-preview-surface]");
+    const canvasEl = floatingPanelHost.querySelector("[data-lava-preview-canvas]");
+    if (!(surface instanceof HTMLElement) || !(canvasEl instanceof HTMLCanvasElement)) {
+      stopLavaPreviewMotionLoop();
+      return;
+    }
+    const ctx2d = canvasEl.getContext("2d");
+    if (!ctx2d) {
+      stopLavaPreviewMotionLoop();
+      return;
+    }
+    const durationMs = Number.parseFloat(surface.dataset.lavaPreviewTraverseMs || "");
+    if (lavaPreviewMotion.surface === surface && lavaPreviewMotion.canvas === canvasEl && lavaPreviewMotion.rafId) {
+      lavaPreviewMotion.durationMs = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 9600;
+      return;
+    }
+    stopLavaPreviewMotionLoop();
+    lavaPreviewMotion.surface = surface;
+    lavaPreviewMotion.canvas = canvasEl;
+    lavaPreviewMotion.ctx = ctx2d;
+    lavaPreviewMotion.worldWidth = canvasEl.width;
+    lavaPreviewMotion.worldHeight = canvasEl.height;
+    const envMetrics = getVolumePreviewEnvironmentMetrics(lavaPreviewMotion.worldWidth, lavaPreviewMotion.worldHeight);
+    lavaPreviewMotion.bandStartX = envMetrics.laneStartX;
+    lavaPreviewMotion.bandEndX = envMetrics.laneEndX;
+    lavaPreviewMotion.durationMs = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 9600;
+    lavaPreviewMotion.startedAtMs = 0;
+    lavaPreviewMotion.lumoX = (lavaPreviewMotion.bandStartX + lavaPreviewMotion.bandEndX) * 0.5;
+    lavaPreviewMotion.lumoDirection = 1;
+    const lumoSpriteSrc = typeof surface.dataset.lavaPreviewLumoSprite === "string" ? surface.dataset.lavaPreviewLumoSprite.trim() : "";
+    if (lumoSpriteSrc) {
+      const sprite = new Image();
+      sprite.decoding = "async";
+      sprite.src = lumoSpriteSrc;
+      lavaPreviewMotion.lumoSprite = sprite;
+    } else {
+      lavaPreviewMotion.lumoSprite = null;
+    }
+    drawLavaPreviewCanvas(0);
+    lavaPreviewMotion.rafId = globalThis.requestAnimationFrame(stepLavaPreviewMotion);
+  };
+
   const applyCanvasTarget = (draft, mode) => {
     const nextMode = mode === "decor" ? "decor" : mode === "sound" ? "sound" : "entity";
     resumeObjectPlacementPreviews(draft, `canvas target ${nextMode}`);
@@ -3301,6 +3579,9 @@ export function createEditorApp({
     }
     if (isWaterVolumeEntityType(entity.type)) {
       entity.params = getWaterVolumeParams(entity);
+    }
+    if (isLavaVolumeEntityType(entity.type)) {
+      entity.params = getLavaVolumeParams(entity);
     }
 
     return isSpecialVolumeEntityType(entity.type)
@@ -4299,8 +4580,12 @@ export function createEditorApp({
     void index;
     void value;
     store.setState((draft) => {
-      if (field === "arm-fog" || field === "arm-water") {
-        const targetType = field === "arm-water" ? "water_volume" : "fog_volume";
+      if (field === "arm-fog" || field === "arm-water" || field === "arm-lava") {
+        const targetType = field === "arm-water"
+          ? "water_volume"
+          : field === "arm-lava"
+            ? "lava_volume"
+            : "fog_volume";
         const entityPreset = resolveEntityPlacementPreset(targetType);
         if (!entityPreset || !isSpecialVolumeEntityType(entityPreset.type)) return;
         const shouldArm = draft.interaction.activeEntityPresetId !== entityPreset.id;
@@ -4906,6 +5191,13 @@ export function createEditorApp({
           nextPosition.y - origin.y,
           doc.dimensions.tileSize,
         )
+        : isLavaVolumeEntityType(entity.type)
+          ? shiftLavaVolumeEntity(
+            entity,
+            nextPosition.x - origin.x,
+            nextPosition.y - origin.y,
+            doc.dimensions.tileSize,
+          )
         : {
           ...entity,
           x: nextPosition.x,
@@ -5544,6 +5836,25 @@ if (event.shiftKey) {
           );
           if (waterRect) {
             const createdIndex = createWaterVolumeAtWorldRect(draft, waterRect);
+            if (createdIndex != null) {
+              setCanvasSelectionMode(draft, "entity");
+              setActiveLayer(draft, PANEL_LAYERS.ENTITIES);
+              if (!entitiesPanelWasOpen && draft.ui.panelSections) {
+                draft.ui.panelSections.entities = false;
+              }
+            }
+          }
+        }
+        if (volumePlacementDrag.type === "lava_volume") {
+          const entitiesPanelWasOpen = draft.ui.panelSections?.entities === true;
+          const lavaRect = getLavaVolumeWorldRectFromDragCells(
+            volumePlacementDrag.startCell,
+            volumePlacementDrag.endCell,
+            draft.document.active?.dimensions?.tileSize,
+            volumePlacementDrag.depthPx,
+          );
+          if (lavaRect) {
+            const createdIndex = createLavaVolumeAtWorldRect(draft, lavaRect);
             if (createdIndex != null) {
               setCanvasSelectionMode(draft, "entity");
               setActiveLayer(draft, PANEL_LAYERS.ENTITIES);
@@ -6713,6 +7024,7 @@ if (event.shiftKey) {
   window.addEventListener("blur", stopFogStepperSession);
   window.addEventListener("blur", stopFogPreviewMotionLoop);
   window.addEventListener("blur", stopWaterPreviewMotionLoop);
+  window.addEventListener("blur", stopLavaPreviewMotionLoop);
   canvas.addEventListener("click", handleCanvasClick);
   minimapCanvas.addEventListener("click", handleMinimapClick);
   window.addEventListener("keydown", handleGlobalKeyDown);
@@ -6756,6 +7068,7 @@ if (event.shiftKey) {
     window.removeEventListener("blur", stopFogStepperSession);
     window.removeEventListener("blur", stopFogPreviewMotionLoop);
     window.removeEventListener("blur", stopWaterPreviewMotionLoop);
+    window.removeEventListener("blur", stopLavaPreviewMotionLoop);
     canvas.removeEventListener("click", handleCanvasClick);
     minimapCanvas.removeEventListener("click", handleMinimapClick);
     window.removeEventListener("keydown", handleGlobalKeyDown);
@@ -6774,5 +7087,6 @@ if (event.shiftKey) {
     stopArrowPanLoop();
     stopFogPreviewMotionLoop();
     stopWaterPreviewMotionLoop();
+    stopLavaPreviewMotionLoop();
   };
 }
