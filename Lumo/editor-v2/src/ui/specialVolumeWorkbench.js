@@ -139,7 +139,7 @@ function getLavaPreviewModel(entity, nowMs = Date.now()) {
     depthPx,
     flowSpeed: clamp(Number(params.flow.speed), 0.1, 1.4),
     temperature: clamp(Number(params.look.temperature), 0.2, 1),
-    crustAmount: clamp(Number(params.look.crustAmount), 0, 1),
+    crustAmount: clamp(Number(params.look.crustAmount), 0, 100),
     traverseDurationMs,
     phaseMs: Math.round(nowMs % traverseDurationMs),
   };
@@ -306,7 +306,7 @@ function renderLavaModal(selection) {
     { label: "Depth", path: "area.depth", min: 24, max: 320, step: 1, digits: 0, read: (entity) => getLavaVolumeParams(entity).area.depth },
     { label: "Flow Speed", path: "flow.speed", min: 0.1, max: 1.4, step: 0.01, digits: 2, read: (entity) => getLavaVolumeParams(entity).flow.speed },
     { label: "Temperature", path: "look.temperature", min: 0.2, max: 1, step: 0.01, digits: 2, read: (entity) => getLavaVolumeParams(entity).look.temperature },
-    { label: "Crust Amount", path: "look.crustAmount", min: 0, max: 1, step: 0.01, digits: 2, read: (entity) => getLavaVolumeParams(entity).look.crustAmount },
+    { label: "Crust Amount", path: "look.crustAmount", min: 0, max: 100, step: 1, digits: 0, read: (entity) => getLavaVolumeParams(entity).look.crustAmount },
   ];
   return {
     type: "lava_volume",
