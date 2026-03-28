@@ -769,6 +769,8 @@ export function createEditorApp({
     worldHeight: 188,
     lumoX: 0,
     lumoDirection: 1,
+    lastDirection: 1,
+    lastLumoX: null,
     durationMs: 9600,
     distancePerSecond: 140,
     lastElapsedMs: undefined,
@@ -2397,6 +2399,8 @@ export function createEditorApp({
     fogPreviewMotion.vel = null;
     fogPreviewMotion.sampleCount = 0;
     fogPreviewMotion.lastElapsedMs = undefined;
+    fogPreviewMotion.lastLumoX = null;
+    fogPreviewMotion.lastDirection = 1;
   };
 
   const clampFogPreview = (value, min, max) => {
@@ -2514,9 +2518,10 @@ export function createEditorApp({
             * (0.70 + (0.30 * topWeight));
           const dev = fogPreviewMotion.field[index];
           const bulge = Math.max(0, dev);
+          const suction = Math.max(0, -dev);
           const n = sampleSmookeNoise((index * 0.22) + (elapsedSeconds * (0.95 + (a * 0.85))));
           const wave = noiseAmount * (((n * 0.5) + 0.5) - 0.5) * (10 + ((1 - a) * 18));
-          const yyBaseRaw = yBase + wave - (bulge * (10 + ((1 - a) * 30)));
+          const yyBaseRaw = yBase + wave - (bulge * (10 + ((1 - a) * 30))) + (suction * (8 + ((1 - a) * 20)));
           const yyOrg = bottom - ((bottom - yyBaseRaw) * org);
           const yyBase = Math.min(yyOrg, groundY - 1);
           yy = bottom - ((bottom - yyBase) * edgeMask);
@@ -2545,9 +2550,10 @@ export function createEditorApp({
         const org = smookeOrganicMaskAtU((x - fogPreviewMotion.bandStartX) / Math.max(1, fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX), elapsedSeconds, organicStrength, organicScale, organicSpeed);
         const dev = fogPreviewMotion.field[index];
         const bulge = Math.max(0, dev);
+        const suction = Math.max(0, -dev);
         const n = sampleSmookeNoise((index * 0.22) + (elapsedSeconds * 1.05));
         const wave = noiseAmount * (((n * 0.5) + 0.5) - 0.5) * 10;
-        const yyBaseRaw = topBase + wave - (bulge * 22);
+        const yyBaseRaw = topBase + wave - (bulge * 22) + (suction * 18);
         const yyOrg = bottom - ((bottom - yyBaseRaw) * org);
         const yyBase = Math.min(yyOrg, groundY - 1);
         yy = bottom - ((bottom - yyBase) * edgeMask);
@@ -2590,7 +2596,6 @@ export function createEditorApp({
     const elapsedMs = timestampMs - fogPreviewMotion.startedAtMs;
     const patrol = fogPreviewPatrolAtElapsed(elapsedMs, fogPreviewMotion.durationMs);
     fogPreviewMotion.lumoX = fogPreviewMotion.bandStartX + ((fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX) * patrol.u);
-    fogPreviewMotion.lumoDirection = patrol.facing;
     {
       const density = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeDensity || "") || 0.25;
       const drift = Number.parseFloat(fogPreviewMotion.surface.dataset.fogSmookeDrift || "") || 0;
@@ -2607,6 +2612,9 @@ export function createEditorApp({
       const vel = fogPreviewMotion.vel;
       const dt = Math.min(0.05, fogPreviewMotion.lastElapsedMs === undefined ? (1 / 60) : Math.max(0.001, (elapsedMs - fogPreviewMotion.lastElapsedMs) / 1000));
       fogPreviewMotion.lastElapsedMs = elapsedMs;
+      const viscClamped = clampFogPreview(visc, 0.35, 0.995);
+      const viscFrameDamping = Math.pow(viscClamped, dt * 60);
+      const settleDrag = (1 - viscClamped) * 1.35 * dt * 60;
 
       for (let index = 1; index < sampleCount - 1; index += 1) {
         const laplacian = field[index - 1] - (2 * field[index]) + field[index + 1];
@@ -2615,12 +2623,20 @@ export function createEditorApp({
 
       for (let index = 0; index < sampleCount; index += 1) {
         vel[index] += (0 - field[index]) * relax * 120 * dt;
-        vel[index] *= visc;
+        vel[index] *= viscFrameDamping;
         field[index] += vel[index] * dt;
+        field[index] *= Math.max(0, 1 - settleDrag);
         field[index] = clampFogPreview(field[index], -2.2, 2.2);
       }
 
-      const lumoSpeedPxPerSecond = fogPreviewMotion.distancePerSecond;
+      const lastLumoX = Number.isFinite(fogPreviewMotion.lastLumoX) ? fogPreviewMotion.lastLumoX : fogPreviewMotion.lumoX;
+      const lumoVx = (fogPreviewMotion.lumoX - lastLumoX) / Math.max(0.001, dt);
+      const absLumoSpeedPxPerSecond = Math.abs(lumoVx);
+      const movementDir = Math.sign(lumoVx) || fogPreviewMotion.lastDirection || patrol.facing || 1;
+      fogPreviewMotion.lastDirection = movementDir;
+      fogPreviewMotion.lumoDirection = movementDir;
+      fogPreviewMotion.lastLumoX = fogPreviewMotion.lumoX;
+
       if (drift > 0.001) {
         const shift = drift * 0.85 * dt;
         if (Math.abs(shift) > 0.00001) {
@@ -2637,11 +2653,11 @@ export function createEditorApp({
         }
       }
 
-      if (lumoSpeedPxPerSecond > gate && density > 0.01) {
+      if (absLumoSpeedPxPerSecond > gate && density > 0.01) {
         const centerIndex = clampFogPreview(Math.round(lumoU * (sampleCount - 1)), 0, sampleCount - 1);
         const radCells = Math.max(3, Math.floor(radiusPx / Math.max(1, ((fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX) / Math.max(2, sampleCount - 1)))));
-        const dir = patrol.facing || 1;
-        const amp = Math.min(2.2, lumoSpeedPxPerSecond / 210);
+        const dir = movementDir;
+        const amp = Math.min(2.6, absLumoSpeedPxPerSecond / 210);
         const aheadOffset = Math.max(2, Math.floor(radCells * 0.35));
         const bulgeCenter = centerIndex + (dir * aheadOffset);
         const behindOffset = Math.max(1, Math.floor(radCells * 0.15));
@@ -2709,6 +2725,8 @@ export function createEditorApp({
     fogPreviewMotion.startedAtMs = 0;
     fogPreviewMotion.lumoX = (fogPreviewMotion.bandStartX + fogPreviewMotion.bandEndX) * 0.5;
     fogPreviewMotion.lumoDirection = 1;
+    fogPreviewMotion.lastDirection = 1;
+    fogPreviewMotion.lastLumoX = null;
     fogPreviewMotion.distancePerSecond = ((fogPreviewMotion.bandEndX - fogPreviewMotion.bandStartX) * 2) / Math.max(1, fogPreviewMotion.durationMs * 0.001);
     fogPreviewMotion.lastElapsedMs = undefined;
 

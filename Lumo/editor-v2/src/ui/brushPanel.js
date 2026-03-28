@@ -39,6 +39,7 @@ const COLLAPSIBLE_PANEL_DEFAULTS = {
   background: true,
   decor: false,
   entities: false,
+  fogVolumes: true,
   sound: false,
 };
 
@@ -288,9 +289,6 @@ function renderFogVolumeSettings(state) {
         ${selectedFog ? "" : "disabled"}
       >${selectedFog ? "Edit selected fog" : "Select fog to edit"}</button>
     </div>
-    <div class="statusRow compactStatusRow entityPlacementStatusRow">
-      <span class="value">Drag on canvas while armed to place a fog span.</span>
-    </div>
   `;
 }
 
@@ -422,7 +420,7 @@ export function renderBrushPanel(panel, state) {
     ${state.document.active ? renderSection("background", "BACKGROUND", panelSections.background, renderBackgroundSettings(state)) : ""}
     ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
     ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
-    ${state.document.active ? renderSection("fog-volumes", "FOG VOLUME", true, renderFogVolumeSettings(state)) : ""}
+    ${state.document.active ? renderSection("fogVolumes", "FOG VOLUME", panelSections.fogVolumes, renderFogVolumeSettings(state)) : ""}
     ${state.document.active ? renderSoundSection(state.interaction.activeSoundPresetId, panelSections.sound) : ""}
   `;
 }
