@@ -2418,10 +2418,10 @@ export function createEditorApp({
       const radiusU = Math.max(0.05, disturbanceWidth / 100);
       const dt = Math.min(0.05, fogPreviewMotion.lastElapsedMs === undefined ? (1 / 60) : Math.max(0.001, (elapsedMs - fogPreviewMotion.lastElapsedMs) / 1000));
       fogPreviewMotion.lastElapsedMs = elapsedMs;
-      const decayPerSecond = 0.9 + (viscosity * 1.3) + (returnTime * 0.45);
-      const spring = 4.4 + (viscosity * 4.6) + (settle * 0.8);
-      const damper = 2.9 + ((1 - viscosity) * 2.5) + (1 / Math.max(0.18, returnTime));
-      const influencePeak = disturbanceStrength * (8.2 + idleAmount * 3.4);
+      const releaseRate = 0.7 + (viscosity * 1.35) + (1 / Math.max(0.24, returnTime));
+      const catchUpRate = 5.4 + ((1 - viscosity) * 4.8) + (settle * 0.65);
+      const influencePeak = disturbanceStrength * (5.8 + (idleAmount * 2.4));
+      const idleRate = elapsedMs * 0.001 * (0.45 + (idleSpeed * 0.55));
 
       fogPreviewMotion.samples.forEach((sample, index) => {
         const state = fogPreviewMotion.sampleState[index];
@@ -2429,26 +2429,26 @@ export function createEditorApp({
         const du = Math.abs(state.u - lumoU);
         const influence = du >= radiusU ? 0 : 1 - (du / radiusU);
         const influenceEase = influence * influence * (3 - (2 * influence));
-        const signed = state.u < lumoU ? -1 : 1;
-        const impulse = influenceEase * influencePeak * signed;
-        state.velocity += impulse * dt;
-        state.velocity -= state.displacement * spring * dt;
-        state.velocity *= Math.max(0.35, 1 - (damper * dt * 0.1));
-        state.displacement += state.velocity * dt;
-        state.displacement *= Math.max(0.25, 1 - (decayPerSecond * dt * 0.18));
+        const targetOpening = influenceEase * influencePeak;
+        const blend = Math.min(1, catchUpRate * dt);
+        state.displacement += (targetOpening - state.displacement) * blend;
+        if (targetOpening < state.displacement) {
+          state.displacement *= Math.max(0, 1 - (releaseRate * dt * 0.35));
+        }
 
-        const idleWave = Math.sin((elapsedMs * 0.001 * (0.85 + idleSpeed * 0.65)) + (state.u * 10.4)) * idleAmount;
-        const idleBias = Math.sin((elapsedMs * 0.001 * (0.45 + idleSpeed * 0.4)) - (state.u * 7.2)) * idleAmount * 0.5;
-        const idleOffset = -(Math.abs(idleWave + idleBias) * idleDrift);
-        const localOffset = Math.min(0, state.baseOffset + idleOffset - (Math.max(0, state.displacement) * 0.58));
-        const coreLift = Math.max(0, state.displacement * 0.72);
-        const hazeLift = Math.max(0, state.displacement * 0.95);
-        const opacityLift = Math.max(0, state.displacement * 0.012) + (influenceEase * disturbanceStrength * 0.04);
+        const seed = Number.isFinite(state.seed) ? state.seed : 0;
+        const idlePulse = (Math.sin(idleRate + (seed * 1.7)) * 0.5) + 0.5;
+        const idleOffset = -Math.max(0, seed * idlePulse) * idleDrift;
+        const opening = Math.max(0, state.displacement);
+        const coreDrop = opening * 0.9;
+        const hazeDrop = opening * 1.12;
+        const opacityDrop = opening * (0.015 + disturbanceStrength * 0.01);
+        const localOffset = Math.min(0, state.baseOffset + idleOffset);
 
         sample.style.setProperty("--fog-sample-offset", `${localOffset.toFixed(3)}px`);
-        sample.style.setProperty("--fog-sample-core", `${Math.max(3, state.baseCore + coreLift).toFixed(3)}px`);
-        sample.style.setProperty("--fog-sample-haze", `${Math.max(5, state.baseHaze + hazeLift).toFixed(3)}px`);
-        sample.style.setProperty("--fog-sample-opacity", `${Math.min(0.98, Math.max(0.02, state.baseOpacity + opacityLift)).toFixed(4)}`);
+        sample.style.setProperty("--fog-sample-core", `${Math.max(2.1, state.baseCore - coreDrop).toFixed(3)}px`);
+        sample.style.setProperty("--fog-sample-haze", `${Math.max(3.8, state.baseHaze - hazeDrop).toFixed(3)}px`);
+        sample.style.setProperty("--fog-sample-opacity", `${Math.min(0.98, Math.max(0.015, state.baseOpacity - opacityDrop)).toFixed(4)}`);
       });
     }
     if (fogPreviewMotion.disturbance) {
@@ -2496,8 +2496,8 @@ export function createEditorApp({
         baseCore: readVar("--fog-sample-baseline-core"),
         baseHaze: readVar("--fog-sample-baseline-haze"),
         baseOpacity: readVar("--fog-sample-baseline-opacity"),
+        seed: Number.parseFloat(sample.dataset.fogSampleSeed || "0"),
         displacement: 0,
-        velocity: 0,
       };
     });
     fogPreviewMotion.durationMs = Number.isFinite(durationMs) && durationMs > 0 ? durationMs : 9600;

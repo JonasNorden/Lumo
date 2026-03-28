@@ -2003,6 +2003,44 @@ kbd {
   background: radial-gradient(120% 100% at 50% 100%, rgba(35, 55, 96, 0.6), rgba(7, 14, 28, 0.96));
 }
 
+.fogWorkbenchPreviewGround {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.fogWorkbenchPreviewGroundSoil {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: clamp(56px, 24%, 84px);
+  background:
+    linear-gradient(180deg, rgba(39, 56, 34, 0.2), rgba(45, 63, 37, 0.62) 32%, rgba(67, 54, 36, 0.85) 64%, rgba(39, 28, 20, 0.98) 100%),
+    repeating-linear-gradient(90deg, rgba(122, 96, 59, 0.22) 0 14px, rgba(72, 53, 32, 0.15) 14px 28px);
+  box-shadow: inset 0 1px 0 rgba(166, 190, 138, 0.2);
+}
+
+.fogWorkbenchPreviewGroundTileStrip {
+  --fog-ground-tile-size: 24px;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(clamp(56px, 24%, 84px) - var(--fog-ground-tile-size));
+  display: grid;
+  grid-template-columns: repeat(30, minmax(0, 1fr));
+  height: var(--fog-ground-tile-size);
+  opacity: 0.92;
+}
+
+.fogWorkbenchPreviewGroundTile {
+  background:
+    var(--fog-ground-tile-src, none) center/24px 24px repeat-x,
+    linear-gradient(180deg, rgba(55, 74, 44, 0.35), rgba(39, 27, 18, 0.75));
+  filter: saturate(0.95) brightness(0.86);
+}
+
 .fogWorkbenchPreviewSpan {
   z-index: 2;
 }
@@ -2120,7 +2158,7 @@ kbd {
   transform: translate3d(-50%, min(0px, calc(var(--fog-sample-offset, 0px) + (var(--fog-relax, 0) * -6px))), 0);
   transform-origin: center bottom;
   opacity: var(--fog-sample-opacity, 0.24);
-  transition: transform 100ms linear, opacity 120ms linear;
+  transition: transform 90ms linear, opacity 90ms linear;
 }
 
 .fogWorkbenchPreviewSample::before,
@@ -2172,7 +2210,7 @@ kbd {
   mix-blend-mode: screen;
   pointer-events: none;
   z-index: 3;
-  opacity: 0.16;
+  opacity: 0.13;
   transform: translate3d(-50%, 0, 0);
   transition-property: transform, opacity;
   transition-timing-function: ease-out;

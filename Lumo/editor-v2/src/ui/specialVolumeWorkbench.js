@@ -1,5 +1,6 @@
 import { getFogVolumeParams, isFogVolumeEntityType } from "../domain/entities/specialVolumeTypes.js";
 import { findEntityPresetById } from "../domain/entities/entityPresets.js";
+import { getTileAssetByTileValue } from "../domain/tiles/tileSpriteCatalog.js";
 
 const PREVIEW_SPAN_WIDTH_PX = 620;
 const PREVIEW_SAMPLE_COUNT = 32;
@@ -145,6 +146,7 @@ function renderFogPreviewSamples(samples) {
       class="fogWorkbenchPreviewSample"
       style="--fog-sample-x:${sample.xPct.toFixed(3)}%;--fog-sample-core:${sample.coreHeightPx.toFixed(2)}px;--fog-sample-haze:${sample.hazeHeightPx.toFixed(2)}px;--fog-sample-opacity:${sample.opacity.toFixed(4)};--fog-sample-offset:${sample.offsetY.toFixed(3)}px;--fog-sample-baseline-core:${sample.coreHeightPx.toFixed(2)}px;--fog-sample-baseline-haze:${sample.hazeHeightPx.toFixed(2)}px;--fog-sample-baseline-offset:${sample.offsetY.toFixed(3)}px;--fog-sample-baseline-opacity:${sample.opacity.toFixed(4)};"
       data-fog-sample-u="${sample.u.toFixed(6)}"
+      data-fog-sample-seed="${sample.seed.toFixed(6)}"
       data-fog-preview-sample
     ></span>
   `).join("");
@@ -153,6 +155,8 @@ function renderFogPreviewSamples(samples) {
 function renderFogModal(selection) {
   const model = getFogPreviewModel(selection.entity);
   const lumoSpriteSrc = resolveLumoPreviewSpriteSrc();
+  const groundTiles = resolveFogPreviewGroundTiles();
+  const groundTileSamples = Array.from({ length: 30 }, (_, index) => groundTiles[index % groundTiles.length]);
   const numberFields = [
     { label: "Density", path: "look.density", min: 0.02, max: 1, step: 0.01, digits: 2, read: (entity) => getFogVolumeParams(entity).look.density },
     { label: "Height above ground", path: "look.lift", min: 0, max: 120, step: 1, digits: 0, read: (entity) => getFogVolumeParams(entity).look.lift },
@@ -186,6 +190,18 @@ function renderFogModal(selection) {
               style="--fog-ground-baseline:14px;--fog-lift:${model.liftPx.toFixed(2)}px;--fog-thickness:${model.thicknessPx.toFixed(2)}px;--fog-falloff-pct:${((model.falloffPx / PREVIEW_SPAN_WIDTH_PX) * 100).toFixed(3)}%;--fog-opacity:${model.densityOpacity.toFixed(4)};--fog-organic:${model.idleAmount.toFixed(4)};--fog-organic-speed:${model.idleSpeed.toFixed(4)};--fog-push:${model.influenceAmount.toFixed(4)};--fog-relax:${model.returnTime.toFixed(4)};--fog-visc:${model.viscosity.toFixed(4)};--fog-disturbance-strength:${model.disturbanceStrength.toFixed(4)};--fog-disturbance-width:${model.disturbanceWidthPct.toFixed(3)}%;--fog-disturbance-rise:${model.disturbanceRisePx.toFixed(2)}px;--fog-idle-drift:${model.idleDriftPx.toFixed(3)}px;--fog-stationary-settle:${model.stationarySettle.toFixed(3)};--fog-return-recover-ms:${model.returnRecoverMs}ms;--fog-preview-motion-phase-ms:${model.phaseMs}ms;"
             >
               <div class="fogWorkbenchPreviewBackdrop"></div>
+              <div class="fogWorkbenchPreviewGround" aria-hidden="true">
+                <div class="fogWorkbenchPreviewGroundSoil"></div>
+                <div class="fogWorkbenchPreviewGroundTileStrip">
+                  ${groundTileSamples.map((tile, index) => `
+                    <span
+                      class="fogWorkbenchPreviewGroundTile"
+                      style="--fog-ground-tile-index:${index};--fog-ground-tile-src:url('${escapeHtml(tile.src)}')"
+                      title="${escapeHtml(tile.label)}"
+                    ></span>
+                  `).join("")}
+                </div>
+              </div>
               <div class="volumeWorkbenchPreviewSpan fogWorkbenchPreviewSpan" data-volume-preview-span>
                 <div class="fogWorkbenchPreviewContainer" aria-hidden="true">
                   <div class="fogWorkbenchPreviewContainerCap"></div>
@@ -221,6 +237,23 @@ function renderFogModal(selection) {
       </section>
     `,
   };
+}
+
+function resolveFogPreviewGroundTiles() {
+  const tileIds = [6, 1, 15];
+  const fallback = [
+    { src: "../data/assets/tiles/grass_bt.png", label: "Grass" },
+    { src: "../data/assets/tiles/soil_c.png", label: "Dirt" },
+    { src: "../data/assets/tiles/stone_ct.png", label: "Stone" },
+  ];
+  return tileIds.map((tileId, index) => {
+    const tile = getTileAssetByTileValue(tileId);
+    const src = typeof tile?.img === "string" && tile.img.trim() ? tile.img.trim() : fallback[index].src;
+    return {
+      src,
+      label: tile?.label || fallback[index].label,
+    };
+  });
 }
 
 function resolveLumoPreviewSpriteSrc() {
@@ -288,16 +321,17 @@ export function buildFogPreviewFieldProfile(config = {}) {
     const edgeMask = clamp(dOpenPx / falloffPx, 0, 1);
     const edgeEase = edgeMask * edgeMask * (3 - (2 * edgeMask));
 
-    const idleWave = Math.sin((u * 4.6) + phase) * 0.5 + Math.sin((u * 9.1) - (phase * 0.65)) * 0.26;
-    const idleLiftScale = idleAmount * (2.8 + (1 - viscosity) * 3.8);
-    const liftOnly = -Math.abs(idleWave) * idleLiftScale;
+    const shapeSeed = Math.sin((u * 6.2) + 0.45) * 0.52 + Math.sin((u * 13.7) + 1.4) * 0.24;
+    const idlePulse = (Math.sin((phase * 0.95) + (u * 1.6)) * 0.5) + 0.5;
+    const idleLiftScale = idleAmount * (2.4 + (1 - viscosity) * 2.9);
+    const liftOnly = -Math.max(0, shapeSeed * idlePulse) * idleLiftScale;
     const returnDrag = clamp(returnTime / 5.8, 0.05, 1.15);
     const settleFactor = clamp(1.1 - returnDrag * 0.4, 0.45, 1.08);
 
     const coreHeightPx = Math.max(
       4,
       (thicknessPx * edgeEase * settleFactor)
-      + (Math.max(0, idleWave) * idleAmount * (8 + (1 - viscosity) * 6)),
+      + (Math.max(0, shapeSeed * idlePulse) * idleAmount * (8 + (1 - viscosity) * 6)),
     );
     const hazeHeightPx = Math.max(coreHeightPx + 6, coreHeightPx * (1.24 + ((1 - viscosity) * 0.35)));
     const influenceDensityLift = (influenceAmount / 5) * 0.045 * edgeEase;
@@ -313,6 +347,7 @@ export function buildFogPreviewFieldProfile(config = {}) {
       hazeHeightPx,
       opacity,
       offsetY: Math.min(0, liftOnly),
+      seed: shapeSeed,
     });
   }
 
