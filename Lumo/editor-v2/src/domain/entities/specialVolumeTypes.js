@@ -23,9 +23,18 @@ const LAVA_DEFAULT_PARAMS = Object.freeze({
 const BUBBLING_LIQUID_DEFAULT_PARAMS = Object.freeze({
   area: { x0: 0, x1: 240, y0: 0, depth: 92 },
   look: { topColor: "#7FD12E", bottomColor: "#2F5E1C" },
-  behavior: { surfaceActivity: 0.45, bubbleAmount: 0.58, fumeAmount: 0.4 },
+  behavior: { surfaceActivity: 0.45, bubbleAmount: 58, fumeAmount: 40 },
   hazard: { instantDeath: true },
 });
+
+export const BUBBLING_LIQUID_DENSITY_MAX = 100;
+
+export function normalizeBubblingLiquidDensityValue(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  if (numeric <= 1) return numeric * BUBBLING_LIQUID_DENSITY_MAX;
+  return numeric;
+}
 
 export const SPECIAL_VOLUME_EDITOR_LAYOUTS = Object.freeze({
   fog_volume: "floating",
@@ -197,8 +206,8 @@ function normalizeBubblingLiquidParams(rawParams = {}) {
     },
     behavior: {
       surfaceActivity: clamp(Number(behaviorInput.surfaceActivity), 0, 1),
-      bubbleAmount: clamp(Number(behaviorInput.bubbleAmount), 0, 1),
-      fumeAmount: clamp(Number(behaviorInput.fumeAmount), 0, 1),
+      bubbleAmount: clamp(normalizeBubblingLiquidDensityValue(behaviorInput.bubbleAmount), 0, BUBBLING_LIQUID_DENSITY_MAX),
+      fumeAmount: clamp(normalizeBubblingLiquidDensityValue(behaviorInput.fumeAmount), 0, BUBBLING_LIQUID_DENSITY_MAX),
     },
     hazard: {
       instantDeath: Boolean(hazardInput.instantDeath ?? true),

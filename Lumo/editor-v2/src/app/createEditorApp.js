@@ -2574,6 +2574,14 @@ export function createEditorApp({
     return x * x * (3 - (2 * x));
   };
 
+  const normalizeBubblingLiquidDensityPreview = (rawValue, fallback) => {
+    const numeric = Number.parseFloat(rawValue || "");
+    const resolved = Number.isFinite(numeric) ? numeric : fallback;
+    if (!Number.isFinite(resolved)) return 0;
+    if (resolved <= 1) return clampFogPreview(resolved * 100, 0, 100);
+    return clampFogPreview(resolved, 0, 100);
+  };
+
   const sampleSmookeNoise = (x) => {
     const xi = Math.floor(x);
     const xf = x - xi;
@@ -3502,8 +3510,10 @@ export function createEditorApp({
 
     const depth = clampFogPreview(Number.parseFloat(surfaceDataset.bubblingLiquidDepth || "") || 92, 24, 164);
     const surfaceActivity = clampFogPreview(Number.parseFloat(surfaceDataset.bubblingLiquidSurfaceActivity || "") || 0.45, 0, 1);
-    const bubbleAmount = clampFogPreview(Number.parseFloat(surfaceDataset.bubblingLiquidBubbleAmount || "") || 0.58, 0, 1);
-    const fumeAmount = clampFogPreview(Number.parseFloat(surfaceDataset.bubblingLiquidFumeAmount || "") || 0.4, 0, 1);
+    const bubbleAmount = normalizeBubblingLiquidDensityPreview(surfaceDataset.bubblingLiquidBubbleAmount, 58);
+    const fumeAmount = normalizeBubblingLiquidDensityPreview(surfaceDataset.bubblingLiquidFumeAmount, 40);
+    const bubbleIntensity = bubbleAmount * 0.01;
+    const fumeIntensity = fumeAmount * 0.01;
     const topColor = surfaceDataset.bubblingLiquidTopColor || "#7FD12E";
     const bottomColor = surfaceDataset.bubblingLiquidBottomColor || "#2F5E1C";
     const liquidTopBase = floorTop - depth;
@@ -3537,30 +3547,73 @@ export function createEditorApp({
     ctx2d.closePath();
     ctx2d.fill();
 
-    const bubbleCount = Math.max(10, Math.round((laneWidth * 0.03) + (bubbleAmount * laneWidth * 0.08)));
+    const sampleSurfaceYAtX = (x) => {
+      if (!surfaceSamples.length) return liquidTopBase;
+      const relative = clampFogPreview((x - laneStartX) / Math.max(1, laneWidth), 0, 1);
+      const scaled = relative * (surfaceSamples.length - 1);
+      const leftIndex = Math.floor(scaled);
+      const rightIndex = Math.min(surfaceSamples.length - 1, leftIndex + 1);
+      const blend = scaled - leftIndex;
+      const left = surfaceSamples[leftIndex]?.y ?? liquidTopBase;
+      const right = surfaceSamples[rightIndex]?.y ?? left;
+      return left + ((right - left) * blend);
+    };
+
+    const bubbleCount = Math.max(4, Math.round((laneWidth * 0.012) + (Math.pow(bubbleIntensity, 1.05) * laneWidth * 0.22)));
+    const popEvents = [];
     for (let i = 0; i < bubbleCount; i += 1) {
       const seed = 12.6 + (i * 9.2);
-      const baseU = sampleSmookeNoise(seed + 1.3);
-      const drift = (sampleSmookeNoise(seed + (elapsedSec * 0.24)) - 0.5) * 0.03;
-      const px = laneStartX + ((baseU + drift + 1) % 1) * laneWidth;
-      const rise = ((elapsedSec * (16 + (sampleSmookeNoise(seed + 2.5) * 24) + (surfaceActivity * 20))) + (sampleSmookeNoise(seed + 3.1) * depth)) % (depth + 16);
-      const py = floorTop - rise;
-      const radius = 1.2 + (sampleSmookeNoise(seed + 7.2) * 3.5);
-      const nearSurface = py <= (liquidTopBase + 7);
+      const baseU = sampleSmookeNoise(seed + 1.3) * 0.98 + 0.01;
+      const phaseOffset = sampleSmookeNoise(seed + 3.1);
+      const lateralSway = (sampleSmookeNoise(seed + (elapsedSec * (0.18 + (surfaceActivity * 0.14)))) - 0.5) * (0.01 + (bubbleIntensity * 0.008));
+      const px = laneStartX + (((baseU + lateralSway + 1) % 1) * laneWidth);
+      const startDepthRatio = 0.35 + (sampleSmookeNoise(seed + 4.6) * 0.62);
+      const speed = (0.05 + (sampleSmookeNoise(seed + 2.5) * 0.05) + (surfaceActivity * 0.05) + (bubbleIntensity * 0.03));
+      const cycle = ((elapsedSec * speed) + phaseOffset) % 1;
+      const risePhase = 0.78;
+      const interactionPhase = 0.14;
+      const popPhase = 1 - risePhase - interactionPhase;
+      const bubbleRadius = 1 + (sampleSmookeNoise(seed + 7.2) * (1.4 + (bubbleIntensity * 1.3)));
+      const surfaceY = sampleSurfaceYAtX(px);
+      let py = floorTop - (depth * startDepthRatio);
+      let bubbleAlpha = 0.12 + (bubbleIntensity * 0.08);
+      let rimAlpha = 0.2 + (bubbleIntensity * 0.22);
+      let radius = bubbleRadius;
+
+      if (cycle <= risePhase) {
+        const riseProgress = smoothFogPreview01(cycle / risePhase);
+        py = floorTop - (depth * startDepthRatio * riseProgress);
+      } else if (cycle <= risePhase + interactionPhase) {
+        const interactionProgress = (cycle - risePhase) / interactionPhase;
+        py = surfaceY - (0.4 + (interactionProgress * (1.4 + (surfaceActivity * 2.2))));
+        radius = bubbleRadius * (1 + (interactionProgress * 0.28));
+        bubbleAlpha += interactionProgress * 0.1;
+        rimAlpha += interactionProgress * 0.22;
+      } else {
+        const popProgress = (cycle - risePhase - interactionPhase) / Math.max(0.001, popPhase);
+        const easedPop = smoothFogPreview01(popProgress);
+        py = surfaceY - (1.8 + (easedPop * (2 + (surfaceActivity * 1.6))));
+        radius = bubbleRadius * (1 - (easedPop * 0.78));
+        bubbleAlpha *= (1 - easedPop);
+        rimAlpha *= (1 - easedPop);
+        popEvents.push({
+          px,
+          py: surfaceY - 0.5,
+          ringRadius: (0.8 + (bubbleRadius * 0.9)) + (easedPop * (3.2 + (surfaceActivity * 2.8))),
+          ringAlpha: (0.26 + (surfaceActivity * 0.16)) * (1 - easedPop),
+          capRadius: Math.max(0.35, bubbleRadius * (1 - (easedPop * 0.5))),
+          capAlpha: (0.34 - (easedPop * 0.28)) * (0.8 + (surfaceActivity * 0.5)),
+        });
+      }
+
+      if (radius <= 0.35 || bubbleAlpha <= 0.01) continue;
       ctx2d.beginPath();
       ctx2d.arc(px, py, radius, 0, Math.PI * 2);
-      ctx2d.fillStyle = `rgba(220, 255, 214, ${nearSurface ? 0.24 : 0.14})`;
+      ctx2d.fillStyle = `rgba(220, 255, 214, ${bubbleAlpha})`;
       ctx2d.fill();
-      ctx2d.strokeStyle = `rgba(230, 255, 224, ${nearSurface ? 0.58 : 0.24})`;
-      ctx2d.lineWidth = nearSurface ? 1.1 : 0.8;
+      ctx2d.strokeStyle = `rgba(230, 255, 224, ${rimAlpha})`;
+      ctx2d.lineWidth = py <= surfaceY + 1 ? 1.05 : 0.75;
       ctx2d.stroke();
-      if (nearSurface && sampleSmookeNoise(seed + (elapsedSec * 2.8)) > 0.68 - (surfaceActivity * 0.24)) {
-        const crestY = liquidTopBase - Math.min(5, 1.4 + (surfaceActivity * 3.6));
-        ctx2d.beginPath();
-        ctx2d.arc(px, crestY, Math.max(0.9, radius * 0.55), 0, Math.PI * 2);
-        ctx2d.fillStyle = "rgba(236, 255, 226, 0.46)";
-        ctx2d.fill();
-      }
     }
     ctx2d.restore();
 
@@ -3574,14 +3627,31 @@ export function createEditorApp({
     ctx2d.lineWidth = 1.4;
     ctx2d.stroke();
 
+    for (let i = 0; i < popEvents.length; i += 1) {
+      const pop = popEvents[i];
+      if (pop.ringAlpha > 0.01) {
+        ctx2d.beginPath();
+        ctx2d.arc(pop.px, pop.py, pop.ringRadius, 0, Math.PI * 2);
+        ctx2d.strokeStyle = `rgba(239, 255, 228, ${pop.ringAlpha})`;
+        ctx2d.lineWidth = 0.95;
+        ctx2d.stroke();
+      }
+      if (pop.capAlpha > 0.01) {
+        ctx2d.beginPath();
+        ctx2d.arc(pop.px, pop.py - 0.6, pop.capRadius, 0, Math.PI * 2);
+        ctx2d.fillStyle = `rgba(244, 255, 236, ${pop.capAlpha})`;
+        ctx2d.fill();
+      }
+    }
+
     if (fumeAmount > 0.01) {
-      const plumeCount = Math.max(10, Math.round((laneWidth * 0.02) + (fumeAmount * 24)));
+      const plumeCount = Math.max(4, Math.round((laneWidth * 0.008) + (Math.pow(fumeIntensity, 1.05) * 42)));
       for (let i = 0; i < plumeCount; i += 1) {
         const seed = 90.1 + (i * 7.7);
         const px = laneStartX + (sampleSmookeNoise(seed) * laneWidth);
-        const puffHeight = 8 + (fumeAmount * 24) + (sampleSmookeNoise(seed + 1.4) * 20);
-        const drift = (sampleSmookeNoise(seed + (elapsedSec * 0.28)) - 0.5) * (4 + (fumeAmount * 9));
-        const alpha = 0.04 + (sampleSmookeNoise(seed + 5.8) * (0.09 + (fumeAmount * 0.12)));
+        const puffHeight = 10 + (fumeIntensity * 34) + (sampleSmookeNoise(seed + 1.4) * (14 + (fumeIntensity * 18)));
+        const drift = (sampleSmookeNoise(seed + (elapsedSec * 0.26)) - 0.5) * (3 + (fumeIntensity * 14));
+        const alpha = 0.035 + (sampleSmookeNoise(seed + 5.8) * (0.06 + (fumeIntensity * 0.2)));
         const grad = ctx2d.createLinearGradient(0, liquidTopBase - puffHeight, 0, liquidTopBase + 4);
         grad.addColorStop(0, "rgba(206, 227, 181, 0)");
         grad.addColorStop(1, `rgba(206, 227, 181, ${alpha})`);

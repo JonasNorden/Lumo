@@ -240,7 +240,7 @@ export const ENTITY_PRESETS = [
     defaultParams: {
       area: { x0: 0, x1: 240, y0: 0, depth: 92 },
       look: { topColor: "#7FD12E", bottomColor: "#2F5E1C" },
-      behavior: { surfaceActivity: 0.45, bubbleAmount: 0.58, fumeAmount: 0.4 },
+      behavior: { surfaceActivity: 0.45, bubbleAmount: 58, fumeAmount: 40 },
       hazard: { instantDeath: true },
     },
     img: null,
