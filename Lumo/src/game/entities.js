@@ -9,6 +9,7 @@
       this._fogVolumes = [];
       this._fogFrame = 0;
       this._liquidVolumes = [];
+      this._liquidAnimT = 0;
       this._registeredRuntimeEntityIds = new Set([
         "water_volume",
         "lava_volume",
@@ -519,6 +520,8 @@
           let surfaceColor = "rgba(135,212,255,0.9)";
           let bodyColorAfterDarkness = "rgba(84,173,232,0.24)";
           let surfaceColorAfterDarkness = "rgba(178,231,255,0.98)";
+          let waveAmount = 0.35;
+          let waveSpeed = 0.9;
           if (id === "lava_volume"){
             bodyColor = "rgba(224,95,32,0.40)";
             surfaceColor = "rgba(255,182,84,0.95)";
@@ -529,6 +532,19 @@
             surfaceColor = "rgba(187,255,130,0.92)";
             bodyColorAfterDarkness = "rgba(132,205,88,0.26)";
             surfaceColorAfterDarkness = "rgba(214,255,176,0.99)";
+          } else if (id === "water_volume"){
+            const motion = (P.motion && typeof P.motion === "object") ? P.motion : {};
+            const look = (P.look && typeof P.look === "object") ? P.look : {};
+            if (typeof look.topColor === "string" && look.topColor.trim()) surfaceColor = look.topColor.trim();
+            if (typeof look.bottomColor === "string" && look.bottomColor.trim()) bodyColor = look.bottomColor.trim();
+            const authoredWaveAmount = Number(motion.waveAmount);
+            const authoredWaveSpeed = Number(motion.waveSpeed);
+            waveAmount = Number.isFinite(authoredWaveAmount)
+              ? Math.max(0, Math.min(1, authoredWaveAmount))
+              : 0.35;
+            waveSpeed = Number.isFinite(authoredWaveSpeed)
+              ? Math.max(0.1, Math.min(3, authoredWaveSpeed))
+              : 0.9;
           }
 
           this._liquidVolumes.push({
@@ -542,6 +558,8 @@
             surfaceColor,
             bodyColorAfterDarkness,
             surfaceColorAfterDarkness,
+            waveAmount,
+            waveSpeed,
           });
           if (!this._pfhLiquidDiag.spawnedByType.has(id)){
             this._pfhLiquidDiag.spawnedByType.add(id);
@@ -1233,6 +1251,7 @@ if (this._catById){
       const g = 980;
       const ts = Lumo.TILE || 24;
       this._lastPlayer = player || null;
+      this._liquidAnimT += Math.max(0, Number.isFinite(dt) ? dt : 0);
       const flareBurnNearDarkCreatureMul = 2.5;
 
       // Frame-gate reset (used by power-cell gradual fill) — once per update() call.
@@ -2948,15 +2967,85 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
         const sy = Math.floor(v.yTop - cam.y);
         const w = Math.max(1, Math.floor(v.x1 - v.x0));
         const h = Math.max(1, Math.floor(v.yBottom - v.yTop));
+        if (v.id !== "water_volume"){
+          ctx.fillStyle = v.bodyColor;
+          ctx.fillRect(sx, sy, w, h);
 
-        ctx.fillStyle = v.bodyColor;
-        ctx.fillRect(sx, sy, w, h);
+          ctx.strokeStyle = v.surfaceColor;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(sx, Math.floor(v.yTop - cam.y) + 0.5);
+          ctx.lineTo(sx + w, Math.floor(v.yTop - cam.y) + 0.5);
+          ctx.stroke();
+          continue;
+        }
 
-        ctx.strokeStyle = v.surfaceColor;
+        const waveAmpPx = Math.max(1, Math.min(h * 0.15, 2 + (v.waveAmount || 0.35) * 7));
+        const waveSpeed = Math.max(0.1, v.waveSpeed || 0.9);
+        const t = this._liquidAnimT * waveSpeed;
+        const step = 12;
+        const yBase = sy;
+        const yTopMin = yBase - waveAmpPx - 3;
+        const yBottom = sy + h;
+
+        const grad = ctx.createLinearGradient(0, yTopMin, 0, yBottom);
+        grad.addColorStop(0, v.surfaceColor || "rgba(78,184,242,0.88)");
+        grad.addColorStop(0.16, "rgba(120,198,238,0.40)");
+        grad.addColorStop(1, v.bodyColor || "rgba(10,75,147,0.55)");
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.moveTo(sx, yBottom);
+        for (let px = 0; px <= w; px += step){
+          const p = px / Math.max(1, w);
+          const wave = Math.sin((p * Math.PI * 2.1) + (t * 1.9))
+            + (Math.sin((p * Math.PI * 4.7) - (t * 2.4)) * 0.45);
+          const yWave = yBase + (wave * waveAmpPx * 0.5);
+          ctx.lineTo(sx + px, yWave);
+        }
+        if ((w % step) !== 0){
+          const p = 1;
+          const wave = Math.sin((p * Math.PI * 2.1) + (t * 1.9))
+            + (Math.sin((p * Math.PI * 4.7) - (t * 2.4)) * 0.45);
+          const yWave = yBase + (wave * waveAmpPx * 0.5);
+          ctx.lineTo(sx + w, yWave);
+        }
+        ctx.lineTo(sx + w, yBottom);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(sx, sy, w, h);
+        ctx.clip();
+        for (let band = 0; band < 2; band += 1){
+          const yBand = sy + h * (0.35 + band * 0.28) + Math.sin((t * (1.1 + band * 0.3)) + (sx * 0.01)) * (2 + band);
+          const g = ctx.createLinearGradient(sx, yBand - 6, sx, yBand + 6);
+          g.addColorStop(0, "rgba(200,240,255,0)");
+          g.addColorStop(0.5, "rgba(200,240,255,0.09)");
+          g.addColorStop(1, "rgba(200,240,255,0)");
+          ctx.fillStyle = g;
+          ctx.fillRect(sx, yBand - 6, w, 12);
+        }
+        ctx.restore();
+
+        ctx.strokeStyle = v.surfaceColor || "rgba(135,212,255,0.9)";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(sx, Math.floor(v.yTop - cam.y) + 0.5);
-        ctx.lineTo(sx + w, Math.floor(v.yTop - cam.y) + 0.5);
+        for (let px = 0; px <= w; px += step){
+          const p = px / Math.max(1, w);
+          const wave = Math.sin((p * Math.PI * 2.1) + (t * 1.9))
+            + (Math.sin((p * Math.PI * 4.7) - (t * 2.4)) * 0.45);
+          const yWave = yBase + (wave * waveAmpPx * 0.5);
+          if (px === 0) ctx.moveTo(sx + px, yWave + 0.5);
+          else ctx.lineTo(sx + px, yWave + 0.5);
+        }
+        if ((w % step) !== 0){
+          const p = 1;
+          const wave = Math.sin((p * Math.PI * 2.1) + (t * 1.9))
+            + (Math.sin((p * Math.PI * 4.7) - (t * 2.4)) * 0.45);
+          const yWave = yBase + (wave * waveAmpPx * 0.5);
+          ctx.lineTo(sx + w, yWave + 0.5);
+        }
         ctx.stroke();
       }
     }
@@ -2979,14 +3068,43 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
 
         // Runtime visibility pass: keep liquids legible after darkness without
         // changing gameplay collision/death behavior.
+        if (v.id !== "water_volume"){
+          ctx.fillStyle = v.bodyColorAfterDarkness || "rgba(120,180,220,0.20)";
+          ctx.fillRect(sx, sy, w, h);
+
+          ctx.strokeStyle = v.surfaceColorAfterDarkness || "rgba(200,235,255,0.95)";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(sx, sy + 0.5);
+          ctx.lineTo(sx + w, sy + 0.5);
+          ctx.stroke();
+          continue;
+        }
+
+        const waveAmpPx = Math.max(1, Math.min(h * 0.14, 1.5 + (v.waveAmount || 0.35) * 5));
+        const waveSpeed = Math.max(0.1, v.waveSpeed || 0.9);
+        const t = this._liquidAnimT * waveSpeed;
+        const step = 14;
         ctx.fillStyle = v.bodyColorAfterDarkness || "rgba(120,180,220,0.20)";
         ctx.fillRect(sx, sy, w, h);
-
         ctx.strokeStyle = v.surfaceColorAfterDarkness || "rgba(200,235,255,0.95)";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.moveTo(sx, sy + 0.5);
-        ctx.lineTo(sx + w, sy + 0.5);
+        for (let px = 0; px <= w; px += step){
+          const p = px / Math.max(1, w);
+          const wave = Math.sin((p * Math.PI * 2.1) + (t * 1.9))
+            + (Math.sin((p * Math.PI * 4.7) - (t * 2.4)) * 0.45);
+          const yWave = sy + (wave * waveAmpPx * 0.5) + 0.5;
+          if (px === 0) ctx.moveTo(sx + px, yWave);
+          else ctx.lineTo(sx + px, yWave);
+        }
+        if ((w % step) !== 0){
+          const p = 1;
+          const wave = Math.sin((p * Math.PI * 2.1) + (t * 1.9))
+            + (Math.sin((p * Math.PI * 4.7) - (t * 2.4)) * 0.45);
+          const yWave = sy + (wave * waveAmpPx * 0.5) + 0.5;
+          ctx.lineTo(sx + w, yWave);
+        }
         ctx.stroke();
       }
       ctx.restore();
