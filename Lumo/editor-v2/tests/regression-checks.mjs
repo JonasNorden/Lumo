@@ -5824,9 +5824,17 @@ function runSourceRegressionChecks() {
       && source.includes("draft.interaction.volumePlacementDrag = {")
       && source.includes("const fogRect = getFogVolumeWorldRectFromDragCells(")
       && source.includes("const createdIndex = createFogVolumeAtWorldRect(draft, fogRect);")
-      && source.includes("setActiveLayer(draft, PANEL_LAYERS.VOLUMES);"),
+      && source.includes("setActiveLayer(draft, PANEL_LAYERS.VOLUMES);")
+      && source.includes("draft.ui.panelSections.entities = false;"),
     true,
     "fog placement should use the dedicated drag-to-area special-volume entrypoint",
+  );
+  assert.equal(
+    source.includes("const selectingSpecialVolume = Boolean(selectedEntity && isSpecialVolumeEntityType(selectedEntity.type));")
+      && source.includes("setActiveLayer(draft, PANEL_LAYERS.VOLUMES);")
+      && source.includes("preserveCanvasTarget: selectingSpecialVolume,"),
+    true,
+    "special-volume selection should stay routed through the volumes lane without forcing the entities panel open",
   );
   assert.equal(
     source.includes("if (isFogVolumeEntityType(activeEntityPresetId) && isMomentaryPlacementTrigger(event)) return false;"),
