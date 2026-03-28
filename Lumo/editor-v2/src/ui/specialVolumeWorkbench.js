@@ -57,17 +57,26 @@ function renderNumberField(selection, config) {
   return `
     <label class="specialVolumeWorkbenchControlField" data-fog-number-field>
       <span class="label">${escapeHtml(config.label)}</span>
-      <input
-        type="number"
-        value="${escapeHtml(formatNumber(paramValue, config.digits ?? 2))}"
-        step="${escapeHtml(String(config.step))}"
-        min="${escapeHtml(String(config.min))}"
-        max="${escapeHtml(String(config.max))}"
-        data-entity-index="${selection.index}"
-        data-entity-id="${escapeHtml(entity.id || "")}" 
-        data-entity-param-path="${escapeHtml(config.path)}"
-        data-entity-param-type="number"
-      />
+      <div class="specialVolumeWorkbenchNumberInput">
+        <input
+          type="number"
+          value="${escapeHtml(formatNumber(paramValue, config.digits ?? 2))}"
+          step="${escapeHtml(String(config.step))}"
+          min="${escapeHtml(String(config.min))}"
+          max="${escapeHtml(String(config.max))}"
+          data-entity-index="${selection.index}"
+          data-entity-id="${escapeHtml(entity.id || "")}"
+          data-entity-param-path="${escapeHtml(config.path)}"
+          data-entity-param-type="number"
+          data-fog-number-step="${escapeHtml(String(config.step))}"
+          data-fog-number-min="${escapeHtml(String(config.min))}"
+          data-fog-number-max="${escapeHtml(String(config.max))}"
+        />
+        <span class="selectionStepperButtons">
+          <button type="button" class="selectionStepperButton" data-fog-step-direction="-1" aria-label="Decrease ${escapeHtml(config.label)}">−</button>
+          <button type="button" class="selectionStepperButton" data-fog-step-direction="1" aria-label="Increase ${escapeHtml(config.label)}">+</button>
+        </span>
+      </div>
     </label>
   `;
 }
