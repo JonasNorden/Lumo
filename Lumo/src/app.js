@@ -1628,6 +1628,8 @@
     world.loadLevel(levelObj);
 
     const isPfhRuntimeSession = Boolean(levelObj && levelObj[PFH_RUNTIME_SESSION_FLAG]);
+    console.log("[PFH DEBUG] before override entities:", levelObj && levelObj.entities);
+    console.log("[PFH DEBUG] is PFH:", isPfhRuntimeSession);
     if (isPfhRuntimeSession){
       console.log("[PFH runtime] using layers.ents for entity load");
       levelObj.entities = [];
