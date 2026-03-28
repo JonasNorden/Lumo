@@ -129,6 +129,8 @@ import {
   syncScanPlaybackState,
 } from "../domain/scan/scanSystem.js";
 import { createScanAudioPlaybackController } from "../domain/scan/scanAudioPlayback.js";
+import { v2ToRuntimeLevelObject } from "../runtime/v2ToRuntimeLevelObject.js";
+import { launchEditorPlayRuntime } from "../runtime/editorPlaySessionBridge.js";
 import {
   clearDecorSelection,
   getPrimarySelectedDecorId,
@@ -6758,6 +6760,49 @@ if (event.shiftKey) {
     closeTopBarMenu();
   };
 
+  const getAuthoredSpawnCell = (doc) => {
+    if (!doc || !Array.isArray(doc.entities)) return null;
+    const spawn = doc.entities.find((entity) => String(entity?.type || "").trim().toLowerCase() === "player-spawn");
+    if (!spawn) return null;
+    const x = Number(spawn.x);
+    const y = Number(spawn.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x: x | 0, y: y | 0 };
+  };
+
+  const handlePlayFromHereLaunch = () => {
+    const doc = store.getState().document.active;
+    if (!doc) return;
+
+    let bridgeResult = null;
+    try {
+      bridgeResult = v2ToRuntimeLevelObject(doc);
+      const spawnOverride = getAuthoredSpawnCell(doc);
+      launchEditorPlayRuntime({
+        runtimeLevel: bridgeResult.runtimeLevel,
+        spawnOverride,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown bridge failure.";
+      store.setState((draft) => {
+        draft.ui.importStatus = `Play launch failed: ${message}`;
+      });
+      return;
+    }
+
+    const unsupportedCount = bridgeResult.unsupported.length;
+    const warningsCount = bridgeResult.warnings.length;
+    const diagnostics = [];
+    if (unsupportedCount) diagnostics.push(`${unsupportedCount} unsupported`);
+    if (warningsCount) diagnostics.push(`${warningsCount} warning${warningsCount === 1 ? "" : "s"}`);
+
+    store.setState((draft) => {
+      draft.ui.importStatus = diagnostics.length
+        ? `Play From Here launched (authored spawn). Bridge diagnostics: ${diagnostics.join(", ")}.`
+        : "Play From Here launched from authored spawn.";
+    });
+  };
+
   const handleImport = () => {
     const fileInput = document.createElement("input");
     fileInput.type = "file";
@@ -7215,6 +7260,7 @@ if (event.shiftKey) {
       const action = actionButton.dataset.topbarAction;
       if (action === "new") openNewLevelSizeFlow();
       if (action === "import") handleImport();
+      if (action === "play-from-here") handlePlayFromHereLaunch();
       if (action === "undo") handleUndo();
       if (action === "redo") handleRedo();
       if (action === "toggle-darkness") updatePreviewSettings("darkness", !store.getState().ui.darknessPreviewEnabled);
