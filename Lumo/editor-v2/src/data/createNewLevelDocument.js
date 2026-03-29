@@ -5,24 +5,30 @@ export const DEFAULT_NEW_LEVEL_WIDTH = 32;
 export const DEFAULT_NEW_LEVEL_HEIGHT = 18;
 export const DEFAULT_NEW_LEVEL_TILE_SIZE = 24;
 export const MIN_LEVEL_DIMENSION = 8;
-export const MAX_LEVEL_DIMENSION = 1024;
+export const MAX_LEVEL_WIDTH = 1024;
+export const MAX_LEVEL_HEIGHT = 64;
 
-export function sanitizeLevelDimension(value, fallback = DEFAULT_NEW_LEVEL_WIDTH) {
-  const parsed = Number.parseInt(String(value), 10);
-  if (!Number.isInteger(parsed)) {
-    return Math.max(MIN_LEVEL_DIMENSION, Math.min(MAX_LEVEL_DIMENSION, fallback));
-  }
-
-  return Math.max(MIN_LEVEL_DIMENSION, Math.min(MAX_LEVEL_DIMENSION, parsed));
+function getLevelDimensionMax(axis = "width") {
+  return axis === "height" ? MAX_LEVEL_HEIGHT : MAX_LEVEL_WIDTH;
 }
 
-export function isValidLevelDimension(value) {
-  return Number.isInteger(value) && value >= MIN_LEVEL_DIMENSION && value <= MAX_LEVEL_DIMENSION;
+export function sanitizeLevelDimension(value, fallback = DEFAULT_NEW_LEVEL_WIDTH, axis = "width") {
+  const max = getLevelDimensionMax(axis);
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isInteger(parsed)) {
+    return Math.max(MIN_LEVEL_DIMENSION, Math.min(max, fallback));
+  }
+
+  return Math.max(MIN_LEVEL_DIMENSION, Math.min(max, parsed));
+}
+
+export function isValidLevelDimension(value, axis = "width") {
+  return Number.isInteger(value) && value >= MIN_LEVEL_DIMENSION && value <= getLevelDimensionMax(axis);
 }
 
 export function createNewLevelDocument(options = {}) {
-  const width = sanitizeLevelDimension(options.width, DEFAULT_NEW_LEVEL_WIDTH);
-  const height = sanitizeLevelDimension(options.height, DEFAULT_NEW_LEVEL_HEIGHT);
+  const width = sanitizeLevelDimension(options.width, DEFAULT_NEW_LEVEL_WIDTH, "width");
+  const height = sanitizeLevelDimension(options.height, DEFAULT_NEW_LEVEL_HEIGHT, "height");
 
   return validateLevelDocument({
     meta: {

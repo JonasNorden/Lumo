@@ -33,7 +33,8 @@ import {
   createNewLevelDocument,
   DEFAULT_NEW_LEVEL_HEIGHT,
   DEFAULT_NEW_LEVEL_WIDTH,
-  MAX_LEVEL_DIMENSION,
+  MAX_LEVEL_HEIGHT,
+  MAX_LEVEL_WIDTH,
   MIN_LEVEL_DIMENSION,
   sanitizeLevelDimension,
 } from "../src/data/createNewLevelDocument.js";
@@ -1768,12 +1769,13 @@ function runNewLevelDocumentRegressionChecks() {
 
   const largeDoc = createNewLevelDocument({ width: 512, height: 384 });
   assert.equal(largeDoc.dimensions.width, 512, "new level should allow widths larger than the previous 256 cap");
-  assert.equal(largeDoc.dimensions.height, 384, "new level should allow heights larger than the previous 256 cap");
-  assert.equal(largeDoc.tiles.base.length, 512 * 384, "new level tiles should match larger dimensions without clamping");
+  assert.equal(largeDoc.dimensions.height, MAX_LEVEL_HEIGHT, "new level should clamp heights to the dedicated project height cap");
+  assert.equal(largeDoc.tiles.base.length, 512 * MAX_LEVEL_HEIGHT, "new level tiles should match the clamped per-axis dimensions");
 
-  assert.equal(sanitizeLevelDimension("5", DEFAULT_NEW_LEVEL_WIDTH), MIN_LEVEL_DIMENSION, "dimension sanitizing should clamp to the minimum");
-  assert.equal(sanitizeLevelDimension("999", DEFAULT_NEW_LEVEL_WIDTH), 999, "dimension sanitizing should preserve larger in-range values");
-  assert.equal(sanitizeLevelDimension("2048", DEFAULT_NEW_LEVEL_WIDTH), MAX_LEVEL_DIMENSION, "dimension sanitizing should clamp values above the maximum");
+  assert.equal(sanitizeLevelDimension("5", DEFAULT_NEW_LEVEL_WIDTH, "width"), MIN_LEVEL_DIMENSION, "width sanitizing should clamp to the minimum");
+  assert.equal(sanitizeLevelDimension("999", DEFAULT_NEW_LEVEL_WIDTH, "width"), 999, "width sanitizing should preserve larger in-range values");
+  assert.equal(sanitizeLevelDimension("2048", DEFAULT_NEW_LEVEL_WIDTH, "width"), MAX_LEVEL_WIDTH, "width sanitizing should clamp values above the maximum width cap");
+  assert.equal(sanitizeLevelDimension("999", DEFAULT_NEW_LEVEL_HEIGHT, "height"), MAX_LEVEL_HEIGHT, "height sanitizing should clamp values above the maximum height cap");
 }
 
 function runSpawnExitNormalizationRegressionChecks() {
