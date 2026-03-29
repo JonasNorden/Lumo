@@ -34,6 +34,7 @@ import {
   getTileBehaviorById,
   suggestTileCatalogId,
 } from "../domain/assets/assetManagerWizardModel.js";
+import { saveTileThroughLocalBridge } from "../domain/assets/localTileSaveBridge.js";
 import { isTileCatalogIdTaken, registerTileSpriteOption } from "../domain/tiles/tileSpriteCatalog.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
@@ -811,6 +812,7 @@ export function createEditorApp({
     },
   };
   let fogStepperSession = null;
+  let selectedAssetWizardSpriteFile = null;
   const fogPreviewMotion = {
     rafId: 0,
     startedAtMs: 0,
@@ -7194,61 +7196,93 @@ if (event.shiftKey) {
     }
   };
 
-  const attemptTileWizardSave = () => {
-    let didSave = false;
-    store.setState((draft) => {
-      const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
-      const identityValidation = getAssetWizardStepValidation("identity", wizard);
-      const metadataValidation = getAssetWizardStepValidation("metadata", wizard);
-      if (!identityValidation.isValid || !metadataValidation.isValid) {
+  const attemptTileWizardSave = async () => {
+    const currentWizard = store.getState().ui.assetManager.wizard || createInitialAssetManagerWizardState();
+    const identityValidation = getAssetWizardStepValidation("identity", currentWizard);
+    const metadataValidation = getAssetWizardStepValidation("metadata", currentWizard);
+    if (!identityValidation.isValid || !metadataValidation.isValid) {
+      store.setState((draft) => {
+        const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
         wizard.stepId = !identityValidation.isValid ? "identity" : "metadata";
         wizard.draft = wizard.draft || {};
         wizard.draft.saveFeedback = "Cannot save yet. Resolve the highlighted validation issues first.";
         draft.ui.assetManager.wizard = wizard;
-        return;
-      }
+      });
+      return false;
+    }
 
-      wizard.draft = wizard.draft || {};
-      applyWizardDraftDefaults(wizard);
-      const selectedTileBehavior = getTileBehaviorById(wizard.draft.tileBehavior);
-      const numericTileId = Number.parseInt(wizard.draft.tileNumericId, 10);
-      const drawW = Number.parseInt(wizard.draft.drawWidth, 10);
-      const drawH = Number.parseInt(wizard.draft.drawHeight, 10);
-      const footprint = parseFootprint(wizard.draft.footprint);
-      const registerResult = registerTileSpriteOption({
-        catalogId: wizard.draft.catalogId,
-        label: wizard.draft.displayName,
+    const resolvedDraft = getAssetWizardDraftWithDefaults(currentWizard.assetType, currentWizard.draft || {});
+    const selectedTileBehavior = getTileBehaviorById(resolvedDraft.tileBehavior);
+    const numericTileId = Number.parseInt(resolvedDraft.tileNumericId, 10);
+    const drawW = Number.parseInt(resolvedDraft.drawWidth, 10);
+    const drawH = Number.parseInt(resolvedDraft.drawHeight, 10);
+    const footprint = parseFootprint(resolvedDraft.footprint);
+    const bridgeResult = await saveTileThroughLocalBridge({
+      draft: resolvedDraft,
+      tilePayload: {
+        catalogId: resolvedDraft.catalogId,
+        label: resolvedDraft.displayName,
         tileId: numericTileId,
-        img: wizard.draft.spritePreviewUrl || wizard.draft.spritePath || null,
         drawW,
         drawH,
-        drawAnchor: wizard.draft.drawAnchor,
+        drawAnchor: resolvedDraft.drawAnchor,
         footprint,
-        collisionType: selectedTileBehavior?.collisionType || wizard.draft.collisionType,
+        collisionType: selectedTileBehavior?.collisionType || resolvedDraft.collisionType,
         group: "Custom",
-      });
-      if (!registerResult.ok) {
-        wizard.stepId = "identity";
-        wizard.draft.catalogIdAvailability = registerResult.reason === "duplicate-catalog-id" ? "taken" : wizard.draft.catalogIdAvailability;
-        wizard.draft.saveFeedback = registerResult.reason === "duplicate-catalog-id"
-          ? "Catalog id already exists. Choose another id."
-          : "Tile registration failed due to invalid data.";
-        draft.ui.assetManager.wizard = wizard;
-        return;
-      }
+      },
+      spriteFile: selectedAssetWizardSpriteFile,
+    });
 
+    if (!bridgeResult.ok) {
+      store.setState((draft) => {
+        const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+        wizard.stepId = bridgeResult.reason === "duplicate-catalog-id" ? "identity" : wizard.stepId || "save";
+        wizard.draft = wizard.draft || {};
+        wizard.draft.catalogIdAvailability = bridgeResult.reason === "duplicate-catalog-id" ? "taken" : wizard.draft.catalogIdAvailability;
+        wizard.draft.saveFeedback = bridgeResult.message || "Persistent save failed.";
+        draft.ui.assetManager.wizard = wizard;
+      });
+      return false;
+    }
+
+    const registerResult = registerTileSpriteOption({
+      catalogId: bridgeResult.persistedTile?.catalogId || resolvedDraft.catalogId,
+      label: bridgeResult.persistedTile?.label || resolvedDraft.displayName,
+      tileId: bridgeResult.persistedTile?.tileId || numericTileId,
+      img: bridgeResult.persistedTile?.img || null,
+      drawW: bridgeResult.persistedTile?.drawW || drawW,
+      drawH: bridgeResult.persistedTile?.drawH || drawH,
+      drawAnchor: bridgeResult.persistedTile?.drawAnchor || resolvedDraft.drawAnchor,
+      footprint: bridgeResult.persistedTile?.footprint || footprint,
+      collisionType: bridgeResult.persistedTile?.collisionType || selectedTileBehavior?.collisionType || resolvedDraft.collisionType,
+      group: bridgeResult.persistedTile?.group || "Custom",
+    });
+    if (!registerResult.ok) {
+      store.setState((draft) => {
+        const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+        wizard.stepId = "identity";
+        wizard.draft = wizard.draft || {};
+        wizard.draft.catalogIdAvailability = registerResult.reason === "duplicate-catalog-id" ? "taken" : wizard.draft.catalogIdAvailability;
+        wizard.draft.saveFeedback = "Tile saved on disk, but editor catalog refresh failed. Reload the page.";
+        draft.ui.assetManager.wizard = wizard;
+      });
+      return false;
+    }
+
+    store.setState((draft) => {
+      const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
       draft.brush.activeDraft.sprite = registerResult.option.value;
       setActiveLayer(draft, PANEL_LAYERS.TILES);
       draft.interaction.activeTool = EDITOR_TOOLS.PAINT;
       draft.ui.assetManager.selectedCategory = "tiles";
       draft.ui.assetManager.activeView = "wizard";
-      draft.ui.importStatus = `Tile created: ${wizard.draft.displayName || registerResult.option.label || registerResult.option.value}`;
+      draft.ui.importStatus = `Tile created (persisted): ${resolvedDraft.displayName || registerResult.option.label || registerResult.option.value}`;
       cleanupWizardPreview(wizard);
       draft.ui.assetManager.wizard = createInitialAssetManagerWizardState();
       draft.ui.assetManager.isOpen = false;
-      didSave = true;
+      selectedAssetWizardSpriteFile = null;
     });
-    return didSave;
+    return true;
   };
 
   const moveAssetWizardStep = (direction) => {
@@ -7335,6 +7369,7 @@ if (event.shiftKey) {
             wizard.selectedExistingAssetId = "";
             wizard.draft = {};
             wizard.draft.catalogIdManuallyEdited = false;
+            selectedAssetWizardSpriteFile = null;
             draft.ui.assetManager.wizard = wizard;
           });
         }
@@ -7348,6 +7383,7 @@ if (event.shiftKey) {
             wizard.assetType = type;
             wizard.selectedExistingAssetId = "";
             wizard.draft = {};
+            selectedAssetWizardSpriteFile = null;
             applyWizardDraftDefaults(wizard);
             syncWizardCatalogIdHint(wizard);
             draft.ui.assetManager.wizard = wizard;
@@ -7366,7 +7402,7 @@ if (event.shiftKey) {
       if (action === "wizard-next") {
         const wizard = store.getState().ui.assetManager.wizard || createInitialAssetManagerWizardState();
         if (wizard.stepId === "save" && wizard.assetType === ASSET_WIZARD_TYPES.TILE && wizard.mode === ASSET_WIZARD_MODES.CREATE) {
-          attemptTileWizardSave();
+          void attemptTileWizardSave();
         } else {
           moveAssetWizardStep(1);
         }
@@ -7376,6 +7412,7 @@ if (event.shiftKey) {
         store.setState((draft) => {
           cleanupWizardPreview(draft.ui.assetManager.wizard);
           draft.ui.assetManager.wizard = createInitialAssetManagerWizardState();
+          selectedAssetWizardSpriteFile = null;
         });
       }
       return;
@@ -7453,6 +7490,7 @@ if (event.shiftKey) {
           wizard.draft[field] = `selected://${file.name}`;
           wizard.draft.spriteFileName = file.name;
           wizard.draft.spritePreviewUrl = previewUrl;
+          selectedAssetWizardSpriteFile = file;
           syncWizardCatalogIdHint(wizard);
           if (shouldAutofillWidth || shouldAutofillHeight) {
             const probeImage = new Image();
@@ -7475,6 +7513,7 @@ if (event.shiftKey) {
           wizard.draft[field] = "";
           wizard.draft.spriteFileName = "";
           wizard.draft.spritePreviewUrl = "";
+          selectedAssetWizardSpriteFile = null;
           syncWizardCatalogIdHint(wizard);
         }
         applyWizardDraftDefaults(wizard);
