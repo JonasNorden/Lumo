@@ -340,14 +340,16 @@ function renderPreviewPane(wizard) {
   if (!previewSource) {
     return `
       <aside class="assetWizardPreviewPane" aria-label="Sprite preview">
-        <h5>Preview / Workbench</h5>
+        <h5>Sprite Preview</h5>
+        <p class="assetWizardPreviewHelp">Preview is intentionally secondary so the form remains the dominant workspace.</p>
         <div class="assetWizardPreviewPlaceholder">No preview available yet</div>
       </aside>
     `;
   }
   return `
     <aside class="assetWizardPreviewPane" aria-label="Sprite preview">
-      <h5>Preview / Workbench</h5>
+      <h5>Sprite Preview</h5>
+      <p class="assetWizardPreviewHelp">Current sprite draft rendered from selected source.</p>
       <div class="assetWizardPreviewCanvas">
         <img src="${escapeHtml(previewSource)}" alt="Selected sprite preview" />
       </div>
@@ -363,35 +365,39 @@ function renderWizardPane(wizard) {
   const canMoveNext = currentIndex < (steps.length - 1) && stepValidation.isValid;
 
   return `
-    <section class="assetManagerContentPane assetWizardPane assetWizardWorkbenchPane" aria-label="Asset wizard">
-      <div class="assetWizardHeader">
-        <h4>Guided Asset Wizard</h4>
-        <p>Wizard-first registration shell for LumoEditor V2 asset manager.</p>
-      </div>
+    <section class="assetWizardWorkbench" aria-label="Asset wizard">
+      <div class="assetWizardWorkbenchShell">
+        <div class="assetWizardMainPane">
+          <div class="assetWizardHeader">
+            <h4>Guided Asset Wizard</h4>
+            <p>Wizard-first registration shell for LumoEditor V2 asset manager.</p>
+          </div>
 
-      <ol class="assetWizardSteps" aria-label="Wizard progression">
-        ${steps.map((stepId, index) => {
-          const isActive = index === currentIndex;
-          const isDone = index < currentIndex && isStepComplete(stepId, wizard);
-          return `<li class="assetWizardStep${isActive ? " isActive" : ""}${isDone ? " isDone" : ""}"><span>${index + 1}. ${escapeHtml(getStepTitle(stepId))}</span></li>`;
-        }).join("")}
-      </ol>
+          <ol class="assetWizardSteps" aria-label="Wizard progression">
+            ${steps.map((stepId, index) => {
+              const isActive = index === currentIndex;
+              const isDone = index < currentIndex && isStepComplete(stepId, wizard);
+              return `<li class="assetWizardStep${isActive ? " isActive" : ""}${isDone ? " isDone" : ""}"><span>${index + 1}. ${escapeHtml(getStepTitle(stepId))}</span></li>`;
+            }).join("")}
+          </ol>
 
-      <div class="assetWizardWorkspace">
-        <div class="assetWizardFormColumn">
-          ${renderStepBody(wizard, stepValidation)}
+          <div class="assetWizardMainBody">
+            ${renderStepBody(wizard, stepValidation)}
+          </div>
+          ${!stepValidation.isValid && stepValidation.blockingReason ? `<p class="assetWizardStepNotice" role="alert">${escapeHtml(stepValidation.blockingReason)}</p>` : ""}
+
+          <footer class="assetWizardFooter">
+            <button type="button" class="assetWizardNavButton" data-asset-manager-action="wizard-cancel">Cancel</button>
+            <div class="assetWizardFooterRight">
+              <button type="button" class="assetWizardNavButton" data-asset-manager-action="wizard-back" ${canMoveBack ? "" : "disabled"}>Back</button>
+              <button type="button" class="assetWizardNavButton isPrimary" data-asset-manager-action="wizard-next" ${canMoveNext ? "" : "disabled"}>${currentIndex === (steps.length - 1) ? "Done" : "Next"}</button>
+            </div>
+          </footer>
         </div>
-        ${renderPreviewPane(wizard)}
-      </div>
-      ${!stepValidation.isValid && stepValidation.blockingReason ? `<p class="assetWizardStepNotice" role="alert">${escapeHtml(stepValidation.blockingReason)}</p>` : ""}
-
-      <footer class="assetWizardFooter">
-        <button type="button" class="assetWizardNavButton" data-asset-manager-action="wizard-cancel">Cancel</button>
-        <div class="assetWizardFooterRight">
-          <button type="button" class="assetWizardNavButton" data-asset-manager-action="wizard-back" ${canMoveBack ? "" : "disabled"}>Back</button>
-          <button type="button" class="assetWizardNavButton isPrimary" data-asset-manager-action="wizard-next" ${canMoveNext ? "" : "disabled"}>${currentIndex === (steps.length - 1) ? "Done" : "Next"}</button>
+        <div class="assetWizardAsidePane">
+          ${renderPreviewPane(wizard)}
         </div>
-      </footer>
+      </div>
     </section>
   `;
 }
@@ -488,7 +494,7 @@ export function getAssetManagerModalContent(state) {
           <button type="button" class="assetManagerTabButton${activeView === "overview" ? " isActive" : ""}" data-asset-manager-action="set-view" data-asset-manager-view="overview" role="tab" aria-selected="${activeView === "overview" ? "true" : "false"}">Overview / Audit</button>
         </div>
 
-        <div class="assetManagerBody">
+        <div class="assetManagerBody${activeView === "wizard" ? " isWizardView" : ""}">
           ${activeView === "overview" ? `
             <aside class="assetManagerCategoryRail" aria-label="Asset categories">
               ${ASSET_MANAGER_CATEGORIES.map((category) => {
