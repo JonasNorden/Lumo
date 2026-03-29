@@ -2,6 +2,7 @@ import { BRUSH_SPRITE_OPTIONS } from "../tiles/tileSpriteCatalog.js";
 import { BACKGROUND_MATERIAL_OPTIONS } from "../background/materialCatalog.js";
 import { DECOR_PRESETS } from "../decor/decorPresets.js";
 import { ENTITY_PRESETS } from "../entities/entityPresets.js";
+import { GRID_SIZE } from "../../../core/constants.js";
 
 export const ASSET_WIZARD_MODES = {
   CREATE: "create",
@@ -59,9 +60,13 @@ function normalizeString(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function isPositiveNumber(value) {
+function toPositiveNumberOrNull(value) {
   const numeric = Number.parseFloat(value);
-  return Number.isFinite(numeric) && numeric > 0;
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+function isPositiveNumber(value) {
+  return toPositiveNumberOrNull(value) !== null;
 }
 
 function isInteger(value) {
@@ -73,10 +78,40 @@ function isHexColor(value) {
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(normalizeString(value));
 }
 
+function normalizeDrawSizeValue(value) {
+  const resolved = toPositiveNumberOrNull(value);
+  return resolved === null ? String(GRID_SIZE) : String(Math.round(resolved));
+}
+
+export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
+  const baseDraft = { ...(draft || {}) };
+  if (assetType === ASSET_WIZARD_TYPES.TILE) {
+    return {
+      ...baseDraft,
+      collisionType: normalizeString(baseDraft.collisionType) || "solid",
+      drawAnchor: normalizeString(baseDraft.drawAnchor) || "BL",
+      drawWidth: normalizeDrawSizeValue(baseDraft.drawWidth),
+      drawHeight: normalizeDrawSizeValue(baseDraft.drawHeight),
+      footprint: normalizeString(baseDraft.footprint) || '{"w":1,"h":1}',
+    };
+  }
+  if (assetType === ASSET_WIZARD_TYPES.BACKGROUND) {
+    return {
+      ...baseDraft,
+      drawAnchor: normalizeString(baseDraft.drawAnchor) || "BL",
+      drawWidth: normalizeDrawSizeValue(baseDraft.drawWidth),
+      drawHeight: normalizeDrawSizeValue(baseDraft.drawHeight),
+      fallbackColor: normalizeString(baseDraft.fallbackColor) || "#3d4b63",
+      footprint: normalizeString(baseDraft.footprint) || '{"w":1,"h":1}',
+    };
+  }
+  return baseDraft;
+}
+
 export function getStepValidation(stepId, wizardState) {
   const mode = wizardState?.mode;
   const assetType = wizardState?.assetType;
-  const draft = wizardState?.draft || {};
+  const draft = getAssetWizardDraftWithDefaults(assetType, wizardState?.draft || {});
   const fieldErrors = {};
 
   if (stepId === "mode") {
