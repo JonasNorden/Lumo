@@ -2531,6 +2531,7 @@ kbd {
   backdrop-filter: blur(14px);
   overflow: hidden;
   display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -2562,6 +2563,7 @@ kbd {
 
 .assetManagerBody {
   min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 230px minmax(0, 1fr);
   gap: 12px;
@@ -2720,11 +2722,14 @@ kbd {
 }
 
 .assetWizardWorkbench {
+  min-width: 0;
+  height: 100%;
   min-height: 0;
 }
 
 .assetWizardWorkbenchShell {
-  min-height: min(66vh, 620px);
+  height: 100%;
+  min-height: 0;
   border: 1px solid #22314f;
   border-radius: 14px;
   background: rgba(11, 17, 29, 0.7);

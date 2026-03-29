@@ -22,6 +22,7 @@ import {
 import { getVolumePreviewEnvironmentMetrics } from "../ui/volumePreviewEnvironment.js";
 import {
   createInitialAssetManagerWizardState,
+  getAssetWizardDraftWithDefaults,
   getAssetManagerModalContent,
   getStepsForWizard,
   isStepComplete,
@@ -7146,6 +7147,15 @@ if (event.shiftKey) {
     wizard.draft.spritePreviewUrl = "";
   };
 
+  const hasPositiveWizardDrawSize = (value) => {
+    const numeric = Number.parseFloat(value);
+    return Number.isFinite(numeric) && numeric > 0;
+  };
+
+  const applyWizardDraftDefaults = (wizard) => {
+    wizard.draft = getAssetWizardDraftWithDefaults(wizard.assetType, wizard.draft || {});
+  };
+
   const moveAssetWizardStep = (direction) => {
     const steps = getStepsForWizard();
     store.setState((draft) => {
@@ -7242,6 +7252,7 @@ if (event.shiftKey) {
             wizard.assetType = type;
             wizard.selectedExistingAssetId = "";
             wizard.draft = {};
+            applyWizardDraftDefaults(wizard);
             draft.ui.assetManager.wizard = wizard;
           });
         }
@@ -7325,17 +7336,38 @@ if (event.shiftKey) {
       store.setState((draft) => {
         const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
         wizard.draft = wizard.draft || {};
+        applyWizardDraftDefaults(wizard);
         releaseWizardPreviewUrl(wizard.draft.spritePreviewUrl);
+        const shouldAutofillWidth = !hasPositiveWizardDrawSize(wizard.draft.drawWidth);
+        const shouldAutofillHeight = !hasPositiveWizardDrawSize(wizard.draft.drawHeight);
         if (file) {
           const previewUrl = URL.createObjectURL(file);
           wizard.draft[field] = `selected://${file.name}`;
           wizard.draft.spriteFileName = file.name;
           wizard.draft.spritePreviewUrl = previewUrl;
+          if (shouldAutofillWidth || shouldAutofillHeight) {
+            const probeImage = new Image();
+            probeImage.addEventListener("load", () => {
+              const naturalWidth = Number.isFinite(probeImage.naturalWidth) && probeImage.naturalWidth > 0 ? probeImage.naturalWidth : null;
+              const naturalHeight = Number.isFinite(probeImage.naturalHeight) && probeImage.naturalHeight > 0 ? probeImage.naturalHeight : null;
+              store.setState((imageDraft) => {
+                const imageWizard = imageDraft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+                imageWizard.draft = imageWizard.draft || {};
+                if (imageWizard.draft.spritePreviewUrl !== previewUrl) return;
+                if (shouldAutofillWidth && naturalWidth !== null) imageWizard.draft.drawWidth = String(naturalWidth);
+                if (shouldAutofillHeight && naturalHeight !== null) imageWizard.draft.drawHeight = String(naturalHeight);
+                applyWizardDraftDefaults(imageWizard);
+                imageDraft.ui.assetManager.wizard = imageWizard;
+              });
+            }, { once: true });
+            probeImage.src = previewUrl;
+          }
         } else {
           wizard.draft[field] = "";
           wizard.draft.spriteFileName = "";
           wizard.draft.spritePreviewUrl = "";
         }
+        applyWizardDraftDefaults(wizard);
         draft.ui.assetManager.wizard = wizard;
       });
       return;

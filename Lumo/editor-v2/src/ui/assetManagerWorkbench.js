@@ -7,6 +7,7 @@ import {
   ASSET_WIZARD_MODES,
   ASSET_WIZARD_TYPE_OPTIONS,
   createInitialAssetManagerWizardState,
+  getAssetWizardDraftWithDefaults,
   getExistingAssetOptions,
   getFirstIncompleteStep,
   getTileNumericIdOptions,
@@ -15,7 +16,7 @@ import {
   isStepComplete,
 } from "../domain/assets/assetManagerWizardModel.js";
 
-export { createInitialAssetManagerWizardState, getFirstIncompleteStep, getStepsForWizard, isStepComplete };
+export { createInitialAssetManagerWizardState, getAssetWizardDraftWithDefaults, getFirstIncompleteStep, getStepsForWizard, isStepComplete };
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -168,7 +169,7 @@ function renderSelectInput(label, field, value, optionsList = [], description = 
 function renderStepBody(wizard, validation) {
   const mode = wizard.mode;
   const type = wizard.assetType;
-  const draft = wizard.draft || {};
+  const draft = getAssetWizardDraftWithDefaults(type, wizard.draft || {});
   const fieldErrors = validation?.fieldErrors || {};
 
   if (wizard.stepId === "mode") {
