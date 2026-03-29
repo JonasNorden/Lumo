@@ -24,6 +24,125 @@ export const ASSET_WIZARD_TYPE_OPTIONS = [
   { id: ASSET_WIZARD_TYPES.ENTITY, label: "Entity" },
 ];
 
+const TILE_BEHAVIOR_DEFINITIONS = [
+  {
+    id: "solid",
+    label: "Solid",
+    tileId: 15,
+    collisionType: "solid",
+    helpText: "Standard blocking ground/wall tile.",
+  },
+  {
+    id: "ice",
+    label: "Ice",
+    tileId: 4,
+    collisionType: "solid",
+    helpText: "Slippery solid surface with low friction.",
+  },
+  {
+    id: "one-way",
+    label: "One-way Platform",
+    tileId: 2,
+    collisionType: "oneWay",
+    helpText: "Pass upward through it, land on top.",
+  },
+  {
+    id: "hazard",
+    label: "Hazard",
+    tileId: 3,
+    collisionType: "hazard",
+    helpText: "Damaging surface; does not block movement.",
+  },
+  {
+    id: "brake",
+    label: "Brake",
+    tileId: 5,
+    collisionType: "solid",
+    helpText: "Very high-friction solid surface that slows movement.",
+  },
+];
+
+const TILE_BEHAVIOR_BY_ID = new Map(TILE_BEHAVIOR_DEFINITIONS.map((item) => [item.id, item]));
+
+const TILE_ID_TO_BEHAVIOR_ID = new Map([
+  [1, "solid"],
+  [2, "one-way"],
+  [3, "hazard"],
+  [4, "ice"],
+  [5, "brake"],
+  [6, "solid"],
+  [7, "solid"],
+  [8, "solid"],
+  [9, "solid"],
+  [10, "solid"],
+  [11, "solid"],
+  [12, "solid"],
+  [13, "solid"],
+  [14, "solid"],
+  [15, "solid"],
+  [16, "ice"],
+]);
+
+function getBehaviorIdForTileId(tileId) {
+  const numericTileId = Number.parseInt(tileId, 10);
+  if (!Number.isInteger(numericTileId)) return "solid";
+  return TILE_ID_TO_BEHAVIOR_ID.get(numericTileId) || "solid";
+}
+
+export function getTileBehaviorAuditGroups() {
+  const idsByBehavior = new Map(TILE_BEHAVIOR_DEFINITIONS.map((item) => [item.id, new Set()]));
+  for (const option of BRUSH_SPRITE_OPTIONS) {
+    if (!Number.isInteger(option?.tileId)) continue;
+    const behaviorId = getBehaviorIdForTileId(option.tileId);
+    idsByBehavior.get(behaviorId)?.add(option.tileId);
+  }
+
+  return TILE_BEHAVIOR_DEFINITIONS.map((behavior) => {
+    const available = Array.from(idsByBehavior.get(behavior.id) || []).sort((a, b) => a - b);
+    return {
+      behaviorId: behavior.id,
+      label: behavior.label,
+      canonicalTileId: behavior.tileId,
+      exposedTileIds: available,
+      includesCanonicalId: available.includes(behavior.tileId),
+    };
+  });
+}
+
+export function getTileBehaviorOptions() {
+  return TILE_BEHAVIOR_DEFINITIONS.map((behavior) => ({
+    value: behavior.id,
+    label: `${behavior.label} · tileId ${behavior.tileId}`,
+    helpText: behavior.helpText,
+  }));
+}
+
+export function getTileBehaviorById(behaviorId) {
+  const normalized = normalizeString(behaviorId);
+  return TILE_BEHAVIOR_BY_ID.get(normalized) || null;
+}
+
+export function getCanonicalTileIdForBehavior(behaviorId) {
+  return getTileBehaviorById(behaviorId)?.tileId ?? null;
+}
+
+export function getTileBehaviorForTileId(tileId) {
+  return getTileBehaviorById(getBehaviorIdForTileId(tileId));
+}
+
+export function syncTileBehaviorDraftFields(draft = {}) {
+  const nextDraft = { ...(draft || {}) };
+  const behaviorFromField = getTileBehaviorById(nextDraft.tileBehavior);
+  const behaviorFromTileId = getTileBehaviorForTileId(nextDraft.tileNumericId);
+  const resolvedBehavior = behaviorFromField || behaviorFromTileId || TILE_BEHAVIOR_DEFINITIONS[0];
+  if (!resolvedBehavior) return nextDraft;
+
+  nextDraft.tileBehavior = resolvedBehavior.id;
+  nextDraft.tileNumericId = String(resolvedBehavior.tileId);
+  nextDraft.collisionType = resolvedBehavior.collisionType;
+  return nextDraft;
+}
+
 export function getTileNumericIdOptions() {
   return BRUSH_SPRITE_OPTIONS
     .filter((item) => Number.isInteger(item?.tileId))
@@ -37,7 +156,7 @@ export function getTileNumericIdOptions() {
 export function isKnownTileNumericId(value) {
   const normalized = normalizeString(value);
   if (!isInteger(normalized)) return false;
-  const knownIds = new Set(getTileNumericIdOptions().map((option) => option.value));
+  const knownIds = new Set(TILE_BEHAVIOR_DEFINITIONS.map((behavior) => String(behavior.tileId)));
   return knownIds.has(normalized);
 }
 
@@ -117,14 +236,14 @@ export function suggestTileCatalogId({ displayName = "", spriteFileName = "", cu
 export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
   const baseDraft = { ...(draft || {}) };
   if (assetType === ASSET_WIZARD_TYPES.TILE) {
-    return {
+    return syncTileBehaviorDraftFields({
       ...baseDraft,
       collisionType: normalizeString(baseDraft.collisionType) || "solid",
       drawAnchor: normalizeString(baseDraft.drawAnchor) || "BL",
       drawWidth: normalizeDrawSizeValue(baseDraft.drawWidth),
       drawHeight: normalizeDrawSizeValue(baseDraft.drawHeight),
       footprint: normalizeString(baseDraft.footprint) || '{"w":1,"h":1}',
-    };
+    });
   }
   if (assetType === ASSET_WIZARD_TYPES.BACKGROUND) {
     return {
@@ -186,7 +305,8 @@ export function getStepValidation(stepId, wizardState) {
       else if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalizeString(draft.catalogId))) fieldErrors.catalogId = "Catalog id must be lowercase letters, numbers, and hyphens only.";
       else if (isTileCatalogIdTaken(draft.catalogId)) fieldErrors.catalogId = "Catalog id already exists. Choose a different id.";
       if (!normalizeString(draft.displayName)) fieldErrors.displayName = "Display name is required.";
-      if (!isKnownTileNumericId(draft.tileNumericId)) fieldErrors.tileNumericId = "Tile numeric id must be selected from known runtime tile ids.";
+      if (!getTileBehaviorById(draft.tileBehavior)) fieldErrors.tileBehavior = "Choose a tile behavior from supported runtime behaviors.";
+      if (!isKnownTileNumericId(draft.tileNumericId)) fieldErrors.tileNumericId = "Selected behavior must map to a known runtime tile id.";
       if (!normalizeString(draft.spritePath)) fieldErrors.spritePath = "Select a sprite file.";
       const isValid = Object.keys(fieldErrors).length === 0;
       return { isValid, fieldErrors, blockingReason: isValid ? "" : "Complete required identity fields to continue." };
@@ -207,7 +327,7 @@ export function getStepValidation(stepId, wizardState) {
       if (!normalizeString(draft.drawAnchor)) fieldErrors.drawAnchor = "Draw anchor is required.";
       if (!isPositiveNumber(draft.drawWidth)) fieldErrors.drawWidth = "Draw width must be a positive number.";
       if (!isPositiveNumber(draft.drawHeight)) fieldErrors.drawHeight = "Draw height must be a positive number.";
-      if (!isValidFootprint(draft.footprint)) fieldErrors.footprint = "Footprint must be JSON with positive w/h, e.g. {\"w\":1,\"h\":1}.";
+      if (!isValidFootprint(draft.footprint)) fieldErrors.footprint = 'Footprint must be JSON with positive w/h, e.g. {"w":1,"h":1}.';
       const isValid = Object.keys(fieldErrors).length === 0;
       return { isValid, fieldErrors, blockingReason: isValid ? "" : "Resolve metadata validation issues to continue." };
     }
