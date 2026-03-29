@@ -13,6 +13,17 @@ python3 -m http.server 4173
 
 Besök sedan `http://localhost:4173/editor-v2/`.
 
+## Tile persistence bridge (local dev)
+
+För beständig Tile-save i Asset Manager wizard (överlever reload/F5), starta också den lokala bridge-servern:
+
+```bash
+cd Lumo
+node editor-v2/dev/localTileSaveBridge.js
+```
+
+Bridge-endpoint: `POST http://localhost:4180/api/editor-v2/tiles/save`.
+
 ## Struktur
 
 - `app/` app shell och bootstrap
