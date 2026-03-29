@@ -2693,12 +2693,227 @@ kbd {
   letter-spacing: 0.06em;
 }
 
+
+.assetManagerViewToggle {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.assetManagerTabButton {
+  border: 1px solid #263554;
+  background: #0f172a;
+  color: #c6d5f2;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.assetManagerTabButton.isActive {
+  border-color: #7496e9;
+  background: rgba(71, 101, 168, 0.3);
+  color: #eaf1ff;
+}
+
+.assetWizardPane {
+  border: 1px solid #22314f;
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(11, 17, 29, 0.7);
+}
+
+.assetWizardHeader h4 {
+  margin: 0;
+  color: #f0f5ff;
+  font-size: 14px;
+}
+
+.assetWizardHeader p {
+  margin: 4px 0 0;
+  color: #90a7cf;
+  font-size: 12px;
+}
+
+.assetWizardSteps {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.assetWizardStep {
+  border: 1px solid #243250;
+  border-radius: 9px;
+  padding: 6px 8px;
+  color: #839ac2;
+  font-size: 11px;
+}
+
+.assetWizardStep.isActive {
+  border-color: #7ea2f0;
+  color: #eaf2ff;
+  background: rgba(56, 86, 150, 0.28);
+}
+
+.assetWizardStep.isDone {
+  border-color: #466196;
+  color: #afc6f3;
+}
+
+.assetWizardSection {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.assetWizardSection h4 {
+  margin: 0;
+  color: #e7f0ff;
+  font-size: 14px;
+}
+
+.assetWizardSection p {
+  margin: 0;
+  color: #94abd2;
+  font-size: 12px;
+}
+
+.assetWizardChoiceGrid,
+.assetWizardTypeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.assetWizardChoiceButton,
+.assetWizardTypeButton,
+.assetWizardNavButton {
+  border: 1px solid #2a3a59;
+  background: #0f172a;
+  color: #c8d8f5;
+  border-radius: 10px;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.assetWizardChoiceButton span {
+  display: block;
+  color: #8ea6ce;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.assetWizardTypeButton {
+  text-align: center;
+}
+
+.assetWizardChoiceButton.isActive,
+.assetWizardTypeButton.isActive {
+  border-color: #7b9eeb;
+  background: rgba(61, 93, 161, 0.28);
+  color: #ebf3ff;
+}
+
+.assetWizardFieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.assetWizardField {
+  display: grid;
+  gap: 4px;
+}
+
+.assetWizardFieldLabel {
+  color: #d7e5ff;
+  font-size: 12px;
+}
+
+.assetWizardFieldHelp {
+  color: #7f96be;
+  font-size: 11px;
+}
+
+.assetWizardField input,
+.assetWizardField select {
+  border: 1px solid #2a3a5c;
+  background: #0a1220;
+  border-radius: 9px;
+  color: #ecf2ff;
+  min-height: 34px;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+.assetWizardReviewTable {
+  border: 1px solid #223454;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.assetWizardReviewRow {
+  display: grid;
+  grid-template-columns: 170px minmax(0, 1fr);
+  gap: 8px;
+  padding: 7px 9px;
+  border-top: 1px solid #1a2943;
+  color: #bcd0f3;
+  font-size: 12px;
+}
+
+.assetWizardReviewRow:first-child {
+  border-top: none;
+}
+
+.assetWizardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.assetWizardFooterRight {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.assetWizardNavButton {
+  min-height: 34px;
+  border-radius: 9px;
+  padding: 7px 12px;
+}
+
+.assetWizardNavButton.isPrimary {
+  border-color: #7ea2ec;
+  color: #eff5ff;
+}
+
+.assetWizardNavButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 @media (max-width: 1100px) {
   .assetManagerBody {
     grid-template-columns: 1fr;
   }
 
   .assetManagerGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .assetWizardSteps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .assetWizardFieldGrid,
+  .assetWizardChoiceGrid,
+  .assetWizardTypeGrid {
     grid-template-columns: 1fr;
   }
 }
