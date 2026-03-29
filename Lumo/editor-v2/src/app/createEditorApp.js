@@ -20,6 +20,7 @@ import {
   resolveSelectedSpecialVolume,
 } from "../ui/specialVolumeWorkbench.js";
 import { getVolumePreviewEnvironmentMetrics } from "../ui/volumePreviewEnvironment.js";
+import { getAssetManagerModalContent } from "../ui/assetManagerWorkbench.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
 import {
@@ -2526,10 +2527,16 @@ export function createEditorApp({
 
   const renderFloatingPanels = (state) => {
     const focusedField = document.activeElement instanceof HTMLInputElement
-      ? document.activeElement.dataset.newLevelField || document.activeElement.dataset.entityParamPath || null
+      ? document.activeElement.dataset.newLevelField || document.activeElement.dataset.entityParamPath || document.activeElement.dataset.assetManagerField || null
       : null;
     const focusedScope = document.activeElement instanceof HTMLInputElement
-      ? (document.activeElement.dataset.newLevelField ? "new-level" : document.activeElement.dataset.entityParamPath ? "fog-workbench" : null)
+      ? (document.activeElement.dataset.newLevelField
+        ? "new-level"
+        : document.activeElement.dataset.entityParamPath
+          ? "fog-workbench"
+          : document.activeElement.dataset.assetManagerField
+            ? "asset-manager"
+            : null)
       : null;
     const selectionStart = focusedField && typeof document.activeElement.selectionStart === "number"
       ? document.activeElement.selectionStart
@@ -2543,8 +2550,10 @@ export function createEditorApp({
 
     const fogWorkbenchModal = getSpecialVolumeWorkbenchModalContent(state);
     const fogWorkbenchLauncher = getSpecialVolumeWorkbenchLauncherContent(state);
-    floatingPanelHost.innerHTML = `${renderNewLevelSizePopover(state)}${fogWorkbenchLauncher}${fogWorkbenchModal?.markup || ""}`;
+    const assetManagerModal = getAssetManagerModalContent(state);
+    floatingPanelHost.innerHTML = `${renderNewLevelSizePopover(state)}${fogWorkbenchLauncher}${fogWorkbenchModal?.markup || ""}${assetManagerModal?.markup || ""}`;
     floatingPanelHost.classList.toggle("hasSpecialVolumeWorkbench", Boolean(fogWorkbenchModal));
+    floatingPanelHost.classList.toggle("hasAssetManagerWorkbench", Boolean(assetManagerModal));
     syncFogPreviewMotionLoop();
     syncWaterPreviewMotionLoop();
     syncLavaPreviewMotionLoop();
@@ -2556,7 +2565,9 @@ export function createEditorApp({
       : focusedScope === "fog-workbench" && fogWorkbenchModal
         ? Array.from(floatingPanelHost.querySelectorAll("[data-entity-param-path]"))
           .find((input) => input instanceof HTMLInputElement && input.dataset.entityParamPath === focusedField) || null
-        : null;
+        : focusedScope === "asset-manager" && assetManagerModal
+          ? floatingPanelHost.querySelector(`[data-asset-manager-field="${CSS.escape(focusedField)}"]`)
+          : null;
     if (nextField instanceof HTMLInputElement) {
       nextField.focus({ preventScroll: true });
       if (typeof selectionStart === "number" && typeof selectionEnd === "number") {
@@ -6962,6 +6973,14 @@ if (event.shiftKey) {
       }
     }
 
+    if (store.getState().ui.assetManager?.isOpen && event.key === "Escape") {
+      event.preventDefault();
+      store.setState((draft) => {
+        draft.ui.assetManager.isOpen = false;
+      });
+      return;
+    }
+
     if (event.key === "Escape") {
       const selection = resolveSelectedSpecialVolume(store.getState());
       if (selection && isSpecialVolumeEntityType(selection.entity?.type)) {
@@ -7145,6 +7164,28 @@ if (event.shiftKey) {
       return;
     }
 
+    const assetManagerActionButton = target.closest("[data-asset-manager-action]");
+    if (assetManagerActionButton instanceof HTMLButtonElement) {
+      const action = assetManagerActionButton.dataset.assetManagerAction;
+      if (action === "close") {
+        store.setState((draft) => {
+          draft.ui.assetManager.isOpen = false;
+        });
+      }
+      return;
+    }
+
+    const assetManagerCategoryButton = target.closest("[data-asset-manager-category]");
+    if (assetManagerCategoryButton instanceof HTMLButtonElement) {
+      const category = assetManagerCategoryButton.dataset.assetManagerCategory;
+      if (category) {
+        store.setState((draft) => {
+          draft.ui.assetManager.selectedCategory = category;
+        });
+      }
+      return;
+    }
+
     const actionButton = target.closest("[data-new-level-action]");
     if (!(actionButton instanceof HTMLButtonElement)) return;
 
@@ -7310,6 +7351,11 @@ if (event.shiftKey) {
       const action = actionButton.dataset.topbarAction;
       if (action === "new") openNewLevelSizeFlow();
       if (action === "import") handleImport();
+      if (action === "assets") {
+        store.setState((draft) => {
+          draft.ui.assetManager.isOpen = true;
+        });
+      }
       if (action === "play-from-here") handlePlayFromHereLaunch();
       if (action === "undo") handleUndo();
       if (action === "redo") handleRedo();
@@ -7443,6 +7489,11 @@ if (event.shiftKey) {
     if (store.getState().ui.newLevelSize?.isOpen) {
       closeNewLevelSizeFlow();
     }
+    if (store.getState().ui.assetManager?.isOpen) {
+      store.setState((draft) => {
+        draft.ui.assetManager.isOpen = false;
+      });
+    }
     stopFogStepperSession();
   };
 
@@ -7488,6 +7539,7 @@ if (event.shiftKey) {
           height: String(doc?.dimensions?.height || DEFAULT_NEW_LEVEL_HEIGHT),
           error: null,
         };
+        state.ui.assetManager.isOpen = false;
         syncScanWithDocument(state, { preserveRange: false, preserveLog: false });
       });
       resize();
