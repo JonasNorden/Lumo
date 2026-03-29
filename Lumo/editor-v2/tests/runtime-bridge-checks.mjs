@@ -77,7 +77,7 @@ function runAdapterChecks() {
   assert.ok(runtimeLevel.layers.ents.find((entity) => entity.id === "fog_volume"), "fog_volume should bridge via runtime entity path");
   const flowerDecor = runtimeLevel.layers.ents.find((entity) => entity.id === "decor_flower_01");
   assert.ok(flowerDecor, "supported decor should bridge via runtime entity path");
-  assert.equal(flowerDecor?.params?.variant, "d", "decor variant should map to runtime params for runtime sprite variant selection");
+  assert.equal(flowerDecor?.params?.variant, 4, "flower decor variant should bridge as runtime variant index 1..4");
 
   assert.equal(
     unsupported.some((entry) => entry.includes("water_volume")),

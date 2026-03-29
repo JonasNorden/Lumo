@@ -13,6 +13,7 @@ import {
 import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 
 const MIXED_FIELD_VALUE = "__mixed__";
+const FLOWER_DECOR_TYPE = "decor_flower_01";
 
 function escapeHtml(value) {
   return String(value)
@@ -288,6 +289,40 @@ function renderParamFields(prefix, params, selectedIndex, itemId = null) {
   return Object.entries(cloneEntityParams(params))
     .map(([paramKey, paramValue]) => renderParamField(prefix, paramKey, paramValue, selectedIndex, itemId))
     .join("");
+}
+
+function resolveFlowerVariantParamValue(decor) {
+  const paramVariant = decor?.params?.variant;
+  const normalizedParamVariant = Number.parseInt(String(paramVariant ?? "").trim(), 10);
+  if (Number.isInteger(normalizedParamVariant) && normalizedParamVariant >= 1 && normalizedParamVariant <= 4) {
+    return String(normalizedParamVariant);
+  }
+
+  const normalizedLegacyVariant = String(decor?.variant || "").trim().toLowerCase();
+  if (normalizedLegacyVariant === "b") return "2";
+  if (normalizedLegacyVariant === "c") return "3";
+  if (normalizedLegacyVariant === "d") return "4";
+  return "1";
+}
+
+function renderFlowerVariantParamField(decor, selectedDecorIndex) {
+  const selectedVariant = resolveFlowerVariantParamValue(decor);
+  return `
+    <label class="fieldRow compactInline selectionInlineField selectionParamField">
+      <span class="label">Variant</span>
+      <select
+        data-decor-param-key="variant"
+        data-decor-param-type="number"
+        data-decor-index="${selectedDecorIndex}"
+        ${renderObjectDatasetAttr("decor", decor?.id || null)}
+      >
+        <option value="1" ${selectedVariant === "1" ? "selected" : ""}>1</option>
+        <option value="2" ${selectedVariant === "2" ? "selected" : ""}>2</option>
+        <option value="3" ${selectedVariant === "3" ? "selected" : ""}>3</option>
+        <option value="4" ${selectedVariant === "4" ? "selected" : ""}>4</option>
+      </select>
+    </label>
+  `;
 }
 
 function resolveSharedValue(values) {
@@ -605,6 +640,12 @@ function renderDecorEditor(decor, selectedDecorIndex) {
   const drawSize = `${decorVisual?.drawW || 24}×${decorVisual?.drawH || 24}px`;
   const anchor = decorVisual?.drawAnchor || "BL";
 
+  const isFlower = String(decor?.type || "").trim().toLowerCase() === FLOWER_DECOR_TYPE;
+  const decorParams = cloneEntityParams(decor?.params);
+  if (isFlower && Object.prototype.hasOwnProperty.call(decorParams, "variant")) {
+    delete decorParams.variant;
+  }
+
   return renderSelectionFields([
     `<div class="statusCard assetSelectionCard assetSelectionCardCompact">
       <div class="assetSelectionMeta">
@@ -616,8 +657,10 @@ function renderDecorEditor(decor, selectedDecorIndex) {
     renderNumberField("decor", "x", "X", decor.x, selectedDecorIndex, "", decor?.id || null),
     renderNumberField("decor", "y", "Y", decor.y, selectedDecorIndex, "", decor?.id || null),
     renderCheckboxField("decor", "visible", "Visible", decor.visible, selectedDecorIndex, "selectionFieldToggle", decor?.id || null),
-    renderTextField("decor", "variant", "Variant", decor.variant, selectedDecorIndex, "selectionFieldVariant selectionParamField", decor?.id || null),
-    renderParamFields("decor", decor?.params, selectedDecorIndex, decor?.id || null),
+    isFlower
+      ? renderFlowerVariantParamField(decor, selectedDecorIndex)
+      : renderTextField("decor", "variant", "Variant", decor.variant, selectedDecorIndex, "selectionFieldVariant selectionParamField", decor?.id || null),
+    renderParamFields("decor", decorParams, selectedDecorIndex, decor?.id || null),
   ].join(""));
 }
 

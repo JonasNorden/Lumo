@@ -21,6 +21,7 @@ const SUPPORTED_RUNTIME_ENTITY_IDS = new Set([
 const FALLBACK_RUNTIME_CATALOG_DECOR_IDS = new Set([
   "decor_flower_01",
 ]);
+const FLOWER_DECOR_TYPE = "decor_flower_01";
 
 const RUNTIME_BG_FALLBACK_ID = "bg_rock_01";
 const RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED = new Map([
@@ -65,6 +66,24 @@ const RUNTIME_BG_IMAGE_BASENAME_TO_ID = new Map([
 function cloneParams(params) {
   if (!params || typeof params !== "object") return {};
   return structuredClone(params);
+}
+
+function parseFlowerVariant(value) {
+  if (Number.isFinite(value)) {
+    const parsed = Math.round(value);
+    if (parsed >= 1 && parsed <= 4) return parsed;
+    return null;
+  }
+
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (/^[1-4]$/.test(normalized)) return Number.parseInt(normalized, 10);
+  if (normalized === "a" || normalized === "default") return 1;
+  if (normalized === "b") return 2;
+  if (normalized === "c") return 3;
+  if (normalized === "d") return 4;
+  return null;
 }
 
 function buildRuntimeTileVisualOverrides(levelDocument, tileSize) {
@@ -436,6 +455,12 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
     const drawAnchor = String(visual?.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL";
     const drawOffX = Number.isFinite(visual?.drawOffX) ? Math.round(visual.drawOffX) : 0;
     const drawOffY = Number.isFinite(visual?.drawOffY) ? Math.round(visual.drawOffY) : 0;
+    const runtimeParams = cloneParams(decor?.params);
+    if (runtimeId === FLOWER_DECOR_TYPE) {
+      runtimeParams.variant = parseFlowerVariant(runtimeParams.variant) ?? parseFlowerVariant(decor?.variant) ?? 1;
+    } else if (typeof decor?.variant === "string" && decor.variant.trim()) {
+      runtimeParams.variant = decor.variant.trim();
+    }
 
     runtimeLevel.layers.ents.push({
       id: runtimeId,
@@ -444,12 +469,7 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
       anchor: drawAnchor,
       offsetX: drawOffX,
       offsetY: drawOffY,
-      params: {
-        ...cloneParams(decor?.params),
-        ...(typeof decor?.variant === "string" && decor.variant.trim()
-          ? { variant: decor.variant.trim() }
-          : {}),
-      },
+      params: runtimeParams,
     });
   }
 

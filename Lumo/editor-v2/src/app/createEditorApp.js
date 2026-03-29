@@ -5158,6 +5158,31 @@ export function createEditorApp({
       const decor = decorItems[index];
       if (!decor) return;
 
+      if (field === "param") {
+        const mutation = unwrapCanonicalParamMutationValue(value);
+        const paramKey = typeof mutation?.key === "string" ? mutation.key.trim() : "";
+        const isFlower = String(decor?.type || "").trim().toLowerCase() === "decor_flower_01";
+        const parsedVariant = Number.parseInt(String(mutation?.value ?? ""), 10);
+        if (!isFlower || paramKey !== "variant" || !Number.isInteger(parsedVariant)) return;
+
+        const clampedVariant = Math.max(1, Math.min(4, parsedVariant));
+        const previousDecor = cloneCanonicalDecorSnapshot(decor);
+        const nextDecor = cloneCanonicalDecorSnapshot({
+          ...decor,
+          params: {
+            ...cloneEntityParams(decor.params),
+            variant: clampedVariant,
+          },
+        });
+        if (previousDecor?.params?.variant === nextDecor?.params?.variant) return;
+
+        applyCanonicalDecorUpdate(draft, {
+          type: "update",
+          items: [{ index, previousDecor, nextDecor }],
+        });
+        return;
+      }
+
       if (field === "param" || field === 'name' || field === 'type' || field === 'variant' || field === 'visible' || field === 'x' || field === 'y') {
         // CANONICAL DECOR RUNTIME ONLY: the old inspect mutation lane stays disabled until a stable-id clean-room edit path replaces it.
         return;
