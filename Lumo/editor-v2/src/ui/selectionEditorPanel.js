@@ -11,6 +11,7 @@ import {
   getSoundAssetOptionsForType,
 } from "../domain/sound/audioAssetCatalog.js";
 import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
+import { stopNativeInputKeyboardPropagation } from "./nativeInputGuards.js";
 
 const MIXED_FIELD_VALUE = "__mixed__";
 const FLOWER_DECOR_TYPE = "decor_flower_01";
@@ -1014,11 +1015,6 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     }
   };
 
-  const stopInputKeyboardPropagation = (event) => {
-    if (!isKeyboardIsolatedInput(event.target)) return;
-    event.stopPropagation();
-  };
-
   const onFocusOut = (event) => {
     const target = event.target;
     if (!isDraftableInput(target)) return;
@@ -1063,9 +1059,9 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
   panel.addEventListener("change", onChange);
   panel.addEventListener("input", onInput);
   panel.addEventListener("keydown", onKeyDown);
-  panel.addEventListener("keydown", stopInputKeyboardPropagation, true);
-  panel.addEventListener("keyup", stopInputKeyboardPropagation, true);
-  panel.addEventListener("keypress", stopInputKeyboardPropagation, true);
+  panel.addEventListener("keydown", stopNativeInputKeyboardPropagation, true);
+  panel.addEventListener("keyup", stopNativeInputKeyboardPropagation, true);
+  panel.addEventListener("keypress", stopNativeInputKeyboardPropagation, true);
   panel.addEventListener("focusout", onFocusOut);
   panel.addEventListener("click", onClick);
   panel.addEventListener("pointerdown", onPointerDown);
@@ -1077,9 +1073,9 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     panel.removeEventListener("change", onChange);
     panel.removeEventListener("input", onInput);
     panel.removeEventListener("keydown", onKeyDown);
-    panel.removeEventListener("keydown", stopInputKeyboardPropagation, true);
-    panel.removeEventListener("keyup", stopInputKeyboardPropagation, true);
-    panel.removeEventListener("keypress", stopInputKeyboardPropagation, true);
+    panel.removeEventListener("keydown", stopNativeInputKeyboardPropagation, true);
+    panel.removeEventListener("keyup", stopNativeInputKeyboardPropagation, true);
+    panel.removeEventListener("keypress", stopNativeInputKeyboardPropagation, true);
     panel.removeEventListener("focusout", onFocusOut);
     panel.removeEventListener("click", onClick);
     panel.removeEventListener("pointerdown", onPointerDown);

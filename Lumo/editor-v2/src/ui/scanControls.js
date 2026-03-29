@@ -1,3 +1,5 @@
+import { stopNativeInputKeyboardPropagation } from "./nativeInputGuards.js";
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -93,13 +95,25 @@ export function bindScanControls(panel, options = {}) {
     event.preventDefault();
   };
 
+  const onKeyDown = (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || !target.dataset.scanField) return;
+    stopNativeInputKeyboardPropagation(event);
+    if (event.key === "Enter") {
+      event.preventDefault();
+      target.blur();
+    }
+  };
+
   panel.addEventListener("change", onChange);
   panel.addEventListener("pointerdown", onPointerDown);
   panel.addEventListener("click", onClick);
+  panel.addEventListener("keydown", onKeyDown, true);
 
   return () => {
     panel.removeEventListener("change", onChange);
     panel.removeEventListener("pointerdown", onPointerDown);
     panel.removeEventListener("click", onClick);
+    panel.removeEventListener("keydown", onKeyDown, true);
   };
 }
