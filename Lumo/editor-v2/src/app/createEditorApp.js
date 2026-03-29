@@ -34,7 +34,7 @@ import {
   getTileBehaviorById,
   suggestTileCatalogId,
 } from "../domain/assets/assetManagerWizardModel.js";
-import { saveTileThroughLocalBridge } from "../domain/assets/localTileSaveBridge.js";
+import { saveBackgroundThroughLocalBridge, saveTileThroughLocalBridge } from "../domain/assets/localTileSaveBridge.js";
 import { isTileCatalogIdTaken, registerTileSpriteOption } from "../domain/tiles/tileSpriteCatalog.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
@@ -70,7 +70,7 @@ import {
   canRedo,
 } from "../domain/tiles/history.js";
 import { createDefaultBackgroundLayer, getTileIndex } from "../domain/level/levelDocument.js";
-import { DEFAULT_BACKGROUND_MATERIAL_ID } from "../domain/background/materialCatalog.js";
+import { DEFAULT_BACKGROUND_MATERIAL_ID, isBackgroundMaterialIdTaken, registerBackgroundMaterialOption } from "../domain/background/materialCatalog.js";
 import { eraseBackgroundMaterial } from "../domain/background/paint.js";
 import { getBackgroundFloodFillCells } from "../domain/background/floodFill.js";
 import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
@@ -7285,6 +7285,94 @@ if (event.shiftKey) {
     return true;
   };
 
+  const attemptBackgroundWizardSave = async () => {
+    const currentWizard = store.getState().ui.assetManager.wizard || createInitialAssetManagerWizardState();
+    const identityValidation = getAssetWizardStepValidation("identity", currentWizard);
+    const metadataValidation = getAssetWizardStepValidation("metadata", currentWizard);
+    if (!identityValidation.isValid || !metadataValidation.isValid) {
+      store.setState((draft) => {
+        const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+        wizard.stepId = !identityValidation.isValid ? "identity" : "metadata";
+        wizard.draft = wizard.draft || {};
+        wizard.draft.saveFeedback = "Cannot save yet. Resolve the highlighted validation issues first.";
+        draft.ui.assetManager.wizard = wizard;
+      });
+      return false;
+    }
+
+    const resolvedDraft = getAssetWizardDraftWithDefaults(currentWizard.assetType, currentWizard.draft || {});
+    const drawW = Number.parseInt(resolvedDraft.drawWidth, 10);
+    const drawH = Number.parseInt(resolvedDraft.drawHeight, 10);
+    const footprint = parseFootprint(resolvedDraft.footprint);
+    const bridgeResult = await saveBackgroundThroughLocalBridge({
+      draft: resolvedDraft,
+      backgroundPayload: {
+        materialId: resolvedDraft.materialId,
+        label: resolvedDraft.displayName,
+        drawW,
+        drawH,
+        drawAnchor: "BL",
+        drawOffX: 0,
+        drawOffY: 0,
+        footprint,
+        fallbackColor: resolvedDraft.fallbackColor,
+        group: "Custom",
+      },
+      spriteFile: selectedAssetWizardSpriteFile,
+    });
+
+    if (!bridgeResult.ok) {
+      store.setState((draft) => {
+        const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+        wizard.stepId = bridgeResult.reason === "duplicate-material-id" ? "identity" : wizard.stepId || "save";
+        wizard.draft = wizard.draft || {};
+        wizard.draft.saveFeedback = bridgeResult.message || "Persistent save failed.";
+        draft.ui.assetManager.wizard = wizard;
+      });
+      return false;
+    }
+
+    const registerResult = registerBackgroundMaterialOption({
+      materialId: bridgeResult.persistedBackground?.materialId || resolvedDraft.materialId,
+      label: bridgeResult.persistedBackground?.label || resolvedDraft.displayName,
+      img: bridgeResult.persistedBackground?.img || null,
+      drawW: bridgeResult.persistedBackground?.drawW || drawW,
+      drawH: bridgeResult.persistedBackground?.drawH || drawH,
+      drawAnchor: "BL",
+      drawOffX: 0,
+      drawOffY: 0,
+      footprint: bridgeResult.persistedBackground?.footprint || footprint,
+      fallbackColor: bridgeResult.persistedBackground?.fallbackColor || resolvedDraft.fallbackColor,
+      group: bridgeResult.persistedBackground?.group || "Custom",
+    });
+    if (!registerResult.ok) {
+      store.setState((draft) => {
+        const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+        wizard.stepId = "identity";
+        wizard.draft = wizard.draft || {};
+        wizard.draft.saveFeedback = "Background saved on disk, but editor catalog refresh failed. Reload the page.";
+        draft.ui.assetManager.wizard = wizard;
+      });
+      return false;
+    }
+
+    store.setState((draft) => {
+      const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+      setActiveLayer(draft, PANEL_LAYERS.BACKGROUND);
+      draft.interaction.activeTool = EDITOR_TOOLS.PAINT;
+      draft.interaction.activeBackgroundMaterialId = registerResult.material.id;
+      draft.ui.panelSections.background = true;
+      draft.ui.assetManager.selectedCategory = "background";
+      draft.ui.assetManager.activeView = "wizard";
+      draft.ui.importStatus = `Background created (persisted): ${registerResult.material.label || registerResult.material.id}`;
+      cleanupWizardPreview(wizard);
+      draft.ui.assetManager.wizard = createInitialAssetManagerWizardState();
+      draft.ui.assetManager.isOpen = false;
+      selectedAssetWizardSpriteFile = null;
+    });
+    return true;
+  };
+
   const moveAssetWizardStep = (direction) => {
     const steps = getStepsForWizard();
     store.setState((draft) => {
@@ -7403,6 +7491,8 @@ if (event.shiftKey) {
         const wizard = store.getState().ui.assetManager.wizard || createInitialAssetManagerWizardState();
         if (wizard.stepId === "save" && wizard.assetType === ASSET_WIZARD_TYPES.TILE && wizard.mode === ASSET_WIZARD_MODES.CREATE) {
           void attemptTileWizardSave();
+        } else if (wizard.stepId === "save" && wizard.assetType === ASSET_WIZARD_TYPES.BACKGROUND && wizard.mode === ASSET_WIZARD_MODES.CREATE) {
+          void attemptBackgroundWizardSave();
         } else {
           moveAssetWizardStep(1);
         }
@@ -7462,6 +7552,7 @@ if (event.shiftKey) {
         if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
         if (assetDraftField === "displayName") syncWizardCatalogIdHint(wizard);
         if (assetDraftField === "catalogId") wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(target.value) ? "taken" : "available";
+        if (assetDraftField === "materialId") wizard.draft.materialIdAvailability = isBackgroundMaterialIdTaken(target.value) ? "taken" : "available";
         draft.ui.assetManager.wizard = wizard;
       });
       return;
@@ -7532,6 +7623,7 @@ if (event.shiftKey) {
           applyWizardDraftDefaults(wizard);
           if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
           if (assetDraftField === "catalogId") wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(target.value) ? "taken" : "available";
+          if (assetDraftField === "materialId") wizard.draft.materialIdAvailability = isBackgroundMaterialIdTaken(target.value) ? "taken" : "available";
           draft.ui.assetManager.wizard = wizard;
         });
       }
