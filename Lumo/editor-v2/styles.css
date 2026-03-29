@@ -2567,6 +2567,10 @@ kbd {
   gap: 12px;
 }
 
+.assetManagerBody.isWizardView {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .assetManagerCategoryRail {
   min-height: 0;
   overflow-y: auto;
@@ -2715,16 +2719,38 @@ kbd {
   color: #eaf1ff;
 }
 
-.assetWizardPane {
-  border: 1px solid #22314f;
-  border-radius: 14px;
-  padding: 14px 16px;
-  background: rgba(11, 17, 29, 0.7);
+.assetWizardWorkbench {
+  min-height: 0;
 }
 
-.assetWizardWorkbenchPane {
-  overflow: hidden;
+.assetWizardWorkbenchShell {
+  min-height: min(66vh, 620px);
+  border: 1px solid #22314f;
+  border-radius: 14px;
+  background: rgba(11, 17, 29, 0.7);
+  padding: 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 2.6fr) minmax(260px, 1fr);
+  gap: 16px;
+}
+
+.assetWizardMainPane {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  gap: 12px;
+}
+
+.assetWizardMainBody {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.assetWizardAsidePane {
+  min-width: 0;
+  min-height: 0;
 }
 
 .assetWizardHeader h4 {
@@ -2768,9 +2794,8 @@ kbd {
 }
 
 .assetWizardSection {
-  margin-top: 12px;
   display: grid;
-  gap: 8px;
+  gap: 10px;
 }
 
 .assetWizardSection h4 {
@@ -2783,21 +2808,6 @@ kbd {
   margin: 0;
   color: #94abd2;
   font-size: 12px;
-}
-
-.assetWizardWorkspace {
-  margin-top: 14px;
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(240px, 1fr);
-  gap: 14px;
-  align-items: start;
-  min-height: 0;
-}
-
-.assetWizardFormColumn {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
 }
 
 .assetWizardChoiceGrid,
@@ -2926,18 +2936,27 @@ kbd {
   border: 1px solid #223454;
   border-radius: 10px;
   background: #0a1220;
-  padding: 10px;
+  padding: 12px;
   display: grid;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
+  min-height: 100%;
   position: sticky;
   top: 0;
+  align-content: start;
 }
 
 .assetWizardPreviewPane h5 {
   margin: 0;
   font-size: 12px;
   color: #d9e7ff;
+}
+
+.assetWizardPreviewHelp {
+  margin: 0;
+  color: #8fa7cf;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .assetWizardPreviewCanvas,
@@ -3046,11 +3065,12 @@ kbd {
     grid-template-columns: 1fr;
   }
 
-  .assetWizardWorkspace {
+  .assetWizardWorkbenchShell {
     grid-template-columns: 1fr;
   }
 
   .assetWizardPreviewPane {
     position: static;
+    min-height: 0;
   }
 }
