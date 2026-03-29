@@ -7342,6 +7342,16 @@ if (event.shiftKey) {
     }
 
     if (target instanceof HTMLSelectElement) {
+      const assetDraftField = typeof target.dataset.assetManagerDraftField === "string" ? target.dataset.assetManagerDraftField.trim() : "";
+      if (assetDraftField) {
+        store.setState((draft) => {
+          const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+          wizard.draft = wizard.draft || {};
+          wizard.draft[assetDraftField] = target.value;
+          draft.ui.assetManager.wizard = wizard;
+        });
+      }
+
       const selector = typeof target.dataset.assetManagerSelect === "string" ? target.dataset.assetManagerSelect.trim() : "";
       if (selector === "existing-id") {
         store.setState((draft) => {

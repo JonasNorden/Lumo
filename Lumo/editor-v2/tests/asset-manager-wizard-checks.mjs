@@ -4,6 +4,7 @@ import {
   ASSET_WIZARD_MODES,
   ASSET_WIZARD_TYPES,
   createInitialAssetManagerWizardState,
+  getTileNumericIdOptions,
   getStepValidation,
   isStepComplete,
 } from "../src/domain/assets/assetManagerWizardModel.js";
@@ -17,14 +18,21 @@ assert.equal(isStepComplete("mode", wizard), true);
 assert.equal(isStepComplete("type", wizard), false);
 
 wizard.assetType = ASSET_WIZARD_TYPES.TILE;
+const knownTileId = getTileNumericIdOptions()[0]?.value || "15";
 wizard.draft = {
   catalogId: "stone-floor",
   displayName: "Stone Floor",
-  tileNumericId: "401",
+  tileNumericId: knownTileId,
   spritePath: "assets/tiles/stone_floor.png",
 };
 assert.equal(isStepComplete("identity", wizard), true);
 assert.equal(getStepValidation("identity", wizard).isValid, true);
+
+wizard.draft.tileNumericId = "401";
+const unknownTileValidation = getStepValidation("identity", wizard);
+assert.equal(unknownTileValidation.isValid, false);
+assert.equal(unknownTileValidation.fieldErrors.tileNumericId, "Tile numeric id must be selected from known runtime tile ids.");
+wizard.draft.tileNumericId = knownTileId;
 
 wizard.draft.collisionType = "solid";
 wizard.draft.drawAnchor = "BL";
