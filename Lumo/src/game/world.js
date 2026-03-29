@@ -264,6 +264,21 @@
       };
     }
 
+    // Runtime collision must follow authored placement size truth.
+    // Collision intentionally defaults to 1x1 unless an authored override says otherwise.
+    // (Visuals may still use catalog footprint metadata as a compatibility fallback.)
+    _getCollisionFootprintAt(tx, ty, id){
+      const override = this._getTileVisualOverrideAt(tx, ty);
+      const overrideW = override && Number.isFinite(Number(override.footprintW)) ? (Number(override.footprintW) | 0) : null;
+      const overrideH = override && Number.isFinite(Number(override.footprintH)) ? (Number(override.footprintH) | 0) : null;
+
+      if (overrideW && overrideH && overrideW > 0 && overrideH > 0){
+        return { w: overrideW, h: overrideH };
+      }
+
+      return { w: 1, h: 1 };
+    }
+
     getTile(tx, ty){
       if (tx < 0 || ty < 0 || tx >= this.w || ty >= this.h) return 0;
       return this.layers.main[ty * this.w + tx] | 0;
@@ -289,7 +304,7 @@
           const id = this.getTile(ax, ay) | 0;
           if (!id) continue;
 
-          const footprint = this._getTileFootprintAt(ax, ay, id);
+          const footprint = this._getCollisionFootprintAt(ax, ay, id);
           const fw = footprint.w|0;
           const fh = footprint.h|0;
 
@@ -341,7 +356,7 @@
           let w = ts, h = ts, x = hit.ax * ts, y = hit.ay * ts;
 
           // If the tile is a "big tile", expand collider to its footprint (BL anchored)
-          const footprint = this._getTileFootprintAt(hit.ax, hit.ay, id);
+          const footprint = this._getCollisionFootprintAt(hit.ax, hit.ay, id);
           const fw = footprint.w|0;
           const fh = footprint.h|0;
 
