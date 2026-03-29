@@ -24,6 +24,23 @@ export const ASSET_WIZARD_TYPE_OPTIONS = [
   { id: ASSET_WIZARD_TYPES.ENTITY, label: "Entity" },
 ];
 
+export function getTileNumericIdOptions() {
+  return BRUSH_SPRITE_OPTIONS
+    .filter((item) => Number.isInteger(item?.tileId))
+    .map((item) => ({
+      value: String(item.tileId),
+      label: `${item.label || item.value || `Tile ${item.tileId}`} · tileId ${item.tileId}`,
+    }))
+    .sort((a, b) => Number.parseInt(a.value, 10) - Number.parseInt(b.value, 10));
+}
+
+export function isKnownTileNumericId(value) {
+  const normalized = normalizeString(value);
+  if (!isInteger(normalized)) return false;
+  const knownIds = new Set(getTileNumericIdOptions().map((option) => option.value));
+  return knownIds.has(normalized);
+}
+
 export function createInitialAssetManagerWizardState() {
   return {
     mode: null,
@@ -101,7 +118,7 @@ export function getStepValidation(stepId, wizardState) {
     if (assetType === ASSET_WIZARD_TYPES.TILE) {
       if (!normalizeString(draft.catalogId)) fieldErrors.catalogId = "Catalog id is required.";
       if (!normalizeString(draft.displayName)) fieldErrors.displayName = "Display name is required.";
-      if (!isInteger(draft.tileNumericId)) fieldErrors.tileNumericId = "Tile numeric id must be an integer.";
+      if (!isKnownTileNumericId(draft.tileNumericId)) fieldErrors.tileNumericId = "Tile numeric id must be selected from known runtime tile ids.";
       if (!normalizeString(draft.spritePath)) fieldErrors.spritePath = "Select a sprite file.";
       const isValid = Object.keys(fieldErrors).length === 0;
       return { isValid, fieldErrors, blockingReason: isValid ? "" : "Complete required identity fields to continue." };

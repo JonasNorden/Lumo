@@ -9,6 +9,7 @@ import {
   createInitialAssetManagerWizardState,
   getExistingAssetOptions,
   getFirstIncompleteStep,
+  getTileNumericIdOptions,
   getStepValidation,
   getStepsForWizard,
   isStepComplete,
@@ -134,6 +135,36 @@ function renderFilePickerField(label, field, wizard, options = {}) {
   `;
 }
 
+function renderSelectInput(label, field, value, optionsList = [], description = "", options = {}) {
+  const errorMessage = options.errorMessage || "";
+  const infoTip = options.infoTip || "";
+  const placeholder = options.placeholder || "Select…";
+  return `
+    <label class="assetWizardField" for="asset-wizard-${escapeHtml(field)}">
+      <span class="assetWizardFieldLabelRow">
+        <span class="assetWizardFieldLabel">${escapeHtml(label)}</span>
+        ${renderInfoTip(infoTip)}
+      </span>
+      ${description ? `<span class="assetWizardFieldHelp">${escapeHtml(description)}</span>` : ""}
+      <select
+        id="asset-wizard-${escapeHtml(field)}"
+        data-asset-manager-field="${escapeHtml(field)}"
+        data-asset-manager-draft-field="${escapeHtml(field)}"
+        aria-invalid="${errorMessage ? "true" : "false"}"
+        class="${errorMessage ? "isInvalid" : ""}"
+      >
+        <option value="">${escapeHtml(placeholder)}</option>
+        ${optionsList.map((option) => `
+          <option value="${escapeHtml(option.value)}" ${String(option.value) === String(value || "") ? "selected" : ""}>
+            ${escapeHtml(option.label)}
+          </option>
+        `).join("")}
+      </select>
+      ${errorMessage ? `<span class="assetWizardFieldError">${escapeHtml(errorMessage)}</span>` : ""}
+    </label>
+  `;
+}
+
 function renderStepBody(wizard, validation) {
   const mode = wizard.mode;
   const type = wizard.assetType;
@@ -200,14 +231,15 @@ function renderStepBody(wizard, validation) {
     }
 
     if (type === "tiles") {
+      const tileIdOptions = getTileNumericIdOptions();
       return `
         <div class="assetWizardSection">
           <h4>Tile identity</h4>
-          <p>Capture the key tile identity fields first.</p>
+          <p>Capture the key tile identity fields first. Tile ids come from known runtime tile mappings.</p>
           <div class="assetWizardFieldGrid">
             ${renderInput("Catalog id", "catalogId", draft.catalogId, "stone-floor", "", { errorMessage: fieldErrors.catalogId })}
             ${renderInput("Display name", "displayName", draft.displayName, "Stone Floor", "", { errorMessage: fieldErrors.displayName })}
-            ${renderInput("Tile numeric id", "tileNumericId", draft.tileNumericId, "401", "Must be an integer.", { errorMessage: fieldErrors.tileNumericId, infoTip: "Used by runtime tile system. Must be unique." })}
+            ${renderSelectInput("Tile numeric id", "tileNumericId", draft.tileNumericId, tileIdOptions, "Select from known runtime tile ids; do not invent a numeric id.", { errorMessage: fieldErrors.tileNumericId, infoTip: "Sourced from existing runtime/editor tile catalog." })}
             ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/tiles/", infoTip: "Optional for now in architecture, but required to proceed in this wizard." })}
           </div>
         </div>
@@ -331,7 +363,7 @@ function renderWizardPane(wizard) {
   const canMoveNext = currentIndex < (steps.length - 1) && stepValidation.isValid;
 
   return `
-    <section class="assetManagerContentPane assetWizardPane" aria-label="Asset wizard">
+    <section class="assetManagerContentPane assetWizardPane assetWizardWorkbenchPane" aria-label="Asset wizard">
       <div class="assetWizardHeader">
         <h4>Guided Asset Wizard</h4>
         <p>Wizard-first registration shell for LumoEditor V2 asset manager.</p>
