@@ -7,6 +7,7 @@ import { renderDecor } from "./layers/decorLayer.js";
 import { renderSounds } from "./layers/soundLayer.js";
 import { renderProximityOverlays } from "./layers/proximityOverlayLayer.js";
 import { renderScanOverlay } from "./layers/scanLayer.js";
+import { renderSelectionOverlay } from "./layers/selectionLayer.js";
 import { renderDarknessPreview } from "./darknessPreview.js";
 import { findDecorPresetById } from "../domain/decor/decorPresets.js";
 import { findEntityPresetById } from "../domain/entities/entityPresets.js";
@@ -69,4 +70,5 @@ export function renderEditorFrame(ctx, state) {
     sound: findSoundPresetById(state.interaction.activeSoundPresetId) || null,
   });
   renderBrushPreviewOverlay(ctx, doc, state.viewport, state.interaction, state.brush.activeDraft);
+  renderSelectionOverlay(ctx, doc, state.viewport, state.interaction);
 }
