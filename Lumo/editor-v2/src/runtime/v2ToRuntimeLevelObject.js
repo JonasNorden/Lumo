@@ -1,5 +1,6 @@
 import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
 import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
+import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 
 const SUPPORTED_RUNTIME_ENTITY_IDS = new Set([
   "start_01",
@@ -431,11 +432,18 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
       unsupported.push(`Decor '${decorId || "(missing-id)"}' (${decorType || runtimeId}) is not mapped because runtime loader does not support it on the editor-play bridge path.`);
       continue;
     }
+    const visual = getDecorVisual(decorType);
+    const drawAnchor = String(visual?.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL";
+    const drawOffX = Number.isFinite(visual?.drawOffX) ? Math.round(visual.drawOffX) : 0;
+    const drawOffY = Number.isFinite(visual?.drawOffY) ? Math.round(visual.drawOffY) : 0;
 
     runtimeLevel.layers.ents.push({
       id: runtimeId,
       x: Number.isFinite(decor?.x) ? (decor.x | 0) : 0,
       y: Number.isFinite(decor?.y) ? (decor.y | 0) : 0,
+      anchor: drawAnchor,
+      offsetX: drawOffX,
+      offsetY: drawOffY,
       params: {
         ...cloneParams(decor?.params),
         ...(typeof decor?.variant === "string" && decor.variant.trim()
