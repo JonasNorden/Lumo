@@ -13,6 +13,7 @@ import { getWorldPointFromMinimapPoint, renderMinimap } from "../render/minimap.
 import { renderInspector, bindInspectorPanel } from "../ui/inspectorPanel.js";
 import { renderBottomPanel, bindBottomPanel } from "../ui/bottomPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
+import { stopNativeInputKeyboardPropagation, isNativeTextEditingEventTarget, hasNativeTextEditingFocus } from "../ui/nativeInputGuards.js";
 import {
   getSpecialVolumeWorkbenchLauncherContent,
   getSpecialVolumeWorkbenchModalContent,
@@ -1105,17 +1106,9 @@ export function createEditorApp({
     });
   };
 
-  const isShortcutTargetBlocked = (eventTarget) => {
-    if (!(eventTarget instanceof Element)) return false;
+  const isShortcutTargetBlocked = (eventTarget) => isNativeTextEditingEventTarget(eventTarget);
 
-    return Boolean(eventTarget.closest("input, textarea, select, button, [contenteditable='true'], [contenteditable='']"));
-  };
-
-  const hasBlockedShortcutFocus = () => {
-    const activeElement = document.activeElement;
-    return activeElement instanceof Element
-      && Boolean(activeElement.closest("input, textarea, select, button, [contenteditable='true'], [contenteditable='']"));
-  };
+  const hasBlockedShortcutFocus = () => hasNativeTextEditingFocus(document);
 
   const resize = () => {
     const dpr = window.devicePixelRatio || 1;
@@ -6957,6 +6950,10 @@ if (event.shiftKey) {
   };
 
   const handleGlobalKeyDown = (event) => {
+    if (hasBlockedShortcutFocus()) {
+      return;
+    }
+
     if (store.getState().ui.newLevelSize?.isOpen) {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -6977,10 +6974,6 @@ if (event.shiftKey) {
         });
         return;
       }
-    }
-
-    if (hasBlockedShortcutFocus()) {
-      return;
     }
 
     if (event.code === "Space") {
@@ -7285,11 +7278,8 @@ if (event.shiftKey) {
   const handleFloatingPanelKeyDown = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
+    stopNativeInputKeyboardPropagation(event);
     if (!target.dataset.entityParamPath) return;
-    event.stopPropagation();
-    if (event.key === "Delete" || event.key === "Backspace" || event.key === "z" || event.key === "Z" || event.key === "d" || event.key === "D") {
-      return;
-    }
     if (event.key === "Enter") {
       event.preventDefault();
       target.dispatchEvent(new Event("change", { bubbles: true }));
