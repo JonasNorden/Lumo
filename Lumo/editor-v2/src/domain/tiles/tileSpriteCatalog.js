@@ -146,8 +146,6 @@ export const BRUSH_SPRITE_OPTIONS = [
   { value: "ice_00", label: "Ice 00", tileId: 16 },
   { value: "ice_01", label: "Ice 01", tileId: 4 },
   { value: "stone_ct", label: "Stone CT", tileId: 15 },
-  { value: "lava_01", label: "Lava 01", tileId: 3 },
-  { value: "void_1", label: "Void", tileId: 0 },
 ].map((option) => {
   const tileAsset = TILE_ASSETS.get(option.tileId);
   return {

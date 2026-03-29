@@ -17,7 +17,7 @@ export const BRUSH_PALETTE_PRESETS = [
     id: "empty",
     label: "Empty",
     color: "#141a29",
-    brush: { behavior: "solid", size: "1x1", sprite: "void_1" },
+    brush: { behavior: "solid", size: "1x1", sprite: "soil_c" },
   },
   {
     id: "solid",
@@ -29,7 +29,7 @@ export const BRUSH_PALETTE_PRESETS = [
     id: "hazard",
     label: "Hazard",
     color: "#bf4d4d",
-    brush: { behavior: "hazard", size: "1x1", sprite: "lava_01" },
+    brush: { behavior: "hazard", size: "1x1", sprite: "stone_ct" },
   },
   {
     id: "accent",
