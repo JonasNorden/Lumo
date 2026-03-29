@@ -26,7 +26,8 @@ import {
   DEFAULT_NEW_LEVEL_HEIGHT,
   DEFAULT_NEW_LEVEL_WIDTH,
   isValidLevelDimension,
-  MAX_LEVEL_DIMENSION,
+  MAX_LEVEL_HEIGHT,
+  MAX_LEVEL_WIDTH,
   MIN_LEVEL_DIMENSION,
   sanitizeLevelDimension,
 } from "../data/createNewLevelDocument.js";
@@ -538,11 +539,11 @@ function getNewLevelSizeValidationMessage(widthValue, heightValue) {
   const parsedHeight = Number.parseInt(String(heightValue), 10);
 
   if (!Number.isInteger(parsedWidth) || !Number.isInteger(parsedHeight)) {
-    return `Use whole numbers from ${MIN_LEVEL_DIMENSION} to ${MAX_LEVEL_DIMENSION}.`;
+    return `Use whole numbers: width ${MIN_LEVEL_DIMENSION}-${MAX_LEVEL_WIDTH}, height ${MIN_LEVEL_DIMENSION}-${MAX_LEVEL_HEIGHT}.`;
   }
 
-  if (!isValidLevelDimension(parsedWidth) || !isValidLevelDimension(parsedHeight)) {
-    return `Size must stay between ${MIN_LEVEL_DIMENSION} and ${MAX_LEVEL_DIMENSION}.`;
+  if (!isValidLevelDimension(parsedWidth, "width") || !isValidLevelDimension(parsedHeight, "height")) {
+    return `Width must be ${MIN_LEVEL_DIMENSION}-${MAX_LEVEL_WIDTH} and height must be ${MIN_LEVEL_DIMENSION}-${MAX_LEVEL_HEIGHT}.`;
   }
 
   return null;
@@ -569,7 +570,7 @@ function renderNewLevelSizePopover(state) {
           <input
             type="text"
             min="${MIN_LEVEL_DIMENSION}"
-            max="${MAX_LEVEL_DIMENSION}"
+            max="${MAX_LEVEL_WIDTH}"
             step="1"
             inputmode="numeric"
             value="${escapeHtml(widthValue)}"
@@ -581,7 +582,7 @@ function renderNewLevelSizePopover(state) {
           <input
             type="text"
             min="${MIN_LEVEL_DIMENSION}"
-            max="${MAX_LEVEL_DIMENSION}"
+            max="${MAX_LEVEL_HEIGHT}"
             step="1"
             inputmode="numeric"
             value="${escapeHtml(heightValue)}"
@@ -724,11 +725,11 @@ function renderExportMenu(state) {
         </label>
         <label class="fieldRow fieldRowCompact">
           <span class="label">Width</span>
-          <input type="number" min="${MIN_LEVEL_DIMENSION}" max="${MAX_LEVEL_DIMENSION}" step="1" value="${active.dimensions.width}" data-export-dimension-field="width" />
+          <input type="number" min="${MIN_LEVEL_DIMENSION}" max="${MAX_LEVEL_WIDTH}" step="1" value="${active.dimensions.width}" data-export-dimension-field="width" />
         </label>
         <label class="fieldRow fieldRowCompact">
           <span class="label">Height</span>
-          <input type="number" min="${MIN_LEVEL_DIMENSION}" max="${MAX_LEVEL_DIMENSION}" step="1" value="${active.dimensions.height}" data-export-dimension-field="height" />
+          <input type="number" min="${MIN_LEVEL_DIMENSION}" max="${MAX_LEVEL_HEIGHT}" step="1" value="${active.dimensions.height}" data-export-dimension-field="height" />
         </label>
       </div>
       <div class="compactActionRow compactActionRowSingle topBarMenuActionRow">
@@ -6631,7 +6632,7 @@ if (event.shiftKey) {
     const { commit = false } = options;
     store.setState((draft) => {
       draft.ui.newLevelSize[field] = commit
-        ? String(sanitizeLevelDimension(rawValue, field === "width" ? DEFAULT_NEW_LEVEL_WIDTH : DEFAULT_NEW_LEVEL_HEIGHT))
+        ? String(sanitizeLevelDimension(rawValue, field === "width" ? DEFAULT_NEW_LEVEL_WIDTH : DEFAULT_NEW_LEVEL_HEIGHT, field))
         : rawValue;
       draft.ui.newLevelSize.error = null;
     });
@@ -7357,7 +7358,7 @@ if (event.shiftKey) {
       if (!active) return true;
 
       const nextValue = target.value.trim()
-        ? sanitizeLevelDimension(target.value, active.dimensions[exportDimensionField])
+        ? sanitizeLevelDimension(target.value, active.dimensions[exportDimensionField], exportDimensionField)
         : active.dimensions[exportDimensionField];
       target.value = String(nextValue);
       const nextWidth = exportDimensionField === "width" ? nextValue : active.dimensions.width;
