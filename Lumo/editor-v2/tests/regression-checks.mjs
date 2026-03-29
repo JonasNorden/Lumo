@@ -1766,8 +1766,14 @@ function runNewLevelDocumentRegressionChecks() {
   assert.equal(resizedDoc.dimensions.height, 24, "new level should accept a custom height");
   assert.equal(resizedDoc.tiles.base.length, 64 * 24, "new level tiles should match the custom dimensions");
 
+  const largeDoc = createNewLevelDocument({ width: 512, height: 384 });
+  assert.equal(largeDoc.dimensions.width, 512, "new level should allow widths larger than the previous 256 cap");
+  assert.equal(largeDoc.dimensions.height, 384, "new level should allow heights larger than the previous 256 cap");
+  assert.equal(largeDoc.tiles.base.length, 512 * 384, "new level tiles should match larger dimensions without clamping");
+
   assert.equal(sanitizeLevelDimension("5", DEFAULT_NEW_LEVEL_WIDTH), MIN_LEVEL_DIMENSION, "dimension sanitizing should clamp to the minimum");
-  assert.equal(sanitizeLevelDimension("999", DEFAULT_NEW_LEVEL_WIDTH), MAX_LEVEL_DIMENSION, "dimension sanitizing should clamp to the maximum");
+  assert.equal(sanitizeLevelDimension("999", DEFAULT_NEW_LEVEL_WIDTH), 999, "dimension sanitizing should preserve larger in-range values");
+  assert.equal(sanitizeLevelDimension("2048", DEFAULT_NEW_LEVEL_WIDTH), MAX_LEVEL_DIMENSION, "dimension sanitizing should clamp values above the maximum");
 }
 
 function runSpawnExitNormalizationRegressionChecks() {
