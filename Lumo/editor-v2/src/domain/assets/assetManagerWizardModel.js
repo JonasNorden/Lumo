@@ -56,6 +56,89 @@ function isHexColor(value) {
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(normalizeString(value));
 }
 
+export function getStepValidation(stepId, wizardState) {
+  const mode = wizardState?.mode;
+  const assetType = wizardState?.assetType;
+  const draft = wizardState?.draft || {};
+  const fieldErrors = {};
+
+  if (stepId === "mode") {
+    if (!(mode === ASSET_WIZARD_MODES.CREATE || mode === ASSET_WIZARD_MODES.EDIT)) {
+      return {
+        isValid: false,
+        fieldErrors,
+        blockingReason: "Choose Create New Asset or Edit Existing Asset to continue.",
+      };
+    }
+    return { isValid: true, fieldErrors, blockingReason: "" };
+  }
+
+  if (stepId === "type") {
+    if (!assetType) {
+      return {
+        isValid: false,
+        fieldErrors,
+        blockingReason: "Choose an asset type to continue.",
+      };
+    }
+    return { isValid: true, fieldErrors, blockingReason: "" };
+  }
+
+  if (stepId === "identity") {
+    if (!assetType) {
+      return { isValid: false, fieldErrors, blockingReason: "Choose an asset type first." };
+    }
+    if (mode === ASSET_WIZARD_MODES.EDIT) {
+      if (!normalizeString(wizardState?.selectedExistingAssetId)) {
+        return {
+          isValid: false,
+          fieldErrors: { selectedExistingAssetId: "Pick an existing asset before continuing." },
+          blockingReason: "Pick an existing asset before continuing.",
+        };
+      }
+      return { isValid: true, fieldErrors, blockingReason: "" };
+    }
+    if (assetType === ASSET_WIZARD_TYPES.TILE) {
+      if (!normalizeString(draft.catalogId)) fieldErrors.catalogId = "Catalog id is required.";
+      if (!normalizeString(draft.displayName)) fieldErrors.displayName = "Display name is required.";
+      if (!isInteger(draft.tileNumericId)) fieldErrors.tileNumericId = "Tile numeric id must be an integer.";
+      if (!normalizeString(draft.spritePath)) fieldErrors.spritePath = "Select a sprite file.";
+      const isValid = Object.keys(fieldErrors).length === 0;
+      return { isValid, fieldErrors, blockingReason: isValid ? "" : "Complete required identity fields to continue." };
+    }
+    if (assetType === ASSET_WIZARD_TYPES.BACKGROUND) {
+      if (!normalizeString(draft.materialId)) fieldErrors.materialId = "Material id is required.";
+      if (!normalizeString(draft.displayName)) fieldErrors.displayName = "Display name is required.";
+      if (!normalizeString(draft.spritePath)) fieldErrors.spritePath = "Select a sprite file.";
+      const isValid = Object.keys(fieldErrors).length === 0;
+      return { isValid, fieldErrors, blockingReason: isValid ? "" : "Complete required identity fields to continue." };
+    }
+    return { isValid: false, fieldErrors, blockingReason: "This flow is not fully implemented yet." };
+  }
+
+  if (stepId === "metadata") {
+    if (assetType === ASSET_WIZARD_TYPES.TILE) {
+      if (!normalizeString(draft.collisionType)) fieldErrors.collisionType = "Collision/behavior type is required.";
+      if (!normalizeString(draft.drawAnchor)) fieldErrors.drawAnchor = "Draw anchor is required.";
+      if (!isPositiveNumber(draft.drawWidth)) fieldErrors.drawWidth = "Draw width must be a positive number.";
+      if (!isPositiveNumber(draft.drawHeight)) fieldErrors.drawHeight = "Draw height must be a positive number.";
+      const isValid = Object.keys(fieldErrors).length === 0;
+      return { isValid, fieldErrors, blockingReason: isValid ? "" : "Resolve metadata validation issues to continue." };
+    }
+    if (assetType === ASSET_WIZARD_TYPES.BACKGROUND) {
+      if (!normalizeString(draft.drawAnchor)) fieldErrors.drawAnchor = "Draw anchor is required.";
+      if (!isPositiveNumber(draft.drawWidth)) fieldErrors.drawWidth = "Draw width must be a positive number.";
+      if (!isPositiveNumber(draft.drawHeight)) fieldErrors.drawHeight = "Draw height must be a positive number.";
+      if (!isHexColor(draft.fallbackColor)) fieldErrors.fallbackColor = "Fallback color must be a hex value like #3d4b63.";
+      const isValid = Object.keys(fieldErrors).length === 0;
+      return { isValid, fieldErrors, blockingReason: isValid ? "" : "Resolve metadata validation issues to continue." };
+    }
+    return { isValid: true, fieldErrors, blockingReason: "" };
+  }
+
+  return { isValid: true, fieldErrors, blockingReason: "" };
+}
+
 export function getExistingAssetOptions(assetType) {
   if (assetType === ASSET_WIZARD_TYPES.TILE) {
     return BRUSH_SPRITE_OPTIONS.map((item) => ({
@@ -85,40 +168,8 @@ export function getExistingAssetOptions(assetType) {
 }
 
 export function isStepComplete(stepId, wizardState) {
-  const mode = wizardState?.mode;
-  const assetType = wizardState?.assetType;
-  const draft = wizardState?.draft || {};
-
-  if (stepId === "mode") {
-    return mode === ASSET_WIZARD_MODES.CREATE || mode === ASSET_WIZARD_MODES.EDIT;
-  }
-  if (stepId === "type") {
-    return Boolean(assetType);
-  }
-  if (stepId === "identity") {
-    if (!assetType) return false;
-    if (mode === ASSET_WIZARD_MODES.EDIT) {
-      return normalizeString(wizardState?.selectedExistingAssetId).length > 0;
-    }
-    if (assetType === ASSET_WIZARD_TYPES.TILE) {
-      return Boolean(normalizeString(draft.catalogId) && normalizeString(draft.displayName) && isInteger(draft.tileNumericId) && normalizeString(draft.spritePath));
-    }
-    if (assetType === ASSET_WIZARD_TYPES.BACKGROUND) {
-      return Boolean(normalizeString(draft.materialId) && normalizeString(draft.displayName) && normalizeString(draft.spritePath));
-    }
-    return false;
-  }
-  if (stepId === "metadata") {
-    if (assetType === ASSET_WIZARD_TYPES.TILE) {
-      return Boolean(normalizeString(draft.collisionType) && normalizeString(draft.drawAnchor) && isPositiveNumber(draft.drawWidth) && isPositiveNumber(draft.drawHeight));
-    }
-    if (assetType === ASSET_WIZARD_TYPES.BACKGROUND) {
-      return Boolean(normalizeString(draft.drawAnchor) && isPositiveNumber(draft.drawWidth) && isPositiveNumber(draft.drawHeight) && isHexColor(draft.fallbackColor));
-    }
-    return true;
-  }
   if (stepId === "review" || stepId === "save") return true;
-  return false;
+  return getStepValidation(stepId, wizardState).isValid;
 }
 
 export function getFirstIncompleteStep(wizardState) {

@@ -4,6 +4,7 @@ import {
   ASSET_WIZARD_MODES,
   ASSET_WIZARD_TYPES,
   createInitialAssetManagerWizardState,
+  getStepValidation,
   isStepComplete,
 } from "../src/domain/assets/assetManagerWizardModel.js";
 
@@ -23,6 +24,7 @@ wizard.draft = {
   spritePath: "assets/tiles/stone_floor.png",
 };
 assert.equal(isStepComplete("identity", wizard), true);
+assert.equal(getStepValidation("identity", wizard).isValid, true);
 
 wizard.draft.collisionType = "solid";
 wizard.draft.drawAnchor = "BL";
@@ -33,6 +35,7 @@ assert.equal(isStepComplete("metadata", wizard), true);
 wizard.mode = ASSET_WIZARD_MODES.EDIT;
 wizard.selectedExistingAssetId = "";
 assert.equal(isStepComplete("identity", wizard), false);
+assert.equal(getStepValidation("identity", wizard).fieldErrors.selectedExistingAssetId, "Pick an existing asset before continuing.");
 wizard.selectedExistingAssetId = "tile_stone_01";
 assert.equal(isStepComplete("identity", wizard), true);
 
@@ -49,5 +52,10 @@ wizard.draft = {
 };
 assert.equal(isStepComplete("identity", wizard), true);
 assert.equal(isStepComplete("metadata", wizard), true);
+
+wizard.draft.spritePath = "";
+const backgroundIdentityValidation = getStepValidation("identity", wizard);
+assert.equal(backgroundIdentityValidation.isValid, false);
+assert.equal(backgroundIdentityValidation.fieldErrors.spritePath, "Select a sprite file.");
 
 console.log("asset-manager wizard checks passed");
