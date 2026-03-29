@@ -9,6 +9,7 @@ import {
   createInitialAssetManagerWizardState,
   getExistingAssetOptions,
   getFirstIncompleteStep,
+  getStepValidation,
   getStepsForWizard,
   isStepComplete,
 } from "../domain/assets/assetManagerWizardModel.js";
@@ -67,28 +68,77 @@ function getStepTitle(stepId) {
   return "Step";
 }
 
-function renderInput(label, field, value, placeholder, description = "") {
+function renderInfoTip(text = "") {
+  if (!text) return "";
+  return `<span class="assetWizardInfoTip" role="img" aria-label="${escapeHtml(text)}" title="${escapeHtml(text)}">i</span>`;
+}
+
+function renderInput(label, field, value, placeholder, description = "", options = {}) {
+  const errorMessage = options.errorMessage || "";
+  const infoTip = options.infoTip || "";
   return `
     <label class="assetWizardField" for="asset-wizard-${escapeHtml(field)}">
-      <span class="assetWizardFieldLabel">${escapeHtml(label)}</span>
+      <span class="assetWizardFieldLabelRow">
+        <span class="assetWizardFieldLabel">${escapeHtml(label)}</span>
+        ${renderInfoTip(infoTip)}
+      </span>
       ${description ? `<span class="assetWizardFieldHelp">${escapeHtml(description)}</span>` : ""}
       <input
         id="asset-wizard-${escapeHtml(field)}"
         data-asset-manager-field="${escapeHtml(field)}"
         data-asset-manager-draft-field="${escapeHtml(field)}"
+        aria-invalid="${errorMessage ? "true" : "false"}"
         type="text"
+        class="${errorMessage ? "isInvalid" : ""}"
         value="${escapeHtml(value || "")}"
         placeholder="${escapeHtml(placeholder || "")}"
         autocomplete="off"
       />
+      ${errorMessage ? `<span class="assetWizardFieldError">${escapeHtml(errorMessage)}</span>` : ""}
     </label>
   `;
 }
 
-function renderStepBody(wizard) {
+function renderFilePickerField(label, field, wizard, options = {}) {
+  const value = wizard?.draft?.[field] || "";
+  const fileName = wizard?.draft?.spriteFileName || "";
+  const errorMessage = options.errorMessage || "";
+  const hint = options.hint || "";
+  return `
+    <div class="assetWizardField">
+      <span class="assetWizardFieldLabelRow">
+        <span class="assetWizardFieldLabel">${escapeHtml(label)}</span>
+        ${renderInfoTip(options.infoTip || "")}
+      </span>
+      ${hint ? `<span class="assetWizardFieldHelp">${escapeHtml(hint)}</span>` : ""}
+      <div class="assetWizardFilePickerRow">
+        <button type="button" class="assetWizardNavButton" data-asset-manager-action="choose-file" data-asset-manager-file-field="${escapeHtml(field)}">Choose File</button>
+        <span class="assetWizardFileName${fileName ? "" : " isMuted"}">${escapeHtml(fileName || "No file selected")}</span>
+      </div>
+      <input
+        type="file"
+        class="assetWizardHiddenFileInput"
+        data-asset-manager-file-field="${escapeHtml(field)}"
+        accept="image/*"
+      />
+      <input
+        type="text"
+        readonly
+        data-asset-manager-field="${escapeHtml(field)}"
+        class="${errorMessage ? "isInvalid" : ""}"
+        value="${escapeHtml(value)}"
+        placeholder="Selected file path placeholder"
+      />
+      ${errorMessage ? `<span class="assetWizardFieldError">${escapeHtml(errorMessage)}</span>` : ""}
+    </div>
+  `;
+}
+
+function renderStepBody(wizard, validation) {
   const mode = wizard.mode;
   const type = wizard.assetType;
   const draft = wizard.draft || {};
+  const fieldErrors = validation?.fieldErrors || {};
 
   if (wizard.stepId === "mode") {
     const isCreate = mode === ASSET_WIZARD_MODES.CREATE;
@@ -143,6 +193,7 @@ function renderStepBody(wizard) {
               <option value="">Choose an asset…</option>
               ${options.map((option) => `<option value="${escapeHtml(option.id)}" ${option.id === wizard.selectedExistingAssetId ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
             </select>
+            ${fieldErrors.selectedExistingAssetId ? `<span class="assetWizardFieldError">${escapeHtml(fieldErrors.selectedExistingAssetId)}</span>` : ""}
           </label>
         </div>
       `;
@@ -154,10 +205,10 @@ function renderStepBody(wizard) {
           <h4>Tile identity</h4>
           <p>Capture the key tile identity fields first.</p>
           <div class="assetWizardFieldGrid">
-            ${renderInput("Catalog id", "catalogId", draft.catalogId, "stone-floor")}
-            ${renderInput("Display name", "displayName", draft.displayName, "Stone Floor")}
-            ${renderInput("Tile numeric id", "tileNumericId", draft.tileNumericId, "401", "Must be an integer.")}
-            ${renderInput("Sprite path", "spritePath", draft.spritePath, "assets/tiles/stone_floor.png")}
+            ${renderInput("Catalog id", "catalogId", draft.catalogId, "stone-floor", "", { errorMessage: fieldErrors.catalogId })}
+            ${renderInput("Display name", "displayName", draft.displayName, "Stone Floor", "", { errorMessage: fieldErrors.displayName })}
+            ${renderInput("Tile numeric id", "tileNumericId", draft.tileNumericId, "401", "Must be an integer.", { errorMessage: fieldErrors.tileNumericId, infoTip: "Used by runtime tile system. Must be unique." })}
+            ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/tiles/", infoTip: "Optional for now in architecture, but required to proceed in this wizard." })}
           </div>
         </div>
       `;
@@ -169,9 +220,9 @@ function renderStepBody(wizard) {
           <h4>Background identity</h4>
           <p>Define the material id, label, and texture source for this background material.</p>
           <div class="assetWizardFieldGrid">
-            ${renderInput("Material id", "materialId", draft.materialId, "bg-stone")}
-            ${renderInput("Display name", "displayName", draft.displayName, "Stone Background")}
-            ${renderInput("Sprite path", "spritePath", draft.spritePath, "assets/sprites/bg/stone_bg.png")}
+            ${renderInput("Material id", "materialId", draft.materialId, "bg-stone", "", { errorMessage: fieldErrors.materialId })}
+            ${renderInput("Display name", "displayName", draft.displayName, "Stone Background", "", { errorMessage: fieldErrors.displayName })}
+            ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/backgrounds/", infoTip: "Choose the texture image for this background material." })}
           </div>
         </div>
       `;
@@ -192,10 +243,10 @@ function renderStepBody(wizard) {
           <h4>Tile metadata</h4>
           <p>Set behavior and draw/footprint related metadata used by editor and runtime mappings.</p>
           <div class="assetWizardFieldGrid">
-            ${renderInput("Collision / behavior type", "collisionType", draft.collisionType, "solid | oneWay | hazard")}
-            ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor, "BL")}
-            ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "16")}
-            ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "16")}
+            ${renderInput("Collision / behavior type", "collisionType", draft.collisionType, "solid | oneWay | hazard", "", { errorMessage: fieldErrors.collisionType, infoTip: "Determines gameplay interaction for this tile (blocking, one-way, hazard, etc.)." })}
+            ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor, "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left)." })}
+            ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "16", "", { errorMessage: fieldErrors.drawWidth })}
+            ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "16", "", { errorMessage: fieldErrors.drawHeight })}
             ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}')}
           </div>
         </div>
@@ -207,10 +258,10 @@ function renderStepBody(wizard) {
           <h4>Background metadata</h4>
           <p>Background materials are visual only. Anchor defaults to BL and gameplay behavior is intentionally omitted.</p>
           <div class="assetWizardFieldGrid">
-            ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", "BL")}
-            ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "16")}
-            ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "16")}
-            ${renderInput("Fallback color", "fallbackColor", draft.fallbackColor, "#3d4b63")}
+            ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left)." })}
+            ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "16", "", { errorMessage: fieldErrors.drawWidth })}
+            ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "16", "", { errorMessage: fieldErrors.drawHeight })}
+            ${renderInput("Fallback color", "fallbackColor", draft.fallbackColor, "#3d4b63", "", { errorMessage: fieldErrors.fallbackColor })}
             ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}')}
           </div>
         </div>
@@ -251,11 +302,33 @@ function renderStepBody(wizard) {
   `;
 }
 
+function renderPreviewPane(wizard) {
+  const draft = wizard?.draft || {};
+  const previewSource = draft.spritePreviewUrl || draft.spritePath || "";
+  if (!previewSource) {
+    return `
+      <aside class="assetWizardPreviewPane" aria-label="Sprite preview">
+        <h5>Preview / Workbench</h5>
+        <div class="assetWizardPreviewPlaceholder">No preview available yet</div>
+      </aside>
+    `;
+  }
+  return `
+    <aside class="assetWizardPreviewPane" aria-label="Sprite preview">
+      <h5>Preview / Workbench</h5>
+      <div class="assetWizardPreviewCanvas">
+        <img src="${escapeHtml(previewSource)}" alt="Selected sprite preview" />
+      </div>
+    </aside>
+  `;
+}
+
 function renderWizardPane(wizard) {
   const steps = getStepsForWizard();
   const currentIndex = Math.max(0, steps.indexOf(wizard.stepId));
   const canMoveBack = currentIndex > 0;
-  const canMoveNext = currentIndex < (steps.length - 1) && isStepComplete(wizard.stepId, wizard);
+  const stepValidation = getStepValidation(wizard.stepId, wizard);
+  const canMoveNext = currentIndex < (steps.length - 1) && stepValidation.isValid;
 
   return `
     <section class="assetManagerContentPane assetWizardPane" aria-label="Asset wizard">
@@ -272,7 +345,13 @@ function renderWizardPane(wizard) {
         }).join("")}
       </ol>
 
-      ${renderStepBody(wizard)}
+      <div class="assetWizardWorkspace">
+        <div class="assetWizardFormColumn">
+          ${renderStepBody(wizard, stepValidation)}
+        </div>
+        ${renderPreviewPane(wizard)}
+      </div>
+      ${!stepValidation.isValid && stepValidation.blockingReason ? `<p class="assetWizardStepNotice" role="alert">${escapeHtml(stepValidation.blockingReason)}</p>` : ""}
 
       <footer class="assetWizardFooter">
         <button type="button" class="assetWizardNavButton" data-asset-manager-action="wizard-cancel">Cancel</button>

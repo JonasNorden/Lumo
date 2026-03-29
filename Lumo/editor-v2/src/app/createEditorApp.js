@@ -6981,6 +6981,7 @@ if (event.shiftKey) {
     if (store.getState().ui.assetManager?.isOpen && event.key === "Escape") {
       event.preventDefault();
       store.setState((draft) => {
+        cleanupWizardPreview(draft.ui.assetManager.wizard);
         draft.ui.assetManager.isOpen = false;
       });
       return;
@@ -7130,6 +7131,20 @@ if (event.shiftKey) {
     });
   };
 
+  const releaseWizardPreviewUrl = (url) => {
+    if (typeof url !== "string" || !url.startsWith("blob:")) return;
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // ignore stale or already released blob urls
+    }
+  };
+
+  const cleanupWizardPreview = (wizard) => {
+    if (!wizard?.draft) return;
+    releaseWizardPreviewUrl(wizard.draft.spritePreviewUrl);
+    wizard.draft.spritePreviewUrl = "";
+  };
 
   const moveAssetWizardStep = (direction) => {
     const steps = getStepsForWizard();
@@ -7192,6 +7207,7 @@ if (event.shiftKey) {
       const action = assetManagerActionButton.dataset.assetManagerAction;
       if (action === "close") {
         store.setState((draft) => {
+          cleanupWizardPreview(draft.ui.assetManager.wizard);
           draft.ui.assetManager.isOpen = false;
         });
       }
@@ -7208,6 +7224,7 @@ if (event.shiftKey) {
         if (mode === "create" || mode === "edit") {
           store.setState((draft) => {
             const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+            cleanupWizardPreview(wizard);
             wizard.mode = mode;
             wizard.stepId = "mode";
             wizard.selectedExistingAssetId = "";
@@ -7221,6 +7238,7 @@ if (event.shiftKey) {
         if (type) {
           store.setState((draft) => {
             const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+            cleanupWizardPreview(wizard);
             wizard.assetType = type;
             wizard.selectedExistingAssetId = "";
             wizard.draft = {};
@@ -7228,10 +7246,20 @@ if (event.shiftKey) {
           });
         }
       }
+      if (action === "choose-file") {
+        const field = assetManagerActionButton.dataset.assetManagerFileField;
+        if (field) {
+          const fileInput = floatingPanelHost.querySelector(`input[type="file"][data-asset-manager-file-field="${CSS.escape(field)}"]`);
+          if (fileInput instanceof HTMLInputElement) {
+            fileInput.click();
+          }
+        }
+      }
       if (action === "wizard-next") moveAssetWizardStep(1);
       if (action === "wizard-back") moveAssetWizardStep(-1);
       if (action === "wizard-cancel") {
         store.setState((draft) => {
+          cleanupWizardPreview(draft.ui.assetManager.wizard);
           draft.ui.assetManager.wizard = createInitialAssetManagerWizardState();
         });
       }
@@ -7289,6 +7317,29 @@ if (event.shiftKey) {
 
   const handleFloatingPanelChange = (event) => {
     const target = event.target;
+
+    if (target instanceof HTMLInputElement && target.type === "file") {
+      const field = typeof target.dataset.assetManagerFileField === "string" ? target.dataset.assetManagerFileField.trim() : "";
+      if (!field) return;
+      const file = target.files?.[0] || null;
+      store.setState((draft) => {
+        const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+        wizard.draft = wizard.draft || {};
+        releaseWizardPreviewUrl(wizard.draft.spritePreviewUrl);
+        if (file) {
+          const previewUrl = URL.createObjectURL(file);
+          wizard.draft[field] = `selected://${file.name}`;
+          wizard.draft.spriteFileName = file.name;
+          wizard.draft.spritePreviewUrl = previewUrl;
+        } else {
+          wizard.draft[field] = "";
+          wizard.draft.spriteFileName = "";
+          wizard.draft.spritePreviewUrl = "";
+        }
+        draft.ui.assetManager.wizard = wizard;
+      });
+      return;
+    }
 
     if (target instanceof HTMLSelectElement) {
       const selector = typeof target.dataset.assetManagerSelect === "string" ? target.dataset.assetManagerSelect.trim() : "";
@@ -7593,6 +7644,7 @@ if (event.shiftKey) {
     }
     if (store.getState().ui.assetManager?.isOpen) {
       store.setState((draft) => {
+        cleanupWizardPreview(draft.ui.assetManager.wizard);
         draft.ui.assetManager.isOpen = false;
       });
     }
@@ -7642,6 +7694,7 @@ if (event.shiftKey) {
           error: null,
         };
         state.ui.assetManager.isOpen = false;
+        cleanupWizardPreview(state.ui.assetManager.wizard);
         syncScanWithDocument(state, { preserveRange: false, preserveLog: false });
       });
       resize();
