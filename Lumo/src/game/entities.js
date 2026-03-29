@@ -664,8 +664,12 @@ if (id === "flare_pickup_01"){
 
 if (id === "dark_creature_01"){
           const mergedParams = { ...(params || {}) };
-          if (!Number.isFinite(+mergedParams.aggroTiles) && Number.isFinite(+e.aggroRadius)){
-            mergedParams.aggroRadius = +e.aggroRadius;
+          if (!Number.isFinite(+mergedParams.aggroTiles)){
+            if (Number.isFinite(+mergedParams.aggroRadius)){
+              mergedParams.aggroRadius = +mergedParams.aggroRadius;
+            } else if (Number.isFinite(+e.aggroRadius)){
+              mergedParams.aggroRadius = +e.aggroRadius;
+            }
           }
           const dc = this.makeDarkCreature(tx, ty, { w:18, h:18, params: mergedParams });
           applyAnchor(dc, dc.w, dc.h);
@@ -949,7 +953,7 @@ if (this._catById){
       const rawAggroRadiusPx = nOr(params && params.aggroRadius, null);
       const aggroTiles = (rawAggroTiles != null)
         ? rawAggroTiles
-        : ((rawAggroRadiusPx != null) ? (rawAggroRadiusPx / ts) : 0);
+        : ((rawAggroRadiusPx != null) ? (rawAggroRadiusPx / ts) : 6);
 
       return {
         type:"darkCreature",
@@ -1659,7 +1663,7 @@ if (e.type === "lantern"){
 
           const aggroPx = (typeof e.aggroRadiusPx === "number" && e.aggroRadiusPx > 0)
             ? e.aggroRadiusPx
-            : Math.max(0, (e.aggroTiles || 0) * ts);
+            : Math.max(0, (e.aggroTiles || 0) * ts || (6 * ts));
 
           const insideLumoAura = this.isPointLitFromPlayerOnly(cx, cy, player);
           const canCastNow = !!(player && e.isDarkActive && !insideLumoAura && aggroPx > 0);
