@@ -1,5 +1,6 @@
 import { createDefaultBrushDraft } from "../domain/tiles/brushDraft.js";
 import { createGlobalHistoryTimelineState } from "../domain/history/globalTimeline.js";
+import { createInitialAssetManagerWizardState } from "../domain/assets/assetManagerWizardModel.js";
 import { DEFAULT_NEW_LEVEL_HEIGHT, DEFAULT_NEW_LEVEL_WIDTH } from "../data/createNewLevelDocument.js";
 
 export function createEditorState() {
@@ -136,6 +137,8 @@ export function createEditorState() {
       assetManager: {
         isOpen: false,
         selectedCategory: "tiles",
+        activeView: "wizard",
+        wizard: createInitialAssetManagerWizardState(),
       },
     },
   };

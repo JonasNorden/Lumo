@@ -20,7 +20,12 @@ import {
   resolveSelectedSpecialVolume,
 } from "../ui/specialVolumeWorkbench.js";
 import { getVolumePreviewEnvironmentMetrics } from "../ui/volumePreviewEnvironment.js";
-import { getAssetManagerModalContent } from "../ui/assetManagerWorkbench.js";
+import {
+  createInitialAssetManagerWizardState,
+  getAssetManagerModalContent,
+  getStepsForWizard,
+  isStepComplete,
+} from "../ui/assetManagerWorkbench.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
 import {
@@ -7125,6 +7130,24 @@ if (event.shiftKey) {
     });
   };
 
+
+  const moveAssetWizardStep = (direction) => {
+    const steps = getStepsForWizard();
+    store.setState((draft) => {
+      const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+      const currentIndex = Math.max(0, steps.indexOf(wizard.stepId));
+      if (direction > 0) {
+        if (!isStepComplete(wizard.stepId, wizard)) return;
+        const nextIndex = Math.min(steps.length - 1, currentIndex + 1);
+        wizard.stepId = steps[nextIndex];
+      } else {
+        const prevIndex = Math.max(0, currentIndex - 1);
+        wizard.stepId = steps[prevIndex];
+      }
+      draft.ui.assetManager.wizard = wizard;
+    });
+  };
+
   const handleFloatingPanelClick = (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
@@ -7172,6 +7195,46 @@ if (event.shiftKey) {
           draft.ui.assetManager.isOpen = false;
         });
       }
+      if (action === "set-view") {
+        const nextView = assetManagerActionButton.dataset.assetManagerView;
+        if (nextView === "wizard" || nextView === "overview") {
+          store.setState((draft) => {
+            draft.ui.assetManager.activeView = nextView;
+          });
+        }
+      }
+      if (action === "set-mode") {
+        const mode = assetManagerActionButton.dataset.assetManagerMode;
+        if (mode === "create" || mode === "edit") {
+          store.setState((draft) => {
+            const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+            wizard.mode = mode;
+            wizard.stepId = "mode";
+            wizard.selectedExistingAssetId = "";
+            wizard.draft = {};
+            draft.ui.assetManager.wizard = wizard;
+          });
+        }
+      }
+      if (action === "set-type") {
+        const type = assetManagerActionButton.dataset.assetManagerType;
+        if (type) {
+          store.setState((draft) => {
+            const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+            wizard.assetType = type;
+            wizard.selectedExistingAssetId = "";
+            wizard.draft = {};
+            draft.ui.assetManager.wizard = wizard;
+          });
+        }
+      }
+      if (action === "wizard-next") moveAssetWizardStep(1);
+      if (action === "wizard-back") moveAssetWizardStep(-1);
+      if (action === "wizard-cancel") {
+        store.setState((draft) => {
+          draft.ui.assetManager.wizard = createInitialAssetManagerWizardState();
+        });
+      }
       return;
     }
 
@@ -7208,12 +7271,37 @@ if (event.shiftKey) {
       event.stopPropagation();
       return;
     }
+
+    const assetDraftField = typeof target.dataset.assetManagerDraftField === "string" ? target.dataset.assetManagerDraftField.trim() : "";
+    if (assetDraftField) {
+      store.setState((draft) => {
+        const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+        wizard.draft = wizard.draft || {};
+        wizard.draft[assetDraftField] = target.value;
+        draft.ui.assetManager.wizard = wizard;
+      });
+      return;
+    }
+
     const field = target.dataset.newLevelField;
     updateNewLevelSizeField(field, target.value, { commit: false });
   };
 
   const handleFloatingPanelChange = (event) => {
     const target = event.target;
+
+    if (target instanceof HTMLSelectElement) {
+      const selector = typeof target.dataset.assetManagerSelect === "string" ? target.dataset.assetManagerSelect.trim() : "";
+      if (selector === "existing-id") {
+        store.setState((draft) => {
+          const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+          wizard.selectedExistingAssetId = target.value;
+          draft.ui.assetManager.wizard = wizard;
+        });
+      }
+      return;
+    }
+
     if (!(target instanceof HTMLInputElement)) return;
     const paramPath = typeof target.dataset.entityParamPath === "string" ? target.dataset.entityParamPath.trim() : "";
     if (paramPath) {
@@ -7228,6 +7316,18 @@ if (event.shiftKey) {
       });
       return;
     }
+
+    const assetDraftField = typeof target.dataset.assetManagerDraftField === "string" ? target.dataset.assetManagerDraftField.trim() : "";
+    if (assetDraftField) {
+      store.setState((draft) => {
+        const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+        wizard.draft = wizard.draft || {};
+        wizard.draft[assetDraftField] = target.value;
+        draft.ui.assetManager.wizard = wizard;
+      });
+      return;
+    }
+
     const field = target.dataset.newLevelField;
     updateNewLevelSizeField(field, target.value, { commit: true });
   };
@@ -7354,6 +7454,8 @@ if (event.shiftKey) {
       if (action === "assets") {
         store.setState((draft) => {
           draft.ui.assetManager.isOpen = true;
+          draft.ui.assetManager.activeView = draft.ui.assetManager.activeView || "wizard";
+          draft.ui.assetManager.wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
         });
       }
       if (action === "play-from-here") handlePlayFromHereLaunch();
