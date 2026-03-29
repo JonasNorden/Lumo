@@ -5,7 +5,7 @@ export const DEFAULT_NEW_LEVEL_WIDTH = 32;
 export const DEFAULT_NEW_LEVEL_HEIGHT = 18;
 export const DEFAULT_NEW_LEVEL_TILE_SIZE = 24;
 export const MIN_LEVEL_DIMENSION = 8;
-export const MAX_LEVEL_DIMENSION = 256;
+export const MAX_LEVEL_DIMENSION = 1024;
 
 export function sanitizeLevelDimension(value, fallback = DEFAULT_NEW_LEVEL_WIDTH) {
   const parsed = Number.parseInt(String(value), 10);
