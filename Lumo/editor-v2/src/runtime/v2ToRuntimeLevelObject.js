@@ -182,6 +182,18 @@ function getRuntimeCatalogDecorIdSet() {
   return ids.size ? ids : FALLBACK_RUNTIME_CATALOG_DECOR_IDS;
 }
 
+function getRuntimeCatalogBackgroundIdByNormalized() {
+  const entries = globalThis?.window?.LUMO_CATALOG_BG;
+  if (!Array.isArray(entries)) return RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED;
+  const idMap = new Map(RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED);
+  for (const entry of entries) {
+    const id = String(entry?.id || "").trim();
+    if (!id) continue;
+    idMap.set(id.toLowerCase(), id);
+  }
+  return idMap;
+}
+
 function getBasename(input) {
   const value = String(input || "").trim().toLowerCase();
   if (!value) return "";
@@ -195,14 +207,15 @@ function createBackgroundRuntimeMaterialResolver(levelDocument) {
     ? levelDocument.background.materials
     : [];
 
+  const runtimeCatalogBackgroundIds = getRuntimeCatalogBackgroundIdByNormalized();
   const runtimeIdByMaterialId = new Map();
   for (const material of authoredMaterials) {
     const materialId = String(material?.id || "").trim();
     if (!materialId) continue;
     const normalizedMaterialId = materialId.toLowerCase();
 
-    if (RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED.has(normalizedMaterialId)) {
-      runtimeIdByMaterialId.set(materialId, RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED.get(normalizedMaterialId));
+    if (runtimeCatalogBackgroundIds.has(normalizedMaterialId)) {
+      runtimeIdByMaterialId.set(materialId, runtimeCatalogBackgroundIds.get(normalizedMaterialId));
       continue;
     }
 
@@ -224,8 +237,8 @@ function createBackgroundRuntimeMaterialResolver(levelDocument) {
     if (!normalized) return null;
 
     const directNormalized = normalized.toLowerCase();
-    if (RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED.has(directNormalized)) {
-      return RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED.get(directNormalized);
+    if (runtimeCatalogBackgroundIds.has(directNormalized)) {
+      return runtimeCatalogBackgroundIds.get(directNormalized);
     }
 
     const knownV2Id = V2_BACKGROUND_ID_TO_RUNTIME_ID.get(directNormalized);

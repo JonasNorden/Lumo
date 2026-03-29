@@ -75,3 +75,36 @@ export function normalizeBackgroundMaterial(material, index = 0) {
     group: typeof material?.group === "string" && material.group.trim() ? material.group.trim() : fallback?.group || "Custom",
   };
 }
+
+function normalizeMaterialIdForCompare(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+export function isBackgroundMaterialIdTaken(materialId) {
+  const normalized = normalizeMaterialIdForCompare(materialId);
+  return normalized.length > 0 && BACKGROUND_MATERIAL_OPTIONS.some((material) => normalizeMaterialIdForCompare(material?.id) === normalized);
+}
+
+export function registerBackgroundMaterialOption(entry) {
+  const materialId = String(entry?.materialId || entry?.id || "").trim();
+  if (!materialId) return { ok: false, reason: "missing-material-id" };
+  if (isBackgroundMaterialIdTaken(materialId)) return { ok: false, reason: "duplicate-material-id" };
+
+  const normalizedMaterial = normalizeBackgroundMaterial({
+    id: materialId,
+    label: entry?.label || materialId,
+    img: entry?.img || null,
+    drawW: entry?.drawW,
+    drawH: entry?.drawH,
+    drawAnchor: "BL",
+    drawOffX: entry?.drawOffX,
+    drawOffY: entry?.drawOffY,
+    footprint: entry?.footprint,
+    fallbackColor: entry?.fallbackColor,
+    group: entry?.group || "Custom",
+  }, BACKGROUND_MATERIAL_OPTIONS.length);
+
+  BACKGROUND_MATERIAL_OPTIONS.push(normalizedMaterial);
+  materialMap.set(normalizedMaterial.id, normalizedMaterial);
+  return { ok: true, material: normalizedMaterial };
+}

@@ -1,5 +1,5 @@
 import { BRUSH_SPRITE_OPTIONS, isTileCatalogIdTaken } from "../tiles/tileSpriteCatalog.js";
-import { BACKGROUND_MATERIAL_OPTIONS } from "../background/materialCatalog.js";
+import { BACKGROUND_MATERIAL_OPTIONS, isBackgroundMaterialIdTaken } from "../background/materialCatalog.js";
 import { DECOR_PRESETS } from "../decor/decorPresets.js";
 import { ENTITY_PRESETS } from "../entities/entityPresets.js";
 
@@ -313,6 +313,8 @@ export function getStepValidation(stepId, wizardState) {
     }
     if (assetType === ASSET_WIZARD_TYPES.BACKGROUND) {
       if (!normalizeString(draft.materialId)) fieldErrors.materialId = "Material id is required.";
+      else if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(normalizeString(draft.materialId))) fieldErrors.materialId = "Material id must use lowercase letters, numbers, underscores, or hyphens.";
+      else if (isBackgroundMaterialIdTaken(draft.materialId)) fieldErrors.materialId = "Material id already exists. Choose a different id.";
       if (!normalizeString(draft.displayName)) fieldErrors.displayName = "Display name is required.";
       if (!normalizeString(draft.spritePath)) fieldErrors.spritePath = "Select a sprite file.";
       const isValid = Object.keys(fieldErrors).length === 0;

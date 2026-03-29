@@ -260,14 +260,20 @@ function renderStepBody(wizard, validation) {
     }
 
     if (type === "background") {
+      const materialIdAvailability = draft.materialIdAvailability || "";
+      const materialIdStatus = materialIdAvailability === "taken"
+        ? "Already exists"
+        : materialIdAvailability === "available"
+          ? "Available"
+          : "";
       return `
         <div class="assetWizardSection">
           <h4>Background identity</h4>
           <p>Define the material id, label, and texture source for this background material.</p>
           <div class="assetWizardFieldGrid">
-            ${renderInput("Material id", "materialId", draft.materialId, "bg-stone", "", { errorMessage: fieldErrors.materialId })}
+            ${renderInput("Material id", "materialId", draft.materialId, "bg_stone_custom", "", { errorMessage: fieldErrors.materialId, statusMessage: materialIdStatus, statusClass: materialIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted" })}
             ${renderInput("Display name", "displayName", draft.displayName, "Stone Background", "", { errorMessage: fieldErrors.displayName })}
-            ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/backgrounds/", infoTip: "Choose the texture image for this background material." })}
+            ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/bg/", infoTip: "Choose the texture image for this background material." })}
           </div>
         </div>
       `;
@@ -347,7 +353,9 @@ function renderStepBody(wizard, validation) {
   return `
     <div class="assetWizardSection">
       <h4>Save / Register</h4>
-      <p class="assetManagerMuted">Register this tile into the live editor-v2 tile catalog for immediate use in the Tiles workflow.</p>
+      <p class="assetManagerMuted">${wizard.assetType === "background"
+        ? "Register this background material into editor-v2 and runtime background catalogs for immediate use in the Background workflow."
+        : "Register this tile into the live editor-v2 tile catalog for immediate use in the Tiles workflow."}</p>
       ${wizard?.draft?.saveFeedback ? `<p class="assetWizardStepNotice" role="status">${escapeHtml(wizard.draft.saveFeedback)}</p>` : ""}
     </div>
   `;
@@ -383,7 +391,13 @@ function renderWizardPane(wizard) {
   const stepValidation = getStepValidation(wizard.stepId, wizard);
   const isFinalStep = currentIndex === (steps.length - 1);
   const canMoveNext = isFinalStep ? true : currentIndex < (steps.length - 1) && stepValidation.isValid;
-  const nextLabel = isFinalStep ? (wizard.assetType === "tiles" ? "Save Tile" : "Done") : "Next";
+  const nextLabel = isFinalStep
+    ? wizard.assetType === "tiles"
+      ? "Save Tile"
+      : wizard.assetType === "background"
+        ? "Save Background"
+        : "Done"
+    : "Next";
 
   return `
     <section class="assetWizardWorkbench" aria-label="Asset wizard">
