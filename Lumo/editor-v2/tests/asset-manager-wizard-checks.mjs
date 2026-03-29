@@ -5,10 +5,12 @@ import {
   ASSET_WIZARD_TYPES,
   createInitialAssetManagerWizardState,
   getAssetWizardDraftWithDefaults,
-  getTileNumericIdOptions,
-  suggestTileCatalogId,
+  getCanonicalTileIdForBehavior,
   getStepValidation,
+  getTileBehaviorAuditGroups,
+  getTileBehaviorOptions,
   isStepComplete,
+  suggestTileCatalogId,
 } from "../src/domain/assets/assetManagerWizardModel.js";
 import { isTileCatalogIdTaken, registerTileSpriteOption } from "../src/domain/tiles/tileSpriteCatalog.js";
 
@@ -21,21 +23,26 @@ assert.equal(isStepComplete("mode", wizard), true);
 assert.equal(isStepComplete("type", wizard), false);
 
 wizard.assetType = ASSET_WIZARD_TYPES.TILE;
-const knownTileId = getTileNumericIdOptions()[0]?.value || "15";
+const behaviorOptions = getTileBehaviorOptions();
+const knownBehavior = behaviorOptions[0]?.value || "solid";
+const knownTileId = String(getCanonicalTileIdForBehavior(knownBehavior) || 15);
 wizard.draft = {
   catalogId: "stone-floor",
   displayName: "Stone Floor",
+  tileBehavior: knownBehavior,
   tileNumericId: knownTileId,
   spritePath: "assets/tiles/stone_floor.png",
 };
 assert.equal(isStepComplete("identity", wizard), true);
 assert.equal(getStepValidation("identity", wizard).isValid, true);
 
-wizard.draft.tileNumericId = "401";
-const unknownTileValidation = getStepValidation("identity", wizard);
-assert.equal(unknownTileValidation.isValid, false);
-assert.equal(unknownTileValidation.fieldErrors.tileNumericId, "Tile numeric id must be selected from known runtime tile ids.");
-wizard.draft.tileNumericId = knownTileId;
+assert.ok(behaviorOptions.length >= 5);
+
+wizard.draft.tileBehavior = "hazard";
+const syncedHazardDraft = getAssetWizardDraftWithDefaults(ASSET_WIZARD_TYPES.TILE, wizard.draft);
+assert.equal(syncedHazardDraft.tileNumericId, "3");
+assert.equal(syncedHazardDraft.collisionType, "hazard");
+wizard.draft = { ...syncedHazardDraft, tileBehavior: knownBehavior, tileNumericId: knownTileId, collisionType: "solid" };
 
 wizard.draft.collisionType = "solid";
 wizard.draft.drawAnchor = "BL";
@@ -43,6 +50,12 @@ wizard.draft.drawWidth = "16";
 wizard.draft.drawHeight = "16";
 wizard.draft.footprint = "{\"w\":1,\"h\":1}";
 assert.equal(isStepComplete("metadata", wizard), true);
+
+const behaviorAuditGroups = getTileBehaviorAuditGroups();
+const solidGroup = behaviorAuditGroups.find((entry) => entry.behaviorId === "solid");
+assert.ok(solidGroup);
+assert.ok(Array.isArray(solidGroup.exposedTileIds));
+assert.ok(solidGroup.exposedTileIds.length > 0);
 
 wizard.mode = ASSET_WIZARD_MODES.EDIT;
 wizard.selectedExistingAssetId = "";
@@ -73,6 +86,8 @@ assert.equal(backgroundIdentityValidation.fieldErrors.spritePath, "Select a spri
 const tileDefaults = getAssetWizardDraftWithDefaults(ASSET_WIZARD_TYPES.TILE, {});
 assert.equal(tileDefaults.drawWidth, "24");
 assert.equal(tileDefaults.drawHeight, "24");
+assert.equal(tileDefaults.tileBehavior, "solid");
+assert.equal(tileDefaults.tileNumericId, "15");
 
 const suggestedId = suggestTileCatalogId({ displayName: "Crystal Brick" });
 assert.equal(suggestedId, "crystal-brick");
@@ -98,6 +113,7 @@ const duplicateValidation = getStepValidation("identity", {
   draft: {
     catalogId: suggestedId,
     displayName: "Another Crystal",
+    tileBehavior: knownBehavior,
     tileNumericId: knownTileId,
     spritePath: "selected://another.png",
   },

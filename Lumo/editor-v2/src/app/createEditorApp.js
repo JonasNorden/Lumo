@@ -31,6 +31,7 @@ import {
   ASSET_WIZARD_MODES,
   ASSET_WIZARD_TYPES,
   getStepValidation as getAssetWizardStepValidation,
+  getTileBehaviorById,
   suggestTileCatalogId,
 } from "../domain/assets/assetManagerWizardModel.js";
 import { isTileCatalogIdTaken, registerTileSpriteOption } from "../domain/tiles/tileSpriteCatalog.js";
@@ -7208,6 +7209,8 @@ if (event.shiftKey) {
       }
 
       wizard.draft = wizard.draft || {};
+      applyWizardDraftDefaults(wizard);
+      const selectedTileBehavior = getTileBehaviorById(wizard.draft.tileBehavior);
       const numericTileId = Number.parseInt(wizard.draft.tileNumericId, 10);
       const drawW = Number.parseInt(wizard.draft.drawWidth, 10);
       const drawH = Number.parseInt(wizard.draft.drawHeight, 10);
@@ -7221,7 +7224,7 @@ if (event.shiftKey) {
         drawH,
         drawAnchor: wizard.draft.drawAnchor,
         footprint,
-        collisionType: wizard.draft.collisionType,
+        collisionType: selectedTileBehavior?.collisionType || wizard.draft.collisionType,
         group: "Custom",
       });
       if (!registerResult.ok) {
@@ -7415,6 +7418,7 @@ if (event.shiftKey) {
         const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
         wizard.draft = wizard.draft || {};
         wizard.draft[assetDraftField] = target.value;
+        applyWizardDraftDefaults(wizard);
         if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
         if (assetDraftField === "displayName") syncWizardCatalogIdHint(wizard);
         if (assetDraftField === "catalogId") wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(target.value) ? "taken" : "available";
@@ -7483,6 +7487,7 @@ if (event.shiftKey) {
           const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
           wizard.draft = wizard.draft || {};
           wizard.draft[assetDraftField] = target.value;
+          applyWizardDraftDefaults(wizard);
           if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
           if (assetDraftField === "catalogId") wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(target.value) ? "taken" : "available";
           draft.ui.assetManager.wizard = wizard;
@@ -7521,6 +7526,7 @@ if (event.shiftKey) {
         const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
         wizard.draft = wizard.draft || {};
         wizard.draft[assetDraftField] = target.value;
+        applyWizardDraftDefaults(wizard);
         if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
         if (assetDraftField === "catalogId") wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(target.value) ? "taken" : "available";
         if (assetDraftField === "displayName") syncWizardCatalogIdHint(wizard);
