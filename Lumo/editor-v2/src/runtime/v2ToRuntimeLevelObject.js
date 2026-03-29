@@ -94,6 +94,47 @@ function buildRuntimeTileVisualOverrides(levelDocument, tileSize) {
   return overrides;
 }
 
+function buildRuntimeBackgroundVisualOverrides(levelDocument) {
+  const overrides = {};
+  const placements = Array.isArray(levelDocument?.background?.placements) ? levelDocument.background.placements : [];
+  const authoredMaterials = Array.isArray(levelDocument?.background?.materials) ? levelDocument.background.materials : [];
+  const materialById = new Map();
+  for (const material of authoredMaterials) {
+    const materialId = typeof material?.id === "string" ? material.id.trim() : "";
+    if (!materialId) continue;
+    materialById.set(materialId, material);
+  }
+
+  for (const placement of placements) {
+    const x = Number.isFinite(Number(placement?.x)) ? (Number(placement.x) | 0) : null;
+    const y = Number.isFinite(Number(placement?.y)) ? (Number(placement.y) | 0) : null;
+    if (!Number.isInteger(x) || !Number.isInteger(y)) continue;
+
+    const size = Number.isFinite(Number(placement?.size)) ? (Number(placement.size) | 0) : 1;
+    const clampedSize = Math.max(1, Math.min(3, size));
+    const materialId = String(placement?.materialId || "").trim();
+    const material = materialById.get(materialId) || null;
+
+    const drawW = Number.isFinite(Number(material?.drawW)) ? Number(material.drawW) : 24;
+    const drawH = Number.isFinite(Number(material?.drawH)) ? Number(material.drawH) : 24;
+    const drawOffX = Number.isFinite(Number(material?.drawOffX)) ? Number(material.drawOffX) : 0;
+    const drawOffY = Number.isFinite(Number(material?.drawOffY)) ? Number(material.drawOffY) : 0;
+    const drawAnchor = typeof material?.drawAnchor === "string" && material.drawAnchor.trim()
+      ? material.drawAnchor.trim()
+      : "BL";
+
+    overrides[`${x},${y}`] = {
+      drawW: Math.max(1, Math.round(drawW * clampedSize)),
+      drawH: Math.max(1, Math.round(drawH * clampedSize)),
+      drawOffX: Math.round(drawOffX),
+      drawOffY: Math.round(drawOffY),
+      drawAnchor,
+    };
+  }
+
+  return overrides;
+}
+
 function normalizeRuntimeEntityType(type) {
   const normalized = String(type || "").trim().toLowerCase();
   if (!normalized) return null;
@@ -291,6 +332,7 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
     warnings.push(`Background paint remapped ${unknownBackgroundMaterialCount} cell(s) to '${RUNTIME_BG_FALLBACK_ID}' for runtime compatibility.`);
   }
 
+  const runtimeBackgroundVisualOverrides = buildRuntimeBackgroundVisualOverrides(levelDocument);
   const runtimeLevel = {
     meta: {
       id: String(levelDocument?.meta?.id || ""),
@@ -303,11 +345,13 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
     layers: {
       main: mainTiles,
       bg: runtimeBackgroundBase,
+      bgVisualOverrides: runtimeBackgroundVisualOverrides,
       tileVisualOverrides: buildRuntimeTileVisualOverrides(levelDocument, tileSize),
       ents: [],
     },
     editor: {
       bg: runtimeBackgroundBase.slice(0),
+      bgVisualOverrides: { ...runtimeBackgroundVisualOverrides },
     },
   };
 

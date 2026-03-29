@@ -15,6 +15,7 @@
 
       // Background layer (grid of ids)
       this.bg = [];
+      this.bgVisualOverrides = {};
       this._bgDefMap = null;
       this._bgImg = new Map();
       this._pfhBackgroundDiag = {
@@ -212,6 +213,11 @@
       if (bg.length > needBG) bg = bg.slice(0, needBG);
 
       this.bg = bg;
+      this.bgVisualOverrides = (layers && layers.bgVisualOverrides && typeof layers.bgVisualOverrides === "object")
+        ? Object.assign({}, layers.bgVisualOverrides)
+        : (levelObj && levelObj.editor && levelObj.editor.bgVisualOverrides && typeof levelObj.editor.bgVisualOverrides === "object")
+          ? Object.assign({}, levelObj.editor.bgVisualOverrides)
+          : {};
       this._bgDefMap = null;
       this._pfhBackgroundDiag = {
         loadLogged: false,
@@ -242,6 +248,11 @@
     _getTileVisualOverrideAt(tx, ty){
       if (!this.tileVisualOverrides || typeof this.tileVisualOverrides !== "object") return null;
       return this.tileVisualOverrides[`${tx|0},${ty|0}`] || null;
+    }
+
+    _getBackgroundVisualOverrideAt(tx, ty){
+      if (!this.bgVisualOverrides || typeof this.bgVisualOverrides !== "object") return null;
+      return this.bgVisualOverrides[`${tx|0},${ty|0}`] || null;
     }
 
     _getTileFootprintAt(tx, ty, id){
@@ -468,14 +479,19 @@
             this._bgImg.set(def.img, img);
           }
 
-          const w = (typeof def.w === "number") ? def.w : ts;
-          const h = (typeof def.h === "number") ? def.h : ts;
-          const anchor = def.anchor || "TL";
+          const override = this._getBackgroundVisualOverrideAt(tx, ty);
+          const w = (override && Number.isFinite(Number(override.drawW))) ? (Number(override.drawW) | 0) : ((typeof def.w === "number") ? def.w : ts);
+          const h = (override && Number.isFinite(Number(override.drawH))) ? (Number(override.drawH) | 0) : ((typeof def.h === "number") ? def.h : ts);
+          const offX = (override && Number.isFinite(Number(override.drawOffX))) ? (Number(override.drawOffX) | 0) : 0;
+          const offY = (override && Number.isFinite(Number(override.drawOffY))) ? (Number(override.drawOffY) | 0) : 0;
+          const anchor = (override && override.drawAnchor) ? String(override.drawAnchor) : (def.anchor || "TL");
 
           const wx = tx * ts;
           const wy = ty * ts;
-          const dx = wx - cam.x;
-          const dy = (anchor === "BL") ? ((ty + 1) * ts - h - cam.y) : (wy - cam.y);
+          const dx = wx + offX - cam.x;
+          const dy = (anchor === "BL")
+            ? ((ty + 1) * ts - h + offY - cam.y)
+            : (wy + offY - cam.y);
 
           if (img._ok){
             ctx.drawImage(img, dx, dy, w, h);
