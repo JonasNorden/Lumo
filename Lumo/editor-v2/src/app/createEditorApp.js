@@ -7238,12 +7238,15 @@ if (event.shiftKey) {
       }
 
       draft.brush.activeDraft.sprite = registerResult.option.value;
-      wizard.stepId = "save";
-      wizard.draft.catalogIdAvailability = "available";
-      wizard.draft.saveFeedback = `Saved tile “${wizard.draft.displayName}” (${wizard.draft.catalogId}). It is now available in the Tiles picker.`;
-      wizard.draft.lastSavedCatalogId = wizard.draft.catalogId;
+      setActiveLayer(draft, PANEL_LAYERS.TILES);
+      draft.interaction.activeTool = EDITOR_TOOLS.PAINT;
+      draft.ui.assetManager.selectedCategory = "tiles";
+      draft.ui.assetManager.activeView = "wizard";
+      draft.ui.importStatus = `Tile created: ${wizard.draft.displayName || registerResult.option.label || registerResult.option.value}`;
+      cleanupWizardPreview(wizard);
+      draft.ui.assetManager.wizard = createInitialAssetManagerWizardState();
+      draft.ui.assetManager.isOpen = false;
       didSave = true;
-      draft.ui.assetManager.wizard = wizard;
     });
     return didSave;
   };
