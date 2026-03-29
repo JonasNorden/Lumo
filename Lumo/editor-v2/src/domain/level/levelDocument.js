@@ -12,6 +12,25 @@ import { normalizeSpawnAndExitEntities } from "../entities/spawnExitRules.js";
 const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
 const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
 const DEFAULT_DECOR_VARIANT = "a";
+const FLOWER_DECOR_TYPE = "decor_flower_01";
+
+function parseFlowerVariant(value) {
+  if (Number.isFinite(value)) {
+    const parsed = Math.round(value);
+    if (parsed >= 1 && parsed <= 4) return parsed;
+    return null;
+  }
+
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+  if (/^[1-4]$/.test(normalized)) return Number.parseInt(normalized, 10);
+  if (normalized === "a" || normalized === "default") return 1;
+  if (normalized === "b") return 2;
+  if (normalized === "c") return 3;
+  if (normalized === "d") return 4;
+  return null;
+}
 
 /**
  * @typedef LevelDocument
@@ -92,6 +111,10 @@ function normalizeDecor(decor, index) {
   const nextVisible = typeof decor?.visible === "boolean" ? decor.visible : true;
   const nextVariant = typeof decor?.variant === "string" && decor.variant.trim() ? decor.variant.trim() : DEFAULT_DECOR_VARIANT;
   const nextParams = cloneEntityParams(decor?.params);
+  if (nextType === FLOWER_DECOR_TYPE) {
+    const parsedFlowerVariant = parseFlowerVariant(nextParams.variant) ?? parseFlowerVariant(nextVariant) ?? 1;
+    nextParams.variant = parsedFlowerVariant;
+  }
 
   return {
     id: nextId,
