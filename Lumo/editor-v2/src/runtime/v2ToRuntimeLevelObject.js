@@ -76,18 +76,20 @@ function buildRuntimeTileVisualOverrides(levelDocument, tileSize) {
     const y = Number.isFinite(Number(placement?.y)) ? (Number(placement.y) | 0) : null;
     if (!Number.isInteger(x) || !Number.isInteger(y)) continue;
     if (size <= 0) continue;
+    if (value <= 0) continue;
 
-    // Runtime parity fix: stone_ct supports 1x1/2x2/3x3 authoring in editor-v2,
-    // but runtime catalog metadata is fixed to a legacy 2x2 draw profile.
-    // Inject per-anchor draw overrides so runtime uses authored brush size.
-    if (value === 15) {
-      const clampedSize = Math.max(1, Math.min(3, size));
-      overrides[`${x},${y}`] = {
-        drawW: clampedSize * tileSize,
-        drawH: clampedSize * tileSize,
-        drawAnchor: "BL",
-      };
-    }
+    const clampedSize = Math.max(1, Math.min(3, size));
+    // Preserve authored tile-size semantics through runtime:
+    // - draw footprint
+    // - collision footprint
+    // - anchor convention (BL)
+    overrides[`${x},${y}`] = {
+      drawW: clampedSize * tileSize,
+      drawH: clampedSize * tileSize,
+      drawAnchor: "BL",
+      footprintW: clampedSize,
+      footprintH: clampedSize,
+    };
   }
   return overrides;
 }
