@@ -2816,7 +2816,7 @@ function runObjectPlacementPreviewSuppressionRegressionChecks() {
     hoverCell: { x: 0, y: 0 },
     objectPlacementPreviewSuppressed: false,
   }, null);
-  assert.ok(fallbackEntityPreview.operations.length > 0, "entity placement preview should fall back to a generic footprint when preset metadata is unavailable");
+  assert.equal(fallbackEntityPreview.operations.length, 0, "entity placement preview should stay hidden when no entity preset is actively selected for placement");
 
   const fallbackSoundPreview = createPreviewTestContext();
   renderSoundPlacementPreview(fallbackSoundPreview.ctx, doc, viewport, {
