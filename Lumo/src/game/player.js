@@ -425,17 +425,23 @@
       const sy = this.y + this.h + 1;
       const tx = Math.floor(sx / ts);
       const ty = Math.floor(sy / ts);
+      const resolved = (typeof world.getTileBehavior === 'function')
+        ? world.getTileBehavior(tx, ty)
+        : null;
+      if (resolved) return resolved;
+
       let id = 0;
       if (typeof world.getTile === 'function') id = world.getTile(tx, ty) | 0;
       else if (typeof world.get === 'function') id = world.get(tx, ty) | 0;
       if (!id) return null;
-      const resolved = (typeof world.resolveTileBehaviorById === 'function')
+
+      const resolvedById = (typeof world.resolveTileBehaviorById === 'function')
         ? world.resolveTileBehaviorById(id)
         : null;
       const tsDef = (Lumo.Tileset && Lumo.Tileset[id]) ? Lumo.Tileset[id] : null;
       // Some implementations store defs in world.tileDefs instead.
       const wDef = (world.tileDefs && world.tileDefs[id]) ? world.tileDefs[id] : null;
-      return resolved || tsDef || wDef || null;
+      return resolvedById || tsDef || wDef || null;
     }
 
     _applySurface(world){
