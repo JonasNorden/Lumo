@@ -476,7 +476,8 @@ export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, ac
 
   const presetType = typeof activePreset?.type === "string" && activePreset.type.trim()
     ? activePreset.type
-    : "generic";
+    : null;
+  if (!presetType) return;
   const previewEntity = {
     type: presetType,
     x: interaction.hoverCell.x,
