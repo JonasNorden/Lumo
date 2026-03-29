@@ -27,6 +27,13 @@ import {
   getStepsForWizard,
   isStepComplete,
 } from "../ui/assetManagerWorkbench.js";
+import {
+  ASSET_WIZARD_MODES,
+  ASSET_WIZARD_TYPES,
+  getStepValidation as getAssetWizardStepValidation,
+  suggestTileCatalogId,
+} from "../domain/assets/assetManagerWizardModel.js";
+import { isTileCatalogIdTaken, registerTileSpriteOption } from "../domain/tiles/tileSpriteCatalog.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
 import {
@@ -7156,6 +7163,88 @@ if (event.shiftKey) {
     wizard.draft = getAssetWizardDraftWithDefaults(wizard.assetType, wizard.draft || {});
   };
 
+  const syncWizardCatalogIdHint = (wizard) => {
+    if (!wizard || wizard.assetType !== ASSET_WIZARD_TYPES.TILE || wizard.mode !== ASSET_WIZARD_MODES.CREATE) return;
+    wizard.draft = wizard.draft || {};
+    const suggestedCatalogId = suggestTileCatalogId({
+      displayName: wizard.draft.displayName,
+      spriteFileName: wizard.draft.spriteFileName,
+      currentCatalogId: wizard.draft.catalogId,
+    });
+    if (!wizard.draft.catalogId || !wizard.draft.catalogIdManuallyEdited) {
+      wizard.draft.catalogId = suggestedCatalogId;
+    }
+    if (!wizard.draft.catalogId) {
+      wizard.draft.catalogIdAvailability = "";
+      return;
+    }
+    wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(wizard.draft.catalogId) ? "taken" : "available";
+  };
+
+  const parseFootprint = (value) => {
+    try {
+      const parsed = JSON.parse(String(value || "{\"w\":1,\"h\":1}"));
+      return {
+        w: Math.max(1, Math.round(Number(parsed?.w) || 1)),
+        h: Math.max(1, Math.round(Number(parsed?.h) || 1)),
+      };
+    } catch {
+      return { w: 1, h: 1 };
+    }
+  };
+
+  const attemptTileWizardSave = () => {
+    let didSave = false;
+    store.setState((draft) => {
+      const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+      const identityValidation = getAssetWizardStepValidation("identity", wizard);
+      const metadataValidation = getAssetWizardStepValidation("metadata", wizard);
+      if (!identityValidation.isValid || !metadataValidation.isValid) {
+        wizard.stepId = !identityValidation.isValid ? "identity" : "metadata";
+        wizard.draft = wizard.draft || {};
+        wizard.draft.saveFeedback = "Cannot save yet. Resolve the highlighted validation issues first.";
+        draft.ui.assetManager.wizard = wizard;
+        return;
+      }
+
+      wizard.draft = wizard.draft || {};
+      const numericTileId = Number.parseInt(wizard.draft.tileNumericId, 10);
+      const drawW = Number.parseInt(wizard.draft.drawWidth, 10);
+      const drawH = Number.parseInt(wizard.draft.drawHeight, 10);
+      const footprint = parseFootprint(wizard.draft.footprint);
+      const registerResult = registerTileSpriteOption({
+        catalogId: wizard.draft.catalogId,
+        label: wizard.draft.displayName,
+        tileId: numericTileId,
+        img: wizard.draft.spritePreviewUrl || wizard.draft.spritePath || null,
+        drawW,
+        drawH,
+        drawAnchor: wizard.draft.drawAnchor,
+        footprint,
+        collisionType: wizard.draft.collisionType,
+        group: "Custom",
+      });
+      if (!registerResult.ok) {
+        wizard.stepId = "identity";
+        wizard.draft.catalogIdAvailability = registerResult.reason === "duplicate-catalog-id" ? "taken" : wizard.draft.catalogIdAvailability;
+        wizard.draft.saveFeedback = registerResult.reason === "duplicate-catalog-id"
+          ? "Catalog id already exists. Choose another id."
+          : "Tile registration failed due to invalid data.";
+        draft.ui.assetManager.wizard = wizard;
+        return;
+      }
+
+      draft.brush.activeDraft.sprite = registerResult.option.value;
+      wizard.stepId = "save";
+      wizard.draft.catalogIdAvailability = "available";
+      wizard.draft.saveFeedback = `Saved tile “${wizard.draft.displayName}” (${wizard.draft.catalogId}). It is now available in the Tiles picker.`;
+      wizard.draft.lastSavedCatalogId = wizard.draft.catalogId;
+      didSave = true;
+      draft.ui.assetManager.wizard = wizard;
+    });
+    return didSave;
+  };
+
   const moveAssetWizardStep = (direction) => {
     const steps = getStepsForWizard();
     store.setState((draft) => {
@@ -7239,6 +7328,7 @@ if (event.shiftKey) {
             wizard.stepId = "mode";
             wizard.selectedExistingAssetId = "";
             wizard.draft = {};
+            wizard.draft.catalogIdManuallyEdited = false;
             draft.ui.assetManager.wizard = wizard;
           });
         }
@@ -7253,6 +7343,7 @@ if (event.shiftKey) {
             wizard.selectedExistingAssetId = "";
             wizard.draft = {};
             applyWizardDraftDefaults(wizard);
+            syncWizardCatalogIdHint(wizard);
             draft.ui.assetManager.wizard = wizard;
           });
         }
@@ -7266,7 +7357,14 @@ if (event.shiftKey) {
           }
         }
       }
-      if (action === "wizard-next") moveAssetWizardStep(1);
+      if (action === "wizard-next") {
+        const wizard = store.getState().ui.assetManager.wizard || createInitialAssetManagerWizardState();
+        if (wizard.stepId === "save" && wizard.assetType === ASSET_WIZARD_TYPES.TILE && wizard.mode === ASSET_WIZARD_MODES.CREATE) {
+          attemptTileWizardSave();
+        } else {
+          moveAssetWizardStep(1);
+        }
+      }
       if (action === "wizard-back") moveAssetWizardStep(-1);
       if (action === "wizard-cancel") {
         store.setState((draft) => {
@@ -7317,6 +7415,9 @@ if (event.shiftKey) {
         const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
         wizard.draft = wizard.draft || {};
         wizard.draft[assetDraftField] = target.value;
+        if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
+        if (assetDraftField === "displayName") syncWizardCatalogIdHint(wizard);
+        if (assetDraftField === "catalogId") wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(target.value) ? "taken" : "available";
         draft.ui.assetManager.wizard = wizard;
       });
       return;
@@ -7345,6 +7446,7 @@ if (event.shiftKey) {
           wizard.draft[field] = `selected://${file.name}`;
           wizard.draft.spriteFileName = file.name;
           wizard.draft.spritePreviewUrl = previewUrl;
+          syncWizardCatalogIdHint(wizard);
           if (shouldAutofillWidth || shouldAutofillHeight) {
             const probeImage = new Image();
             probeImage.addEventListener("load", () => {
@@ -7366,6 +7468,7 @@ if (event.shiftKey) {
           wizard.draft[field] = "";
           wizard.draft.spriteFileName = "";
           wizard.draft.spritePreviewUrl = "";
+          syncWizardCatalogIdHint(wizard);
         }
         applyWizardDraftDefaults(wizard);
         draft.ui.assetManager.wizard = wizard;
@@ -7380,6 +7483,8 @@ if (event.shiftKey) {
           const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
           wizard.draft = wizard.draft || {};
           wizard.draft[assetDraftField] = target.value;
+          if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
+          if (assetDraftField === "catalogId") wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(target.value) ? "taken" : "available";
           draft.ui.assetManager.wizard = wizard;
         });
       }
@@ -7416,6 +7521,9 @@ if (event.shiftKey) {
         const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
         wizard.draft = wizard.draft || {};
         wizard.draft[assetDraftField] = target.value;
+        if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
+        if (assetDraftField === "catalogId") wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(target.value) ? "taken" : "available";
+        if (assetDraftField === "displayName") syncWizardCatalogIdHint(wizard);
         draft.ui.assetManager.wizard = wizard;
       });
       return;

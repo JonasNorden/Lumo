@@ -120,6 +120,12 @@ const TILE_ASSETS = new Map(
   CATALOG_TILE_ENTRIES.map((entry) => [entry.tileId, entry]),
 );
 
+const TILE_CATALOG_IDS = new Set(
+  CATALOG_TILE_ENTRIES
+    .map((entry) => String(entry.id || "").trim().toLowerCase())
+    .filter((value) => value.length > 0),
+);
+
 for (const [tileId, override] of Object.entries(TILE_DRAW_OVERRIDES)) {
   const numericTileId = Number(tileId);
   if (TILE_ASSETS.has(numericTileId)) continue;
@@ -157,6 +163,72 @@ export const BRUSH_SPRITE_OPTIONS = [
     supportedSizes: normalizeSupportedSizes(tileAsset?.supportedSizes),
   };
 });
+
+for (const option of BRUSH_SPRITE_OPTIONS) {
+  const catalogId = String(option?.id || option?.value || "").trim().toLowerCase();
+  if (catalogId) TILE_CATALOG_IDS.add(catalogId);
+}
+
+function normalizeCatalogIdForCompare(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+export function isTileCatalogIdTaken(catalogId) {
+  const normalized = normalizeCatalogIdForCompare(catalogId);
+  return normalized.length > 0 && TILE_CATALOG_IDS.has(normalized);
+}
+
+export function registerTileSpriteOption(entry) {
+  if (!entry || !Number.isInteger(entry.tileId)) {
+    return { ok: false, reason: "invalid-tile-id" };
+  }
+
+  const catalogId = String(entry.catalogId || entry.id || entry.value || "").trim();
+  if (!catalogId) {
+    return { ok: false, reason: "missing-catalog-id" };
+  }
+  if (isTileCatalogIdTaken(catalogId)) {
+    return { ok: false, reason: "duplicate-catalog-id" };
+  }
+
+  const normalizedOption = {
+    id: catalogId,
+    value: catalogId,
+    label: entry.label || catalogId,
+    tileId: entry.tileId,
+    img: entry.img || null,
+    drawW: Number.isFinite(entry.drawW) ? entry.drawW : 24,
+    drawH: Number.isFinite(entry.drawH) ? entry.drawH : 24,
+    drawAnchor: entry.drawAnchor === "BL" ? "BL" : "TL",
+    drawOffX: Number.isFinite(entry.drawOffX) ? entry.drawOffX : 0,
+    drawOffY: Number.isFinite(entry.drawOffY) ? entry.drawOffY : 0,
+    footprint: entry.footprint || { w: 1, h: 1 },
+    supportedSizes: normalizeSupportedSizes(entry.supportedSizes),
+    collisionType: entry.collisionType || null,
+    group: entry.group || "Custom",
+  };
+
+  BRUSH_SPRITE_OPTIONS.push(normalizedOption);
+  TILE_CATALOG_IDS.add(catalogId.toLowerCase());
+
+  TILE_ASSETS.set(normalizedOption.tileId, {
+    tileId: normalizedOption.tileId,
+    id: normalizedOption.id,
+    label: normalizedOption.label,
+    img: normalizedOption.img,
+    drawW: normalizedOption.drawW,
+    drawH: normalizedOption.drawH,
+    drawAnchor: normalizedOption.drawAnchor,
+    drawOffX: normalizedOption.drawOffX,
+    drawOffY: normalizedOption.drawOffY,
+    footprint: normalizedOption.footprint,
+    supportedSizes: normalizedOption.supportedSizes,
+    collisionType: normalizedOption.collisionType,
+    group: normalizedOption.group,
+  });
+
+  return { ok: true, option: normalizedOption };
+}
 
 export function getTileAssetByTileValue(tileValue) {
   return TILE_ASSETS.get(tileValue) || null;

@@ -1,8 +1,7 @@
-import { BRUSH_SPRITE_OPTIONS } from "../tiles/tileSpriteCatalog.js";
+import { BRUSH_SPRITE_OPTIONS, isTileCatalogIdTaken } from "../tiles/tileSpriteCatalog.js";
 import { BACKGROUND_MATERIAL_OPTIONS } from "../background/materialCatalog.js";
 import { DECOR_PRESETS } from "../decor/decorPresets.js";
 import { ENTITY_PRESETS } from "../entities/entityPresets.js";
-import { GRID_SIZE } from "../../../core/constants.js";
 
 export const ASSET_WIZARD_MODES = {
   CREATE: "create",
@@ -78,9 +77,41 @@ function isHexColor(value) {
   return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(normalizeString(value));
 }
 
+function isValidFootprint(value) {
+  const normalized = normalizeString(value);
+  if (!normalized) return false;
+  try {
+    const parsed = JSON.parse(normalized);
+    return isPositiveNumber(parsed?.w) && isPositiveNumber(parsed?.h);
+  } catch {
+    return false;
+  }
+}
+
 function normalizeDrawSizeValue(value) {
   const resolved = toPositiveNumberOrNull(value);
-  return resolved === null ? String(GRID_SIZE) : String(Math.round(resolved));
+  return resolved === null ? "24" : String(Math.round(resolved));
+}
+
+function toSlugToken(value) {
+  return normalizeString(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+export function suggestTileCatalogId({ displayName = "", spriteFileName = "", currentCatalogId = "" } = {}) {
+  const current = toSlugToken(currentCatalogId);
+  const fromDisplayName = toSlugToken(displayName);
+  const fromSprite = toSlugToken(spriteFileName.replace(/\.[a-z0-9]+$/i, ""));
+  const base = fromDisplayName || fromSprite || current || "tile";
+  let candidate = base;
+  let suffix = 2;
+  while (isTileCatalogIdTaken(candidate) && candidate !== current) {
+    candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
 }
 
 export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
@@ -152,6 +183,8 @@ export function getStepValidation(stepId, wizardState) {
     }
     if (assetType === ASSET_WIZARD_TYPES.TILE) {
       if (!normalizeString(draft.catalogId)) fieldErrors.catalogId = "Catalog id is required.";
+      else if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalizeString(draft.catalogId))) fieldErrors.catalogId = "Catalog id must be lowercase letters, numbers, and hyphens only.";
+      else if (isTileCatalogIdTaken(draft.catalogId)) fieldErrors.catalogId = "Catalog id already exists. Choose a different id.";
       if (!normalizeString(draft.displayName)) fieldErrors.displayName = "Display name is required.";
       if (!isKnownTileNumericId(draft.tileNumericId)) fieldErrors.tileNumericId = "Tile numeric id must be selected from known runtime tile ids.";
       if (!normalizeString(draft.spritePath)) fieldErrors.spritePath = "Select a sprite file.";
@@ -174,6 +207,7 @@ export function getStepValidation(stepId, wizardState) {
       if (!normalizeString(draft.drawAnchor)) fieldErrors.drawAnchor = "Draw anchor is required.";
       if (!isPositiveNumber(draft.drawWidth)) fieldErrors.drawWidth = "Draw width must be a positive number.";
       if (!isPositiveNumber(draft.drawHeight)) fieldErrors.drawHeight = "Draw height must be a positive number.";
+      if (!isValidFootprint(draft.footprint)) fieldErrors.footprint = "Footprint must be JSON with positive w/h, e.g. {\"w\":1,\"h\":1}.";
       const isValid = Object.keys(fieldErrors).length === 0;
       return { isValid, fieldErrors, blockingReason: isValid ? "" : "Resolve metadata validation issues to continue." };
     }

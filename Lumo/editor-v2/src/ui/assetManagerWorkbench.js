@@ -78,6 +78,8 @@ function renderInfoTip(text = "") {
 function renderInput(label, field, value, placeholder, description = "", options = {}) {
   const errorMessage = options.errorMessage || "";
   const infoTip = options.infoTip || "";
+  const statusMessage = options.statusMessage || "";
+  const statusClass = options.statusClass || "";
   return `
     <label class="assetWizardField" for="asset-wizard-${escapeHtml(field)}">
       <span class="assetWizardFieldLabelRow">
@@ -97,6 +99,7 @@ function renderInput(label, field, value, placeholder, description = "", options
         autocomplete="off"
       />
       ${errorMessage ? `<span class="assetWizardFieldError">${escapeHtml(errorMessage)}</span>` : ""}
+      ${statusMessage ? `<span class="assetWizardFieldHelp ${escapeHtml(statusClass)}">${escapeHtml(statusMessage)}</span>` : ""}
     </label>
   `;
 }
@@ -233,12 +236,18 @@ function renderStepBody(wizard, validation) {
 
     if (type === "tiles") {
       const tileIdOptions = getTileNumericIdOptions();
+      const catalogIdAvailability = draft.catalogIdAvailability || "";
+      const catalogIdStatus = catalogIdAvailability === "taken"
+        ? "Already exists"
+        : catalogIdAvailability === "available"
+          ? "Available"
+          : "";
       return `
         <div class="assetWizardSection">
           <h4>Tile identity</h4>
           <p>Capture the key tile identity fields first. Tile ids come from known runtime tile mappings.</p>
           <div class="assetWizardFieldGrid">
-            ${renderInput("Catalog id", "catalogId", draft.catalogId, "stone-floor", "", { errorMessage: fieldErrors.catalogId })}
+            ${renderInput("Catalog id", "catalogId", draft.catalogId, "stone-floor", "Unique technical registry key.", { errorMessage: fieldErrors.catalogId, statusMessage: catalogIdStatus, statusClass: catalogIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted" })}
             ${renderInput("Display name", "displayName", draft.displayName, "Stone Floor", "", { errorMessage: fieldErrors.displayName })}
             ${renderSelectInput("Tile numeric id", "tileNumericId", draft.tileNumericId, tileIdOptions, "Select from known runtime tile ids; do not invent a numeric id.", { errorMessage: fieldErrors.tileNumericId, infoTip: "Sourced from existing runtime/editor tile catalog." })}
             ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/tiles/", infoTip: "Optional for now in architecture, but required to proceed in this wizard." })}
@@ -278,9 +287,9 @@ function renderStepBody(wizard, validation) {
           <div class="assetWizardFieldGrid">
             ${renderInput("Collision / behavior type", "collisionType", draft.collisionType, "solid | oneWay | hazard", "", { errorMessage: fieldErrors.collisionType, infoTip: "Determines gameplay interaction for this tile (blocking, one-way, hazard, etc.)." })}
             ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor, "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left)." })}
-            ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "16", "", { errorMessage: fieldErrors.drawWidth })}
-            ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "16", "", { errorMessage: fieldErrors.drawHeight })}
-            ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}')}
+            ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth })}
+            ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight })}
+            ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { errorMessage: fieldErrors.footprint })}
           </div>
         </div>
       `;
@@ -330,7 +339,8 @@ function renderStepBody(wizard, validation) {
   return `
     <div class="assetWizardSection">
       <h4>Save / Register</h4>
-      <p class="assetManagerMuted">Save/register persistence is intentionally not implemented in M24B yet. This final step confirms draft readiness only.</p>
+      <p class="assetManagerMuted">Register this tile into the live editor-v2 tile catalog for immediate use in the Tiles workflow.</p>
+      ${wizard?.draft?.saveFeedback ? `<p class="assetWizardStepNotice" role="status">${escapeHtml(wizard.draft.saveFeedback)}</p>` : ""}
     </div>
   `;
 }
@@ -363,7 +373,9 @@ function renderWizardPane(wizard) {
   const currentIndex = Math.max(0, steps.indexOf(wizard.stepId));
   const canMoveBack = currentIndex > 0;
   const stepValidation = getStepValidation(wizard.stepId, wizard);
-  const canMoveNext = currentIndex < (steps.length - 1) && stepValidation.isValid;
+  const isFinalStep = currentIndex === (steps.length - 1);
+  const canMoveNext = isFinalStep ? true : currentIndex < (steps.length - 1) && stepValidation.isValid;
+  const nextLabel = isFinalStep ? (wizard.assetType === "tiles" ? "Save Tile" : "Done") : "Next";
 
   return `
     <section class="assetWizardWorkbench" aria-label="Asset wizard">
@@ -391,7 +403,7 @@ function renderWizardPane(wizard) {
             <button type="button" class="assetWizardNavButton" data-asset-manager-action="wizard-cancel">Cancel</button>
             <div class="assetWizardFooterRight">
               <button type="button" class="assetWizardNavButton" data-asset-manager-action="wizard-back" ${canMoveBack ? "" : "disabled"}>Back</button>
-              <button type="button" class="assetWizardNavButton isPrimary" data-asset-manager-action="wizard-next" ${canMoveNext ? "" : "disabled"}>${currentIndex === (steps.length - 1) ? "Done" : "Next"}</button>
+              <button type="button" class="assetWizardNavButton isPrimary" data-asset-manager-action="wizard-next" ${canMoveNext ? "" : "disabled"}>${nextLabel}</button>
             </div>
           </footer>
         </div>
