@@ -74,6 +74,34 @@ function serializeCatalogEntry(entry) {
   return `  {\n    id: ${JSON.stringify(entry.id)},\n    name: ${JSON.stringify(entry.name)},\n    group: ${JSON.stringify(entry.group)},\n    img: ${JSON.stringify(entry.img)},\n    footprint: { w: ${entry.footprint.w}, h: ${entry.footprint.h} },\n    tileId: ${entry.tileId},\n    collisionType: ${JSON.stringify(entry.collisionType)},\n    special: null,\n    drawW: ${entry.drawW},\n    drawH: ${entry.drawH},\n    drawAnchor: ${JSON.stringify(entry.drawAnchor)},\n    drawOffX: 0,\n    drawOffY: 0\n  }`;
 }
 
+function findTileCatalogArrayBounds(catalogSource) {
+  const catalogKeyIndex = catalogSource.indexOf("window.LUMO_CATALOG_TILES");
+  if (catalogKeyIndex < 0) return null;
+
+  const arrayStartIndex = catalogSource.indexOf("[", catalogKeyIndex);
+  if (arrayStartIndex < 0) return null;
+
+  const arrayEndIndex = catalogSource.lastIndexOf("]");
+  if (arrayEndIndex < 0 || arrayEndIndex <= arrayStartIndex) return null;
+
+  return { arrayStartIndex, arrayEndIndex };
+}
+
+function buildCatalogSourceWithInsertedTile(catalogSource, arrayBounds, entryText, hasExistingEntries) {
+  const { arrayEndIndex } = arrayBounds;
+  const beforeEnd = catalogSource.slice(0, arrayEndIndex);
+  const afterEnd = catalogSource.slice(arrayEndIndex);
+  const trimmedBeforeEnd = beforeEnd.replace(/\s*$/, "");
+
+  if (!hasExistingEntries) {
+    return `${trimmedBeforeEnd}\n${entryText}\n${afterEnd}`;
+  }
+
+  const needsComma = !trimmedBeforeEnd.endsWith(",");
+  const commaPrefix = needsComma ? "," : "";
+  return `${trimmedBeforeEnd}${commaPrefix}\n\n${entryText}\n${afterEnd}`;
+}
+
 async function pickAvailableSpriteFileName(catalogId, sourceFileName) {
   const ext = getExtensionFromFileName(sourceFileName);
   const base = sanitizeSpriteBaseName(catalogId);
@@ -137,13 +165,12 @@ async function saveTile(payload) {
     drawAnchor: tile.drawAnchor === "BL" ? "BL" : "TL",
   };
 
-  const closingIndex = catalogSource.lastIndexOf("];\n");
-  if (closingIndex < 0) {
-    return { ok: false, statusCode: 500, reason: "catalog-format-unsupported", message: "Could not find the tile catalog array terminator in data/catalog_tiles.js." };
+  const arrayBounds = findTileCatalogArrayBounds(catalogSource);
+  if (!arrayBounds) {
+    return { ok: false, statusCode: 500, reason: "catalog-format-unsupported", message: "Could not safely locate tile catalog array" };
   }
 
-  const separator = tiles.length > 0 ? "\n\n  ,\n" : "\n";
-  const nextCatalogSource = `${catalogSource.slice(0, closingIndex)}${separator}${serializeCatalogEntry(tileEntry)}\n${catalogSource.slice(closingIndex)}`;
+  const nextCatalogSource = buildCatalogSourceWithInsertedTile(catalogSource, arrayBounds, serializeCatalogEntry(tileEntry), tiles.length > 0);
   await fs.writeFile(TILE_CATALOG_FILE, nextCatalogSource, "utf8");
 
   return {
