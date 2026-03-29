@@ -133,6 +133,10 @@ export function createEditorState() {
         openEntityId: null,
         fogDefaults: null,
       },
+      assetManager: {
+        isOpen: false,
+        selectedCategory: "tiles",
+      },
     },
   };
 }
