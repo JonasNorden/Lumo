@@ -2,7 +2,7 @@ const BUILTIN_BACKGROUND_MATERIALS = [
   {
     id: "bg_stone_wall",
     label: "Stone Wall",
-    img: "../data/assets/tiles/soil_c.png",
+    img: "../data/assets/sprites/bg/wall_05.png",
     drawW: 24,
     drawH: 24,
     drawAnchor: "BL",

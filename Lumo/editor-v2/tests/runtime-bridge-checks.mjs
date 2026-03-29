@@ -28,7 +28,7 @@ function createMockLevelDocument() {
     background: {
       base: new Array(12).fill("bg_stone_wall"),
       materials: [
-        { id: "bg_stone_wall", img: "../data/assets/tiles/soil_c.png" },
+        { id: "bg_stone_wall", img: "../data/assets/sprites/bg/wall_05.png" },
         { id: "bg_arch", img: "../data/assets/tiles/stone_02.png" },
       ],
     },
