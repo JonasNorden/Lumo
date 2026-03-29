@@ -990,6 +990,7 @@ if (this._catById){
         _castTargetY: 0,
         _pulseHitId: -1,
         reactsToFlares: boolOr(params && params.reactsToFlares, true),
+        flareConsumeBurnMul: Math.max(1, nOr(params && params.flareConsumeBurnMul, 7.5)),
         _animT: Math.random() * 0.8,
         dying:false,
         dissolveT:0,
@@ -1323,7 +1324,7 @@ if (this._catById){
       const ts = Lumo.TILE || 24;
       this._lastPlayer = player || null;
       this._liquidAnimT += Math.max(0, Number.isFinite(dt) ? dt : 0);
-      const flareBurnNearDarkCreatureMul = 2.5;
+      const flareBurnNearDarkCreatureMul = 7.5;
 
       // Frame-gate reset (used by power-cell gradual fill) — once per update() call.
       // Must NOT depend on lanterns existing in the level.
@@ -1451,7 +1452,9 @@ if (e.type === "lantern"){
 
         if (e.type === "flare"){
           const consumingDc = this.findDarkCreatureConsumingFlare(e, ts);
-          const flareBurnMul = consumingDc ? flareBurnNearDarkCreatureMul : 1;
+          const flareBurnMul = consumingDc
+            ? Math.max(1, Number.isFinite(consumingDc.flareConsumeBurnMul) ? consumingDc.flareConsumeBurnMul : flareBurnNearDarkCreatureMul)
+            : 1;
           e.t += dt * flareBurnMul;
           if (consumingDc) this._spawnDarkFlareConsumeVfx(e, consumingDc, dt);
           e.vy += g * dt;
@@ -1665,8 +1668,7 @@ if (e.type === "lantern"){
             ? e.aggroRadiusPx
             : Math.max(0, (e.aggroTiles || 0) * ts || (6 * ts));
 
-          const insideLumoAura = this.isPointLitFromPlayerOnly(cx, cy, player);
-          const canCastNow = !!(player && e.isDarkActive && !insideLumoAura && aggroPx > 0);
+          const canCastNow = !!(player && aggroPx > 0);
 
           if (e._castChargeT > 0){
             if (!canCastNow){
@@ -2494,6 +2496,7 @@ if (e.type === "lantern"){
 
       for (const e of this.items){
         if (!e || !e.active || e.type !== "darkCreature" || e.dying) continue;
+        if (e.reactsToFlares === false) continue;
 
         const aggroPx = (typeof e.aggroRadiusPx === "number" && e.aggroRadiusPx > 0)
           ? e.aggroRadiusPx
