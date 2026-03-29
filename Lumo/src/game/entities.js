@@ -289,18 +289,24 @@
         const tx = e.x|0, ty = e.y|0;
         const offX = (typeof e.offsetX === "number") ? e.offsetX : 0;
         const offY = (typeof e.offsetY === "number") ? e.offsetY : 0;
-        const anchor = (e.anchor === "TL") ? "TL" : "BL";
+        const normalizeAnchor = (value) => {
+          if (typeof value !== "string") return null;
+          const normalized = value.trim().toUpperCase();
+          if (normalized === "TL" || normalized === "BL") return normalized;
+          return null;
+        };
+        const anchor = normalizeAnchor(e.anchor) || "BL";
         const params = (e.params && typeof e.params === "object") ? e.params : {};
         const paramCtx = { levelLabel: diag && diag.levelLabel, entityLabel: `${id}@${tx},${ty}` };
 
         // Helper: convert a tile-anchored BL entity into runtime pixels + optional y-offset
-        const applyAnchor = (obj, w=null, h=null) => {
+        const applyAnchor = (obj, w=null, h=null, resolvedAnchor=anchor) => {
           const ts = (levelObj && levelObj.meta && levelObj.meta.tileSize) ? levelObj.meta.tileSize : (Lumo.TILE || 24);
           const W = (w==null) ? (obj.w||0) : w;
           const H = (h==null) ? (obj.h||0) : h;
 
           // Default to bottom-left anchor so it "sits" on the tile.
-          if (anchor === "BL"){
+          if (resolvedAnchor === "BL"){
             // Place object's bottom on tile bottom, then apply overlap offset.
             obj.x = (tx * ts) + offX;
             obj.y = (ty * ts) + (ts - H);
@@ -708,6 +714,7 @@ if (this._catById){
       }
     }
 
+    const decorAnchor = normalizeAnchor(e.anchor) || normalizeAnchor(def.anchor) || "BL";
     const dc = {
       type:"decor",
       active:true,
@@ -718,8 +725,9 @@ if (this._catById){
       h: hPx,
       perchOffsetY: perchOffsetY,
       img: imgPath ? this._tryLoadImage(imgPath) : null,
+      anchorResolved: decorAnchor,
     };
-    applyAnchor(dc, dc.w, dc.h);
+    applyAnchor(dc, dc.w, dc.h, decorAnchor);
     this.items.push(dc);
     return;
   }
