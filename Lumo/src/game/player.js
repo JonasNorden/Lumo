@@ -420,15 +420,33 @@
       // Only meaningful when grounded on tiles (not moving platforms).
       if (!world) return null;
       const ts = world.tileSize || (Lumo.TILE||24);
-      // Sample one pixel below feet, at the player center.
-      const sx = this.x + this.w * 0.5;
+      // Sample one pixel below feet across the player's support width so
+      // surface behavior remains stable on sized footprints (2x2, 3x3, ...).
       const sy = this.y + this.h + 1;
-      const tx = Math.floor(sx / ts);
       const ty = Math.floor(sy / ts);
-      const resolved = (typeof world.getTileBehavior === 'function')
-        ? world.getTileBehavior(tx, ty)
-        : null;
-      if (resolved) return resolved;
+      const inset = Math.min(4, this.w * 0.25);
+      const sampleXs = [
+        this.x + inset,
+        this.x + this.w * 0.5,
+        this.x + this.w - inset,
+      ];
+
+      if (typeof world.getTileBehavior === 'function'){
+        const sampledTx = new Set();
+        for (let i = 0; i < sampleXs.length; i++){
+          const tx = Math.floor(sampleXs[i] / ts);
+          if (sampledTx.has(tx)) continue;
+          sampledTx.add(tx);
+          const resolved = world.getTileBehavior(tx, ty);
+          if (resolved) return resolved;
+        }
+        // Modern runtime path: behavior lookup is authoritative.
+        // If none of the support samples resolve a behavior, treat as undefined.
+        return null;
+      }
+
+      // Legacy fallback path for runtimes that don't expose getTileBehavior.
+      const tx = Math.floor(sampleXs[1] / ts);
 
       let id = 0;
       if (typeof world.getTile === 'function') id = world.getTile(tx, ty) | 0;
