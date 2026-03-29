@@ -134,9 +134,9 @@
     }
 
     getTileBehavior(tx, ty){
-      const id = this.getTile(tx, ty) | 0;
-      if (!id) return null;
-      return this.resolveTileBehaviorById(id);
+      const hit = this._getCoveringTile(tx|0, ty|0);
+      if (!hit || !hit.id) return null;
+      return this.resolveTileBehaviorById(hit.id|0);
     }
 
     loadLevel(levelObj){
