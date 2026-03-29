@@ -190,6 +190,28 @@ function getInspectedCell(state) {
   return state.interaction.selectedCell || state.interaction.hoverCell;
 }
 
+function getSelectedPlayFromHereCell(state) {
+  const doc = state?.document?.active;
+  const selectedCell = state?.interaction?.selectedCell;
+  if (!doc || !selectedCell) return null;
+
+  const x = Number(selectedCell.x);
+  const y = Number(selectedCell.y);
+  const width = Number(doc?.dimensions?.width);
+  const height = Number(doc?.dimensions?.height);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) {
+    return null;
+  }
+
+  const cellX = x | 0;
+  const cellY = y | 0;
+  if (cellX < 0 || cellY < 0 || cellX >= width || cellY >= height) {
+    return null;
+  }
+
+  return { x: cellX, y: cellY };
+}
+
 function getTileForCell(active, cell) {
   if (!active || !cell) return null;
 
@@ -6771,13 +6793,16 @@ if (event.shiftKey) {
   };
 
   const handlePlayFromHereLaunch = () => {
-    const doc = store.getState().document.active;
+    const state = store.getState();
+    const doc = state.document.active;
     if (!doc) return;
+
+    const selectedPfhCell = getSelectedPlayFromHereCell(state);
+    const spawnOverride = selectedPfhCell || getAuthoredSpawnCell(doc);
 
     let bridgeResult = null;
     try {
       bridgeResult = v2ToRuntimeLevelObject(doc);
-      const spawnOverride = getAuthoredSpawnCell(doc);
       launchEditorPlayRuntime({
         runtimeLevel: bridgeResult.runtimeLevel,
         spawnOverride,
@@ -6803,9 +6828,12 @@ if (event.shiftKey) {
       : "";
 
     store.setState((draft) => {
+      const spawnSourceLabel = selectedPfhCell
+        ? `selected cell (${selectedPfhCell.x}, ${selectedPfhCell.y})`
+        : "authored/default spawn";
       draft.ui.importStatus = diagnostics.length
-        ? `Play From Here launched (authored spawn). Bridge diagnostics: ${diagnostics.join(", ")}.${liquidSuffix}`
-        : "Play From Here launched from authored spawn.";
+        ? `Play From Here launched (${spawnSourceLabel}). Bridge diagnostics: ${diagnostics.join(", ")}.${liquidSuffix}`
+        : `Play From Here launched from ${spawnSourceLabel}.`;
     });
   };
 
