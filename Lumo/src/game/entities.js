@@ -3050,6 +3050,63 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
       return samples[samples.length - 1].y;
     }
 
+    _parseColorToRgba(color, fallback){
+      const fallbackColor = (fallback && typeof fallback === "object")
+        ? fallback
+        : { r: 127, g: 209, b: 46, a: 1 };
+      if (typeof color !== "string") return { ...fallbackColor };
+      const v = color.trim();
+      if (!v) return { ...fallbackColor };
+
+      const hexMatch = v.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+      if (hexMatch){
+        const hex = hexMatch[1];
+        if (hex.length === 3){
+          return {
+            r: parseInt(hex[0] + hex[0], 16),
+            g: parseInt(hex[1] + hex[1], 16),
+            b: parseInt(hex[2] + hex[2], 16),
+            a: 1,
+          };
+        }
+        return {
+          r: parseInt(hex.slice(0, 2), 16),
+          g: parseInt(hex.slice(2, 4), 16),
+          b: parseInt(hex.slice(4, 6), 16),
+          a: 1,
+        };
+      }
+
+      const rgbMatch = v.match(/^rgba?\(([^)]+)\)$/i);
+      if (rgbMatch){
+        const parts = rgbMatch[1].split(",").map((part) => Number(part.trim()));
+        if (parts.length >= 3 && parts.slice(0, 3).every((n) => Number.isFinite(n))){
+          return {
+            r: Math.max(0, Math.min(255, Math.round(parts[0]))),
+            g: Math.max(0, Math.min(255, Math.round(parts[1]))),
+            b: Math.max(0, Math.min(255, Math.round(parts[2]))),
+            a: Number.isFinite(parts[3]) ? Math.max(0, Math.min(1, parts[3])) : 1,
+          };
+        }
+      }
+
+      return { ...fallbackColor };
+    }
+
+    _rgbaWithAlpha(color, alpha){
+      const a = Math.max(0, Math.min(1, Number(alpha) || 0));
+      return `rgba(${color.r|0},${color.g|0},${color.b|0},${a})`;
+    }
+
+    _mixRgb(a, b, blend){
+      const t = Math.max(0, Math.min(1, Number(blend) || 0));
+      return {
+        r: Math.round((a.r * (1 - t)) + (b.r * t)),
+        g: Math.round((a.g * (1 - t)) + (b.g * t)),
+        b: Math.round((a.b * (1 - t)) + (b.b * t)),
+      };
+    }
+
     _drawBubblingLiquidVolume(ctx, v, sx, sy, w, h, afterDarkness = false){
       const activity = Math.max(0, Math.min(1, Number(v.bubblingSurfaceActivity) || 0.45));
       const bubbleIntensity = Math.max(0, Math.min(1, (Number(v.bubblingBubbleAmount) || 58) / 100));
@@ -3061,15 +3118,28 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
       const last = samples[samples.length - 1] || { x: sx + w, y: sy };
       let surfaceCrestY = first.y;
       for (let i = 1; i < samples.length; i += 1) if (samples[i].y < surfaceCrestY) surfaceCrestY = samples[i].y;
+      const surfaceTone = this._parseColorToRgba(
+        afterDarkness ? (v.surfaceColorAfterDarkness || v.surfaceColor) : v.surfaceColor,
+        { r: 127, g: 209, b: 46, a: 1 },
+      );
+      const bodyTone = this._parseColorToRgba(
+        afterDarkness ? (v.bodyColorAfterDarkness || v.bodyColor) : v.bodyColor,
+        { r: 47, g: 94, b: 28, a: 1 },
+      );
+      const midTone = this._mixRgb(surfaceTone, bodyTone, afterDarkness ? 0.48 : 0.4);
+      const bubbleFillTone = this._mixRgb(surfaceTone, { r: 255, g: 255, b: 255 }, 0.34);
+      const bubbleRimTone = this._mixRgb(surfaceTone, { r: 255, g: 255, b: 255 }, 0.45);
+      const glowTone = this._mixRgb(surfaceTone, bodyTone, 0.3);
+      const fumeTone = this._mixRgb(surfaceTone, { r: 230, g: 234, b: 223 }, 0.42);
 
       const bodyGrad = ctx.createLinearGradient(0, surfaceCrestY - 2, 0, yBottom);
       if (!afterDarkness){
         bodyGrad.addColorStop(0, v.surfaceColor || "rgba(187,255,130,0.92)");
-        bodyGrad.addColorStop(0.22, "rgba(168,226,110,0.45)");
+        bodyGrad.addColorStop(0.22, this._rgbaWithAlpha(midTone, 0.45));
         bodyGrad.addColorStop(1, v.bodyColor || "rgba(98,170,58,0.36)");
       } else {
         bodyGrad.addColorStop(0, v.surfaceColorAfterDarkness || "rgba(214,255,176,0.99)");
-        bodyGrad.addColorStop(0.25, "rgba(168,230,132,0.28)");
+        bodyGrad.addColorStop(0.25, this._rgbaWithAlpha(midTone, 0.28));
         bodyGrad.addColorStop(1, v.bodyColorAfterDarkness || "rgba(132,205,88,0.26)");
       }
 
@@ -3132,13 +3202,9 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
         if (radius <= 0.35 || bubbleAlpha <= 0.01) continue;
         ctx.beginPath();
         ctx.arc(px, py, radius, 0, Math.PI * 2);
-        ctx.fillStyle = afterDarkness
-          ? `rgba(226,255,206,${bubbleAlpha})`
-          : `rgba(220,255,214,${bubbleAlpha})`;
+        ctx.fillStyle = this._rgbaWithAlpha(bubbleFillTone, bubbleAlpha);
         ctx.fill();
-        ctx.strokeStyle = afterDarkness
-          ? `rgba(232,255,224,${rimAlpha})`
-          : `rgba(234,255,224,${rimAlpha})`;
+        ctx.strokeStyle = this._rgbaWithAlpha(bubbleRimTone, rimAlpha);
         ctx.lineWidth = py <= surfaceY + 1 ? 1.0 : 0.75;
         ctx.stroke();
       }
@@ -3148,9 +3214,9 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           const yBand = sy + h * (0.24 + (band * 0.3)) + (Math.sin((t * (0.45 + (band * 0.12))) + (sx * 0.02)) * (1.4 + band));
           const alpha = 0.05 + (activity * 0.06) - (band * 0.012);
           const glowBand = ctx.createLinearGradient(sx, yBand - 8, sx, yBand + 8);
-          glowBand.addColorStop(0, "rgba(206,240,172,0)");
-          glowBand.addColorStop(0.5, `rgba(206,240,172,${Math.max(0.01, alpha)})`);
-          glowBand.addColorStop(1, "rgba(206,240,172,0)");
+          glowBand.addColorStop(0, this._rgbaWithAlpha(glowTone, 0));
+          glowBand.addColorStop(0.5, this._rgbaWithAlpha(glowTone, Math.max(0.01, alpha)));
+          glowBand.addColorStop(1, this._rgbaWithAlpha(glowTone, 0));
           ctx.fillStyle = glowBand;
           ctx.fillRect(sx, yBand - 8, w, 16);
         }
@@ -3174,9 +3240,7 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
         if (pop.ringAlpha <= 0.01) continue;
         ctx.beginPath();
         ctx.arc(pop.x, pop.y, pop.ringRadius, 0, Math.PI * 2);
-        ctx.strokeStyle = afterDarkness
-          ? `rgba(239,255,228,${pop.ringAlpha})`
-          : `rgba(242,255,226,${pop.ringAlpha})`;
+        ctx.strokeStyle = this._rgbaWithAlpha(bubbleRimTone, pop.ringAlpha);
         ctx.lineWidth = 0.95;
         ctx.stroke();
       }
@@ -3191,13 +3255,8 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           const alpha = (afterDarkness ? 0.04 : 0.03) + (((Math.sin(seed * 7.9) * 0.5) + 0.5) * ((afterDarkness ? 0.11 : 0.09) + (fumeIntensity * (afterDarkness ? 0.24 : 0.18))));
           const topY = sy - puffHeight;
           const grad = ctx.createLinearGradient(0, topY, 0, sy + 4);
-          if (!afterDarkness){
-            grad.addColorStop(0, "rgba(206,227,181,0)");
-            grad.addColorStop(1, `rgba(206,227,181,${Math.max(0.01, alpha)})`);
-          } else {
-            grad.addColorStop(0, "rgba(228,245,210,0)");
-            grad.addColorStop(1, `rgba(228,245,210,${Math.max(0.01, alpha)})`);
-          }
+          grad.addColorStop(0, this._rgbaWithAlpha(fumeTone, 0));
+          grad.addColorStop(1, this._rgbaWithAlpha(fumeTone, Math.max(0.01, alpha)));
           ctx.strokeStyle = grad;
           ctx.lineWidth = 1 + (((Math.sin(seed * 11.1) * 0.5) + 0.5) * 1.9);
           ctx.beginPath();
