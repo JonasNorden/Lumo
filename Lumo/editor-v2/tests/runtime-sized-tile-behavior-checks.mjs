@@ -20,12 +20,17 @@ globalThis.Lumo = {
     down: () => false,
     tap: () => false,
   },
-  Util: {
+  U: {
     clamp(value, min, max) {
       return Math.max(min, Math.min(max, value));
     },
-    aabb() {
-      return false;
+    aabb(ax, ay, aw, ah, bx, by, bw, bh) {
+      return (
+        ax < bx + bw &&
+        ax + aw > bx &&
+        ay < by + bh &&
+        ay + ah > by
+      );
     },
   },
   Tileset: {
@@ -109,7 +114,74 @@ function runPlayerSurfaceSamplingChecks() {
   assert.equal(def?.frictionMul, 0.02);
 }
 
+function runOneWayCollisionChecks() {
+  const world = new Lumo.World();
+  const w = 12;
+  const h = 10;
+  const data = new Array(w * h).fill(0);
+
+  // 1x1 one-way (control)
+  data[keyForCell(w, 2, 6)] = 2;
+  // 2x2 one-way at BL anchor (5,6)
+  data[keyForCell(w, 5, 6)] = 2;
+  // 3x3 one-way at BL anchor (8,7)
+  data[keyForCell(w, 8, 7)] = 2;
+
+  world.loadLevel({
+    meta: { w, h, tileSize: 24, id: "one-way-sized", name: "One-way Sized" },
+    layers: {
+      main: data,
+      tileVisualOverrides: {
+        "5,6": { footprintW: 2, footprintH: 2, drawW: 48, drawH: 48, drawAnchor: "BL" },
+        "8,7": { footprintW: 3, footprintH: 3, drawW: 72, drawH: 72, drawAnchor: "BL" },
+      },
+    },
+  });
+
+  function assertLanding({ anchorTx, anchorTy, footprintW = 1, footprintH = 1 }) {
+    const player = new Lumo.Player(0, 0);
+    const top = (anchorTy - footprintH + 1) * 24;
+    const centerX = (anchorTx + (footprintW * 0.5)) * 24;
+    player.x = centerX - (player.w * 0.5);
+    player.y = top - player.h - 5;
+    player.vy = 120;
+
+    player.moveAndCollide(0.1, world);
+
+    assert.equal(player.onGround, true);
+    assert.equal(player.y, top - player.h);
+    assert.equal(player.vy, 0);
+  }
+
+  function assertJumpThrough({ anchorTx, anchorTy, footprintW = 1, footprintH = 1 }) {
+    const player = new Lumo.Player(0, 0);
+    const top = (anchorTy - footprintH + 1) * 24;
+    const centerX = (anchorTx + (footprintW * 0.5)) * 24;
+    player.x = centerX - (player.w * 0.5);
+    player.y = top + 4;
+    player.vy = -120;
+
+    const expectedY = player.y + player.vy * 0.1;
+    player.moveAndCollide(0.1, world);
+
+    assert.equal(player.onGround, false);
+    assert.equal(player.vy, -120);
+    assert.equal(player.y, expectedY);
+  }
+
+  // Landing from above must work for all footprints.
+  assertLanding({ anchorTx: 2, anchorTy: 6, footprintW: 1, footprintH: 1 });
+  assertLanding({ anchorTx: 5, anchorTy: 6, footprintW: 2, footprintH: 2 });
+  assertLanding({ anchorTx: 8, anchorTy: 7, footprintW: 3, footprintH: 3 });
+
+  // Jumping up from below must pass through for all footprints.
+  assertJumpThrough({ anchorTx: 2, anchorTy: 6, footprintW: 1, footprintH: 1 });
+  assertJumpThrough({ anchorTx: 5, anchorTy: 6, footprintW: 2, footprintH: 2 });
+  assertJumpThrough({ anchorTx: 8, anchorTy: 7, footprintW: 3, footprintH: 3 });
+}
+
 runWorldBehaviorCoverageChecks();
 runPlayerSurfaceSamplingChecks();
+runOneWayCollisionChecks();
 
 console.log("runtime sized tile behavior checks passed");
