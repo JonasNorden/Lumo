@@ -10,8 +10,10 @@ import {
   getTileBehaviorAuditGroups,
   getTileBehaviorOptions,
   isStepComplete,
+  suggestBackgroundMaterialId,
   suggestTileCatalogId,
 } from "../src/domain/assets/assetManagerWizardModel.js";
+import { isBackgroundMaterialIdTaken, registerBackgroundMaterialOption } from "../src/domain/background/materialCatalog.js";
 import { isTileCatalogIdTaken, registerTileSpriteOption } from "../src/domain/tiles/tileSpriteCatalog.js";
 
 const wizard = createInitialAssetManagerWizardState();
@@ -120,5 +122,30 @@ const duplicateValidation = getStepValidation("identity", {
 });
 assert.equal(duplicateValidation.isValid, false);
 assert.equal(duplicateValidation.fieldErrors.catalogId, "Catalog id already exists. Choose a different id.");
+
+const suggestedMaterialId = suggestBackgroundMaterialId({ displayName: "Crystal Wall" });
+assert.equal(suggestedMaterialId, "bg_crystal_wall");
+assert.equal(isBackgroundMaterialIdTaken(suggestedMaterialId), false);
+
+const backgroundRegistration = registerBackgroundMaterialOption({
+  materialId: suggestedMaterialId,
+  label: "Crystal Wall",
+  img: "selected://bg-crystal.png",
+  drawW: 24,
+  drawH: 24,
+  footprint: { w: 1, h: 1 },
+  fallbackColor: "#3d4b63",
+  group: "Custom",
+});
+assert.equal(backgroundRegistration.ok, true);
+assert.equal(isBackgroundMaterialIdTaken(suggestedMaterialId), true);
+assert.equal(
+  suggestBackgroundMaterialId({ displayName: "Crystal Wall", currentMaterialId: suggestedMaterialId }),
+  suggestedMaterialId,
+);
+assert.equal(
+  suggestBackgroundMaterialId({ displayName: "Crystal Wall" }),
+  "bg_crystal_wall_2",
+);
 
 console.log("asset-manager wizard checks passed");

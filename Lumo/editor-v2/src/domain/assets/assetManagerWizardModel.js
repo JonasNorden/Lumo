@@ -219,6 +219,13 @@ function toSlugToken(value) {
     .replace(/^-+|-+$/g, "");
 }
 
+function toBackgroundToken(value) {
+  return normalizeString(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 export function suggestTileCatalogId({ displayName = "", spriteFileName = "", currentCatalogId = "" } = {}) {
   const current = toSlugToken(currentCatalogId);
   const fromDisplayName = toSlugToken(displayName);
@@ -228,6 +235,21 @@ export function suggestTileCatalogId({ displayName = "", spriteFileName = "", cu
   let suffix = 2;
   while (isTileCatalogIdTaken(candidate) && candidate !== current) {
     candidate = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
+export function suggestBackgroundMaterialId({ displayName = "", spriteFileName = "", currentMaterialId = "" } = {}) {
+  const current = normalizeString(currentMaterialId).toLowerCase();
+  const fromDisplayName = toBackgroundToken(displayName);
+  const fromSprite = toBackgroundToken(spriteFileName.replace(/\.[a-z0-9]+$/i, ""));
+  const baseToken = fromDisplayName || fromSprite || toBackgroundToken(current) || "material";
+  const base = baseToken.startsWith("bg_") ? baseToken : `bg_${baseToken}`;
+  let candidate = base;
+  let suffix = 2;
+  while (isBackgroundMaterialIdTaken(candidate) && candidate !== current) {
+    candidate = `${base}_${suffix}`;
     suffix += 1;
   }
   return candidate;

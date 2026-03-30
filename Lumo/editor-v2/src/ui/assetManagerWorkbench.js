@@ -82,8 +82,9 @@ function renderInput(label, field, value, placeholder, description = "", options
   const infoTip = options.infoTip || "";
   const statusMessage = options.statusMessage || "";
   const statusClass = options.statusClass || "";
+  const fieldClass = options.fieldClass || "";
   return `
-    <label class="assetWizardField" for="asset-wizard-${escapeHtml(field)}">
+    <label class="assetWizardField ${escapeHtml(fieldClass)}" for="asset-wizard-${escapeHtml(field)}">
       <span class="assetWizardFieldLabelRow">
         <span class="assetWizardFieldLabel">${escapeHtml(label)}</span>
         ${renderInfoTip(infoTip)}
@@ -111,8 +112,9 @@ function renderFilePickerField(label, field, wizard, options = {}) {
   const fileName = wizard?.draft?.spriteFileName || "";
   const errorMessage = options.errorMessage || "";
   const hint = options.hint || "";
+  const fieldClass = options.fieldClass || "";
   return `
-    <div class="assetWizardField">
+    <div class="assetWizardField ${escapeHtml(fieldClass)}">
       <span class="assetWizardFieldLabelRow">
         <span class="assetWizardFieldLabel">${escapeHtml(label)}</span>
         ${renderInfoTip(options.infoTip || "")}
@@ -145,8 +147,9 @@ function renderSelectInput(label, field, value, optionsList = [], description = 
   const errorMessage = options.errorMessage || "";
   const infoTip = options.infoTip || "";
   const placeholder = options.placeholder || "Select…";
+  const fieldClass = options.fieldClass || "";
   return `
-    <label class="assetWizardField" for="asset-wizard-${escapeHtml(field)}">
+    <label class="assetWizardField ${escapeHtml(fieldClass)}" for="asset-wizard-${escapeHtml(field)}">
       <span class="assetWizardFieldLabelRow">
         <span class="assetWizardFieldLabel">${escapeHtml(label)}</span>
         ${renderInfoTip(infoTip)}
@@ -269,11 +272,11 @@ function renderStepBody(wizard, validation) {
       return `
         <div class="assetWizardSection">
           <h4>Background identity</h4>
-          <p>Define the material id, label, and texture source for this background material.</p>
+          <p>Define a unique technical id and sprite source. The wizard auto-suggests the next available material id as you type.</p>
           <div class="assetWizardFieldGrid">
-            ${renderInput("Material id", "materialId", draft.materialId, "bg_stone_custom", "", { errorMessage: fieldErrors.materialId, statusMessage: materialIdStatus, statusClass: materialIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted" })}
-            ${renderInput("Display name", "displayName", draft.displayName, "Stone Background", "", { errorMessage: fieldErrors.displayName })}
-            ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/bg/", infoTip: "Choose the texture image for this background material." })}
+            ${renderInput("Display name", "displayName", draft.displayName, "Stone Background", "Human-friendly picker label.", { errorMessage: fieldErrors.displayName, fieldClass: "assetWizardFieldSpan6" })}
+            ${renderInput("Material id", "materialId", draft.materialId, "bg_stone_background", "Unique technical id used for persistence and reload.", { errorMessage: fieldErrors.materialId, statusMessage: materialIdStatus, statusClass: materialIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted", infoTip: "Auto-suggested from display name or file name. You can override manually.", fieldClass: "assetWizardFieldSpan6" })}
+            ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/bg/", infoTip: "Choose the texture image for this background material.", fieldClass: "assetWizardFieldSpan12" })}
           </div>
         </div>
       `;
@@ -309,11 +312,11 @@ function renderStepBody(wizard, validation) {
           <h4>Background metadata</h4>
           <p>Background materials are visual only. Anchor defaults to BL and gameplay behavior is intentionally omitted.</p>
           <div class="assetWizardFieldGrid">
-            ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left)." })}
-            ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "16", "", { errorMessage: fieldErrors.drawWidth })}
-            ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "16", "", { errorMessage: fieldErrors.drawHeight })}
-            ${renderInput("Fallback color", "fallbackColor", draft.fallbackColor, "#3d4b63", "", { errorMessage: fieldErrors.fallbackColor })}
-            ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}')}
+            ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left).", fieldClass: "assetWizardFieldSpan4" })}
+            ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan4" })}
+            ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan4" })}
+            ${renderInput("Fallback color", "fallbackColor", draft.fallbackColor, "#3d4b63", "", { errorMessage: fieldErrors.fallbackColor, fieldClass: "assetWizardFieldSpan6" })}
+            ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { fieldClass: "assetWizardFieldSpan6" })}
           </div>
         </div>
       `;
