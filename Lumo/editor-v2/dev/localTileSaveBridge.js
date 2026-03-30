@@ -189,14 +189,9 @@ function findBackgroundEditorMaterialArrayBounds(source) {
 
   const arrayEndIndex = findMatchingArrayEndIndex(source, arrayStartIndex);
   if (arrayEndIndex < 0) return null;
-
-  const normalizeFunctionIndex = source.indexOf("export function normalizeBackgroundMaterial");
-  if (normalizeFunctionIndex < 0) return null;
-
   if (arrayStartIndex <= declarationIndex || arrayEndIndex <= arrayStartIndex) return null;
-  if (arrayEndIndex >= normalizeFunctionIndex) return null;
 
-  return { arrayStartIndex, arrayEndIndex, normalizeFunctionIndex };
+  return { arrayStartIndex, arrayEndIndex };
 }
 
 function buildCatalogSourceWithInsertedTile(catalogSource, arrayBounds, entryText, hasExistingEntries) {
@@ -382,9 +377,6 @@ async function saveBackground(payload) {
     serializeBackgroundMaterialEntry(entry),
     editorMaterials.length > 0,
   );
-  if (nextEditorSource.indexOf("export function normalizeBackgroundMaterial") !== editorBounds.normalizeFunctionIndex) {
-    return { ok: false, statusCode: 500, reason: "catalog-format-unsupported", message: "Could not safely locate BUILTIN_BACKGROUND_MATERIALS array" };
-  }
   const nextRuntimeSource = buildCatalogSourceWithInsertedTile(
     runtimeCatalogSource,
     runtimeBounds,
