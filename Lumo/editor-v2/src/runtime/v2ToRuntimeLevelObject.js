@@ -474,6 +474,9 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
     } else if (typeof decor?.variant === "string" && decor.variant.trim()) {
       runtimeParams.variant = decor.variant.trim();
     }
+    if (decor?.flipX === true) {
+      runtimeParams.flipX = true;
+    }
 
     runtimeLevel.layers.ents.push({
       id: runtimeId,

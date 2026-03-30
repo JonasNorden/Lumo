@@ -94,7 +94,17 @@ function drawDecorSprite(ctx, metrics, viewport, visual, options = {}) {
   ctx.save();
   ctx.globalAlpha *= options.alpha ?? 1;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(image, Math.floor(drawX), Math.floor(drawY), Math.round(drawWidth), Math.round(drawHeight));
+  const pixelDrawX = Math.floor(drawX);
+  const pixelDrawY = Math.floor(drawY);
+  const pixelDrawWidth = Math.round(drawWidth);
+  const pixelDrawHeight = Math.round(drawHeight);
+  if (options.flipX) {
+    ctx.translate(pixelDrawX + pixelDrawWidth, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(image, 0, pixelDrawY, pixelDrawWidth, pixelDrawHeight);
+  } else {
+    ctx.drawImage(image, pixelDrawX, pixelDrawY, pixelDrawWidth, pixelDrawHeight);
+  }
   ctx.restore();
   return true;
 }
@@ -107,7 +117,7 @@ function drawDecorMarker(ctx, decor, viewport, tileSize, options = {}) {
   ctx.save();
   ctx.globalAlpha *= options.alpha ?? 1;
   drawDecorFocus(ctx, metrics.focusX, metrics.focusY, metrics.focusRadius * scale, options, scale);
-  if (!drawDecorSprite(ctx, metrics, viewport, visual, options)) {
+  if (!drawDecorSprite(ctx, metrics, viewport, visual, { ...options, flipX: decor?.flipX === true })) {
     drawDecorFallback(ctx, metrics.focusX, metrics.focusY, scale, visual);
   }
   ctx.restore();

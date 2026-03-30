@@ -658,6 +658,7 @@ function renderDecorEditor(decor, selectedDecorIndex) {
     renderNumberField("decor", "x", "X", decor.x, selectedDecorIndex, "", decor?.id || null),
     renderNumberField("decor", "y", "Y", decor.y, selectedDecorIndex, "", decor?.id || null),
     renderCheckboxField("decor", "visible", "Visible", decor.visible, selectedDecorIndex, "selectionFieldToggle", decor?.id || null),
+    renderCheckboxField("decor", "flipX", "Flip X", Boolean(decor?.flipX), selectedDecorIndex, "selectionFieldToggle", decor?.id || null),
     isFlower
       ? renderFlowerVariantParamField(decor, selectedDecorIndex)
       : renderTextField("decor", "variant", "Variant", decor.variant, selectedDecorIndex, "selectionFieldVariant selectionParamField", decor?.id || null),
@@ -912,8 +913,8 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       value: nextValue,
     });
 
-    if (field === "visible") {
-      onUpdate?.(index, "visible", wrapMutationValue(target.checked));
+    if (field === "visible" || field === "flipX") {
+      onUpdate?.(index, field, wrapMutationValue(target.checked));
       return true;
     }
 
@@ -937,7 +938,7 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       clearInputDraft(target);
       return;
     }
-    if (handleChange(target, "decor", ["name", "type", "variant", "visible", "x", "y"], onDecorUpdate)) {
+    if (handleChange(target, "decor", ["name", "type", "variant", "visible", "flipX", "x", "y"], onDecorUpdate)) {
       clearInputDraft(target);
       return;
     }

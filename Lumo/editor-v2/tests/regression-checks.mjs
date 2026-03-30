@@ -2045,6 +2045,44 @@ function runCleanRoomDecorRuntimeRegressionChecks() {
   assert.equal(doc.decor[1].y, 0, "clean-room decor update undo should restore the original y position");
 }
 
+function runDecorFlipXRegressionChecks() {
+  const normalizedDoc = validateLevelDocument({
+    ...createDoc(),
+    decor: [
+      { id: "decor-default", name: "Default", type: "decor_flower_01", x: 1, y: 1, visible: true, variant: "a", params: {} },
+      { id: "decor-flipped", name: "Flipped", type: "decor_flower_01", x: 2, y: 1, visible: true, variant: "a", flipX: true, params: {} },
+    ],
+  });
+  assert.equal(normalizedDoc.decor[0].flipX, false, "decor normalization should default flipX to false for legacy authored decor");
+  assert.equal(normalizedDoc.decor[1].flipX, true, "decor normalization should preserve authored flipX=true");
+
+  const serialized = serializeLevelDocument(normalizedDoc);
+  const parsed = validateLevelDocument(JSON.parse(serialized));
+  assert.equal(parsed.decor[1].flipX, true, "decor export/import roundtrip should preserve flipX");
+
+  const doc = createDoc();
+  doc.decor = [
+    { id: "decor-a", name: "A", type: "decor_flower_01", x: 0, y: 0, visible: true, variant: "a", flipX: false, params: {} },
+  ];
+  const action = {
+    type: "update",
+    items: [
+      {
+        index: 0,
+        previousDecor: { ...doc.decor[0], params: structuredClone(doc.decor[0].params) },
+        nextDecor: { ...doc.decor[0], flipX: true, params: structuredClone(doc.decor[0].params) },
+      },
+    ],
+  };
+  const forwardResult = applyCanonicalDecorAction(doc, action, "forward");
+  assert.equal(forwardResult.changed, true, "clean-room decor updates should apply flipX mutation");
+  assert.equal(doc.decor[0].flipX, true, "clean-room decor update should set flipX=true");
+
+  const backwardResult = applyCanonicalDecorAction(doc, action, "backward");
+  assert.equal(backwardResult.changed, true, "clean-room decor updates should undo flipX mutation");
+  assert.equal(doc.decor[0].flipX, false, "clean-room decor undo should restore prior flipX state");
+}
+
 function runCleanRoomDecorHistoryDeterminismRegressionChecks() {
   const doc = createDoc();
   const harness = createDecorHistoryHarness(doc);
@@ -6128,6 +6166,7 @@ async function main() {
   runEntityRegressionChecks();
   runDecorAndSoundDeletionRegressionChecks();
   runCleanRoomDecorRuntimeRegressionChecks();
+  runDecorFlipXRegressionChecks();
   runCleanRoomDecorHistoryDeterminismRegressionChecks();
   runCleanRoomSoundHistoryDeterminismRegressionChecks();
   await runLiveDecorPlacementRuntimeRegressionChecks();
