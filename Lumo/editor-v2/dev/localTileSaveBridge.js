@@ -177,12 +177,11 @@ function findArrayBoundsByMarker(source, marker) {
 }
 
 function findBackgroundEditorMaterialArrayBounds(source) {
-  const declarationMatch = /\bconst\s+BUILTIN_BACKGROUND_MATERIALS\b/g.exec(source);
-  if (!declarationMatch) return null;
+  const declarationMarker = "const BUILTIN_BACKGROUND_MATERIALS";
+  const declarationIndex = source.indexOf(declarationMarker);
+  if (declarationIndex < 0) return null;
 
-  const declarationStart = declarationMatch.index;
-  const declarationEnd = declarationStart + declarationMatch[0].length;
-  const assignmentIndex = source.indexOf("=", declarationEnd);
+  const assignmentIndex = source.indexOf("=", declarationIndex + declarationMarker.length);
   if (assignmentIndex < 0) return null;
 
   const arrayStartIndex = source.indexOf("[", assignmentIndex);
@@ -191,7 +190,13 @@ function findBackgroundEditorMaterialArrayBounds(source) {
   const arrayEndIndex = findMatchingArrayEndIndex(source, arrayStartIndex);
   if (arrayEndIndex < 0) return null;
 
-  return { arrayStartIndex, arrayEndIndex };
+  const normalizeFunctionIndex = source.indexOf("export function normalizeBackgroundMaterial");
+  if (normalizeFunctionIndex < 0) return null;
+
+  if (arrayStartIndex <= declarationIndex || arrayEndIndex <= arrayStartIndex) return null;
+  if (arrayEndIndex >= normalizeFunctionIndex) return null;
+
+  return { arrayStartIndex, arrayEndIndex, normalizeFunctionIndex };
 }
 
 function buildCatalogSourceWithInsertedTile(catalogSource, arrayBounds, entryText, hasExistingEntries) {
@@ -364,7 +369,7 @@ async function saveBackground(payload) {
 
   const editorBounds = findBackgroundEditorMaterialArrayBounds(editorMaterialSource);
   if (!editorBounds) {
-    return { ok: false, statusCode: 500, reason: "catalog-format-unsupported", message: "Could not safely locate background material array." };
+    return { ok: false, statusCode: 500, reason: "catalog-format-unsupported", message: "Could not safely locate BUILTIN_BACKGROUND_MATERIALS array" };
   }
   const runtimeBounds = findArrayBoundsByMarker(runtimeCatalogSource, "window.LUMO_CATALOG_BG");
   if (!runtimeBounds) {
@@ -377,6 +382,9 @@ async function saveBackground(payload) {
     serializeBackgroundMaterialEntry(entry),
     editorMaterials.length > 0,
   );
+  if (nextEditorSource.indexOf("export function normalizeBackgroundMaterial") !== editorBounds.normalizeFunctionIndex) {
+    return { ok: false, statusCode: 500, reason: "catalog-format-unsupported", message: "Could not safely locate BUILTIN_BACKGROUND_MATERIALS array" };
+  }
   const nextRuntimeSource = buildCatalogSourceWithInsertedTile(
     runtimeCatalogSource,
     runtimeBounds,
