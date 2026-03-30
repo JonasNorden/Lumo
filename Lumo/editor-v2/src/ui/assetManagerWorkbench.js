@@ -314,9 +314,33 @@ function renderStepBody(wizard, validation) {
       `;
     }
 
+    if (type === "decor") {
+      const presetIdAvailability = draft.presetIdAvailability || "";
+      const presetIdStatus = presetIdAvailability === "taken"
+        ? "Already exists"
+        : presetIdAvailability === "available"
+          ? "Available"
+          : "";
+      return `
+        <div class="assetWizardSection">
+          <h4>Decor identity</h4>
+          <p>Define a unique decor preset id and sprite source. The wizard auto-suggests an available decor id.</p>
+          ${renderFieldGroup(
+            "Identity",
+            "Naming and source fields used by the decor preset flow.",
+            `
+              ${renderInput("Display name", "displayName", draft.displayName, "Wall Banner", "Human-friendly picker label.", { errorMessage: fieldErrors.displayName, fieldClass: "assetWizardFieldSpan6" })}
+              ${renderInput("Decor id", "presetId", draft.presetId, "wall_banner_custom", "Stable preset id used for persistence and placement.", { errorMessage: fieldErrors.presetId, statusMessage: presetIdStatus, statusClass: presetIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted", infoTip: "Auto-suggested from display name or file name. You can override manually.", fieldClass: "assetWizardFieldSpan6" })}
+              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/decor/", infoTip: "Choose the sprite image for this decor preset.", fieldClass: "assetWizardFieldSpan12" })}
+            `,
+          )}
+        </div>
+      `;
+    }
+
     return `
       <div class="assetWizardSection">
-        <h4>${type === "decor" ? "Decor" : "Entity"} flow scaffolding</h4>
+        <h4>Entity flow scaffolding</h4>
         <p>This wizard path is scaffolded in this pass. Metadata editing will be expanded in the next milestone.</p>
       </div>
     `;
@@ -377,10 +401,34 @@ function renderStepBody(wizard, validation) {
         </div>
       `;
     }
+    if (type === "decor") {
+      return `
+        <div class="assetWizardSection">
+          <h4>Decor metadata</h4>
+          <p>Decor presets preserve their draw anchor, pixel size, and footprint semantics for placement and rendering.</p>
+          ${renderFieldGroup(
+            "Draw settings",
+            "",
+            `
+              ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Decor supports BL (grounded) and TL (attached) anchor semantics.", fieldClass: "assetWizardFieldSpan4" })}
+              ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan4" })}
+              ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan4" })}
+            `,
+          )}
+          ${renderFieldGroup(
+            "Footprint",
+            "",
+            `
+              ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { errorMessage: fieldErrors.footprint, fieldClass: "assetWizardFieldSpan8" })}
+            `,
+          )}
+        </div>
+      `;
+    }
     return `
       <div class="assetWizardSection">
         <h4>Metadata scaffolding</h4>
-        <p>${type === "decor" ? "Decor" : "Entity"} metadata steps are not fully implemented in this pass.</p>
+        <p>Entity metadata steps are not fully implemented in this pass.</p>
       </div>
     `;
   }
@@ -390,6 +438,7 @@ function renderStepBody(wizard, validation) {
     const orderedDraftKeys = [
       "catalogId",
       "materialId",
+      "presetId",
       "displayName",
       "spritePath",
       "drawAnchor",
@@ -425,10 +474,12 @@ function renderStepBody(wizard, validation) {
   }
 
   return `
-    <div class="assetWizardSection">
+      <div class="assetWizardSection">
       <h4>Save / Register</h4>
       <p class="assetManagerMuted">${wizard.assetType === "background"
         ? "Register this background material into editor-v2 and runtime background catalogs for immediate use in the Background workflow."
+        : wizard.assetType === "decor"
+          ? "Register this decor preset into the audited decor source-of-truth catalog for immediate use in the Decor workflow."
         : "Register this tile into the live editor-v2 tile catalog for immediate use in the Tiles workflow."}</p>
       ${wizard?.draft?.saveFeedback ? `<p class="assetWizardStepNotice" role="status">${escapeHtml(wizard.draft.saveFeedback)}</p>` : ""}
     </div>
@@ -470,6 +521,8 @@ function renderWizardPane(wizard) {
       ? "Save Tile"
       : wizard.assetType === "background"
         ? "Save Background"
+        : wizard.assetType === "decor"
+          ? "Save Decor"
         : "Done"
     : "Next";
 

@@ -281,3 +281,49 @@ export function findDecorPresetById(presetId) {
 export function findDecorPresetByType(type) {
   return DECOR_PRESETS.find((preset) => preset.type === type) || null;
 }
+
+function normalizeDecorPresetIdForCompare(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+export function isDecorPresetIdTaken(presetId) {
+  const normalized = normalizeDecorPresetIdForCompare(presetId);
+  return (
+    normalized.length > 0 &&
+    DECOR_PRESETS.some(
+      (preset) => normalizeDecorPresetIdForCompare(preset?.id) === normalized
+    )
+  );
+}
+
+export function registerDecorPresetOption(entry) {
+  const presetId = String(entry?.presetId || entry?.id || "").trim();
+  if (!presetId) return { ok: false, reason: "missing-preset-id" };
+  if (isDecorPresetIdTaken(presetId)) {
+    return { ok: false, reason: "duplicate-preset-id" };
+  }
+
+  const normalizedPreset = normalizeDecorPresetShape(
+    {
+      id: presetId,
+      type: String(entry?.type || presetId).trim() || presetId,
+      defaultName: entry?.defaultName || entry?.label || presetId,
+      img: entry?.img || null,
+      drawW: entry?.drawW,
+      drawH: entry?.drawH,
+      drawAnchor: entry?.drawAnchor,
+      drawOffX: entry?.drawOffX,
+      drawOffY: entry?.drawOffY,
+      footprint: entry?.footprint,
+      defaultVariant: entry?.defaultVariant || "a",
+      variants: Array.isArray(entry?.variants) && entry.variants.length ? entry.variants : ["a"],
+      group: entry?.group || "Decor",
+    },
+    DECOR_PRESETS.length
+  );
+  if (!normalizedPreset) return { ok: false, reason: "invalid-preset-entry" };
+
+  DECOR_PRESET_BY_ID.set(normalizedPreset.id, normalizedPreset);
+  DECOR_PRESETS.push(normalizedPreset);
+  return { ok: true, preset: normalizedPreset };
+}

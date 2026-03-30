@@ -12,6 +12,8 @@ const TILE_ASSET_DIR = path.join(REPO_ROOT, "data/assets/tiles");
 const TILE_CATALOG_FILE = path.join(REPO_ROOT, "data/catalog_tiles.js");
 const BACKGROUND_ASSET_DIR = path.join(REPO_ROOT, "data/assets/sprites/bg");
 const BACKGROUND_RUNTIME_CATALOG_FILE = path.join(REPO_ROOT, "data/catalog_bg.js");
+const DECOR_ASSET_DIR = path.join(REPO_ROOT, "data/assets/sprites/decor");
+const DECOR_CATALOG_FILE = path.join(REPO_ROOT, "data/catalog_entities.js");
 const BACKGROUND_EDITOR_MATERIAL_FILE = path.join(
   REPO_ROOT,
   "editor-v2/src/domain/background/materialCatalog.js"
@@ -52,6 +54,10 @@ function isSafeCatalogId(value) {
 }
 
 function isSafeBackgroundMaterialId(value) {
+  return typeof value === "string" && /^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(value.trim());
+}
+
+function isSafeDecorPresetId(value) {
   return typeof value === "string" && /^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(value.trim());
 }
 
@@ -155,6 +161,10 @@ function serializeBackgroundMaterialEntry(entry) {
 
 function serializeRuntimeBackgroundCatalogEntry(entry) {
   return `  {\n    "id": ${JSON.stringify(entry.id)},\n    "name": ${JSON.stringify(entry.name)},\n    "group": ${JSON.stringify(entry.group)},\n    "img": ${JSON.stringify(entry.img)},\n    "w": ${entry.w},\n    "h": ${entry.h},\n    "anchor": "BL"\n  }`;
+}
+
+function serializeDecorCatalogEntry(entry) {
+  return `  {\n    "id": ${JSON.stringify(entry.id)},\n    "name": ${JSON.stringify(entry.name)},\n    "group": ${JSON.stringify(entry.group)},\n    "category": "decor",\n    "img": ${JSON.stringify(entry.img)},\n    "w": ${entry.w},\n    "h": ${entry.h},\n    "anchor": ${JSON.stringify(entry.anchor)}\n  }`;
 }
 
 function findArrayBoundsFromIndex(source, startIndex) {
@@ -423,6 +433,27 @@ function readRuntimeBackgroundCatalogEntries(source) {
   return Array.isArray(context.window.LUMO_CATALOG_BG) ? context.window.LUMO_CATALOG_BG : [];
 }
 
+function readDecorCatalogEntries(source) {
+  const context = vm.createContext({ window: {} });
+  vm.runInContext(source, context, { filename: "catalog_entities.js" });
+  return Array.isArray(context.window.LUMO_CATALOG_ENTITIES) ? context.window.LUMO_CATALOG_ENTITIES : [];
+}
+
+export function buildPersistedDecorEntry({ decor = {}, presetId, spriteFileName }) {
+  const drawW = Number.parseInt(decor.drawW, 10);
+  const drawH = Number.parseInt(decor.drawH, 10);
+  return {
+    id: presetId,
+    name: String(decor.label || presetId).trim() || presetId,
+    group: String(decor.group || "Decor").trim() || "Decor",
+    category: "decor",
+    img: `data/assets/sprites/decor/${spriteFileName}`,
+    w: Number.isInteger(drawW) && drawW > 0 ? drawW : 24,
+    h: Number.isInteger(drawH) && drawH > 0 ? drawH : 24,
+    anchor: String(decor.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL",
+  };
+}
+
 async function saveBackground(payload) {
   const background = payload?.background || {};
   const sprite = payload?.sprite || {};
@@ -569,6 +600,107 @@ async function saveBackground(payload) {
   };
 }
 
+async function saveDecor(payload) {
+  const decor = payload?.decor || {};
+  const sprite = payload?.sprite || {};
+  const presetId = String(decor.presetId || "").trim();
+
+  if (!isSafeDecorPresetId(presetId)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      reason: "invalid-preset-id",
+      message: "Decor id must be lowercase with letters, numbers, underscores, or hyphens.",
+    };
+  }
+
+  const dataUrlParts = parseDataUrl(sprite.dataUrl);
+  if (!dataUrlParts) {
+    return {
+      ok: false,
+      statusCode: 400,
+      reason: "invalid-sprite-data",
+      message: "Sprite payload must be a base64 data URL.",
+    };
+  }
+  if (!dataUrlParts.mimeType.startsWith("image/")) {
+    return {
+      ok: false,
+      statusCode: 400,
+      reason: "invalid-sprite-type",
+      message: "Sprite payload must be an image file.",
+    };
+  }
+
+  const catalogSource = await fs.readFile(DECOR_CATALOG_FILE, "utf8");
+  const entries = readDecorCatalogEntries(catalogSource);
+  if (entries.some((entry) => String(entry?.id || "").toLowerCase() === presetId.toLowerCase())) {
+    return {
+      ok: false,
+      statusCode: 409,
+      reason: "duplicate-preset-id",
+      message: `Decor id "${presetId}" already exists.`,
+    };
+  }
+
+  await fs.mkdir(DECOR_ASSET_DIR, { recursive: true });
+  const spriteFileName = await pickAvailableSpriteFileName(
+    DECOR_ASSET_DIR,
+    presetId,
+    sprite.fileName
+  );
+  const spriteFilePath = path.join(DECOR_ASSET_DIR, spriteFileName);
+  await fs.writeFile(spriteFilePath, Buffer.from(dataUrlParts.base64Data, "base64"));
+
+  const entry = buildPersistedDecorEntry({
+    decor,
+    presetId,
+    spriteFileName,
+  });
+  const arrayBounds = findArrayBoundsByMarker(catalogSource, "window.LUMO_CATALOG_ENTITIES");
+  if (!arrayBounds) {
+    return {
+      ok: false,
+      statusCode: 500,
+      reason: "catalog-format-unsupported",
+      message: "Could not safely locate decor catalog array.",
+    };
+  }
+
+  const nextCatalogSource = buildCatalogSourceWithInsertedEntry(
+    catalogSource,
+    arrayBounds,
+    serializeDecorCatalogEntry(entry),
+    entries.length > 0
+  );
+  await fs.writeFile(DECOR_CATALOG_FILE, nextCatalogSource, "utf8");
+
+  const footprintW = Math.max(1, Number.parseInt(decor?.footprint?.w, 10) || Math.max(1, Math.ceil(entry.w / 24)));
+  const footprintH = Math.max(1, Number.parseInt(decor?.footprint?.h, 10) || Math.max(1, Math.ceil(entry.h / 24)));
+
+  return {
+    ok: true,
+    statusCode: 200,
+    message: `Decor persisted as ${presetId}.`,
+    persistedDecor: {
+      presetId: entry.id,
+      type: entry.id,
+      label: entry.name,
+      img: `../${entry.img}`,
+      drawW: entry.w,
+      drawH: entry.h,
+      drawAnchor: entry.anchor,
+      drawOffX: 0,
+      drawOffY: 0,
+      footprint: { w: footprintW, h: footprintH },
+      variants: ["a"],
+      defaultVariant: "a",
+      group: entry.group,
+      spriteFileName,
+    },
+  };
+}
+
 export function createLocalTileSaveBridgeServer() {
   return createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
@@ -608,6 +740,22 @@ export function createLocalTileSaveBridgeServer() {
     return;
   }
 
+  if (req.method === "POST" && req.url === "/api/editor-v2/decor/save") {
+    try {
+      const body = await parseJsonBody(req);
+      const result = await saveDecor(body);
+      writeJson(res, result.statusCode, result);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown-error";
+      writeJson(res, 500, {
+        ok: false,
+        reason,
+        message: "Decor persistence bridge failed while writing local files.",
+      });
+    }
+    return;
+  }
+
     writeJson(res, 404, { ok: false, reason: "not-found", message: "Endpoint not found." });
   });
 }
@@ -621,5 +769,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
     console.log(`[tile-save-bridge] background assets => ${BACKGROUND_ASSET_DIR}`);
     console.log(`[tile-save-bridge] background editor catalog => ${BACKGROUND_EDITOR_MATERIAL_FILE}`);
     console.log(`[tile-save-bridge] background runtime catalog => ${BACKGROUND_RUNTIME_CATALOG_FILE}`);
+    console.log(`[tile-save-bridge] decor assets => ${DECOR_ASSET_DIR}`);
+    console.log(`[tile-save-bridge] decor catalog => ${DECOR_CATALOG_FILE}`);
   });
 }

@@ -1,6 +1,6 @@
 import { BRUSH_SPRITE_OPTIONS, isTileCatalogIdTaken } from "../tiles/tileSpriteCatalog.js";
 import { BACKGROUND_MATERIAL_OPTIONS, isBackgroundMaterialIdTaken } from "../background/materialCatalog.js";
-import { DECOR_PRESETS } from "../decor/decorPresets.js";
+import { DECOR_PRESETS, isDecorPresetIdTaken } from "../decor/decorPresets.js";
 import { ENTITY_PRESETS } from "../entities/entityPresets.js";
 
 export const ASSET_WIZARD_MODES = {
@@ -235,6 +235,13 @@ function toBackgroundToken(value) {
     .replace(/^_+|_+$/g, "");
 }
 
+function toDecorToken(value) {
+  return normalizeString(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 export function suggestTileCatalogId({ displayName = "", spriteFileName = "", currentCatalogId = "" } = {}) {
   const current = toSlugToken(currentCatalogId);
   const fromDisplayName = toSlugToken(displayName);
@@ -264,6 +271,20 @@ export function suggestBackgroundMaterialId({ displayName = "", spriteFileName =
   return candidate;
 }
 
+export function suggestDecorPresetId({ displayName = "", spriteFileName = "", currentPresetId = "" } = {}) {
+  const current = normalizeString(currentPresetId).toLowerCase();
+  const fromDisplayName = toDecorToken(displayName);
+  const fromSprite = toDecorToken(spriteFileName.replace(/\.[a-z0-9]+$/i, ""));
+  const base = fromDisplayName || fromSprite || toDecorToken(current) || "decor";
+  let candidate = base;
+  let suffix = 2;
+  while (isDecorPresetIdTaken(candidate) && candidate !== current) {
+    candidate = `${base}_${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
 export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
   const baseDraft = { ...(draft || {}) };
   if (assetType === ASSET_WIZARD_TYPES.TILE) {
@@ -283,6 +304,15 @@ export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
       drawWidth: normalizeDrawSizeValue(baseDraft.drawWidth),
       drawHeight: normalizeDrawSizeValue(baseDraft.drawHeight),
       fallbackColor: normalizeString(baseDraft.fallbackColor) || "#3d4b63",
+      footprint: normalizeString(baseDraft.footprint) || '{"w":1,"h":1}',
+    };
+  }
+  if (assetType === ASSET_WIZARD_TYPES.DECOR) {
+    return {
+      ...baseDraft,
+      drawAnchor: normalizeString(baseDraft.drawAnchor) || "BL",
+      drawWidth: normalizeDrawSizeValue(baseDraft.drawWidth),
+      drawHeight: normalizeDrawSizeValue(baseDraft.drawHeight),
       footprint: normalizeString(baseDraft.footprint) || '{"w":1,"h":1}',
     };
   }
@@ -351,6 +381,15 @@ export function getStepValidation(stepId, wizardState) {
       const isValid = Object.keys(fieldErrors).length === 0;
       return { isValid, fieldErrors, blockingReason: isValid ? "" : "Complete required identity fields to continue." };
     }
+    if (assetType === ASSET_WIZARD_TYPES.DECOR) {
+      if (!normalizeString(draft.presetId)) fieldErrors.presetId = "Decor id is required.";
+      else if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(normalizeString(draft.presetId))) fieldErrors.presetId = "Decor id must use lowercase letters, numbers, underscores, or hyphens.";
+      else if (isDecorPresetIdTaken(draft.presetId)) fieldErrors.presetId = "Decor id already exists. Choose a different id.";
+      if (!normalizeString(draft.displayName)) fieldErrors.displayName = "Display name is required.";
+      if (!normalizeString(draft.spritePath)) fieldErrors.spritePath = "Select a sprite file.";
+      const isValid = Object.keys(fieldErrors).length === 0;
+      return { isValid, fieldErrors, blockingReason: isValid ? "" : "Complete required identity fields to continue." };
+    }
     return { isValid: false, fieldErrors, blockingReason: "This flow is not fully implemented yet." };
   }
 
@@ -369,6 +408,14 @@ export function getStepValidation(stepId, wizardState) {
       if (!isPositiveNumber(draft.drawWidth)) fieldErrors.drawWidth = "Draw width must be a positive number.";
       if (!isPositiveNumber(draft.drawHeight)) fieldErrors.drawHeight = "Draw height must be a positive number.";
       if (!isHexColor(draft.fallbackColor)) fieldErrors.fallbackColor = "Fallback color must be a hex value like #3d4b63.";
+      const isValid = Object.keys(fieldErrors).length === 0;
+      return { isValid, fieldErrors, blockingReason: isValid ? "" : "Resolve metadata validation issues to continue." };
+    }
+    if (assetType === ASSET_WIZARD_TYPES.DECOR) {
+      if (!normalizeString(draft.drawAnchor)) fieldErrors.drawAnchor = "Draw anchor is required.";
+      if (!isPositiveNumber(draft.drawWidth)) fieldErrors.drawWidth = "Draw width must be a positive number.";
+      if (!isPositiveNumber(draft.drawHeight)) fieldErrors.drawHeight = "Draw height must be a positive number.";
+      if (!isValidFootprint(draft.footprint)) fieldErrors.footprint = 'Footprint must be JSON with positive w/h, e.g. {"w":1,"h":1}.';
       const isValid = Object.keys(fieldErrors).length === 0;
       return { isValid, fieldErrors, blockingReason: isValid ? "" : "Resolve metadata validation issues to continue." };
     }
