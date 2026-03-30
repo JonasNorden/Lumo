@@ -112,6 +112,43 @@ export function computeNextCustomTileId(entries = []) {
   return maxTileId + 1;
 }
 
+function hasTileIdCollision(entries = [], tileId) {
+  if (!Number.isInteger(tileId) || tileId < 1) return true;
+  return entries.some((entry) => Number.parseInt(entry?.tileId, 10) === tileId);
+}
+
+export function buildPersistedTileEntry({ tile = {}, existingEntries = [], catalogId, spriteFileName }) {
+  const drawW = Number.parseInt(tile.drawW, 10);
+  const drawH = Number.parseInt(tile.drawH, 10);
+  const footprintW = Math.max(1, Number.parseInt(tile?.footprint?.w, 10) || 1);
+  const footprintH = Math.max(1, Number.parseInt(tile?.footprint?.h, 10) || 1);
+
+  const newTileId = computeNextCustomTileId(existingEntries);
+  if (hasTileIdCollision(existingEntries, newTileId)) {
+    throw new Error("generated-tile-id-collision");
+  }
+
+  const resolvedBehaviorProfileId = resolveBehaviorProfileId({
+    explicitBehaviorProfileId: tile.behaviorProfileId,
+    tileBehavior: tile.tileBehavior,
+    collisionType: tile.collisionType,
+  });
+
+  return {
+    id: catalogId,
+    name: String(tile.label || catalogId).trim() || catalogId,
+    group: String(tile.group || "Custom").trim() || "Custom",
+    img: `data/assets/tiles/${spriteFileName}`,
+    footprint: { w: footprintW, h: footprintH },
+    tileId: newTileId,
+    behaviorProfileId: resolvedBehaviorProfileId,
+    collisionType: String(tile.collisionType || "solid"),
+    drawW: Number.isInteger(drawW) && drawW > 0 ? drawW : 24,
+    drawH: Number.isInteger(drawH) && drawH > 0 ? drawH : 24,
+    drawAnchor: tile.drawAnchor === "BL" ? "BL" : "TL",
+  };
+}
+
 function serializeBackgroundMaterialEntry(entry) {
   return `  {\n    id: ${JSON.stringify(entry.id)},\n    label: ${JSON.stringify(entry.label)},\n    img: ${JSON.stringify(entry.img)},\n    drawW: ${entry.drawW},\n    drawH: ${entry.drawH},\n    drawAnchor: "BL",\n    drawOffX: 0,\n    drawOffY: 0,\n    footprint: { w: ${entry.footprint.w}, h: ${entry.footprint.h} },\n    fallbackColor: ${JSON.stringify(entry.fallbackColor)},\n    group: ${JSON.stringify(entry.group)}\n  }`;
 }
@@ -258,7 +295,12 @@ async function pickAvailableSpriteFileName(targetDir, catalogId, sourceFileName)
 }
 
 async function saveTile(payload) {
-  const tile = payload?.tile || {};
+  const incomingTile = payload?.tile || {};
+  const {
+    tileId: _ignoredIncomingTileId,
+    tileNumericId: _ignoredIncomingTileNumericId,
+    ...tile
+  } = incomingTile;
   const sprite = payload?.sprite || {};
 
   const catalogId = String(tile.catalogId || "").trim();
@@ -305,30 +347,25 @@ async function saveTile(payload) {
   const spriteFilePath = path.join(TILE_ASSET_DIR, spriteFileName);
   await fs.writeFile(spriteFilePath, Buffer.from(dataUrlParts.base64Data, "base64"));
 
-  const drawW = Number.parseInt(tile.drawW, 10);
-  const drawH = Number.parseInt(tile.drawH, 10);
-  const footprintW = Math.max(1, Number.parseInt(tile?.footprint?.w, 10) || 1);
-  const footprintH = Math.max(1, Number.parseInt(tile?.footprint?.h, 10) || 1);
-  const uniqueTileId = computeNextCustomTileId(tiles);
-  const resolvedBehaviorProfileId = resolveBehaviorProfileId({
-    explicitBehaviorProfileId: tile.behaviorProfileId,
-    tileBehavior: tile.tileBehavior,
-    collisionType: tile.collisionType,
-  });
-
-  const tileEntry = {
-    id: catalogId,
-    name: String(tile.label || catalogId).trim() || catalogId,
-    group: String(tile.group || "Custom").trim() || "Custom",
-    img: `data/assets/tiles/${spriteFileName}`,
-    footprint: { w: footprintW, h: footprintH },
-    tileId: uniqueTileId,
-    behaviorProfileId: resolvedBehaviorProfileId,
-    collisionType: String(tile.collisionType || "solid"),
-    drawW: Number.isInteger(drawW) && drawW > 0 ? drawW : 24,
-    drawH: Number.isInteger(drawH) && drawH > 0 ? drawH : 24,
-    drawAnchor: tile.drawAnchor === "BL" ? "BL" : "TL",
-  };
+  let tileEntry;
+  try {
+    tileEntry = buildPersistedTileEntry({
+      tile,
+      existingEntries: tiles,
+      catalogId,
+      spriteFileName,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "generated-tile-id-collision") {
+      return {
+        ok: false,
+        statusCode: 500,
+        reason: "generated-tile-id-collision",
+        message: "Generated tile id already exists. Aborting save to protect catalog integrity.",
+      };
+    }
+    throw error;
+  }
 
   const arrayBounds = findTileCatalogArrayBounds(catalogSource);
   if (!arrayBounds) {
