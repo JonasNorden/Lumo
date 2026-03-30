@@ -1,0 +1,23 @@
+# =========================
+# Lumo - Local Ignore Rules
+# =========================
+
+# ❌ Local tools (DO NOT COMMIT)
+data/assets/audio/music/ffmpeg.exe
+
+# ❌ Accidental sprite dump folder (outside pipeline)
+Sprite 24x24/
+
+# ❌ Temp / exports / local junk
+*.tmp
+*.log
+
+# ❌ OS junk
+Thumbs.db
+.DS_Store
+
+# ❌ Node / dev junk (future safe)
+node_modules/
+
+# ❌ Optional: prevent large binaries
+*.exe
