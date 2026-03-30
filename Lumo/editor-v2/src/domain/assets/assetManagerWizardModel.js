@@ -117,7 +117,7 @@ export function getTileBehaviorAuditGroups() {
 export function getTileBehaviorOptions() {
   return TILE_BEHAVIOR_DEFINITIONS.map((behavior) => ({
     value: behavior.id,
-    label: `${behavior.label} · tileId ${behavior.tileId}`,
+    label: behavior.label,
     helpText: behavior.helpText,
   }));
 }
@@ -337,7 +337,7 @@ export function getStepValidation(stepId, wizardState) {
       else if (isTileCatalogIdTaken(draft.catalogId)) fieldErrors.catalogId = "Catalog id already exists. Choose a different id.";
       if (!normalizeString(draft.displayName)) fieldErrors.displayName = "Display name is required.";
       if (!getTileBehaviorById(draft.tileBehavior)) fieldErrors.tileBehavior = "Choose a tile behavior from supported runtime behaviors.";
-      if (!isKnownTileNumericId(draft.tileNumericId)) fieldErrors.tileNumericId = "Selected behavior must map to a known runtime tile id.";
+      if (!isKnownTileNumericId(draft.tileNumericId)) fieldErrors.tileNumericId = "Selected behavior must map to a supported runtime behavior profile.";
       if (!normalizeString(draft.spritePath)) fieldErrors.spritePath = "Select a sprite file.";
       const isValid = Object.keys(fieldErrors).length === 0;
       return { isValid, fieldErrors, blockingReason: isValid ? "" : "Complete required identity fields to continue." };
