@@ -12,6 +12,21 @@ window.LUMO_TILE_BEHAVIOR_PROFILES = [
     id: "tile.solid.ice",
     collisionType: "solid",
     special: "ice"
+  },
+  {
+    id: "tile.solid.brake",
+    collisionType: "solid",
+    special: "brake"
+  },
+  {
+    id: "tile.one-way.default",
+    collisionType: "oneWay",
+    special: null
+  },
+  {
+    id: "tile.hazard.default",
+    collisionType: "hazard",
+    special: null
   }
 ];
 
@@ -127,4 +142,3 @@ window.LUMO_THEME_DEFS = [
   { id: "theme.void", tags: ["void", "dark"] },
   { id: "theme.tech", tags: ["tech", "constructed"] }
 ];
-

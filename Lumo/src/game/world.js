@@ -122,7 +122,9 @@
       if (profile.collisionType === "solid"){
         profileBase = (profile.special === "ice")
           ? this._getLegacyTileBehavior(4)
-          : this._getLegacyTileBehavior(1);
+          : (profile.special === "brake")
+            ? this._getLegacyTileBehavior(5)
+            : this._getLegacyTileBehavior(1);
       } else if (profile.collisionType === "oneWay"){
         profileBase = this._getLegacyTileBehavior(2);
       } else if (profile.collisionType === "hazard"){

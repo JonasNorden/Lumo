@@ -5,6 +5,7 @@ import {
   ASSET_WIZARD_TYPES,
   createInitialAssetManagerWizardState,
   getAssetWizardDraftWithDefaults,
+  getBehaviorProfileIdForTileBehavior,
   getCanonicalTileIdForBehavior,
   getStepValidation,
   getTileBehaviorAuditGroups,
@@ -14,7 +15,13 @@ import {
   suggestTileCatalogId,
 } from "../src/domain/assets/assetManagerWizardModel.js";
 import { isBackgroundMaterialIdTaken, registerBackgroundMaterialOption } from "../src/domain/background/materialCatalog.js";
-import { isTileCatalogIdTaken, registerTileSpriteOption } from "../src/domain/tiles/tileSpriteCatalog.js";
+import {
+  findBrushSpriteOptionByValue,
+  getTileAssetByTileValue,
+  isTileCatalogIdTaken,
+  registerTileSpriteOption,
+} from "../src/domain/tiles/tileSpriteCatalog.js";
+import { computeNextCustomTileId } from "../dev/localTileSaveBridge.js";
 
 const wizard = createInitialAssetManagerWizardState();
 assert.equal(wizard.stepId, "mode");
@@ -90,6 +97,8 @@ assert.equal(tileDefaults.drawWidth, "24");
 assert.equal(tileDefaults.drawHeight, "24");
 assert.equal(tileDefaults.tileBehavior, "solid");
 assert.equal(tileDefaults.tileNumericId, "15");
+assert.equal(getBehaviorProfileIdForTileBehavior("solid"), "tile.solid.default");
+assert.equal(getBehaviorProfileIdForTileBehavior("one-way"), "tile.one-way.default");
 
 const suggestedId = suggestTileCatalogId({ displayName: "Crystal Brick" });
 assert.equal(suggestedId, "crystal-brick");
@@ -98,7 +107,7 @@ assert.equal(isTileCatalogIdTaken(suggestedId), false);
 const registration = registerTileSpriteOption({
   catalogId: suggestedId,
   label: "Crystal Brick",
-  tileId: Number.parseInt(knownTileId, 10),
+  tileId: 99,
   img: "selected://crystal.png",
   drawW: 24,
   drawH: 24,
@@ -108,6 +117,11 @@ const registration = registerTileSpriteOption({
 });
 assert.equal(registration.ok, true);
 assert.equal(isTileCatalogIdTaken(suggestedId), true);
+assert.equal(computeNextCustomTileId([{ tileId: 15 }, { tileId: 16 }, { tileId: 27 }]), 28);
+assert.equal(findBrushSpriteOptionByValue("stone_ct")?.tileId, 15);
+assert.equal(findBrushSpriteOptionByValue(suggestedId)?.tileId, 99);
+assert.equal(getTileAssetByTileValue(15)?.id, "stone_ct");
+assert.equal(getTileAssetByTileValue(99)?.id, suggestedId);
 
 const duplicateValidation = getStepValidation("identity", {
   mode: ASSET_WIZARD_MODES.CREATE,

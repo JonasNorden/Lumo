@@ -29,6 +29,7 @@ const TILE_BEHAVIOR_DEFINITIONS = [
     id: "solid",
     label: "Solid",
     tileId: 15,
+    behaviorProfileId: "tile.solid.default",
     collisionType: "solid",
     helpText: "Standard blocking ground/wall tile.",
   },
@@ -36,6 +37,7 @@ const TILE_BEHAVIOR_DEFINITIONS = [
     id: "ice",
     label: "Ice",
     tileId: 4,
+    behaviorProfileId: "tile.solid.ice",
     collisionType: "solid",
     helpText: "Slippery solid surface with low friction.",
   },
@@ -43,6 +45,7 @@ const TILE_BEHAVIOR_DEFINITIONS = [
     id: "one-way",
     label: "One-way Platform",
     tileId: 2,
+    behaviorProfileId: "tile.one-way.default",
     collisionType: "oneWay",
     helpText: "Pass upward through it, land on top.",
   },
@@ -50,6 +53,7 @@ const TILE_BEHAVIOR_DEFINITIONS = [
     id: "hazard",
     label: "Hazard",
     tileId: 3,
+    behaviorProfileId: "tile.hazard.default",
     collisionType: "hazard",
     helpText: "Damaging surface; does not block movement.",
   },
@@ -57,6 +61,7 @@ const TILE_BEHAVIOR_DEFINITIONS = [
     id: "brake",
     label: "Brake",
     tileId: 5,
+    behaviorProfileId: "tile.solid.brake",
     collisionType: "solid",
     helpText: "Very high-friction solid surface that slows movement.",
   },
@@ -124,6 +129,10 @@ export function getTileBehaviorById(behaviorId) {
 
 export function getCanonicalTileIdForBehavior(behaviorId) {
   return getTileBehaviorById(behaviorId)?.tileId ?? null;
+}
+
+export function getBehaviorProfileIdForTileBehavior(behaviorId) {
+  return getTileBehaviorById(behaviorId)?.behaviorProfileId ?? null;
 }
 
 export function getTileBehaviorForTileId(tileId) {

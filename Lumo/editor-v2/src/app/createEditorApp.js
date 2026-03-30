@@ -30,6 +30,7 @@ import {
 import {
   ASSET_WIZARD_MODES,
   ASSET_WIZARD_TYPES,
+  getBehaviorProfileIdForTileBehavior,
   getStepValidation as getAssetWizardStepValidation,
   getTileBehaviorById,
   suggestBackgroundMaterialId,
@@ -7242,6 +7243,8 @@ if (event.shiftKey) {
         catalogId: resolvedDraft.catalogId,
         label: resolvedDraft.displayName,
         tileId: numericTileId,
+        tileBehavior: selectedTileBehavior?.id || resolvedDraft.tileBehavior,
+        behaviorProfileId: getBehaviorProfileIdForTileBehavior(resolvedDraft.tileBehavior),
         drawW,
         drawH,
         drawAnchor: resolvedDraft.drawAnchor,
