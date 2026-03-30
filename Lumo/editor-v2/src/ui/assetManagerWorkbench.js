@@ -10,7 +10,6 @@ import {
   getAssetWizardDraftWithDefaults,
   getExistingAssetOptions,
   getFirstIncompleteStep,
-  getCanonicalTileIdForBehavior,
   getTileBehaviorById,
   getTileBehaviorOptions,
   getStepValidation,
@@ -250,12 +249,12 @@ function renderStepBody(wizard, validation) {
       return `
         <div class="assetWizardSection">
           <h4>Tile identity</h4>
-          <p>Choose gameplay behavior first; the wizard maps it to a safe runtime tile id automatically.</p>
+          <p>Choose gameplay behavior first. Runtime tile identity is assigned automatically when you save.</p>
           <div class="assetWizardFieldGrid">
             ${renderInput("Catalog id", "catalogId", draft.catalogId, "stone-floor", "Unique technical registry key.", { errorMessage: fieldErrors.catalogId, statusMessage: catalogIdStatus, statusClass: catalogIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted" })}
             ${renderInput("Display name", "displayName", draft.displayName, "Stone Floor", "", { errorMessage: fieldErrors.displayName })}
-            ${renderSelectInput("Tile behavior", "tileBehavior", draft.tileBehavior, tileBehaviorOptions, "Gameplay semantics (Solid, Ice, One-way, Hazard, Brake).", { errorMessage: fieldErrors.tileBehavior, infoTip: "Maps to canonical runtime tile ids: Solid→15, Ice→4, One-way→2, Hazard→3, Brake→5." })}
-            <label class="assetWizardField" for="asset-wizard-tileNumericId"><span class="assetWizardFieldLabelRow"><span class="assetWizardFieldLabel">Mapped runtime tile id</span></span><span class="assetWizardFieldHelp">Auto-mapped from behavior. Shown for transparency and review.</span><input id="asset-wizard-tileNumericId" type="text" readonly value="${escapeHtml(String(getCanonicalTileIdForBehavior(draft.tileBehavior) || draft.tileNumericId || ""))}" /><span class="assetWizardFieldHelp">Advanced detail only. Primary choice is behavior.</span>${fieldErrors.tileNumericId ? `<span class="assetWizardFieldError">${escapeHtml(fieldErrors.tileNumericId)}</span>` : ""}</label>
+            ${renderSelectInput("Tile behavior", "tileBehavior", draft.tileBehavior, tileBehaviorOptions, "Gameplay semantics (Solid, Ice, One-way, Hazard, Brake).", { errorMessage: fieldErrors.tileBehavior, infoTip: "Behavior profile is selected now; runtime tile identity is auto-generated on save." })}
+            <label class="assetWizardField"><span class="assetWizardFieldLabelRow"><span class="assetWizardFieldLabel">Runtime identity</span></span><span class="assetWizardFieldHelp">Assigned on save.</span><input type="text" readonly value="Auto-generated on save" /><span class="assetWizardFieldHelp">Custom tiles get a unique runtime tile ID when persisted.</span>${fieldErrors.tileNumericId ? `<span class="assetWizardFieldError">${escapeHtml(fieldErrors.tileNumericId)}</span>` : ""}</label>
             ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/tiles/", infoTip: "Optional for now in architecture, but required to proceed in this wizard." })}
           </div>
         </div>
@@ -335,7 +334,7 @@ function renderStepBody(wizard, validation) {
       ["Mode", mode || "—"],
       ["Asset type", type || "—"],
       ["Existing target", wizard.selectedExistingAssetId || "(new asset)"],
-      ...(type === "tiles" ? [["Tile behavior", tileBehavior ? `${tileBehavior.label}` : "—"], ["Mapped runtime tile id", String(draft.tileNumericId || "")]] : []),
+      ...(type === "tiles" ? [["Tile behavior", tileBehavior ? `${tileBehavior.label}` : "—"], ["Runtime identity", "Auto-generated on save"]] : []),
       ...(Object.entries(draft || {})
         .filter(([key]) => !(type === "tiles" && (key === "tileBehavior" || key === "tileNumericId")))
         .map(([key, value]) => [key, String(value ?? "")])
