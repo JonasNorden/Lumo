@@ -11,17 +11,19 @@ import {
   getTileBehaviorAuditGroups,
   getTileBehaviorOptions,
   isStepComplete,
+  suggestDecorPresetId,
   suggestBackgroundMaterialId,
   suggestTileCatalogId,
 } from "../src/domain/assets/assetManagerWizardModel.js";
 import { isBackgroundMaterialIdTaken, registerBackgroundMaterialOption } from "../src/domain/background/materialCatalog.js";
+import { findDecorPresetById, isDecorPresetIdTaken, registerDecorPresetOption } from "../src/domain/decor/decorPresets.js";
 import {
   findBrushSpriteOptionByValue,
   getTileAssetByTileValue,
   isTileCatalogIdTaken,
   registerTileSpriteOption,
 } from "../src/domain/tiles/tileSpriteCatalog.js";
-import { buildPersistedTileEntry, computeNextCustomTileId } from "../dev/localTileSaveBridge.js";
+import { buildPersistedDecorEntry, buildPersistedTileEntry, computeNextCustomTileId } from "../dev/localTileSaveBridge.js";
 
 const wizard = createInitialAssetManagerWizardState();
 assert.equal(wizard.stepId, "mode");
@@ -58,6 +60,20 @@ wizard.draft.drawAnchor = "BL";
 wizard.draft.drawWidth = "16";
 wizard.draft.drawHeight = "16";
 wizard.draft.footprint = "{\"w\":1,\"h\":1}";
+assert.equal(isStepComplete("metadata", wizard), true);
+
+wizard.assetType = ASSET_WIZARD_TYPES.DECOR;
+wizard.mode = ASSET_WIZARD_MODES.CREATE;
+wizard.draft = {
+  presetId: "custom_banner",
+  displayName: "Custom Banner",
+  spritePath: "assets/sprites/decor/custom_banner.png",
+  drawAnchor: "TL",
+  drawWidth: "48",
+  drawHeight: "96",
+  footprint: "{\"w\":2,\"h\":4}",
+};
+assert.equal(isStepComplete("identity", wizard), true);
 assert.equal(isStepComplete("metadata", wizard), true);
 
 const behaviorAuditGroups = getTileBehaviorAuditGroups();
@@ -191,5 +207,57 @@ assert.equal(
   suggestBackgroundMaterialId({ displayName: "Crystal Wall" }),
   "bg_crystal_wall_2",
 );
+
+const suggestedDecorPresetId = suggestDecorPresetId({ displayName: "Crystal Banner" });
+assert.equal(suggestedDecorPresetId, "crystal_banner");
+assert.equal(isDecorPresetIdTaken(suggestedDecorPresetId), false);
+
+const builtinFlowerPreset = findDecorPresetById("decor_flower_01");
+assert.ok(builtinFlowerPreset, "builtin decor preset should exist before registration");
+const decorRegistration = registerDecorPresetOption({
+  presetId: suggestedDecorPresetId,
+  defaultName: "Crystal Banner",
+  img: "../data/assets/sprites/decor/crystal_banner.png",
+  drawW: 48,
+  drawH: 96,
+  drawAnchor: "TL",
+  footprint: { w: 2, h: 4 },
+  group: "Decor",
+});
+assert.equal(decorRegistration.ok, true);
+assert.equal(isDecorPresetIdTaken(suggestedDecorPresetId), true);
+assert.equal(findDecorPresetById("decor_flower_01")?.type, builtinFlowerPreset.type, "builtin decor preset should remain intact");
+assert.equal(
+  suggestDecorPresetId({ displayName: "Crystal Banner" }),
+  "crystal_banner_2",
+);
+
+const duplicateDecorValidation = getStepValidation("identity", {
+  mode: ASSET_WIZARD_MODES.CREATE,
+  assetType: ASSET_WIZARD_TYPES.DECOR,
+  draft: {
+    presetId: suggestedDecorPresetId,
+    displayName: "Duplicate Crystal Banner",
+    spritePath: "selected://another.png",
+  },
+});
+assert.equal(duplicateDecorValidation.isValid, false);
+assert.equal(duplicateDecorValidation.fieldErrors.presetId, "Decor id already exists. Choose a different id.");
+
+const persistedDecorEntry = buildPersistedDecorEntry({
+  decor: {
+    label: "Bridge Decor",
+    drawW: 32,
+    drawH: 64,
+    drawAnchor: "TL",
+    group: "Decor",
+  },
+  presetId: "bridge_decor",
+  spriteFileName: "bridge_decor.png",
+});
+assert.equal(persistedDecorEntry.id, "bridge_decor");
+assert.equal(persistedDecorEntry.category, "decor");
+assert.equal(persistedDecorEntry.img, "data/assets/sprites/decor/bridge_decor.png");
+assert.equal(persistedDecorEntry.anchor, "TL");
 
 console.log("asset-manager wizard checks passed");
