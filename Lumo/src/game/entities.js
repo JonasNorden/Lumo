@@ -719,6 +719,7 @@ if (this._catById){
     }
 
     const decorAnchor = normalizeAnchor(e.anchor) || normalizeAnchor(def.anchor) || "BL";
+    const decorFlipX = (params && typeof params.flipX === "boolean") ? params.flipX : false;
     const dc = {
       type:"decor",
       active:true,
@@ -730,6 +731,7 @@ if (this._catById){
       perchOffsetY: perchOffsetY,
       img: imgPath ? this._tryLoadImage(imgPath) : null,
       anchorResolved: decorAnchor,
+      flipX: decorFlipX,
     };
     applyAnchor(dc, dc.w, dc.h, decorAnchor);
     this.items.push(dc);
@@ -2811,7 +2813,15 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
 
         if (e.type === "decor"){
           if (e.img && e.img.complete && e.img.naturalWidth > 0){
-            ctx.drawImage(e.img, sx, sy, e.w, e.h);
+            if (e.flipX === true){
+              ctx.save();
+              ctx.translate(sx + e.w, sy);
+              ctx.scale(-1, 1);
+              ctx.drawImage(e.img, 0, 0, e.w, e.h);
+              ctx.restore();
+            } else {
+              ctx.drawImage(e.img, sx, sy, e.w, e.h);
+            }
           } else {
             ctx.fillStyle = "rgba(120,200,120,0.35)";
             ctx.fillRect(sx, sy, e.w, e.h);
