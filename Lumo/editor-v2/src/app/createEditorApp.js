@@ -7233,7 +7233,6 @@ if (event.shiftKey) {
 
     const resolvedDraft = getAssetWizardDraftWithDefaults(currentWizard.assetType, currentWizard.draft || {});
     const selectedTileBehavior = getTileBehaviorById(resolvedDraft.tileBehavior);
-    const numericTileId = Number.parseInt(resolvedDraft.tileNumericId, 10);
     const drawW = Number.parseInt(resolvedDraft.drawWidth, 10);
     const drawH = Number.parseInt(resolvedDraft.drawHeight, 10);
     const footprint = parseFootprint(resolvedDraft.footprint);
@@ -7242,7 +7241,6 @@ if (event.shiftKey) {
       tilePayload: {
         catalogId: resolvedDraft.catalogId,
         label: resolvedDraft.displayName,
-        tileId: numericTileId,
         tileBehavior: selectedTileBehavior?.id || resolvedDraft.tileBehavior,
         behaviorProfileId: getBehaviorProfileIdForTileBehavior(resolvedDraft.tileBehavior),
         drawW,
@@ -7270,7 +7268,7 @@ if (event.shiftKey) {
     const registerResult = registerTileSpriteOption({
       catalogId: bridgeResult.persistedTile?.catalogId || resolvedDraft.catalogId,
       label: bridgeResult.persistedTile?.label || resolvedDraft.displayName,
-      tileId: bridgeResult.persistedTile?.tileId || numericTileId,
+      tileId: bridgeResult.persistedTile?.tileId,
       img: bridgeResult.persistedTile?.img || null,
       drawW: bridgeResult.persistedTile?.drawW || drawW,
       drawH: bridgeResult.persistedTile?.drawH || drawH,

@@ -21,7 +21,7 @@ import {
   isTileCatalogIdTaken,
   registerTileSpriteOption,
 } from "../src/domain/tiles/tileSpriteCatalog.js";
-import { computeNextCustomTileId } from "../dev/localTileSaveBridge.js";
+import { buildPersistedTileEntry, computeNextCustomTileId } from "../dev/localTileSaveBridge.js";
 
 const wizard = createInitialAssetManagerWizardState();
 assert.equal(wizard.stepId, "mode");
@@ -118,6 +118,36 @@ const registration = registerTileSpriteOption({
 assert.equal(registration.ok, true);
 assert.equal(isTileCatalogIdTaken(suggestedId), true);
 assert.equal(computeNextCustomTileId([{ tileId: 15 }, { tileId: 16 }, { tileId: 27 }]), 28);
+const existingTileEntries = [
+  { id: "stone_ct", tileId: 15, behaviorProfileId: "tile.solid.default" },
+  { id: "ice_01", tileId: 16, behaviorProfileId: "tile.solid.ice" },
+];
+const existingTileSnapshot = JSON.stringify(existingTileEntries);
+const persistedTileEntry = buildPersistedTileEntry({
+  tile: {
+    label: "Wizard Tile",
+    tileId: 15,
+    tileNumericId: 15,
+    tileBehavior: "solid",
+    behaviorProfileId: "tile.solid.default",
+    collisionType: "solid",
+    drawW: 24,
+    drawH: 24,
+    drawAnchor: "TL",
+    footprint: { w: 1, h: 1 },
+    group: "Custom",
+  },
+  existingEntries: existingTileEntries,
+  catalogId: "wizard-tile",
+  spriteFileName: "wizard-tile.png",
+});
+assert.equal(persistedTileEntry.tileId, 17);
+assert.ok(!existingTileEntries.some((entry) => entry.tileId === persistedTileEntry.tileId));
+assert.equal(JSON.stringify(existingTileEntries), existingTileSnapshot);
+const nextEntries = [...existingTileEntries, persistedTileEntry];
+assert.equal(nextEntries.length, existingTileEntries.length + 1);
+assert.ok(nextEntries.some((entry) => entry.id === "stone_ct"));
+assert.ok(nextEntries.some((entry) => entry.id === "wizard-tile"));
 assert.equal(findBrushSpriteOptionByValue("stone_ct")?.tileId, 15);
 assert.equal(findBrushSpriteOptionByValue(suggestedId)?.tileId, 99);
 assert.equal(getTileAssetByTileValue(15)?.id, "stone_ct");
