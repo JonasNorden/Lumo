@@ -99,9 +99,75 @@ function findArrayBoundsFromIndex(source, startIndex) {
   if (!Number.isInteger(startIndex) || startIndex < 0) return null;
   const arrayStartIndex = source.indexOf("[", startIndex);
   if (arrayStartIndex < 0) return null;
-  const arrayEndIndex = source.lastIndexOf("]");
-  if (arrayEndIndex < 0 || arrayEndIndex <= arrayStartIndex) return null;
+  const arrayEndIndex = findMatchingArrayEndIndex(source, arrayStartIndex);
+  if (arrayEndIndex < 0) return null;
   return { arrayStartIndex, arrayEndIndex };
+}
+
+function findMatchingArrayEndIndex(source, arrayStartIndex) {
+  let depth = 0;
+  let inString = false;
+  let stringQuote = "";
+  let inLineComment = false;
+  let inBlockComment = false;
+  let isEscaped = false;
+
+  for (let index = arrayStartIndex; index < source.length; index += 1) {
+    const current = source[index];
+    const next = source[index + 1] || "";
+
+    if (inLineComment) {
+      if (current === "\n") inLineComment = false;
+      continue;
+    }
+    if (inBlockComment) {
+      if (current === "*" && next === "/") {
+        inBlockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+    if (inString) {
+      if (isEscaped) {
+        isEscaped = false;
+        continue;
+      }
+      if (current === "\\") {
+        isEscaped = true;
+        continue;
+      }
+      if (current === stringQuote) {
+        inString = false;
+        stringQuote = "";
+      }
+      continue;
+    }
+
+    if (current === "/" && next === "/") {
+      inLineComment = true;
+      index += 1;
+      continue;
+    }
+    if (current === "/" && next === "*") {
+      inBlockComment = true;
+      index += 1;
+      continue;
+    }
+    if (current === "'" || current === "\"" || current === "`") {
+      inString = true;
+      stringQuote = current;
+      continue;
+    }
+    if (current === "[") {
+      depth += 1;
+      continue;
+    }
+    if (current === "]") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
 }
 
 function findArrayBoundsByMarker(source, marker) {

@@ -32,6 +32,7 @@ import {
   ASSET_WIZARD_TYPES,
   getStepValidation as getAssetWizardStepValidation,
   getTileBehaviorById,
+  suggestBackgroundMaterialId,
   suggestTileCatalogId,
 } from "../domain/assets/assetManagerWizardModel.js";
 import { saveBackgroundThroughLocalBridge, saveTileThroughLocalBridge } from "../domain/assets/localTileSaveBridge.js";
@@ -7184,6 +7185,24 @@ if (event.shiftKey) {
     wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(wizard.draft.catalogId) ? "taken" : "available";
   };
 
+  const syncWizardBackgroundMaterialIdHint = (wizard) => {
+    if (!wizard || wizard.assetType !== ASSET_WIZARD_TYPES.BACKGROUND || wizard.mode !== ASSET_WIZARD_MODES.CREATE) return;
+    wizard.draft = wizard.draft || {};
+    const suggestedMaterialId = suggestBackgroundMaterialId({
+      displayName: wizard.draft.displayName,
+      spriteFileName: wizard.draft.spriteFileName,
+      currentMaterialId: wizard.draft.materialId,
+    });
+    if (!wizard.draft.materialId || !wizard.draft.materialIdManuallyEdited) {
+      wizard.draft.materialId = suggestedMaterialId;
+    }
+    if (!wizard.draft.materialId) {
+      wizard.draft.materialIdAvailability = "";
+      return;
+    }
+    wizard.draft.materialIdAvailability = isBackgroundMaterialIdTaken(wizard.draft.materialId) ? "taken" : "available";
+  };
+
   const parseFootprint = (value) => {
     try {
       const parsed = JSON.parse(String(value || "{\"w\":1,\"h\":1}"));
@@ -7326,6 +7345,7 @@ if (event.shiftKey) {
         const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
         wizard.stepId = bridgeResult.reason === "duplicate-material-id" ? "identity" : wizard.stepId || "save";
         wizard.draft = wizard.draft || {};
+        wizard.draft.materialIdAvailability = bridgeResult.reason === "duplicate-material-id" ? "taken" : wizard.draft.materialIdAvailability;
         wizard.draft.saveFeedback = bridgeResult.message || "Persistent save failed.";
         draft.ui.assetManager.wizard = wizard;
       });
@@ -7350,6 +7370,7 @@ if (event.shiftKey) {
         const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
         wizard.stepId = "identity";
         wizard.draft = wizard.draft || {};
+        wizard.draft.materialIdAvailability = registerResult.reason === "duplicate-material-id" ? "taken" : wizard.draft.materialIdAvailability;
         wizard.draft.saveFeedback = "Background saved on disk, but editor catalog refresh failed. Reload the page.";
         draft.ui.assetManager.wizard = wizard;
       });
@@ -7474,6 +7495,7 @@ if (event.shiftKey) {
             selectedAssetWizardSpriteFile = null;
             applyWizardDraftDefaults(wizard);
             syncWizardCatalogIdHint(wizard);
+            syncWizardBackgroundMaterialIdHint(wizard);
             draft.ui.assetManager.wizard = wizard;
           });
         }
@@ -7550,7 +7572,9 @@ if (event.shiftKey) {
         wizard.draft[assetDraftField] = target.value;
         applyWizardDraftDefaults(wizard);
         if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
+        if (assetDraftField === "materialId") wizard.draft.materialIdManuallyEdited = true;
         if (assetDraftField === "displayName") syncWizardCatalogIdHint(wizard);
+        if (assetDraftField === "displayName") syncWizardBackgroundMaterialIdHint(wizard);
         if (assetDraftField === "catalogId") wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(target.value) ? "taken" : "available";
         if (assetDraftField === "materialId") wizard.draft.materialIdAvailability = isBackgroundMaterialIdTaken(target.value) ? "taken" : "available";
         draft.ui.assetManager.wizard = wizard;
@@ -7583,6 +7607,7 @@ if (event.shiftKey) {
           wizard.draft.spritePreviewUrl = previewUrl;
           selectedAssetWizardSpriteFile = file;
           syncWizardCatalogIdHint(wizard);
+          syncWizardBackgroundMaterialIdHint(wizard);
           if (shouldAutofillWidth || shouldAutofillHeight) {
             const probeImage = new Image();
             probeImage.addEventListener("load", () => {
@@ -7606,6 +7631,7 @@ if (event.shiftKey) {
           wizard.draft.spritePreviewUrl = "";
           selectedAssetWizardSpriteFile = null;
           syncWizardCatalogIdHint(wizard);
+          syncWizardBackgroundMaterialIdHint(wizard);
         }
         applyWizardDraftDefaults(wizard);
         draft.ui.assetManager.wizard = wizard;
@@ -7622,6 +7648,7 @@ if (event.shiftKey) {
           wizard.draft[assetDraftField] = target.value;
           applyWizardDraftDefaults(wizard);
           if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
+          if (assetDraftField === "materialId") wizard.draft.materialIdManuallyEdited = true;
           if (assetDraftField === "catalogId") wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(target.value) ? "taken" : "available";
           if (assetDraftField === "materialId") wizard.draft.materialIdAvailability = isBackgroundMaterialIdTaken(target.value) ? "taken" : "available";
           draft.ui.assetManager.wizard = wizard;
@@ -7662,8 +7689,11 @@ if (event.shiftKey) {
         wizard.draft[assetDraftField] = target.value;
         applyWizardDraftDefaults(wizard);
         if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
+        if (assetDraftField === "materialId") wizard.draft.materialIdManuallyEdited = true;
         if (assetDraftField === "catalogId") wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(target.value) ? "taken" : "available";
         if (assetDraftField === "displayName") syncWizardCatalogIdHint(wizard);
+        if (assetDraftField === "displayName") syncWizardBackgroundMaterialIdHint(wizard);
+        if (assetDraftField === "materialId") wizard.draft.materialIdAvailability = isBackgroundMaterialIdTaken(target.value) ? "taken" : "available";
         draft.ui.assetManager.wizard = wizard;
       });
       return;
