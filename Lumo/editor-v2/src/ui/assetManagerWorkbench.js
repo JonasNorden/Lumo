@@ -82,6 +82,7 @@ function renderInput(label, field, value, placeholder, description = "", options
   const statusMessage = options.statusMessage || "";
   const statusClass = options.statusClass || "";
   const fieldClass = options.fieldClass || "";
+  const isReadonly = options.readonly === true;
   return `
     <label class="assetWizardField ${escapeHtml(fieldClass)}" for="asset-wizard-${escapeHtml(field)}">
       <span class="assetWizardFieldLabelRow">
@@ -99,6 +100,7 @@ function renderInput(label, field, value, placeholder, description = "", options
         value="${escapeHtml(value || "")}"
         placeholder="${escapeHtml(placeholder || "")}"
         autocomplete="off"
+        ${isReadonly ? "readonly" : ""}
       />
       ${errorMessage ? `<span class="assetWizardFieldError">${escapeHtml(errorMessage)}</span>` : ""}
       ${statusMessage ? `<span class="assetWizardFieldHelp ${escapeHtml(statusClass)}">${escapeHtml(statusMessage)}</span>` : ""}
@@ -107,7 +109,6 @@ function renderInput(label, field, value, placeholder, description = "", options
 }
 
 function renderFilePickerField(label, field, wizard, options = {}) {
-  const value = wizard?.draft?.[field] || "";
   const fileName = wizard?.draft?.spriteFileName || "";
   const errorMessage = options.errorMessage || "";
   const hint = options.hint || "";
@@ -128,14 +129,6 @@ function renderFilePickerField(label, field, wizard, options = {}) {
         class="assetWizardHiddenFileInput"
         data-asset-manager-file-field="${escapeHtml(field)}"
         accept="image/*"
-      />
-      <input
-        type="text"
-        readonly
-        data-asset-manager-field="${escapeHtml(field)}"
-        class="${errorMessage ? "isInvalid" : ""}"
-        value="${escapeHtml(value)}"
-        placeholder="Selected file path placeholder"
       />
       ${errorMessage ? `<span class="assetWizardFieldError">${escapeHtml(errorMessage)}</span>` : ""}
     </div>
@@ -289,21 +282,8 @@ function renderStepBody(wizard, validation) {
             `
               ${renderInput("Catalog id", "catalogId", draft.catalogId, "stone-floor", "Unique technical registry key.", { errorMessage: fieldErrors.catalogId, statusMessage: catalogIdStatus, statusClass: catalogIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted", fieldClass: "assetWizardFieldSpan4" })}
               ${renderInput("Display name", "displayName", draft.displayName, "Stone Floor", "Human-friendly picker label.", { errorMessage: fieldErrors.displayName, fieldClass: "assetWizardFieldSpan4" })}
-              ${renderSelectInput("Tile behavior", "tileBehavior", draft.tileBehavior, tileBehaviorOptions, "Gameplay semantics (Solid, Ice, One-way, Hazard, Brake).", { errorMessage: fieldErrors.tileBehavior, infoTip: "Behavior profile is selected now; runtime tile identity is auto-generated on save.", fieldClass: "assetWizardFieldSpan4" })}
-            `,
-          )}
-          ${renderFieldGroup(
-            "Runtime assignment",
-            "Runtime identity remains system-managed to preserve safe save semantics.",
-            `
-              <label class="assetWizardField assetWizardFieldSpan6">
-                <span class="assetWizardFieldLabelRow"><span class="assetWizardFieldLabel">Runtime identity</span></span>
-                <span class="assetWizardFieldHelp">Assigned on save.</span>
-                <input type="text" readonly value="Auto-generated on save" />
-                <span class="assetWizardFieldHelp">Custom tiles get a unique runtime tile ID when persisted.</span>
-                ${fieldErrors.tileNumericId ? `<span class="assetWizardFieldError">${escapeHtml(fieldErrors.tileNumericId)}</span>` : ""}
-              </label>
-              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/tiles/", infoTip: "Optional for now in architecture, but required to proceed in this wizard.", fieldClass: "assetWizardFieldSpan6" })}
+              ${renderSelectInput("Tile behavior", "tileBehavior", draft.tileBehavior, tileBehaviorOptions, "", { errorMessage: fieldErrors.tileBehavior, infoTip: "Behavior profile is selected now; runtime tile identity is auto-generated on save.", fieldClass: "assetWizardFieldSpan4" })}
+              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/tiles/", infoTip: "Optional for now in architecture, but required to proceed in this wizard.", fieldClass: "assetWizardFieldSpan12" })}
             `,
           )}
         </div>
@@ -353,11 +333,11 @@ function renderStepBody(wizard, validation) {
             "Collision stays synchronized with selected tile behavior.",
             `
               <label class="assetWizardField assetWizardFieldSpan6" for="asset-wizard-collisionType">
-                <span class="assetWizardFieldLabelRow"><span class="assetWizardFieldLabel">Collision profile (from behavior)</span>${renderInfoTip("Derived from Tile behavior to keep save semantics safe.")}</span>
+                <span class="assetWizardFieldLabelRow"><span class="assetWizardFieldLabel">Collision profile</span>${renderInfoTip("Derived from Tile behavior to keep save semantics safe.")}</span>
                 <input id="asset-wizard-collisionType" type="text" readonly value="${escapeHtml(draft.collisionType || "")}" />
                 ${fieldErrors.collisionType ? `<span class="assetWizardFieldError">${escapeHtml(fieldErrors.collisionType)}</span>` : ""}
               </label>
-              ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor, "BL", "Grid anchor token.", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left).", fieldClass: "assetWizardFieldSpan6" })}
+              ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor, "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left).", fieldClass: "assetWizardFieldSpan6" })}
             `,
           )}
           ${renderFieldGroup(
@@ -429,7 +409,7 @@ function renderStepBody(wizard, validation) {
       ["Mode", mode || "—"],
       ["Asset type", type || "—"],
       ["Existing target", wizard.selectedExistingAssetId || "(new asset)"],
-      ...(type === "tiles" ? [["Tile behavior", tileBehavior ? `${tileBehavior.label}` : "—"], ["Runtime identity", "Auto-generated on save"]] : []),
+      ...(type === "tiles" ? [["Tile behavior", tileBehavior ? `${tileBehavior.label}` : "—"]] : []),
       ...mappedDraftRows,
     ];
 
