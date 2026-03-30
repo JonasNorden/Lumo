@@ -1,7 +1,7 @@
 import { BRUSH_SPRITE_OPTIONS, isTileCatalogIdTaken } from "../tiles/tileSpriteCatalog.js";
 import { BACKGROUND_MATERIAL_OPTIONS, isBackgroundMaterialIdTaken } from "../background/materialCatalog.js";
 import { DECOR_PRESETS, isDecorPresetIdTaken } from "../decor/decorPresets.js";
-import { ENTITY_PRESETS } from "../entities/entityPresets.js";
+import { ENTITY_PRESETS, isEntityPresetIdTaken } from "../entities/entityPresets.js";
 
 export const ASSET_WIZARD_MODES = {
   CREATE: "create",
@@ -242,6 +242,135 @@ function toDecorToken(value) {
     .replace(/^_+|_+$/g, "");
 }
 
+function toEntityToken(value) {
+  return normalizeString(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+const ENTITY_FAMILY_OPTIONS = [
+  { value: "lantern_01", label: "Lantern glow" },
+  { value: "firefly_01", label: "Firefly light" },
+  { value: "dark_creature_01", label: "Dark creature" },
+  { value: "hover_void_01", label: "Hover void" },
+  { value: "checkpoint", label: "Checkpoint" },
+  { value: "powercell_01", label: "Power-cell pickup" },
+  { value: "flare_pickup_01", label: "Flare pickup" },
+];
+
+const ALLOWED_ENTITY_FAMILY_IDS = new Set(ENTITY_FAMILY_OPTIONS.map((option) => option.value));
+const EXCLUDED_ENTITY_FAMILY_IDS = new Set([
+  "player-spawn",
+  "player-exit",
+  "fog_volume",
+  "water_volume",
+  "lava_volume",
+  "bubbling_liquid_volume",
+  "generic",
+  "trigger",
+]);
+
+const ENTITY_SAFE_PARAM_SCHEMA = {
+  lantern_01: [
+    { key: "radius", label: "Light radius", type: "number", min: 1 },
+    { key: "strength", label: "Light strength", type: "number", min: 0 },
+  ],
+  firefly_01: [
+    { key: "lightDiameter", label: "Light diameter", type: "number", min: 1 },
+    { key: "lightStrength", label: "Light strength", type: "number", min: 0 },
+    { key: "flyRangeX", label: "Fly range X", type: "number", min: 0 },
+    { key: "flyRangeYUp", label: "Fly range Y (up)", type: "number", min: 0 },
+    { key: "flySpeed", label: "Fly speed", type: "number", min: 0 },
+    { key: "flyTime", label: "Fly time", type: "number", min: 0 },
+    { key: "cooldown", label: "Cooldown", type: "number", min: 0 },
+  ],
+  dark_creature_01: [
+    { key: "hp", label: "HP", type: "number", min: 1 },
+    { key: "hitCooldown", label: "Hit cooldown", type: "number", min: 0 },
+    { key: "safeDelay", label: "Safe delay", type: "number", min: 0 },
+    { key: "patrolTiles", label: "Patrol range (tiles)", type: "number", min: 0 },
+    { key: "aggroTiles", label: "Aggro range (tiles)", type: "number", min: 0 },
+    { key: "castCooldown", label: "Cast cooldown", type: "number", min: 0 },
+    { key: "energyLoss", label: "Energy loss", type: "number", min: 0 },
+    { key: "knockbackX", label: "Knockback X", type: "number" },
+    { key: "knockbackY", label: "Knockback Y", type: "number" },
+    { key: "reactsToFlares", label: "Reacts to flares", type: "boolean" },
+  ],
+  hover_void_01: [
+    { key: "aggroTiles", label: "Aggro range (tiles)", type: "number", min: 0 },
+    { key: "followTiles", label: "Follow range (tiles)", type: "number", min: 0 },
+    { key: "maxHp", label: "Max HP", type: "number", min: 1 },
+    { key: "colorVariant", label: "Color variant", type: "number", min: 0 },
+    { key: "loseSightTiles", label: "Lose sight range", type: "number", min: 0 },
+    { key: "attackCooldownMin", label: "Attack cooldown min", type: "number", min: 0 },
+    { key: "attackCooldownMax", label: "Attack cooldown max", type: "number", min: 0 },
+    { key: "attackDamage", label: "Attack damage", type: "number", min: 0 },
+    { key: "attackPushback", label: "Attack pushback", type: "number", min: 0 },
+    { key: "braveGroupSize", label: "Brave group size", type: "number", min: 0 },
+    { key: "swarmGroupSize", label: "Swarm group size", type: "number", min: 0 },
+  ],
+  checkpoint: [{ key: "respawnId", label: "Respawn ID", type: "string" }],
+  powercell_01: [],
+  flare_pickup_01: [],
+};
+
+function parseEntityParamDraft(rawValue, type) {
+  if (type === "boolean") {
+    if (typeof rawValue === "boolean") return rawValue;
+    const normalized = normalizeString(rawValue).toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on";
+  }
+  if (type === "number") return Number.parseFloat(rawValue);
+  return String(rawValue ?? "");
+}
+
+function isEntityParamValueValid(field, value) {
+  if (field.type === "boolean") return typeof value === "boolean";
+  if (field.type === "number") {
+    if (!Number.isFinite(value)) return false;
+    if (Number.isFinite(field.min) && value < field.min) return false;
+    return true;
+  }
+  if (field.type === "string") return typeof value === "string";
+  return false;
+}
+
+function normalizeEntityParamsDraft(familyId, paramsDraft = {}) {
+  const schema = ENTITY_SAFE_PARAM_SCHEMA[familyId] || [];
+  const normalized = {};
+  for (const field of schema) {
+    if (!Object.prototype.hasOwnProperty.call(paramsDraft || {}, field.key)) continue;
+    const parsed = parseEntityParamDraft(paramsDraft[field.key], field.type);
+    if (!isEntityParamValueValid(field, parsed)) continue;
+    normalized[field.key] = parsed;
+  }
+  return normalized;
+}
+
+export function getEntityBehaviorFamilyOptions() {
+  return ENTITY_FAMILY_OPTIONS.map((entry) => ({ ...entry }));
+}
+
+export function getEntitySafeParamSchema(familyId) {
+  const normalized = normalizeString(familyId);
+  return (ENTITY_SAFE_PARAM_SCHEMA[normalized] || []).map((field) => ({ ...field }));
+}
+
+export function suggestEntityPresetId({ displayName = "", spriteFileName = "", currentPresetId = "" } = {}) {
+  const current = normalizeString(currentPresetId).toLowerCase();
+  const fromDisplayName = toEntityToken(displayName);
+  const fromSprite = toEntityToken(spriteFileName.replace(/\.[a-z0-9]+$/i, ""));
+  const base = fromDisplayName || fromSprite || toEntityToken(current) || "entity";
+  let candidate = base;
+  let suffix = 2;
+  while (isEntityPresetIdTaken(candidate) && candidate !== current) {
+    candidate = `${base}_${suffix}`;
+    suffix += 1;
+  }
+  return candidate;
+}
+
 export function suggestTileCatalogId({ displayName = "", spriteFileName = "", currentCatalogId = "" } = {}) {
   const current = toSlugToken(currentCatalogId);
   const fromDisplayName = toSlugToken(displayName);
@@ -314,6 +443,18 @@ export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
       drawWidth: normalizeDrawSizeValue(baseDraft.drawWidth),
       drawHeight: normalizeDrawSizeValue(baseDraft.drawHeight),
       footprint: normalizeString(baseDraft.footprint) || '{"w":1,"h":1}',
+    };
+  }
+  if (assetType === ASSET_WIZARD_TYPES.ENTITY) {
+    const familyId = normalizeString(baseDraft.behaviorFamilyId) || "lantern_01";
+    return {
+      ...baseDraft,
+      behaviorFamilyId: familyId,
+      presetId: normalizeString(baseDraft.presetId),
+      drawAnchor: normalizeString(baseDraft.drawAnchor) || "BL",
+      drawWidth: normalizeDrawSizeValue(baseDraft.drawWidth),
+      drawHeight: normalizeDrawSizeValue(baseDraft.drawHeight),
+      safeDefaults: normalizeEntityParamsDraft(familyId, baseDraft.safeDefaults || {}),
     };
   }
   return baseDraft;
@@ -390,6 +531,21 @@ export function getStepValidation(stepId, wizardState) {
       const isValid = Object.keys(fieldErrors).length === 0;
       return { isValid, fieldErrors, blockingReason: isValid ? "" : "Complete required identity fields to continue." };
     }
+    if (assetType === ASSET_WIZARD_TYPES.ENTITY) {
+      if (!normalizeString(draft.behaviorFamilyId)) fieldErrors.behaviorFamilyId = "Choose a behavior family.";
+      else if (EXCLUDED_ENTITY_FAMILY_IDS.has(normalizeString(draft.behaviorFamilyId))) fieldErrors.behaviorFamilyId = "This family is not available in Phase 1.";
+      else if (!ALLOWED_ENTITY_FAMILY_IDS.has(normalizeString(draft.behaviorFamilyId))) fieldErrors.behaviorFamilyId = "Choose one of the supported Entity Builder families.";
+
+      if (!normalizeString(draft.presetId)) fieldErrors.presetId = "Preset id is required.";
+      else if (!/^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(normalizeString(draft.presetId))) fieldErrors.presetId = "Preset id must use lowercase letters, numbers, underscores, or hyphens.";
+      else if (isEntityPresetIdTaken(draft.presetId)) fieldErrors.presetId = "Preset id already exists. Choose a different id.";
+
+      if (!normalizeString(draft.displayName)) fieldErrors.displayName = "Display name is required.";
+      if (!normalizeString(draft.spritePath)) fieldErrors.spritePath = "Select a sprite file.";
+
+      const isValid = Object.keys(fieldErrors).length === 0;
+      return { isValid, fieldErrors, blockingReason: isValid ? "" : "Complete required identity fields to continue." };
+    }
     return { isValid: false, fieldErrors, blockingReason: "This flow is not fully implemented yet." };
   }
 
@@ -416,6 +572,22 @@ export function getStepValidation(stepId, wizardState) {
       if (!isPositiveNumber(draft.drawWidth)) fieldErrors.drawWidth = "Draw width must be a positive number.";
       if (!isPositiveNumber(draft.drawHeight)) fieldErrors.drawHeight = "Draw height must be a positive number.";
       if (!isValidFootprint(draft.footprint)) fieldErrors.footprint = 'Footprint must be JSON with positive w/h, e.g. {"w":1,"h":1}.';
+      const isValid = Object.keys(fieldErrors).length === 0;
+      return { isValid, fieldErrors, blockingReason: isValid ? "" : "Resolve metadata validation issues to continue." };
+    }
+    if (assetType === ASSET_WIZARD_TYPES.ENTITY) {
+      if (!normalizeString(draft.drawAnchor)) fieldErrors.drawAnchor = "Draw anchor is required.";
+      if (!isPositiveNumber(draft.drawWidth)) fieldErrors.drawWidth = "Draw width must be a positive number.";
+      if (!isPositiveNumber(draft.drawHeight)) fieldErrors.drawHeight = "Draw height must be a positive number.";
+      const familyId = normalizeString(draft.behaviorFamilyId);
+      const safeSchema = ENTITY_SAFE_PARAM_SCHEMA[familyId] || [];
+      const parsedSafeDefaults = normalizeEntityParamsDraft(familyId, draft.safeDefaults || {});
+      for (const field of safeSchema) {
+        if (!Object.prototype.hasOwnProperty.call(draft.safeDefaults || {}, field.key)) continue;
+        if (!Object.prototype.hasOwnProperty.call(parsedSafeDefaults, field.key)) {
+          fieldErrors[`safeDefaults.${field.key}`] = `${field.label} is invalid for this family.`;
+        }
+      }
       const isValid = Object.keys(fieldErrors).length === 0;
       return { isValid, fieldErrors, blockingReason: isValid ? "" : "Resolve metadata validation issues to continue." };
     }

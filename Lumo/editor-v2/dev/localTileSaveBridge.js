@@ -14,6 +14,8 @@ const BACKGROUND_ASSET_DIR = path.join(REPO_ROOT, "data/assets/sprites/bg");
 const BACKGROUND_RUNTIME_CATALOG_FILE = path.join(REPO_ROOT, "data/catalog_bg.js");
 const DECOR_ASSET_DIR = path.join(REPO_ROOT, "data/assets/sprites/decor");
 const DECOR_CATALOG_FILE = path.join(REPO_ROOT, "data/catalog_entities.js");
+const ENTITY_ASSET_DIR = path.join(REPO_ROOT, "data/assets/sprites/entities");
+const ENTITY_PRESETS_FILE = path.join(REPO_ROOT, "editor-v2/src/domain/entities/entityPresets.js");
 const BACKGROUND_EDITOR_MATERIAL_FILE = path.join(
   REPO_ROOT,
   "editor-v2/src/domain/background/materialCatalog.js"
@@ -60,6 +62,30 @@ function isSafeBackgroundMaterialId(value) {
 function isSafeDecorPresetId(value) {
   return typeof value === "string" && /^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(value.trim());
 }
+
+function isSafeEntityPresetId(value) {
+  return typeof value === "string" && /^[a-z0-9]+(?:[_-][a-z0-9]+)*$/.test(value.trim());
+}
+
+const PHASE1_ENTITY_ALLOWED_FAMILIES = new Set([
+  "lantern_01",
+  "firefly_01",
+  "dark_creature_01",
+  "hover_void_01",
+  "checkpoint",
+  "powercell_01",
+  "flare_pickup_01",
+]);
+
+const ENTITY_SAFE_PARAM_KEYS = {
+  lantern_01: ["radius", "strength"],
+  firefly_01: ["lightDiameter", "lightStrength", "flyRangeX", "flyRangeYUp", "flySpeed", "flyTime", "cooldown"],
+  dark_creature_01: ["hp", "hitCooldown", "safeDelay", "patrolTiles", "aggroTiles", "castCooldown", "energyLoss", "knockbackX", "knockbackY", "reactsToFlares"],
+  hover_void_01: ["aggroTiles", "followTiles", "maxHp", "colorVariant", "loseSightTiles", "attackCooldownMin", "attackCooldownMax", "attackDamage", "attackPushback", "braveGroupSize", "swarmGroupSize"],
+  checkpoint: ["respawnId"],
+  powercell_01: [],
+  flare_pickup_01: [],
+};
 
 function sanitizeSpriteBaseName(value) {
   const base = String(value || "tile")
@@ -165,6 +191,23 @@ function serializeRuntimeBackgroundCatalogEntry(entry) {
 
 function serializeDecorCatalogEntry(entry) {
   return `  {\n    "id": ${JSON.stringify(entry.id)},\n    "name": ${JSON.stringify(entry.name)},\n    "group": ${JSON.stringify(entry.group)},\n    "category": "decor",\n    "img": ${JSON.stringify(entry.img)},\n    "w": ${entry.w},\n    "h": ${entry.h},\n    "anchor": ${JSON.stringify(entry.anchor)}\n  }`;
+}
+
+function readEditorEntityPresets(source) {
+  const context = vm.createContext({});
+  const bounds = findArrayBoundsByMarker(source, "export const ENTITY_PRESETS");
+  if (!bounds) return [];
+  const arrayLiteral = source.slice(bounds.arrayStartIndex, bounds.arrayEndIndex + 1);
+  vm.runInContext(
+    `globalThis.__entityPresets = ${arrayLiteral};`,
+    context,
+    { filename: "entityPresets.js" }
+  );
+  return Array.isArray(context.__entityPresets) ? context.__entityPresets : [];
+}
+
+function serializeEntityPresetEntry(entry) {
+  return `  {\n    id: ${JSON.stringify(entry.id)},\n    type: ${JSON.stringify(entry.type)},\n    defaultName: ${JSON.stringify(entry.defaultName)},\n    defaultParams: ${JSON.stringify(entry.defaultParams, null, 2).replace(/\n/g, "\n    ")},\n    img: ${JSON.stringify(entry.img)},\n    drawW: ${entry.drawW},\n    drawH: ${entry.drawH},\n    footprintW: ${entry.footprintW},\n    footprintH: ${entry.footprintH},\n    drawAnchor: ${JSON.stringify(entry.drawAnchor)},\n    hitRadius: ${entry.hitRadius},\n  }`;
 }
 
 function findArrayBoundsFromIndex(source, startIndex) {
@@ -701,6 +744,144 @@ async function saveDecor(payload) {
   };
 }
 
+function sanitizeEntityDefaultParams(familyId, defaultParams) {
+  const safeKeys = new Set(ENTITY_SAFE_PARAM_KEYS[familyId] || []);
+  const nextParams = {};
+  const source = defaultParams && typeof defaultParams === "object" ? defaultParams : {};
+  for (const key of Object.keys(source)) {
+    if (!safeKeys.has(key)) continue;
+    const value = source[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      nextParams[key] = value;
+      continue;
+    }
+    if (typeof value === "boolean") {
+      nextParams[key] = value;
+      continue;
+    }
+    if (typeof value === "string") {
+      nextParams[key] = value;
+    }
+  }
+  return nextParams;
+}
+
+export function isPhase1EntityFamilySupported(familyId) {
+  return PHASE1_ENTITY_ALLOWED_FAMILIES.has(String(familyId || "").trim());
+}
+
+export function buildPersistedEntityPresetEntry({ entity = {}, presetId, spriteFileName }) {
+  const familyId = String(entity.type || "").trim();
+  if (!isPhase1EntityFamilySupported(familyId)) {
+    throw new Error("unsupported-entity-family");
+  }
+  const drawW = Math.max(1, Number.parseInt(entity.drawW, 10) || 24);
+  const drawH = Math.max(1, Number.parseInt(entity.drawH, 10) || 24);
+  return {
+    id: presetId,
+    type: familyId,
+    defaultName: String(entity.label || presetId).trim() || presetId,
+    defaultParams: sanitizeEntityDefaultParams(familyId, entity.defaultParams),
+    img: `../data/assets/sprites/entities/${spriteFileName}`,
+    drawW,
+    drawH,
+    footprintW: drawW,
+    footprintH: drawH,
+    drawAnchor: String(entity.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL",
+    hitRadius: Number.isFinite(Number(entity.hitRadius)) ? Number(entity.hitRadius) : 8.5,
+  };
+}
+
+async function saveEntity(payload) {
+  const entity = payload?.entity || {};
+  const sprite = payload?.sprite || {};
+  const presetId = String(entity.presetId || "").trim();
+  const familyId = String(entity.type || "").trim();
+
+  if (!isSafeEntityPresetId(presetId)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      reason: "invalid-preset-id",
+      message: "Entity preset id must be lowercase with letters, numbers, underscores, or hyphens.",
+    };
+  }
+  if (!PHASE1_ENTITY_ALLOWED_FAMILIES.has(familyId)) {
+    return {
+      ok: false,
+      statusCode: 400,
+      reason: "unsupported-entity-family",
+      message: "This behavior family is excluded from Entity Builder Phase 1.",
+    };
+  }
+
+  const dataUrlParts = parseDataUrl(sprite.dataUrl);
+  if (!dataUrlParts || !dataUrlParts.mimeType.startsWith("image/")) {
+    return {
+      ok: false,
+      statusCode: 400,
+      reason: "invalid-sprite-data",
+      message: "Sprite payload must be an image base64 data URL.",
+    };
+  }
+
+  const source = await fs.readFile(ENTITY_PRESETS_FILE, "utf8");
+  const presets = readEditorEntityPresets(source);
+  if (presets.some((entry) => String(entry?.id || "").toLowerCase() === presetId.toLowerCase())) {
+    return {
+      ok: false,
+      statusCode: 409,
+      reason: "duplicate-preset-id",
+      message: `Entity preset id "${presetId}" already exists.`,
+    };
+  }
+
+  await fs.mkdir(ENTITY_ASSET_DIR, { recursive: true });
+  const spriteFileName = await pickAvailableSpriteFileName(ENTITY_ASSET_DIR, presetId, sprite.fileName);
+  const spriteFilePath = path.join(ENTITY_ASSET_DIR, spriteFileName);
+  await fs.writeFile(spriteFilePath, Buffer.from(dataUrlParts.base64Data, "base64"));
+
+  const entry = buildPersistedEntityPresetEntry({ entity, presetId, spriteFileName });
+
+  const arrayBounds = findArrayBoundsByMarker(source, "export const ENTITY_PRESETS");
+  if (!arrayBounds) {
+    return {
+      ok: false,
+      statusCode: 500,
+      reason: "catalog-format-unsupported",
+      message: "Could not safely locate ENTITY_PRESETS array.",
+    };
+  }
+
+  const nextSource = buildCatalogSourceWithInsertedEntry(
+    source,
+    arrayBounds,
+    serializeEntityPresetEntry(entry),
+    presets.length > 0
+  );
+  await fs.writeFile(ENTITY_PRESETS_FILE, nextSource, "utf8");
+
+  return {
+    ok: true,
+    statusCode: 200,
+    message: `Entity preset persisted as ${presetId}.`,
+    persistedEntity: {
+      presetId: entry.id,
+      type: entry.type,
+      label: entry.defaultName,
+      defaultParams: entry.defaultParams,
+      img: entry.img,
+      drawW: entry.drawW,
+      drawH: entry.drawH,
+      footprintW: entry.footprintW,
+      footprintH: entry.footprintH,
+      drawAnchor: entry.drawAnchor,
+      hitRadius: entry.hitRadius,
+      spriteFileName,
+    },
+  };
+}
+
 export function createLocalTileSaveBridgeServer() {
   return createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
@@ -756,6 +937,22 @@ export function createLocalTileSaveBridgeServer() {
     return;
   }
 
+  if (req.method === "POST" && req.url === "/api/editor-v2/entities/save") {
+    try {
+      const body = await parseJsonBody(req);
+      const result = await saveEntity(body);
+      writeJson(res, result.statusCode, result);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown-error";
+      writeJson(res, 500, {
+        ok: false,
+        reason,
+        message: "Entity persistence bridge failed while writing local files.",
+      });
+    }
+    return;
+  }
+
     writeJson(res, 404, { ok: false, reason: "not-found", message: "Endpoint not found." });
   });
 }
@@ -771,5 +968,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
     console.log(`[tile-save-bridge] background runtime catalog => ${BACKGROUND_RUNTIME_CATALOG_FILE}`);
     console.log(`[tile-save-bridge] decor assets => ${DECOR_ASSET_DIR}`);
     console.log(`[tile-save-bridge] decor catalog => ${DECOR_CATALOG_FILE}`);
+    console.log(`[tile-save-bridge] entity assets => ${ENTITY_ASSET_DIR}`);
+    console.log(`[tile-save-bridge] entity presets => ${ENTITY_PRESETS_FILE}`);
   });
 }

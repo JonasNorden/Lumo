@@ -8,6 +8,8 @@ import {
   ASSET_WIZARD_TYPE_OPTIONS,
   createInitialAssetManagerWizardState,
   getAssetWizardDraftWithDefaults,
+  getEntityBehaviorFamilyOptions,
+  getEntitySafeParamSchema,
   getExistingAssetOptions,
   getFirstIncompleteStep,
   getTileBehaviorById,
@@ -195,6 +197,9 @@ function getReviewLabel(fieldKey) {
     collisionType: "Collision profile",
     fallbackColor: "Fallback color",
     footprint: "Footprint (JSON)",
+    behaviorFamilyId: "Behavior family",
+    presetId: "Preset id",
+    safeDefaults: "Safe defaults",
   };
   return REVIEW_LABELS[fieldKey] || fieldKey;
 }
@@ -338,6 +343,38 @@ function renderStepBody(wizard, validation) {
       `;
     }
 
+    if (type === "entities") {
+      const presetIdAvailability = draft.presetIdAvailability || "";
+      const presetIdStatus = presetIdAvailability === "taken"
+        ? "Already exists"
+        : presetIdAvailability === "available"
+          ? "Available"
+          : "";
+      return `
+        <div class="assetWizardSection">
+          <h4>Entity setup</h4>
+          <p>Pick a proven behavior family, then define the preset name and look.</p>
+          ${renderFieldGroup(
+            "Behavior family",
+            "Phase 1 supports only approved runtime-safe families.",
+            `
+              ${renderSelectInput("Behavior family", "behaviorFamilyId", draft.behaviorFamilyId, getEntityBehaviorFamilyOptions(), "", { errorMessage: fieldErrors.behaviorFamilyId, fieldClass: "assetWizardFieldSpan12" })}
+            `,
+          )}
+          ${renderFieldGroup(
+            "Look & identity",
+            "Create a reusable preset id, display name, and sprite.",
+            `
+              ${renderInput("Display name", "displayName", draft.displayName, "Blue Lantern", "Shown in the entity picker.", { errorMessage: fieldErrors.displayName, fieldClass: "assetWizardFieldSpan4" })}
+              ${renderInput("Preset id", "presetId", draft.presetId, "blue_lantern", "Stable id for this preset.", { errorMessage: fieldErrors.presetId, statusMessage: presetIdStatus, statusClass: presetIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted", fieldClass: "assetWizardFieldSpan4" })}
+              ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", "BL", "", { errorMessage: fieldErrors.drawAnchor, fieldClass: "assetWizardFieldSpan4" })}
+              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/entities/", fieldClass: "assetWizardFieldSpan12" })}
+            `,
+          )}
+        </div>
+      `;
+    }
+
     return `
       <div class="assetWizardSection">
         <h4>Entity flow scaffolding</h4>
@@ -425,6 +462,41 @@ function renderStepBody(wizard, validation) {
         </div>
       `;
     }
+    if (type === "entities") {
+      const safeSchema = getEntitySafeParamSchema(draft.behaviorFamilyId);
+      const safeDefaults = draft.safeDefaults || {};
+      const safeFieldMarkup = safeSchema.length
+        ? safeSchema.map((field) => {
+          const fieldKey = `safeDefaults.${field.key}`;
+          const rawValue = safeDefaults[field.key];
+          const value = field.type === "boolean" ? String(Boolean(rawValue)) : String(rawValue ?? "");
+          const placeholder = field.type === "boolean" ? "true or false" : field.type === "number" ? "0" : "value";
+          return renderInput(field.label, fieldKey, value, placeholder, "", {
+            errorMessage: fieldErrors[fieldKey],
+            fieldClass: "assetWizardFieldSpan4",
+          });
+        }).join("")
+        : '<p class="assetManagerMuted">This family has no editable safe defaults in Phase 1.</p>';
+      return `
+        <div class="assetWizardSection">
+          <h4>Safe defaults</h4>
+          <p>Tune only guarded parameters approved for this behavior family.</p>
+          ${renderFieldGroup(
+            "Default params",
+            "",
+            safeFieldMarkup,
+          )}
+          ${renderFieldGroup(
+            "Draw settings",
+            "",
+            `
+              ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan6" })}
+              ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan6" })}
+            `,
+          )}
+        </div>
+      `;
+    }
     return `
       <div class="assetWizardSection">
         <h4>Metadata scaffolding</h4>
@@ -447,6 +519,7 @@ function renderStepBody(wizard, validation) {
       "fallbackColor",
       "footprint",
       "collisionType",
+      "behaviorFamilyId",
     ];
     const mappedDraftRows = orderedDraftKeys
       .filter((key) => {
@@ -459,6 +532,7 @@ function renderStepBody(wizard, validation) {
       ["Asset type", type || "—"],
       ["Existing target", wizard.selectedExistingAssetId || "(new asset)"],
       ...(type === "tiles" ? [["Tile behavior", tileBehavior ? `${tileBehavior.label}` : "—"]] : []),
+      ...(type === "entities" ? [["Safe defaults", JSON.stringify(draft.safeDefaults || {})]] : []),
       ...mappedDraftRows,
     ];
 
@@ -480,7 +554,9 @@ function renderStepBody(wizard, validation) {
         ? "Register this background material into editor-v2 and runtime background catalogs for immediate use in the Background workflow."
         : wizard.assetType === "decor"
           ? "Register this decor preset into the audited decor source-of-truth catalog for immediate use in the Decor workflow."
-        : "Register this tile into the live editor-v2 tile catalog for immediate use in the Tiles workflow."}</p>
+          : wizard.assetType === "entities"
+            ? "Save this entity preset into editor-v2 entityPresets.js and register it live for placement."
+          : "Register this tile into the live editor-v2 tile catalog for immediate use in the Tiles workflow."}</p>
       ${wizard?.draft?.saveFeedback ? `<p class="assetWizardStepNotice" role="status">${escapeHtml(wizard.draft.saveFeedback)}</p>` : ""}
     </div>
   `;

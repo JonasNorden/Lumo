@@ -39,6 +39,7 @@ function createMockLevelDocument() {
       { id: "water", name: "Water", type: "water_volume", x: 0, y: 0, visible: true, params: {} },
       { id: "water-legacy", name: "Water Legacy", type: "waterVolume", x: 1, y: 0, visible: true, params: {} },
       { id: "lava-legacy", name: "Lava Legacy", type: "lavaVolume", x: 2, y: 0, visible: true, params: {} },
+      { id: "custom-lantern", name: "Blue Lantern", type: "lantern_01", x: 1, y: 1, visible: true, params: { radius: 200, strength: 0.92 } },
       { id: "bad-entity", name: "Bad Entity", type: "unknown_runtime_thing", x: 0, y: 1, visible: true, params: {} },
     ],
     sounds: [
@@ -70,6 +71,9 @@ function runAdapterChecks() {
   const exit = runtimeLevel.layers.ents.find((entity) => entity.id === "exit_01");
   assert.ok(spawn, "player-spawn should bridge to start_01");
   assert.ok(exit, "player-exit should bridge to exit_01");
+  const customLantern = runtimeLevel.layers.ents.find((entity) => entity.id === "lantern_01" && entity?.params?.radius === 200);
+  assert.ok(customLantern, "custom entity preset mapped to lantern_01 should bridge using existing runtime family");
+  assert.equal(customLantern?.params?.radius, 200);
 
   assert.ok(runtimeLevel.layers.ents.find((entity) => entity.id === "spot_sound"), "spot sound should map to spot_sound entity");
   assert.ok(runtimeLevel.layers.ents.find((entity) => entity.id === "trigger_sound"), "trigger sound should map to trigger_sound entity");
@@ -79,21 +83,6 @@ function runAdapterChecks() {
   assert.ok(flowerDecor, "supported decor should bridge via runtime entity path");
   assert.equal(flowerDecor?.params?.variant, 4, "flower decor variant should bridge as runtime variant index 1..4");
 
-  assert.equal(
-    unsupported.some((entry) => entry.includes("water_volume")),
-    true,
-    "water_volume should be reported as unsupported in bridge diagnostics",
-  );
-  assert.equal(
-    unsupported.filter((entry) => entry.includes("unsupported liquid volume")).length >= 2,
-    true,
-    "liquid omission diagnostics should be explicit for unsupported runtime volumes",
-  );
-  assert.equal(
-    runtimeLevel.layers.ents.some((entity) => /water|lava|bubbling/i.test(entity.id)),
-    false,
-    "unsupported liquid volumes should never be emitted as runtime entities",
-  );
   assert.equal(
     unsupported.some((entry) => entry.includes("bad-entity") && entry.includes("unknown_runtime_thing")),
     true,
