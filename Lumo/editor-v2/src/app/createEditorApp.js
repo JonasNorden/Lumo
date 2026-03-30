@@ -7289,18 +7289,23 @@ if (event.shiftKey) {
       return false;
     }
 
+    const createdTileLabel = resolvedDraft.displayName || registerResult.option.label || registerResult.option.value;
+
     store.setState((draft) => {
       const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+      cleanupWizardPreview(wizard);
+      draft.ui.assetManager.wizard = createInitialAssetManagerWizardState();
+      draft.ui.assetManager.selectedCategory = "tiles";
+      draft.ui.assetManager.activeView = "wizard";
+      draft.ui.assetManager.isOpen = false;
+      selectedAssetWizardSpriteFile = null;
+    });
+
+    store.setState((draft) => {
       draft.brush.activeDraft.sprite = registerResult.option.value;
       setActiveLayer(draft, PANEL_LAYERS.TILES);
       draft.interaction.activeTool = EDITOR_TOOLS.PAINT;
-      draft.ui.assetManager.selectedCategory = "tiles";
-      draft.ui.assetManager.activeView = "wizard";
-      draft.ui.importStatus = `Tile created (persisted): ${resolvedDraft.displayName || registerResult.option.label || registerResult.option.value}`;
-      cleanupWizardPreview(wizard);
-      draft.ui.assetManager.wizard = createInitialAssetManagerWizardState();
-      draft.ui.assetManager.isOpen = false;
-      selectedAssetWizardSpriteFile = null;
+      draft.ui.importStatus = `Tile created (persisted): ${createdTileLabel}`;
     });
     return true;
   };
