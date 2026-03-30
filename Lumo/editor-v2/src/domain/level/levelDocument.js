@@ -110,6 +110,7 @@ function normalizeDecor(decor, index) {
   const nextY = Number.isFinite(decor?.y) ? Math.round(decor.y) : 0;
   const nextVisible = typeof decor?.visible === "boolean" ? decor.visible : true;
   const nextVariant = typeof decor?.variant === "string" && decor.variant.trim() ? decor.variant.trim() : DEFAULT_DECOR_VARIANT;
+  const nextFlipX = decor?.flipX === true;
   const nextParams = cloneEntityParams(decor?.params);
   if (nextType === FLOWER_DECOR_TYPE) {
     const parsedFlowerVariant = parseFlowerVariant(nextParams.variant) ?? parseFlowerVariant(nextVariant) ?? 1;
@@ -124,6 +125,7 @@ function normalizeDecor(decor, index) {
     y: nextY,
     visible: nextVisible,
     variant: nextVariant,
+    flipX: nextFlipX,
     params: nextParams,
   };
 }

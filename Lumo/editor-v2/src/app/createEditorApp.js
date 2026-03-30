@@ -3921,6 +3921,7 @@ export function createEditorApp({
       y: placement.y,
       visible: true,
       variant: options.variant || resolveDecorVariant(preset, options.variantMode),
+      flipX: options.flipX === true,
     };
   };
 
@@ -5205,6 +5206,24 @@ export function createEditorApp({
         applyCanonicalDecorUpdate(draft, {
           type: "update",
           items: [{ index, previousDecor, nextDecor }],
+        });
+        return;
+      }
+
+      if (field === "flipX") {
+        const nextFlipX = Boolean(unwrapCanonicalMutationValue(value).value);
+        if (Boolean(decor.flipX) === nextFlipX) return;
+
+        applyCanonicalDecorUpdate(draft, {
+          type: "update",
+          items: [{
+            index,
+            previousDecor: cloneCanonicalDecorSnapshot(decor),
+            nextDecor: cloneCanonicalDecorSnapshot({
+              ...decor,
+              flipX: nextFlipX,
+            }),
+          }],
         });
         return;
       }
