@@ -35,10 +35,25 @@ globalThis.Lumo = {
   },
   Tileset: {
     0: { solid: false, oneWay: false, hazard: false },
+    1: { solid: true, oneWay: false, hazard: false, name: "solid" },
     2: { solid: true, oneWay: true, hazard: false, name: "oneway" },
+    3: { solid: false, oneWay: false, hazard: true, name: "hazard" },
     4: { solid: true, oneWay: false, hazard: false, name: "ice", frictionMul: 0.02 },
+    5: { solid: true, oneWay: false, hazard: false, name: "brake", frictionMul: 6.4 },
   },
 };
+globalThis.window.LUMO_TILE_BEHAVIOR_PROFILES = [
+  { id: "tile.solid.default", collisionType: "solid", special: null },
+  { id: "tile.solid.ice", collisionType: "solid", special: "ice" },
+  { id: "tile.solid.brake", collisionType: "solid", special: "brake" },
+  { id: "tile.one-way.default", collisionType: "oneWay", special: null },
+  { id: "tile.hazard.default", collisionType: "hazard", special: null },
+];
+globalThis.window.LUMO_CATALOG_TILES = [
+  { id: "stone_ct", tileId: 15, behaviorProfileId: "tile.solid.default", collisionType: "solid", footprint: { w: 2, h: 2 } },
+  { id: "custom-solid", tileId: 101, behaviorProfileId: "tile.solid.default", collisionType: "solid", footprint: { w: 1, h: 1 } },
+  { id: "custom-one-way", tileId: 102, behaviorProfileId: "tile.one-way.default", collisionType: "oneWay", footprint: { w: 1, h: 1 } },
+];
 
 vm.runInThisContext(worldSource, { filename: "world.js" });
 vm.runInThisContext(playerSource, { filename: "player.js" });
@@ -83,6 +98,27 @@ function runWorldBehaviorCoverageChecks() {
   assert.equal(world.getTileBehavior(6, 6)?.oneWay, true);
   assert.equal(world.getTileBehavior(4, 4)?.oneWay, true);
   assert.equal(world.getTileBehavior(6, 4)?.oneWay, true);
+}
+
+function runCustomTileIdentityChecks() {
+  const world = new Lumo.World();
+  const w = 4;
+  const h = 3;
+  const data = new Array(w * h).fill(0);
+  data[keyForCell(w, 0, 2)] = 15;
+  data[keyForCell(w, 1, 2)] = 101;
+  data[keyForCell(w, 2, 2)] = 102;
+
+  world.loadLevel({
+    meta: { w, h, tileSize: 24, id: "custom-identity", name: "Custom Identity" },
+    layers: { main: data },
+  });
+
+  assert.equal(world._tileDefById.get(15)?.id, "stone_ct", "built-in id should retain its own catalog definition");
+  assert.equal(world._tileDefById.get(101)?.id, "custom-solid", "custom tile should have its own identity");
+  assert.equal(world.getTileBehavior(0, 2)?.solid, true, "built-in solid behavior should remain intact");
+  assert.equal(world.getTileBehavior(1, 2)?.solid, true, "custom solid behavior should resolve from behavior profile");
+  assert.equal(world.getTileBehavior(2, 2)?.oneWay, true, "custom one-way behavior should survive reload/runtime lookup");
 }
 
 function runPlayerSurfaceSamplingChecks() {
@@ -181,6 +217,7 @@ function runOneWayCollisionChecks() {
 }
 
 runWorldBehaviorCoverageChecks();
+runCustomTileIdentityChecks();
 runPlayerSurfaceSamplingChecks();
 runOneWayCollisionChecks();
 

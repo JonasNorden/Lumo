@@ -82,7 +82,34 @@ function readCatalogTiles(catalogSource) {
 }
 
 function serializeCatalogEntry(entry) {
-  return `  {\n    id: ${JSON.stringify(entry.id)},\n    name: ${JSON.stringify(entry.name)},\n    group: ${JSON.stringify(entry.group)},\n    img: ${JSON.stringify(entry.img)},\n    footprint: { w: ${entry.footprint.w}, h: ${entry.footprint.h} },\n    tileId: ${entry.tileId},\n    collisionType: ${JSON.stringify(entry.collisionType)},\n    special: null,\n    drawW: ${entry.drawW},\n    drawH: ${entry.drawH},\n    drawAnchor: ${JSON.stringify(entry.drawAnchor)},\n    drawOffX: 0,\n    drawOffY: 0\n  }`;
+  return `  {\n    id: ${JSON.stringify(entry.id)},\n    name: ${JSON.stringify(entry.name)},\n    group: ${JSON.stringify(entry.group)},\n    img: ${JSON.stringify(entry.img)},\n    footprint: { w: ${entry.footprint.w}, h: ${entry.footprint.h} },\n    tileId: ${entry.tileId},\n    behaviorProfileId: ${JSON.stringify(entry.behaviorProfileId || null)},\n    collisionType: ${JSON.stringify(entry.collisionType)},\n    special: null,\n    drawW: ${entry.drawW},\n    drawH: ${entry.drawH},\n    drawAnchor: ${JSON.stringify(entry.drawAnchor)},\n    drawOffX: 0,\n    drawOffY: 0\n  }`;
+}
+
+function resolveBehaviorProfileId({ explicitBehaviorProfileId, tileBehavior, collisionType }) {
+  const explicit = String(explicitBehaviorProfileId || "").trim();
+  if (explicit) return explicit;
+
+  const byBehavior = String(tileBehavior || "").trim().toLowerCase();
+  if (byBehavior === "solid") return "tile.solid.default";
+  if (byBehavior === "ice") return "tile.solid.ice";
+  if (byBehavior === "one-way") return "tile.one-way.default";
+  if (byBehavior === "hazard") return "tile.hazard.default";
+  if (byBehavior === "brake") return "tile.solid.brake";
+
+  const byCollisionType = String(collisionType || "").trim().toLowerCase();
+  if (byCollisionType === "solid") return "tile.solid.default";
+  if (byCollisionType === "oneway") return "tile.one-way.default";
+  if (byCollisionType === "hazard") return "tile.hazard.default";
+  return "tile.solid.default";
+}
+
+export function computeNextCustomTileId(entries = []) {
+  const maxTileId = entries.reduce((currentMax, entry) => {
+    const value = Number.parseInt(entry?.tileId, 10);
+    if (!Number.isInteger(value) || value < 1) return currentMax;
+    return Math.max(currentMax, value);
+  }, 0);
+  return maxTileId + 1;
 }
 
 function serializeBackgroundMaterialEntry(entry) {
@@ -278,11 +305,16 @@ async function saveTile(payload) {
   const spriteFilePath = path.join(TILE_ASSET_DIR, spriteFileName);
   await fs.writeFile(spriteFilePath, Buffer.from(dataUrlParts.base64Data, "base64"));
 
-  const numericTileId = Number.parseInt(tile.tileId, 10);
   const drawW = Number.parseInt(tile.drawW, 10);
   const drawH = Number.parseInt(tile.drawH, 10);
   const footprintW = Math.max(1, Number.parseInt(tile?.footprint?.w, 10) || 1);
   const footprintH = Math.max(1, Number.parseInt(tile?.footprint?.h, 10) || 1);
+  const uniqueTileId = computeNextCustomTileId(tiles);
+  const resolvedBehaviorProfileId = resolveBehaviorProfileId({
+    explicitBehaviorProfileId: tile.behaviorProfileId,
+    tileBehavior: tile.tileBehavior,
+    collisionType: tile.collisionType,
+  });
 
   const tileEntry = {
     id: catalogId,
@@ -290,7 +322,8 @@ async function saveTile(payload) {
     group: String(tile.group || "Custom").trim() || "Custom",
     img: `data/assets/tiles/${spriteFileName}`,
     footprint: { w: footprintW, h: footprintH },
-    tileId: Number.isInteger(numericTileId) ? numericTileId : 15,
+    tileId: uniqueTileId,
+    behaviorProfileId: resolvedBehaviorProfileId,
     collisionType: String(tile.collisionType || "solid"),
     drawW: Number.isInteger(drawW) && drawW > 0 ? drawW : 24,
     drawH: Number.isInteger(drawH) && drawH > 0 ? drawH : 24,
@@ -323,6 +356,7 @@ async function saveTile(payload) {
       catalogId: tileEntry.id,
       label: tileEntry.name,
       tileId: tileEntry.tileId,
+      behaviorProfileId: tileEntry.behaviorProfileId,
       img: `../${tileEntry.img}`,
       drawW: tileEntry.drawW,
       drawH: tileEntry.drawH,
@@ -498,7 +532,8 @@ async function saveBackground(payload) {
   };
 }
 
-const server = createServer(async (req, res) => {
+export function createLocalTileSaveBridgeServer() {
+  return createServer(async (req, res) => {
   if (req.method === "OPTIONS") {
     writeJson(res, 204, {});
     return;
@@ -536,14 +571,18 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  writeJson(res, 404, { ok: false, reason: "not-found", message: "Endpoint not found." });
-});
+    writeJson(res, 404, { ok: false, reason: "not-found", message: "Endpoint not found." });
+  });
+}
 
-server.listen(PORT, () => {
-  console.log(`[tile-save-bridge] listening on http://localhost:${PORT}`);
-  console.log(`[tile-save-bridge] tile assets => ${TILE_ASSET_DIR}`);
-  console.log(`[tile-save-bridge] tile catalog => ${TILE_CATALOG_FILE}`);
-  console.log(`[tile-save-bridge] background assets => ${BACKGROUND_ASSET_DIR}`);
-  console.log(`[tile-save-bridge] background editor catalog => ${BACKGROUND_EDITOR_MATERIAL_FILE}`);
-  console.log(`[tile-save-bridge] background runtime catalog => ${BACKGROUND_RUNTIME_CATALOG_FILE}`);
-});
+if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
+  const server = createLocalTileSaveBridgeServer();
+  server.listen(PORT, () => {
+    console.log(`[tile-save-bridge] listening on http://localhost:${PORT}`);
+    console.log(`[tile-save-bridge] tile assets => ${TILE_ASSET_DIR}`);
+    console.log(`[tile-save-bridge] tile catalog => ${TILE_CATALOG_FILE}`);
+    console.log(`[tile-save-bridge] background assets => ${BACKGROUND_ASSET_DIR}`);
+    console.log(`[tile-save-bridge] background editor catalog => ${BACKGROUND_EDITOR_MATERIAL_FILE}`);
+    console.log(`[tile-save-bridge] background runtime catalog => ${BACKGROUND_RUNTIME_CATALOG_FILE}`);
+  });
+}
