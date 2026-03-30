@@ -177,9 +177,21 @@ function findArrayBoundsByMarker(source, marker) {
 }
 
 function findBackgroundEditorMaterialArrayBounds(source) {
-  const markerIndex = source.indexOf("const BUILTIN_BACKGROUND_MATERIALS");
-  if (markerIndex < 0) return null;
-  return findArrayBoundsFromIndex(source, markerIndex);
+  const declarationMatch = /\bconst\s+BUILTIN_BACKGROUND_MATERIALS\b/g.exec(source);
+  if (!declarationMatch) return null;
+
+  const declarationStart = declarationMatch.index;
+  const declarationEnd = declarationStart + declarationMatch[0].length;
+  const assignmentIndex = source.indexOf("=", declarationEnd);
+  if (assignmentIndex < 0) return null;
+
+  const arrayStartIndex = source.indexOf("[", assignmentIndex);
+  if (arrayStartIndex < 0) return null;
+
+  const arrayEndIndex = findMatchingArrayEndIndex(source, arrayStartIndex);
+  if (arrayEndIndex < 0) return null;
+
+  return { arrayStartIndex, arrayEndIndex };
 }
 
 function buildCatalogSourceWithInsertedTile(catalogSource, arrayBounds, entryText, hasExistingEntries) {
