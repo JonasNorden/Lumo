@@ -115,5 +115,35 @@ window.LUMO_CATALOG_BG = [
     "w": 96,
     "h": 96,
     "anchor": "TL"
+  },
+
+  {
+    "id": "stone_block_ct",
+    "name": "Stone_block_ct",
+    "group": "Walls",
+    "img": "data/assets/sprites/bg/stone_block_ct.png",
+    "w": 24,
+    "h": 24,
+    "anchor": "BL"
+  },
+
+  {
+    "id": "bg_stone_block_c_vinjett",
+    "name": "Stone_block_c_vinjett",
+    "group": "Custom",
+    "img": "data/assets/sprites/bg/bg_stone_block_c_vinjett.png",
+    "w": 24,
+    "h": 24,
+    "anchor": "BL"
+  },
+
+  {
+    "id": "bg_stone_wall_cc",
+    "name": "Stone_wall_cc",
+    "group": "Custom",
+    "img": "data/assets/sprites/bg/bg_stone_wall_cc.png",
+    "w": 24,
+    "h": 24,
+    "anchor": "BL"
   }
 ]

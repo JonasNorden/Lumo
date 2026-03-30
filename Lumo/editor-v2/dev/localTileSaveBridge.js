@@ -12,7 +12,10 @@ const TILE_ASSET_DIR = path.join(REPO_ROOT, "data/assets/tiles");
 const TILE_CATALOG_FILE = path.join(REPO_ROOT, "data/catalog_tiles.js");
 const BACKGROUND_ASSET_DIR = path.join(REPO_ROOT, "data/assets/sprites/bg");
 const BACKGROUND_RUNTIME_CATALOG_FILE = path.join(REPO_ROOT, "data/catalog_bg.js");
-const BACKGROUND_EDITOR_MATERIAL_FILE = path.join(REPO_ROOT, "editor-v2/src/domain/background/materialCatalog.js");
+const BACKGROUND_EDITOR_MATERIAL_FILE = path.join(
+  REPO_ROOT,
+  "editor-v2/src/domain/background/materialCatalog.js"
+);
 const PORT = Number.parseInt(process.env.LUMO_TILE_BRIDGE_PORT || "4180", 10);
 
 function writeJson(res, statusCode, payload) {
@@ -31,9 +34,7 @@ function parseJsonBody(req) {
     req.setEncoding("utf8");
     req.on("data", (chunk) => {
       raw += chunk;
-      if (raw.length > 25 * 1024 * 1024) {
-        reject(new Error("request-too-large"));
-      }
+      if (raw.length > 25 * 1024 * 1024) reject(new Error("request-too-large"));
     });
     req.on("end", () => {
       try {
@@ -55,7 +56,10 @@ function isSafeBackgroundMaterialId(value) {
 }
 
 function sanitizeSpriteBaseName(value) {
-  const base = String(value || "tile").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+  const base = String(value || "tile")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
   return base || "tile";
 }
 
@@ -87,12 +91,6 @@ function serializeBackgroundMaterialEntry(entry) {
 
 function serializeRuntimeBackgroundCatalogEntry(entry) {
   return `  {\n    "id": ${JSON.stringify(entry.id)},\n    "name": ${JSON.stringify(entry.name)},\n    "group": ${JSON.stringify(entry.group)},\n    "img": ${JSON.stringify(entry.img)},\n    "w": ${entry.w},\n    "h": ${entry.h},\n    "anchor": "BL"\n  }`;
-}
-
-function findTileCatalogArrayBounds(catalogSource) {
-  const catalogKeyIndex = catalogSource.indexOf("window.LUMO_CATALOG_TILES");
-  if (catalogKeyIndex < 0) return null;
-  return findArrayBoundsFromIndex(catalogSource, catalogKeyIndex);
 }
 
 function findArrayBoundsFromIndex(source, startIndex) {
@@ -176,6 +174,12 @@ function findArrayBoundsByMarker(source, marker) {
   return findArrayBoundsFromIndex(source, markerIndex);
 }
 
+function findTileCatalogArrayBounds(catalogSource) {
+  const catalogKeyIndex = catalogSource.indexOf("window.LUMO_CATALOG_TILES");
+  if (catalogKeyIndex < 0) return null;
+  return findArrayBoundsFromIndex(catalogSource, catalogKeyIndex);
+}
+
 function findBackgroundEditorMaterialArrayBounds(source) {
   const declarationMarker = "const BUILTIN_BACKGROUND_MATERIALS";
   const declarationIndex = source.indexOf(declarationMarker);
@@ -194,10 +198,10 @@ function findBackgroundEditorMaterialArrayBounds(source) {
   return { arrayStartIndex, arrayEndIndex };
 }
 
-function buildCatalogSourceWithInsertedTile(catalogSource, arrayBounds, entryText, hasExistingEntries) {
+function buildCatalogSourceWithInsertedEntry(source, arrayBounds, entryText, hasExistingEntries) {
   const { arrayEndIndex } = arrayBounds;
-  const beforeEnd = catalogSource.slice(0, arrayEndIndex);
-  const afterEnd = catalogSource.slice(arrayEndIndex);
+  const beforeEnd = source.slice(0, arrayEndIndex);
+  const afterEnd = source.slice(arrayEndIndex);
   const trimmedBeforeEnd = beforeEnd.replace(/\s*$/, "");
 
   if (!hasExistingEntries) {
@@ -232,21 +236,41 @@ async function saveTile(payload) {
 
   const catalogId = String(tile.catalogId || "").trim();
   if (!isSafeCatalogId(catalogId)) {
-    return { ok: false, statusCode: 400, reason: "invalid-catalog-id", message: "Catalog id must be lowercase kebab-case (a-z, 0-9, -)." };
+    return {
+      ok: false,
+      statusCode: 400,
+      reason: "invalid-catalog-id",
+      message: "Catalog id must be lowercase kebab-case (a-z, 0-9, -).",
+    };
   }
 
   const dataUrlParts = parseDataUrl(sprite.dataUrl);
   if (!dataUrlParts) {
-    return { ok: false, statusCode: 400, reason: "invalid-sprite-data", message: "Sprite payload must be a base64 data URL." };
+    return {
+      ok: false,
+      statusCode: 400,
+      reason: "invalid-sprite-data",
+      message: "Sprite payload must be a base64 data URL.",
+    };
   }
   if (!dataUrlParts.mimeType.startsWith("image/")) {
-    return { ok: false, statusCode: 400, reason: "invalid-sprite-type", message: "Sprite payload must be an image file." };
+    return {
+      ok: false,
+      statusCode: 400,
+      reason: "invalid-sprite-type",
+      message: "Sprite payload must be an image file.",
+    };
   }
 
   const catalogSource = await fs.readFile(TILE_CATALOG_FILE, "utf8");
   const tiles = readCatalogTiles(catalogSource);
   if (tiles.some((entry) => String(entry?.id || "").toLowerCase() === catalogId.toLowerCase())) {
-    return { ok: false, statusCode: 409, reason: "duplicate-catalog-id", message: `Tile catalog id \"${catalogId}\" already exists.` };
+    return {
+      ok: false,
+      statusCode: 409,
+      reason: "duplicate-catalog-id",
+      message: `Tile catalog id "${catalogId}" already exists.`,
+    };
   }
 
   await fs.mkdir(TILE_ASSET_DIR, { recursive: true });
@@ -259,6 +283,7 @@ async function saveTile(payload) {
   const drawH = Number.parseInt(tile.drawH, 10);
   const footprintW = Math.max(1, Number.parseInt(tile?.footprint?.w, 10) || 1);
   const footprintH = Math.max(1, Number.parseInt(tile?.footprint?.h, 10) || 1);
+
   const tileEntry = {
     id: catalogId,
     name: String(tile.label || catalogId).trim() || catalogId,
@@ -274,10 +299,20 @@ async function saveTile(payload) {
 
   const arrayBounds = findTileCatalogArrayBounds(catalogSource);
   if (!arrayBounds) {
-    return { ok: false, statusCode: 500, reason: "catalog-format-unsupported", message: "Could not safely locate tile catalog array" };
+    return {
+      ok: false,
+      statusCode: 500,
+      reason: "catalog-format-unsupported",
+      message: "Could not safely locate tile catalog array",
+    };
   }
 
-  const nextCatalogSource = buildCatalogSourceWithInsertedTile(catalogSource, arrayBounds, serializeCatalogEntry(tileEntry), tiles.length > 0);
+  const nextCatalogSource = buildCatalogSourceWithInsertedEntry(
+    catalogSource,
+    arrayBounds,
+    serializeCatalogEntry(tileEntry),
+    tiles.length > 0
+  );
   await fs.writeFile(TILE_CATALOG_FILE, nextCatalogSource, "utf8");
 
   return {
@@ -303,7 +338,11 @@ async function saveTile(payload) {
 function readBackgroundMaterialEntries(source) {
   const context = vm.createContext({});
   const executableSource = source.replace(/^export\s+/gm, "");
-  vm.runInContext(`${executableSource}\n;globalThis.__bg = BUILTIN_BACKGROUND_MATERIALS;`, context, { filename: "materialCatalog.js" });
+  vm.runInContext(
+    `${executableSource}\n;globalThis.__bg = BUILTIN_BACKGROUND_MATERIALS;`,
+    context,
+    { filename: "materialCatalog.js" }
+  );
   return Array.isArray(context.__bg) ? context.__bg : [];
 }
 
@@ -317,32 +356,61 @@ async function saveBackground(payload) {
   const background = payload?.background || {};
   const sprite = payload?.sprite || {};
   const materialId = String(background.materialId || "").trim();
+
   if (!isSafeBackgroundMaterialId(materialId)) {
-    return { ok: false, statusCode: 400, reason: "invalid-material-id", message: "Material id must be lowercase with letters, numbers, underscores, or hyphens." };
+    return {
+      ok: false,
+      statusCode: 400,
+      reason: "invalid-material-id",
+      message: "Material id must be lowercase with letters, numbers, underscores, or hyphens.",
+    };
   }
 
   const dataUrlParts = parseDataUrl(sprite.dataUrl);
   if (!dataUrlParts) {
-    return { ok: false, statusCode: 400, reason: "invalid-sprite-data", message: "Sprite payload must be a base64 data URL." };
+    return {
+      ok: false,
+      statusCode: 400,
+      reason: "invalid-sprite-data",
+      message: "Sprite payload must be a base64 data URL.",
+    };
   }
   if (!dataUrlParts.mimeType.startsWith("image/")) {
-    return { ok: false, statusCode: 400, reason: "invalid-sprite-type", message: "Sprite payload must be an image file." };
+    return {
+      ok: false,
+      statusCode: 400,
+      reason: "invalid-sprite-type",
+      message: "Sprite payload must be an image file.",
+    };
   }
 
   const [editorMaterialSource, runtimeCatalogSource] = await Promise.all([
     fs.readFile(BACKGROUND_EDITOR_MATERIAL_FILE, "utf8"),
     fs.readFile(BACKGROUND_RUNTIME_CATALOG_FILE, "utf8"),
   ]);
+
   const editorMaterials = readBackgroundMaterialEntries(editorMaterialSource);
   const runtimeCatalogEntries = readRuntimeBackgroundCatalogEntries(runtimeCatalogSource);
-  const hasDuplicate = editorMaterials.some((entry) => String(entry?.id || "").toLowerCase() === materialId.toLowerCase())
-    || runtimeCatalogEntries.some((entry) => String(entry?.id || "").toLowerCase() === materialId.toLowerCase());
+
+  const hasDuplicate =
+    editorMaterials.some((entry) => String(entry?.id || "").toLowerCase() === materialId.toLowerCase()) ||
+    runtimeCatalogEntries.some((entry) => String(entry?.id || "").toLowerCase() === materialId.toLowerCase());
+
   if (hasDuplicate) {
-    return { ok: false, statusCode: 409, reason: "duplicate-material-id", message: `Background material id "${materialId}" already exists.` };
+    return {
+      ok: false,
+      statusCode: 409,
+      reason: "duplicate-material-id",
+      message: `Background material id "${materialId}" already exists.`,
+    };
   }
 
   await fs.mkdir(BACKGROUND_ASSET_DIR, { recursive: true });
-  const spriteFileName = await pickAvailableSpriteFileName(BACKGROUND_ASSET_DIR, materialId, sprite.fileName);
+  const spriteFileName = await pickAvailableSpriteFileName(
+    BACKGROUND_ASSET_DIR,
+    materialId,
+    sprite.fileName
+  );
   const spriteFilePath = path.join(BACKGROUND_ASSET_DIR, spriteFileName);
   await fs.writeFile(spriteFilePath, Buffer.from(dataUrlParts.base64Data, "base64"));
 
@@ -350,6 +418,7 @@ async function saveBackground(payload) {
   const drawH = Number.parseInt(background.drawH, 10);
   const footprintW = Math.max(1, Number.parseInt(background?.footprint?.w, 10) || 1);
   const footprintH = Math.max(1, Number.parseInt(background?.footprint?.h, 10) || 1);
+
   const entry = {
     id: materialId,
     label: String(background.label || materialId).trim() || materialId,
@@ -364,20 +433,32 @@ async function saveBackground(payload) {
 
   const editorBounds = findBackgroundEditorMaterialArrayBounds(editorMaterialSource);
   if (!editorBounds) {
-    return { ok: false, statusCode: 500, reason: "catalog-format-unsupported", message: "Could not safely locate BUILTIN_BACKGROUND_MATERIALS array" };
-  }
-  const runtimeBounds = findArrayBoundsByMarker(runtimeCatalogSource, "window.LUMO_CATALOG_BG");
-  if (!runtimeBounds) {
-    return { ok: false, statusCode: 500, reason: "catalog-format-unsupported", message: "Could not safely locate runtime background catalog array." };
+    return {
+      ok: false,
+      statusCode: 500,
+      reason: "catalog-format-unsupported",
+      message: "Could not safely locate BUILTIN_BACKGROUND_MATERIALS array",
+    };
   }
 
-  const nextEditorSource = buildCatalogSourceWithInsertedTile(
+  const runtimeBounds = findArrayBoundsByMarker(runtimeCatalogSource, "window.LUMO_CATALOG_BG");
+  if (!runtimeBounds) {
+    return {
+      ok: false,
+      statusCode: 500,
+      reason: "catalog-format-unsupported",
+      message: "Could not safely locate runtime background catalog array.",
+    };
+  }
+
+  const nextEditorSource = buildCatalogSourceWithInsertedEntry(
     editorMaterialSource,
     editorBounds,
     serializeBackgroundMaterialEntry(entry),
-    editorMaterials.length > 0,
+    editorMaterials.length > 0
   );
-  const nextRuntimeSource = buildCatalogSourceWithInsertedTile(
+
+  const nextRuntimeSource = buildCatalogSourceWithInsertedEntry(
     runtimeCatalogSource,
     runtimeBounds,
     serializeRuntimeBackgroundCatalogEntry({
@@ -388,7 +469,7 @@ async function saveBackground(payload) {
       w: entry.drawW,
       h: entry.drawH,
     }),
-    runtimeCatalogEntries.length > 0,
+    runtimeCatalogEntries.length > 0
   );
 
   await Promise.all([
