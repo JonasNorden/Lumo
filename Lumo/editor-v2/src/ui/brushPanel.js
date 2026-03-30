@@ -35,10 +35,10 @@ const HIDDEN_ENTITY_PRESET_IDS = new Set(["player-spawn", "fog_volume", "water_v
 const PLACEABLE_ENTITY_PRESETS = ENTITY_PRESETS.filter((preset) => !HIDDEN_ENTITY_PRESET_IDS.has(preset.id));
 const COLLAPSIBLE_PANEL_DEFAULTS = {
   tiles: false,
-  background: true,
+  background: false,
   decor: false,
   entities: false,
-  fogVolumes: true,
+  fogVolumes: false,
   sound: false,
 };
 

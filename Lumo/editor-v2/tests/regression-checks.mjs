@@ -4172,7 +4172,8 @@ function runUiRegressionChecks() {
       tiles: false,
       entities: false,
       decor: false,
-      background: true,
+      background: false,
+      fogVolumes: false,
       sound: false,
     },
     "editor state should initialize left panel sections with compact collapsed defaults",
@@ -4184,6 +4185,8 @@ function runUiRegressionChecks() {
   assert.equal(/panelSection\s+tilesSection\s+isCollapsed/.test(panel.innerHTML), true, "tiles should be collapsed by default on first render");
   assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="DECOR section">/.test(panel.innerHTML), true, "decor should be collapsed by default on first render");
   assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="ENTITIES section">/.test(panel.innerHTML), true, "entities should be collapsed by default on first render");
+  assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="BACKGROUND section">/.test(panel.innerHTML), true, "background should be collapsed by default on first render");
+  assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="SPECIAL VOLUMES section">/.test(panel.innerHTML), true, "special volumes should be collapsed by default on first render");
   assert.equal(/panelSection\s+soundSection\s+isCollapsed/.test(panel.innerHTML), true, "sound should be collapsed by default on first render");
   assert.equal(panel.innerHTML.includes('aria-label="TOOLS section"'), true, "tools should remain visible on first render");
   assert.equal(panel.innerHTML.includes('aria-label="LAYER section"'), true, "layer should remain visible on first render");
@@ -4192,8 +4195,10 @@ function runUiRegressionChecks() {
     ui: {
       panelSections: {
         tiles: true,
+        background: true,
         decor: true,
         entities: true,
+        fogVolumes: true,
         sound: true,
       },
     },
@@ -4201,6 +4206,8 @@ function runUiRegressionChecks() {
   assert.equal(/panelSection\s+tilesSection\s+isCollapsed/.test(panel.innerHTML), false, "tiles should still expand when section state is toggled open");
   assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="DECOR section">/.test(panel.innerHTML), false, "decor should still expand when section state is toggled open");
   assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="ENTITIES section">/.test(panel.innerHTML), false, "entities should still expand when section state is toggled open");
+  assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="BACKGROUND section">/.test(panel.innerHTML), false, "background should still expand when section state is toggled open");
+  assert.equal(/<section class="panelSection\s+isCollapsed" aria-label="SPECIAL VOLUMES section">/.test(panel.innerHTML), false, "special volumes should still expand when section state is toggled open");
   assert.equal(/panelSection\s+soundSection\s+isCollapsed/.test(panel.innerHTML), false, "sound should still expand when section state is toggled open");
   assert.equal(brushPanelSource.includes('const sectionToggleButton = target.closest("[data-section-toggle]");'), true, "brush panel should bind click handling for collapsible section toggles");
   assert.equal(brushPanelSource.includes('function togglePanelSection(store, sectionId) {'), true, "brush panel should centralize collapsible section state updates");

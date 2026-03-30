@@ -125,7 +125,8 @@ export function createEditorState() {
         tiles: false,
         entities: false,
         decor: false,
-        background: true,
+        background: false,
+        fogVolumes: false,
         sound: false,
       },
       specialVolumeWorkbench: {
