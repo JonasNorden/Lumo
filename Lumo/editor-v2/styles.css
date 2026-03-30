@@ -2744,13 +2744,14 @@ kbd {
   min-height: 0;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto;
-  gap: 12px;
+  gap: 10px;
 }
 
 .assetWizardMainBody {
   min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
+  padding-bottom: 2px;
 }
 
 .assetWizardAsidePane {
@@ -2800,7 +2801,7 @@ kbd {
 
 .assetWizardSection {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .assetWizardSection h4 {
@@ -2813,6 +2814,34 @@ kbd {
   margin: 0;
   color: #94abd2;
   font-size: 12px;
+  line-height: 1.4;
+}
+
+.assetWizardFieldGroup {
+  border: 1px solid #1f2d48;
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(9, 15, 27, 0.55);
+  display: grid;
+  gap: 8px;
+}
+
+.assetWizardFieldGroupHeader {
+  display: grid;
+  gap: 2px;
+}
+
+.assetWizardFieldGroupHeader h5 {
+  margin: 0;
+  color: #d9e7ff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.assetWizardFieldGroupHeader p {
+  margin: 0;
+  color: #8198c0;
+  font-size: 11px;
 }
 
 .assetWizardChoiceGrid,
@@ -2855,13 +2884,17 @@ kbd {
 .assetWizardFieldGrid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 8px;
+  gap: 8px 10px;
 }
 
 .assetWizardField {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   grid-column: span 6;
+}
+
+.assetWizardFieldSpan3 {
+  grid-column: span 3;
 }
 
 .assetWizardFieldSpan4 {
@@ -2885,6 +2918,7 @@ kbd {
 .assetWizardFieldLabel {
   color: #d7e5ff;
   font-size: 12px;
+  line-height: 1.3;
 }
 
 .assetWizardInfoTip {
@@ -2904,6 +2938,7 @@ kbd {
 .assetWizardFieldHelp {
   color: #7f96be;
   font-size: 11px;
+  line-height: 1.35;
 }
 
 .assetWizardField input,
@@ -2912,8 +2947,8 @@ kbd {
   background: #0a1220;
   border-radius: 9px;
   color: #ecf2ff;
-  min-height: 34px;
-  padding: 7px 9px;
+  min-height: 32px;
+  padding: 6px 9px;
   font-size: 12px;
 }
 
@@ -3017,16 +3052,25 @@ kbd {
   border: 1px solid #223454;
   border-radius: 10px;
   overflow: hidden;
+  background: rgba(10, 17, 30, 0.7);
 }
 
 .assetWizardReviewRow {
   display: grid;
-  grid-template-columns: 170px minmax(0, 1fr);
+  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
   gap: 8px;
-  padding: 7px 9px;
+  padding: 6px 10px;
   border-top: 1px solid #1a2943;
   color: #bcd0f3;
   font-size: 12px;
+}
+
+.assetWizardReviewRow span:first-child {
+  color: #93acd4;
+}
+
+.assetWizardReviewRow span:last-child {
+  color: #e2ecff;
 }
 
 .assetWizardReviewRow:first-child {

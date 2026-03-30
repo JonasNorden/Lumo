@@ -173,6 +173,39 @@ function renderSelectInput(label, field, value, optionsList = [], description = 
   `;
 }
 
+function renderFieldGroup(title, description, content, options = {}) {
+  const groupClass = options.groupClass || "";
+  return `
+    <section class="assetWizardFieldGroup ${escapeHtml(groupClass)}">
+      <header class="assetWizardFieldGroupHeader">
+        <h5>${escapeHtml(title)}</h5>
+        ${description ? `<p>${escapeHtml(description)}</p>` : ""}
+      </header>
+      <div class="assetWizardFieldGrid">
+        ${content}
+      </div>
+    </section>
+  `;
+}
+
+function getReviewLabel(fieldKey) {
+  const REVIEW_LABELS = {
+    catalogId: "Catalog id",
+    displayName: "Display name",
+    tileBehavior: "Tile behavior",
+    tileNumericId: "Runtime identity",
+    materialId: "Material id",
+    spritePath: "Sprite file",
+    drawAnchor: "Draw anchor",
+    drawWidth: "Draw width (px)",
+    drawHeight: "Draw height (px)",
+    collisionType: "Collision profile",
+    fallbackColor: "Fallback color",
+    footprint: "Footprint (JSON)",
+  };
+  return REVIEW_LABELS[fieldKey] || fieldKey;
+}
+
 function renderStepBody(wizard, validation) {
   const mode = wizard.mode;
   const type = wizard.assetType;
@@ -250,13 +283,29 @@ function renderStepBody(wizard, validation) {
         <div class="assetWizardSection">
           <h4>Tile identity</h4>
           <p>Choose gameplay behavior first. Runtime tile identity is assigned automatically when you save.</p>
-          <div class="assetWizardFieldGrid">
-            ${renderInput("Catalog id", "catalogId", draft.catalogId, "stone-floor", "Unique technical registry key.", { errorMessage: fieldErrors.catalogId, statusMessage: catalogIdStatus, statusClass: catalogIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted" })}
-            ${renderInput("Display name", "displayName", draft.displayName, "Stone Floor", "", { errorMessage: fieldErrors.displayName })}
-            ${renderSelectInput("Tile behavior", "tileBehavior", draft.tileBehavior, tileBehaviorOptions, "Gameplay semantics (Solid, Ice, One-way, Hazard, Brake).", { errorMessage: fieldErrors.tileBehavior, infoTip: "Behavior profile is selected now; runtime tile identity is auto-generated on save." })}
-            <label class="assetWizardField"><span class="assetWizardFieldLabelRow"><span class="assetWizardFieldLabel">Runtime identity</span></span><span class="assetWizardFieldHelp">Assigned on save.</span><input type="text" readonly value="Auto-generated on save" /><span class="assetWizardFieldHelp">Custom tiles get a unique runtime tile ID when persisted.</span>${fieldErrors.tileNumericId ? `<span class="assetWizardFieldError">${escapeHtml(fieldErrors.tileNumericId)}</span>` : ""}</label>
-            ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/tiles/", infoTip: "Optional for now in architecture, but required to proceed in this wizard." })}
-          </div>
+          ${renderFieldGroup(
+            "Identity",
+            "Core naming and behavior fields for this tile entry.",
+            `
+              ${renderInput("Catalog id", "catalogId", draft.catalogId, "stone-floor", "Unique technical registry key.", { errorMessage: fieldErrors.catalogId, statusMessage: catalogIdStatus, statusClass: catalogIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted", fieldClass: "assetWizardFieldSpan4" })}
+              ${renderInput("Display name", "displayName", draft.displayName, "Stone Floor", "Human-friendly picker label.", { errorMessage: fieldErrors.displayName, fieldClass: "assetWizardFieldSpan4" })}
+              ${renderSelectInput("Tile behavior", "tileBehavior", draft.tileBehavior, tileBehaviorOptions, "Gameplay semantics (Solid, Ice, One-way, Hazard, Brake).", { errorMessage: fieldErrors.tileBehavior, infoTip: "Behavior profile is selected now; runtime tile identity is auto-generated on save.", fieldClass: "assetWizardFieldSpan4" })}
+            `,
+          )}
+          ${renderFieldGroup(
+            "Runtime assignment",
+            "Runtime identity remains system-managed to preserve safe save semantics.",
+            `
+              <label class="assetWizardField assetWizardFieldSpan6">
+                <span class="assetWizardFieldLabelRow"><span class="assetWizardFieldLabel">Runtime identity</span></span>
+                <span class="assetWizardFieldHelp">Assigned on save.</span>
+                <input type="text" readonly value="Auto-generated on save" />
+                <span class="assetWizardFieldHelp">Custom tiles get a unique runtime tile ID when persisted.</span>
+                ${fieldErrors.tileNumericId ? `<span class="assetWizardFieldError">${escapeHtml(fieldErrors.tileNumericId)}</span>` : ""}
+              </label>
+              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/tiles/", infoTip: "Optional for now in architecture, but required to proceed in this wizard.", fieldClass: "assetWizardFieldSpan6" })}
+            `,
+          )}
         </div>
       `;
     }
@@ -272,11 +321,15 @@ function renderStepBody(wizard, validation) {
         <div class="assetWizardSection">
           <h4>Background identity</h4>
           <p>Define a unique technical id and sprite source. The wizard auto-suggests the next available material id as you type.</p>
-          <div class="assetWizardFieldGrid">
-            ${renderInput("Display name", "displayName", draft.displayName, "Stone Background", "Human-friendly picker label.", { errorMessage: fieldErrors.displayName, fieldClass: "assetWizardFieldSpan6" })}
-            ${renderInput("Material id", "materialId", draft.materialId, "bg_stone_background", "Unique technical id used for persistence and reload.", { errorMessage: fieldErrors.materialId, statusMessage: materialIdStatus, statusClass: materialIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted", infoTip: "Auto-suggested from display name or file name. You can override manually.", fieldClass: "assetWizardFieldSpan6" })}
-            ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/bg/", infoTip: "Choose the texture image for this background material.", fieldClass: "assetWizardFieldSpan12" })}
-          </div>
+          ${renderFieldGroup(
+            "Identity",
+            "Naming and source fields used by the background workflow.",
+            `
+              ${renderInput("Display name", "displayName", draft.displayName, "Stone Background", "Human-friendly picker label.", { errorMessage: fieldErrors.displayName, fieldClass: "assetWizardFieldSpan6" })}
+              ${renderInput("Material id", "materialId", draft.materialId, "bg_stone_background", "Unique technical id used for persistence and reload.", { errorMessage: fieldErrors.materialId, statusMessage: materialIdStatus, statusClass: materialIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted", infoTip: "Auto-suggested from display name or file name. You can override manually.", fieldClass: "assetWizardFieldSpan6" })}
+              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/bg/", infoTip: "Choose the texture image for this background material.", fieldClass: "assetWizardFieldSpan12" })}
+            `,
+          )}
         </div>
       `;
     }
@@ -295,13 +348,27 @@ function renderStepBody(wizard, validation) {
         <div class="assetWizardSection">
           <h4>Tile metadata</h4>
           <p>Set behavior and draw/footprint related metadata used by editor and runtime mappings.</p>
-          <div class="assetWizardFieldGrid">
-            <label class="assetWizardField" for="asset-wizard-collisionType"><span class="assetWizardFieldLabelRow"><span class="assetWizardFieldLabel">Collision profile (from behavior)</span>${renderInfoTip("Derived from Tile behavior to keep save semantics safe.")}</span><input id="asset-wizard-collisionType" type="text" readonly value="${escapeHtml(draft.collisionType || "")}" />${fieldErrors.collisionType ? `<span class="assetWizardFieldError">${escapeHtml(fieldErrors.collisionType)}</span>` : ""}</label>
-            ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor, "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left)." })}
-            ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth })}
-            ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight })}
-            ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { errorMessage: fieldErrors.footprint })}
-          </div>
+          ${renderFieldGroup(
+            "Behavior mapping",
+            "Collision stays synchronized with selected tile behavior.",
+            `
+              <label class="assetWizardField assetWizardFieldSpan6" for="asset-wizard-collisionType">
+                <span class="assetWizardFieldLabelRow"><span class="assetWizardFieldLabel">Collision profile (from behavior)</span>${renderInfoTip("Derived from Tile behavior to keep save semantics safe.")}</span>
+                <input id="asset-wizard-collisionType" type="text" readonly value="${escapeHtml(draft.collisionType || "")}" />
+                ${fieldErrors.collisionType ? `<span class="assetWizardFieldError">${escapeHtml(fieldErrors.collisionType)}</span>` : ""}
+              </label>
+              ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor, "BL", "Grid anchor token.", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left).", fieldClass: "assetWizardFieldSpan6" })}
+            `,
+          )}
+          ${renderFieldGroup(
+            "Sizing & footprint",
+            "Keep draw sizing and footprint values compact and aligned.",
+            `
+              ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan3" })}
+              ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan3" })}
+              ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { errorMessage: fieldErrors.footprint, fieldClass: "assetWizardFieldSpan6" })}
+            `,
+          )}
         </div>
       `;
     }
@@ -310,13 +377,23 @@ function renderStepBody(wizard, validation) {
         <div class="assetWizardSection">
           <h4>Background metadata</h4>
           <p>Background materials are visual only. Anchor defaults to BL and gameplay behavior is intentionally omitted.</p>
-          <div class="assetWizardFieldGrid">
-            ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left).", fieldClass: "assetWizardFieldSpan4" })}
-            ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan4" })}
-            ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan4" })}
-            ${renderInput("Fallback color", "fallbackColor", draft.fallbackColor, "#3d4b63", "", { errorMessage: fieldErrors.fallbackColor, fieldClass: "assetWizardFieldSpan6" })}
-            ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { fieldClass: "assetWizardFieldSpan6" })}
-          </div>
+          ${renderFieldGroup(
+            "Draw settings",
+            "",
+            `
+              ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left).", fieldClass: "assetWizardFieldSpan4" })}
+              ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan4" })}
+              ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan4" })}
+            `,
+          )}
+          ${renderFieldGroup(
+            "Visual fallback",
+            "",
+            `
+              ${renderInput("Fallback color", "fallbackColor", draft.fallbackColor, "#3d4b63", "", { errorMessage: fieldErrors.fallbackColor, fieldClass: "assetWizardFieldSpan4" })}
+              ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { fieldClass: "assetWizardFieldSpan8" })}
+            `,
+          )}
         </div>
       `;
     }
@@ -330,15 +407,30 @@ function renderStepBody(wizard, validation) {
 
   if (wizard.stepId === "review") {
     const tileBehavior = getTileBehaviorById(draft.tileBehavior);
+    const orderedDraftKeys = [
+      "catalogId",
+      "materialId",
+      "displayName",
+      "spritePath",
+      "drawAnchor",
+      "drawWidth",
+      "drawHeight",
+      "fallbackColor",
+      "footprint",
+      "collisionType",
+    ];
+    const mappedDraftRows = orderedDraftKeys
+      .filter((key) => {
+        const value = draft?.[key];
+        return typeof value === "string" && value.trim().length > 0;
+      })
+      .map((key) => [getReviewLabel(key), String(draft[key])]);
     const rows = [
       ["Mode", mode || "—"],
       ["Asset type", type || "—"],
       ["Existing target", wizard.selectedExistingAssetId || "(new asset)"],
       ...(type === "tiles" ? [["Tile behavior", tileBehavior ? `${tileBehavior.label}` : "—"], ["Runtime identity", "Auto-generated on save"]] : []),
-      ...(Object.entries(draft || {})
-        .filter(([key]) => !(type === "tiles" && (key === "tileBehavior" || key === "tileNumericId")))
-        .map(([key, value]) => [key, String(value ?? "")])
-        .filter(([, value]) => value.trim().length > 0)),
+      ...mappedDraftRows,
     ];
 
     return `
