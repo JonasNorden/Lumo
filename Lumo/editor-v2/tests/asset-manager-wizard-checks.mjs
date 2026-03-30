@@ -5,9 +5,11 @@ import {
   ASSET_WIZARD_TYPES,
   createInitialAssetManagerWizardState,
   getAssetWizardDraftWithDefaults,
+  getEntitySafeParamSchema,
   getBehaviorProfileIdForTileBehavior,
   getCanonicalTileIdForBehavior,
   getStepValidation,
+  suggestEntityPresetId,
   getTileBehaviorAuditGroups,
   getTileBehaviorOptions,
   isStepComplete,
@@ -23,7 +25,14 @@ import {
   isTileCatalogIdTaken,
   registerTileSpriteOption,
 } from "../src/domain/tiles/tileSpriteCatalog.js";
-import { buildPersistedDecorEntry, buildPersistedTileEntry, computeNextCustomTileId } from "../dev/localTileSaveBridge.js";
+import {
+  buildPersistedDecorEntry,
+  buildPersistedEntityPresetEntry,
+  buildPersistedTileEntry,
+  computeNextCustomTileId,
+  isPhase1EntityFamilySupported,
+} from "../dev/localTileSaveBridge.js";
+import { ENTITY_PRESETS, isEntityPresetIdTaken, registerEntityPresetOption } from "../src/domain/entities/entityPresets.js";
 
 const wizard = createInitialAssetManagerWizardState();
 assert.equal(wizard.stepId, "mode");
@@ -259,5 +268,102 @@ assert.equal(persistedDecorEntry.id, "bridge_decor");
 assert.equal(persistedDecorEntry.category, "decor");
 assert.equal(persistedDecorEntry.img, "data/assets/sprites/decor/bridge_decor.png");
 assert.equal(persistedDecorEntry.anchor, "TL");
+
+const suggestedEntityPresetId = suggestEntityPresetId({ displayName: "Blue Lantern" });
+assert.equal(suggestedEntityPresetId, "blue_lantern");
+assert.equal(isEntityPresetIdTaken(suggestedEntityPresetId), false);
+
+const entityIdentityValidation = getStepValidation("identity", {
+  mode: ASSET_WIZARD_MODES.CREATE,
+  assetType: ASSET_WIZARD_TYPES.ENTITY,
+  draft: {
+    behaviorFamilyId: "lantern_01",
+    presetId: suggestedEntityPresetId,
+    displayName: "Blue Lantern",
+    spritePath: "selected://blue_lantern.png",
+  },
+});
+assert.equal(entityIdentityValidation.isValid, true);
+
+const excludedEntityFamilyValidation = getStepValidation("identity", {
+  mode: ASSET_WIZARD_MODES.CREATE,
+  assetType: ASSET_WIZARD_TYPES.ENTITY,
+  draft: {
+    behaviorFamilyId: "player-spawn",
+    presetId: "bad_spawn_variant",
+    displayName: "Bad Spawn",
+    spritePath: "selected://bad.png",
+  },
+});
+assert.equal(excludedEntityFamilyValidation.isValid, false);
+assert.equal(excludedEntityFamilyValidation.fieldErrors.behaviorFamilyId, "This family is not available in Phase 1.");
+
+const entityMetadataValidation = getStepValidation("metadata", {
+  mode: ASSET_WIZARD_MODES.CREATE,
+  assetType: ASSET_WIZARD_TYPES.ENTITY,
+  draft: {
+    behaviorFamilyId: "lantern_01",
+    drawAnchor: "BL",
+    drawWidth: "24",
+    drawHeight: "24",
+    safeDefaults: { radius: "180", strength: "0.9", unsupported: "123" },
+  },
+});
+assert.equal(entityMetadataValidation.isValid, true);
+
+const lanternSchema = getEntitySafeParamSchema("lantern_01");
+assert.deepEqual(lanternSchema.map((field) => field.key), ["radius", "strength"]);
+
+const registrationCountBefore = ENTITY_PRESETS.length;
+const entityRegistration = registerEntityPresetOption({
+  presetId: suggestedEntityPresetId,
+  type: "lantern_01",
+  defaultName: "Blue Lantern",
+  defaultParams: { radius: 180, strength: 0.9 },
+  img: "../data/assets/sprites/entities/blue_lantern.png",
+  drawW: 24,
+  drawH: 24,
+  drawAnchor: "BL",
+});
+assert.equal(entityRegistration.ok, true);
+assert.equal(ENTITY_PRESETS.length, registrationCountBefore + 1);
+assert.equal(isEntityPresetIdTaken(suggestedEntityPresetId), true);
+assert.equal(entityRegistration.preset.type, "lantern_01");
+assert.equal(entityRegistration.preset.defaultParams.radius, 180);
+
+const entityDuplicateValidation = getStepValidation("identity", {
+  mode: ASSET_WIZARD_MODES.CREATE,
+  assetType: ASSET_WIZARD_TYPES.ENTITY,
+  draft: {
+    behaviorFamilyId: "lantern_01",
+    presetId: suggestedEntityPresetId,
+    displayName: "Duplicate Blue Lantern",
+    spritePath: "selected://duplicate.png",
+  },
+});
+assert.equal(entityDuplicateValidation.isValid, false);
+assert.equal(entityDuplicateValidation.fieldErrors.presetId, "Preset id already exists. Choose a different id.");
+
+assert.equal(isPhase1EntityFamilySupported("lantern_01"), true);
+assert.equal(isPhase1EntityFamilySupported("player-spawn"), false);
+
+const persistedEntityEntry = buildPersistedEntityPresetEntry({
+  presetId: "lantern_blue_runtime",
+  spriteFileName: "lantern_blue_runtime.png",
+  entity: {
+    type: "lantern_01",
+    label: "Lantern Blue Runtime",
+    drawW: 24,
+    drawH: 24,
+    defaultParams: {
+      radius: 190,
+      strength: 0.8,
+      unsupportedParam: 999,
+    },
+  },
+});
+assert.equal(persistedEntityEntry.type, "lantern_01");
+assert.equal(persistedEntityEntry.defaultParams.radius, 190);
+assert.equal("unsupportedParam" in persistedEntityEntry.defaultParams, false);
 
 console.log("asset-manager wizard checks passed");

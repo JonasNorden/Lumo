@@ -309,6 +309,47 @@ export function findEntityPresetByType(type) {
   return ENTITY_PRESETS.find((preset) => preset.type === normalizedType) || null;
 }
 
+function normalizeEntityPresetIdForCompare(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+export function isEntityPresetIdTaken(presetId) {
+  const normalized = normalizeEntityPresetIdForCompare(presetId);
+  return (
+    normalized.length > 0 &&
+    ENTITY_PRESETS.some((preset) => normalizeEntityPresetIdForCompare(preset?.id) === normalized)
+  );
+}
+
+export function registerEntityPresetOption(entry = {}) {
+  const presetId = String(entry?.presetId || entry?.id || "").trim();
+  if (!presetId) return { ok: false, reason: "missing-preset-id" };
+  if (isEntityPresetIdTaken(presetId)) {
+    return { ok: false, reason: "duplicate-preset-id" };
+  }
+
+  const entityType = normalizeEditableObjectType(entry?.type || "");
+  if (!entityType) return { ok: false, reason: "missing-entity-type" };
+
+  const normalizedPreset = {
+    id: presetId,
+    type: entityType,
+    defaultName: String(entry?.defaultName || entry?.label || presetId).trim() || presetId,
+    defaultParams: cloneEntityParams(entry?.defaultParams || {}),
+    img: typeof entry?.img === "string" && entry.img.trim() ? entry.img.trim() : null,
+    drawW: Math.max(1, Number.parseInt(entry?.drawW, 10) || 24),
+    drawH: Math.max(1, Number.parseInt(entry?.drawH, 10) || 24),
+    footprintW: Math.max(1, Number.parseInt(entry?.footprintW, 10) || Number.parseInt(entry?.drawW, 10) || 24),
+    footprintH: Math.max(1, Number.parseInt(entry?.footprintH, 10) || Number.parseInt(entry?.drawH, 10) || 24),
+    drawAnchor: String(entry?.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL",
+    hitRadius: Number.isFinite(Number(entry?.hitRadius)) ? Number(entry.hitRadius) : 8.5,
+  };
+
+  ENTITY_PRESET_BY_ID.set(normalizedPreset.id, normalizedPreset);
+  ENTITY_PRESETS.push(normalizedPreset);
+  return { ok: true, preset: normalizedPreset };
+}
+
 export function getEntityPresetForType(type) {
   return findEntityPresetByType(type) || findEntityPresetById(type) || null;
 }

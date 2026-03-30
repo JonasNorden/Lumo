@@ -33,11 +33,12 @@ import {
   getBehaviorProfileIdForTileBehavior,
   getStepValidation as getAssetWizardStepValidation,
   getTileBehaviorById,
+  suggestEntityPresetId,
   suggestDecorPresetId,
   suggestBackgroundMaterialId,
   suggestTileCatalogId,
 } from "../domain/assets/assetManagerWizardModel.js";
-import { saveBackgroundThroughLocalBridge, saveDecorThroughLocalBridge, saveTileThroughLocalBridge } from "../domain/assets/localTileSaveBridge.js";
+import { saveBackgroundThroughLocalBridge, saveDecorThroughLocalBridge, saveEntityThroughLocalBridge, saveTileThroughLocalBridge } from "../domain/assets/localTileSaveBridge.js";
 import { isTileCatalogIdTaken, registerTileSpriteOption } from "../domain/tiles/tileSpriteCatalog.js";
 import { triggerLevelDocumentDownload } from "../data/exportLevelDocument.js";
 import { importLevelDocumentFromFile } from "../data/importLevelDocument.js";
@@ -87,6 +88,8 @@ import {
   getEntityPresetDefaultParams,
   getEntityPresetForType,
   getEntityPresetParamsForType,
+  isEntityPresetIdTaken,
+  registerEntityPresetOption,
 } from "../domain/entities/entityPresets.js";
 import { DEFAULT_DECOR_PRESET_ID, findDecorPresetById, findDecorPresetByType, isDecorPresetIdTaken, registerDecorPresetOption } from "../domain/decor/decorPresets.js";
 import { isEntityLikeEditableType, normalizeEditableObjectType } from "../domain/placeables/editableObjectBuckets.js";
@@ -7223,6 +7226,24 @@ if (event.shiftKey) {
     wizard.draft.presetIdAvailability = isDecorPresetIdTaken(wizard.draft.presetId) ? "taken" : "available";
   };
 
+  const syncWizardEntityPresetIdHint = (wizard) => {
+    if (!wizard || wizard.assetType !== ASSET_WIZARD_TYPES.ENTITY || wizard.mode !== ASSET_WIZARD_MODES.CREATE) return;
+    wizard.draft = wizard.draft || {};
+    const suggestedPresetId = suggestEntityPresetId({
+      displayName: wizard.draft.displayName,
+      spriteFileName: wizard.draft.spriteFileName,
+      currentPresetId: wizard.draft.presetId,
+    });
+    if (!wizard.draft.presetId || !wizard.draft.presetIdManuallyEdited) {
+      wizard.draft.presetId = suggestedPresetId;
+    }
+    if (!wizard.draft.presetId) {
+      wizard.draft.presetIdAvailability = "";
+      return;
+    }
+    wizard.draft.presetIdAvailability = isEntityPresetIdTaken(wizard.draft.presetId) ? "taken" : "available";
+  };
+
   const parseFootprint = (value) => {
     try {
       const parsed = JSON.parse(String(value || "{\"w\":1,\"h\":1}"));
@@ -7233,6 +7254,18 @@ if (event.shiftKey) {
     } catch {
       return { w: 1, h: 1 };
     }
+  };
+
+  const assignAssetWizardDraftField = (wizard, fieldPath, value) => {
+    const path = String(fieldPath || "").trim();
+    if (!path) return;
+    if (path.startsWith("safeDefaults.")) {
+      const key = path.slice("safeDefaults.".length);
+      wizard.draft.safeDefaults = wizard.draft.safeDefaults || {};
+      wizard.draft.safeDefaults[key] = value;
+      return;
+    }
+    wizard.draft[path] = value;
   };
 
   const attemptTileWizardSave = async () => {
@@ -7510,6 +7543,91 @@ if (event.shiftKey) {
     return true;
   };
 
+  const attemptEntityWizardSave = async () => {
+    const currentWizard = store.getState().ui.assetManager.wizard || createInitialAssetManagerWizardState();
+    const identityValidation = getAssetWizardStepValidation("identity", currentWizard);
+    const metadataValidation = getAssetWizardStepValidation("metadata", currentWizard);
+    if (!identityValidation.isValid || !metadataValidation.isValid) {
+      store.setState((draft) => {
+        const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+        wizard.stepId = !identityValidation.isValid ? "identity" : "metadata";
+        wizard.draft = wizard.draft || {};
+        wizard.draft.saveFeedback = "Cannot save yet. Resolve the highlighted validation issues first.";
+        draft.ui.assetManager.wizard = wizard;
+      });
+      return false;
+    }
+
+    const resolvedDraft = getAssetWizardDraftWithDefaults(currentWizard.assetType, currentWizard.draft || {});
+    const bridgeResult = await saveEntityThroughLocalBridge({
+      draft: resolvedDraft,
+      entityPayload: {
+        presetId: resolvedDraft.presetId,
+        type: resolvedDraft.behaviorFamilyId,
+        label: resolvedDraft.displayName,
+        img: resolvedDraft.spritePath,
+        drawW: Number.parseInt(resolvedDraft.drawWidth, 10),
+        drawH: Number.parseInt(resolvedDraft.drawHeight, 10),
+        drawAnchor: resolvedDraft.drawAnchor || "BL",
+        defaultParams: resolvedDraft.safeDefaults || {},
+      },
+      spriteFile: selectedAssetWizardSpriteFile,
+    });
+
+    if (!bridgeResult.ok) {
+      store.setState((draft) => {
+        const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+        wizard.stepId = bridgeResult.reason === "duplicate-preset-id" ? "identity" : wizard.stepId || "save";
+        wizard.draft = wizard.draft || {};
+        wizard.draft.presetIdAvailability = bridgeResult.reason === "duplicate-preset-id" ? "taken" : wizard.draft.presetIdAvailability;
+        wizard.draft.saveFeedback = bridgeResult.message || "Persistent save failed.";
+        draft.ui.assetManager.wizard = wizard;
+      });
+      return false;
+    }
+
+    const registerResult = registerEntityPresetOption({
+      presetId: bridgeResult.persistedEntity?.presetId || resolvedDraft.presetId,
+      type: bridgeResult.persistedEntity?.type || resolvedDraft.behaviorFamilyId,
+      defaultName: bridgeResult.persistedEntity?.label || resolvedDraft.displayName,
+      defaultParams: bridgeResult.persistedEntity?.defaultParams || resolvedDraft.safeDefaults || {},
+      img: bridgeResult.persistedEntity?.img || null,
+      drawW: bridgeResult.persistedEntity?.drawW || Number.parseInt(resolvedDraft.drawWidth, 10),
+      drawH: bridgeResult.persistedEntity?.drawH || Number.parseInt(resolvedDraft.drawHeight, 10),
+      drawAnchor: bridgeResult.persistedEntity?.drawAnchor || resolvedDraft.drawAnchor || "BL",
+      footprintW: bridgeResult.persistedEntity?.footprintW || bridgeResult.persistedEntity?.drawW || Number.parseInt(resolvedDraft.drawWidth, 10),
+      footprintH: bridgeResult.persistedEntity?.footprintH || bridgeResult.persistedEntity?.drawH || Number.parseInt(resolvedDraft.drawHeight, 10),
+      hitRadius: bridgeResult.persistedEntity?.hitRadius,
+    });
+    if (!registerResult.ok) {
+      store.setState((draft) => {
+        const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+        wizard.stepId = "identity";
+        wizard.draft = wizard.draft || {};
+        wizard.draft.presetIdAvailability = registerResult.reason === "duplicate-preset-id" ? "taken" : wizard.draft.presetIdAvailability;
+        wizard.draft.saveFeedback = "Entity preset saved on disk, but editor registration failed. Reload the page.";
+        draft.ui.assetManager.wizard = wizard;
+      });
+      return false;
+    }
+
+    store.setState((draft) => {
+      const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+      setActiveLayer(draft, PANEL_LAYERS.ENTITIES);
+      draft.interaction.activeTool = EDITOR_TOOLS.PAINT;
+      draft.interaction.activeEntityPresetId = registerResult.preset.id;
+      draft.ui.panelSections.entities = true;
+      draft.ui.assetManager.selectedCategory = "entities";
+      draft.ui.assetManager.activeView = "wizard";
+      draft.ui.importStatus = `Entity preset created (persisted): ${registerResult.preset.defaultName || registerResult.preset.id}`;
+      cleanupWizardPreview(wizard);
+      draft.ui.assetManager.wizard = createInitialAssetManagerWizardState();
+      draft.ui.assetManager.isOpen = false;
+      selectedAssetWizardSpriteFile = null;
+    });
+    return true;
+  };
+
   const moveAssetWizardStep = (direction) => {
     const steps = getStepsForWizard();
     store.setState((draft) => {
@@ -7614,6 +7732,7 @@ if (event.shiftKey) {
             syncWizardCatalogIdHint(wizard);
             syncWizardBackgroundMaterialIdHint(wizard);
             syncWizardDecorPresetIdHint(wizard);
+            syncWizardEntityPresetIdHint(wizard);
             draft.ui.assetManager.wizard = wizard;
           });
         }
@@ -7635,6 +7754,8 @@ if (event.shiftKey) {
           void attemptBackgroundWizardSave();
         } else if (wizard.stepId === "save" && wizard.assetType === ASSET_WIZARD_TYPES.DECOR && wizard.mode === ASSET_WIZARD_MODES.CREATE) {
           void attemptDecorWizardSave();
+        } else if (wizard.stepId === "save" && wizard.assetType === ASSET_WIZARD_TYPES.ENTITY && wizard.mode === ASSET_WIZARD_MODES.CREATE) {
+          void attemptEntityWizardSave();
         } else {
           moveAssetWizardStep(1);
         }
@@ -7689,7 +7810,7 @@ if (event.shiftKey) {
       store.setState((draft) => {
         const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
         wizard.draft = wizard.draft || {};
-        wizard.draft[assetDraftField] = target.value;
+        assignAssetWizardDraftField(wizard, assetDraftField, target.value);
         applyWizardDraftDefaults(wizard);
         if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
         if (assetDraftField === "materialId") wizard.draft.materialIdManuallyEdited = true;
@@ -7697,9 +7818,12 @@ if (event.shiftKey) {
         if (assetDraftField === "displayName") syncWizardCatalogIdHint(wizard);
         if (assetDraftField === "displayName") syncWizardBackgroundMaterialIdHint(wizard);
         if (assetDraftField === "displayName") syncWizardDecorPresetIdHint(wizard);
+        if (assetDraftField === "displayName") syncWizardEntityPresetIdHint(wizard);
         if (assetDraftField === "catalogId") wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(target.value) ? "taken" : "available";
         if (assetDraftField === "materialId") wizard.draft.materialIdAvailability = isBackgroundMaterialIdTaken(target.value) ? "taken" : "available";
-        if (assetDraftField === "presetId") wizard.draft.presetIdAvailability = isDecorPresetIdTaken(target.value) ? "taken" : "available";
+        if (assetDraftField === "presetId") wizard.draft.presetIdAvailability = wizard.assetType === ASSET_WIZARD_TYPES.ENTITY
+          ? (isEntityPresetIdTaken(target.value) ? "taken" : "available")
+          : (isDecorPresetIdTaken(target.value) ? "taken" : "available");
         draft.ui.assetManager.wizard = wizard;
       });
       return;
@@ -7732,6 +7856,7 @@ if (event.shiftKey) {
           syncWizardCatalogIdHint(wizard);
           syncWizardBackgroundMaterialIdHint(wizard);
           syncWizardDecorPresetIdHint(wizard);
+          syncWizardEntityPresetIdHint(wizard);
           if (shouldAutofillWidth || shouldAutofillHeight) {
             const probeImage = new Image();
             probeImage.addEventListener("load", () => {
@@ -7757,6 +7882,7 @@ if (event.shiftKey) {
           syncWizardCatalogIdHint(wizard);
           syncWizardBackgroundMaterialIdHint(wizard);
           syncWizardDecorPresetIdHint(wizard);
+          syncWizardEntityPresetIdHint(wizard);
         }
         applyWizardDraftDefaults(wizard);
         draft.ui.assetManager.wizard = wizard;
@@ -7770,14 +7896,16 @@ if (event.shiftKey) {
         store.setState((draft) => {
           const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
           wizard.draft = wizard.draft || {};
-          wizard.draft[assetDraftField] = target.value;
+          assignAssetWizardDraftField(wizard, assetDraftField, target.value);
           applyWizardDraftDefaults(wizard);
           if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
           if (assetDraftField === "materialId") wizard.draft.materialIdManuallyEdited = true;
           if (assetDraftField === "presetId") wizard.draft.presetIdManuallyEdited = true;
           if (assetDraftField === "catalogId") wizard.draft.catalogIdAvailability = isTileCatalogIdTaken(target.value) ? "taken" : "available";
           if (assetDraftField === "materialId") wizard.draft.materialIdAvailability = isBackgroundMaterialIdTaken(target.value) ? "taken" : "available";
-          if (assetDraftField === "presetId") wizard.draft.presetIdAvailability = isDecorPresetIdTaken(target.value) ? "taken" : "available";
+          if (assetDraftField === "presetId") wizard.draft.presetIdAvailability = wizard.assetType === ASSET_WIZARD_TYPES.ENTITY
+            ? (isEntityPresetIdTaken(target.value) ? "taken" : "available")
+            : (isDecorPresetIdTaken(target.value) ? "taken" : "available");
           draft.ui.assetManager.wizard = wizard;
         });
       }
@@ -7813,7 +7941,7 @@ if (event.shiftKey) {
       store.setState((draft) => {
         const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
         wizard.draft = wizard.draft || {};
-        wizard.draft[assetDraftField] = target.value;
+        assignAssetWizardDraftField(wizard, assetDraftField, target.value);
         applyWizardDraftDefaults(wizard);
         if (assetDraftField === "catalogId") wizard.draft.catalogIdManuallyEdited = true;
         if (assetDraftField === "materialId") wizard.draft.materialIdManuallyEdited = true;
@@ -7822,8 +7950,11 @@ if (event.shiftKey) {
         if (assetDraftField === "displayName") syncWizardCatalogIdHint(wizard);
         if (assetDraftField === "displayName") syncWizardBackgroundMaterialIdHint(wizard);
         if (assetDraftField === "displayName") syncWizardDecorPresetIdHint(wizard);
+        if (assetDraftField === "displayName") syncWizardEntityPresetIdHint(wizard);
         if (assetDraftField === "materialId") wizard.draft.materialIdAvailability = isBackgroundMaterialIdTaken(target.value) ? "taken" : "available";
-        if (assetDraftField === "presetId") wizard.draft.presetIdAvailability = isDecorPresetIdTaken(target.value) ? "taken" : "available";
+        if (assetDraftField === "presetId") wizard.draft.presetIdAvailability = wizard.assetType === ASSET_WIZARD_TYPES.ENTITY
+          ? (isEntityPresetIdTaken(target.value) ? "taken" : "available")
+          : (isDecorPresetIdTaken(target.value) ? "taken" : "available");
         draft.ui.assetManager.wizard = wizard;
       });
       return;
