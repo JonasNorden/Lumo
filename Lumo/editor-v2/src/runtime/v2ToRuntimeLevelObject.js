@@ -39,10 +39,13 @@ const RUNTIME_BG_CANONICAL_ID_BY_NORMALIZED = new Map([
   ["valv", "valv"],
   ["wall_5", "wall_5"],
   ["wall_02", "wall_02"],
+  ["stone_block_ct", "stone_block_ct"],
+  ["bg_stone_block_c_vinjett", "bg_stone_block_c_vinjett"],
+  ["bg_stone_wall_cc", "bg_stone_wall_cc"],
 ]);
 
 const V2_BACKGROUND_ID_TO_RUNTIME_ID = new Map([
-  ["bg_stone_wall", "bg_rock_01"],
+  ["bg_stone_wall", "bg_stone_wall_cc"],
   ["bg_arch", "wall_02"],
   ["bg_pillar", "pillar_01"],
 ]);
@@ -62,6 +65,9 @@ const RUNTIME_BG_IMAGE_BASENAME_TO_ID = new Map([
   ["wall_05.png", "wall_5"],
   ["wall_5.png", "wall_5"],
   ["wall_02.png", "wall_02"],
+  ["stone_block_ct.png", "stone_block_ct"],
+  ["bg_stone_block_c_vinjett.png", "bg_stone_block_c_vinjett"],
+  ["bg_stone_wall_cc.png", "bg_stone_wall_cc"],
 ]);
 
 function cloneParams(params) {
