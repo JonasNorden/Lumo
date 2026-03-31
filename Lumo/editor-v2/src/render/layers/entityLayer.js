@@ -478,8 +478,16 @@ export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, ac
     ? activePreset.type
     : null;
   if (!presetType) return;
+  const presetId = typeof activePreset?.id === "string" && activePreset.id.trim()
+    ? activePreset.id.trim()
+    : null;
+  const useAuthoredPresetIdentity = (
+    (presetType === "lantern_01" || presetType === "firefly_01")
+    && presetId
+    && presetId !== presetType
+  );
   const previewEntity = {
-    type: presetType,
+    type: useAuthoredPresetIdentity ? presetId : presetType,
     x: interaction.hoverCell.x,
     y: interaction.hoverCell.y,
   };
