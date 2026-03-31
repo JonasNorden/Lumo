@@ -788,7 +788,7 @@ if (this._catById){
       const p = (params && typeof params === "object") ? params : {};
 
       const customSpritePath = (typeof p.customSpritePath === "string" && p.customSpritePath.trim())
-        ? p.customSpritePath.trim()
+        ? p.customSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
         : "";
       const pick = customSpritePath
         ? this._tryLoadImage(customSpritePath)

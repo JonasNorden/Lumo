@@ -4003,6 +4003,7 @@ export function createEditorApp({
     const preset = resolveEntityPlacementPreset(presetId) || findEntityPresetById(DEFAULT_ENTITY_PRESET_ID);
     const isCustomFireflyPreset = preset?.type === "firefly_01" && preset?.id && preset.id !== "firefly_01";
     const authoredEntityType = isCustomFireflyPreset ? preset.id : (preset?.type || "generic");
+    const normalizeRuntimeSpritePath = (value) => String(value || "").trim().replace(/^(\.{1,2}\/)+/, "");
 
     const entity = {
       id: `entity-${nextNumber}`,
@@ -4013,6 +4014,9 @@ export function createEditorApp({
       visible: true,
       params: getEntityPresetParamsForType(preset?.type || DEFAULT_ENTITY_PRESET_ID, getEntityPresetDefaultParams(preset?.id || DEFAULT_ENTITY_PRESET_ID)),
     };
+    if (isCustomFireflyPreset && typeof preset?.img === "string" && preset.img.trim()) {
+      entity.params.customSpritePath = normalizeRuntimeSpritePath(preset.img);
+    }
 
     if (isFogVolumeEntityType(entity.type)) {
       const fogDefaults = store.getState()?.ui?.specialVolumeWorkbench?.fogDefaults;
