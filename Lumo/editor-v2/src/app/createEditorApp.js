@@ -4001,11 +4001,13 @@ export function createEditorApp({
   const createEntityDraft = (doc, x, y, presetId = DEFAULT_ENTITY_PRESET_ID, nextNumber = (doc.entities?.length || 0) + 1) => {
     const placement = clampEntityPosition(doc, x, y);
     const preset = resolveEntityPlacementPreset(presetId) || findEntityPresetById(DEFAULT_ENTITY_PRESET_ID);
+    const isCustomFireflyPreset = preset?.type === "firefly_01" && preset?.id && preset.id !== "firefly_01";
+    const authoredEntityType = isCustomFireflyPreset ? preset.id : (preset?.type || "generic");
 
     const entity = {
       id: `entity-${nextNumber}`,
       name: preset?.defaultName || "Generic",
-      type: preset?.type || "generic",
+      type: authoredEntityType,
       x: placement.x,
       y: placement.y,
       visible: true,

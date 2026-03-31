@@ -1,6 +1,7 @@
 import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
 import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 import { getDecorVisual } from "../domain/decor/decorVisuals.js";
+import { findEntityPresetById } from "../domain/entities/entityPresets.js";
 
 const SUPPORTED_RUNTIME_ENTITY_IDS = new Set([
   "start_01",
@@ -158,6 +159,8 @@ function buildRuntimeBackgroundVisualOverrides(levelDocument) {
 function normalizeRuntimeEntityType(type) {
   const normalized = String(type || "").trim().toLowerCase();
   if (!normalized) return null;
+  const fireflyPreset = findEntityPresetById(normalized);
+  if (fireflyPreset?.type === "firefly_01") return "firefly_01";
   if (normalized === "player-spawn") return "start_01";
   if (normalized === "player-exit") return "exit_01";
   if (normalized === "checkpoint") return "checkpoint_01";
@@ -444,7 +447,16 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
       id: runtimeId,
       x: Number.isFinite(entity?.x) ? (entity.x | 0) : 0,
       y: Number.isFinite(entity?.y) ? (entity.y | 0) : 0,
-      params: cloneParams(entity?.params),
+      params: (() => {
+        const runtimeParams = cloneParams(entity?.params);
+        if (runtimeId === "firefly_01") {
+          const fireflyPreset = findEntityPresetById(entityType.toLowerCase());
+          if (fireflyPreset?.type === "firefly_01" && typeof fireflyPreset.img === "string" && fireflyPreset.img.trim()) {
+            runtimeParams.customSpritePath = fireflyPreset.img.trim().replace(/^\.{2}\//, "");
+          }
+        }
+        return runtimeParams;
+      })(),
     });
   }
 
