@@ -785,11 +785,17 @@ if (this._catById){
 
     makeFireflyPx(px, py, w=12, h=12, params=null){
       const ts = Lumo.TILE || 24;
-
-      const arr = (this.sprites && Array.isArray(this.sprites.fireflies)) ? this.sprites.fireflies : [];
-      const pick = arr.length ? arr[(Math.random() * arr.length) | 0] : null;
-
       const p = (params && typeof params === "object") ? params : {};
+
+      const customSpritePath = (typeof p.customSpritePath === "string" && p.customSpritePath.trim())
+        ? p.customSpritePath.trim()
+        : "";
+      const pick = customSpritePath
+        ? this._tryLoadImage(customSpritePath)
+        : (() => {
+          const arr = (this.sprites && Array.isArray(this.sprites.fireflies)) ? this.sprites.fireflies : [];
+          return arr.length ? arr[(Math.random() * arr.length) | 0] : null;
+        })();
 
       const num = (v) => {
         if (typeof v === "number") return v;
