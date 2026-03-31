@@ -354,6 +354,20 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
   const authoredBackgroundBase = Array.isArray(levelDocument?.background?.base)
     ? levelDocument.background.base.slice(0, expectedTileCount)
     : [];
+  const authoredBackgroundPlacements = Array.isArray(levelDocument?.background?.placements)
+    ? levelDocument.background.placements
+    : [];
+  for (const placement of authoredBackgroundPlacements) {
+    const x = Number.isFinite(Number(placement?.x)) ? (Number(placement.x) | 0) : null;
+    const y = Number.isFinite(Number(placement?.y)) ? (Number(placement.y) | 0) : null;
+    const materialId = typeof placement?.materialId === "string" ? placement.materialId.trim() : "";
+    if (!Number.isInteger(x) || !Number.isInteger(y) || !materialId) continue;
+    if (x < 0 || y < 0 || x >= width || y >= height) continue;
+    const cellIndex = y * width + x;
+    if (typeof authoredBackgroundBase[cellIndex] !== "string" || !authoredBackgroundBase[cellIndex].trim()) {
+      authoredBackgroundBase[cellIndex] = materialId;
+    }
+  }
   let unknownBackgroundMaterialCount = 0;
   const runtimeBackgroundBase = authoredBackgroundBase.map((materialId) => {
     if (typeof materialId !== "string" || !materialId.trim()) return null;

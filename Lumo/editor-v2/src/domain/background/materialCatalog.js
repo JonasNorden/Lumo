@@ -1,18 +1,5 @@
 const BUILTIN_BACKGROUND_MATERIALS = [
   {
-    id: "bg_stone_wall",
-    label: "Stone Wall",
-    img: "../data/assets/sprites/bg/wall_05.png",
-    drawW: 24,
-    drawH: 24,
-    drawAnchor: "BL",
-    drawOffX: 0,
-    drawOffY: 0,
-    footprint: { w: 1, h: 1 },
-    fallbackColor: "#324058",
-    group: "Core",
-  },
-  {
     id: "stone_block_ct",
     label: "Stone_block_ct",
     img: "../data/assets/sprites/bg/stone_block_ct.png",
