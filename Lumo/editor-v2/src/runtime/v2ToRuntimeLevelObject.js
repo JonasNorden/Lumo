@@ -163,8 +163,8 @@ function buildRuntimeBackgroundVisualOverrides(levelDocument) {
 function normalizeRuntimeEntityType(type) {
   const normalized = String(type || "").trim().toLowerCase();
   if (!normalized) return null;
-  const fireflyPreset = findEntityPresetById(normalized);
-  if (fireflyPreset?.type === "firefly_01") return "firefly_01";
+  const customPreset = findEntityPresetById(normalized);
+  if (customPreset?.type === "firefly_01" || customPreset?.type === "lantern_01") return customPreset.type;
   if (normalized === "player-spawn") return "start_01";
   if (normalized === "player-exit") return "exit_01";
   if (normalized === "checkpoint") return "checkpoint_01";
@@ -453,6 +453,32 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
       y: Number.isFinite(entity?.y) ? (entity.y | 0) : 0,
       params: (() => {
         const runtimeParams = cloneParams(entity?.params);
+        if (runtimeId === "lantern_01") {
+          const authoredCustomSpritePath = normalizeRuntimeSpritePath(runtimeParams.customSpritePath);
+          if (authoredCustomSpritePath) {
+            runtimeParams.customSpritePath = authoredCustomSpritePath;
+          } else {
+            const lanternPreset = findEntityPresetById(entityType.toLowerCase());
+            if (lanternPreset?.type === "lantern_01" && typeof lanternPreset.img === "string" && lanternPreset.img.trim()) {
+              runtimeParams.customSpritePath = normalizeRuntimeSpritePath(lanternPreset.img);
+            }
+          }
+          const lanternPreset = findEntityPresetById(entityType.toLowerCase());
+          if (lanternPreset?.type === "lantern_01") {
+            if (!Number.isFinite(Number(runtimeParams.drawW)) && Number.isFinite(Number(lanternPreset.drawW))) {
+              runtimeParams.drawW = Math.max(1, Number(lanternPreset.drawW));
+            }
+            if (!Number.isFinite(Number(runtimeParams.drawH)) && Number.isFinite(Number(lanternPreset.drawH))) {
+              runtimeParams.drawH = Math.max(1, Number(lanternPreset.drawH));
+            }
+            if (typeof runtimeParams.drawAnchor !== "string" || !runtimeParams.drawAnchor.trim()) {
+              runtimeParams.drawAnchor = String(lanternPreset.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL";
+            }
+            if (typeof runtimeParams.presetId !== "string" || !runtimeParams.presetId.trim()) {
+              runtimeParams.presetId = lanternPreset.id;
+            }
+          }
+        }
         if (runtimeId === "firefly_01") {
           const authoredCustomSpritePath = normalizeRuntimeSpritePath(runtimeParams.customSpritePath);
           if (authoredCustomSpritePath) {
