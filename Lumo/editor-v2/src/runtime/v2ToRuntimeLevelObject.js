@@ -69,6 +69,10 @@ function cloneParams(params) {
   return structuredClone(params);
 }
 
+function normalizeRuntimeSpritePath(value) {
+  return String(value || "").trim().replace(/^(\.{1,2}\/)+/, "");
+}
+
 function parseFlowerVariant(value) {
   if (Number.isFinite(value)) {
     const parsed = Math.round(value);
@@ -450,9 +454,14 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
       params: (() => {
         const runtimeParams = cloneParams(entity?.params);
         if (runtimeId === "firefly_01") {
-          const fireflyPreset = findEntityPresetById(entityType.toLowerCase());
-          if (fireflyPreset?.type === "firefly_01" && typeof fireflyPreset.img === "string" && fireflyPreset.img.trim()) {
-            runtimeParams.customSpritePath = fireflyPreset.img.trim().replace(/^\.{2}\//, "");
+          const authoredCustomSpritePath = normalizeRuntimeSpritePath(runtimeParams.customSpritePath);
+          if (authoredCustomSpritePath) {
+            runtimeParams.customSpritePath = authoredCustomSpritePath;
+          } else {
+            const fireflyPreset = findEntityPresetById(entityType.toLowerCase());
+            if (fireflyPreset?.type === "firefly_01" && typeof fireflyPreset.img === "string" && fireflyPreset.img.trim()) {
+              runtimeParams.customSpritePath = normalizeRuntimeSpritePath(fireflyPreset.img);
+            }
           }
         }
         return runtimeParams;
