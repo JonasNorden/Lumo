@@ -64,7 +64,7 @@ function runAdapterChecks() {
   assert.equal(runtimeLevel.layers.main.length, 12);
   assert.deepEqual(runtimeLevel.layers.main, doc.tiles.base);
   assert.equal(runtimeLevel.layers.bg.length, 12);
-  assert.equal(runtimeLevel.layers.bg[0], "bg_rock_01", "background base should map to runtime-supported bg ids");
+  assert.equal(runtimeLevel.layers.bg[0], "bg_stone_wall_cc", "background base should map to runtime-supported bg ids");
   assert.deepEqual(runtimeLevel.layers.bg, runtimeLevel.editor.bg, "runtime bg should be mirrored on editor.bg fallback path");
 
   const spawn = runtimeLevel.layers.ents.find((entity) => entity.id === "start_01");
