@@ -351,7 +351,12 @@
           }
           const radius = (typeof params.radius === "number") ? params.radius : 170;
           const strength = (typeof params.strength === "number") ? params.strength : 0.85;
-          const ln = this.makeLantern(tx, ty, radius, strength);
+          const ln = this.makeLantern(tx, ty, radius, strength, {
+            customSpritePath: params.customSpritePath,
+            drawW: params.drawW,
+            drawH: params.drawH,
+            drawAnchor: params.drawAnchor,
+          });
           applyAnchor(ln, ln.w, ln.h);
           this.items.push(ln);
           return;
@@ -896,8 +901,15 @@ if (this._catById){
       return { type:"checkpoint", active:true, x:tx*ts, y:ty*ts, w:ts, h:ts };
     }
 
-    makeLantern(tx, ty, radius=170, strength=0.85){
+    makeLantern(tx, ty, radius=170, strength=0.85, visualOptions=null){
       const ts = Lumo.TILE || 24;
+      const options = (visualOptions && typeof visualOptions === "object") ? visualOptions : {};
+      const normalizedSpritePath = (typeof options.customSpritePath === "string" && options.customSpritePath.trim())
+        ? options.customSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
+        : "";
+      const drawW = Number.isFinite(Number(options.drawW)) ? Math.max(1, Number(options.drawW)) : 24;
+      const drawH = Number.isFinite(Number(options.drawH)) ? Math.max(1, Number(options.drawH)) : 32;
+      const drawAnchor = String(options.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL";
       return {
         type:"lantern",
         active:true,
@@ -906,7 +918,12 @@ if (this._catById){
         w:14,
         h:14,
         radius,
-        strength
+        strength,
+        _lanternSpritePath: normalizedSpritePath || "",
+        _lanternSprite: normalizedSpritePath ? this._tryLoadImage(normalizedSpritePath) : null,
+        _lanternDrawW: drawW,
+        _lanternDrawH: drawH,
+        _lanternDrawAnchor: drawAnchor,
       };
     }
 
@@ -2735,15 +2752,20 @@ if (e.type === "powerCell"){
           ctx.arc(gx, gy, outer, 0, Math.PI * 2);
           ctx.fill();
 
-          const img = this.sprites && this.sprites.lantern;
+          const img = (e._lanternSprite && e._lanternSprite._ok)
+            ? e._lanternSprite
+            : (this.sprites && this.sprites.lantern);
           if (img && img._ok){
             // Visual can be larger than collision/interaction box (14×14).
             // Anchor sprite to bottom-center of the lantern entity.
-            const drawW = 24;
-            const drawH = 32;
+            const drawW = Number.isFinite(Number(e._lanternDrawW)) ? Math.max(1, Number(e._lanternDrawW)) : 24;
+            const drawH = Number.isFinite(Number(e._lanternDrawH)) ? Math.max(1, Number(e._lanternDrawH)) : 32;
+            const drawAnchor = String(e._lanternDrawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL";
             const cx = sx + e.w * 0.5;
             const bottom = sy + e.h;
-            ctx.drawImage(img, (cx - drawW/2), (bottom - drawH), drawW, drawH);
+            const drawX = cx - drawW / 2;
+            const drawY = drawAnchor === "TL" ? sy : (bottom - drawH);
+            ctx.drawImage(img, drawX, drawY, drawW, drawH);
           } else {
             // Fallback placeholder
             ctx.fillStyle = "rgba(255,255,160,0.95)";
