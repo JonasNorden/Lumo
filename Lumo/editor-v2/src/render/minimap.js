@@ -71,7 +71,7 @@ export function renderMinimap(ctx, state) {
 
   for (const entity of doc.entities || []) {
     if (!entity?.visible) continue;
-    const visual = getEntityVisual(entity.type);
+    const visual = getEntityVisual(entity.type, entity?.params?.presetId);
     ctx.fillStyle = visual.stroke;
     ctx.fillRect(
       Math.floor(originX + entity.x * contentScale),

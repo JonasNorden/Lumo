@@ -653,7 +653,7 @@ if (id === "flare_pickup_01"){
     console.warn(`[Lumo][contract] Level ${diag && diag.levelLabel ? diag.levelLabel : "(unknown-level)"}: entity ${id}@${tx},${ty} has invalid numeric param 'amount' (${JSON.stringify(params.amount)}); using fallback 1.`);
   }
   const amount = (typeof params.amount === "number") ? params.amount : 1;
-  const fp = this.makeFlarePickup(tx, ty, amount);
+  const fp = this.makeFlarePickup(tx, ty, amount, params);
   applyAnchor(fp, fp.w, fp.h);
   this.items.push(fp);
   return;
@@ -754,7 +754,7 @@ if (this._catById){
       if (e.type === "powerCell") this.items.push(this.makePowerCell(e.x, e.y));
       else if (e.type === "checkpoint") this.items.push(this.makeCheckpoint(e.x, e.y));
       else if (e.type === "lantern") this.items.push(this.makeLantern(e.x, e.y, e.radius, e.strength));
-      else if (e.type === "flarePickup") this.items.push(this.makeFlarePickup(e.x, e.y, e.amount));
+      else if (e.type === "flarePickup") this.items.push(this.makeFlarePickup(e.x, e.y, e.amount, e.params));
       else if (e.type === "patrolEnemy") this.items.push(this.makeEnemy(e.x, e.y, e.left, e.right));
       else if (e.type === "movingPlatform") this.items.push(this.makeMovingPlatformFromDef(e, levelObj));
       else if (e.type === "darkCreature") this.items.push(this.makeDarkCreature(e.x, e.y, e));
@@ -927,8 +927,12 @@ if (this._catById){
       };
     }
 
-    makeFlarePickup(tx, ty, amount=1){
+    makeFlarePickup(tx, ty, amount=1, params=null){
       const ts = Lumo.TILE || 24;
+      const p = (params && typeof params === "object") ? params : {};
+      const customSpritePath = (typeof p.customSpritePath === "string" && p.customSpritePath.trim())
+        ? p.customSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
+        : "";
       return {
         type:"flarePickup",
         active:true,
@@ -936,7 +940,9 @@ if (this._catById){
         y:ty*ts,
         w:12,
         h:12,
-        amount: amount|0
+        amount: amount|0,
+        _flareSpritePath: customSpritePath || "",
+        _flareSprite: customSpritePath ? this._tryLoadImage(customSpritePath) : null,
       };
     }
 
@@ -2712,7 +2718,9 @@ if (e.type === "powerCell"){
 
 
                if (e.type === "flarePickup"){
-          const img = this.sprites && this.sprites.flarePickup;
+          const img = (e._flareSprite && e._flareSprite._ok)
+            ? e._flareSprite
+            : (this.sprites && this.sprites.flarePickup);
           if (img && img._ok){
             // draw sprite slightly larger for readability
             const size = Math.max(e.w, e.h) * 2.0;

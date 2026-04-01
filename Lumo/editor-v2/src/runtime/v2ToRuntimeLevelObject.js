@@ -170,7 +170,9 @@ function normalizeRuntimeEntityType(type) {
   const normalized = String(type || "").trim().toLowerCase();
   if (!normalized) return null;
   const customPreset = findEntityPresetById(normalized);
-  if (customPreset?.type === "firefly_01" || customPreset?.type === "lantern_01") return customPreset.type;
+  if (customPreset?.type === "firefly_01" || customPreset?.type === "lantern_01" || customPreset?.type === "flare_pickup_01") {
+    return customPreset.type;
+  }
   if (normalized === "player-spawn") return "start_01";
   if (normalized === "player-exit") return "exit_01";
   if (normalized === "checkpoint") return "checkpoint_01";
@@ -507,6 +509,17 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
             const fireflyPreset = findEntityPresetById(entityType.toLowerCase());
             if (fireflyPreset?.type === "firefly_01" && typeof fireflyPreset.img === "string" && fireflyPreset.img.trim()) {
               runtimeParams.customSpritePath = normalizeRuntimeSpritePath(fireflyPreset.img);
+            }
+          }
+        }
+        if (runtimeId === "flare_pickup_01") {
+          const authoredCustomSpritePath = normalizeRuntimeSpritePath(runtimeParams.customSpritePath);
+          if (authoredCustomSpritePath) {
+            runtimeParams.customSpritePath = authoredCustomSpritePath;
+          } else {
+            const flarePreset = findEntityPresetById(entityType.toLowerCase()) || findEntityPresetById(runtimeParams.presetId);
+            if (flarePreset?.type === "flare_pickup_01" && typeof flarePreset.img === "string" && flarePreset.img.trim()) {
+              runtimeParams.customSpritePath = normalizeRuntimeSpritePath(flarePreset.img);
             }
           }
         }

@@ -13,7 +13,7 @@ import {
 import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
 function getEntityCenter(entity, tileSize) {
-  const visual = getEntityVisual(entity.type);
+  const visual = getEntityVisual(entity.type, entity?.params?.presetId);
   const footprintW = Math.max(1, visual.footprintW || visual.drawW || tileSize);
   const footprintH = Math.max(1, visual.footprintH || visual.drawH || tileSize);
 
@@ -39,7 +39,7 @@ function getEntityScreenCenter(entity, tileSize, viewport) {
 }
 
 function getEntityFootprintRect(entity, tileSize, viewport) {
-  const visual = getEntityVisual(entity.type);
+  const visual = getEntityVisual(entity.type, entity?.params?.presetId);
   const footprintWidthCells = Math.max(1, Math.ceil((visual.footprintW || visual.drawW || tileSize) / tileSize));
   const footprintHeightCells = Math.max(1, Math.ceil((visual.footprintH || visual.drawH || tileSize) / tileSize));
   const topTileY = visual.drawAnchor === "TL" ? entity.y : entity.y - (footprintHeightCells - 1);
@@ -101,7 +101,7 @@ function drawEntitySprite(ctx, x, y, viewport, visual, alpha = 1) {
 }
 
 function drawEntityMarker(ctx, entity, x, y, viewport, { isSelected, isHovered, alpha = 1, preview = false } = {}) {
-  const visual = getEntityVisual(entity.type);
+  const visual = getEntityVisual(entity.type, entity?.params?.presetId);
   const zoomScale = 1 / Math.max(0.001, viewport.zoom);
   const focusRadius = Math.max(8.5, Math.max(visual.drawW || 24, visual.drawH || 24) * 0.34) * zoomScale;
   const outlineWidth = (preview ? 2.1 : isSelected ? 2 : isHovered ? 1.7 : 1.3) * zoomScale;
@@ -481,13 +481,9 @@ export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, ac
   const presetId = typeof activePreset?.id === "string" && activePreset.id.trim()
     ? activePreset.id.trim()
     : null;
-  const useAuthoredPresetIdentity = (
-    (presetType === "lantern_01" || presetType === "firefly_01")
-    && presetId
-    && presetId !== presetType
-  );
   const previewEntity = {
-    type: useAuthoredPresetIdentity ? presetId : presetType,
+    type: presetType,
+    params: presetId ? { presetId } : undefined,
     x: interaction.hoverCell.x,
     y: interaction.hoverCell.y,
   };
