@@ -2532,7 +2532,14 @@
 
           if (req){
             if (typeof ents.spawnFlare === "function"){
-              ents.spawnFlare(req.x, req.y, req.vx, req.vy);
+              ents.spawnFlare(
+                req.x,
+                req.y,
+                req.vx,
+                req.vy,
+                req.sprite || null,
+                req.spritePath || ""
+              );
             } else if (typeof ents.spawnThrownFlare === "function"){
               ents.spawnThrownFlare(req.x, req.y);
             }
