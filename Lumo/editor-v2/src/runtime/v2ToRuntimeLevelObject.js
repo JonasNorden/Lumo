@@ -469,12 +469,27 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
       continue;
     }
 
-    runtimeLevel.layers.ents.push({
+    const exportedCheckpointEntity = {
       id: runtimeId,
       x: Number.isFinite(entity?.x) ? (entity.x | 0) : 0,
       y: Number.isFinite(entity?.y) ? (entity.y | 0) : 0,
       params: (() => {
         const runtimeParams = cloneParams(entity?.params);
+        if (runtimeId === "checkpoint_01") {
+          const presetId = typeof runtimeParams.presetId === "string" ? runtimeParams.presetId : "";
+          const authoredCheckpointCustomSpritePath = typeof entity?.params?.customSpritePath === "string"
+            ? normalizeRuntimeSpritePath(entity.params.customSpritePath)
+            : "";
+          let checkpointCustomSpritePath = authoredCheckpointCustomSpritePath;
+          if (!checkpointCustomSpritePath && presetId.trim()) {
+            const checkpointPreset = findEntityPresetById(presetId);
+            const presetImagePath = typeof checkpointPreset?.image === "string" && checkpointPreset.image.trim()
+              ? checkpointPreset.image
+              : checkpointPreset?.img;
+            checkpointCustomSpritePath = normalizeRuntimeSpritePath(presetImagePath);
+          }
+          runtimeParams.customSpritePath = checkpointCustomSpritePath || undefined;
+        }
         if (runtimeId === "lantern_01") {
           const authoredCustomSpritePath = normalizeRuntimeSpritePath(runtimeParams.customSpritePath);
           if (authoredCustomSpritePath) {
@@ -540,7 +555,11 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
         }
         return runtimeParams;
       })(),
-    });
+    };
+    if (runtimeId === "checkpoint_01") {
+      console.log("[PFH checkpoint export debug]", exportedCheckpointEntity);
+    }
+    runtimeLevel.layers.ents.push(exportedCheckpointEntity);
   }
 
   const decorItems = Array.isArray(levelDocument.decor) ? levelDocument.decor : [];
