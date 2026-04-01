@@ -2716,15 +2716,11 @@ if (e.type === "lantern"){
   sy = Math.floor((e.y - cam.y) + (e._offY || 0));
 }
 if (e.type === "powerCell"){
-  const img = e._pcSprite || (this.sprites?.powerCells?.[0] ?? null);
+  const img = e._pcSprite || (this.sprites.powerCells ? this.sprites.powerCells[0] : null);
 
-  if (img && img._ok){
+  if (img && img.complete){
     // Rita som exakt 1 tile (24×24)
     ctx.drawImage(img, sx, sy, e.w, e.h);
-  } else {
-    // Fallback om något inte laddat än
-    ctx.fillStyle = "rgba(200,255,255,0.95)";
-    ctx.fillRect(sx, sy, e.w, e.h);
   }
 }
 
