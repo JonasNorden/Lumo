@@ -2718,15 +2718,13 @@ if (e.type === "powerCell"){
 
 
                if (e.type === "flarePickup"){
-          const img = (e._flareSprite && e._flareSprite._ok)
-            ? e._flareSprite
-            : (this.sprites && this.sprites.flarePickup);
-          if (img && img._ok){
+          const sprite = e._flareSprite || (this.sprites && this.sprites.flarePickup);
+          if (sprite && sprite._ok){
             // draw sprite slightly larger for readability
             const size = Math.max(e.w, e.h) * 2.0;
             const cx = sx + e.w/2;
             const cy = sy + e.h/2;
-            ctx.drawImage(img, cx - size/2, cy - size/2, size, size);
+            ctx.drawImage(sprite, cx - size/2, cy - size/2, size, size);
           } else {
             // fallback placeholder
             ctx.fillStyle = "rgba(255,200,120,0.95)";
