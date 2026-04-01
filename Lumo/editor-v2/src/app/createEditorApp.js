@@ -4003,6 +4003,8 @@ export function createEditorApp({
     const preset = resolveEntityPlacementPreset(presetId) || findEntityPresetById(DEFAULT_ENTITY_PRESET_ID);
     const isCustomFireflyPreset = preset?.type === "firefly_01" && preset?.id && preset.id !== "firefly_01";
     const isCustomLanternPreset = preset?.type === "lantern_01" && preset?.id && preset.id !== "lantern_01";
+    const isCustomFlarePickupPreset = preset?.type === "flare_pickup_01" && preset?.id && preset.id !== "flare_pickup_01";
+    const isCustomPreset = !!(preset?.id && preset?.type && preset.id !== preset.type);
     const authoredEntityType = (isCustomFireflyPreset || isCustomLanternPreset) ? preset.id : (preset?.type || "generic");
     const normalizeRuntimeSpritePath = (value) => String(value || "").trim().replace(/^(\.{1,2}\/)+/, "");
 
@@ -4018,6 +4020,9 @@ export function createEditorApp({
     if (isCustomFireflyPreset && typeof preset?.img === "string" && preset.img.trim()) {
       entity.params.customSpritePath = normalizeRuntimeSpritePath(preset.img);
     }
+    if (isCustomFlarePickupPreset && typeof preset?.img === "string" && preset.img.trim()) {
+      entity.params.customSpritePath = normalizeRuntimeSpritePath(preset.img);
+    }
     if (isCustomLanternPreset) {
       if (typeof preset?.img === "string" && preset.img.trim()) {
         entity.params.customSpritePath = normalizeRuntimeSpritePath(preset.img);
@@ -4025,6 +4030,8 @@ export function createEditorApp({
       if (Number.isFinite(Number(preset?.drawW))) entity.params.drawW = Math.max(1, Number(preset.drawW));
       if (Number.isFinite(Number(preset?.drawH))) entity.params.drawH = Math.max(1, Number(preset.drawH));
       entity.params.drawAnchor = String(preset?.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL";
+    }
+    if (isCustomPreset) {
       entity.params.presetId = String(preset?.id || "").trim() || undefined;
     }
 

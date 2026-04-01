@@ -1,4 +1,4 @@
-import { getEntityPresetForType } from "./entityPresets.js";
+import { findEntityPresetById, getEntityPresetForType } from "./entityPresets.js";
 
 const ENTITY_VISUALS = {
   "player-spawn": {
@@ -101,10 +101,14 @@ function normalizeEntityType(type) {
     .toLowerCase();
 }
 
-export function getEntityVisual(entityType) {
+export function getEntityVisual(entityType, presetId = null) {
   const normalizedType = normalizeEntityType(entityType);
   const visualKey = ENTITY_TYPE_ALIASES.get(normalizedType) || normalizedType || "generic";
-  const preset = getEntityPresetForType(visualKey) || getEntityPresetForType("generic");
+  const normalizedPresetId = String(presetId || "").trim().toLowerCase();
+  const presetById = normalizedPresetId
+    ? findEntityPresetById(normalizedPresetId)
+    : findEntityPresetById(visualKey);
+  const preset = presetById || getEntityPresetForType(visualKey) || getEntityPresetForType("generic");
   const baseVisual = ENTITY_VISUALS[visualKey] || ENTITY_VISUALS.generic;
 
   return {
@@ -120,6 +124,6 @@ export function getEntityVisual(entityType) {
   };
 }
 
-export function getEntityHitRadius(entityType) {
-  return getEntityVisual(entityType).hitRadius;
+export function getEntityHitRadius(entityType, presetId = null) {
+  return getEntityVisual(entityType, presetId).hitRadius;
 }
