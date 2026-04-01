@@ -2269,6 +2269,8 @@ if (e.type === "lantern"){
 
               if (e.type === "flarePickup"){
                 if (typeof player.addFlares === "function") player.addFlares(e.amount || 1);
+                player._flareSprite = e._flareSprite || null;
+                player._flareSpritePath = e._flareSpritePath || "";
               }
             }
           }
