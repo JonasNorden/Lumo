@@ -512,6 +512,21 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
             }
           }
         }
+        if (runtimeId === "powercell_01") {
+          const authoredCustomSpritePath = normalizeRuntimeSpritePath(runtimeParams.customSpritePath);
+          if (authoredCustomSpritePath) {
+            runtimeParams.customSpritePath = authoredCustomSpritePath;
+          } else {
+            const powercellPreset = findEntityPresetById(runtimeParams.presetId) || findEntityPresetById(entityType.toLowerCase());
+            if (powercellPreset?.type === "powercell_01" && typeof powercellPreset.img === "string" && powercellPreset.img.trim()) {
+              runtimeParams.customSpritePath = normalizeRuntimeSpritePath(powercellPreset.img);
+            }
+          }
+          const powercellPreset = findEntityPresetById(runtimeParams.presetId) || findEntityPresetById(entityType.toLowerCase());
+          if (powercellPreset?.type === "powercell_01" && (typeof runtimeParams.presetId !== "string" || !runtimeParams.presetId.trim())) {
+            runtimeParams.presetId = powercellPreset.id;
+          }
+        }
         if (runtimeId === "flare_pickup_01") {
           const authoredCustomSpritePath = normalizeRuntimeSpritePath(runtimeParams.customSpritePath);
           if (authoredCustomSpritePath) {
