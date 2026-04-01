@@ -642,7 +642,7 @@
         }
 
         if (id === "powercell_01"){
-          const pc = this.makePowerCell(tx, ty);
+          const pc = this.makePowerCell(tx, ty, params);
           applyAnchor(pc, pc.w, pc.h);
           this.items.push(pc);
           return;
@@ -751,7 +751,7 @@ if (this._catById){
       }
 
       // Engine-native path (type-based)
-      if (e.type === "powerCell") this.items.push(this.makePowerCell(e.x, e.y));
+      if (e.type === "powerCell") this.items.push(this.makePowerCell(e.x, e.y, e.params));
       else if (e.type === "checkpoint") this.items.push(this.makeCheckpoint(e.x, e.y));
       else if (e.type === "lantern") this.items.push(this.makeLantern(e.x, e.y, e.radius, e.strength));
       else if (e.type === "flarePickup") this.items.push(this.makeFlarePickup(e.x, e.y, e.amount, e.params));
@@ -769,12 +769,20 @@ if (this._catById){
     }
 
     // tile coords in, store pixels
-  makePowerCell(tx, ty){
+  makePowerCell(tx, ty, params = null){
   const ts = Lumo.TILE || 24;
+  const p = (params && typeof params === "object") ? params : {};
+  const customSpritePath = (typeof p.customSpritePath === "string" && p.customSpritePath.trim())
+    ? p.customSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
+    : "";
 
   // Alternativ A: äkta slump per runtime-load (väljs en gång per entity)
-  const arr = (this.sprites && Array.isArray(this.sprites.powerCells)) ? this.sprites.powerCells : [];
-  const pick = arr.length ? arr[(Math.random() * arr.length) | 0] : null;
+  const pick = customSpritePath
+    ? this._tryLoadImage(customSpritePath)
+    : (() => {
+      const arr = (this.sprites && Array.isArray(this.sprites.powerCells)) ? this.sprites.powerCells : [];
+      return arr.length ? arr[(Math.random() * arr.length) | 0] : null;
+    })();
 
   // Skala till exakt 1 tile
   return {
@@ -784,7 +792,8 @@ if (this._catById){
     y:ty*ts,
     w:ts,
     h:ts,
-    _pcSprite: pick
+    _pcSprite: pick,
+    _pcSpritePath: customSpritePath || ""
   };
 }
 
