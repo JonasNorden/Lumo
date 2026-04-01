@@ -929,6 +929,10 @@ if (this._catById){
 
     makeFlarePickup(tx, ty, amount=1, params=null){
       const ts = Lumo.TILE || 24;
+      const p = (params && typeof params === "object") ? params : {};
+      const customSpritePath = (typeof p.customSpritePath === "string" && p.customSpritePath.trim())
+        ? p.customSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
+        : "";
       const e = {
         type:"flarePickup",
         active:true,
@@ -937,12 +941,9 @@ if (this._catById){
         w:12,
         h:12,
         amount: amount|0,
+        _flareSpritePath: customSpritePath || "",
+        _flareSprite: customSpritePath ? this._tryLoadImage(customSpritePath) : null,
       };
-      if (params && params.customSpritePath) {
-        const img = new Image();
-        img.src = params.customSpritePath;
-        e._flareSprite = img;
-      }
       return e;
     }
 
