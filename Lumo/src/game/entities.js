@@ -2718,17 +2718,13 @@ if (e.type === "powerCell"){
 
 
                if (e.type === "flarePickup"){
-          const sprite = e._flareSprite || (this.sprites && this.sprites.flarePickup);
-          if (sprite && sprite._ok){
+          const sprite = e._flareSprite || this.sprites.flarePickup;
+          if (sprite && sprite.complete){
             // draw sprite slightly larger for readability
             const size = Math.max(e.w, e.h) * 2.0;
             const cx = sx + e.w/2;
             const cy = sy + e.h/2;
             ctx.drawImage(sprite, cx - size/2, cy - size/2, size, size);
-          } else {
-            // fallback placeholder
-            ctx.fillStyle = "rgba(255,200,120,0.95)";
-            ctx.fillRect(sx, sy, e.w, e.h);
           }
         }
         if (e.type === "checkpoint"){
