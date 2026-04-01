@@ -326,7 +326,7 @@
 
         if (id === "checkpoint_01"){
           // Checkpoint = engine-native (placeholder tills du sätter sprite)
-          const cp = this.makeCheckpoint(tx, ty);
+          const cp = this.makeCheckpoint(tx, ty, params);
           applyAnchor(cp, cp.w, cp.h);
           this.items.push(cp);
           return;
@@ -752,7 +752,7 @@ if (this._catById){
 
       // Engine-native path (type-based)
       if (e.type === "powerCell") this.items.push(this.makePowerCell(e.x, e.y, e.params));
-      else if (e.type === "checkpoint") this.items.push(this.makeCheckpoint(e.x, e.y));
+      else if (e.type === "checkpoint") this.items.push(this.makeCheckpoint(e.x, e.y, e.params));
       else if (e.type === "lantern") this.items.push(this.makeLantern(e.x, e.y, e.radius, e.strength));
       else if (e.type === "flarePickup") this.items.push(this.makeFlarePickup(e.x, e.y, e.amount, e.params));
       else if (e.type === "patrolEnemy") this.items.push(this.makeEnemy(e.x, e.y, e.left, e.right));
@@ -905,9 +905,26 @@ if (this._catById){
 
 
 
-    makeCheckpoint(tx, ty){
+    makeCheckpoint(tx, ty, params = null){
       const ts = Lumo.TILE || 24;
-      return { type:"checkpoint", active:true, x:tx*ts, y:ty*ts, w:ts, h:ts };
+      const p = (params && typeof params === "object") ? params : {};
+      const customSpritePath = (typeof p.customSpritePath === "string" && p.customSpritePath.trim())
+        ? p.customSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
+        : "";
+
+      const defaultList = this.sprites && this.sprites.checkpoints;
+      const defaultSprite = (defaultList && defaultList.length) ? (defaultList.find(im => im && im._ok) || defaultList[0]) : null;
+
+      return {
+        type:"checkpoint",
+        active:true,
+        x:tx*ts,
+        y:ty*ts,
+        w:ts,
+        h:ts,
+        _checkpointSpritePath: customSpritePath || "",
+        _checkpointSprite: customSpritePath ? this._tryLoadImage(customSpritePath) : defaultSprite
+      };
     }
 
     makeLantern(tx, ty, radius=170, strength=0.85, visualOptions=null){
@@ -2736,8 +2753,7 @@ if (e.type === "powerCell"){
           }
         }
         if (e.type === "checkpoint"){
-          const list = this.sprites && this.sprites.checkpoints;
-          const img = (list && list.length) ? (list.find(im => im && im._ok) || list[0]) : null;
+          const img = e._checkpointSprite || ((this.sprites && this.sprites.checkpoints && this.sprites.checkpoints.length) ? (this.sprites.checkpoints.find(im => im && im._ok) || this.sprites.checkpoints[0]) : null);
           if (img && img._ok){
             // 1 tile (24×24)
             ctx.drawImage(img, Math.floor(sx), Math.floor(sy), 24, 24);
