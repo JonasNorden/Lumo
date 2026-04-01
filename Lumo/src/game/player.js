@@ -76,6 +76,8 @@
       this.flares = 1;
       this.flareEnergyCost = 0.11;
       this._throwFlareRequest = null;
+      this._flareSprite = null;
+      this._flareSpritePath = "";
 
       // HUD cache
       this._hud = {
@@ -403,6 +405,8 @@
         y: startY,
         vx: 360 * dir,
         vy: -420,
+        sprite: this._flareSprite || null,
+        spritePath: this._flareSpritePath || "",
       };
 
       return true;
