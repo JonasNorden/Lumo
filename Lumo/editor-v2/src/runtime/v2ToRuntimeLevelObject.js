@@ -560,17 +560,27 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
         }
         if (runtimeId === "hover_void_01") {
           const authoredCustomSpritePath = normalizeRuntimeSpritePath(runtimeParams.customSpritePath);
+          const hoverVoidPreset = findEntityPresetById(runtimeParams.presetId) || findEntityPresetById(entityType.toLowerCase());
           if (authoredCustomSpritePath) {
             runtimeParams.customSpritePath = authoredCustomSpritePath;
           } else {
-            const hoverVoidPreset = findEntityPresetById(runtimeParams.presetId) || findEntityPresetById(entityType.toLowerCase());
             if (hoverVoidPreset?.type === "hover_void_01" && typeof hoverVoidPreset.img === "string" && hoverVoidPreset.img.trim()) {
               runtimeParams.customSpritePath = normalizeRuntimeSpritePath(hoverVoidPreset.img);
             }
           }
-          const hoverVoidPreset = findEntityPresetById(runtimeParams.presetId) || findEntityPresetById(entityType.toLowerCase());
-          if (hoverVoidPreset?.type === "hover_void_01" && (typeof runtimeParams.presetId !== "string" || !runtimeParams.presetId.trim())) {
-            runtimeParams.presetId = hoverVoidPreset.id;
+          if (hoverVoidPreset?.type === "hover_void_01") {
+            if (!Number.isFinite(Number(runtimeParams.drawW)) && Number.isFinite(Number(hoverVoidPreset.drawW))) {
+              runtimeParams.drawW = Math.max(1, Number(hoverVoidPreset.drawW));
+            }
+            if (!Number.isFinite(Number(runtimeParams.drawH)) && Number.isFinite(Number(hoverVoidPreset.drawH))) {
+              runtimeParams.drawH = Math.max(1, Number(hoverVoidPreset.drawH));
+            }
+            if (typeof runtimeParams.drawAnchor !== "string" || !runtimeParams.drawAnchor.trim()) {
+              runtimeParams.drawAnchor = String(hoverVoidPreset.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL";
+            }
+            if (typeof runtimeParams.presetId !== "string" || !runtimeParams.presetId.trim()) {
+              runtimeParams.presetId = hoverVoidPreset.id;
+            }
           }
         }
         return runtimeParams;
