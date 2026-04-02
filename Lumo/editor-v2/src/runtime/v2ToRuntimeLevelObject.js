@@ -170,7 +170,12 @@ function normalizeRuntimeEntityType(type) {
   const normalized = String(type || "").trim().toLowerCase();
   if (!normalized) return null;
   const customPreset = findEntityPresetById(normalized);
-  if (customPreset?.type === "firefly_01" || customPreset?.type === "lantern_01" || customPreset?.type === "flare_pickup_01") {
+  if (
+    customPreset?.type === "firefly_01"
+    || customPreset?.type === "lantern_01"
+    || customPreset?.type === "flare_pickup_01"
+    || customPreset?.type === "hover_void_01"
+  ) {
     return customPreset.type;
   }
   if (normalized === "player-spawn") return "start_01";
@@ -551,6 +556,21 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
             if (flarePreset?.type === "flare_pickup_01" && typeof flarePreset.img === "string" && flarePreset.img.trim()) {
               runtimeParams.customSpritePath = normalizeRuntimeSpritePath(flarePreset.img);
             }
+          }
+        }
+        if (runtimeId === "hover_void_01") {
+          const authoredCustomSpritePath = normalizeRuntimeSpritePath(runtimeParams.customSpritePath);
+          if (authoredCustomSpritePath) {
+            runtimeParams.customSpritePath = authoredCustomSpritePath;
+          } else {
+            const hoverVoidPreset = findEntityPresetById(runtimeParams.presetId) || findEntityPresetById(entityType.toLowerCase());
+            if (hoverVoidPreset?.type === "hover_void_01" && typeof hoverVoidPreset.img === "string" && hoverVoidPreset.img.trim()) {
+              runtimeParams.customSpritePath = normalizeRuntimeSpritePath(hoverVoidPreset.img);
+            }
+          }
+          const hoverVoidPreset = findEntityPresetById(runtimeParams.presetId) || findEntityPresetById(entityType.toLowerCase());
+          if (hoverVoidPreset?.type === "hover_void_01" && (typeof runtimeParams.presetId !== "string" || !runtimeParams.presetId.trim())) {
+            runtimeParams.presetId = hoverVoidPreset.id;
           }
         }
         return runtimeParams;

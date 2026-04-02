@@ -1065,6 +1065,9 @@ if (this._catById){
         return Number.isFinite(n) ? n : fallback;
       };
       const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+      const customSpritePath = (typeof params?.customSpritePath === "string" && params.customSpritePath.trim())
+        ? params.customSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
+        : "";
       const aggroTiles = Math.max(0, nOr(params && params.aggroTiles, 7));
       const followTiles = Math.max(0, nOr(params && params.followTiles, 7));
       const maxHp = Math.max(1, Math.floor(nOr(params && params.maxHp, 3)));
@@ -1122,6 +1125,8 @@ if (this._catById){
         _facingX:1,
         _lungeHitDone:false,
         _attackCd:attackCooldownMin + Math.random()*(attackCooldownMax-attackCooldownMin),
+        _hoverVoidBodySpritePath: customSpritePath || "",
+        _hoverVoidBodySprite: customSpritePath ? this._tryLoadImage(customSpritePath) : null,
       };
     }
 
@@ -2986,67 +2991,75 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           const cx = sx + e.w * 0.5;
           const cy = sy + e.h * 0.5;
           const lit = this.isPointLitAnySource(e.x + e.w*0.5, e.y + e.h*0.5, this._lastPlayer);
-          const palette = this._hoverVoidPalette(e.colorVariant || 0);
           const bodyAlpha = lit ? (0.94 + (1 - (e.sleepBlend || 1)) * 0.06) : 0;
           if (bodyAlpha > 0.01){
-            const r = Math.max(e.w, e.h) * 0.95;
-            const bodyScale = 1.15;
-            const wobble = Math.sin((e._t || 0) * 0.7) * 0.08;
+            const bodySprite = e._hoverVoidBodySprite;
+            if (bodySprite && bodySprite._ok) {
+              ctx.save();
+              ctx.globalAlpha *= Math.max(0, Math.min(1, bodyAlpha));
+              ctx.drawImage(bodySprite, sx, sy, e.w, e.h);
+              ctx.restore();
+            } else {
+              const palette = this._hoverVoidPalette(e.colorVariant || 0);
+              const r = Math.max(e.w, e.h) * 0.95;
+              const bodyScale = 1.15;
+              const wobble = Math.sin((e._t || 0) * 0.7) * 0.08;
 
-            const deepR = Math.floor(palette.center[0] * 0.22);
-            const deepG = Math.floor(palette.center[1] * 0.22);
-            const deepB = Math.floor(palette.center[2] * 0.22);
-            const shadeR = Math.floor(palette.mid[0] * 0.34);
-            const shadeG = Math.floor(palette.mid[1] * 0.34);
-            const shadeB = Math.floor(palette.mid[2] * 0.34);
+              const deepR = Math.floor(palette.center[0] * 0.22);
+              const deepG = Math.floor(palette.center[1] * 0.22);
+              const deepB = Math.floor(palette.center[2] * 0.22);
+              const shadeR = Math.floor(palette.mid[0] * 0.34);
+              const shadeG = Math.floor(palette.mid[1] * 0.34);
+              const shadeB = Math.floor(palette.mid[2] * 0.34);
 
-            const edgeR = Math.floor(palette.edge[0] * 0.5);
-            const edgeG = Math.floor(palette.edge[1] * 0.5);
-            const edgeB = Math.floor(palette.edge[2] * 0.5);
+              const edgeR = Math.floor(palette.edge[0] * 0.5);
+              const edgeG = Math.floor(palette.edge[1] * 0.5);
+              const edgeB = Math.floor(palette.edge[2] * 0.5);
 
-            const outerGlow = ctx.createRadialGradient(cx, cy, r * 0.9, cx, cy, r * 1.25);
-            outerGlow.addColorStop(0.0, "rgba(" + edgeR + "," + edgeG + "," + edgeB + "," + (bodyAlpha * 0.13).toFixed(3) + ")");
-            outerGlow.addColorStop(1.0, "rgba(" + edgeR + "," + edgeG + "," + edgeB + ",0)");
-            ctx.fillStyle = outerGlow;
-            ctx.beginPath();
-            ctx.ellipse(cx, cy, e.w * 0.97 * bodyScale, e.h * 0.87 * bodyScale, wobble, 0, Math.PI*2);
-            ctx.fill();
+              const outerGlow = ctx.createRadialGradient(cx, cy, r * 0.9, cx, cy, r * 1.25);
+              outerGlow.addColorStop(0.0, "rgba(" + edgeR + "," + edgeG + "," + edgeB + "," + (bodyAlpha * 0.13).toFixed(3) + ")");
+              outerGlow.addColorStop(1.0, "rgba(" + edgeR + "," + edgeG + "," + edgeB + ",0)");
+              ctx.fillStyle = outerGlow;
+              ctx.beginPath();
+              ctx.ellipse(cx, cy, e.w * 0.97 * bodyScale, e.h * 0.87 * bodyScale, wobble, 0, Math.PI*2);
+              ctx.fill();
 
-            const sphere = ctx.createRadialGradient(cx - r * 0.23, cy - r * 0.28, r * 0.11, cx, cy, r * 0.97);
-            sphere.addColorStop(0.0, "rgba(" + palette.edge[0] + "," + palette.edge[1] + "," + palette.edge[2] + "," + (Math.min(1, bodyAlpha * 0.98)).toFixed(3) + ")");
-            sphere.addColorStop(0.30, "rgba(" + palette.mid[0] + "," + palette.mid[1] + "," + palette.mid[2] + "," + (Math.min(1, bodyAlpha * 0.99)).toFixed(3) + ")");
-            sphere.addColorStop(0.64, "rgba(" + shadeR + "," + shadeG + "," + shadeB + "," + (Math.min(1, bodyAlpha * 1.02)).toFixed(3) + ")");
-            sphere.addColorStop(1.0, "rgba(" + deepR + "," + deepG + "," + deepB + "," + (Math.min(1, bodyAlpha)).toFixed(3) + ")");
-            ctx.fillStyle = sphere;
-            ctx.beginPath();
-            ctx.ellipse(cx, cy, e.w * 0.89 * bodyScale, e.h * 0.79 * bodyScale, wobble, 0, Math.PI*2);
-            ctx.fill();
+              const sphere = ctx.createRadialGradient(cx - r * 0.23, cy - r * 0.28, r * 0.11, cx, cy, r * 0.97);
+              sphere.addColorStop(0.0, "rgba(" + palette.edge[0] + "," + palette.edge[1] + "," + palette.edge[2] + "," + (Math.min(1, bodyAlpha * 0.98)).toFixed(3) + ")");
+              sphere.addColorStop(0.30, "rgba(" + palette.mid[0] + "," + palette.mid[1] + "," + palette.mid[2] + "," + (Math.min(1, bodyAlpha * 0.99)).toFixed(3) + ")");
+              sphere.addColorStop(0.64, "rgba(" + shadeR + "," + shadeG + "," + shadeB + "," + (Math.min(1, bodyAlpha * 1.02)).toFixed(3) + ")");
+              sphere.addColorStop(1.0, "rgba(" + deepR + "," + deepG + "," + deepB + "," + (Math.min(1, bodyAlpha)).toFixed(3) + ")");
+              ctx.fillStyle = sphere;
+              ctx.beginPath();
+              ctx.ellipse(cx, cy, e.w * 0.89 * bodyScale, e.h * 0.79 * bodyScale, wobble, 0, Math.PI*2);
+              ctx.fill();
 
-            const core = ctx.createRadialGradient(cx - r * 0.1, cy - r * 0.12, r * 0.04, cx, cy, r * 0.66);
-            core.addColorStop(0.0, "rgba(" + palette.center[0] + "," + palette.center[1] + "," + palette.center[2] + "," + (Math.min(1, bodyAlpha * 0.9)).toFixed(3) + ")");
-            core.addColorStop(0.55, "rgba(" + shadeR + "," + shadeG + "," + shadeB + "," + (Math.min(1, bodyAlpha)).toFixed(3) + ")");
-            core.addColorStop(1.0, "rgba(" + deepR + "," + deepG + "," + deepB + ",0)");
-            ctx.fillStyle = core;
-            ctx.beginPath();
-            ctx.ellipse(cx, cy, e.w * 0.87 * bodyScale, e.h * 0.77 * bodyScale, wobble, 0, Math.PI*2);
-            ctx.fill();
+              const core = ctx.createRadialGradient(cx - r * 0.1, cy - r * 0.12, r * 0.04, cx, cy, r * 0.66);
+              core.addColorStop(0.0, "rgba(" + palette.center[0] + "," + palette.center[1] + "," + palette.center[2] + "," + (Math.min(1, bodyAlpha * 0.9)).toFixed(3) + ")");
+              core.addColorStop(0.55, "rgba(" + shadeR + "," + shadeG + "," + shadeB + "," + (Math.min(1, bodyAlpha)).toFixed(3) + ")");
+              core.addColorStop(1.0, "rgba(" + deepR + "," + deepG + "," + deepB + ",0)");
+              ctx.fillStyle = core;
+              ctx.beginPath();
+              ctx.ellipse(cx, cy, e.w * 0.87 * bodyScale, e.h * 0.77 * bodyScale, wobble, 0, Math.PI*2);
+              ctx.fill();
 
-            const highlight = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.38, r * 0.01, cx - r * 0.35, cy - r * 0.38, r * 0.46);
-            highlight.addColorStop(0.0, "rgba(255,255,255," + (bodyAlpha * 0.46).toFixed(3) + ")");
-            highlight.addColorStop(0.22, "rgba(" + palette.edge[0] + "," + palette.edge[1] + "," + palette.edge[2] + "," + (bodyAlpha * 0.34).toFixed(3) + ")");
-            highlight.addColorStop(1.0, "rgba(" + palette.edge[0] + "," + palette.edge[1] + "," + palette.edge[2] + ",0)");
-            ctx.fillStyle = highlight;
-            ctx.beginPath();
-            ctx.ellipse(cx - r * 0.1, cy - r * 0.1, e.w * 0.5 * bodyScale, e.h * 0.42 * bodyScale, wobble, 0, Math.PI*2);
-            ctx.fill();
+              const highlight = ctx.createRadialGradient(cx - r * 0.35, cy - r * 0.38, r * 0.01, cx - r * 0.35, cy - r * 0.38, r * 0.46);
+              highlight.addColorStop(0.0, "rgba(255,255,255," + (bodyAlpha * 0.46).toFixed(3) + ")");
+              highlight.addColorStop(0.22, "rgba(" + palette.edge[0] + "," + palette.edge[1] + "," + palette.edge[2] + "," + (bodyAlpha * 0.34).toFixed(3) + ")");
+              highlight.addColorStop(1.0, "rgba(" + palette.edge[0] + "," + palette.edge[1] + "," + palette.edge[2] + ",0)");
+              ctx.fillStyle = highlight;
+              ctx.beginPath();
+              ctx.ellipse(cx - r * 0.1, cy - r * 0.1, e.w * 0.5 * bodyScale, e.h * 0.42 * bodyScale, wobble, 0, Math.PI*2);
+              ctx.fill();
 
-            const rimFade = ctx.createRadialGradient(cx, cy, r * 0.78, cx, cy, r * 1.02);
-            rimFade.addColorStop(0.0, "rgba(" + deepR + "," + deepG + "," + deepB + ",0)");
-            rimFade.addColorStop(1.0, "rgba(" + deepR + "," + deepG + "," + deepB + "," + (bodyAlpha * 0.3).toFixed(3) + ")");
-            ctx.fillStyle = rimFade;
-            ctx.beginPath();
-            ctx.ellipse(cx, cy, e.w * 0.9 * bodyScale, e.h * 0.8 * bodyScale, wobble, 0, Math.PI*2);
-            ctx.fill();
+              const rimFade = ctx.createRadialGradient(cx, cy, r * 0.78, cx, cy, r * 1.02);
+              rimFade.addColorStop(0.0, "rgba(" + deepR + "," + deepG + "," + deepB + ",0)");
+              rimFade.addColorStop(1.0, "rgba(" + deepR + "," + deepG + "," + deepB + "," + (bodyAlpha * 0.3).toFixed(3) + ")");
+              ctx.fillStyle = rimFade;
+              ctx.beginPath();
+              ctx.ellipse(cx, cy, e.w * 0.9 * bodyScale, e.h * 0.8 * bodyScale, wobble, 0, Math.PI*2);
+              ctx.fill();
+            }
           }
 
           if (!e.awake) this._drawHoverVoidEyes(ctx, e, cx, cy, 1);
