@@ -330,6 +330,7 @@ const ENTITY_SAFE_PARAM_SCHEMA = {
     { key: "reactsToFlares", label: "Reacts to flares", type: "boolean" },
     { key: "drawW", label: "Body draw width", type: "number", min: 1 },
     { key: "drawH", label: "Body draw height", type: "number", min: 1 },
+    { key: "projectileSpritePath", label: "Projectile sprite path", type: "string" },
   ],
   hover_void_01: [
     { key: "aggroTiles", label: "Aggro range (tiles)", type: "number", min: 0 },
