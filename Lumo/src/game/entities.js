@@ -1272,8 +1272,19 @@ if (this._catById){
     }
 
     spawnDarkSpellHazard(centerX, centerY, source, projectileSprite=null, projectileSpritePath="", projectileW=null, projectileH=null){
-      const w = Number.isFinite(Number(projectileW)) ? Math.max(1, Number(projectileW)) : 18;
-      const h = Number.isFinite(Number(projectileH)) ? Math.max(1, Number(projectileH)) : 18;
+      const hasProjectileSize = Number.isFinite(Number(projectileW)) && Number.isFinite(Number(projectileH));
+      const ts = Lumo.TILE || 24;
+      const tileScale = ts / 24;
+      let w = 18;
+      let h = 18;
+      if (hasProjectileSize){
+        const baseW = Math.max(1, Number(projectileW)) * tileScale;
+        const baseH = Math.max(1, Number(projectileH)) * tileScale;
+        // Match darkSpellProjectile draw size: rendered as a square using max(w, h) * 1.8.
+        const renderedSize = Math.max(baseW, baseH) * 1.8;
+        w = renderedSize;
+        h = renderedSize;
+      }
       const normalizedProjectileSpritePath = (typeof projectileSpritePath === "string")
         ? projectileSpritePath
         : "";
