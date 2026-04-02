@@ -2974,26 +2974,36 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           if ((!e._projectileSprite || !e._projectileSprite._ok) && e._projectileSpritePath){
             e._projectileSprite = this._tryLoadImage(e._projectileSpritePath);
           }
-          const customImg = (e._projectileSprite && e._projectileSprite._ok) ? e._projectileSprite : null;
-          const t = e.t || 0;
-          let img = customImg || (spr && spr.impact01);
-          if (!customImg){
-            if (t < 0.15) img = spr && spr.impact03;
-            else if (t < 0.30) img = spr && spr.impact02;
-          }
+          const customHazardSprite = (e._projectileSprite && e._projectileSprite._ok)
+            ? e._projectileSprite
+            : null;
 
           ctx.save();
           ctx.globalAlpha = Math.max(0, Math.min(1, (typeof e.alpha === "number") ? e.alpha : 1));
-          if (img && img._ok){
+
+          if (customHazardSprite){
             const size = Math.max(e.w, e.h) * 2.1;
             const cx = sx + e.w * 0.5;
             const cy = sy + e.h * 0.5;
-            ctx.drawImage(img, cx - size*0.5, cy - size*0.5, size, size);
+            ctx.drawImage(customHazardSprite, cx - size*0.5, cy - size*0.5, size, size);
+            ctx.restore();
           } else {
-            ctx.fillStyle = "rgba(145,110,210,0.85)";
-            ctx.fillRect(sx, sy, e.w, e.h);
+            const t = e.t || 0;
+            let img = spr && spr.impact01;
+            if (t < 0.15) img = spr && spr.impact03;
+            else if (t < 0.30) img = spr && spr.impact02;
+
+            if (img && img._ok){
+              const size = Math.max(e.w, e.h) * 2.1;
+              const cx = sx + e.w * 0.5;
+              const cy = sy + e.h * 0.5;
+              ctx.drawImage(img, cx - size*0.5, cy - size*0.5, size, size);
+            } else {
+              ctx.fillStyle = "rgba(145,110,210,0.85)";
+              ctx.fillRect(sx, sy, e.w, e.h);
+            }
+            ctx.restore();
           }
-          ctx.restore();
         }
 
 
