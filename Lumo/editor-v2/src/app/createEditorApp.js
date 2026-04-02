@@ -7444,6 +7444,7 @@ if (event.shiftKey) {
         group: "Custom",
       },
       spriteFile: selectedAssetWizardSpriteFile,
+      projectileSpriteFile: selectedAssetWizardProjectileSpriteFile,
     });
 
     if (!bridgeResult.ok) {
