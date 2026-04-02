@@ -103,7 +103,6 @@ export const ENTITY_PRESETS = [
       aggroTiles: 7,
       followTiles: 7,
       maxHp: 3,
-      colorVariant: 0,
       loseSightTiles: 11,
       attackCooldownMin: 1,
       attackCooldownMax: 3,

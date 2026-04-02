@@ -1064,14 +1064,12 @@ if (this._catById){
         const n = +v;
         return Number.isFinite(n) ? n : fallback;
       };
-      const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
       const customSpritePath = (typeof params?.customSpritePath === "string" && params.customSpritePath.trim())
         ? params.customSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
         : "";
       const aggroTiles = Math.max(0, nOr(params && params.aggroTiles, 7));
       const followTiles = Math.max(0, nOr(params && params.followTiles, 7));
       const maxHp = Math.max(1, Math.floor(nOr(params && params.maxHp, 3)));
-      const colorVariant = clamp(Math.floor(nOr(params && params.colorVariant, 0)), 0, 3);
       const loseSightTiles = Math.max(0, nOr(params && params.loseSightTiles, 11));
       let attackCooldownMin = Math.max(0.2, nOr(params && params.attackCooldownMin, 1));
       let attackCooldownMax = Math.max(attackCooldownMin, nOr(params && params.attackCooldownMax, 3));
@@ -1095,7 +1093,6 @@ if (this._catById){
         aggroTiles,
         followTiles,
         loseSightTiles,
-        colorVariant,
         attackCooldownMin,
         attackCooldownMax,
         attackDamage,
@@ -1132,9 +1129,11 @@ if (this._catById){
 
     makeHoverVoid(tx, ty, def){
       const ts = Lumo.TILE || 24;
-      const w = (def && def.w) ? (def.w|0) : 16;
-      const h = (def && def.h) ? (def.h|0) : 16;
       const params = (def && def.params && typeof def.params === "object") ? def.params : null;
+      const fallbackW = (def && Number.isFinite(Number(def.w))) ? Math.max(1, Number(def.w)) : 16;
+      const fallbackH = (def && Number.isFinite(Number(def.h))) ? Math.max(1, Number(def.h)) : 16;
+      const w = (params && Number.isFinite(Number(params.drawW))) ? Math.max(1, Number(params.drawW)) : fallbackW;
+      const h = (params && Number.isFinite(Number(params.drawH))) ? Math.max(1, Number(params.drawH)) : fallbackH;
       return this.makeHoverVoidPx(tx*ts, ty*ts, w, h, params);
     }
 
@@ -2456,15 +2455,14 @@ if (e.type === "lantern"){
       return null;
     }
 
-    _hoverVoidPalette(variant){
-      const v = ((variant|0) % 4 + 4) % 4;
+    _hoverVoidPalette(){
       const arr = [
         { center:[72,46,112], mid:[104,70,156], edge:[126,92,182] },
         { center:[106,40,58], mid:[146,64,92], edge:[176,88,120] },
         { center:[52,82,54], mid:[84,116,72], edge:[112,146,88] },
         { center:[122,80,34], mid:[164,108,52], edge:[194,132,66] },
       ];
-      return arr[v];
+      return arr[0];
     }
 
     isPointLitAnySource(x, y, player){
@@ -3000,7 +2998,7 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
               ctx.drawImage(bodySprite, sx, sy, e.w, e.h);
               ctx.restore();
             } else {
-              const palette = this._hoverVoidPalette(e.colorVariant || 0);
+              const palette = this._hoverVoidPalette();
               const r = Math.max(e.w, e.h) * 0.95;
               const bodyScale = 1.15;
               const wobble = Math.sin((e._t || 0) * 0.7) * 0.08;

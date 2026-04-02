@@ -301,7 +301,6 @@ const ENTITY_SAFE_PARAM_SCHEMA = {
     { key: "aggroTiles", label: "Aggro range (tiles)", type: "number", min: 0 },
     { key: "followTiles", label: "Follow range (tiles)", type: "number", min: 0 },
     { key: "maxHp", label: "Max HP", type: "number", min: 1 },
-    { key: "colorVariant", label: "Color variant", type: "number", min: 0 },
     { key: "loseSightTiles", label: "Lose sight range", type: "number", min: 0 },
     { key: "attackCooldownMin", label: "Attack cooldown min", type: "number", min: 0 },
     { key: "attackCooldownMax", label: "Attack cooldown max", type: "number", min: 0 },
