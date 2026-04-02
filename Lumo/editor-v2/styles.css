@@ -2801,7 +2801,7 @@ kbd {
 
 .assetWizardSection {
   display: grid;
-  gap: 8px;
+  gap: 5px;
 }
 
 .assetWizardSection h4 {
@@ -2820,15 +2820,15 @@ kbd {
 .assetWizardFieldGroup {
   border: 1px solid #1f2d48;
   border-radius: 10px;
-  padding: 10px;
+  padding: 8px;
   background: rgba(9, 15, 27, 0.55);
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .assetWizardFieldGroupHeader {
   display: grid;
-  gap: 2px;
+  gap: 1px;
 }
 
 .assetWizardFieldGroupHeader h5 {
@@ -2884,17 +2884,21 @@ kbd {
 .assetWizardFieldGrid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 8px 10px;
+  gap: 5px 8px;
 }
 
 .assetWizardField {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   grid-column: span 6;
 }
 
 .assetWizardFieldSpan3 {
   grid-column: span 3;
+}
+
+.assetWizardFieldSpan2 {
+  grid-column: span 2;
 }
 
 .assetWizardFieldSpan4 {
@@ -2912,7 +2916,7 @@ kbd {
 .assetWizardFieldLabelRow {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .assetWizardFieldLabel {
@@ -2937,7 +2941,7 @@ kbd {
 
 .assetWizardFieldHelp {
   color: #7f96be;
-  font-size: 11px;
+  font-size: 10px;
   line-height: 1.35;
 }
 
@@ -2947,9 +2951,50 @@ kbd {
   background: #0a1220;
   border-radius: 9px;
   color: #ecf2ff;
-  min-height: 32px;
-  padding: 6px 9px;
+  min-height: 30px;
+  padding: 5px 8px;
   font-size: 12px;
+}
+
+.assetWizardFieldGroup.isDenseGrid .assetWizardFieldGrid {
+  grid-template-columns: repeat(6, minmax(96px, 1fr));
+  gap: 5px 7px;
+}
+
+.assetWizardFieldGroup.isDenseGrid .assetWizardField {
+  grid-column: span 2;
+}
+
+.assetWizardFieldGroup.isDenseGrid .assetWizardFieldSpan2 {
+  grid-column: span 1;
+}
+
+.assetWizardFieldGroup.isDenseGrid .assetWizardFieldSpan3 {
+  grid-column: span 2;
+}
+
+.assetWizardFieldGroup.isDenseGrid .assetWizardFieldSpan4 {
+  grid-column: span 2;
+}
+
+.assetWizardFieldGroup.isDenseGrid .assetWizardFieldSpan6 {
+  grid-column: span 3;
+}
+
+.assetWizardFieldGroup.isDenseGrid .assetWizardFieldSpan8 {
+  grid-column: span 4;
+}
+
+.assetWizardFieldGroup.isDenseGrid .assetWizardFieldSpan12 {
+  grid-column: 1 / -1;
+}
+
+.assetWizardFieldGroup.isDenseGrid .assetWizardField input {
+  min-width: 88px;
+}
+
+.assetWizardFieldGroup.isDenseGrid .assetWizardField select {
+  min-width: 120px;
 }
 
 .assetWizardField input.isInvalid,
