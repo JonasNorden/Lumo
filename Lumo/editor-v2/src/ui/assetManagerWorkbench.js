@@ -291,7 +291,7 @@ function renderStepBody(wizard, validation) {
               ${renderInput("Catalog id", "catalogId", draft.catalogId, "stone-floor", "Unique technical registry key.", { errorMessage: fieldErrors.catalogId, statusMessage: catalogIdStatus, statusClass: catalogIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted", fieldClass: "assetWizardFieldSpan4" })}
               ${renderInput("Display name", "displayName", draft.displayName, "Stone Floor", "Human-friendly picker label.", { errorMessage: fieldErrors.displayName, fieldClass: "assetWizardFieldSpan4" })}
               ${renderSelectInput("Tile behavior", "tileBehavior", draft.tileBehavior, tileBehaviorOptions, "", { errorMessage: fieldErrors.tileBehavior, infoTip: "Behavior profile is selected now; runtime tile identity is auto-generated on save.", fieldClass: "assetWizardFieldSpan4" })}
-              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/tiles/", infoTip: "Optional for now in architecture, but required to proceed in this wizard.", fieldClass: "assetWizardFieldSpan12" })}
+              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/tiles/", infoTip: "Optional for now in architecture, but required to proceed in this wizard.", fieldClass: "assetWizardFieldSpan6" })}
             `,
           )}
         </div>
@@ -315,7 +315,7 @@ function renderStepBody(wizard, validation) {
             `
               ${renderInput("Display name", "displayName", draft.displayName, "Stone Background", "Human-friendly picker label.", { errorMessage: fieldErrors.displayName, fieldClass: "assetWizardFieldSpan6" })}
               ${renderInput("Material id", "materialId", draft.materialId, "bg_stone_background", "Unique technical id used for persistence and reload.", { errorMessage: fieldErrors.materialId, statusMessage: materialIdStatus, statusClass: materialIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted", infoTip: "Auto-suggested from display name or file name. You can override manually.", fieldClass: "assetWizardFieldSpan6" })}
-              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/bg/", infoTip: "Choose the texture image for this background material.", fieldClass: "assetWizardFieldSpan12" })}
+              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/bg/", infoTip: "Choose the texture image for this background material.", fieldClass: "assetWizardFieldSpan6" })}
             `,
           )}
         </div>
@@ -339,7 +339,7 @@ function renderStepBody(wizard, validation) {
             `
               ${renderInput("Display name", "displayName", draft.displayName, "Wall Banner", "Human-friendly picker label.", { errorMessage: fieldErrors.displayName, fieldClass: "assetWizardFieldSpan6" })}
               ${renderInput("Decor id", "presetId", draft.presetId, "wall_banner_custom", "Stable preset id used for persistence and placement.", { errorMessage: fieldErrors.presetId, statusMessage: presetIdStatus, statusClass: presetIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted", infoTip: "Auto-suggested from display name or file name. You can override manually.", fieldClass: "assetWizardFieldSpan6" })}
-              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/decor/", infoTip: "Choose the sprite image for this decor preset.", fieldClass: "assetWizardFieldSpan12" })}
+              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/decor/", infoTip: "Choose the sprite image for this decor preset.", fieldClass: "assetWizardFieldSpan6" })}
             `,
           )}
         </div>
@@ -368,10 +368,10 @@ function renderStepBody(wizard, validation) {
             "Look & identity",
             "Create a reusable preset id, display name, and sprite.",
             `
-              ${renderInput("Display name", "displayName", draft.displayName, "Blue Lantern", "Shown in the entity picker.", { errorMessage: fieldErrors.displayName, fieldClass: "assetWizardFieldSpan4" })}
-              ${renderInput("Preset id", "presetId", draft.presetId, "blue_lantern", "Stable id for this preset.", { errorMessage: fieldErrors.presetId, statusMessage: presetIdStatus, statusClass: presetIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted", fieldClass: "assetWizardFieldSpan4" })}
-              ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", "BL", "", { errorMessage: fieldErrors.drawAnchor, fieldClass: "assetWizardFieldSpan4" })}
-              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/entities/", fieldClass: "assetWizardFieldSpan12" })}
+              ${renderInput("Display name", "displayName", draft.displayName, "Blue Lantern", "Shown in the entity picker.", { errorMessage: fieldErrors.displayName, fieldClass: "assetWizardFieldSpan3" })}
+              ${renderInput("Preset id", "presetId", draft.presetId, "blue_lantern", "Stable id for this preset.", { errorMessage: fieldErrors.presetId, statusMessage: presetIdStatus, statusClass: presetIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted", fieldClass: "assetWizardFieldSpan3" })}
+              ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/entities/", fieldClass: "assetWizardFieldSpan4" })}
+              ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", "BL", "", { errorMessage: fieldErrors.drawAnchor, fieldClass: "assetWizardFieldSpan2" })}
             `,
           )}
         </div>
@@ -403,6 +403,7 @@ function renderStepBody(wizard, validation) {
               </label>
               ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor, "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left).", fieldClass: "assetWizardFieldSpan6" })}
             `,
+            { groupClass: "isDenseGrid" },
           )}
           ${renderFieldGroup(
             "Sizing & footprint",
@@ -412,6 +413,7 @@ function renderStepBody(wizard, validation) {
               ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan3" })}
               ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { errorMessage: fieldErrors.footprint, fieldClass: "assetWizardFieldSpan6" })}
             `,
+            { groupClass: "isDenseGrid" },
           )}
         </div>
       `;
@@ -429,6 +431,7 @@ function renderStepBody(wizard, validation) {
               ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan4" })}
               ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan4" })}
             `,
+            { groupClass: "isDenseGrid" },
           )}
           ${renderFieldGroup(
             "Visual fallback",
@@ -437,6 +440,7 @@ function renderStepBody(wizard, validation) {
               ${renderInput("Fallback color", "fallbackColor", draft.fallbackColor, "#3d4b63", "", { errorMessage: fieldErrors.fallbackColor, fieldClass: "assetWizardFieldSpan4" })}
               ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { fieldClass: "assetWizardFieldSpan8" })}
             `,
+            { groupClass: "isDenseGrid" },
           )}
         </div>
       `;
@@ -454,6 +458,7 @@ function renderStepBody(wizard, validation) {
               ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan4" })}
               ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan4" })}
             `,
+            { groupClass: "isDenseGrid" },
           )}
           ${renderFieldGroup(
             "Footprint",
@@ -461,6 +466,7 @@ function renderStepBody(wizard, validation) {
             `
               ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { errorMessage: fieldErrors.footprint, fieldClass: "assetWizardFieldSpan8" })}
             `,
+            { groupClass: "isDenseGrid" },
           )}
         </div>
       `;
@@ -488,12 +494,12 @@ function renderStepBody(wizard, validation) {
             ], "", {
               errorMessage: fieldErrors[fieldKey],
               placeholder: "Select…",
-              fieldClass: "assetWizardFieldSpan4",
+              fieldClass: "assetWizardFieldSpan2",
             });
           }
           return renderInput(field.label, fieldKey, value, placeholder, "", {
             errorMessage: fieldErrors[fieldKey],
-            fieldClass: "assetWizardFieldSpan4",
+            fieldClass: "assetWizardFieldSpan2",
           });
         }).join("")
         : '<p class="assetManagerMuted">This family has no editable safe defaults in Phase 1.</p>';
@@ -505,17 +511,18 @@ function renderStepBody(wizard, validation) {
             "Default params",
             "",
             safeFieldMarkup,
+            { groupClass: "isDenseGrid" },
           )}
           ${renderFieldGroup(
             "Draw settings",
             "",
             isDarkCreatureFamily
               ? `
-                ${renderSelectInput("Body size", "darkCreatureBodySize", draft.darkCreatureBodySize || "1x1", getDarkCreatureBodySizeOptions(), "", { errorMessage: fieldErrors.darkCreatureBodySize, fieldClass: "assetWizardFieldSpan12" })}
+                ${renderSelectInput("Body size", "darkCreatureBodySize", draft.darkCreatureBodySize || "1x1", getDarkCreatureBodySizeOptions(), "", { errorMessage: fieldErrors.darkCreatureBodySize, fieldClass: "assetWizardFieldSpan3" })}
                 ${renderFilePickerField("Projectile sprite", "safeDefaults.projectileSpritePath", wizard, {
                   errorMessage: fieldErrors["safeDefaults.projectileSpritePath"],
                   hint: "Optional. Choose a projectile sprite image for Dark Creature spells.",
-                  fieldClass: "assetWizardFieldSpan12",
+                  fieldClass: "assetWizardFieldSpan3",
                   fileNameField: "projectileSpriteFileName",
                 })}
               `
@@ -523,6 +530,7 @@ function renderStepBody(wizard, validation) {
                 ${renderInput(isHoverVoidFamily ? "Width" : "Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan6" })}
                 ${renderInput(isHoverVoidFamily ? "Height" : "Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan6" })}
               `,
+            { groupClass: "isDenseGrid" },
           )}
         </div>
       `;
