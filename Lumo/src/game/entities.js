@@ -676,7 +676,7 @@ if (id === "dark_creature_01"){
               mergedParams.aggroRadius = +e.aggroRadius;
             }
           }
-          const dc = this.makeDarkCreature(tx, ty, { w:18, h:18, params: mergedParams });
+          const dc = this.makeDarkCreature(tx, ty, { params: mergedParams });
           applyAnchor(dc, dc.w, dc.h);
           this.items.push(dc);
           return;
@@ -1013,6 +1013,10 @@ if (this._catById){
         ? rawAggroTiles
         : ((rawAggroRadiusPx != null) ? (rawAggroRadiusPx / ts) : 6);
 
+      const customSpritePath = (typeof params?.customSpritePath === "string" && params.customSpritePath.trim())
+        ? params.customSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
+        : "";
+
       return {
         type:"darkCreature",
         active:true,
@@ -1050,6 +1054,8 @@ if (this._catById){
         reactsToFlares: boolOr(params && params.reactsToFlares, true),
         flareConsumeBurnMul: Math.max(1, nOr(params && params.flareConsumeBurnMul, 7.5)),
         _animT: Math.random() * 0.8,
+        _darkCreatureBodySpritePath: customSpritePath || "",
+        _darkCreatureBodySprite: customSpritePath ? this._tryLoadImage(customSpritePath) : null,
         dying:false,
         dissolveT:0,
         dissolveDur:1.35,
@@ -1282,9 +1288,11 @@ if (this._catById){
     // Dark creature från tile-coords (level-data)
     makeDarkCreature(tx, ty, def){
       const ts = Lumo.TILE || 24;
-      const w = (def && def.w) ? (def.w|0) : 18;
-      const h = (def && def.h) ? (def.h|0) : 18;
       const params = (def && def.params && typeof def.params === "object") ? def.params : null;
+      const authoredW = Number.isFinite(Number(params && params.drawW)) ? Math.max(1, Number(params.drawW)) : null;
+      const authoredH = Number.isFinite(Number(params && params.drawH)) ? Math.max(1, Number(params.drawH)) : null;
+      const w = (def && Number.isFinite(Number(def.w))) ? Math.max(1, Number(def.w)) : (authoredW || 18);
+      const h = (def && Number.isFinite(Number(def.h))) ? Math.max(1, Number(def.h)) : (authoredH || 18);
       return this.makeDarkCreaturePx(tx*ts, ty*ts, w, h, params);
     }
 
@@ -3072,20 +3080,21 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
         }
 
         if (e.type === "darkCreature"){
+          const customBodySprite = (e._darkCreatureBodySprite && e._darkCreatureBodySprite._ok)
+            ? e._darkCreatureBodySprite
+            : null;
           const frames = (this.sprites && Array.isArray(this.sprites.darkCreatureIdle))
             ? this.sprites.darkCreatureIdle
             : [];
 
           const frameDur = 0.4;
           const frameIdx = Math.floor((e._animT || 0) / frameDur) % 2;
-          const img = frames[frameIdx] || frames[0] || null;
+          const fallbackIdleFrame = frames[frameIdx] || frames[0] || null;
+          const img = customBodySprite || fallbackIdleFrame;
 
           if (img && img._ok){
-            const iw = (img.naturalWidth || img.width || 1);
-            const ih = (img.naturalHeight || img.height || 1);
-            const scale = Math.min(48 / iw, 48 / ih);
-            const drawW = iw * scale;
-            const drawH = ih * scale;
+            const drawW = Math.max(1, Number(e.w) || 18);
+            const drawH = Math.max(1, Number(e.h) || 18);
 
             // Keep collision footprint unchanged; render sprite centered and bottom-aligned.
             const drawX = sx + (e.w - drawW) * 0.5;

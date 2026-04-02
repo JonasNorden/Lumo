@@ -8,6 +8,7 @@ import {
   ASSET_WIZARD_TYPE_OPTIONS,
   createInitialAssetManagerWizardState,
   getAssetWizardDraftWithDefaults,
+  getDarkCreatureBodySizeOptions,
   getEntityBehaviorFamilyOptions,
   getEntitySafeParamSchema,
   getExistingAssetOptions,
@@ -194,6 +195,7 @@ function getReviewLabel(fieldKey) {
     drawAnchor: "Draw anchor",
     drawWidth: "Draw width (px)",
     drawHeight: "Draw height (px)",
+    darkCreatureBodySize: "Body size",
     collisionType: "Collision profile",
     fallbackColor: "Fallback color",
     footprint: "Footprint (JSON)",
@@ -466,8 +468,12 @@ function renderStepBody(wizard, validation) {
       const safeSchema = getEntitySafeParamSchema(draft.behaviorFamilyId);
       const safeDefaults = draft.safeDefaults || {};
       const isHoverVoidFamily = draft.behaviorFamilyId === "hover_void_01";
-      const safeFieldMarkup = safeSchema.length
-        ? safeSchema.map((field) => {
+      const isDarkCreatureFamily = draft.behaviorFamilyId === "dark_creature_01";
+      const editableSafeSchema = isDarkCreatureFamily
+        ? safeSchema.filter((field) => field.key !== "drawW" && field.key !== "drawH")
+        : safeSchema;
+      const safeFieldMarkup = editableSafeSchema.length
+        ? editableSafeSchema.map((field) => {
           const fieldKey = `safeDefaults.${field.key}`;
           const rawValue = safeDefaults[field.key];
           const value = field.type === "boolean" ? String(Boolean(rawValue)) : String(rawValue ?? "");
@@ -490,10 +496,14 @@ function renderStepBody(wizard, validation) {
           ${renderFieldGroup(
             "Draw settings",
             "",
-            `
-              ${renderInput(isHoverVoidFamily ? "Width" : "Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan6" })}
-              ${renderInput(isHoverVoidFamily ? "Height" : "Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan6" })}
-            `,
+            isDarkCreatureFamily
+              ? `
+                ${renderSelectInput("Body size", "darkCreatureBodySize", draft.darkCreatureBodySize || "1x1", getDarkCreatureBodySizeOptions(), "", { errorMessage: fieldErrors.darkCreatureBodySize, fieldClass: "assetWizardFieldSpan12" })}
+              `
+              : `
+                ${renderInput(isHoverVoidFamily ? "Width" : "Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan6" })}
+                ${renderInput(isHoverVoidFamily ? "Height" : "Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan6" })}
+              `,
           )}
         </div>
       `;
@@ -517,6 +527,7 @@ function renderStepBody(wizard, validation) {
       "drawAnchor",
       "drawWidth",
       "drawHeight",
+      "darkCreatureBodySize",
       "fallbackColor",
       "footprint",
       "collisionType",

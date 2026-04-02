@@ -254,6 +254,34 @@ function toEntityToken(value) {
     .replace(/^_+|_+$/g, "");
 }
 
+const DARK_CREATURE_BODY_SIZE_OPTIONS = [
+  { value: "1x1", label: "1x1" },
+  { value: "2x2", label: "2x2" },
+];
+
+const DARK_CREATURE_BODY_SIZE_TO_DRAW_PIXELS = {
+  "1x1": { drawW: 24, drawH: 24 },
+  "2x2": { drawW: 48, drawH: 48 },
+};
+
+function normalizeDarkCreatureBodySize(value) {
+  const normalized = normalizeString(value);
+  if (normalized === "2x2") return "2x2";
+  return "1x1";
+}
+
+function inferDarkCreatureBodySizeFromDrawSize(drawWidth, drawHeight) {
+  const width = Math.round(toPositiveNumberOrNull(drawWidth) || 24);
+  const height = Math.round(toPositiveNumberOrNull(drawHeight) || 24);
+  if (width === 48 && height === 48) return "2x2";
+  return "1x1";
+}
+
+function resolveDarkCreatureDrawSize(bodySize) {
+  const normalized = normalizeDarkCreatureBodySize(bodySize);
+  return DARK_CREATURE_BODY_SIZE_TO_DRAW_PIXELS[normalized] || DARK_CREATURE_BODY_SIZE_TO_DRAW_PIXELS["1x1"];
+}
+
 const ENTITY_FAMILY_OPTIONS = [
   { value: "lantern_01", label: "Lantern glow" },
   { value: "firefly_01", label: "Firefly light" },
@@ -301,6 +329,8 @@ const ENTITY_SAFE_PARAM_SCHEMA = {
     { key: "knockbackX", label: "Knockback X", type: "number" },
     { key: "knockbackY", label: "Knockback Y", type: "number" },
     { key: "reactsToFlares", label: "Reacts to flares", type: "boolean" },
+    { key: "drawW", label: "Body draw width", type: "number", min: 1 },
+    { key: "drawH", label: "Body draw height", type: "number", min: 1 },
   ],
   hover_void_01: [
     { key: "aggroTiles", label: "Aggro range (tiles)", type: "number", min: 0 },
@@ -359,6 +389,10 @@ export function getEntityBehaviorFamilyOptions() {
 export function getEntitySafeParamSchema(familyId) {
   const normalized = normalizeString(familyId);
   return (ENTITY_SAFE_PARAM_SCHEMA[normalized] || []).map((field) => ({ ...field }));
+}
+
+export function getDarkCreatureBodySizeOptions() {
+  return DARK_CREATURE_BODY_SIZE_OPTIONS.map((option) => ({ ...option }));
 }
 
 export function suggestEntityPresetId({ displayName = "", spriteFileName = "", currentPresetId = "" } = {}) {
@@ -451,14 +485,27 @@ export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
   }
   if (assetType === ASSET_WIZARD_TYPES.ENTITY) {
     const familyId = normalizeString(baseDraft.behaviorFamilyId) || "lantern_01";
+    const darkCreatureBodySize = familyId === "dark_creature_01"
+      ? normalizeDarkCreatureBodySize(baseDraft.darkCreatureBodySize || inferDarkCreatureBodySizeFromDrawSize(baseDraft.drawWidth, baseDraft.drawHeight))
+      : normalizeString(baseDraft.darkCreatureBodySize);
+    const darkCreatureDrawSize = familyId === "dark_creature_01"
+      ? resolveDarkCreatureDrawSize(darkCreatureBodySize)
+      : null;
+    const normalizedSafeDefaults = normalizeEntityParamsDraft(familyId, baseDraft.safeDefaults || {});
+    if (familyId === "dark_creature_01") {
+      normalizedSafeDefaults.drawW = darkCreatureDrawSize.drawW;
+      normalizedSafeDefaults.drawH = darkCreatureDrawSize.drawH;
+    }
+
     return {
       ...baseDraft,
       behaviorFamilyId: familyId,
       presetId: normalizeString(baseDraft.presetId),
       drawAnchor: normalizeString(baseDraft.drawAnchor) || "BL",
-      drawWidth: normalizeDrawSizeValue(baseDraft.drawWidth),
-      drawHeight: normalizeDrawSizeValue(baseDraft.drawHeight),
-      safeDefaults: normalizeEntityParamsDraft(familyId, baseDraft.safeDefaults || {}),
+      darkCreatureBodySize,
+      drawWidth: familyId === "dark_creature_01" ? String(darkCreatureDrawSize.drawW) : normalizeDrawSizeValue(baseDraft.drawWidth),
+      drawHeight: familyId === "dark_creature_01" ? String(darkCreatureDrawSize.drawH) : normalizeDrawSizeValue(baseDraft.drawHeight),
+      safeDefaults: normalizedSafeDefaults,
     };
   }
   return baseDraft;
@@ -584,6 +631,12 @@ export function getStepValidation(stepId, wizardState) {
       if (!isPositiveNumber(draft.drawWidth)) fieldErrors.drawWidth = "Draw width must be a positive number.";
       if (!isPositiveNumber(draft.drawHeight)) fieldErrors.drawHeight = "Draw height must be a positive number.";
       const familyId = normalizeString(draft.behaviorFamilyId);
+      if (familyId === "dark_creature_01") {
+        const rawBodySize = normalizeString(draft.darkCreatureBodySize);
+        if (rawBodySize && rawBodySize !== "1x1" && rawBodySize !== "2x2") {
+          fieldErrors.darkCreatureBodySize = "Choose either 1x1 or 2x2.";
+        }
+      }
       if (familyId === "hover_void_01") {
         if (!isPositiveInteger(draft.drawWidth)) fieldErrors.drawWidth = "Width must be a positive integer.";
         if (!isPositiveInteger(draft.drawHeight)) fieldErrors.drawHeight = "Height must be a positive integer.";
