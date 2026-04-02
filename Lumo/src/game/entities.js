@@ -1271,9 +1271,9 @@ if (this._catById){
       });
     }
 
-    spawnDarkSpellHazard(centerX, centerY, source, projectileSprite=null, projectileSpritePath=""){
-      const w = 18;
-      const h = 18;
+    spawnDarkSpellHazard(centerX, centerY, source, projectileSprite=null, projectileSpritePath="", projectileW=null, projectileH=null){
+      const w = Number.isFinite(Number(projectileW)) ? Math.max(1, Number(projectileW)) : 18;
+      const h = Number.isFinite(Number(projectileH)) ? Math.max(1, Number(projectileH)) : 18;
       const normalizedProjectileSpritePath = (typeof projectileSpritePath === "string")
         ? projectileSpritePath
         : "";
@@ -1648,7 +1648,9 @@ if (e.type === "lantern"){
               e.y + e.h*0.5,
               e,
               e._projectileSprite,
-              e._projectileSpritePath
+              e._projectileSpritePath,
+              e.w,
+              e.h
             );
             e.active = false;
             continue;
@@ -2982,10 +2984,7 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           ctx.globalAlpha = Math.max(0, Math.min(1, (typeof e.alpha === "number") ? e.alpha : 1));
 
           if (customHazardSprite){
-            const size = Math.max(e.w, e.h) * 2.1;
-            const cx = sx + e.w * 0.5;
-            const cy = sy + e.h * 0.5;
-            ctx.drawImage(customHazardSprite, cx - size*0.5, cy - size*0.5, size, size);
+            ctx.drawImage(customHazardSprite, sx, sy, e.w, e.h);
             ctx.restore();
           } else {
             const t = e.t || 0;
@@ -2994,10 +2993,7 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
             else if (t < 0.30) img = spr && spr.impact02;
 
             if (img && img._ok){
-              const size = Math.max(e.w, e.h) * 2.1;
-              const cx = sx + e.w * 0.5;
-              const cy = sy + e.h * 0.5;
-              ctx.drawImage(img, cx - size*0.5, cy - size*0.5, size, size);
+              ctx.drawImage(img, sx, sy, e.w, e.h);
             } else {
               ctx.fillStyle = "rgba(145,110,210,0.85)";
               ctx.fillRect(sx, sy, e.w, e.h);
