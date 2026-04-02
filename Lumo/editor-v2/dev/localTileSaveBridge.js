@@ -795,6 +795,7 @@ export function buildPersistedEntityPresetEntry({ entity = {}, presetId, spriteF
 async function saveEntity(payload) {
   const entity = payload?.entity || {};
   const sprite = payload?.sprite || {};
+  const projectileSprite = payload?.projectileSprite || null;
   const presetId = String(entity.presetId || "").trim();
   const familyId = String(entity.type || "").trim();
 
@@ -841,7 +842,28 @@ async function saveEntity(payload) {
   const spriteFilePath = path.join(ENTITY_ASSET_DIR, spriteFileName);
   await fs.writeFile(spriteFilePath, Buffer.from(dataUrlParts.base64Data, "base64"));
 
-  const entry = buildPersistedEntityPresetEntry({ entity, presetId, spriteFileName });
+  const entityWithProjectile = {
+    ...entity,
+    defaultParams: { ...(entity?.defaultParams && typeof entity.defaultParams === "object" ? entity.defaultParams : {}) },
+  };
+  let projectileSpriteFileName = "";
+  if (projectileSprite && typeof projectileSprite === "object") {
+    const projectileDataUrlParts = parseDataUrl(projectileSprite.dataUrl);
+    if (!projectileDataUrlParts || !projectileDataUrlParts.mimeType.startsWith("image/")) {
+      return {
+        ok: false,
+        statusCode: 400,
+        reason: "invalid-projectile-sprite-data",
+        message: "Projectile sprite payload must be an image base64 data URL.",
+      };
+    }
+    projectileSpriteFileName = await pickAvailableSpriteFileName(ENTITY_ASSET_DIR, `${presetId}-projectile`, projectileSprite.fileName);
+    const projectileSpriteFilePath = path.join(ENTITY_ASSET_DIR, projectileSpriteFileName);
+    await fs.writeFile(projectileSpriteFilePath, Buffer.from(projectileDataUrlParts.base64Data, "base64"));
+    entityWithProjectile.defaultParams.projectileSpritePath = `../data/assets/sprites/entities/${projectileSpriteFileName}`;
+  }
+
+  const entry = buildPersistedEntityPresetEntry({ entity: entityWithProjectile, presetId, spriteFileName });
 
   const arrayBounds = findArrayBoundsByMarker(source, "export const ENTITY_PRESETS");
   if (!arrayBounds) {
@@ -878,6 +900,7 @@ async function saveEntity(payload) {
       drawAnchor: entry.drawAnchor,
       hitRadius: entry.hitRadius,
       spriteFileName,
+      projectileSpriteFileName,
     },
   };
 }

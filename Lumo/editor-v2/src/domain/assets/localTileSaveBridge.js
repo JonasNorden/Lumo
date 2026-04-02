@@ -177,7 +177,7 @@ export async function saveDecorThroughLocalBridge({ draft, decorPayload, spriteF
   };
 }
 
-export async function saveEntityThroughLocalBridge({ draft, entityPayload, spriteFile }) {
+export async function saveEntityThroughLocalBridge({ draft, entityPayload, spriteFile, projectileSpriteFile = null }) {
   if (!(spriteFile instanceof File)) {
     return { ok: false, reason: "missing-sprite-file", message: "Select a sprite file before saving this entity preset." };
   }
@@ -197,6 +197,13 @@ export async function saveEntityThroughLocalBridge({ draft, entityPayload, sprit
           mimeType: spriteFile.type || "application/octet-stream",
           dataUrl: spriteDataUrl,
         },
+        projectileSprite: projectileSpriteFile instanceof File
+          ? {
+            fileName: draft?.projectileSpriteFileName || projectileSpriteFile.name,
+            mimeType: projectileSpriteFile.type || "application/octet-stream",
+            dataUrl: await fileToDataUrl(projectileSpriteFile),
+          }
+          : null,
       }),
     });
   } catch {
