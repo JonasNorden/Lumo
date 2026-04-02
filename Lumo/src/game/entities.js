@@ -3724,8 +3724,8 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           ctx.restore();
         };
         if ((e._blinkDur || 0) <= 0) {
-          drawFilledAngryEye(largeX, largeY, 3.5 * sEye, -1 * facingX);
-          drawFilledAngryEye(smallX, smallY, 2.3 * sEye, 1 * facingX);
+          drawFilledAngryEye(largeX, largeY, largeR, -1 * facingX);
+          drawFilledAngryEye(smallX, smallY, smallR, 1 * facingX);
         } else {
           ctx.strokeStyle = "rgba(243,240,255," + eyeAlpha.toFixed(3) + ")";
           ctx.lineWidth = 1.8;
