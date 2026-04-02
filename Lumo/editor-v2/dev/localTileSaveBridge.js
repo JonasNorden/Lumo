@@ -16,6 +16,7 @@ const DECOR_ASSET_DIR = path.join(REPO_ROOT, "data/assets/sprites/decor");
 const DECOR_CATALOG_FILE = path.join(REPO_ROOT, "data/catalog_entities.js");
 const ENTITY_ASSET_DIR = path.join(REPO_ROOT, "data/assets/sprites/entities");
 const ENTITY_PRESETS_FILE = path.join(REPO_ROOT, "editor-v2/src/domain/entities/entityPresets.js");
+const ENTITY_RUNTIME_SPRITE_PREFIX = "../data/assets/sprites/entities/";
 const BACKGROUND_EDITOR_MATERIAL_FILE = path.join(
   REPO_ROOT,
   "editor-v2/src/domain/background/materialCatalog.js"
@@ -119,6 +120,45 @@ function parseDataUrl(dataUrl) {
   const match = /^data:([^;,]+);base64,(.+)$/i.exec(String(dataUrl || ""));
   if (!match) return null;
   return { mimeType: match[1].toLowerCase(), base64Data: match[2] };
+}
+
+function normalizeEntityRuntimeSpritePath(value) {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (!trimmed) return "";
+  if (trimmed.startsWith("selected://")) return trimmed;
+
+  const normalized = trimmed.replace(/\\/g, "/");
+  if (normalized.startsWith(ENTITY_RUNTIME_SPRITE_PREFIX)) {
+    const suffix = normalized.slice(ENTITY_RUNTIME_SPRITE_PREFIX.length).replace(/^\/+/, "");
+    return suffix ? `${ENTITY_RUNTIME_SPRITE_PREFIX}${suffix}` : "";
+  }
+  const withoutParentPrefix = normalized.replace(/^\.\.\//, "");
+  const runtimePrefixWithoutParent = "data/assets/sprites/entities/";
+  if (withoutParentPrefix.startsWith(runtimePrefixWithoutParent)) {
+    const suffix = withoutParentPrefix.slice(runtimePrefixWithoutParent.length).replace(/^\/+/, "");
+    return suffix ? `${ENTITY_RUNTIME_SPRITE_PREFIX}${suffix}` : "";
+  }
+  return normalized;
+}
+
+function readProjectileSpritePayload(payload, selectedProjectilePath = "") {
+  const payloadCandidates = [
+    payload?.projectileSprite,
+    payload?.entity?.projectileSprite,
+    payload?.entity?.defaultParams?.projectileSprite,
+    payload?.selectedFiles?.[selectedProjectilePath],
+    payload?.selectedAssets?.[selectedProjectilePath],
+  ];
+  for (const candidate of payloadCandidates) {
+    if (!candidate || typeof candidate !== "object") continue;
+    const dataUrl = typeof candidate.dataUrl === "string" ? candidate.dataUrl.trim() : "";
+    if (!dataUrl) continue;
+    return {
+      fileName: String(candidate.fileName || "").trim(),
+      dataUrl,
+    };
+  }
+  return null;
 }
 
 function readCatalogTiles(catalogSource) {
@@ -775,9 +815,9 @@ function sanitizeEntityDefaultParams(familyId, defaultParams) {
     }
     if (typeof value === "string") {
       if (key === "projectileSpritePath") {
-        const trimmedValue = value.trim();
-        if (!trimmedValue) continue;
-        nextParams[key] = trimmedValue;
+        const normalizedValue = normalizeEntityRuntimeSpritePath(value);
+        if (!normalizedValue) continue;
+        nextParams[key] = normalizedValue;
         continue;
       }
       nextParams[key] = value;
@@ -815,7 +855,6 @@ export function buildPersistedEntityPresetEntry({ entity = {}, presetId, spriteF
 async function saveEntity(payload) {
   const entity = payload?.entity || {};
   const sprite = payload?.sprite || {};
-  const projectileSprite = payload?.projectileSprite || null;
   const presetId = String(entity.presetId || "").trim();
   const familyId = String(entity.type || "").trim();
 
@@ -867,7 +906,15 @@ async function saveEntity(payload) {
     defaultParams: { ...(entity?.defaultParams && typeof entity.defaultParams === "object" ? entity.defaultParams : {}) },
   };
   let projectileSpriteFileName = "";
-  if (projectileSprite && typeof projectileSprite === "object") {
+  const existingProjectilePath = normalizeEntityRuntimeSpritePath(entityWithProjectile?.defaultParams?.projectileSpritePath);
+  if (existingProjectilePath) {
+    entityWithProjectile.defaultParams.projectileSpritePath = existingProjectilePath;
+  } else {
+    delete entityWithProjectile.defaultParams.projectileSpritePath;
+  }
+
+  const projectileSprite = readProjectileSpritePayload(payload, existingProjectilePath);
+  if (projectileSprite) {
     const projectileDataUrlParts = parseDataUrl(projectileSprite.dataUrl);
     if (!projectileDataUrlParts || !projectileDataUrlParts.mimeType.startsWith("image/")) {
       return {
@@ -880,7 +927,9 @@ async function saveEntity(payload) {
     projectileSpriteFileName = await pickAvailableSpriteFileName(ENTITY_ASSET_DIR, `${presetId}-projectile`, projectileSprite.fileName);
     const projectileSpriteFilePath = path.join(ENTITY_ASSET_DIR, projectileSpriteFileName);
     await fs.writeFile(projectileSpriteFilePath, Buffer.from(projectileDataUrlParts.base64Data, "base64"));
-    entityWithProjectile.defaultParams.projectileSpritePath = `../data/assets/sprites/entities/${projectileSpriteFileName}`;
+    entityWithProjectile.defaultParams.projectileSpritePath = `${ENTITY_RUNTIME_SPRITE_PREFIX}${projectileSpriteFileName}`;
+  } else if (existingProjectilePath.startsWith("selected://")) {
+    delete entityWithProjectile.defaultParams.projectileSpritePath;
   }
 
   const entry = buildPersistedEntityPresetEntry({ entity: entityWithProjectile, presetId, spriteFileName });
