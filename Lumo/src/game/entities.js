@@ -3665,14 +3665,16 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
 
       const blink = (e._blinkDur > 0) ? 0.15 : 1;
       const angry = (e._angryT > 0 || e._lungeState !== "idle");
-      const sEye = Math.min(e.w, e.h) / 16;
+      const hoverVoidEyeBaselineBody = 24;
+      const sEye = hoverVoidEyeBaselineBody / 16;
+      const eyePosScale = Math.min(e.w, e.h) / hoverVoidEyeBaselineBody;
       const facingX = (e._facingX === -1) ? -1 : 1;
       const largeR = 2.8 * sEye;
       const smallR = 1.9 * sEye;
-      const largeX = cx - (7 * sEye) * facingX;
-      const largeY = cy - 6 * sEye;
-      const smallX = cx + (6 * sEye) * facingX;
-      const smallY = cy - 4 * sEye;
+      const largeX = cx - (7 * sEye * eyePosScale) * facingX;
+      const largeY = cy - (6 * sEye * eyePosScale);
+      const smallX = cx + (6 * sEye * eyePosScale) * facingX;
+      const smallY = cy - (4 * sEye * eyePosScale);
       const eyeAlpha = (1.0 * eyeK) * Math.max(0, Math.min(1, alphaMul));
       if (eyeAlpha <= 0.001) return;
 
