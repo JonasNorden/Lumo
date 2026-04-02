@@ -2993,9 +2993,17 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           if (bodyAlpha > 0.01){
             const bodySprite = e._hoverVoidBodySprite;
             if (bodySprite && bodySprite._ok) {
+              const facingX = (e._facingX === -1) ? -1 : 1;
               ctx.save();
               ctx.globalAlpha *= Math.max(0, Math.min(1, bodyAlpha));
-              ctx.drawImage(bodySprite, sx, sy, e.w, e.h);
+              if (facingX > 0){
+                // Hover Void custom bodies may be authored facing left; mirror while facing right.
+                ctx.translate(sx + e.w, sy);
+                ctx.scale(-1, 1);
+                ctx.drawImage(bodySprite, 0, 0, e.w, e.h);
+              } else {
+                ctx.drawImage(bodySprite, sx, sy, e.w, e.h);
+              }
               ctx.restore();
             } else {
               const palette = this._hoverVoidPalette();
@@ -3667,14 +3675,14 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
       const angry = (e._angryT > 0 || e._lungeState !== "idle");
       const hoverVoidEyeBaselineBody = 24;
       const sEye = hoverVoidEyeBaselineBody / 16;
-      const eyePosScale = Math.min(e.w, e.h) / hoverVoidEyeBaselineBody;
       const facingX = (e._facingX === -1) ? -1 : 1;
+      // Keep classic face geometry fixed regardless of body sprite sizing.
       const largeR = 2.8 * sEye;
       const smallR = 1.9 * sEye;
-      const largeX = cx - (7 * sEye * eyePosScale) * facingX;
-      const largeY = cy - (6 * sEye * eyePosScale);
-      const smallX = cx + (6 * sEye * eyePosScale) * facingX;
-      const smallY = cy - (4 * sEye * eyePosScale);
+      const largeX = cx - (7 * sEye) * facingX;
+      const largeY = cy - (6 * sEye);
+      const smallX = cx + (6 * sEye) * facingX;
+      const smallY = cy - (4 * sEye);
       const eyeAlpha = (1.0 * eyeK) * Math.max(0, Math.min(1, alphaMul));
       if (eyeAlpha <= 0.001) return;
 
