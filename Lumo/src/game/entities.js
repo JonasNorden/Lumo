@@ -684,7 +684,7 @@ if (id === "dark_creature_01"){
 
         
 if (id === "hover_void_01"){
-          const hv = this.makeHoverVoid(tx, ty, { w:16, h:16, params });
+          const hv = this.makeHoverVoid(tx, ty, { params });
           applyAnchor(hv, hv.w, hv.h);
           this.items.push(hv);
           return;
