@@ -586,7 +586,11 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
         }
         if (runtimeId === "dark_creature_01") {
           const authoredCustomSpritePath = normalizeRuntimeSpritePath(runtimeParams.customSpritePath);
-          const authoredProjectileSpritePath = normalizeRuntimeSpritePath(runtimeParams.projectileSpritePath);
+          const authoredProjectileSpritePath = normalizeRuntimeSpritePath(
+            typeof entity?.params?.projectileSpritePath === "string"
+              ? entity.params.projectileSpritePath
+              : runtimeParams.projectileSpritePath,
+          );
           const darkCreaturePreset = findEntityPresetById(runtimeParams.presetId) || findEntityPresetById(entityType.toLowerCase());
           if (authoredCustomSpritePath) {
             runtimeParams.customSpritePath = authoredCustomSpritePath;
@@ -595,6 +599,17 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
           }
           if (authoredProjectileSpritePath) {
             runtimeParams.projectileSpritePath = authoredProjectileSpritePath;
+          } else if (darkCreaturePreset?.type === "dark_creature_01") {
+            const presetProjectileSpritePath = normalizeRuntimeSpritePath(
+              darkCreaturePreset?.defaultParams?.projectileSpritePath,
+            );
+            if (presetProjectileSpritePath) {
+              runtimeParams.projectileSpritePath = presetProjectileSpritePath;
+            } else {
+              delete runtimeParams.projectileSpritePath;
+            }
+          } else {
+            delete runtimeParams.projectileSpritePath;
           }
           if (darkCreaturePreset?.type === "dark_creature_01") {
             if (!Number.isFinite(Number(runtimeParams.drawW)) && Number.isFinite(Number(darkCreaturePreset.drawW))) {

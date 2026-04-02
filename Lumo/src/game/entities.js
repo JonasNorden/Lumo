@@ -993,6 +993,7 @@ if (this._catById){
     // Dark creature med pixlar direkt (används för auto-spawn nära spelaren)
     makeDarkCreaturePx(px, py, w=18, h=18, params=null){
       const ts = Lumo.TILE || 24;
+      const p = (params && typeof params === "object") ? params : {};
       const nOr = (v, fallback) => {
         const n = +v;
         return Number.isFinite(n) ? n : fallback;
@@ -1007,17 +1008,17 @@ if (this._catById){
         return !!v;
       };
 
-      const rawAggroTiles = nOr(params && params.aggroTiles, null);
-      const rawAggroRadiusPx = nOr(params && params.aggroRadius, null);
+      const rawAggroTiles = nOr(p.aggroTiles, null);
+      const rawAggroRadiusPx = nOr(p.aggroRadius, null);
       const aggroTiles = (rawAggroTiles != null)
         ? rawAggroTiles
         : ((rawAggroRadiusPx != null) ? (rawAggroRadiusPx / ts) : 6);
 
-      const customSpritePath = (typeof params?.customSpritePath === "string" && params.customSpritePath.trim())
-        ? params.customSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
+      const customSpritePath = (typeof p.customSpritePath === "string" && p.customSpritePath.trim())
+        ? p.customSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
         : "";
-      const projectileSpritePath = (typeof params?.projectileSpritePath === "string" && params.projectileSpritePath.trim())
-        ? params.projectileSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
+      const projectileSpritePath = (typeof p.projectileSpritePath === "string" && p.projectileSpritePath.trim())
+        ? p.projectileSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
         : "";
 
       return {
@@ -1032,30 +1033,30 @@ if (this._catById){
         isDarkActive:false,
         vx: 0,
         // params (optional)
-        hp: nOr(params && params.hp, 3),
-        hitCooldown: nOr(params && params.hitCooldown, 0.6),
-        safeDelay: nOr(params && params.safeDelay, 0.6),
-        patrolTiles: nOr(params && params.patrolTiles, 0),
+        hp: nOr(p.hp, 3),
+        hitCooldown: nOr(p.hitCooldown, 0.6),
+        safeDelay: nOr(p.safeDelay, 0.6),
+        patrolTiles: nOr(p.patrolTiles, 0),
         aggroTiles,
         aggroRadiusPx: (rawAggroRadiusPx != null) ? rawAggroRadiusPx : null,
-        energyLoss: nOr(params && params.energyLoss, 40),
-        knockbackX: nOr(params && params.knockbackX, 260),
-        knockbackY: nOr(params && params.knockbackY, -220),
-        bodyEnergyLoss: nOr(params && params.bodyEnergyLoss, nOr(params && params.energyLoss, 40)),
-        bodyKnockbackX: nOr(params && params.bodyKnockbackX, 160),
-        bodyKnockbackY: nOr(params && params.bodyKnockbackY, -140),
-        castCooldown: nOr(params && params.castCooldown, 5.5),
-        castChargeTime: nOr(params && params.castChargeTime, 0.5),
-        spellSpeedX: nOr(params && params.spellSpeedX, 190),
-        spellGravity: nOr(params && params.spellGravity, 760),
-        targetJitterPx: nOr(params && params.targetJitterPx, 3),
+        energyLoss: nOr(p.energyLoss, 40),
+        knockbackX: nOr(p.knockbackX, 260),
+        knockbackY: nOr(p.knockbackY, -220),
+        bodyEnergyLoss: nOr(p.bodyEnergyLoss, nOr(p.energyLoss, 40)),
+        bodyKnockbackX: nOr(p.bodyKnockbackX, 160),
+        bodyKnockbackY: nOr(p.bodyKnockbackY, -140),
+        castCooldown: nOr(p.castCooldown, 5.5),
+        castChargeTime: nOr(p.castChargeTime, 0.5),
+        spellSpeedX: nOr(p.spellSpeedX, 190),
+        spellGravity: nOr(p.spellGravity, 760),
+        targetJitterPx: nOr(p.targetJitterPx, 3),
         _castCd: Math.random() * 0.35,
         _castChargeT: 0,
         _castTargetX: 0,
         _castTargetY: 0,
         _pulseHitId: -1,
-        reactsToFlares: boolOr(params && params.reactsToFlares, true),
-        flareConsumeBurnMul: Math.max(1, nOr(params && params.flareConsumeBurnMul, 7.5)),
+        reactsToFlares: boolOr(p.reactsToFlares, true),
+        flareConsumeBurnMul: Math.max(1, nOr(p.flareConsumeBurnMul, 7.5)),
         _animT: Math.random() * 0.8,
         _darkCreatureBodySpritePath: customSpritePath || "",
         _darkCreatureBodySprite: customSpritePath ? this._tryLoadImage(customSpritePath) : null,
@@ -1251,7 +1252,8 @@ if (this._catById){
       const projectileSpritePath = (typeof source?._darkCreatureProjectileSpritePath === "string")
         ? source._darkCreatureProjectileSpritePath
         : "";
-      const projectileSprite = source?._darkCreatureProjectileSprite || null;
+      const projectileSprite = source?._darkCreatureProjectileSprite
+        || (projectileSpritePath ? this._tryLoadImage(projectileSpritePath) : null);
       this.items.push({
         type:"darkSpellProjectile",
         active:true,
