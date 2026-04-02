@@ -80,7 +80,21 @@ const PHASE1_ENTITY_ALLOWED_FAMILIES = new Set([
 const ENTITY_SAFE_PARAM_KEYS = {
   lantern_01: ["radius", "strength"],
   firefly_01: ["lightDiameter", "lightStrength", "flyRangeX", "flyRangeYUp", "flySpeed", "flyTime", "cooldown"],
-  dark_creature_01: ["hp", "hitCooldown", "safeDelay", "patrolTiles", "aggroTiles", "castCooldown", "energyLoss", "knockbackX", "knockbackY", "reactsToFlares", "drawW", "drawH", "projectileSpritePath"],
+  dark_creature_01: [
+    "hp",
+    "hitCooldown",
+    "safeDelay",
+    "patrolTiles",
+    "aggroTiles",
+    "castCooldown",
+    "energyLoss",
+    "knockbackX",
+    "knockbackY",
+    "reactsToFlares",
+    "drawW",
+    "drawH",
+    "projectileSpritePath",
+  ],
   hover_void_01: ["aggroTiles", "followTiles", "maxHp", "loseSightTiles", "attackCooldownMin", "attackCooldownMax", "attackDamage", "attackPushback", "braveGroupSize", "swarmGroupSize", "drawW", "drawH"],
   checkpoint: ["respawnId"],
   powercell_01: [],
@@ -760,6 +774,12 @@ function sanitizeEntityDefaultParams(familyId, defaultParams) {
       continue;
     }
     if (typeof value === "string") {
+      if (key === "projectileSpritePath") {
+        const trimmedValue = value.trim();
+        if (!trimmedValue) continue;
+        nextParams[key] = trimmedValue;
+        continue;
+      }
       nextParams[key] = value;
     }
   }
