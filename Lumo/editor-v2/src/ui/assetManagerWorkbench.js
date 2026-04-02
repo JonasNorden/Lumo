@@ -112,7 +112,8 @@ function renderInput(label, field, value, placeholder, description = "", options
 }
 
 function renderFilePickerField(label, field, wizard, options = {}) {
-  const fileName = wizard?.draft?.spriteFileName || "";
+  const fileNameField = options.fileNameField || "spriteFileName";
+  const fileName = wizard?.draft?.[fileNameField] || "";
   const errorMessage = options.errorMessage || "";
   const hint = options.hint || "";
   const fieldClass = options.fieldClass || "";
@@ -470,7 +471,7 @@ function renderStepBody(wizard, validation) {
       const isHoverVoidFamily = draft.behaviorFamilyId === "hover_void_01";
       const isDarkCreatureFamily = draft.behaviorFamilyId === "dark_creature_01";
       const editableSafeSchema = isDarkCreatureFamily
-        ? safeSchema.filter((field) => field.key !== "drawW" && field.key !== "drawH")
+        ? safeSchema.filter((field) => field.key !== "drawW" && field.key !== "drawH" && field.key !== "projectileSpritePath")
         : safeSchema;
       const safeFieldMarkup = editableSafeSchema.length
         ? editableSafeSchema.map((field) => {
@@ -511,6 +512,12 @@ function renderStepBody(wizard, validation) {
             isDarkCreatureFamily
               ? `
                 ${renderSelectInput("Body size", "darkCreatureBodySize", draft.darkCreatureBodySize || "1x1", getDarkCreatureBodySizeOptions(), "", { errorMessage: fieldErrors.darkCreatureBodySize, fieldClass: "assetWizardFieldSpan12" })}
+                ${renderFilePickerField("Projectile sprite", "safeDefaults.projectileSpritePath", wizard, {
+                  errorMessage: fieldErrors["safeDefaults.projectileSpritePath"],
+                  hint: "Optional. Choose a projectile sprite image for Dark Creature spells.",
+                  fieldClass: "assetWizardFieldSpan12",
+                  fileNameField: "projectileSpriteFileName",
+                })}
               `
               : `
                 ${renderInput(isHoverVoidFamily ? "Width" : "Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan6" })}

@@ -819,6 +819,7 @@ export function createEditorApp({
   };
   let fogStepperSession = null;
   let selectedAssetWizardSpriteFile = null;
+  let selectedAssetWizardProjectileSpriteFile = null;
   const fogPreviewMotion = {
     rafId: 0,
     startedAtMs: 0,
@@ -7202,7 +7203,9 @@ if (event.shiftKey) {
   const cleanupWizardPreview = (wizard) => {
     if (!wizard?.draft) return;
     releaseWizardPreviewUrl(wizard.draft.spritePreviewUrl);
+    releaseWizardPreviewUrl(wizard.draft.projectileSpritePreviewUrl);
     wizard.draft.spritePreviewUrl = "";
+    wizard.draft.projectileSpritePreviewUrl = "";
   };
 
   const hasPositiveWizardDrawSize = (value) => {
@@ -7345,6 +7348,7 @@ if (event.shiftKey) {
         group: "Custom",
       },
       spriteFile: selectedAssetWizardSpriteFile,
+      projectileSpriteFile: selectedAssetWizardProjectileSpriteFile,
     });
 
     if (!bridgeResult.ok) {
@@ -7393,6 +7397,8 @@ if (event.shiftKey) {
       draft.ui.assetManager.activeView = "wizard";
       draft.ui.assetManager.isOpen = false;
       selectedAssetWizardSpriteFile = null;
+      selectedAssetWizardProjectileSpriteFile = null;
+      selectedAssetWizardProjectileSpriteFile = null;
     });
 
     store.setState((draft) => {
@@ -7490,6 +7496,7 @@ if (event.shiftKey) {
       draft.ui.assetManager.wizard = createInitialAssetManagerWizardState();
       draft.ui.assetManager.isOpen = false;
       selectedAssetWizardSpriteFile = null;
+      selectedAssetWizardProjectileSpriteFile = null;
     });
     return true;
   };
@@ -7581,6 +7588,7 @@ if (event.shiftKey) {
       draft.ui.assetManager.wizard = createInitialAssetManagerWizardState();
       draft.ui.assetManager.isOpen = false;
       selectedAssetWizardSpriteFile = null;
+      selectedAssetWizardProjectileSpriteFile = null;
     });
     return true;
   };
@@ -7763,6 +7771,7 @@ if (event.shiftKey) {
             wizard.draft.catalogIdManuallyEdited = false;
             wizard.draft.presetIdManuallyEdited = false;
             selectedAssetWizardSpriteFile = null;
+            selectedAssetWizardProjectileSpriteFile = null;
             draft.ui.assetManager.wizard = wizard;
           });
         }
@@ -7777,6 +7786,7 @@ if (event.shiftKey) {
             wizard.selectedExistingAssetId = "";
             wizard.draft = {};
             selectedAssetWizardSpriteFile = null;
+            selectedAssetWizardProjectileSpriteFile = null;
             applyWizardDraftDefaults(wizard);
             syncWizardCatalogIdHint(wizard);
             syncWizardBackgroundMaterialIdHint(wizard);
@@ -7815,6 +7825,7 @@ if (event.shiftKey) {
           cleanupWizardPreview(draft.ui.assetManager.wizard);
           draft.ui.assetManager.wizard = createInitialAssetManagerWizardState();
           selectedAssetWizardSpriteFile = null;
+          selectedAssetWizardProjectileSpriteFile = null;
         });
       }
       return;
@@ -7893,15 +7904,25 @@ if (event.shiftKey) {
         const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
         wizard.draft = wizard.draft || {};
         applyWizardDraftDefaults(wizard);
-        releaseWizardPreviewUrl(wizard.draft.spritePreviewUrl);
-        const shouldAutofillWidth = !hasPositiveWizardDrawSize(wizard.draft.drawWidth);
-        const shouldAutofillHeight = !hasPositiveWizardDrawSize(wizard.draft.drawHeight);
+        const isPrimarySpriteField = field === "spritePath";
+        if (isPrimarySpriteField) {
+          releaseWizardPreviewUrl(wizard.draft.spritePreviewUrl);
+        }
+        const shouldAutofillWidth = isPrimarySpriteField && !hasPositiveWizardDrawSize(wizard.draft.drawWidth);
+        const shouldAutofillHeight = isPrimarySpriteField && !hasPositiveWizardDrawSize(wizard.draft.drawHeight);
         if (file) {
           const previewUrl = URL.createObjectURL(file);
-          wizard.draft[field] = `selected://${file.name}`;
-          wizard.draft.spriteFileName = file.name;
-          wizard.draft.spritePreviewUrl = previewUrl;
-          selectedAssetWizardSpriteFile = file;
+          assignAssetWizardDraftField(wizard, field, `selected://${file.name}`);
+          if (isPrimarySpriteField) {
+            wizard.draft.spriteFileName = file.name;
+            wizard.draft.spritePreviewUrl = previewUrl;
+            selectedAssetWizardSpriteFile = file;
+          } else if (field === "safeDefaults.projectileSpritePath") {
+            releaseWizardPreviewUrl(wizard.draft.projectileSpritePreviewUrl);
+            wizard.draft.projectileSpriteFileName = file.name;
+            wizard.draft.projectileSpritePreviewUrl = previewUrl;
+            selectedAssetWizardProjectileSpriteFile = file;
+          }
           syncWizardCatalogIdHint(wizard);
           syncWizardBackgroundMaterialIdHint(wizard);
           syncWizardDecorPresetIdHint(wizard);
@@ -7924,10 +7945,17 @@ if (event.shiftKey) {
             probeImage.src = previewUrl;
           }
         } else {
-          wizard.draft[field] = "";
-          wizard.draft.spriteFileName = "";
-          wizard.draft.spritePreviewUrl = "";
-          selectedAssetWizardSpriteFile = null;
+          assignAssetWizardDraftField(wizard, field, "");
+          if (isPrimarySpriteField) {
+            wizard.draft.spriteFileName = "";
+            wizard.draft.spritePreviewUrl = "";
+            selectedAssetWizardSpriteFile = null;
+          } else if (field === "safeDefaults.projectileSpritePath") {
+            releaseWizardPreviewUrl(wizard.draft.projectileSpritePreviewUrl);
+            wizard.draft.projectileSpriteFileName = "";
+            wizard.draft.projectileSpritePreviewUrl = "";
+            selectedAssetWizardProjectileSpriteFile = null;
+          }
           syncWizardCatalogIdHint(wizard);
           syncWizardBackgroundMaterialIdHint(wizard);
           syncWizardDecorPresetIdHint(wizard);
