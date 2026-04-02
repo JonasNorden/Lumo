@@ -7535,6 +7535,7 @@ if (event.shiftKey) {
         group: "Decor",
       },
       spriteFile: selectedAssetWizardSpriteFile,
+      projectileSpriteFile: selectedAssetWizardProjectileSpriteFile,
     });
 
     if (!bridgeResult.ok) {
@@ -7617,6 +7618,13 @@ if (event.shiftKey) {
       ...(resolvedDraft.safeDefaults || {}),
       ...(includeFixedBodySize ? { drawW, drawH } : {}),
     };
+    if (
+      resolvedDraft.behaviorFamilyId === "dark_creature_01"
+      && selectedAssetWizardProjectileSpriteFile
+      && !entityDefaultParams.projectileSpritePath
+    ) {
+      entityDefaultParams.projectileSpritePath = `selected://${selectedAssetWizardProjectileSpriteFile.fileName}`;
+    }
     const bridgeResult = await saveEntityThroughLocalBridge({
       draft: resolvedDraft,
       entityPayload: {
@@ -7630,6 +7638,7 @@ if (event.shiftKey) {
         defaultParams: entityDefaultParams,
       },
       spriteFile: selectedAssetWizardSpriteFile,
+      projectileSpriteFile: selectedAssetWizardProjectileSpriteFile,
     });
 
     if (!bridgeResult.ok) {
