@@ -175,6 +175,7 @@ function normalizeRuntimeEntityType(type) {
     || customPreset?.type === "lantern_01"
     || customPreset?.type === "flare_pickup_01"
     || customPreset?.type === "hover_void_01"
+    || customPreset?.type === "dark_creature_01"
   ) {
     return customPreset.type;
   }
@@ -580,6 +581,29 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
             }
             if (typeof runtimeParams.presetId !== "string" || !runtimeParams.presetId.trim()) {
               runtimeParams.presetId = hoverVoidPreset.id;
+            }
+          }
+        }
+        if (runtimeId === "dark_creature_01") {
+          const authoredCustomSpritePath = normalizeRuntimeSpritePath(runtimeParams.customSpritePath);
+          const darkCreaturePreset = findEntityPresetById(runtimeParams.presetId) || findEntityPresetById(entityType.toLowerCase());
+          if (authoredCustomSpritePath) {
+            runtimeParams.customSpritePath = authoredCustomSpritePath;
+          } else if (darkCreaturePreset?.type === "dark_creature_01" && typeof darkCreaturePreset.img === "string" && darkCreaturePreset.img.trim()) {
+            runtimeParams.customSpritePath = normalizeRuntimeSpritePath(darkCreaturePreset.img);
+          }
+          if (darkCreaturePreset?.type === "dark_creature_01") {
+            if (!Number.isFinite(Number(runtimeParams.drawW)) && Number.isFinite(Number(darkCreaturePreset.drawW))) {
+              runtimeParams.drawW = Math.max(1, Number(darkCreaturePreset.drawW));
+            }
+            if (!Number.isFinite(Number(runtimeParams.drawH)) && Number.isFinite(Number(darkCreaturePreset.drawH))) {
+              runtimeParams.drawH = Math.max(1, Number(darkCreaturePreset.drawH));
+            }
+            if (typeof runtimeParams.drawAnchor !== "string" || !runtimeParams.drawAnchor.trim()) {
+              runtimeParams.drawAnchor = String(darkCreaturePreset.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL";
+            }
+            if (typeof runtimeParams.presetId !== "string" || !runtimeParams.presetId.trim()) {
+              runtimeParams.presetId = darkCreaturePreset.id;
             }
           }
         }

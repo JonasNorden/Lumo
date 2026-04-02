@@ -7603,9 +7603,10 @@ if (event.shiftKey) {
     const resolvedDraft = getAssetWizardDraftWithDefaults(currentWizard.assetType, currentWizard.draft || {});
     const drawW = Math.max(1, Math.round(Number.parseFloat(resolvedDraft.drawWidth) || 24));
     const drawH = Math.max(1, Math.round(Number.parseFloat(resolvedDraft.drawHeight) || 24));
+    const includeFixedBodySize = resolvedDraft.behaviorFamilyId === "hover_void_01" || resolvedDraft.behaviorFamilyId === "dark_creature_01";
     const entityDefaultParams = {
       ...(resolvedDraft.safeDefaults || {}),
-      ...(resolvedDraft.behaviorFamilyId === "hover_void_01" ? { drawW, drawH } : {}),
+      ...(includeFixedBodySize ? { drawW, drawH } : {}),
     };
     const bridgeResult = await saveEntityThroughLocalBridge({
       draft: resolvedDraft,
