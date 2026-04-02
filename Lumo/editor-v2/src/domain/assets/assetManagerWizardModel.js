@@ -196,6 +196,11 @@ function isPositiveNumber(value) {
   return toPositiveNumberOrNull(value) !== null;
 }
 
+function isPositiveInteger(value) {
+  const numeric = Number.parseFloat(value);
+  return Number.isInteger(numeric) && numeric > 0;
+}
+
 function isInteger(value) {
   const numeric = Number.parseInt(value, 10);
   return Number.isInteger(numeric);
@@ -579,6 +584,10 @@ export function getStepValidation(stepId, wizardState) {
       if (!isPositiveNumber(draft.drawWidth)) fieldErrors.drawWidth = "Draw width must be a positive number.";
       if (!isPositiveNumber(draft.drawHeight)) fieldErrors.drawHeight = "Draw height must be a positive number.";
       const familyId = normalizeString(draft.behaviorFamilyId);
+      if (familyId === "hover_void_01") {
+        if (!isPositiveInteger(draft.drawWidth)) fieldErrors.drawWidth = "Width must be a positive integer.";
+        if (!isPositiveInteger(draft.drawHeight)) fieldErrors.drawHeight = "Height must be a positive integer.";
+      }
       const safeSchema = ENTITY_SAFE_PARAM_SCHEMA[familyId] || [];
       const parsedSafeDefaults = normalizeEntityParamsDraft(familyId, draft.safeDefaults || {});
       for (const field of safeSchema) {

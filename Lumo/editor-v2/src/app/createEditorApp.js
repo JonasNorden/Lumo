@@ -7601,6 +7601,12 @@ if (event.shiftKey) {
     }
 
     const resolvedDraft = getAssetWizardDraftWithDefaults(currentWizard.assetType, currentWizard.draft || {});
+    const drawW = Math.max(1, Math.round(Number.parseFloat(resolvedDraft.drawWidth) || 24));
+    const drawH = Math.max(1, Math.round(Number.parseFloat(resolvedDraft.drawHeight) || 24));
+    const entityDefaultParams = {
+      ...(resolvedDraft.safeDefaults || {}),
+      ...(resolvedDraft.behaviorFamilyId === "hover_void_01" ? { drawW, drawH } : {}),
+    };
     const bridgeResult = await saveEntityThroughLocalBridge({
       draft: resolvedDraft,
       entityPayload: {
@@ -7608,10 +7614,10 @@ if (event.shiftKey) {
         type: resolvedDraft.behaviorFamilyId,
         label: resolvedDraft.displayName,
         img: resolvedDraft.spritePath,
-        drawW: Number.parseInt(resolvedDraft.drawWidth, 10),
-        drawH: Number.parseInt(resolvedDraft.drawHeight, 10),
+        drawW,
+        drawH,
         drawAnchor: resolvedDraft.drawAnchor || "BL",
-        defaultParams: resolvedDraft.safeDefaults || {},
+        defaultParams: entityDefaultParams,
       },
       spriteFile: selectedAssetWizardSpriteFile,
     });
@@ -7632,13 +7638,13 @@ if (event.shiftKey) {
       presetId: bridgeResult.persistedEntity?.presetId || resolvedDraft.presetId,
       type: bridgeResult.persistedEntity?.type || resolvedDraft.behaviorFamilyId,
       defaultName: bridgeResult.persistedEntity?.label || resolvedDraft.displayName,
-      defaultParams: bridgeResult.persistedEntity?.defaultParams || resolvedDraft.safeDefaults || {},
+      defaultParams: bridgeResult.persistedEntity?.defaultParams || entityDefaultParams,
       img: bridgeResult.persistedEntity?.img || null,
-      drawW: bridgeResult.persistedEntity?.drawW || Number.parseInt(resolvedDraft.drawWidth, 10),
-      drawH: bridgeResult.persistedEntity?.drawH || Number.parseInt(resolvedDraft.drawHeight, 10),
+      drawW: bridgeResult.persistedEntity?.drawW || drawW,
+      drawH: bridgeResult.persistedEntity?.drawH || drawH,
       drawAnchor: bridgeResult.persistedEntity?.drawAnchor || resolvedDraft.drawAnchor || "BL",
-      footprintW: bridgeResult.persistedEntity?.footprintW || bridgeResult.persistedEntity?.drawW || Number.parseInt(resolvedDraft.drawWidth, 10),
-      footprintH: bridgeResult.persistedEntity?.footprintH || bridgeResult.persistedEntity?.drawH || Number.parseInt(resolvedDraft.drawHeight, 10),
+      footprintW: bridgeResult.persistedEntity?.footprintW || bridgeResult.persistedEntity?.drawW || drawW,
+      footprintH: bridgeResult.persistedEntity?.footprintH || bridgeResult.persistedEntity?.drawH || drawH,
       hitRadius: bridgeResult.persistedEntity?.hitRadius,
     });
     if (!registerResult.ok) {

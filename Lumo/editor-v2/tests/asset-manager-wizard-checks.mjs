@@ -311,6 +311,19 @@ const entityMetadataValidation = getStepValidation("metadata", {
 });
 assert.equal(entityMetadataValidation.isValid, true);
 
+const hoverVoidMetadataValidation = getStepValidation("metadata", {
+  mode: ASSET_WIZARD_MODES.CREATE,
+  assetType: ASSET_WIZARD_TYPES.ENTITY,
+  draft: {
+    behaviorFamilyId: "hover_void_01",
+    drawAnchor: "BL",
+    drawWidth: "18",
+    drawHeight: "20",
+    safeDefaults: { aggroTiles: "8" },
+  },
+});
+assert.equal(hoverVoidMetadataValidation.isValid, true);
+
 const lanternSchema = getEntitySafeParamSchema("lantern_01");
 assert.deepEqual(lanternSchema.map((field) => field.key), ["radius", "strength"]);
 
@@ -365,5 +378,25 @@ const persistedEntityEntry = buildPersistedEntityPresetEntry({
 assert.equal(persistedEntityEntry.type, "lantern_01");
 assert.equal(persistedEntityEntry.defaultParams.radius, 190);
 assert.equal("unsupportedParam" in persistedEntityEntry.defaultParams, false);
+
+const persistedHoverVoidEntry = buildPersistedEntityPresetEntry({
+  presetId: "hover_void_custom_runtime",
+  spriteFileName: "hover_void_custom_runtime.png",
+  entity: {
+    type: "hover_void_01",
+    label: "Hover Void Runtime",
+    drawW: 28,
+    drawH: 34,
+    defaultParams: {
+      aggroTiles: 10,
+      drawW: 28,
+      drawH: 34,
+      colorVariant: "removed",
+    },
+  },
+});
+assert.equal(persistedHoverVoidEntry.defaultParams.drawW, 28);
+assert.equal(persistedHoverVoidEntry.defaultParams.drawH, 34);
+assert.equal("colorVariant" in persistedHoverVoidEntry.defaultParams, false);
 
 console.log("asset-manager wizard checks passed");

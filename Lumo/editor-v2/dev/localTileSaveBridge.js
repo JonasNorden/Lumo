@@ -81,7 +81,7 @@ const ENTITY_SAFE_PARAM_KEYS = {
   lantern_01: ["radius", "strength"],
   firefly_01: ["lightDiameter", "lightStrength", "flyRangeX", "flyRangeYUp", "flySpeed", "flyTime", "cooldown"],
   dark_creature_01: ["hp", "hitCooldown", "safeDelay", "patrolTiles", "aggroTiles", "castCooldown", "energyLoss", "knockbackX", "knockbackY", "reactsToFlares"],
-  hover_void_01: ["aggroTiles", "followTiles", "maxHp", "colorVariant", "loseSightTiles", "attackCooldownMin", "attackCooldownMax", "attackDamage", "attackPushback", "braveGroupSize", "swarmGroupSize"],
+  hover_void_01: ["aggroTiles", "followTiles", "maxHp", "loseSightTiles", "attackCooldownMin", "attackCooldownMax", "attackDamage", "attackPushback", "braveGroupSize", "swarmGroupSize", "drawW", "drawH"],
   checkpoint: ["respawnId"],
   powercell_01: [],
   flare_pickup_01: [],

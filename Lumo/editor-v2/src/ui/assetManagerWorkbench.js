@@ -465,6 +465,7 @@ function renderStepBody(wizard, validation) {
     if (type === "entities") {
       const safeSchema = getEntitySafeParamSchema(draft.behaviorFamilyId);
       const safeDefaults = draft.safeDefaults || {};
+      const isHoverVoidFamily = draft.behaviorFamilyId === "hover_void_01";
       const safeFieldMarkup = safeSchema.length
         ? safeSchema.map((field) => {
           const fieldKey = `safeDefaults.${field.key}`;
@@ -490,8 +491,8 @@ function renderStepBody(wizard, validation) {
             "Draw settings",
             "",
             `
-              ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan6" })}
-              ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan6" })}
+              ${renderInput(isHoverVoidFamily ? "Width" : "Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan6" })}
+              ${renderInput(isHoverVoidFamily ? "Height" : "Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan6" })}
             `,
           )}
         </div>
