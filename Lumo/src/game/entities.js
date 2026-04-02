@@ -1271,9 +1271,12 @@ if (this._catById){
       });
     }
 
-    spawnDarkSpellHazard(centerX, centerY, source){
+    spawnDarkSpellHazard(centerX, centerY, source, projectileSprite=null, projectileSpritePath=""){
       const w = 18;
       const h = 18;
+      const normalizedProjectileSpritePath = (typeof projectileSpritePath === "string")
+        ? projectileSpritePath
+        : "";
       this.items.push({
         type:"darkSpellHazard",
         active:true,
@@ -1293,6 +1296,8 @@ if (this._catById){
         energyLoss: source?.energyLoss ?? 40,
         knockbackX: source?.knockbackX ?? 260,
         knockbackY: source?.knockbackY ?? -220,
+        _projectileSpritePath: normalizedProjectileSpritePath,
+        _projectileSprite: projectileSprite,
       });
     }
 
@@ -1638,7 +1643,13 @@ if (e.type === "lantern"){
           if (!impacted && e.age >= (e.maxAge || 4.0)) impacted = true;
 
           if (impacted){
-            this.spawnDarkSpellHazard(e.x + e.w*0.5, e.y + e.h*0.5, e);
+            this.spawnDarkSpellHazard(
+              e.x + e.w*0.5,
+              e.y + e.h*0.5,
+              e,
+              e._projectileSprite,
+              e._projectileSpritePath
+            );
             e.active = false;
             continue;
           }
@@ -2960,10 +2971,16 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
 
         if (e.type === "darkSpellHazard"){
           const spr = this.sprites && this.sprites.darkSpell;
+          if ((!e._projectileSprite || !e._projectileSprite._ok) && e._projectileSpritePath){
+            e._projectileSprite = this._tryLoadImage(e._projectileSpritePath);
+          }
+          const customImg = (e._projectileSprite && e._projectileSprite._ok) ? e._projectileSprite : null;
           const t = e.t || 0;
-          let img = spr && spr.impact01;
-          if (t < 0.15) img = spr && spr.impact03;
-          else if (t < 0.30) img = spr && spr.impact02;
+          let img = customImg || (spr && spr.impact01);
+          if (!customImg){
+            if (t < 0.15) img = spr && spr.impact03;
+            else if (t < 0.30) img = spr && spr.impact02;
+          }
 
           ctx.save();
           ctx.globalAlpha = Math.max(0, Math.min(1, (typeof e.alpha === "number") ? e.alpha : 1));
