@@ -86,13 +86,15 @@ function renderInput(label, field, value, placeholder, description = "", options
   const statusClass = options.statusClass || "";
   const fieldClass = options.fieldClass || "";
   const isReadonly = options.readonly === true;
+  const feedbackMessage = errorMessage || statusMessage;
+  const feedbackClass = errorMessage ? "assetWizardFieldError" : statusClass;
   return `
     <label class="assetWizardField ${escapeHtml(fieldClass)}" for="asset-wizard-${escapeHtml(field)}">
       <span class="assetWizardFieldLabelRow">
         <span class="assetWizardFieldLabel">${escapeHtml(label)}</span>
         ${renderInfoTip(infoTip)}
       </span>
-      ${description ? `<span class="assetWizardFieldHelp">${escapeHtml(description)}</span>` : ""}
+      <span class="assetWizardFieldHelp${description ? "" : " isEmpty"}">${description ? escapeHtml(description) : "&nbsp;"}</span>
       <input
         id="asset-wizard-${escapeHtml(field)}"
         data-asset-manager-field="${escapeHtml(field)}"
@@ -105,8 +107,7 @@ function renderInput(label, field, value, placeholder, description = "", options
         autocomplete="off"
         ${isReadonly ? "readonly" : ""}
       />
-      ${errorMessage ? `<span class="assetWizardFieldError">${escapeHtml(errorMessage)}</span>` : ""}
-      ${statusMessage ? `<span class="assetWizardFieldHelp ${escapeHtml(statusClass)}">${escapeHtml(statusMessage)}</span>` : ""}
+      <span class="assetWizardFieldFeedback ${feedbackClass ? escapeHtml(feedbackClass) : "isEmpty"}">${feedbackMessage ? escapeHtml(feedbackMessage) : "&nbsp;"}</span>
     </label>
   `;
 }
@@ -123,7 +124,7 @@ function renderFilePickerField(label, field, wizard, options = {}) {
         <span class="assetWizardFieldLabel">${escapeHtml(label)}</span>
         ${renderInfoTip(options.infoTip || "")}
       </span>
-      ${hint ? `<span class="assetWizardFieldHelp">${escapeHtml(hint)}</span>` : ""}
+      <span class="assetWizardFieldHelp${hint ? "" : " isEmpty"}">${hint ? escapeHtml(hint) : "&nbsp;"}</span>
       <div class="assetWizardFilePickerRow">
         <button type="button" class="assetWizardNavButton" data-asset-manager-action="choose-file" data-asset-manager-file-field="${escapeHtml(field)}">Choose File</button>
         <span class="assetWizardFileName${fileName ? "" : " isMuted"}">${escapeHtml(fileName || "No file selected")}</span>
@@ -134,7 +135,7 @@ function renderFilePickerField(label, field, wizard, options = {}) {
         data-asset-manager-file-field="${escapeHtml(field)}"
         accept="image/*"
       />
-      ${errorMessage ? `<span class="assetWizardFieldError">${escapeHtml(errorMessage)}</span>` : ""}
+      <span class="assetWizardFieldFeedback ${errorMessage ? "assetWizardFieldError" : "isEmpty"}">${errorMessage ? escapeHtml(errorMessage) : "&nbsp;"}</span>
     </div>
   `;
 }
@@ -144,19 +145,20 @@ function renderSelectInput(label, field, value, optionsList = [], description = 
   const infoTip = options.infoTip || "";
   const placeholder = options.placeholder || "Select…";
   const fieldClass = options.fieldClass || "";
+  const compact = options.compact === true;
   return `
     <label class="assetWizardField ${escapeHtml(fieldClass)}" for="asset-wizard-${escapeHtml(field)}">
       <span class="assetWizardFieldLabelRow">
         <span class="assetWizardFieldLabel">${escapeHtml(label)}</span>
         ${renderInfoTip(infoTip)}
       </span>
-      ${description ? `<span class="assetWizardFieldHelp">${escapeHtml(description)}</span>` : ""}
+      <span class="assetWizardFieldHelp${description ? "" : " isEmpty"}">${description ? escapeHtml(description) : "&nbsp;"}</span>
       <select
         id="asset-wizard-${escapeHtml(field)}"
         data-asset-manager-field="${escapeHtml(field)}"
         data-asset-manager-draft-field="${escapeHtml(field)}"
         aria-invalid="${errorMessage ? "true" : "false"}"
-        class="${errorMessage ? "isInvalid" : ""}"
+        class="${errorMessage ? "isInvalid" : ""} ${compact ? "assetWizardFieldControlCompact" : ""}"
       >
         <option value="">${escapeHtml(placeholder)}</option>
         ${optionsList.map((option) => `
@@ -165,9 +167,30 @@ function renderSelectInput(label, field, value, optionsList = [], description = 
           </option>
         `).join("")}
       </select>
-      ${errorMessage ? `<span class="assetWizardFieldError">${escapeHtml(errorMessage)}</span>` : ""}
+      <span class="assetWizardFieldFeedback ${errorMessage ? "assetWizardFieldError" : "isEmpty"}">${errorMessage ? escapeHtml(errorMessage) : "&nbsp;"}</span>
     </label>
   `;
+}
+
+function renderDrawAnchorInput(value, errorMessage = "", fieldClass = "") {
+  return renderSelectInput(
+    "Draw anchor",
+    "drawAnchor",
+    value,
+    [
+      { value: "BL", label: "BL" },
+      { value: "BR", label: "BR" },
+      { value: "TL", label: "TL" },
+      { value: "TR", label: "TR" },
+    ],
+    "",
+    {
+      errorMessage,
+      infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left).",
+      fieldClass,
+      compact: true,
+    },
+  );
 }
 
 function renderFieldGroup(title, description, content, options = {}) {
@@ -262,11 +285,12 @@ function renderStepBody(wizard, validation) {
           <p>Choose a registered item as your edit target. Final save/write behavior is still deferred.</p>
           <label class="assetWizardField" for="asset-wizard-existing-id">
             <span class="assetWizardFieldLabel">Registered asset</span>
+            <span class="assetWizardFieldHelp isEmpty">&nbsp;</span>
             <select id="asset-wizard-existing-id" data-asset-manager-select="existing-id" data-asset-manager-field="selected-existing">
               <option value="">Choose an asset…</option>
               ${options.map((option) => `<option value="${escapeHtml(option.id)}" ${option.id === wizard.selectedExistingAssetId ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
             </select>
-            ${fieldErrors.selectedExistingAssetId ? `<span class="assetWizardFieldError">${escapeHtml(fieldErrors.selectedExistingAssetId)}</span>` : ""}
+            <span class="assetWizardFieldFeedback ${fieldErrors.selectedExistingAssetId ? "assetWizardFieldError" : "isEmpty"}">${fieldErrors.selectedExistingAssetId ? escapeHtml(fieldErrors.selectedExistingAssetId) : "&nbsp;"}</span>
           </label>
         </div>
       `;
@@ -371,7 +395,7 @@ function renderStepBody(wizard, validation) {
               ${renderInput("Display name", "displayName", draft.displayName, "Blue Lantern", "Shown in the entity picker.", { errorMessage: fieldErrors.displayName, fieldClass: "assetWizardFieldSpan3" })}
               ${renderInput("Preset id", "presetId", draft.presetId, "blue_lantern", "Stable id for this preset.", { errorMessage: fieldErrors.presetId, statusMessage: presetIdStatus, statusClass: presetIdAvailability === "taken" ? "assetWizardFieldError" : "assetManagerMuted", fieldClass: "assetWizardFieldSpan3" })}
               ${renderFilePickerField("Sprite file", "spritePath", wizard, { errorMessage: fieldErrors.spritePath, hint: "Recommended folder: data/assets/sprites/entities/", fieldClass: "assetWizardFieldSpan4" })}
-              ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", "BL", "", { errorMessage: fieldErrors.drawAnchor, fieldClass: "assetWizardFieldSpan2" })}
+              ${renderDrawAnchorInput(draft.drawAnchor || "BL", fieldErrors.drawAnchor, "assetWizardFieldSpan2")}
             `,
           )}
         </div>
@@ -398,10 +422,11 @@ function renderStepBody(wizard, validation) {
             `
               <label class="assetWizardField assetWizardFieldSpan6" for="asset-wizard-collisionType">
                 <span class="assetWizardFieldLabelRow"><span class="assetWizardFieldLabel">Collision profile</span>${renderInfoTip("Derived from Tile behavior to keep save semantics safe.")}</span>
+                <span class="assetWizardFieldHelp isEmpty">&nbsp;</span>
                 <input id="asset-wizard-collisionType" type="text" readonly value="${escapeHtml(draft.collisionType || "")}" />
-                ${fieldErrors.collisionType ? `<span class="assetWizardFieldError">${escapeHtml(fieldErrors.collisionType)}</span>` : ""}
+                <span class="assetWizardFieldFeedback ${fieldErrors.collisionType ? "assetWizardFieldError" : "isEmpty"}">${fieldErrors.collisionType ? escapeHtml(fieldErrors.collisionType) : "&nbsp;"}</span>
               </label>
-              ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor, "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left).", fieldClass: "assetWizardFieldSpan6" })}
+              ${renderDrawAnchorInput(draft.drawAnchor, fieldErrors.drawAnchor, "assetWizardFieldSpan4")}
             `,
             { groupClass: "isDenseGrid" },
           )}
@@ -427,7 +452,7 @@ function renderStepBody(wizard, validation) {
             "Draw settings",
             "",
             `
-              ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Defines how the sprite aligns to the grid (BL = bottom-left).", fieldClass: "assetWizardFieldSpan4" })}
+              ${renderDrawAnchorInput(draft.drawAnchor || "BL", fieldErrors.drawAnchor, "assetWizardFieldSpan2")}
               ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan4" })}
               ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan4" })}
             `,
@@ -454,7 +479,17 @@ function renderStepBody(wizard, validation) {
             "Draw settings",
             "",
             `
-              ${renderInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", "BL", "", { errorMessage: fieldErrors.drawAnchor, infoTip: "Decor supports BL (grounded) and TL (attached) anchor semantics.", fieldClass: "assetWizardFieldSpan4" })}
+              ${renderSelectInput("Draw anchor", "drawAnchor", draft.drawAnchor || "BL", [
+                { value: "BL", label: "BL" },
+                { value: "BR", label: "BR" },
+                { value: "TL", label: "TL" },
+                { value: "TR", label: "TR" },
+              ], "", {
+                errorMessage: fieldErrors.drawAnchor,
+                infoTip: "Decor supports BL (grounded) and TL (attached) anchor semantics.",
+                fieldClass: "assetWizardFieldSpan2",
+                compact: true,
+              })}
               ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan4" })}
               ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan4" })}
             `,
