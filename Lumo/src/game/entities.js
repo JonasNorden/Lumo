@@ -3679,9 +3679,9 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
       // Keep classic face geometry fixed regardless of body sprite sizing.
       const largeR = 2.8 * sEye;
       const smallR = 1.9 * sEye;
-      const largeX = cx - (7 * sEye) * facingX;
+      const largeX = cx - (7 * sEye) * facingX + (2 * facingX);
       const largeY = cy - (6 * sEye);
-      const smallX = cx + (6 * sEye) * facingX;
+      const smallX = cx + (6 * sEye) * facingX - (2 * facingX);
       const smallY = cy - (4 * sEye);
       const eyeAlpha = (1.0 * eyeK) * Math.max(0, Math.min(1, alphaMul));
       if (eyeAlpha <= 0.001) return;
