@@ -1016,6 +1016,9 @@ if (this._catById){
       const customSpritePath = (typeof params?.customSpritePath === "string" && params.customSpritePath.trim())
         ? params.customSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
         : "";
+      const projectileSpritePath = (typeof params?.projectileSpritePath === "string" && params.projectileSpritePath.trim())
+        ? params.projectileSpritePath.trim().replace(/^(\.{1,2}\/)+/, "")
+        : "";
 
       return {
         type:"darkCreature",
@@ -1056,6 +1059,8 @@ if (this._catById){
         _animT: Math.random() * 0.8,
         _darkCreatureBodySpritePath: customSpritePath || "",
         _darkCreatureBodySprite: customSpritePath ? this._tryLoadImage(customSpritePath) : null,
+        _darkCreatureProjectileSpritePath: projectileSpritePath || "",
+        _darkCreatureProjectileSprite: projectileSpritePath ? this._tryLoadImage(projectileSpritePath) : null,
         dying:false,
         dissolveT:0,
         dissolveDur:1.35,
@@ -1243,6 +1248,10 @@ if (this._catById){
     }
 
     spawnDarkSpellProjectile(x, y, vx, vy, source){
+      const projectileSpritePath = (typeof source?._darkCreatureProjectileSpritePath === "string")
+        ? source._darkCreatureProjectileSpritePath
+        : "";
+      const projectileSprite = source?._darkCreatureProjectileSprite || null;
       this.items.push({
         type:"darkSpellProjectile",
         active:true,
@@ -1257,6 +1266,8 @@ if (this._catById){
         energyLoss: source?.energyLoss ?? 40,
         knockbackX: source?.knockbackX ?? 260,
         knockbackY: source?.knockbackY ?? -220,
+        _darkSpellProjectileSpritePath: projectileSpritePath,
+        _darkSpellProjectileSprite: projectileSprite,
       });
     }
 
@@ -2918,7 +2929,8 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
 
         if (e.type === "darkSpellProjectile"){
           const spr = this.sprites && this.sprites.darkSpell;
-          const img = spr && spr.flight;
+          const customImg = e._darkSpellProjectileSprite;
+          const img = (customImg && customImg._ok) ? customImg : (spr && spr.flight);
           if (img && img._ok){
             const cx = sx + e.w * 0.5;
             const cy = sy + e.h * 0.5;

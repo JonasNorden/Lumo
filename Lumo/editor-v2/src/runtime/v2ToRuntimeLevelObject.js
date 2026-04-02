@@ -586,11 +586,15 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
         }
         if (runtimeId === "dark_creature_01") {
           const authoredCustomSpritePath = normalizeRuntimeSpritePath(runtimeParams.customSpritePath);
+          const authoredProjectileSpritePath = normalizeRuntimeSpritePath(runtimeParams.projectileSpritePath);
           const darkCreaturePreset = findEntityPresetById(runtimeParams.presetId) || findEntityPresetById(entityType.toLowerCase());
           if (authoredCustomSpritePath) {
             runtimeParams.customSpritePath = authoredCustomSpritePath;
           } else if (darkCreaturePreset?.type === "dark_creature_01" && typeof darkCreaturePreset.img === "string" && darkCreaturePreset.img.trim()) {
             runtimeParams.customSpritePath = normalizeRuntimeSpritePath(darkCreaturePreset.img);
+          }
+          if (authoredProjectileSpritePath) {
+            runtimeParams.projectileSpritePath = authoredProjectileSpritePath;
           }
           if (darkCreaturePreset?.type === "dark_creature_01") {
             if (!Number.isFinite(Number(runtimeParams.drawW)) && Number.isFinite(Number(darkCreaturePreset.drawW))) {
