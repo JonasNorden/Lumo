@@ -476,8 +476,20 @@ function renderStepBody(wizard, validation) {
         ? editableSafeSchema.map((field) => {
           const fieldKey = `safeDefaults.${field.key}`;
           const rawValue = safeDefaults[field.key];
-          const value = field.type === "boolean" ? String(Boolean(rawValue)) : String(rawValue ?? "");
-          const placeholder = field.type === "boolean" ? "true or false" : field.type === "number" ? "0" : "value";
+          const value = field.type === "boolean"
+            ? (rawValue === true ? "true" : rawValue === false ? "false" : "")
+            : String(rawValue ?? "");
+          const placeholder = field.type === "number" ? "0" : "value";
+          if (field.type === "boolean") {
+            return renderSelectInput(field.label, fieldKey, value, [
+              { value: "true", label: "True" },
+              { value: "false", label: "False" },
+            ], "", {
+              errorMessage: fieldErrors[fieldKey],
+              placeholder: "Select…",
+              fieldClass: "assetWizardFieldSpan4",
+            });
+          }
           return renderInput(field.label, fieldKey, value, placeholder, "", {
             errorMessage: fieldErrors[fieldKey],
             fieldClass: "assetWizardFieldSpan4",

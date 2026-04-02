@@ -221,9 +221,8 @@ function isValidFootprint(value) {
   }
 }
 
-function normalizeDrawSizeValue(value) {
-  const resolved = toPositiveNumberOrNull(value);
-  return resolved === null ? "24" : String(Math.round(resolved));
+function withFallback(value, fallback) {
+  return value === undefined || value === null ? fallback : value;
 }
 
 function toSlugToken(value) {
@@ -382,6 +381,33 @@ function normalizeEntityParamsDraft(familyId, paramsDraft = {}) {
   return normalized;
 }
 
+function normalizeEntityParamsDraftForEditing(familyId, paramsDraft = {}) {
+  const schema = ENTITY_SAFE_PARAM_SCHEMA[familyId] || [];
+  const normalized = {};
+  for (const field of schema) {
+    if (!Object.prototype.hasOwnProperty.call(paramsDraft || {}, field.key)) continue;
+    const rawValue = paramsDraft[field.key];
+    if (field.type === "boolean") {
+      if (typeof rawValue === "boolean") {
+        normalized[field.key] = rawValue;
+        continue;
+      }
+      const normalizedBoolean = normalizeString(rawValue).toLowerCase();
+      if (normalizedBoolean === "true" || normalizedBoolean === "1" || normalizedBoolean === "yes" || normalizedBoolean === "on") {
+        normalized[field.key] = true;
+        continue;
+      }
+      if (normalizedBoolean === "false" || normalizedBoolean === "0" || normalizedBoolean === "no" || normalizedBoolean === "off") {
+        normalized[field.key] = false;
+        continue;
+      }
+      continue;
+    }
+    normalized[field.key] = rawValue;
+  }
+  return normalized;
+}
+
 export function getEntityBehaviorFamilyOptions() {
   return ENTITY_FAMILY_OPTIONS.map((entry) => ({ ...entry }));
 }
@@ -459,28 +485,28 @@ export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
       ...baseDraft,
       collisionType: normalizeString(baseDraft.collisionType) || "solid",
       drawAnchor: normalizeString(baseDraft.drawAnchor) || "BL",
-      drawWidth: normalizeDrawSizeValue(baseDraft.drawWidth),
-      drawHeight: normalizeDrawSizeValue(baseDraft.drawHeight),
-      footprint: normalizeString(baseDraft.footprint) || '{"w":1,"h":1}',
+      drawWidth: withFallback(baseDraft.drawWidth, "24"),
+      drawHeight: withFallback(baseDraft.drawHeight, "24"),
+      footprint: withFallback(baseDraft.footprint, '{"w":1,"h":1}'),
     });
   }
   if (assetType === ASSET_WIZARD_TYPES.BACKGROUND) {
     return {
       ...baseDraft,
       drawAnchor: normalizeString(baseDraft.drawAnchor) || "BL",
-      drawWidth: normalizeDrawSizeValue(baseDraft.drawWidth),
-      drawHeight: normalizeDrawSizeValue(baseDraft.drawHeight),
-      fallbackColor: normalizeString(baseDraft.fallbackColor) || "#3d4b63",
-      footprint: normalizeString(baseDraft.footprint) || '{"w":1,"h":1}',
+      drawWidth: withFallback(baseDraft.drawWidth, "24"),
+      drawHeight: withFallback(baseDraft.drawHeight, "24"),
+      fallbackColor: withFallback(baseDraft.fallbackColor, "#3d4b63"),
+      footprint: withFallback(baseDraft.footprint, '{"w":1,"h":1}'),
     };
   }
   if (assetType === ASSET_WIZARD_TYPES.DECOR) {
     return {
       ...baseDraft,
       drawAnchor: normalizeString(baseDraft.drawAnchor) || "BL",
-      drawWidth: normalizeDrawSizeValue(baseDraft.drawWidth),
-      drawHeight: normalizeDrawSizeValue(baseDraft.drawHeight),
-      footprint: normalizeString(baseDraft.footprint) || '{"w":1,"h":1}',
+      drawWidth: withFallback(baseDraft.drawWidth, "24"),
+      drawHeight: withFallback(baseDraft.drawHeight, "24"),
+      footprint: withFallback(baseDraft.footprint, '{"w":1,"h":1}'),
     };
   }
   if (assetType === ASSET_WIZARD_TYPES.ENTITY) {
@@ -491,7 +517,7 @@ export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
     const darkCreatureDrawSize = familyId === "dark_creature_01"
       ? resolveDarkCreatureDrawSize(darkCreatureBodySize)
       : null;
-    const normalizedSafeDefaults = normalizeEntityParamsDraft(familyId, baseDraft.safeDefaults || {});
+    const normalizedSafeDefaults = normalizeEntityParamsDraftForEditing(familyId, baseDraft.safeDefaults || {});
     if (familyId === "dark_creature_01") {
       normalizedSafeDefaults.drawW = darkCreatureDrawSize.drawW;
       normalizedSafeDefaults.drawH = darkCreatureDrawSize.drawH;
@@ -503,8 +529,8 @@ export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
       presetId: normalizeString(baseDraft.presetId),
       drawAnchor: normalizeString(baseDraft.drawAnchor) || "BL",
       darkCreatureBodySize,
-      drawWidth: familyId === "dark_creature_01" ? String(darkCreatureDrawSize.drawW) : normalizeDrawSizeValue(baseDraft.drawWidth),
-      drawHeight: familyId === "dark_creature_01" ? String(darkCreatureDrawSize.drawH) : normalizeDrawSizeValue(baseDraft.drawHeight),
+      drawWidth: familyId === "dark_creature_01" ? String(darkCreatureDrawSize.drawW) : withFallback(baseDraft.drawWidth, "24"),
+      drawHeight: familyId === "dark_creature_01" ? String(darkCreatureDrawSize.drawH) : withFallback(baseDraft.drawHeight, "24"),
       safeDefaults: normalizedSafeDefaults,
     };
   }
