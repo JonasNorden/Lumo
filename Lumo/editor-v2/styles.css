@@ -2820,7 +2820,7 @@ kbd {
 .assetWizardFieldGroup {
   border: 1px solid #1f2d48;
   border-radius: 10px;
-  padding: 8px;
+  padding: 7px 8px;
   background: rgba(9, 15, 27, 0.55);
   display: grid;
   gap: 6px;
@@ -2884,7 +2884,7 @@ kbd {
 .assetWizardFieldGrid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 4px 7px;
+  gap: 3px 6px;
 }
 
 .assetWizardField {
@@ -2893,6 +2893,7 @@ kbd {
   align-content: start;
   grid-template-rows: auto minmax(13px, auto) minmax(28px, auto) minmax(15px, auto);
   grid-column: span 6;
+  min-width: 0;
 }
 
 .assetWizardFieldSpan3 {
@@ -2977,6 +2978,8 @@ kbd {
   padding: 4px 8px;
   font-size: 12px;
   align-self: start;
+  width: 100%;
+  min-width: 0;
 }
 
 .assetWizardFieldControlCompact {
@@ -2985,8 +2988,13 @@ kbd {
   justify-self: start;
 }
 
+.assetWizardControlNumberCompact {
+  width: clamp(64px, 100%, 96px) !important;
+  justify-self: start;
+}
+
 .assetWizardFieldGroup.isDenseGrid .assetWizardFieldGrid {
-  grid-template-columns: repeat(6, minmax(96px, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 4px 6px;
 }
 
@@ -3034,13 +3042,17 @@ kbd {
   gap: 2px 6px;
 }
 
+.assetWizardField.isControlOnlyField {
+  grid-template-rows: auto;
+}
+
 .assetWizardFieldGroup.isTileSizingCompact {
-  padding: 6px;
-  gap: 4px;
+  padding: 5px 7px;
+  gap: 3px;
 }
 
 .assetWizardFieldGroup.isTileSizingCompact .assetWizardFieldGrid {
-  gap: 3px 6px;
+  gap: 2px 6px;
 }
 
 .assetWizardFieldGroup.isTileSizingCompact .assetWizardField input {
@@ -3049,21 +3061,53 @@ kbd {
   padding-bottom: 3px;
 }
 
-.assetWizardFieldGroup.isUltraDenseGrid .assetWizardFieldGrid {
-  grid-template-columns: repeat(10, minmax(84px, 1fr));
-  gap: 3px 5px;
+.assetWizardFieldGroup.isHoverVoidParamGrid .assetWizardFieldGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 2px 5px;
 }
 
-.assetWizardFieldGroup.isUltraDenseGrid .assetWizardField {
-  grid-column: span 2;
+.assetWizardFieldGroup.isHoverVoidParamGrid .assetWizardField {
+  grid-column: span 1;
 }
 
-.assetWizardFieldGroup.isDrawSettingsCompact .assetWizardFieldGrid {
-  gap: 3px 6px;
+.assetWizardFieldGroup.isHoverVoidParamGrid .assetWizardField input,
+.assetWizardFieldGroup.isHoverVoidParamGrid .assetWizardField select {
+  width: clamp(64px, 100%, 96px);
+}
+
+.assetWizardFieldGroup.isEntityDrawCompact {
+  padding-top: 5px;
+  gap: 3px;
+}
+
+.assetWizardFieldGroup.isEntityDrawCompact .assetWizardFieldGrid {
+  gap: 2px 6px;
+}
+
+.assetWizardFieldGroup.isEntityDrawCompact .assetWizardField {
+  grid-column: span 3;
+}
+
+.assetWizardFieldGroup.isHoverVoidDrawRow {
+  padding-top: 5px;
+  gap: 3px;
+}
+
+.assetWizardFieldGroup.isHoverVoidDrawRow .assetWizardFieldGrid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 2px 6px;
+}
+
+.assetWizardFieldGroup.isHoverVoidDrawRow .assetWizardField {
+  grid-column: span 3;
 }
 
 .assetWizardFieldGroup.isDarkCreatureDrawRow .assetWizardFilePickerRow {
   min-height: 28px;
+}
+
+.assetWizardFieldGroup.isDarkCreatureDrawRow .assetWizardFieldGrid {
+  gap: 2px 6px;
 }
 
 .assetWizardField input.isInvalid,

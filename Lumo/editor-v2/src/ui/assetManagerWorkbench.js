@@ -85,6 +85,8 @@ function renderInput(label, field, value, placeholder, description = "", options
   const statusMessage = options.statusMessage || "";
   const statusClass = options.statusClass || "";
   const fieldClass = options.fieldClass || "";
+  const controlClass = options.controlClass || "";
+  const compactField = options.compactField === true;
   const isReadonly = options.readonly === true;
   const feedbackMessage = errorMessage || statusMessage;
   const feedbackClass = errorMessage ? "assetWizardFieldError" : statusClass;
@@ -94,20 +96,20 @@ function renderInput(label, field, value, placeholder, description = "", options
         <span class="assetWizardFieldLabel">${escapeHtml(label)}</span>
         ${renderInfoTip(infoTip)}
       </span>
-      <span class="assetWizardFieldHelp${description ? "" : " isEmpty"}">${description ? escapeHtml(description) : "&nbsp;"}</span>
+      ${compactField && !description ? "" : `<span class="assetWizardFieldHelp${description ? "" : " isEmpty"}">${description ? escapeHtml(description) : "&nbsp;"}</span>`}
       <input
         id="asset-wizard-${escapeHtml(field)}"
         data-asset-manager-field="${escapeHtml(field)}"
         data-asset-manager-draft-field="${escapeHtml(field)}"
         aria-invalid="${errorMessage ? "true" : "false"}"
         type="text"
-        class="${errorMessage ? "isInvalid" : ""}"
+        class="${errorMessage ? "isInvalid" : ""} ${escapeHtml(controlClass)}"
         value="${escapeHtml(value || "")}"
         placeholder="${escapeHtml(placeholder || "")}"
         autocomplete="off"
         ${isReadonly ? "readonly" : ""}
       />
-      <span class="assetWizardFieldFeedback ${feedbackClass ? escapeHtml(feedbackClass) : "isEmpty"}">${feedbackMessage ? escapeHtml(feedbackMessage) : "&nbsp;"}</span>
+      ${compactField && !feedbackMessage ? "" : `<span class="assetWizardFieldFeedback ${feedbackClass ? escapeHtml(feedbackClass) : "isEmpty"}">${feedbackMessage ? escapeHtml(feedbackMessage) : "&nbsp;"}</span>`}
     </label>
   `;
 }
@@ -146,19 +148,21 @@ function renderSelectInput(label, field, value, optionsList = [], description = 
   const placeholder = options.placeholder || "Select…";
   const fieldClass = options.fieldClass || "";
   const compact = options.compact === true;
+  const compactField = options.compactField === true;
+  const controlClass = options.controlClass || "";
   return `
     <label class="assetWizardField ${escapeHtml(fieldClass)}" for="asset-wizard-${escapeHtml(field)}">
       <span class="assetWizardFieldLabelRow">
         <span class="assetWizardFieldLabel">${escapeHtml(label)}</span>
         ${renderInfoTip(infoTip)}
       </span>
-      <span class="assetWizardFieldHelp${description ? "" : " isEmpty"}">${description ? escapeHtml(description) : "&nbsp;"}</span>
+      ${compactField && !description ? "" : `<span class="assetWizardFieldHelp${description ? "" : " isEmpty"}">${description ? escapeHtml(description) : "&nbsp;"}</span>`}
       <select
         id="asset-wizard-${escapeHtml(field)}"
         data-asset-manager-field="${escapeHtml(field)}"
         data-asset-manager-draft-field="${escapeHtml(field)}"
         aria-invalid="${errorMessage ? "true" : "false"}"
-        class="${errorMessage ? "isInvalid" : ""} ${compact ? "assetWizardFieldControlCompact" : ""}"
+        class="${errorMessage ? "isInvalid" : ""} ${compact ? "assetWizardFieldControlCompact" : ""} ${escapeHtml(controlClass)}"
       >
         <option value="">${escapeHtml(placeholder)}</option>
         ${optionsList.map((option) => `
@@ -167,7 +171,7 @@ function renderSelectInput(label, field, value, optionsList = [], description = 
           </option>
         `).join("")}
       </select>
-      <span class="assetWizardFieldFeedback ${errorMessage ? "assetWizardFieldError" : "isEmpty"}">${errorMessage ? escapeHtml(errorMessage) : "&nbsp;"}</span>
+      ${compactField && !errorMessage ? "" : `<span class="assetWizardFieldFeedback ${errorMessage ? "assetWizardFieldError" : "isEmpty"}">${errorMessage ? escapeHtml(errorMessage) : "&nbsp;"}</span>`}
     </label>
   `;
 }
@@ -385,7 +389,21 @@ function renderStepBody(wizard, validation) {
             "Behavior family",
             "Phase 1 supports only approved runtime-safe families.",
             `
-              ${renderSelectInput("Family", "behaviorFamilyId", draft.behaviorFamilyId, getEntityBehaviorFamilyOptions(), "", { errorMessage: fieldErrors.behaviorFamilyId, fieldClass: "assetWizardFieldSpan12" })}
+              <label class="assetWizardField assetWizardFieldSpan12 isControlOnlyField" for="asset-wizard-behaviorFamilyId">
+                <select
+                  id="asset-wizard-behaviorFamilyId"
+                  data-asset-manager-field="behaviorFamilyId"
+                  data-asset-manager-draft-field="behaviorFamilyId"
+                  aria-invalid="${fieldErrors.behaviorFamilyId ? "true" : "false"}"
+                  class="${fieldErrors.behaviorFamilyId ? "isInvalid" : ""}"
+                >
+                  <option value="">Select…</option>
+                  ${getEntityBehaviorFamilyOptions().map((option) => `
+                    <option value="${escapeHtml(option.value)}" ${String(option.value) === String(draft.behaviorFamilyId || "") ? "selected" : ""}>${escapeHtml(option.label)}</option>
+                  `).join("")}
+                </select>
+                ${fieldErrors.behaviorFamilyId ? `<span class="assetWizardFieldFeedback assetWizardFieldError">${escapeHtml(fieldErrors.behaviorFamilyId)}</span>` : ""}
+              </label>
             `,
             { groupClass: "isDenseGrid isSingleFieldCompact" },
           )}
@@ -435,9 +453,9 @@ function renderStepBody(wizard, validation) {
             "Sizing & footprint",
             "Keep draw sizing and footprint values compact and aligned.",
             `
-              ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan3" })}
-              ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan3" })}
-              ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { errorMessage: fieldErrors.footprint, fieldClass: "assetWizardFieldSpan6" })}
+              ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan2", controlClass: "assetWizardControlNumberCompact", compactField: true })}
+              ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan2", controlClass: "assetWizardControlNumberCompact", compactField: true })}
+              ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { errorMessage: fieldErrors.footprint, fieldClass: "assetWizardFieldSpan12", compactField: true })}
             `,
             { groupClass: "isDenseGrid isTileSizingCompact" },
           )}
@@ -536,6 +554,8 @@ function renderStepBody(wizard, validation) {
           return renderInput(field.label, fieldKey, value, placeholder, "", {
             errorMessage: fieldErrors[fieldKey],
             fieldClass: "assetWizardFieldSpan2",
+            controlClass: field.type === "number" ? "assetWizardControlNumberCompact" : "",
+            compactField: true,
           });
         }).join("")
         : '<p class="assetManagerMuted">This family has no editable safe defaults in Phase 1.</p>';
@@ -547,26 +567,26 @@ function renderStepBody(wizard, validation) {
             "Default params",
             "",
             safeFieldMarkup,
-            { groupClass: `isDenseGrid ${isHoverVoidFamily ? "isUltraDenseGrid" : ""}`.trim() },
+            { groupClass: `isDenseGrid ${isHoverVoidFamily ? "isHoverVoidParamGrid" : ""}`.trim() },
           )}
           ${renderFieldGroup(
             "Draw settings",
             "",
             isDarkCreatureFamily
               ? `
-                ${renderSelectInput("Body size", "darkCreatureBodySize", draft.darkCreatureBodySize || "1x1", getDarkCreatureBodySizeOptions(), "", { errorMessage: fieldErrors.darkCreatureBodySize, fieldClass: "assetWizardFieldSpan2" })}
+                ${renderSelectInput("Body size", "darkCreatureBodySize", draft.darkCreatureBodySize || "1x1", getDarkCreatureBodySizeOptions(), "", { errorMessage: fieldErrors.darkCreatureBodySize, fieldClass: "assetWizardFieldSpan3", compactField: true })}
                 ${renderFilePickerField("Projectile sprite", "safeDefaults.projectileSpritePath", wizard, {
                   errorMessage: fieldErrors["safeDefaults.projectileSpritePath"],
                   hint: "Optional. Choose a projectile sprite image for Dark Creature spells.",
-                  fieldClass: "assetWizardFieldSpan4",
+                  fieldClass: "assetWizardFieldSpan9",
                   fileNameField: "projectileSpriteFileName",
                 })}
               `
               : `
-                ${renderInput(isHoverVoidFamily ? "Width" : "Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: isHoverVoidFamily ? "assetWizardFieldSpan3" : "assetWizardFieldSpan6" })}
-                ${renderInput(isHoverVoidFamily ? "Height" : "Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: isHoverVoidFamily ? "assetWizardFieldSpan3" : "assetWizardFieldSpan6" })}
+                ${renderInput(isHoverVoidFamily ? "Width" : "Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan3", controlClass: "assetWizardControlNumberCompact", compactField: true })}
+                ${renderInput(isHoverVoidFamily ? "Height" : "Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan3", controlClass: "assetWizardControlNumberCompact", compactField: true })}
               `,
-            { groupClass: `isDenseGrid ${isHoverVoidFamily ? "isDrawSettingsCompact" : ""} ${isDarkCreatureFamily ? "isDrawSettingsCompact isDarkCreatureDrawRow" : ""}`.trim() },
+            { groupClass: `${isHoverVoidFamily ? "isHoverVoidDrawRow" : "isEntityDrawCompact"} ${isDarkCreatureFamily ? "isDarkCreatureDrawRow" : ""}`.trim() },
           )}
         </div>
       `;
