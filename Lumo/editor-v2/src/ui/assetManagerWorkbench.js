@@ -120,15 +120,17 @@ function renderFilePickerField(label, field, wizard, options = {}) {
   const errorMessage = options.errorMessage || "";
   const hint = options.hint || "";
   const fieldClass = options.fieldClass || "";
+  const compactField = options.compactField === true;
+  const buttonClass = options.buttonClass || "";
   return `
     <div class="assetWizardField ${escapeHtml(fieldClass)}">
       <span class="assetWizardFieldLabelRow">
         <span class="assetWizardFieldLabel">${escapeHtml(label)}</span>
         ${renderInfoTip(options.infoTip || "")}
       </span>
-      <span class="assetWizardFieldHelp${hint ? "" : " isEmpty"}">${hint ? escapeHtml(hint) : "&nbsp;"}</span>
+      ${compactField && !hint ? "" : `<span class="assetWizardFieldHelp${hint ? "" : " isEmpty"}">${hint ? escapeHtml(hint) : "&nbsp;"}</span>`}
       <div class="assetWizardFilePickerRow">
-        <button type="button" class="assetWizardNavButton" data-asset-manager-action="choose-file" data-asset-manager-file-field="${escapeHtml(field)}">Choose File</button>
+        <button type="button" class="assetWizardNavButton ${escapeHtml(buttonClass)}" data-asset-manager-action="choose-file" data-asset-manager-file-field="${escapeHtml(field)}">Choose File</button>
         <span class="assetWizardFileName${fileName ? "" : " isMuted"}">${escapeHtml(fileName || "No file selected")}</span>
       </div>
       <input
@@ -137,7 +139,7 @@ function renderFilePickerField(label, field, wizard, options = {}) {
         data-asset-manager-file-field="${escapeHtml(field)}"
         accept="image/*"
       />
-      <span class="assetWizardFieldFeedback ${errorMessage ? "assetWizardFieldError" : "isEmpty"}">${errorMessage ? escapeHtml(errorMessage) : "&nbsp;"}</span>
+      ${compactField && !errorMessage ? "" : `<span class="assetWizardFieldFeedback ${errorMessage ? "assetWizardFieldError" : "isEmpty"}">${errorMessage ? escapeHtml(errorMessage) : "&nbsp;"}</span>`}
     </div>
   `;
 }
@@ -549,12 +551,14 @@ function renderStepBody(wizard, validation) {
             ], "", {
               errorMessage: fieldErrors[fieldKey],
               placeholder: "Select…",
-              fieldClass: "assetWizardFieldSpan2",
+              fieldClass: `assetWizardFieldSpan2 ${isDarkCreatureFamily ? "isControlOnlyField" : ""}`.trim(),
+              compactField: isDarkCreatureFamily,
+              compact: isDarkCreatureFamily,
             });
           }
           return renderInput(field.label, fieldKey, value, placeholder, "", {
             errorMessage: fieldErrors[fieldKey],
-            fieldClass: `assetWizardFieldSpan2 ${isFireflyFamily ? "assetWizardFireflyParamField isControlOnlyField" : ""}`.trim(),
+            fieldClass: `assetWizardFieldSpan2 ${isFireflyFamily ? "assetWizardFireflyParamField isControlOnlyField" : ""} ${isDarkCreatureFamily ? "isControlOnlyField" : ""}`.trim(),
             controlClass: field.type === "number" ? "assetWizardControlNumberCompact" : "",
             compactField: true,
           });
@@ -578,9 +582,10 @@ function renderStepBody(wizard, validation) {
                 ${renderSelectInput("Body size", "darkCreatureBodySize", draft.darkCreatureBodySize || "1x1", getDarkCreatureBodySizeOptions(), "", { errorMessage: fieldErrors.darkCreatureBodySize, fieldClass: "assetWizardFieldSpan3", compactField: true })}
                 ${renderFilePickerField("Projectile sprite", "safeDefaults.projectileSpritePath", wizard, {
                   errorMessage: fieldErrors["safeDefaults.projectileSpritePath"],
-                  hint: "Optional. Choose a projectile sprite image for Dark Creature spells.",
                   fieldClass: "assetWizardFieldSpan9",
                   fileNameField: "projectileSpriteFileName",
+                  compactField: true,
+                  buttonClass: "assetWizardFilePickerButtonCompact",
                 })}
               `
               : `
