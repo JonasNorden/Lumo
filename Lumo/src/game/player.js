@@ -478,9 +478,18 @@
       const def = this._getSurfaceDef(world);
       if (!def) return;
 
-      const sm = (typeof def.speedMul === 'number') ? def.speedMul : 1.0;
-      const am = (typeof def.accelMul === 'number') ? def.accelMul : 1.0;
-      const fm = (typeof def.frictionMul === 'number') ? def.frictionMul : 1.0;
+      // Runtime/world compatibility bridge:
+      // - legacy/player naming: speedMul, accelMul, frictionMul
+      // - runtime-resolved naming: maxSpeedMul, groundAccelMul, groundFrictionMul
+      const sm = (typeof def.speedMul === 'number')
+        ? def.speedMul
+        : ((typeof def.maxSpeedMul === 'number') ? def.maxSpeedMul : 1.0);
+      const am = (typeof def.accelMul === 'number')
+        ? def.accelMul
+        : ((typeof def.groundAccelMul === 'number') ? def.groundAccelMul : 1.0);
+      const fm = (typeof def.frictionMul === 'number')
+        ? def.frictionMul
+        : ((typeof def.groundFrictionMul === 'number') ? def.groundFrictionMul : 1.0);
 
       this.speed = this._baseSpeed * sm;
       this.groundAccel = this._baseGroundAccel * am;
@@ -600,7 +609,9 @@
         if (this.onGround && !this.onPlatform){
           const def = this._getSurfaceDef(world);
           if (def){
-            const fm = (typeof def.frictionMul === 'number') ? def.frictionMul : 1.0;
+            const fm = (typeof def.frictionMul === 'number')
+              ? def.frictionMul
+              : ((typeof def.groundFrictionMul === 'number') ? def.groundFrictionMul : 1.0);
             const nm = (def.name || "");
             if (fm <= 0.05 || nm === "ice") slipperyNow = true;
           }
