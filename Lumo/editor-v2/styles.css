@@ -3077,6 +3077,7 @@ kbd {
 .assetWizardFieldGroup.isDarkCreatureParamGrid .assetWizardFieldGrid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 2px 6px;
+  align-items: start;
 }
 
 .assetWizardFieldGroup.isFireflyDrawCompact {
@@ -3150,8 +3151,9 @@ kbd {
 }
 
 .assetWizardFieldGroup.isDarkCreatureDrawRow .assetWizardFilePickerRow {
-  min-height: 28px;
+  min-height: 24px;
   width: 100%;
+  gap: 6px;
 }
 
 .assetWizardFieldGroup.isDarkCreatureDrawRow .assetWizardFieldGrid {
@@ -3172,6 +3174,10 @@ kbd {
   grid-column: 2;
 }
 
+.assetWizardFieldGroup.isEntityDrawCompact.isDarkCreatureDrawRow .assetWizardField {
+  gap: 1px;
+}
+
 .assetWizardField input.isInvalid,
 .assetWizardField select.isInvalid {
   border-color: #b85d72;
@@ -3186,6 +3192,14 @@ kbd {
   align-items: center;
   gap: 8px;
   min-height: 34px;
+}
+
+.assetWizardFilePickerButtonCompact {
+  min-height: 26px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .assetWizardHiddenFileInput {
