@@ -88,6 +88,22 @@ const TILE_DRAW_OVERRIDES = {
   },
 };
 
+const CORE_BRUSH_CATALOG_ORDER = [
+  "soil_c",
+  "soil_bl",
+  "soil_br",
+  "grass_bt",
+  "grass_bl",
+  "grass_br",
+  "ice_00",
+  "ice_01",
+  "stone_ct",
+];
+
+const GUARDED_CORE_TILE_IDS = {
+  15: "stone_ct",
+};
+
 function normalizeSupportedSizes(rawSupportedSizes) {
   if (!Array.isArray(rawSupportedSizes) || rawSupportedSizes.length === 0) {
     return [...DEFAULT_SUPPORTED_TILE_SIZES];
@@ -131,15 +147,19 @@ const CATALOG_TILE_ENTRIES = TILE_SCRIPT_CATALOG
   .map(normalizeTileEntry)
   .filter(Boolean);
 
-const TILE_ASSETS = new Map(
-  CATALOG_TILE_ENTRIES.map((entry) => [entry.tileId, entry]),
-);
+function normalizeCatalogIdForCompare(value) {
+  return String(value || "").trim().toLowerCase();
+}
 
-const TILE_CATALOG_IDS = new Set(
-  CATALOG_TILE_ENTRIES
-    .map((entry) => String(entry.id || "").trim().toLowerCase())
-    .filter((value) => value.length > 0),
-);
+const TILE_ASSETS = new Map();
+
+for (const entry of CATALOG_TILE_ENTRIES) {
+  const guardedCatalogId = GUARDED_CORE_TILE_IDS[entry.tileId] || null;
+  if (guardedCatalogId && normalizeCatalogIdForCompare(entry.id) !== normalizeCatalogIdForCompare(guardedCatalogId)) {
+    continue;
+  }
+  TILE_ASSETS.set(entry.tileId, entry);
+}
 
 for (const [tileId, override] of Object.entries(TILE_DRAW_OVERRIDES)) {
   const numericTileId = Number(tileId);
@@ -157,35 +177,77 @@ for (const [tileId, override] of Object.entries(TILE_DRAW_OVERRIDES)) {
   });
 }
 
-export const BRUSH_SPRITE_OPTIONS = [
-  { value: "soil_c", label: "Soil C", tileId: 12 },
-  { value: "soil_bl", label: "Soil BL", tileId: 10 },
-  { value: "soil_br", label: "Soil BR", tileId: 11 },
-  { value: "grass_bt", label: "Grass BT", tileId: 6 },
-  { value: "grass_bl", label: "Grass BL", tileId: 7 },
-  { value: "grass_br", label: "Grass BR", tileId: 8 },
-  { value: "ice_00", label: "Ice 00", tileId: 16 },
-  { value: "ice_01", label: "Ice 01", tileId: 4 },
-  { value: "stone_ct", label: "Stone CT", tileId: 15 },
-].map((option) => {
-  const tileAsset = TILE_ASSETS.get(option.tileId);
+function toBrushSpriteOption(tileAsset) {
+  const catalogId = String(tileAsset?.id || "").trim();
+  if (!catalogId) return null;
   return {
-    ...option,
+    id: catalogId,
+    value: catalogId,
+    label: tileAsset?.label || catalogId,
+    tileId: tileAsset?.tileId,
     img: tileAsset?.img || null,
     drawW: tileAsset?.drawW || 24,
     drawH: tileAsset?.drawH || 24,
     drawAnchor: tileAsset?.drawAnchor || "TL",
+    drawOffX: Number.isFinite(tileAsset?.drawOffX) ? tileAsset.drawOffX : 0,
+    drawOffY: Number.isFinite(tileAsset?.drawOffY) ? tileAsset.drawOffY : 0,
+    footprint: tileAsset?.footprint || { w: 1, h: 1 },
     supportedSizes: normalizeSupportedSizes(tileAsset?.supportedSizes),
+    collisionType: tileAsset?.collisionType || null,
+    group: tileAsset?.group || "Tiles",
   };
-});
-
-for (const option of BRUSH_SPRITE_OPTIONS) {
-  const catalogId = String(option?.id || option?.value || "").trim().toLowerCase();
-  if (catalogId) TILE_CATALOG_IDS.add(catalogId);
 }
 
-function normalizeCatalogIdForCompare(value) {
-  return String(value || "").trim().toLowerCase();
+function getCoreBrushOrderIndex(catalogId) {
+  const normalizedCatalogId = normalizeCatalogIdForCompare(catalogId);
+  const index = CORE_BRUSH_CATALOG_ORDER.findIndex((value) => value === normalizedCatalogId);
+  return index >= 0 ? index : Number.POSITIVE_INFINITY;
+}
+
+function buildInitialBrushSpriteOptions() {
+  const seenCatalogIds = new Set();
+  return CATALOG_TILE_ENTRIES
+    .map((entry, index) => ({ entry, index }))
+    .sort((left, right) => {
+      const leftOrder = getCoreBrushOrderIndex(left.entry?.id);
+      const rightOrder = getCoreBrushOrderIndex(right.entry?.id);
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      return left.index - right.index;
+    })
+    .map(({ entry }) => toBrushSpriteOption(entry))
+    .filter((option) => {
+      if (!option || !Number.isInteger(option.tileId)) return false;
+      const normalizedCatalogId = normalizeCatalogIdForCompare(option.value);
+      if (!normalizedCatalogId || seenCatalogIds.has(normalizedCatalogId)) return false;
+      seenCatalogIds.add(normalizedCatalogId);
+      return true;
+    });
+}
+
+export const BRUSH_SPRITE_OPTIONS = buildInitialBrushSpriteOptions();
+
+function findTileEntryByCatalogId(catalogId) {
+  const normalizedCatalogId = normalizeCatalogIdForCompare(catalogId);
+  return CATALOG_TILE_ENTRIES.find((entry) => normalizeCatalogIdForCompare(entry?.id) === normalizedCatalogId)
+    || Array.from(TILE_ASSETS.values()).find((entry) => normalizeCatalogIdForCompare(entry?.id) === normalizedCatalogId)
+    || null;
+}
+
+for (const coreCatalogId of CORE_BRUSH_CATALOG_ORDER) {
+  if (BRUSH_SPRITE_OPTIONS.some((option) => normalizeCatalogIdForCompare(option.value) === coreCatalogId)) continue;
+  const fallbackOption = toBrushSpriteOption(findTileEntryByCatalogId(coreCatalogId));
+  if (fallbackOption) BRUSH_SPRITE_OPTIONS.push(fallbackOption);
+}
+
+const TILE_CATALOG_IDS = new Set(
+  CATALOG_TILE_ENTRIES
+    .map((entry) => normalizeCatalogIdForCompare(entry?.id))
+    .filter((value) => value.length > 0),
+);
+
+for (const option of BRUSH_SPRITE_OPTIONS) {
+  const catalogId = normalizeCatalogIdForCompare(option?.id || option?.value);
+  if (catalogId) TILE_CATALOG_IDS.add(catalogId);
 }
 
 export function isTileCatalogIdTaken(catalogId) {
@@ -226,21 +288,24 @@ export function registerTileSpriteOption(entry) {
   BRUSH_SPRITE_OPTIONS.push(normalizedOption);
   TILE_CATALOG_IDS.add(catalogId.toLowerCase());
 
-  TILE_ASSETS.set(normalizedOption.tileId, {
-    tileId: normalizedOption.tileId,
-    id: normalizedOption.id,
-    label: normalizedOption.label,
-    img: normalizedOption.img,
-    drawW: normalizedOption.drawW,
-    drawH: normalizedOption.drawH,
-    drawAnchor: normalizedOption.drawAnchor,
-    drawOffX: normalizedOption.drawOffX,
-    drawOffY: normalizedOption.drawOffY,
-    footprint: normalizedOption.footprint,
-    supportedSizes: normalizedOption.supportedSizes,
-    collisionType: normalizedOption.collisionType,
-    group: normalizedOption.group,
-  });
+  const guardedCatalogId = GUARDED_CORE_TILE_IDS[normalizedOption.tileId] || null;
+  if (!guardedCatalogId || normalizeCatalogIdForCompare(normalizedOption.id) === normalizeCatalogIdForCompare(guardedCatalogId)) {
+    TILE_ASSETS.set(normalizedOption.tileId, {
+      tileId: normalizedOption.tileId,
+      id: normalizedOption.id,
+      label: normalizedOption.label,
+      img: normalizedOption.img,
+      drawW: normalizedOption.drawW,
+      drawH: normalizedOption.drawH,
+      drawAnchor: normalizedOption.drawAnchor,
+      drawOffX: normalizedOption.drawOffX,
+      drawOffY: normalizedOption.drawOffY,
+      footprint: normalizedOption.footprint,
+      supportedSizes: normalizedOption.supportedSizes,
+      collisionType: normalizedOption.collisionType,
+      group: normalizedOption.group,
+    });
+  }
 
   return { ok: true, option: normalizedOption };
 }
