@@ -3062,8 +3062,11 @@ kbd {
 }
 
 .assetWizardFieldGroup.isHoverVoidParamGrid .assetWizardFieldGrid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 2px 5px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 8px;
+  align-items: start;
+  align-content: start;
 }
 
 .assetWizardFieldGroup.isFireflyParamGrid .assetWizardFieldGrid {
@@ -3115,12 +3118,19 @@ kbd {
 }
 
 .assetWizardFieldGroup.isHoverVoidParamGrid .assetWizardField {
-  grid-column: span 1;
+  flex: 0 1 172px;
+  width: 172px;
+  max-width: 172px;
+  grid-column: auto;
 }
 
 .assetWizardFieldGroup.isHoverVoidParamGrid .assetWizardField input,
 .assetWizardFieldGroup.isHoverVoidParamGrid .assetWizardField select {
-  width: clamp(64px, 100%, 96px);
+  width: 92px !important;
+}
+
+.assetWizardFieldGroup.isHoverVoidParamGrid .assetWizardHoverVoidCompactField {
+  grid-template-rows: auto minmax(28px, auto);
 }
 
 .assetWizardFieldGroup.isEntityDrawCompact {
@@ -3137,17 +3147,30 @@ kbd {
 }
 
 .assetWizardFieldGroup.isHoverVoidDrawRow {
-  padding-top: 5px;
-  gap: 3px;
+  padding-top: 1px;
+  gap: 2px;
 }
 
 .assetWizardFieldGroup.isHoverVoidDrawRow .assetWizardFieldGrid {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 2px 6px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 3px 8px;
+  align-items: start;
 }
 
 .assetWizardFieldGroup.isHoverVoidDrawRow .assetWizardField {
-  grid-column: span 3;
+  flex: 0 0 128px;
+  width: 128px;
+  max-width: 128px;
+  grid-column: auto;
+}
+
+.assetWizardFieldGroup.isHoverVoidDrawRow .assetWizardHoverVoidDrawField {
+  grid-template-rows: auto minmax(28px, auto);
+}
+
+.assetWizardFieldGroup.isHoverVoidDrawRow .assetWizardHoverVoidDrawField input {
+  width: 92px !important;
 }
 
 .assetWizardFieldGroup.isDarkCreatureDrawRow .assetWizardFilePickerRow {

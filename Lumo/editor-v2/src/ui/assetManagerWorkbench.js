@@ -558,7 +558,7 @@ function renderStepBody(wizard, validation) {
           }
           return renderInput(field.label, fieldKey, value, placeholder, "", {
             errorMessage: fieldErrors[fieldKey],
-            fieldClass: `assetWizardFieldSpan2 ${isFireflyFamily ? "assetWizardFireflyParamField isControlOnlyField" : ""} ${isDarkCreatureFamily ? "isControlOnlyField" : ""}`.trim(),
+            fieldClass: `assetWizardFieldSpan2 ${isHoverVoidFamily ? "assetWizardHoverVoidCompactField isControlOnlyField" : ""} ${isFireflyFamily ? "assetWizardFireflyParamField isControlOnlyField" : ""} ${isDarkCreatureFamily ? "isControlOnlyField" : ""}`.trim(),
             controlClass: field.type === "number" ? "assetWizardControlNumberCompact" : "",
             compactField: true,
           });
@@ -589,8 +589,8 @@ function renderStepBody(wizard, validation) {
                 })}
               `
               : `
-                ${renderInput(isHoverVoidFamily ? "Width" : "Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: `${isFireflyFamily ? "assetWizardFireflyDrawField isControlOnlyField" : "assetWizardFieldSpan3"}`.trim(), controlClass: "assetWizardControlNumberCompact", compactField: true })}
-                ${renderInput(isHoverVoidFamily ? "Height" : "Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: `${isFireflyFamily ? "assetWizardFireflyDrawField isControlOnlyField" : "assetWizardFieldSpan3"}`.trim(), controlClass: "assetWizardControlNumberCompact", compactField: true })}
+                ${renderInput(isHoverVoidFamily ? "Width" : "Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: `${isHoverVoidFamily ? "assetWizardHoverVoidDrawField isControlOnlyField" : ""} ${isFireflyFamily ? "assetWizardFireflyDrawField isControlOnlyField" : "assetWizardFieldSpan3"}`.trim(), controlClass: "assetWizardControlNumberCompact", compactField: true })}
+                ${renderInput(isHoverVoidFamily ? "Height" : "Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: `${isHoverVoidFamily ? "assetWizardHoverVoidDrawField isControlOnlyField" : ""} ${isFireflyFamily ? "assetWizardFireflyDrawField isControlOnlyField" : "assetWizardFieldSpan3"}`.trim(), controlClass: "assetWizardControlNumberCompact", compactField: true })}
               `,
             { groupClass: `${isHoverVoidFamily ? "isHoverVoidDrawRow" : "isEntityDrawCompact"} ${isDarkCreatureFamily ? "isDarkCreatureDrawRow" : ""} ${isFireflyFamily ? "isFireflyDrawCompact" : ""}`.trim() },
           )}
