@@ -1,6 +1,21 @@
-const TILE_SCRIPT_CATALOG = typeof window !== "undefined" && Array.isArray(window.LUMO_CATALOG_TILES)
-  ? window.LUMO_CATALOG_TILES
-  : [];
+function resolveTileScriptCatalog() {
+  if (typeof window === "undefined") return [];
+  if (Array.isArray(window.LUMO_CATALOG_TILES)) return window.LUMO_CATALOG_TILES;
+  if (window.__LUMO_TILE_CATALOG_SCRIPT_STATUS?.loading) {
+    throw new Error("Tile catalog script is still loading; editor catalog bootstrap ran too early.");
+  }
+  return [];
+}
+
+const TILE_SCRIPT_CATALOG = resolveTileScriptCatalog();
+
+if (
+  typeof window !== "undefined"
+  && window.__LUMO_TILE_CATALOG_SCRIPT_STATUS?.exists
+  && TILE_SCRIPT_CATALOG.length === 0
+) {
+  console.warn("[editor-v2] TILE_SCRIPT_CATALOG is empty even though data/catalog_tiles.js was loaded. Check catalog export content.");
+}
 
 const DEFAULT_SUPPORTED_TILE_SIZES = [1, 2, 3];
 
