@@ -22,6 +22,7 @@ const BACKGROUND_EDITOR_MATERIAL_FILE = path.join(
   "editor-v2/src/domain/background/materialCatalog.js"
 );
 const PORT = Number.parseInt(process.env.LUMO_TILE_BRIDGE_PORT || "4180", 10);
+const GUARDED_CORE_TILE_IDS = new Set([15]);
 
 function writeJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
@@ -190,12 +191,20 @@ function resolveBehaviorProfileId({ explicitBehaviorProfileId, tileBehavior, col
 }
 
 export function computeNextCustomTileId(entries = []) {
-  const maxTileId = entries.reduce((currentMax, entry) => {
+  const usedTileIds = new Set();
+  let maxTileId = 0;
+  for (const entry of entries) {
     const value = Number.parseInt(entry?.tileId, 10);
-    if (!Number.isInteger(value) || value < 1) return currentMax;
-    return Math.max(currentMax, value);
-  }, 0);
-  return maxTileId + 1;
+    if (!Number.isInteger(value) || value < 1) continue;
+    usedTileIds.add(value);
+    maxTileId = Math.max(maxTileId, value);
+  }
+
+  let nextTileId = maxTileId + 1;
+  while (usedTileIds.has(nextTileId) || GUARDED_CORE_TILE_IDS.has(nextTileId)) {
+    nextTileId += 1;
+  }
+  return nextTileId;
 }
 
 function hasTileIdCollision(entries = [], tileId) {

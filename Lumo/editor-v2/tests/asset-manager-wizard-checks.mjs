@@ -143,6 +143,11 @@ const registration = registerTileSpriteOption({
 assert.equal(registration.ok, true);
 assert.equal(isTileCatalogIdTaken(suggestedId), true);
 assert.equal(computeNextCustomTileId([{ tileId: 15 }, { tileId: 16 }, { tileId: 27 }]), 28);
+assert.equal(
+  computeNextCustomTileId([{ tileId: 14 }]),
+  16,
+  "custom tile id generation should skip guarded core ids such as 15",
+);
 const existingTileEntries = [
   { id: "stone_ct", tileId: 15, behaviorProfileId: "tile.solid.default" },
   { id: "ice_01", tileId: 16, behaviorProfileId: "tile.solid.ice" },
@@ -174,9 +179,29 @@ assert.equal(nextEntries.length, existingTileEntries.length + 1);
 assert.ok(nextEntries.some((entry) => entry.id === "stone_ct"));
 assert.ok(nextEntries.some((entry) => entry.id === "wizard-tile"));
 assert.equal(findBrushSpriteOptionByValue("stone_ct")?.tileId, 15);
+assert.equal(
+  findBrushSpriteOptionByValue("grass-green-ct"),
+  null,
+  "guarded tile ids should keep canonical brush identity when a custom entry reuses tileId 15",
+);
 assert.equal(findBrushSpriteOptionByValue(suggestedId)?.tileId, 99);
 assert.equal(getTileAssetByTileValue(15)?.id, "stone_ct");
 assert.equal(getTileAssetByTileValue(99)?.id, suggestedId);
+assert.deepEqual(
+  registerTileSpriteOption({
+    catalogId: "guarded-collision-check",
+    label: "Guarded Collision Check",
+    tileId: 15,
+    img: "selected://guarded.png",
+    drawW: 24,
+    drawH: 24,
+    drawAnchor: "TL",
+    footprint: { w: 1, h: 1 },
+    collisionType: "solid",
+  }),
+  { ok: false, reason: "guarded-tile-id" },
+  "runtime registration should reject non-canonical ids on guarded tile slots",
+);
 
 const duplicateValidation = getStepValidation("identity", {
   mode: ASSET_WIZARD_MODES.CREATE,
