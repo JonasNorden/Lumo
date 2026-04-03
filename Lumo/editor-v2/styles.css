@@ -3067,9 +3067,11 @@ kbd {
 }
 
 .assetWizardFieldGroup.isFireflyParamGrid .assetWizardFieldGrid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  grid-auto-rows: max-content;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
   align-items: start;
+  align-content: start;
 }
 
 .assetWizardFieldGroup.isDarkCreatureParamGrid .assetWizardFieldGrid {
@@ -3078,7 +3080,37 @@ kbd {
 }
 
 .assetWizardFieldGroup.isFireflyDrawCompact {
-  padding-top: 3px;
+  padding-top: 2px;
+  gap: 2px;
+}
+
+.assetWizardFieldGroup.isFireflyParamGrid .assetWizardField {
+  flex: 0 1 124px;
+  width: 124px;
+  max-width: 124px;
+  grid-column: auto;
+}
+
+.assetWizardFieldGroup.isFireflyParamGrid .assetWizardFireflyParamField input {
+  width: 92px !important;
+}
+
+.assetWizardFieldGroup.isFireflyDrawCompact .assetWizardFieldGrid {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px 8px;
+  align-items: start;
+}
+
+.assetWizardFieldGroup.isFireflyDrawCompact .assetWizardFireflyDrawField {
+  flex: 0 0 124px;
+  width: 124px;
+  max-width: 124px;
+  grid-column: auto;
+}
+
+.assetWizardFieldGroup.isFireflyDrawCompact .assetWizardFireflyDrawField input {
+  width: 92px !important;
 }
 
 .assetWizardFieldGroup.isHoverVoidParamGrid .assetWizardField {
