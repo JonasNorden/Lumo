@@ -2,6 +2,7 @@ import { normalizeSoundType } from "../domain/sound/soundVisuals.js";
 import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 import { findEntityPresetById } from "../domain/entities/entityPresets.js";
+import { getTileAssetByTileValue } from "../domain/tiles/tileSpriteCatalog.js";
 
 const SUPPORTED_RUNTIME_ENTITY_IDS = new Set([
   "start_01",
@@ -110,17 +111,52 @@ function buildRuntimeTileVisualOverrides(levelDocument, tileSize) {
     if (value <= 0) continue;
 
     const clampedSize = Math.max(1, Math.min(3, size));
+    const authoredCatalogTileId = typeof placement?.catalogTileId === "string" && placement.catalogTileId.trim()
+      ? placement.catalogTileId.trim()
+      : null;
+    const authoredImage = typeof placement?.img === "string" && placement.img.trim()
+      ? placement.img.trim()
+      : null;
+    const tileAsset = getTileAssetByTileValue(value);
+    const resolvedCatalogTileId = authoredCatalogTileId
+      || (typeof tileAsset?.id === "string" && tileAsset.id.trim() ? tileAsset.id.trim() : null);
+    const resolvedImage = authoredImage
+      || (typeof tileAsset?.img === "string" && tileAsset.img.trim() ? tileAsset.img.trim() : null);
+    const authoredDrawW = Number.isFinite(Number(placement?.drawW))
+      ? Number(placement.drawW)
+      : Number.isFinite(Number(tileAsset?.drawW))
+        ? Number(tileAsset.drawW)
+        : tileSize;
+    const authoredDrawH = Number.isFinite(Number(placement?.drawH))
+      ? Number(placement.drawH)
+      : Number.isFinite(Number(tileAsset?.drawH))
+        ? Number(tileAsset.drawH)
+        : tileSize;
+    const authoredDrawAnchor = typeof placement?.drawAnchor === "string" && placement.drawAnchor.trim()
+      ? placement.drawAnchor.trim()
+      : "BL";
+    const authoredFootprintW = Number.isFinite(Number(placement?.footprintW))
+      ? Math.max(1, Number(placement.footprintW) | 0)
+      : clampedSize;
+    const authoredFootprintH = Number.isFinite(Number(placement?.footprintH))
+      ? Math.max(1, Number(placement.footprintH) | 0)
+      : clampedSize;
+
     // Preserve authored tile-size semantics through runtime:
     // - draw footprint
     // - collision footprint
     // - anchor convention (BL)
-    overrides[`${x},${y}`] = {
-      drawW: clampedSize * tileSize,
-      drawH: clampedSize * tileSize,
-      drawAnchor: "BL",
-      footprintW: clampedSize,
-      footprintH: clampedSize,
+    const nextOverride = {
+      drawW: Math.max(1, Math.round(authoredDrawW * clampedSize)),
+      drawH: Math.max(1, Math.round(authoredDrawH * clampedSize)),
+      drawAnchor: authoredDrawAnchor,
+      footprintW: authoredFootprintW,
+      footprintH: authoredFootprintH,
     };
+    if (resolvedCatalogTileId) nextOverride.catalogTileId = resolvedCatalogTileId;
+    if (resolvedImage) nextOverride.img = resolvedImage;
+
+    overrides[`${x},${y}`] = nextOverride;
   }
   return overrides;
 }
