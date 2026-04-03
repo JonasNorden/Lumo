@@ -385,8 +385,9 @@ function renderStepBody(wizard, validation) {
             "Behavior family",
             "Phase 1 supports only approved runtime-safe families.",
             `
-              ${renderSelectInput("Behavior family", "behaviorFamilyId", draft.behaviorFamilyId, getEntityBehaviorFamilyOptions(), "", { errorMessage: fieldErrors.behaviorFamilyId, fieldClass: "assetWizardFieldSpan12" })}
+              ${renderSelectInput("Family", "behaviorFamilyId", draft.behaviorFamilyId, getEntityBehaviorFamilyOptions(), "", { errorMessage: fieldErrors.behaviorFamilyId, fieldClass: "assetWizardFieldSpan12" })}
             `,
+            { groupClass: "isDenseGrid isSingleFieldCompact" },
           )}
           ${renderFieldGroup(
             "Look & identity",
@@ -438,7 +439,7 @@ function renderStepBody(wizard, validation) {
               ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan3" })}
               ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { errorMessage: fieldErrors.footprint, fieldClass: "assetWizardFieldSpan6" })}
             `,
-            { groupClass: "isDenseGrid" },
+            { groupClass: "isDenseGrid isTileSizingCompact" },
           )}
         </div>
       `;
@@ -546,26 +547,26 @@ function renderStepBody(wizard, validation) {
             "Default params",
             "",
             safeFieldMarkup,
-            { groupClass: "isDenseGrid" },
+            { groupClass: `isDenseGrid ${isHoverVoidFamily ? "isUltraDenseGrid" : ""}`.trim() },
           )}
           ${renderFieldGroup(
             "Draw settings",
             "",
             isDarkCreatureFamily
               ? `
-                ${renderSelectInput("Body size", "darkCreatureBodySize", draft.darkCreatureBodySize || "1x1", getDarkCreatureBodySizeOptions(), "", { errorMessage: fieldErrors.darkCreatureBodySize, fieldClass: "assetWizardFieldSpan3" })}
+                ${renderSelectInput("Body size", "darkCreatureBodySize", draft.darkCreatureBodySize || "1x1", getDarkCreatureBodySizeOptions(), "", { errorMessage: fieldErrors.darkCreatureBodySize, fieldClass: "assetWizardFieldSpan2" })}
                 ${renderFilePickerField("Projectile sprite", "safeDefaults.projectileSpritePath", wizard, {
                   errorMessage: fieldErrors["safeDefaults.projectileSpritePath"],
                   hint: "Optional. Choose a projectile sprite image for Dark Creature spells.",
-                  fieldClass: "assetWizardFieldSpan3",
+                  fieldClass: "assetWizardFieldSpan4",
                   fileNameField: "projectileSpriteFileName",
                 })}
               `
               : `
-                ${renderInput(isHoverVoidFamily ? "Width" : "Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan6" })}
-                ${renderInput(isHoverVoidFamily ? "Height" : "Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan6" })}
+                ${renderInput(isHoverVoidFamily ? "Width" : "Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: isHoverVoidFamily ? "assetWizardFieldSpan3" : "assetWizardFieldSpan6" })}
+                ${renderInput(isHoverVoidFamily ? "Height" : "Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: isHoverVoidFamily ? "assetWizardFieldSpan3" : "assetWizardFieldSpan6" })}
               `,
-            { groupClass: "isDenseGrid" },
+            { groupClass: `isDenseGrid ${isHoverVoidFamily ? "isDrawSettingsCompact" : ""} ${isDarkCreatureFamily ? "isDrawSettingsCompact isDarkCreatureDrawRow" : ""}`.trim() },
           )}
         </div>
       `;
