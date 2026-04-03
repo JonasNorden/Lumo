@@ -151,6 +151,12 @@ function normalizeCatalogIdForCompare(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function isGuardedTileIdHijack(tileId, catalogId) {
+  const guardedCatalogId = GUARDED_CORE_TILE_IDS[tileId] || null;
+  if (!guardedCatalogId) return false;
+  return normalizeCatalogIdForCompare(catalogId) !== normalizeCatalogIdForCompare(guardedCatalogId);
+}
+
 const TILE_ASSETS = new Map();
 
 for (const entry of CATALOG_TILE_ENTRIES) {
@@ -217,6 +223,7 @@ function buildInitialBrushSpriteOptions() {
     .map(({ entry }) => toBrushSpriteOption(entry))
     .filter((option) => {
       if (!option || !Number.isInteger(option.tileId)) return false;
+      if (isGuardedTileIdHijack(option.tileId, option.id || option.value)) return false;
       const normalizedCatalogId = normalizeCatalogIdForCompare(option.value);
       if (!normalizedCatalogId || seenCatalogIds.has(normalizedCatalogId)) return false;
       seenCatalogIds.add(normalizedCatalogId);
@@ -284,6 +291,10 @@ export function registerTileSpriteOption(entry) {
     collisionType: entry.collisionType || null,
     group: entry.group || "Custom",
   };
+
+  if (isGuardedTileIdHijack(normalizedOption.tileId, normalizedOption.id)) {
+    return { ok: false, reason: "guarded-tile-id" };
+  }
 
   BRUSH_SPRITE_OPTIONS.push(normalizedOption);
   TILE_CATALOG_IDS.add(catalogId.toLowerCase());
