@@ -568,7 +568,7 @@ function renderStepBody(wizard, validation) {
             "Default params",
             "",
             safeFieldMarkup,
-            { groupClass: `isDenseGrid ${isHoverVoidFamily ? "isHoverVoidParamGrid" : ""} ${isFireflyFamily ? "isFireflyParamGrid" : ""}`.trim() },
+            { groupClass: `isDenseGrid ${isHoverVoidFamily ? "isHoverVoidParamGrid" : ""} ${isFireflyFamily ? "isFireflyParamGrid" : ""} ${isDarkCreatureFamily ? "isDarkCreatureParamGrid" : ""}`.trim() },
           )}
           ${renderFieldGroup(
             "Draw settings",

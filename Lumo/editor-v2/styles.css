@@ -3072,6 +3072,11 @@ kbd {
   align-items: start;
 }
 
+.assetWizardFieldGroup.isDarkCreatureParamGrid .assetWizardFieldGrid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px 6px;
+}
+
 .assetWizardFieldGroup.isFireflyDrawCompact {
   padding-top: 3px;
 }
@@ -3114,10 +3119,25 @@ kbd {
 
 .assetWizardFieldGroup.isDarkCreatureDrawRow .assetWizardFilePickerRow {
   min-height: 28px;
+  width: 100%;
 }
 
 .assetWizardFieldGroup.isDarkCreatureDrawRow .assetWizardFieldGrid {
+  grid-template-columns: minmax(136px, 168px) minmax(0, 1fr);
   gap: 2px 6px;
+  align-items: start;
+}
+
+.assetWizardFieldGroup.isEntityDrawCompact.isDarkCreatureDrawRow .assetWizardField {
+  grid-column: auto;
+}
+
+.assetWizardFieldGroup.isEntityDrawCompact.isDarkCreatureDrawRow .assetWizardField:first-child {
+  grid-column: 1;
+}
+
+.assetWizardFieldGroup.isEntityDrawCompact.isDarkCreatureDrawRow .assetWizardField:last-child {
+  grid-column: 2;
 }
 
 .assetWizardField input.isInvalid,
