@@ -3066,6 +3066,16 @@ kbd {
   gap: 2px 5px;
 }
 
+.assetWizardFieldGroup.isFireflyParamGrid .assetWizardFieldGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: max-content;
+  align-items: start;
+}
+
+.assetWizardFieldGroup.isFireflyDrawCompact {
+  padding-top: 3px;
+}
+
 .assetWizardFieldGroup.isHoverVoidParamGrid .assetWizardField {
   grid-column: span 1;
 }

@@ -530,6 +530,7 @@ function renderStepBody(wizard, validation) {
       const safeDefaults = draft.safeDefaults || {};
       const isHoverVoidFamily = draft.behaviorFamilyId === "hover_void_01";
       const isDarkCreatureFamily = draft.behaviorFamilyId === "dark_creature_01";
+      const isFireflyFamily = draft.behaviorFamilyId === "firefly_01";
       const editableSafeSchema = isDarkCreatureFamily
         ? safeSchema.filter((field) => field.key !== "drawW" && field.key !== "drawH" && field.key !== "projectileSpritePath")
         : safeSchema;
@@ -567,7 +568,7 @@ function renderStepBody(wizard, validation) {
             "Default params",
             "",
             safeFieldMarkup,
-            { groupClass: `isDenseGrid ${isHoverVoidFamily ? "isHoverVoidParamGrid" : ""}`.trim() },
+            { groupClass: `isDenseGrid ${isHoverVoidFamily ? "isHoverVoidParamGrid" : ""} ${isFireflyFamily ? "isFireflyParamGrid" : ""}`.trim() },
           )}
           ${renderFieldGroup(
             "Draw settings",
@@ -586,7 +587,7 @@ function renderStepBody(wizard, validation) {
                 ${renderInput(isHoverVoidFamily ? "Width" : "Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan3", controlClass: "assetWizardControlNumberCompact", compactField: true })}
                 ${renderInput(isHoverVoidFamily ? "Height" : "Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan3", controlClass: "assetWizardControlNumberCompact", compactField: true })}
               `,
-            { groupClass: `${isHoverVoidFamily ? "isHoverVoidDrawRow" : "isEntityDrawCompact"} ${isDarkCreatureFamily ? "isDarkCreatureDrawRow" : ""}`.trim() },
+            { groupClass: `${isHoverVoidFamily ? "isHoverVoidDrawRow" : "isEntityDrawCompact"} ${isDarkCreatureFamily ? "isDarkCreatureDrawRow" : ""} ${isFireflyFamily ? "isFireflyDrawCompact" : ""}`.trim() },
           )}
         </div>
       `;
