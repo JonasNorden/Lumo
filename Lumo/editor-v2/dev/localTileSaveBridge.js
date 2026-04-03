@@ -27,7 +27,7 @@ function writeJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
   });
   res.end(JSON.stringify(payload));
@@ -975,75 +975,83 @@ async function saveEntity(payload) {
 }
 
 export function createLocalTileSaveBridgeServer() {
+  const handleSaveRoute = async (req, res, routeLabel, saveFn, failureMessage) => {
+    console.log(`[Lumo Bridge] Save request: ${routeLabel}`);
+    try {
+      const body = await parseJsonBody(req);
+      const result = await saveFn(body);
+      if (result.ok) {
+        console.log(`[Lumo Bridge] Save OK: ${routeLabel}`);
+      } else {
+        const detail = result.message || result.reason || "Unknown error";
+        console.error(`[Lumo Bridge] Save FAILED: ${routeLabel} (${detail})`);
+      }
+      writeJson(res, result.statusCode, result);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "unknown-error";
+      console.error(`[Lumo Bridge] Save FAILED: ${routeLabel} (${reason})`);
+      writeJson(res, 500, {
+        ok: false,
+        reason,
+        message: failureMessage,
+      });
+    }
+  };
+
   return createServer(async (req, res) => {
-  if (req.method === "OPTIONS") {
-    writeJson(res, 204, {});
-    return;
-  }
-
-  if (req.method === "POST" && req.url === "/api/editor-v2/tiles/save") {
-    try {
-      const body = await parseJsonBody(req);
-      const result = await saveTile(body);
-      writeJson(res, result.statusCode, result);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "unknown-error";
-      writeJson(res, 500, {
-        ok: false,
-        reason,
-        message: "Tile persistence bridge failed while writing local files.",
-      });
+    if (req.method === "OPTIONS") {
+      writeJson(res, 204, {});
+      return;
     }
-    return;
-  }
 
-  if (req.method === "POST" && req.url === "/api/editor-v2/background/save") {
-    try {
-      const body = await parseJsonBody(req);
-      const result = await saveBackground(body);
-      writeJson(res, result.statusCode, result);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "unknown-error";
-      writeJson(res, 500, {
-        ok: false,
-        reason,
-        message: "Background persistence bridge failed while writing local files.",
-      });
+    if (req.method === "GET" && req.url === "/health") {
+      writeJson(res, 200, { ok: true, status: "ok" });
+      return;
     }
-    return;
-  }
 
-  if (req.method === "POST" && req.url === "/api/editor-v2/decor/save") {
-    try {
-      const body = await parseJsonBody(req);
-      const result = await saveDecor(body);
-      writeJson(res, result.statusCode, result);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "unknown-error";
-      writeJson(res, 500, {
-        ok: false,
-        reason,
-        message: "Decor persistence bridge failed while writing local files.",
-      });
+    if (req.method === "POST" && req.url === "/api/editor-v2/tiles/save") {
+      await handleSaveRoute(
+        req,
+        res,
+        "tile",
+        saveTile,
+        "Tile persistence bridge failed while writing local files."
+      );
+      return;
     }
-    return;
-  }
 
-  if (req.method === "POST" && req.url === "/api/editor-v2/entities/save") {
-    try {
-      const body = await parseJsonBody(req);
-      const result = await saveEntity(body);
-      writeJson(res, result.statusCode, result);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : "unknown-error";
-      writeJson(res, 500, {
-        ok: false,
-        reason,
-        message: "Entity persistence bridge failed while writing local files.",
-      });
+    if (req.method === "POST" && req.url === "/api/editor-v2/background/save") {
+      await handleSaveRoute(
+        req,
+        res,
+        "background",
+        saveBackground,
+        "Background persistence bridge failed while writing local files."
+      );
+      return;
     }
-    return;
-  }
+
+    if (req.method === "POST" && req.url === "/api/editor-v2/decor/save") {
+      await handleSaveRoute(
+        req,
+        res,
+        "decor",
+        saveDecor,
+        "Decor persistence bridge failed while writing local files."
+      );
+      return;
+    }
+
+    if (req.method === "POST" && req.url === "/api/editor-v2/entities/save") {
+      await handleSaveRoute(
+        req,
+        res,
+        "entity",
+        saveEntity,
+        "Entity persistence bridge failed while writing local files."
+      );
+      return;
+    }
 
     writeJson(res, 404, { ok: false, reason: "not-found", message: "Endpoint not found." });
   });
@@ -1051,16 +1059,21 @@ export function createLocalTileSaveBridgeServer() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
   const server = createLocalTileSaveBridgeServer();
+  server.on("error", (error) => {
+    const reason = error instanceof Error ? error.message : "unknown-server-error";
+    console.error(`[Lumo Bridge] FAILED to start or run: ${reason}`);
+  });
+
+  process.on("uncaughtException", (error) => {
+    console.error(`[Lumo Bridge] CRASHED: ${error instanceof Error ? error.message : "unknown-error"}`);
+  });
+  process.on("unhandledRejection", (error) => {
+    console.error(`[Lumo Bridge] Unhandled promise rejection: ${error instanceof Error ? error.message : String(error)}`);
+  });
+
   server.listen(PORT, () => {
-    console.log(`[tile-save-bridge] listening on http://localhost:${PORT}`);
-    console.log(`[tile-save-bridge] tile assets => ${TILE_ASSET_DIR}`);
-    console.log(`[tile-save-bridge] tile catalog => ${TILE_CATALOG_FILE}`);
-    console.log(`[tile-save-bridge] background assets => ${BACKGROUND_ASSET_DIR}`);
-    console.log(`[tile-save-bridge] background editor catalog => ${BACKGROUND_EDITOR_MATERIAL_FILE}`);
-    console.log(`[tile-save-bridge] background runtime catalog => ${BACKGROUND_RUNTIME_CATALOG_FILE}`);
-    console.log(`[tile-save-bridge] decor assets => ${DECOR_ASSET_DIR}`);
-    console.log(`[tile-save-bridge] decor catalog => ${DECOR_CATALOG_FILE}`);
-    console.log(`[tile-save-bridge] entity assets => ${ENTITY_ASSET_DIR}`);
-    console.log(`[tile-save-bridge] entity presets => ${ENTITY_PRESETS_FILE}`);
+    console.log(`[Lumo Bridge] Running on port ${PORT} (http://localhost:${PORT})`);
+    console.log("[Lumo Bridge] Ready to receive save requests.");
+    console.log("[Lumo Bridge] Health check: GET /health");
   });
 }
