@@ -185,19 +185,4 @@ window.LUMO_CATALOG_TILES = [
     special: "ice"
   },
 
-  {
-    id: "grass-green-ct",
-    name: "Grass_green_ct",
-    group: "Custom",
-    img: "data/assets/tiles/grass-green-ct.png",
-    footprint: { w: 1, h: 1 },
-    tileId: 15,
-    collisionType: "solid",
-    special: null,
-    drawW: 24,
-    drawH: 24,
-    drawAnchor: "BL",
-    drawOffX: 0,
-    drawOffY: 0
-  }
 ];
