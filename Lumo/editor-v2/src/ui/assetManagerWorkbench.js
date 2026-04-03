@@ -455,7 +455,7 @@ function renderStepBody(wizard, validation) {
             `
               ${renderInput("Draw width px", "drawWidth", draft.drawWidth, "24", "", { errorMessage: fieldErrors.drawWidth, fieldClass: "assetWizardFieldSpan2", controlClass: "assetWizardControlNumberCompact", compactField: true })}
               ${renderInput("Draw height px", "drawHeight", draft.drawHeight, "24", "", { errorMessage: fieldErrors.drawHeight, fieldClass: "assetWizardFieldSpan2", controlClass: "assetWizardControlNumberCompact", compactField: true })}
-              ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { errorMessage: fieldErrors.footprint, fieldClass: "assetWizardFieldSpan12", compactField: true })}
+              ${renderInput("Footprint (JSON)", "footprint", draft.footprint, '{"w":1,"h":1}', "", { errorMessage: fieldErrors.footprint, fieldClass: "assetWizardFieldSpan8", compactField: true })}
             `,
             { groupClass: "isDenseGrid isTileSizingCompact" },
           )}
