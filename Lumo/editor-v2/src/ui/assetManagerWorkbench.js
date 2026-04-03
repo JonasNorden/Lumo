@@ -700,7 +700,7 @@ function renderWizardPane(wizard) {
         ? "Save Background"
         : wizard.assetType === "decor"
           ? "Save Decor"
-        : "Done"
+        : "Save Entity"
     : "Next";
 
   return `
