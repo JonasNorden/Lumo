@@ -21,6 +21,10 @@ function createMockLevelDocument() {
     },
     tiles: {
       base: Array.from({ length: 12 }, (_, index) => index),
+      placements: [
+        { x: 1, y: 2, size: 2, value: 15 },
+        { x: 3, y: 2, size: 3, value: 101, catalogTileId: "custom_runtime_tile", img: "../data/assets/tiles/custom_runtime_tile.png" },
+      ],
     },
     backgrounds: {
       layers: [{ id: "bg-1", name: "Sky", type: "color", depth: 0, visible: true, color: "#000000" }],
@@ -66,6 +70,21 @@ function runAdapterChecks() {
   assert.equal(runtimeLevel.layers.bg.length, 12);
   assert.equal(runtimeLevel.layers.bg[0], "bg_stone_wall_cc", "background base should map to runtime-supported bg ids");
   assert.deepEqual(runtimeLevel.layers.bg, runtimeLevel.editor.bg, "runtime bg should be mirrored on editor.bg fallback path");
+  assert.equal(
+    runtimeLevel.layers.tileVisualOverrides["1,2"]?.catalogTileId,
+    "stone_ct",
+    "tile override should carry canonical catalog identity for guarded tile ids",
+  );
+  assert.equal(
+    runtimeLevel.layers.tileVisualOverrides["3,2"]?.catalogTileId,
+    "custom_runtime_tile",
+    "tile override should preserve authored catalogTileId when provided",
+  );
+  assert.equal(
+    runtimeLevel.layers.tileVisualOverrides["3,2"]?.img,
+    "../data/assets/tiles/custom_runtime_tile.png",
+    "tile override should preserve authored image fallback when provided",
+  );
 
   const spawn = runtimeLevel.layers.ents.find((entity) => entity.id === "start_01");
   const exit = runtimeLevel.layers.ents.find((entity) => entity.id === "exit_01");
