@@ -13,7 +13,11 @@ import { getWorldPointFromMinimapPoint, renderMinimap } from "../render/minimap.
 import { renderInspector, bindInspectorPanel } from "../ui/inspectorPanel.js";
 import { renderBottomPanel, bindBottomPanel } from "../ui/bottomPanel.js";
 import { bindBrushPanel, renderBrushPanel } from "../ui/brushPanel.js";
-import { stopNativeInputKeyboardPropagation, isNativeTextEditingEventTarget, hasNativeTextEditingFocus } from "../ui/nativeInputGuards.js";
+import {
+  stopNativeInputKeyboardPropagation,
+  isNativeFormControlEventTarget,
+  hasNativeFormControlFocus,
+} from "../ui/nativeInputGuards.js";
 import {
   getSpecialVolumeWorkbenchLauncherContent,
   getSpecialVolumeWorkbenchModalContent,
@@ -1130,9 +1134,18 @@ export function createEditorApp({
     });
   };
 
-  const isShortcutTargetBlocked = (eventTarget) => isNativeTextEditingEventTarget(eventTarget);
+  const isShortcutTargetBlocked = (eventTarget) => isNativeFormControlEventTarget(eventTarget);
 
-  const hasBlockedShortcutFocus = () => hasNativeTextEditingFocus(document);
+  const hasBlockedShortcutFocus = () => hasNativeFormControlFocus(document);
+
+  const isModalKeyboardCaptureActive = () => {
+    const uiState = store.getState().ui;
+    return Boolean(
+      uiState?.newLevelSize?.isOpen
+      || uiState?.assetManager?.isOpen
+      || uiState?.specialVolumeWorkbench?.openEntityId,
+    );
+  };
 
   const resize = () => {
     const dpr = window.devicePixelRatio || 1;
@@ -7061,6 +7074,10 @@ if (event.shiftKey) {
       }
     }
 
+    if (isModalKeyboardCaptureActive()) {
+      return;
+    }
+
     if (event.code === "Space") {
       if (isShortcutTargetBlocked(event.target)) return;
       event.preventDefault();
@@ -7177,6 +7194,19 @@ if (event.shiftKey) {
     if (interactionState.panDrag?.trigger === "space") {
       stopPanDrag();
     }
+  };
+
+  const handleWindowBlur = () => {
+    stopCanvasInteraction();
+    stopFogStepperSession();
+    interactionState.arrowPan.activeKeys.clear();
+    interactionState.arrowPan.speedMultiplier = 1;
+    stopArrowPanLoop();
+    updateSpacePanActive(false);
+    stopFogPreviewMotionLoop();
+    stopWaterPreviewMotionLoop();
+    stopLavaPreviewMotionLoop();
+    stopBubblingLiquidPreviewMotionLoop();
   };
 
   const toggleTopBarMenu = (menuName) => {
@@ -8419,11 +8449,7 @@ if (event.shiftKey) {
   window.addEventListener("mouseup", stopFogStepperSession);
   window.addEventListener("pointerup", stopFogStepperSession);
   window.addEventListener("pointercancel", stopFogStepperSession);
-  window.addEventListener("blur", stopFogStepperSession);
-  window.addEventListener("blur", stopFogPreviewMotionLoop);
-  window.addEventListener("blur", stopWaterPreviewMotionLoop);
-  window.addEventListener("blur", stopLavaPreviewMotionLoop);
-  window.addEventListener("blur", stopBubblingLiquidPreviewMotionLoop);
+  window.addEventListener("blur", handleWindowBlur);
   canvas.addEventListener("click", handleCanvasClick);
   minimapCanvas.addEventListener("click", handleMinimapClick);
   window.addEventListener("keydown", handleGlobalKeyDown);
@@ -8464,11 +8490,7 @@ if (event.shiftKey) {
     window.removeEventListener("mouseup", stopFogStepperSession);
     window.removeEventListener("pointerup", stopFogStepperSession);
     window.removeEventListener("pointercancel", stopFogStepperSession);
-    window.removeEventListener("blur", stopFogStepperSession);
-    window.removeEventListener("blur", stopFogPreviewMotionLoop);
-    window.removeEventListener("blur", stopWaterPreviewMotionLoop);
-    window.removeEventListener("blur", stopLavaPreviewMotionLoop);
-    window.removeEventListener("blur", stopBubblingLiquidPreviewMotionLoop);
+    window.removeEventListener("blur", handleWindowBlur);
     canvas.removeEventListener("click", handleCanvasClick);
     minimapCanvas.removeEventListener("click", handleMinimapClick);
     window.removeEventListener("keydown", handleGlobalKeyDown);
