@@ -53,6 +53,7 @@ globalThis.window.LUMO_CATALOG_TILES = [
   { id: "stone_ct", tileId: 15, behaviorProfileId: "tile.solid.default", collisionType: "solid", footprint: { w: 2, h: 2 } },
   { id: "custom-solid", tileId: 101, behaviorProfileId: "tile.solid.default", collisionType: "solid", footprint: { w: 1, h: 1 } },
   { id: "custom-one-way", tileId: 102, behaviorProfileId: "tile.one-way.default", collisionType: "oneWay", footprint: { w: 1, h: 1 } },
+  { id: "custom-brake", tileId: 17, behaviorProfileId: "tile.solid.brake", collisionType: "solid", special: "brake", footprint: { w: 1, h: 1 } },
 ];
 
 vm.runInThisContext(worldSource, { filename: "world.js" });
@@ -108,6 +109,7 @@ function runCustomTileIdentityChecks() {
   data[keyForCell(w, 0, 2)] = 15;
   data[keyForCell(w, 1, 2)] = 101;
   data[keyForCell(w, 2, 2)] = 102;
+  data[keyForCell(w, 3, 2)] = 17;
 
   world.loadLevel({
     meta: { w, h, tileSize: 24, id: "custom-identity", name: "Custom Identity" },
@@ -116,9 +118,13 @@ function runCustomTileIdentityChecks() {
 
   assert.equal(world._tileDefById.get(15)?.id, "stone_ct", "built-in id should retain its own catalog definition");
   assert.equal(world._tileDefById.get(101)?.id, "custom-solid", "custom tile should have its own identity");
+  assert.equal(world._tileDefById.get(17)?.behaviorProfileId, "tile.solid.brake", "custom brake tile should keep behavior profile identity");
+  assert.equal(world.tileDefs[17]?.solid, true, "custom tileDefs entry should be synthesized from behavior profile");
+  assert.equal(world.tileDefs[17]?.frictionMul, 6.4, "custom brake tileDefs entry should inherit brake friction semantics");
   assert.equal(world.getTileBehavior(0, 2)?.solid, true, "built-in solid behavior should remain intact");
   assert.equal(world.getTileBehavior(1, 2)?.solid, true, "custom solid behavior should resolve from behavior profile");
   assert.equal(world.getTileBehavior(2, 2)?.oneWay, true, "custom one-way behavior should survive reload/runtime lookup");
+  assert.equal(world.getTileBehavior(3, 2)?.frictionMul, 6.4, "custom brake behavior profile should resolve runtime brake semantics");
 }
 
 function runPlayerSurfaceSamplingChecks() {

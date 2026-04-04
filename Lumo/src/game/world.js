@@ -39,7 +39,59 @@
         5: { solid:true,  oneWay:false, hazard:false, color:"#4a372c", groundAccelMul:1.00, groundFrictionMul:3.00, maxSpeedMul:0.80 },
       };
 
-      this.tileDefs = (window.Lumo && Lumo.Tileset) ? Lumo.Tileset : fallback;
+      const baseTileDefs = (window.Lumo && Lumo.Tileset) ? Lumo.Tileset : fallback;
+      this.tileDefs = this._buildRuntimeTileDefs(baseTileDefs);
+    }
+
+    _resolveProfileBaseTileDef(profile, baseTileDefs){
+      if (!profile || !baseTileDefs) return null;
+
+      if (profile.collisionType === "solid"){
+        if (profile.special === "ice") return baseTileDefs[4] || baseTileDefs[1] || null;
+        if (profile.special === "brake") return baseTileDefs[5] || baseTileDefs[1] || null;
+        return baseTileDefs[1] || null;
+      }
+      if (profile.collisionType === "oneWay") return baseTileDefs[2] || null;
+      if (profile.collisionType === "hazard") return baseTileDefs[3] || null;
+      return null;
+    }
+
+    _buildRuntimeTileDefs(baseTileDefs){
+      const defs = Object.assign({}, baseTileDefs || {});
+      const catalog = window.LUMO_CATALOG_TILES;
+      if (!Array.isArray(catalog) || !catalog.length) return defs;
+
+      const profileById = new Map();
+      const profiles = window.LUMO_TILE_BEHAVIOR_PROFILES;
+      if (Array.isArray(profiles)){
+        for (const profile of profiles){
+          if (!profile || !profile.id) continue;
+          profileById.set(profile.id, profile);
+        }
+      }
+
+      for (const tile of catalog){
+        if (!tile) continue;
+        const tileId = tile.tileId | 0;
+        if (!tileId) continue;
+        if (Object.prototype.hasOwnProperty.call(defs, tileId)) continue;
+
+        const profile = profileById.get(tile.behaviorProfileId);
+        let resolvedBase = this._resolveProfileBaseTileDef(profile, defs);
+
+        if (!resolvedBase){
+          const fallbackProfile = {
+            collisionType: tile.collisionType,
+            special: tile.special,
+          };
+          resolvedBase = this._resolveProfileBaseTileDef(fallbackProfile, defs);
+        }
+
+        if (!resolvedBase) continue;
+        defs[tileId] = Object.assign({ name: tile.id || `tile-${tileId}` }, resolvedBase);
+      }
+
+      return defs;
     }
 
     _tryLoadImage(src){
@@ -142,6 +194,9 @@
     }
 
     loadLevel(levelObj){
+      this._ensureTileCatalog();
+      this._ensureBehaviorProfiles();
+
       const meta = levelObj && levelObj.meta ? levelObj.meta : {};
       const levelLabel = ((meta.id || "(no-id)") + (meta.name ? `:${meta.name}` : ""));
       this.tileSize = meta.tileSize || 24;
