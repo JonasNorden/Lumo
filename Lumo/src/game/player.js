@@ -27,6 +27,10 @@
       this._baseSpeed = this.speed;
       this._baseGroundAccel = this.groundAccel;
       this._baseGroundFriction = this.groundFriction;
+      this._surfaceState = {
+        lastDef: null,
+        holdUntil: 0,
+      };
 
       // Jump / gravity
       this.jumpVel = -720;
@@ -429,9 +433,10 @@
       const sy = this.y + this.h + 1;
       const ty = Math.floor(sy / ts);
       const inset = Math.min(4, this.w * 0.25);
+      // Sample center first so crossing tile seams does not "lag" on edge tiles.
       const sampleXs = [
-        this.x + inset,
         this.x + this.w * 0.5,
+        this.x + inset,
         this.x + this.w - inset,
       ];
 
@@ -467,15 +472,28 @@
     }
 
     _applySurface(world){
+      const now = (typeof performance !== "undefined" && performance && performance.now)
+        ? performance.now()
+        : Date.now();
+      let def = null;
+
+      if (this.onGround && !this.onPlatform){
+        def = this._getSurfaceDef(world);
+        if (def){
+          this._surfaceState.lastDef = def;
+          this._surfaceState.holdUntil = now + 90;
+        }
+      }
+
+      if (!def && this._surfaceState.lastDef && now < (this._surfaceState.holdUntil || 0)){
+        def = this._surfaceState.lastDef;
+      }
+
       // Default to base values
       this.speed = this._baseSpeed;
       this.groundAccel = this._baseGroundAccel;
       this.groundFriction = this._baseGroundFriction;
 
-      if (!this.onGround) return;
-      if (this.onPlatform) return; // platform carry uses normal feel
-
-      const def = this._getSurfaceDef(world);
       if (!def) return;
 
       // Runtime/world compatibility bridge:
@@ -680,6 +698,8 @@
 
       // horizontal accel
 	  if (!this.knockTimer || this.knockTimer <= 0){
+      // Apply latest grounded surface tuning before movement integration.
+      this._applySurface(world);
       const targetSpeed = moveDir * this.speed * (this.boosting ? this.boostMult : 1.0);
 
       if (moving){
