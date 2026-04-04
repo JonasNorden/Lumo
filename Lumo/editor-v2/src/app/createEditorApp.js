@@ -7330,6 +7330,10 @@ if (event.shiftKey) {
 
     const resolvedDraft = getAssetWizardDraftWithDefaults(currentWizard.assetType, currentWizard.draft || {});
     const selectedTileBehavior = getTileBehaviorById(resolvedDraft.tileBehavior);
+    const authoredMovementMul = Number.parseFloat(resolvedDraft.tileMovementMul);
+    const behaviorParams = Number.isFinite(authoredMovementMul)
+      ? { movementMul: authoredMovementMul }
+      : null;
     const drawW = Number.parseInt(resolvedDraft.drawWidth, 10);
     const drawH = Number.parseInt(resolvedDraft.drawHeight, 10);
     const footprint = parseFootprint(resolvedDraft.footprint);
@@ -7340,6 +7344,7 @@ if (event.shiftKey) {
         label: resolvedDraft.displayName,
         tileBehavior: selectedTileBehavior?.id || resolvedDraft.tileBehavior,
         behaviorProfileId: getBehaviorProfileIdForTileBehavior(resolvedDraft.tileBehavior),
+        behaviorParams,
         drawW,
         drawH,
         drawAnchor: resolvedDraft.drawAnchor,
@@ -7372,8 +7377,10 @@ if (event.shiftKey) {
       drawH: bridgeResult.persistedTile?.drawH || drawH,
       drawAnchor: bridgeResult.persistedTile?.drawAnchor || resolvedDraft.drawAnchor,
       footprint: bridgeResult.persistedTile?.footprint || footprint,
+      behaviorProfileId: bridgeResult.persistedTile?.behaviorProfileId || getBehaviorProfileIdForTileBehavior(resolvedDraft.tileBehavior),
       collisionType: bridgeResult.persistedTile?.collisionType || selectedTileBehavior?.collisionType || resolvedDraft.collisionType,
       group: bridgeResult.persistedTile?.group || "Custom",
+      behaviorParams: bridgeResult.persistedTile?.behaviorParams || behaviorParams,
     });
     if (!registerResult.ok) {
       store.setState((draft) => {

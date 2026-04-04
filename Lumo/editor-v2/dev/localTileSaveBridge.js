@@ -169,7 +169,7 @@ function readCatalogTiles(catalogSource) {
 }
 
 function serializeCatalogEntry(entry) {
-  return `  {\n    id: ${JSON.stringify(entry.id)},\n    name: ${JSON.stringify(entry.name)},\n    group: ${JSON.stringify(entry.group)},\n    img: ${JSON.stringify(entry.img)},\n    footprint: { w: ${entry.footprint.w}, h: ${entry.footprint.h} },\n    tileId: ${entry.tileId},\n    behaviorProfileId: ${JSON.stringify(entry.behaviorProfileId || null)},\n    collisionType: ${JSON.stringify(entry.collisionType)},\n    special: null,\n    drawW: ${entry.drawW},\n    drawH: ${entry.drawH},\n    drawAnchor: ${JSON.stringify(entry.drawAnchor)},\n    drawOffX: 0,\n    drawOffY: 0\n  }`;
+  return `  {\n    id: ${JSON.stringify(entry.id)},\n    name: ${JSON.stringify(entry.name)},\n    group: ${JSON.stringify(entry.group)},\n    img: ${JSON.stringify(entry.img)},\n    footprint: { w: ${entry.footprint.w}, h: ${entry.footprint.h} },\n    tileId: ${entry.tileId},\n    behaviorProfileId: ${JSON.stringify(entry.behaviorProfileId || null)},\n    behaviorParams: ${JSON.stringify(entry.behaviorParams || null)},\n    collisionType: ${JSON.stringify(entry.collisionType)},\n    special: null,\n    drawW: ${entry.drawW},\n    drawH: ${entry.drawH},\n    drawAnchor: ${JSON.stringify(entry.drawAnchor)},\n    drawOffX: 0,\n    drawOffY: 0\n  }`;
 }
 
 function resolveBehaviorProfileId({ explicitBehaviorProfileId, tileBehavior, collisionType }) {
@@ -182,6 +182,8 @@ function resolveBehaviorProfileId({ explicitBehaviorProfileId, tileBehavior, col
   if (byBehavior === "one-way") return "tile.one-way.default";
   if (byBehavior === "hazard") return "tile.hazard.default";
   if (byBehavior === "brake") return "tile.solid.brake";
+  if (byBehavior === "sticky") return "tile.solid.sticky";
+  if (byBehavior === "rapid") return "tile.solid.rapid";
 
   const byCollisionType = String(collisionType || "").trim().toLowerCase();
   if (byCollisionType === "solid") return "tile.solid.default";
@@ -229,6 +231,9 @@ export function buildPersistedTileEntry({ tile = {}, existingEntries = [], catal
     collisionType: tile.collisionType,
   });
 
+  const movementMul = Number.parseFloat(tile?.behaviorParams?.movementMul);
+  const behaviorParams = Number.isFinite(movementMul) ? { movementMul } : null;
+
   return {
     id: catalogId,
     name: String(tile.label || catalogId).trim() || catalogId,
@@ -237,6 +242,7 @@ export function buildPersistedTileEntry({ tile = {}, existingEntries = [], catal
     footprint: { w: footprintW, h: footprintH },
     tileId: newTileId,
     behaviorProfileId: resolvedBehaviorProfileId,
+    behaviorParams,
     collisionType: String(tile.collisionType || "solid"),
     drawW: Number.isInteger(drawW) && drawW > 0 ? drawW : 24,
     drawH: Number.isInteger(drawH) && drawH > 0 ? drawH : 24,
@@ -510,6 +516,7 @@ async function saveTile(payload) {
       label: tileEntry.name,
       tileId: tileEntry.tileId,
       behaviorProfileId: tileEntry.behaviorProfileId,
+      behaviorParams: tileEntry.behaviorParams,
       img: `../${tileEntry.img}`,
       drawW: tileEntry.drawW,
       drawH: tileEntry.drawH,

@@ -46,6 +46,8 @@ globalThis.window.LUMO_TILE_BEHAVIOR_PROFILES = [
   { id: "tile.solid.default", collisionType: "solid", special: null },
   { id: "tile.solid.ice", collisionType: "solid", special: "ice" },
   { id: "tile.solid.brake", collisionType: "solid", special: "brake" },
+  { id: "tile.solid.sticky", collisionType: "solid", special: "sticky", defaults: { movementMul: 0.5 } },
+  { id: "tile.solid.rapid", collisionType: "solid", special: "rapid", defaults: { movementMul: 1.35 } },
   { id: "tile.one-way.default", collisionType: "oneWay", special: null },
   { id: "tile.hazard.default", collisionType: "hazard", special: null },
 ];
@@ -54,6 +56,8 @@ globalThis.window.LUMO_CATALOG_TILES = [
   { id: "custom-solid", tileId: 101, behaviorProfileId: "tile.solid.default", collisionType: "solid", footprint: { w: 1, h: 1 } },
   { id: "custom-one-way", tileId: 102, behaviorProfileId: "tile.one-way.default", collisionType: "oneWay", footprint: { w: 1, h: 1 } },
   { id: "custom-brake", tileId: 17, behaviorProfileId: "tile.solid.brake", collisionType: "solid", special: "brake", footprint: { w: 1, h: 1 } },
+  { id: "custom-sticky", tileId: 18, behaviorProfileId: "tile.solid.sticky", behaviorParams: { movementMul: 0.55 }, collisionType: "solid", footprint: { w: 1, h: 1 } },
+  { id: "custom-rapid", tileId: 19, behaviorProfileId: "tile.solid.rapid", behaviorParams: { movementMul: 1.42 }, collisionType: "solid", footprint: { w: 1, h: 1 } },
 ];
 
 vm.runInThisContext(worldSource, { filename: "world.js" });
@@ -110,6 +114,8 @@ function runCustomTileIdentityChecks() {
   data[keyForCell(w, 1, 2)] = 101;
   data[keyForCell(w, 2, 2)] = 102;
   data[keyForCell(w, 3, 2)] = 17;
+  data[keyForCell(w, 0, 1)] = 18;
+  data[keyForCell(w, 1, 1)] = 19;
 
   world.loadLevel({
     meta: { w, h, tileSize: 24, id: "custom-identity", name: "Custom Identity" },
@@ -125,6 +131,8 @@ function runCustomTileIdentityChecks() {
   assert.equal(world.getTileBehavior(1, 2)?.solid, true, "custom solid behavior should resolve from behavior profile");
   assert.equal(world.getTileBehavior(2, 2)?.oneWay, true, "custom one-way behavior should survive reload/runtime lookup");
   assert.equal(world.getTileBehavior(3, 2)?.frictionMul, 6.4, "custom brake behavior profile should resolve runtime brake semantics");
+  assert.equal(world.getTileBehavior(0, 1)?.maxSpeedMul, 0.55, "custom sticky movement multiplier should resolve from authored behavior params");
+  assert.equal(world.getTileBehavior(1, 1)?.maxSpeedMul, 1.42, "custom rapid movement multiplier should resolve from authored behavior params");
 }
 
 function runPlayerSurfaceSamplingChecks() {
@@ -154,6 +162,30 @@ function runPlayerSurfaceSamplingChecks() {
   const def = player._getSurfaceDef(world);
   assert.equal(def?.name, "ice");
   assert.equal(def?.frictionMul, 0.02);
+}
+
+function runPlayerStickyRapidSurfaceChecks() {
+  const stickyPlayer = new Lumo.Player(0, 0);
+  stickyPlayer.onGround = true;
+  stickyPlayer.onPlatform = null;
+  stickyPlayer._applySurface({
+    tileSize: 24,
+    getTileBehavior() {
+      return { maxSpeedMul: 0.5, solid: true };
+    },
+  });
+  assert.equal(stickyPlayer.speed, stickyPlayer._baseSpeed * 0.5, "sticky surface should slow max movement speed");
+
+  const rapidPlayer = new Lumo.Player(0, 0);
+  rapidPlayer.onGround = true;
+  rapidPlayer.onPlatform = null;
+  rapidPlayer._applySurface({
+    tileSize: 24,
+    getTileBehavior() {
+      return { maxSpeedMul: 1.35, solid: true };
+    },
+  });
+  assert.equal(rapidPlayer.speed, rapidPlayer._baseSpeed * 1.35, "rapid surface should boost max movement speed");
 }
 
 function runOneWayCollisionChecks() {
@@ -225,6 +257,7 @@ function runOneWayCollisionChecks() {
 runWorldBehaviorCoverageChecks();
 runCustomTileIdentityChecks();
 runPlayerSurfaceSamplingChecks();
+runPlayerStickyRapidSurfaceChecks();
 runOneWayCollisionChecks();
 
 console.log("runtime sized tile behavior checks passed");

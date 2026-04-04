@@ -184,7 +184,20 @@
       }
 
       if (!profileBase) return legacy;
-      return Object.assign({}, legacy, profileBase);
+      const resolved = Object.assign({}, legacy, profileBase);
+
+      const profileMovementMul = Number.parseFloat(profile?.defaults?.movementMul);
+      const tileMovementMul = Number.parseFloat(tileMeta?.behaviorParams?.movementMul);
+      const movementMul = Number.isFinite(tileMovementMul)
+        ? tileMovementMul
+        : Number.isFinite(profileMovementMul)
+          ? profileMovementMul
+          : null;
+      if (Number.isFinite(movementMul) && movementMul > 0){
+        resolved.maxSpeedMul = movementMul;
+      }
+
+      return resolved;
     }
 
     getTileBehavior(tx, ty){
