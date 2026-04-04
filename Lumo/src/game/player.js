@@ -157,20 +157,41 @@
         sinkSpeed: 125,
       };
       this._sfx = {
-        jump: [
-          "data/assets/audio/sfx/player/movement/player_jump_01.ogg",
-          "data/assets/audio/sfx/player/movement/player_jump_02.ogg",
-        ],
+        jump: "data/assets/audio/sfx/player/movement/player_jump_01.ogg",
+        move: "data/assets/audio/sfx/player/movement/player_move.ogg",
         land: "data/assets/audio/sfx/player/movement/player_land.ogg",
       };
+      this._moveLoopPlaying = false;
+      this._moveLoopHandle = null;
 
     }
 
     _playGameplaySfx(world, path, volume = 1){
       if (!path || !world || !world._ents || typeof world._ents._playOneShot !== "function") return;
-      // Temporary hotfix: fully disable movement loop SFX playback.
-      if (typeof path === "string" && path.endsWith("/player_move.ogg")) return;
       world._ents._playOneShot(path, volume);
+    }
+
+    _setMovementLoop(world, shouldPlay){
+      const ents = world && world._ents;
+      const path = this._sfx && this._sfx.move;
+      if (!ents || !path || typeof ents._getSoundHandle !== "function" || typeof ents._setHandleVolume !== "function"){
+        this._moveLoopPlaying = false;
+        this._moveLoopHandle = null;
+        return;
+      }
+      if (!this._moveLoopHandle){
+        this._moveLoopHandle = ents._getSoundHandle(path, true);
+      }
+      if (shouldPlay){
+        ents._setHandleVolume(this._moveLoopHandle, 1.0);
+        this._moveLoopPlaying = true;
+        return;
+      }
+      if (this._moveLoopPlaying && this._moveLoopHandle && this._moveLoopHandle.audio){
+        try { this._moveLoopHandle.audio.pause(); this._moveLoopHandle.audio.currentTime = 0; } catch(_){ }
+      }
+      ents._setHandleVolume(this._moveLoopHandle, 0);
+      this._moveLoopPlaying = false;
     }
 
     setSpawn(px, py){
@@ -183,6 +204,8 @@
       this.onPlatform = null;
       this.coyoteTimer = 0;
       this.jumpBufferTimer = 0;
+      this._moveLoopPlaying = false;
+      this._moveLoopHandle = null;
     }
 
     setEnergy(p){
@@ -534,6 +557,7 @@
       this._t = (this._t || 0) + dt;
 
       if (this._liquidDeath && this._liquidDeath.active){
+        this._setMovementLoop(world, false);
         this._liquidDeath.t += dt;
         const seqP = U().clamp(this._liquidDeath.t / Math.max(0.001, this._liquidDeath.duration), 0, 1);
         const fadeP = U().clamp((this._liquidDeath.t - this._liquidDeath.fadeDelay) / Math.max(0.001, this._liquidDeath.duration - this._liquidDeath.fadeDelay), 0, 1);
@@ -556,6 +580,7 @@
       }
 
       if (this._damage && this._damage.active){
+        this._setMovementLoop(world, false);
         this._damage.t += dt;
         this.vy += this.gravityUp * dt;
         this.moveAndCollide(dt, world);
@@ -570,6 +595,7 @@
       }
 
       if (this._deathAnim && this._deathAnim.active){
+        this._setMovementLoop(world, false);
         this._deathAnim.t += dt;
         const p = U().clamp(this._deathAnim.t / Math.max(0.001, this._deathAnim.duration), 0, 1);
 
@@ -591,6 +617,7 @@
 
       // Respawn countdown state: freeze player until timer expires
       if (this._respawn && this._respawn.active){
+        this._setMovementLoop(world, false);
         this._respawn.t -= dt;
         if (this._respawn.t <= 0){
           this._respawn.active = false;
@@ -736,9 +763,7 @@
         this.onPlatform = null;
         this.coyoteTimer = 0;
         this.jumpBufferTimer = 0;
-        const jumps = this._sfx && Array.isArray(this._sfx.jump) ? this._sfx.jump : null;
-        const jumpPath = (jumps && jumps.length > 0) ? jumps[(Math.random() * jumps.length) | 0] : null;
-        this._playGameplaySfx(world, jumpPath, 1.0);
+        this._playGameplaySfx(world, this._sfx.jump, 1.0);
       }
 
       // variable jump
@@ -766,6 +791,9 @@
       }
 
       this._airborneTime = this.onGround ? 0 : (airborneTimeBeforeStep + dt);
+      const MOVE_SFX_MIN_SPEED = 8;
+      const shouldPlayMoveLoop = this.onGround && Math.abs(this.vx) >= MOVE_SFX_MIN_SPEED;
+      this._setMovementLoop(world, shouldPlayMoveLoop);
 
       // energy drain
       if (moving){
