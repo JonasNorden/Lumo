@@ -2,6 +2,7 @@ import { BRUSH_SPRITE_OPTIONS } from "./tileSpriteCatalog.js";
 export { BRUSH_SPRITE_OPTIONS };
 
 const TILE_BEHAVIOR_GROUP_DEFINITIONS = [
+  { value: "all", label: "All", profileIds: [] },
   { value: "solid", label: "Solid", profileIds: ["tile.solid.default"] },
   { value: "ice", label: "Ice", profileIds: ["tile.solid.ice"] },
   { value: "brake", label: "Brake", profileIds: ["tile.solid.brake"] },
@@ -46,6 +47,9 @@ export function getBrushSpriteOptionsForBehavior(behaviorId) {
   const resolvedBehaviorId = BRUSH_BEHAVIOR_OPTIONS.some((option) => option.value === normalizedBehaviorId)
     ? normalizedBehaviorId
     : BRUSH_BEHAVIOR_OPTIONS[0].value;
+
+  if (resolvedBehaviorId === "all") return BRUSH_SPRITE_OPTIONS;
+
   return BRUSH_SPRITE_OPTIONS.filter((option) => getBehaviorGroupIdForSpriteOption(option) === resolvedBehaviorId);
 }
 
