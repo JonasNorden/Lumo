@@ -56,7 +56,7 @@ window.LUMO_CATALOG_ENTITIES = [
     "img": "data/assets/sprites/sound/trigger.png",
     "anchor": "BL",
     "defaults": {
-      "soundFile": "data/assets/audio/events/creatures/void_creature.mp3",
+      "soundFile": "data/assets/audio/events/creatures/void_creature.ogg",
       "triggerX": 0,
       "once": true,
       "volume": 1
@@ -422,3 +422,4 @@ window.LUMO_CATALOG_ENTITIES = [
     "anchor": "TL"
   }
 ]
+

@@ -16219,7 +16219,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/events/creatures/void_creature.mp3",
+          "soundFile": "data/assets/audio/events/creatures/void_creature.ogg",
           "triggerX": 3348
         }
       },
@@ -38301,7 +38301,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/events/creatures/void_creature.mp3",
+          "soundFile": "data/assets/audio/events/creatures/void_creature.ogg",
           "triggerX": 3348
         }
       },

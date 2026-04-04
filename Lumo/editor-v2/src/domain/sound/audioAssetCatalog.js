@@ -10,12 +10,12 @@ const FALLBACK_AUDIO_ASSET_PATHS = [
   "data/assets/audio/spot/wind/blowing.wav",
   "data/assets/audio/spot/wind/wind.wav",
   "data/assets/audio/events/creatures/alien_presence.ogg",
-  "data/assets/audio/events/creatures/scream_of_void.mp3",
-  "data/assets/audio/events/creatures/void_creature.mp3",
+  "data/assets/audio/events/creatures/scream_of_void.ogg",
+  "data/assets/audio/events/creatures/void_creature.ogg",
   "data/assets/audio/ambient/forest/jungle.ogg",
   "data/assets/audio/ambient/rain/rain.wav",
   "data/assets/audio/ambient/ruin/dark-ambient-horror.ogg",
-  "data/assets/audio/ambient/space/empty_space_void.mp3",
+  "data/assets/audio/ambient/space/empty_space_void.ogg",
   "data/assets/audio/ambient/space/synthetic_space.ogg",
   "data/assets/audio/ambient/void/creepy_bass.ogg",
   "data/assets/audio/ambient/void/dark_ambient.ogg",
@@ -138,3 +138,4 @@ export function findSoundAssetByPath(path) {
   const normalizedPath = normalizeAssetPath(path);
   return getSoundAssetCatalog().find((entry) => entry.value === normalizedPath) || null;
 }
+

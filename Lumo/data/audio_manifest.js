@@ -15,7 +15,8 @@ window.LUMO_AUDIO_MANIFEST = {
   ],
   events: [
     "data/assets/audio/events/creatures/alien_presence.ogg",
-    "data/assets/audio/events/creatures/scream_of_void.mp3",
-    "data/assets/audio/events/creatures/void_creature.mp3"
+    "data/assets/audio/events/creatures/scream_of_void.ogg",
+    "data/assets/audio/events/creatures/void_creature.ogg"
   ]
 };
+

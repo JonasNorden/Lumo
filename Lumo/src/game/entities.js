@@ -145,7 +145,7 @@
       if (!path) return "";
       if (path.includes("data/assets/sound/")) path = path.replace("data/assets/sound/", "data/assets/audio/");
       if (entityType === "trigger_sound" && /data\/assets\/audio\/events\/creatures\/void_creature\.wav$/i.test(path)){
-        path = "data/assets/audio/events/creatures/void_creature.mp3";
+        path = "data/assets/audio/events/creatures/void_creature.ogg";
       }
       return path;
     }
@@ -3962,3 +3962,4 @@ octx.fillStyle = g;
 
   Lumo.Entities = Entities;
 })();
+
