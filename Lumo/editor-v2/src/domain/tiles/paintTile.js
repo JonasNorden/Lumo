@@ -3,8 +3,12 @@ import { findBrushSpriteOptionByValue } from "./tileSpriteCatalog.js";
 
 const BRUSH_BEHAVIOR_TO_TILE = {
   solid: 1,
-  hazard: 2,
-  accent: 3,
+  "one-way": 2,
+  hazard: 3,
+  ice: 4,
+  brake: 5,
+  sticky: 1,
+  rapid: 1,
 };
 
 export function resolveTileFromBrushDraft(brushDraft) {

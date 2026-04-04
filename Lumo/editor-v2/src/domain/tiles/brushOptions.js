@@ -1,10 +1,53 @@
-export { BRUSH_SPRITE_OPTIONS } from "./tileSpriteCatalog.js";
+import { BRUSH_SPRITE_OPTIONS } from "./tileSpriteCatalog.js";
+export { BRUSH_SPRITE_OPTIONS };
 
-export const BRUSH_BEHAVIOR_OPTIONS = [
-  { value: "solid", label: "Solid" },
-  { value: "hazard", label: "Hazard" },
-  { value: "accent", label: "Accent" },
+const TILE_BEHAVIOR_GROUP_DEFINITIONS = [
+  { value: "solid", label: "Solid", profileIds: ["tile.solid.default"] },
+  { value: "ice", label: "Ice", profileIds: ["tile.solid.ice"] },
+  { value: "brake", label: "Brake", profileIds: ["tile.solid.brake"] },
+  { value: "sticky", label: "Sticky", profileIds: ["tile.solid.sticky"] },
+  { value: "rapid", label: "Rapid", profileIds: ["tile.solid.rapid"] },
+  { value: "one-way", label: "One-way", profileIds: ["tile.one-way.default"] },
+  { value: "hazard", label: "Hazard", profileIds: ["tile.hazard.default"] },
 ];
+
+const TILE_ID_TO_BEHAVIOR_GROUP = new Map([
+  [2, "one-way"],
+  [3, "hazard"],
+  [4, "ice"],
+  [5, "brake"],
+]);
+
+const PROFILE_ID_TO_BEHAVIOR_GROUP = new Map(
+  TILE_BEHAVIOR_GROUP_DEFINITIONS.flatMap((definition) =>
+    definition.profileIds.map((profileId) => [profileId, definition.value])),
+);
+
+export const BRUSH_BEHAVIOR_OPTIONS = TILE_BEHAVIOR_GROUP_DEFINITIONS.map((definition) => ({
+  value: definition.value,
+  label: definition.label,
+}));
+
+export function getBehaviorGroupIdForSpriteOption(spriteOption) {
+  const profileId = String(spriteOption?.behaviorProfileId || "").trim();
+  if (profileId && PROFILE_ID_TO_BEHAVIOR_GROUP.has(profileId)) {
+    return PROFILE_ID_TO_BEHAVIOR_GROUP.get(profileId);
+  }
+
+  if (Number.isInteger(spriteOption?.tileId) && TILE_ID_TO_BEHAVIOR_GROUP.has(spriteOption.tileId)) {
+    return TILE_ID_TO_BEHAVIOR_GROUP.get(spriteOption.tileId);
+  }
+
+  return "solid";
+}
+
+export function getBrushSpriteOptionsForBehavior(behaviorId) {
+  const normalizedBehaviorId = String(behaviorId || "").trim();
+  const resolvedBehaviorId = BRUSH_BEHAVIOR_OPTIONS.some((option) => option.value === normalizedBehaviorId)
+    ? normalizedBehaviorId
+    : BRUSH_BEHAVIOR_OPTIONS[0].value;
+  return BRUSH_SPRITE_OPTIONS.filter((option) => getBehaviorGroupIdForSpriteOption(option) === resolvedBehaviorId);
+}
 
 export const BRUSH_SIZE_OPTIONS = [
   { value: "1x1", label: "1×1" },
@@ -26,15 +69,15 @@ export const BRUSH_PALETTE_PRESETS = [
     brush: { behavior: "solid", size: "1x1", sprite: "soil_c" },
   },
   {
+    id: "ice",
+    label: "Ice",
+    color: "#7fb7d9",
+    brush: { behavior: "ice", size: "1x1", sprite: "ice_01" },
+  },
+  {
     id: "hazard",
     label: "Hazard",
     color: "#bf4d4d",
     brush: { behavior: "hazard", size: "1x1", sprite: "stone_ct" },
-  },
-  {
-    id: "accent",
-    label: "Accent",
-    color: "#59a578",
-    brush: { behavior: "accent", size: "1x1", sprite: "grass_bt" },
   },
 ];

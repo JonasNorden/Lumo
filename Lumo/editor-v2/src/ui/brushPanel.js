@@ -2,6 +2,7 @@ import {
   BRUSH_BEHAVIOR_OPTIONS,
   BRUSH_SIZE_OPTIONS,
   BRUSH_SPRITE_OPTIONS,
+  getBrushSpriteOptionsForBehavior,
 } from "../domain/tiles/brushOptions.js";
 import { getBrushDraftSummary } from "../domain/tiles/brushDraft.js";
 import { TOOL_OPTIONS, EDITOR_TOOLS, isEditorTool } from "../domain/tiles/tools.js";
@@ -388,12 +389,16 @@ function renderSoundSection(activePresetId, isOpen) {
 
 export function renderBrushPanel(panel, state) {
   const brushDraft = state.brush.activeDraft;
-  const visibleSizeOptions = getTileSizeOptionsForSprite(brushDraft.sprite);
-  const selectedSize = isBrushSizeSupportedForSprite(brushDraft.size, brushDraft.sprite)
+  const filteredSpriteOptions = getBrushSpriteOptionsForBehavior(brushDraft.behavior);
+  const visibleSpriteOptions = filteredSpriteOptions.length ? filteredSpriteOptions : BRUSH_SPRITE_OPTIONS;
+  const activeSpriteInBehavior = visibleSpriteOptions.some((option) => option.value === brushDraft.sprite);
+  const selectedSpriteValue = activeSpriteInBehavior ? brushDraft.sprite : visibleSpriteOptions[0]?.value || brushDraft.sprite;
+  const visibleSizeOptions = getTileSizeOptionsForSprite(selectedSpriteValue);
+  const selectedSize = isBrushSizeSupportedForSprite(brushDraft.size, selectedSpriteValue)
     ? brushDraft.size
-    : getFallbackBrushSizeForSprite(brushDraft.sprite);
+    : getFallbackBrushSizeForSprite(selectedSpriteValue);
   const summary = getBrushDraftSummary(brushDraft);
-  const activeTileSprite = findBrushSpriteOptionByValue(brushDraft.sprite);
+  const activeTileSprite = findBrushSpriteOptionByValue(selectedSpriteValue);
   const panelSections = {
     ...COLLAPSIBLE_PANEL_DEFAULTS,
     ...state.ui.panelSections,
@@ -414,7 +419,7 @@ export function renderBrushPanel(panel, state) {
         <span class="fieldMeta">Select a tile to paint</span>
       </div>
 
-      ${renderAssetPicker("Tile sprites", "brush-sprite-button", BRUSH_SPRITE_OPTIONS, brushDraft.sprite, "No tile sprite selected", "assetPickerCompact")}
+      ${renderAssetPicker("Tile sprites", "brush-sprite-button", visibleSpriteOptions, selectedSpriteValue, "No tile sprite selected", "assetPickerCompact")}
 
       <div class="statusRow compactStatusRow tilesCurrentRow">
         <span class="label">Current</span>
@@ -477,6 +482,17 @@ export function bindBrushPanel(panel, store, options = {}) {
         draft.ui.panelSections[nextLayer] = true;
         if (field === "size" && !isBrushSizeSupportedForSprite(target.value, draft.brush.activeDraft.sprite)) {
           draft.brush.activeDraft.size = getFallbackBrushSizeForSprite(draft.brush.activeDraft.sprite);
+          return;
+        }
+        if (field === "behavior") {
+          draft.brush.activeDraft.behavior = target.value;
+          const behaviorSpriteOptions = getBrushSpriteOptionsForBehavior(target.value);
+          if (behaviorSpriteOptions.length && !behaviorSpriteOptions.some((option) => option.value === draft.brush.activeDraft.sprite)) {
+            draft.brush.activeDraft.sprite = behaviorSpriteOptions[0].value;
+            if (!isBrushSizeSupportedForSprite(draft.brush.activeDraft.size, draft.brush.activeDraft.sprite)) {
+              draft.brush.activeDraft.size = getFallbackBrushSizeForSprite(draft.brush.activeDraft.sprite);
+            }
+          }
           return;
         }
         draft.brush.activeDraft[field] = target.value;
