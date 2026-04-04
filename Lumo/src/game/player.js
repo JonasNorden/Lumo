@@ -9,6 +9,7 @@
       this.vx = 0; this.vy = 0;
 
       this.onGround = false;
+      this._airborneTime = 0;
 
       // new: platform reference (entity) player stood on last frame
       this.onPlatform = null;
@@ -178,6 +179,7 @@
       this.vx = 0;
       this.vy = 0;
       this.onGround = false;
+      this._airborneTime = 0;
       this.onPlatform = null;
       this.coyoteTimer = 0;
       this.jumpBufferTimer = 0;
@@ -750,10 +752,20 @@
       this.vy = Math.min(this.vy, this.maxFall);
 
       const wasGrounded = !!this.onGround;
+      const preCollideVy = this.vy;
+      const airborneTimeBeforeStep = this._airborneTime || 0;
       this.moveAndCollide(dt, world);
-      if (!wasGrounded && this.onGround){
+
+      const landedThisStep = (!wasGrounded && this.onGround);
+      const MIN_LAND_AIRTIME = 0.05;
+      const MIN_LAND_IMPACT_VY = 120;
+      const qualifiesAsRealLanding = landedThisStep
+        && (airborneTimeBeforeStep >= MIN_LAND_AIRTIME || preCollideVy >= MIN_LAND_IMPACT_VY);
+      if (qualifiesAsRealLanding){
         this._playGameplaySfx(world, this._sfx.land, 1.0);
       }
+
+      this._airborneTime = this.onGround ? 0 : (airborneTimeBeforeStep + dt);
 
       // energy drain
       if (moving){
