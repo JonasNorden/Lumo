@@ -1,8 +1,8 @@
 const FALLBACK_AUDIO_ASSET_PATHS = [
-  "data/assets/audio/music/game_play_1.mp3",
-  "data/assets/audio/music/game_play_2.mp3",
-  "data/assets/audio/music/game_play_3.mp3",
-  "data/assets/audio/music/menu_music.mp3",
+  "data/assets/audio/music/game_play_1.ogg",
+  "data/assets/audio/music/game_play_2.ogg",
+  "data/assets/audio/music/game_play_3.ogg",
+  "data/assets/audio/music/menu_music.ogg",
   "data/assets/audio/music/space_loop_short.wav",
   "data/assets/audio/spot/drip/one_drip.wav",
   "data/assets/audio/spot/drip/waterdrip.ogg",

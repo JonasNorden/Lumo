@@ -274,7 +274,7 @@ export const mockLevelDocument = {
       x: 30,
       y: 14,
       visible: true,
-      source: "data/assets/audio/music/game_play_1.mp3",
+      source: "data/assets/audio/music/game_play_1.ogg",
       params: {
         volume: 0.85,
         pitch: 1,

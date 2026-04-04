@@ -1,9 +1,9 @@
 window.LUMO_AUDIO_MANIFEST = {
   music: [
-    "data/assets/audio/music/game_play_1.mp3",
-    "data/assets/audio/music/game_play_2.mp3",
-    "data/assets/audio/music/game_play_3.mp3",
-    "data/assets/audio/music/menu_music.mp3",
+    "data/assets/audio/music/game_play_1.ogg",
+    "data/assets/audio/music/game_play_2.ogg",
+    "data/assets/audio/music/game_play_3.ogg",
+    "data/assets/audio/music/menu_music.ogg",
     "data/assets/audio/music/space_loop_short.wav"
   ],
   spot: [
