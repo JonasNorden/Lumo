@@ -15759,7 +15759,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/music/game_play_3.mp3",
+          "soundFile": "data/assets/audio/music/game_play_3.ogg",
           "xStart": 5016,
           "xEnd": 6800,
           "fadeTiles": 15
@@ -37841,7 +37841,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/music/game_play_3.mp3",
+          "soundFile": "data/assets/audio/music/game_play_3.ogg",
           "xStart": 5016,
           "xEnd": 6800,
           "fadeTiles": 15
