@@ -196,6 +196,16 @@
     loadLevel(levelObj){
       this._ensureTileCatalog();
       this._ensureBehaviorProfiles();
+      const fallbackTileDefs = {
+        0: { solid:false, oneWay:false, hazard:false, color:null },
+        1: { solid:true,  oneWay:false, hazard:false, color:"#2b3646" },
+        2: { solid:true,  oneWay:true,  hazard:false, color:"#44586f" },
+        3: { solid:true,  oneWay:false, hazard:true,  color:"#8b1d1d" },
+        4: { solid:true,  oneWay:false, hazard:false, color:"#274a66", groundAccelMul:0.85, groundFrictionMul:0.12, maxSpeedMul:1.25 },
+        5: { solid:true,  oneWay:false, hazard:false, color:"#4a372c", groundAccelMul:1.00, groundFrictionMul:3.00, maxSpeedMul:0.80 },
+      };
+      const baseTileDefs = (window.Lumo && Lumo.Tileset) ? Lumo.Tileset : fallbackTileDefs;
+      this.tileDefs = this._buildRuntimeTileDefs(baseTileDefs);
 
       const meta = levelObj && levelObj.meta ? levelObj.meta : {};
       const levelLabel = ((meta.id || "(no-id)") + (meta.name ? `:${meta.name}` : ""));
