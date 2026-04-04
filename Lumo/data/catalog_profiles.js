@@ -19,6 +19,18 @@ window.LUMO_TILE_BEHAVIOR_PROFILES = [
     special: "brake"
   },
   {
+    id: "tile.solid.sticky",
+    collisionType: "solid",
+    special: "sticky",
+    defaults: { movementMul: 0.5 }
+  },
+  {
+    id: "tile.solid.rapid",
+    collisionType: "solid",
+    special: "rapid",
+    defaults: { movementMul: 1.35 }
+  },
+  {
     id: "tile.one-way.default",
     collisionType: "oneWay",
     special: null

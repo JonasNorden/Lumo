@@ -138,6 +138,8 @@ function normalizeTileEntry(entry) {
     drawOffY: Number.isFinite(entry.drawOffY) ? entry.drawOffY : 0,
     footprint: tileRules?.footprint || entry.footprint || { w: 1, h: 1 },
     supportedSizes: normalizeSupportedSizes(tileRules?.supportedSizes || entry.supportedSizes),
+    behaviorProfileId: entry.behaviorProfileId || null,
+    behaviorParams: entry.behaviorParams && typeof entry.behaviorParams === "object" ? { ...entry.behaviorParams } : null,
     collisionType: entry.collisionType || null,
     group: entry.group || "Tiles",
   };
@@ -199,6 +201,8 @@ function toBrushSpriteOption(tileAsset) {
     drawOffY: Number.isFinite(tileAsset?.drawOffY) ? tileAsset.drawOffY : 0,
     footprint: tileAsset?.footprint || { w: 1, h: 1 },
     supportedSizes: normalizeSupportedSizes(tileAsset?.supportedSizes),
+    behaviorProfileId: tileAsset?.behaviorProfileId || null,
+    behaviorParams: tileAsset?.behaviorParams && typeof tileAsset.behaviorParams === "object" ? { ...tileAsset.behaviorParams } : null,
     collisionType: tileAsset?.collisionType || null,
     group: tileAsset?.group || "Tiles",
   };
@@ -288,6 +292,8 @@ export function registerTileSpriteOption(entry) {
     drawOffY: Number.isFinite(entry.drawOffY) ? entry.drawOffY : 0,
     footprint: entry.footprint || { w: 1, h: 1 },
     supportedSizes: normalizeSupportedSizes(entry.supportedSizes),
+    behaviorProfileId: entry.behaviorProfileId || null,
+    behaviorParams: entry.behaviorParams && typeof entry.behaviorParams === "object" ? { ...entry.behaviorParams } : null,
     collisionType: entry.collisionType || null,
     group: entry.group || "Custom",
   };
@@ -313,6 +319,8 @@ export function registerTileSpriteOption(entry) {
       drawOffY: normalizedOption.drawOffY,
       footprint: normalizedOption.footprint,
       supportedSizes: normalizedOption.supportedSizes,
+      behaviorProfileId: normalizedOption.behaviorProfileId,
+      behaviorParams: normalizedOption.behaviorParams,
       collisionType: normalizedOption.collisionType,
       group: normalizedOption.group,
     });

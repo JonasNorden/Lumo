@@ -57,6 +57,8 @@ assert.equal(isStepComplete("identity", wizard), true);
 assert.equal(getStepValidation("identity", wizard).isValid, true);
 
 assert.ok(behaviorOptions.length >= 5);
+assert.ok(behaviorOptions.some((option) => option.value === "sticky"));
+assert.ok(behaviorOptions.some((option) => option.value === "rapid"));
 
 wizard.draft.tileBehavior = "hazard";
 const syncedHazardDraft = getAssetWizardDraftWithDefaults(ASSET_WIZARD_TYPES.TILE, wizard.draft);
@@ -124,6 +126,10 @@ assert.equal(tileDefaults.tileBehavior, "solid");
 assert.equal(tileDefaults.tileNumericId, "15");
 assert.equal(getBehaviorProfileIdForTileBehavior("solid"), "tile.solid.default");
 assert.equal(getBehaviorProfileIdForTileBehavior("one-way"), "tile.one-way.default");
+assert.equal(getBehaviorProfileIdForTileBehavior("sticky"), "tile.solid.sticky");
+assert.equal(getBehaviorProfileIdForTileBehavior("rapid"), "tile.solid.rapid");
+assert.equal(getAssetWizardDraftWithDefaults(ASSET_WIZARD_TYPES.TILE, { tileBehavior: "sticky" }).tileMovementMul, "0.50");
+assert.equal(getAssetWizardDraftWithDefaults(ASSET_WIZARD_TYPES.TILE, { tileBehavior: "rapid" }).tileMovementMul, "1.35");
 
 const suggestedId = suggestTileCatalogId({ displayName: "Crystal Brick" });
 assert.equal(suggestedId, "crystal-brick");
@@ -160,6 +166,7 @@ const persistedTileEntry = buildPersistedTileEntry({
     tileNumericId: 15,
     tileBehavior: "solid",
     behaviorProfileId: "tile.solid.default",
+    behaviorParams: { movementMul: 0.62 },
     collisionType: "solid",
     drawW: 24,
     drawH: 24,
@@ -172,6 +179,7 @@ const persistedTileEntry = buildPersistedTileEntry({
   spriteFileName: "wizard-tile.png",
 });
 assert.equal(persistedTileEntry.tileId, 17);
+assert.equal(persistedTileEntry.behaviorParams?.movementMul, 0.62);
 assert.ok(!existingTileEntries.some((entry) => entry.tileId === persistedTileEntry.tileId));
 assert.equal(JSON.stringify(existingTileEntries), existingTileSnapshot);
 const nextEntries = [...existingTileEntries, persistedTileEntry];

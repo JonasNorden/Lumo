@@ -65,6 +65,22 @@ const TILE_BEHAVIOR_DEFINITIONS = [
     collisionType: "solid",
     helpText: "Very high-friction solid surface that slows movement.",
   },
+  {
+    id: "sticky",
+    label: "Sticky",
+    tileId: 15,
+    behaviorProfileId: "tile.solid.sticky",
+    collisionType: "solid",
+    helpText: "High-drag surface that noticeably slows walking movement.",
+  },
+  {
+    id: "rapid",
+    label: "Rapid",
+    tileId: 15,
+    behaviorProfileId: "tile.solid.rapid",
+    collisionType: "solid",
+    helpText: "Fast surface that increases walking movement speed.",
+  },
 ];
 
 const TILE_BEHAVIOR_BY_ID = new Map(TILE_BEHAVIOR_DEFINITIONS.map((item) => [item.id, item]));
@@ -190,6 +206,11 @@ function normalizeString(value) {
 function toPositiveNumberOrNull(value) {
   const numeric = Number.parseFloat(value);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
+}
+
+function toFiniteNumberOrNull(value) {
+  const numeric = Number.parseFloat(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }
 
 function isPositiveNumber(value) {
@@ -482,13 +503,21 @@ export function suggestDecorPresetId({ displayName = "", spriteFileName = "", cu
 export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
   const baseDraft = { ...(draft || {}) };
   if (assetType === ASSET_WIZARD_TYPES.TILE) {
+    const syncedBehaviorDraft = syncTileBehaviorDraftFields(baseDraft);
+    const tileBehavior = normalizeString(syncedBehaviorDraft.tileBehavior) || "solid";
+    const defaultMovementMul = tileBehavior === "sticky"
+      ? "0.50"
+      : tileBehavior === "rapid"
+        ? "1.35"
+        : "";
     return syncTileBehaviorDraftFields({
-      ...baseDraft,
-      collisionType: normalizeString(baseDraft.collisionType) || "solid",
-      drawAnchor: normalizeString(baseDraft.drawAnchor) || "BL",
-      drawWidth: withFallback(baseDraft.drawWidth, "24"),
-      drawHeight: withFallback(baseDraft.drawHeight, "24"),
-      footprint: withFallback(baseDraft.footprint, '{"w":1,"h":1}'),
+      ...syncedBehaviorDraft,
+      collisionType: normalizeString(syncedBehaviorDraft.collisionType) || "solid",
+      drawAnchor: normalizeString(syncedBehaviorDraft.drawAnchor) || "BL",
+      drawWidth: withFallback(syncedBehaviorDraft.drawWidth, "24"),
+      drawHeight: withFallback(syncedBehaviorDraft.drawHeight, "24"),
+      footprint: withFallback(syncedBehaviorDraft.footprint, '{"w":1,"h":1}'),
+      tileMovementMul: withFallback(syncedBehaviorDraft.tileMovementMul, defaultMovementMul),
     });
   }
   if (assetType === ASSET_WIZARD_TYPES.BACKGROUND) {
@@ -634,6 +663,17 @@ export function getStepValidation(stepId, wizardState) {
       if (!isPositiveNumber(draft.drawWidth)) fieldErrors.drawWidth = "Draw width must be a positive number.";
       if (!isPositiveNumber(draft.drawHeight)) fieldErrors.drawHeight = "Draw height must be a positive number.";
       if (!isValidFootprint(draft.footprint)) fieldErrors.footprint = 'Footprint must be JSON with positive w/h, e.g. {"w":1,"h":1}.';
+      const tileBehaviorId = normalizeString(draft.tileBehavior);
+      if (tileBehaviorId === "sticky" || tileBehaviorId === "rapid") {
+        const authoredMovementMul = toFiniteNumberOrNull(draft.tileMovementMul);
+        if (authoredMovementMul === null) fieldErrors.tileMovementMul = "Movement multiplier is required.";
+        if (tileBehaviorId === "sticky" && (authoredMovementMul === null || authoredMovementMul <= 0 || authoredMovementMul >= 1)) {
+          fieldErrors.tileMovementMul = "Sticky strength must be > 0 and < 1.";
+        }
+        if (tileBehaviorId === "rapid" && (authoredMovementMul === null || authoredMovementMul <= 1 || authoredMovementMul > 3)) {
+          fieldErrors.tileMovementMul = "Rapid strength must be > 1 and <= 3.";
+        }
+      }
       const isValid = Object.keys(fieldErrors).length === 0;
       return { isValid, fieldErrors, blockingReason: isValid ? "" : "Resolve metadata validation issues to continue." };
     }

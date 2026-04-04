@@ -433,6 +433,12 @@ function renderStepBody(wizard, validation) {
 
   if (wizard.stepId === "metadata") {
     if (type === "tiles") {
+      const isSticky = draft.tileBehavior === "sticky";
+      const isRapid = draft.tileBehavior === "rapid";
+      const movementLabel = isSticky ? "Sticky strength" : "Rapid strength";
+      const movementHint = isSticky
+        ? "Movement multiplier while on Sticky tiles (0 < value < 1)."
+        : "Movement multiplier while on Rapid tiles (> 1).";
       return `
         <div class="assetWizardSection">
           <h4>Tile metadata</h4>
@@ -448,6 +454,21 @@ function renderStepBody(wizard, validation) {
                 <span class="assetWizardFieldFeedback ${fieldErrors.collisionType ? "assetWizardFieldError" : "isEmpty"}">${fieldErrors.collisionType ? escapeHtml(fieldErrors.collisionType) : "&nbsp;"}</span>
               </label>
               ${renderDrawAnchorInput(draft.drawAnchor, fieldErrors.drawAnchor, "assetWizardFieldSpan4")}
+              ${isSticky || isRapid
+    ? renderInput(
+      movementLabel,
+      "tileMovementMul",
+      draft.tileMovementMul,
+      isSticky ? "0.50" : "1.35",
+      movementHint,
+      {
+        errorMessage: fieldErrors.tileMovementMul,
+        fieldClass: "assetWizardFieldSpan4",
+        controlClass: "assetWizardControlNumberCompact",
+        compactField: true,
+      }
+    )
+    : ""}
             `,
             { groupClass: "isDenseGrid" },
           )}
