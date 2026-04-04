@@ -1235,6 +1235,7 @@ if (this._catById){
 
     _damagePlayer(player, sourceCx, knockbackX, knockbackY, energyLoss){
       if (!player) return;
+      this._playOneShot("data/assets/audio/sfx/player/damage/player_hurt.ogg", 1.0);
       const dir = Math.sign((player.x + player.w*0.5) - sourceCx) || 1;
       const kbX = dir * knockbackX;
       if (typeof player.takeHit === "function"){
@@ -3962,4 +3963,3 @@ octx.fillStyle = g;
 
   Lumo.Entities = Entities;
 })();
-
