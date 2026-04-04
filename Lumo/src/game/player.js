@@ -167,6 +167,8 @@
 
     _playGameplaySfx(world, path, volume = 1){
       if (!path || !world || !world._ents || typeof world._ents._playOneShot !== "function") return;
+      // Temporary hotfix: fully disable movement loop SFX playback.
+      if (typeof path === "string" && path.endsWith("/player_move.ogg")) return;
       world._ents._playOneShot(path, volume);
     }
 
