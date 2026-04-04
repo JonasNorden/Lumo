@@ -194,8 +194,6 @@
     }
 
     loadLevel(levelObj){
-      this._ensureTileCatalog();
-      this._ensureBehaviorProfiles();
       const fallbackTileDefs = {
         0: { solid:false, oneWay:false, hazard:false, color:null },
         1: { solid:true,  oneWay:false, hazard:false, color:"#2b3646" },
@@ -204,8 +202,6 @@
         4: { solid:true,  oneWay:false, hazard:false, color:"#274a66", groundAccelMul:0.85, groundFrictionMul:0.12, maxSpeedMul:1.25 },
         5: { solid:true,  oneWay:false, hazard:false, color:"#4a372c", groundAccelMul:1.00, groundFrictionMul:3.00, maxSpeedMul:0.80 },
       };
-      const baseTileDefs = (window.Lumo && Lumo.Tileset) ? Lumo.Tileset : fallbackTileDefs;
-      this.tileDefs = this._buildRuntimeTileDefs(baseTileDefs);
 
       const meta = levelObj && levelObj.meta ? levelObj.meta : {};
       const levelLabel = ((meta.id || "(no-id)") + (meta.name ? `:${meta.name}` : ""));
@@ -309,7 +305,14 @@
       // Reset tile catalog mapping between levels
       this._tileDefById = null;
       this._tileDefByCatalogId = null;
+      this._behaviorProfileById = null;
       this._ensureTileCatalog();
+      this._ensureBehaviorProfiles();
+
+      // Rebuild runtime tileDefs at the end of level load after catalog/profile reset/init.
+      // This guarantees catalog tile IDs are available to live runtime behavior resolution.
+      const baseTileDefs = (window.Lumo && Lumo.Tileset) ? Lumo.Tileset : fallbackTileDefs;
+      this.tileDefs = this._buildRuntimeTileDefs(baseTileDefs);
     }
 
     _getTileVisualOverrideAt(tx, ty){
