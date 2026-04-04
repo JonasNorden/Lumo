@@ -155,7 +155,19 @@
         fade: 1,
         sinkSpeed: 125,
       };
+      this._sfx = {
+        jump: [
+          "data/assets/audio/sfx/player/movement/player_jump_01.ogg",
+          "data/assets/audio/sfx/player/movement/player_jump_02.ogg",
+        ],
+        land: "data/assets/audio/sfx/player/movement/player_land.ogg",
+      };
 
+    }
+
+    _playGameplaySfx(world, path, volume = 1){
+      if (!path || !world || !world._ents || typeof world._ents._playOneShot !== "function") return;
+      world._ents._playOneShot(path, volume);
     }
 
     setSpawn(px, py){
@@ -720,6 +732,9 @@
         this.onPlatform = null;
         this.coyoteTimer = 0;
         this.jumpBufferTimer = 0;
+        const jumps = this._sfx && Array.isArray(this._sfx.jump) ? this._sfx.jump : null;
+        const jumpPath = (jumps && jumps.length > 0) ? jumps[(Math.random() * jumps.length) | 0] : null;
+        this._playGameplaySfx(world, jumpPath, 1.0);
       }
 
       // variable jump
@@ -732,7 +747,11 @@
       this.vy += (falling ? this.gravityDown : this.gravityUp) * dt;
       this.vy = Math.min(this.vy, this.maxFall);
 
+      const wasGrounded = !!this.onGround;
       this.moveAndCollide(dt, world);
+      if (!wasGrounded && this.onGround){
+        this._playGameplaySfx(world, this._sfx.land, 1.0);
+      }
 
       // energy drain
       if (moving){
