@@ -2,6 +2,7 @@ import { getTileIndex } from "../level/levelDocument.js";
 import { findBrushSpriteOptionByValue } from "./tileSpriteCatalog.js";
 
 const BRUSH_BEHAVIOR_TO_TILE = {
+  all: 1,
   solid: 1,
   "one-way": 2,
   hazard: 3,
