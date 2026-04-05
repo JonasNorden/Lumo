@@ -1104,6 +1104,7 @@
     paused = false;
     gameOverReadyForInput = false;
     gameState = GameState.MENU;
+    unlockMenuMusicFromInteraction();
     hudDebug.textContent = "Game Over -> main menu";
   }
 
