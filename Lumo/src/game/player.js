@@ -161,6 +161,7 @@
         move: "data/assets/audio/sfx/player/movement/player_move.ogg",
         land: "data/assets/audio/sfx/player/movement/player_land.ogg",
         death: "data/assets/audio/sfx/player/damage/player_death.ogg",
+        pulse: "data/assets/audio/sfx/player/abilities/player_pulse.ogg",
       };
       this._moveLoopPlaying = false;
       this._moveLoopHandle = null;
@@ -418,6 +419,7 @@
     startPulse(){
       if (this.energy <= 0.08) return;
       this.setEnergy(this.energy - 0.08);
+      this._playGameplaySfx(this._lastWorld || null, this._sfx && this._sfx.pulse, 1.0);
 
       this.pulse.active = true;
       this.pulse.r = 8;
