@@ -791,8 +791,8 @@
       }
 
       this._airborneTime = this.onGround ? 0 : (airborneTimeBeforeStep + dt);
-      const MOVE_SFX_MIN_SPEED = 8;
-      const shouldPlayMoveLoop = this.onGround && Math.abs(this.vx) >= MOVE_SFX_MIN_SPEED;
+      const MOVE_SFX_MIN_SPEED = 0.5;
+      const shouldPlayMoveLoop = this.onGround && (moving || Math.abs(this.vx) >= MOVE_SFX_MIN_SPEED);
       this._setMovementLoop(world, shouldPlayMoveLoop);
 
       // energy drain
