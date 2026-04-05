@@ -2199,6 +2199,7 @@ if (e.type === "lantern"){
               if (near){
                 e.mode = "takeoff";
                 e.tFly = (e.flyTime != null ? e.flyTime : 2.5);
+                this._playOneShot("data/assets/audio/events/creatures/firefly_01.ogg", 0.9);
                 pickWanderTarget();
               }
             }
