@@ -1101,6 +1101,9 @@
   }
 
   function returnToStartAfterGameOver(){
+    if (ents && typeof ents.stopGameplayAudio === "function"){
+      ents.stopGameplayAudio();
+    }
     paused = false;
     gameOverReadyForInput = false;
     gameState = GameState.MENU;
