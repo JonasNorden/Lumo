@@ -292,6 +292,11 @@ function renderParamFields(prefix, params, selectedIndex, itemId = null) {
     .join("");
 }
 
+function isLoopSupportedSoundType(soundType) {
+  const normalizedType = String(soundType || "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+  return normalizedType === "trigger" || normalizedType === "ambientzone" || normalizedType === "musiczone";
+}
+
 function resolveFlowerVariantParamValue(decor) {
   const paramVariant = decor?.params?.variant;
   const normalizedParamVariant = Number.parseInt(String(paramVariant ?? "").trim(), 10);
@@ -608,6 +613,7 @@ function renderBatchSoundEditor(selectedSounds, selectedSoundIndex) {
   const sharedVolume = resolveSharedValue(selectedSounds.map((sound) => sound?.params?.volume ?? 0));
   const sharedPitch = resolveSharedValue(selectedSounds.map((sound) => sound?.params?.pitch ?? 1));
   const sharedLoop = resolveSharedValue(selectedSounds.map((sound) => Boolean(sound?.params?.loop)));
+  const showLoopField = selectedSounds.some((sound) => isLoopSupportedSoundType(sound?.type));
 
   return renderSelectionFields([
     renderBatchSoundTypeSummary(selectedSounds, selectedSoundIndex),
@@ -615,7 +621,8 @@ function renderBatchSoundEditor(selectedSounds, selectedSoundIndex) {
     renderBatchSoundParamField("spatial", "Spatial", "boolean-select", sharedSpatial),
     renderBatchSoundParamField("volume", "Volume", "number", sharedVolume),
     renderBatchSoundParamField("pitch", "Pitch", "number", sharedPitch),
-    renderBatchSoundParamField("loop", "Loop", "boolean-select", sharedLoop),
+    // Spot Sound does not expose loop because it already plays continuously while the player is within range.
+    showLoopField ? renderBatchSoundParamField("loop", "Loop", "boolean-select", sharedLoop) : "",
   ].join(""));
 }
 
@@ -667,6 +674,12 @@ function renderDecorEditor(decor, selectedDecorIndex) {
 }
 
 function renderSoundEditor(sound, selectedSoundIndex, previewState, scanState) {
+  const soundParams = cloneEntityParams(sound?.params);
+  // Spot Sound does not expose loop because it already plays continuously while the player is within range.
+  if (!isLoopSupportedSoundType(sound?.type) && Object.prototype.hasOwnProperty.call(soundParams, "loop")) {
+    delete soundParams.loop;
+  }
+
   return renderSelectionFields([
     renderTextField("sound", "name", "Name", sound.name, selectedSoundIndex, "selectionFieldName", sound?.id || null),
     renderSoundTypeField(sound, selectedSoundIndex),
@@ -674,7 +687,7 @@ function renderSoundEditor(sound, selectedSoundIndex, previewState, scanState) {
     renderNumberField("sound", "x", "X", sound.x, selectedSoundIndex, "", sound?.id || null),
     renderNumberField("sound", "y", "Y", sound.y, selectedSoundIndex, "", sound?.id || null),
     renderCheckboxField("sound", "visible", "Visible", sound.visible, selectedSoundIndex, "selectionFieldToggle", sound?.id || null),
-    renderParamFields("sound", sound?.params, selectedSoundIndex, sound?.id || null),
+    renderParamFields("sound", soundParams, selectedSoundIndex, sound?.id || null),
   ].join(""));
 }
 
