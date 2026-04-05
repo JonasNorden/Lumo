@@ -43,10 +43,12 @@ const SOUND_TYPE_ALIASES = new Map([
   ["ambientzone", "ambientZone"],
   ["ambient_zone", "ambientZone"],
   ["ambient zone", "ambientZone"],
+  ["ambient-zone", "ambientZone"],
   ["music", "musicZone"],
   ["musiczone", "musicZone"],
   ["music_zone", "musicZone"],
   ["music zone", "musicZone"],
+  ["music-zone", "musicZone"],
 ]);
 
 export function normalizeSoundType(type) {
