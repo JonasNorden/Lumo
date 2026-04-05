@@ -5,7 +5,6 @@ import { getPrimarySelectedSoundId, getPrimarySelectedSoundIndex, getSelectedSou
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
 import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
 import {
-  getSoundAssetCatalog,
   findSoundAssetByPath,
   getSoundAssetCategoryLabel,
   getSoundAssetOptionsForType,
@@ -441,6 +440,7 @@ function renderSoundSourceField(sound, selectedSoundIndex, previewState, scanSta
   const authoredSource = getAuthoredSoundSource(sound) || "";
   const selectedAsset = findSoundAssetByPath(authoredSource);
   const assetOptions = getSoundAssetOptionsForType(sound?.type);
+  const hasAuthoredOption = assetOptions.some((asset) => asset.value === authoredSource);
 
   const fieldMarkup = !assetOptions.length
     ? renderTextField("sound", "source", "Source", authoredSource, selectedSoundIndex, "selectionFieldVariant selectionParamField selectionSourceField", sound?.id || null)
@@ -464,7 +464,7 @@ function renderSoundSourceField(sound, selectedSoundIndex, previewState, scanSta
       }
       if (seenCategories.size > 0) optionMarkup.push("</optgroup>");
 
-      if (authoredSource && !selectedAsset) {
+      if (authoredSource && (!selectedAsset || !hasAuthoredOption)) {
         optionMarkup.push(`<option value="${escapeHtml(authoredSource)}" selected>Custom source · ${escapeHtml(authoredSource)}</option>`);
       }
 
@@ -490,7 +490,7 @@ function renderSoundSourceField(sound, selectedSoundIndex, previewState, scanSta
 function getBatchSoundAssetOptions(selectedSounds) {
   const selectedTypes = new Set(selectedSounds.map((sound) => sound?.type).filter(Boolean));
   const assetOptions = selectedTypes.size > 1
-    ? getSoundAssetCatalog()
+    ? [...selectedTypes].flatMap((soundType) => getSoundAssetOptionsForType(soundType))
     : getSoundAssetOptionsForType(selectedSounds[0]?.type);
   const seen = new Set();
 
@@ -516,6 +516,9 @@ function renderBatchSoundSourceField(selectedSounds, selectedSoundIndex) {
   const sharedSource = resolveSharedValue(selectedSounds.map((sound) => getAuthoredSoundSource(sound) || ""));
   const selectedAsset = sharedSource && sharedSource !== MIXED_FIELD_VALUE ? findSoundAssetByPath(sharedSource) : null;
   const assetOptions = getBatchSoundAssetOptions(selectedSounds);
+  const hasSharedOption = sharedSource && sharedSource !== MIXED_FIELD_VALUE
+    ? assetOptions.some((asset) => asset.value === sharedSource)
+    : false;
 
   const fieldMarkup = !assetOptions.length
     ? `
@@ -553,7 +556,7 @@ function renderBatchSoundSourceField(selectedSounds, selectedSoundIndex) {
       }
       if (seenCategories.size > 0) optionMarkup.push("</optgroup>");
 
-      if (sharedSource && sharedSource !== MIXED_FIELD_VALUE && !selectedAsset) {
+      if (sharedSource && sharedSource !== MIXED_FIELD_VALUE && (!selectedAsset || !hasSharedOption)) {
         optionMarkup.push(`<option value="${escapeHtml(sharedSource)}" selected>Custom source · ${escapeHtml(sharedSource)}</option>`);
       }
 

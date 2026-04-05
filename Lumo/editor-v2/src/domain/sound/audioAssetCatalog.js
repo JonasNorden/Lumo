@@ -45,6 +45,21 @@ const SOUND_TYPE_CATEGORY_ORDER = {
   musicZone: ["music", "ambient", "spot", "events", "sfx", "other"],
 };
 
+const SOUND_TYPE_USAGE_KEYS = ["musicZone", "ambientZone", "spot", "trigger"];
+
+const CATEGORY_DEFAULT_ALLOWED_USAGES = {
+  music: ["musicZone"],
+  ambient: ["ambientZone"],
+  spot: ["spot"],
+  events: ["trigger"],
+  sfx: ["trigger"],
+  other: [],
+};
+
+const PATH_ALLOWED_USAGE_OVERRIDES = {
+  "data/assets/audio/music/space_loop_short.wav": ["musicZone", "ambientZone"],
+};
+
 function normalizeAssetPath(path) {
   return typeof path === "string" ? path.trim().replace(/^\.\//, "") : "";
 }
@@ -56,6 +71,28 @@ function detectAssetCategory(path) {
   if (path.includes("/events/")) return "events";
   if (path.includes("/sfx/")) return "sfx";
   return "other";
+}
+
+function normalizeAllowedUsages(allowedUsages, fallbackCategory) {
+  if (!Array.isArray(allowedUsages)) {
+    return [...(CATEGORY_DEFAULT_ALLOWED_USAGES[fallbackCategory] || [])];
+  }
+
+  const normalized = [];
+  const seen = new Set();
+  for (const usage of allowedUsages) {
+    if (!SOUND_TYPE_USAGE_KEYS.includes(usage) || seen.has(usage)) continue;
+    seen.add(usage);
+    normalized.push(usage);
+  }
+
+  return normalized.length ? normalized : [...(CATEGORY_DEFAULT_ALLOWED_USAGES[fallbackCategory] || [])];
+}
+
+function getAllowedUsagesForPath(path, category) {
+  const normalizedPath = normalizeAssetPath(path);
+  const override = PATH_ALLOWED_USAGE_OVERRIDES[normalizedPath];
+  return normalizeAllowedUsages(override, category);
 }
 
 function formatAssetLabel(path) {
@@ -94,11 +131,13 @@ function buildCatalogEntries() {
     const normalizedPath = normalizeAssetPath(path);
     if (!normalizedPath || uniquePaths.has(normalizedPath)) continue;
 
+    const category = detectAssetCategory(normalizedPath);
     uniquePaths.set(normalizedPath, {
       value: normalizedPath,
       label: formatAssetLabel(normalizedPath),
       hint: formatAssetHint(normalizedPath),
-      category: detectAssetCategory(normalizedPath),
+      category,
+      allowedUsages: getAllowedUsagesForPath(normalizedPath, category),
     });
   }
 
@@ -116,11 +155,14 @@ export function getSoundAssetCatalog() {
 }
 
 export function getSoundAssetOptionsForType(soundType) {
-  const catalog = getSoundAssetCatalog();
   const categoryOrder = SOUND_TYPE_CATEGORY_ORDER[soundType] || SOUND_TYPE_CATEGORY_ORDER.spot;
   const categoryWeight = new Map(categoryOrder.map((category, index) => [category, index]));
 
-  return [...catalog].sort((left, right) => {
+  const options = SOUND_TYPE_USAGE_KEYS.includes(soundType)
+    ? getSoundAssetCatalog().filter((asset) => Array.isArray(asset.allowedUsages) && asset.allowedUsages.includes(soundType))
+    : getSoundAssetCatalog();
+
+  return [...options].sort((left, right) => {
     const leftWeight = categoryWeight.get(left.category) ?? categoryOrder.length;
     const rightWeight = categoryWeight.get(right.category) ?? categoryOrder.length;
     if (leftWeight !== rightWeight) return leftWeight - rightWeight;
@@ -138,4 +180,3 @@ export function findSoundAssetByPath(path) {
   const normalizedPath = normalizeAssetPath(path);
   return getSoundAssetCatalog().find((entry) => entry.value === normalizedPath) || null;
 }
-
