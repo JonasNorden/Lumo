@@ -163,6 +163,8 @@
       };
       this._moveLoopPlaying = false;
       this._moveLoopHandle = null;
+      this._moveSfxGroundedUntil = 0;
+      this._moveSfxGroundedGrace = 0.10;
 
     }
 
@@ -206,6 +208,7 @@
       this.jumpBufferTimer = 0;
       this._moveLoopPlaying = false;
       this._moveLoopHandle = null;
+      this._moveSfxGroundedUntil = 0;
     }
 
     setEnergy(p){
@@ -792,9 +795,13 @@
       }
 
       this._airborneTime = this.onGround ? 0 : (airborneTimeBeforeStep + dt);
+      if (this.onGround){
+        this._moveSfxGroundedUntil = (this._t || 0) + (this._moveSfxGroundedGrace || 0.10);
+      }
+      const moveSfxGrounded = this.onGround || (this._t || 0) < (this._moveSfxGroundedUntil || 0);
       const MOVE_SFX_MIN_SPEED = 0.5;
-      const movedGroundedThisStep = this.onGround && Math.abs(this.x - preCollideX) >= 0.05;
-      const shouldPlayMoveLoop = movedGroundedThisStep || (this.onGround && Math.abs(this.vx) >= MOVE_SFX_MIN_SPEED);
+      const movedGroundedThisStep = moveSfxGrounded && Math.abs(this.x - preCollideX) >= 0.05;
+      const shouldPlayMoveLoop = movedGroundedThisStep || (moveSfxGrounded && Math.abs(this.vx) >= MOVE_SFX_MIN_SPEED);
       this._setMovementLoop(world, shouldPlayMoveLoop);
 
       // energy drain
