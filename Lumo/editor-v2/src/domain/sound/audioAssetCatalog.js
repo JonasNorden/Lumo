@@ -1,3 +1,5 @@
+import { normalizeSoundType } from "./soundVisuals.js";
+
 const FALLBACK_AUDIO_ASSET_PATHS = [
   "data/assets/audio/music/game_play_1.ogg",
   "data/assets/audio/music/game_play_2.ogg",
@@ -155,11 +157,14 @@ export function getSoundAssetCatalog() {
 }
 
 export function getSoundAssetOptionsForType(soundType) {
-  const categoryOrder = SOUND_TYPE_CATEGORY_ORDER[soundType] || SOUND_TYPE_CATEGORY_ORDER.spot;
+  const normalizedSoundType = normalizeSoundType(soundType);
+  const categoryOrder = SOUND_TYPE_CATEGORY_ORDER[normalizedSoundType] || SOUND_TYPE_CATEGORY_ORDER.spot;
   const categoryWeight = new Map(categoryOrder.map((category, index) => [category, index]));
 
-  const options = SOUND_TYPE_USAGE_KEYS.includes(soundType)
-    ? getSoundAssetCatalog().filter((asset) => Array.isArray(asset.allowedUsages) && asset.allowedUsages.includes(soundType))
+  const options = SOUND_TYPE_USAGE_KEYS.includes(normalizedSoundType)
+    ? getSoundAssetCatalog().filter(
+        (asset) => Array.isArray(asset.allowedUsages) && asset.allowedUsages.includes(normalizedSoundType),
+      )
     : getSoundAssetCatalog();
 
   return [...options].sort((left, right) => {
