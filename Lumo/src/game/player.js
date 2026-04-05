@@ -170,24 +170,9 @@
 
     }
 
-    _playGameplaySfx(world, path, volume = 1, options = null){
+    _playGameplaySfx(world, path, volume = 1){
       if (!path || !world || !world._ents || typeof world._ents._playOneShot !== "function") return;
-      const playbackRate = Number(options && options.playbackRate);
-      if (!Number.isFinite(playbackRate) || Math.abs(playbackRate - 1) <= 0.0001){
-        world._ents._playOneShot(path, volume);
-        return;
-      }
-      const a = new Audio(path);
-      a.preload = "auto";
-      a.loop = false;
-      a.playbackRate = playbackRate;
-      let base = 1;
-      if (typeof world._ents._getSfxVolume === "function"){
-        try { base = world._ents._getSfxVolume(); } catch(_){ base = 1; }
-      }
-      a.volume = Math.max(0, Math.min(1, volume)) * Math.max(0, Math.min(1, base));
-      const p = a.play();
-      if (p && typeof p.catch === "function") p.catch(() => {});
+      world._ents._playOneShot(path, volume);
     }
 
     _playDeathSfx(world = null){
@@ -434,7 +419,19 @@
     startPulse(){
       if (this.energy <= 0.08) return;
       this.setEnergy(this.energy - 0.08);
-      this._playGameplaySfx(this._lastWorld || null, this._sfx && this._sfx.pulse, 0.75, { playbackRate: 1.35 });
+      const pulsePath = "data/assets/audio/sfx/player/abilities/player_pulse.ogg";
+      const a = new Audio(pulsePath);
+      a.preload = "auto";
+      a.loop = false;
+      a.playbackRate = 1.35;
+      let base = 1;
+      const world = this._lastWorld || null;
+      if (world && world._ents && typeof world._ents._getSfxVolume === "function"){
+        try { base = world._ents._getSfxVolume(); } catch(_){ base = 1; }
+      }
+      a.volume = Math.max(0, Math.min(1, 0.75 * Math.max(0, Math.min(1, base))));
+      const p = a.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
 
       this.pulse.active = true;
       this.pulse.r = 8;
