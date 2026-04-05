@@ -160,6 +160,7 @@
         jump: "data/assets/audio/sfx/player/movement/player_jump_01.ogg",
         move: "data/assets/audio/sfx/player/movement/player_move.ogg",
         land: "data/assets/audio/sfx/player/movement/player_land.ogg",
+        death: "data/assets/audio/sfx/player/damage/player_death.ogg",
       };
       this._moveLoopPlaying = false;
       this._moveLoopHandle = null;
@@ -171,6 +172,11 @@
     _playGameplaySfx(world, path, volume = 1){
       if (!path || !world || !world._ents || typeof world._ents._playOneShot !== "function") return;
       world._ents._playOneShot(path, volume);
+    }
+
+    _playDeathSfx(world = null){
+      const sfxWorld = world || this._lastWorld || null;
+      this._playGameplaySfx(sfxWorld, this._sfx && this._sfx.death, 1.0);
     }
 
     _setMovementLoop(world, shouldPlay){
@@ -292,6 +298,7 @@
 
       // lose life now, then run short hit + death reaction.
       this.lives = Math.max(0, this.lives - 1);
+      this._playDeathSfx();
 
       const dir = (this.facing < 0) ? 1 : -1;
       this.knockTimer = this._damage.duration;
@@ -318,6 +325,7 @@
       if (this.lives <= 0) return;
 
       this.lives = Math.max(0, this.lives - 1);
+      this._playDeathSfx();
 
       this._liquidDeath.active = true;
       this._liquidDeath.type = String(contact?.type || "liquid_volume");
@@ -557,6 +565,7 @@
     }
 
     update(dt, world){
+      this._lastWorld = world || this._lastWorld || null;
       this._t = (this._t || 0) + dt;
 
       if (this._liquidDeath && this._liquidDeath.active){

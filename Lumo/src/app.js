@@ -123,9 +123,9 @@
   function loadGlobalAudioConfig(){
     const fallback = {
       musicByState: {
-        [GameState.MENU]: "data/assets/audio/music/menu_music.ogg",
-        [GameState.SETTINGS]: "data/assets/audio/music/menu_music.ogg",
-        [GameState.FAN_ART]: "data/assets/audio/music/menu_music.ogg",
+        [GameState.MENU]: "data/assets/audio/music/menu_loop_01.ogg",
+        [GameState.SETTINGS]: "data/assets/audio/music/menu_loop_01.ogg",
+        [GameState.FAN_ART]: "data/assets/audio/music/menu_loop_01.ogg",
         [GameState.PLAYING]: null,
         [GameState.PAUSED]: null,
         [GameState.GAME_OVER]: null,
