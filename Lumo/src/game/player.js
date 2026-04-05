@@ -766,7 +766,13 @@
         this.onPlatform = null;
         this.coyoteTimer = 0;
         this.jumpBufferTimer = 0;
-        this._playGameplaySfx(world, this._sfx.jump, 1.0);
+        const jumpVariants = [
+          "data/assets/audio/sfx/player/movement/player_jump_01.ogg",
+          "data/assets/audio/sfx/player/movement/player_jump_03.ogg",
+          "data/assets/audio/sfx/player/movement/player_jump_04.ogg"
+        ];
+        const pick = jumpVariants[Math.floor(Math.random() * jumpVariants.length)];
+        this._playGameplaySfx(world, pick, 0.75);
       }
 
       // variable jump
