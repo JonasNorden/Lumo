@@ -1,5 +1,11 @@
 import { createDefaultBackgroundLayer, validateLevelDocument } from "../domain/level/levelDocument.js";
 import { BACKGROUND_MATERIAL_OPTIONS, DEFAULT_BACKGROUND_MATERIAL_ID } from "../domain/background/materialCatalog.js";
+import {
+  DEFAULT_THEME_ID,
+  getThemeById,
+  normalizeThemeId,
+  resolveThemeBackgroundMaterialId,
+} from "../domain/theme/themeCatalog.js";
 
 export const DEFAULT_NEW_LEVEL_WIDTH = 32;
 export const DEFAULT_NEW_LEVEL_HEIGHT = 18;
@@ -29,12 +35,16 @@ export function isValidLevelDimension(value, axis = "width") {
 export function createNewLevelDocument(options = {}) {
   const width = sanitizeLevelDimension(options.width, DEFAULT_NEW_LEVEL_WIDTH, "width");
   const height = sanitizeLevelDimension(options.height, DEFAULT_NEW_LEVEL_HEIGHT, "height");
+  const themeId = normalizeThemeId(options.themeId);
+  const theme = getThemeById(themeId);
+  const themeDefaultBackgroundMaterialId = resolveThemeBackgroundMaterialId(themeId);
 
   return validateLevelDocument({
     meta: {
       id: "new-level",
       name: "New Level",
       version: "2.0.0",
+      themeId: theme?.id || DEFAULT_THEME_ID,
     },
     dimensions: {
       width,
@@ -50,7 +60,7 @@ export function createNewLevelDocument(options = {}) {
         createDefaultBackgroundLayer(0, {
           id: "sky",
           name: "Sky",
-          color: "#1a1f2b",
+          color: theme.defaultBackgroundLayerColor,
           depth: 0,
         }),
       ],
@@ -59,7 +69,7 @@ export function createNewLevelDocument(options = {}) {
       base: new Array(width * height).fill(null),
       placements: [],
       materials: BACKGROUND_MATERIAL_OPTIONS.map((material) => ({ ...material })),
-      defaultMaterialId: DEFAULT_BACKGROUND_MATERIAL_ID,
+      defaultMaterialId: themeDefaultBackgroundMaterialId || DEFAULT_BACKGROUND_MATERIAL_ID,
     },
     decor: [],
     entities: [],

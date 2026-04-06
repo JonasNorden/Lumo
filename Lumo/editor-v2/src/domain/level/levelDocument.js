@@ -8,6 +8,7 @@ import { normalizeSoundType } from "../sound/soundVisuals.js";
 import { BACKGROUND_MATERIAL_OPTIONS, DEFAULT_BACKGROUND_MATERIAL_ID, normalizeBackgroundMaterial } from "../background/materialCatalog.js";
 import { normalizeSizedPlacements } from "../tiles/sizedPlacements.js";
 import { normalizeSpawnAndExitEntities } from "../entities/spawnExitRules.js";
+import { normalizeThemeId } from "../theme/themeCatalog.js";
 
 const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
 const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
@@ -34,7 +35,7 @@ function parseFlowerVariant(value) {
 
 /**
  * @typedef LevelDocument
- * @property {{id: string, name: string, version: string}} meta
+ * @property {{id: string, name: string, version: string, themeId?: string}} meta
  * @property {{width: number, height: number, tileSize: number}} dimensions
  * @property {{base: number[], placements?: {x: number, y: number, size: number, value: number}[]}} tiles
  * @property {{layers: {id: string, name: string, type: string, depth: number, visible: boolean, color: string}[]}} backgrounds
@@ -93,11 +94,16 @@ function normalizeBackgroundDocument(background, expectedCount) {
 
   const knownMaterialIds = new Set(fallbackMaterials.map((material) => material.id));
   const sanitizedBase = base.map((value) => (value && knownMaterialIds.has(value) ? value : (value ? DEFAULT_BACKGROUND_MATERIAL_ID : null)));
+  const rawDefaultMaterialId = typeof background?.defaultMaterialId === "string" ? background.defaultMaterialId.trim() : "";
+  const defaultMaterialId = rawDefaultMaterialId && knownMaterialIds.has(rawDefaultMaterialId)
+    ? rawDefaultMaterialId
+    : DEFAULT_BACKGROUND_MATERIAL_ID;
 
   return {
     base: sanitizedBase,
     placements: normalizeSizedPlacements(background?.placements, "background"),
     materials: fallbackMaterials,
+    defaultMaterialId,
   };
 }
 
@@ -195,6 +201,7 @@ export function validateLevelDocument(doc) {
   if (typeof doc.meta.version !== "string" || !doc.meta.version.startsWith("2.")) {
     throw new Error("Invalid V2 document version");
   }
+  doc.meta.themeId = normalizeThemeId(doc.meta.themeId);
 
   const { width, height } = doc.dimensions || {};
   const expectedCount = width * height;
