@@ -7,6 +7,27 @@ const THEME_CATALOG = [
     description: "Weathered stone and dusk tones for abandoned structures.",
     defaultBackgroundLayerColor: "#1a1f2b",
     defaultBackgroundMaterialId: "stone_block_ct",
+    editorProfile: {
+      tile: {
+        preferredCatalogIds: ["stone_ct", "grass_bt", "grass_bl", "grass_br"],
+        preferredGroups: ["tiles", "core"],
+        keywordHints: ["stone", "ruin", "moss", "grass"],
+      },
+      background: {
+        preferredMaterialIds: ["stone_block_ct", "bg_stone_wall_cc"],
+        keywordHints: ["stone", "wall", "ruin"],
+      },
+      audio: {
+        preferredAmbientAssetPaths: [
+          "data/assets/audio/ambient/ruin/ambient_girlhumming.ogg",
+          "data/assets/audio/ambient/ruin/dark-ambient-horror.ogg",
+        ],
+        preferredCategories: ["ambient", "spot"],
+        preferredPathKeywords: ["ambient/ruin", "hum", "drip"],
+        preferredHintKeywords: ["ruin", "ambient"],
+        defaultAmbientAssetPath: "data/assets/audio/ambient/ruin/ambient_girlhumming.ogg",
+      },
+    },
   },
   {
     id: "cave",
@@ -14,12 +35,52 @@ const THEME_CATALOG = [
     description: "Low-light cavern mood with cool rock palettes.",
     defaultBackgroundLayerColor: "#141821",
     defaultBackgroundMaterialId: "bg_stone_wall_cc",
+    editorProfile: {
+      tile: {
+        preferredCatalogIds: ["stone_ct", "ice_01", "ice_00"],
+        preferredGroups: ["tiles", "core"],
+        preferredBehaviorProfileIds: ["tile.solid.ice"],
+        keywordHints: ["stone", "cave", "ice", "rock"],
+      },
+      background: {
+        preferredMaterialIds: ["bg_stone_wall_cc", "stone_block_ct"],
+        keywordHints: ["stone", "wall", "cave"],
+      },
+      audio: {
+        preferredAmbientAssetPaths: [
+          "data/assets/audio/spot/drip/waterdrip.ogg",
+          "data/assets/audio/spot/drip/one_drip.wav",
+        ],
+        preferredCategories: ["ambient", "spot"],
+        preferredPathKeywords: ["drip", "cave", "ambient"],
+        preferredHintKeywords: ["drip", "water"],
+        defaultAmbientAssetPath: "data/assets/audio/spot/drip/waterdrip.ogg",
+      },
+    },
   },
   {
     id: "forest",
     label: "Forest",
     description: "Mossy, natural ambience with softened sky contrast.",
     defaultBackgroundLayerColor: "#1b2d27",
+    editorProfile: {
+      tile: {
+        preferredCatalogIds: ["grass_bt", "grass_bl", "grass_br", "soil_c"],
+        preferredGroups: ["tiles", "core"],
+        keywordHints: ["forest", "grass", "soil", "moss"],
+      },
+      background: {
+        preferredMaterialIds: ["stone_block_ct"],
+        keywordHints: ["stone", "block", "natural"],
+      },
+      audio: {
+        preferredAmbientAssetPaths: ["data/assets/audio/ambient/forest/jungle.ogg"],
+        preferredCategories: ["ambient", "spot"],
+        preferredPathKeywords: ["forest", "jungle", "wind", "rain"],
+        preferredHintKeywords: ["forest", "jungle", "wind"],
+        defaultAmbientAssetPath: "data/assets/audio/ambient/forest/jungle.ogg",
+      },
+    },
   },
   {
     id: "futuristic",
@@ -27,12 +88,57 @@ const THEME_CATALOG = [
     description: "Clean synthetic atmosphere with neon-adjacent contrast.",
     defaultBackgroundLayerColor: "#101a30",
     defaultBackgroundMaterialId: "bg_stone_block_c_vinjett",
+    editorProfile: {
+      tile: {
+        preferredCatalogIds: ["stone_ct", "ice_01"],
+        preferredGroups: ["tiles", "core"],
+        preferredBehaviorProfileIds: ["tile.solid.default", "tile.solid.ice"],
+        keywordHints: ["futur", "synthetic", "clean", "ice"],
+      },
+      background: {
+        preferredMaterialIds: ["bg_stone_block_c_vinjett", "stone_block_ct"],
+        keywordHints: ["vinjett", "block", "synthetic"],
+      },
+      audio: {
+        preferredAmbientAssetPaths: [
+          "data/assets/audio/ambient/futuristic/ambient_hum_01.ogg",
+          "data/assets/audio/ambient/futuristic/ambient_hum_02.ogg",
+          "data/assets/audio/ambient/futuristic/ambient_hum_03.ogg",
+        ],
+        preferredCategories: ["ambient", "music"],
+        preferredPathKeywords: ["futuristic", "hum", "space"],
+        preferredHintKeywords: ["futuristic", "hum"],
+        defaultAmbientAssetPath: "data/assets/audio/ambient/futuristic/ambient_hum_01.ogg",
+      },
+    },
   },
   {
     id: "void",
     label: "Void",
     description: "Minimal near-black backdrop for sparse compositions.",
     defaultBackgroundLayerColor: "#080a12",
+    editorProfile: {
+      tile: {
+        preferredCatalogIds: ["void_1", "stone_ct"],
+        preferredGroups: ["core", "tiles"],
+        keywordHints: ["void", "dark", "stone"],
+      },
+      background: {
+        preferredMaterialIds: ["bg_stone_block_c_vinjett", "bg_stone_wall_cc"],
+        keywordHints: ["void", "dark", "vinjett"],
+      },
+      audio: {
+        preferredAmbientAssetPaths: [
+          "data/assets/audio/ambient/void/void_pressure_01.ogg",
+          "data/assets/audio/ambient/void/dark_ambient.ogg",
+          "data/assets/audio/ambient/space/empty_space_void.ogg",
+        ],
+        preferredCategories: ["ambient", "music"],
+        preferredPathKeywords: ["void", "space", "dark", "pressure"],
+        preferredHintKeywords: ["void", "space", "ambient"],
+        defaultAmbientAssetPath: "data/assets/audio/ambient/void/void_pressure_01.ogg",
+      },
+    },
   },
 ];
 

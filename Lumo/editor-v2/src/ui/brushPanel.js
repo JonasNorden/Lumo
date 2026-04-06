@@ -16,6 +16,10 @@ import {
   isBrushSizeSupportedForSprite,
 } from "../domain/tiles/tileSpriteCatalog.js";
 import { BACKGROUND_MATERIAL_OPTIONS } from "../domain/background/materialCatalog.js";
+import {
+  rankBackgroundMaterialOptionsForTheme,
+  rankTileSpriteOptionsForTheme,
+} from "../domain/theme/themeProfiles.js";
 
 const PANEL_LAYERS = {
   TOOLS: "tools",
@@ -219,14 +223,16 @@ function renderTileSelectionSummary(activeTileSprite) {
 
 
 function renderBackgroundSettings(state) {
+  const themeId = state?.document?.active?.meta?.themeId;
+  const materialOptions = rankBackgroundMaterialOptionsForTheme(BACKGROUND_MATERIAL_OPTIONS, themeId);
   const activeMaterialId = state.interaction.activeBackgroundMaterialId;
-  const activeMaterial = BACKGROUND_MATERIAL_OPTIONS.find((material) => material.id === activeMaterialId) || null;
+  const activeMaterial = materialOptions.find((material) => material.id === activeMaterialId) || null;
   const status = activeMaterial
     ? `${activeMaterial.label} · ${activeMaterial.drawW}×${activeMaterial.drawH} · BL anchor`
     : "Select a background material";
 
   return `
-    ${renderAssetPicker("Background materials", "background-material-button", BACKGROUND_MATERIAL_OPTIONS, activeMaterialId, "No background material selected", "assetPickerCompact")}
+    ${renderAssetPicker("Background materials", "background-material-button", materialOptions, activeMaterialId, "No background material selected", "assetPickerCompact")}
     <div class="statusRow compactStatusRow tilesCurrentRow">
       <span class="label">Current</span>
       <span class="value">${escapeHtml(status)}</span>
@@ -390,7 +396,11 @@ function renderSoundSection(activePresetId, isOpen) {
 export function renderBrushPanel(panel, state) {
   const brushDraft = state.brush.activeDraft;
   const filteredSpriteOptions = getBrushSpriteOptionsForBehavior(brushDraft.behavior);
-  const visibleSpriteOptions = filteredSpriteOptions.length ? filteredSpriteOptions : BRUSH_SPRITE_OPTIONS;
+  const themeId = state?.document?.active?.meta?.themeId;
+  const visibleSpriteOptions = rankTileSpriteOptionsForTheme(
+    filteredSpriteOptions.length ? filteredSpriteOptions : BRUSH_SPRITE_OPTIONS,
+    themeId,
+  );
   const activeSpriteInBehavior = visibleSpriteOptions.some((option) => option.value === brushDraft.sprite);
   const selectedSpriteValue = activeSpriteInBehavior ? brushDraft.sprite : visibleSpriteOptions[0]?.value || brushDraft.sprite;
   const visibleSizeOptions = getTileSizeOptionsForSprite(selectedSpriteValue);
