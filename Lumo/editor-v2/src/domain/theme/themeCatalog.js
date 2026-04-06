@@ -4,7 +4,7 @@ const THEME_CATALOG = [
   {
     id: "ruins",
     label: "Ruins",
-    description: "Weathered stone and dusk tones for abandoned structures.",
+    description: "These Walls Keep a Dark Secret — abandoned structures filled with history.",
     defaultBackgroundLayerColor: "#1a1f2b",
     defaultBackgroundMaterialId: "stone_block_ct",
     editorProfile: {
@@ -32,7 +32,7 @@ const THEME_CATALOG = [
   {
     id: "cave",
     label: "Cave",
-    description: "Low-light cavern mood with cool rock palettes.",
+    description: "Pressure of the Void — darkness, depth, and survival through light.",
     defaultBackgroundLayerColor: "#141821",
     defaultBackgroundMaterialId: "bg_stone_wall_cc",
     editorProfile: {
@@ -60,8 +60,8 @@ const THEME_CATALOG = [
   },
   {
     id: "forest",
-    label: "Forest",
-    description: "Mossy, natural ambience with softened sky contrast.",
+    label: "Jungle",
+    description: "Beauty is Just a Facade — lush, alive, and deceptively dangerous.",
     defaultBackgroundLayerColor: "#1b2d27",
     editorProfile: {
       tile: {
@@ -84,8 +84,8 @@ const THEME_CATALOG = [
   },
   {
     id: "futuristic",
-    label: "Futuristic",
-    description: "Clean synthetic atmosphere with neon-adjacent contrast.",
+    label: "Sci-Fi",
+    description: "The Abandoned Spaceship — broken systems, metal, and fading technology.",
     defaultBackgroundLayerColor: "#101a30",
     defaultBackgroundMaterialId: "bg_stone_block_c_vinjett",
     editorProfile: {
@@ -114,8 +114,8 @@ const THEME_CATALOG = [
   },
   {
     id: "void",
-    label: "Void",
-    description: "Minimal near-black backdrop for sparse compositions.",
+    label: "Touch the Void",
+    description: "Even the Air Feels Heavy — psychological tension and unseen presence.",
     defaultBackgroundLayerColor: "#080a12",
     editorProfile: {
       tile: {
