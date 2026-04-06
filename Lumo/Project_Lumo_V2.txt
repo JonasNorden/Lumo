@@ -1,0 +1,2810 @@
+# LOKAL START / SERVER / LÄNKAR / NODE BRIDGE
+
+Starta lokal server från repo-root
+
+Kör detta i terminalen från projektets repo-root:
+npx http-server -p 3000
+
+Länkar
+
+Editor V2
+http://127.0.0.1:3000/editor-v2/
+
+Runtime
+http://127.0.0.1:3000/Lumo.html
+
+Starta Node bridge för save till fil
+
+Kör detta i en separat terminal:
+node editor-v2/dev/localTileSaveBridge.js
+
+Vad Node bridge används till
+Denna bridge måste vara igång för att Editor V2 ska kunna spara assets/filer till disk via den lokala save-pipelinen.
+Det gäller när editorn ska skriva riktiga filer, till exempel via Asset Builder.
+
+Rekommenderad arbetsordning
+Terminal 1 — starta lokal server
+npx http-server -p 3000
+Terminal 2 — starta Node bridge
+node editor-v2/dev/localTileSaveBridge.js
+
+Öppna sedan i browsern
+Editor V2:
+http://127.0.0.1:3000/editor-v2/
+
+Runtime:
+http://127.0.0.1:3000/Lumo.html
+
+
+
+# FULL ÖVERLÄMNING — LUMO / LumoEditor V2
+
+## Uppdaterad efter denna chatt
+
+---
+
+# VIKTIGT OM HUR DENNA ÖVERLÄMNING SKA ANVÄNDAS
+
+Detta är inte en kort sammanfattning.
+
+Detta är en levande, detaljerad projektöverlämning som ska följa med till nästa chat så att kontext, beslut, implementationer, UX-riktning, arbetsmetod, buggar, premiumlösningar, roadmap och pågående problem inte tappas bort.
+
+## Hårda regler för framtida överlämningar
+
+Om ny överlämning senare skapas ska den:
+
+* bygga vidare på denna
+* uppdatera roadmap/status
+* lägga till nya beslut
+* lägga till nya buggar/fixar
+* lägga till nya UX-insikter
+* inte förenkla bort tidigare etablerad kontext
+* inte sammanfatta bort detaljer som påverkar riktning eller implementation
+
+Detta gäller särskilt för:
+
+* editor runtime-kopplingar
+* asset-system
+* audio/scan-system
+* UX-beslut
+* panelstruktur
+* specialvolymer
+* batch/workflow
+* Codex-arbetsflöde
+* bugghistorik
+* premium/AAA-känsla
+* Git-arbetsflöde
+* testdatahantering
+
+---
+
+# PROJEKTET I STORT
+
+Projektet gäller Lumo, framför allt LumoEditor V2.
+
+LumoEditor V2 är en ny premium/AAA-inriktad 2D-editor som byggs i samma repo som tidigare editor, men som ett separat nytt delprojekt.
+
+Målet är att den på sikt ska ersätta gamla editorn, men byggas betydligt smartare, renare, modulärare och med bättre UX från början.
+
+Detta är inte bara en “map editor”.
+
+Det är ett fullskaligt authoring-verktyg för att bygga:
+
+* världen
+* gameplay
+* ljudupplevelsen
+* flödet
+* atmosfären
+
+## Målbild
+
+* AAA / premium känsla
+* snabb att arbeta i
+* lite UI-brus
+* tydligt arbetsflöde
+* stor canvas/workspace
+* visuellt och auditivt level-authoring i samma verktyg
+
+---
+
+# VIKTIGASTE FILOSOFIN FÖR LUMO
+
+Lumo är inte bara visuellt levelbygge.
+
+En mycket viktig del av projektet är att spelupplevelsen också byggs genom ljud:
+
+* music zones
+* ambient zones
+* spot sounds
+* trigger sounds
+* spatial ljuddesign
+* volume/pitch/fade
+* scan-funktion som spelar igenom banan och låter designern höra hur upplevelsen faktiskt kommer bli
+
+Det betyder att LumoEditor V2 inte bara är en tile/entity editor.
+
+Den ska på sikt bli ett verktyg där man bygger:
+
+* visuals
+* gameplay
+* ljudvärld
+* rytm
+* atmosfär
+
+En avgörande insikt från projektet är:
+
+man behöver inte traditionell “game music” på klassiskt sätt om banan byggs auditivt och visuellt samtidigt.
+
+Detta får absolut inte tappas bort.
+
+Audio/systemdelen är en av de mest unika delarna i hela Lumo-projektet.
+
+---
+
+# HUR VI JOBBAR I DENNA KONVERSATION OCH FRAMÅT
+
+Användaren kan inte kod och ska inte förväntas förstå implementationer, terminalarbete, Git, commitdetaljer eller Codex i detalj.
+
+Assistenten skriver alla Codex-prompts.
+
+## Arbetsflödet är
+
+1. vi resonerar fram rätt steg
+2. assistenten skriver en tydlig prompt till Codex
+3. användaren kör prompten
+4. Codex skapar ändring/PR/fix
+5. användaren postar summary
+6. assistenten bedömer om det är okej att köra PR + Merge + Git Pull
+7. användaren mergear + pullar
+8. användaren testar det i editorn eller runtime på riktigt
+9. användaren ger verklig feedback
+10. assistenten skriver nästa prompt: nästa roadmapsteg eller en fix/justeringsprompt
+
+## Viktig regel om merge-läget
+
+Om användaren redan hunnit mergea/pulla och sedan ger feedback på verkligt beteende, ska assistenten inte säga “mergea inte”.
+
+Då ska assistenten utgå från att ändringen redan är inne och ge nästa åtgärd.
+
+## Viktig regel om verkligt utfall
+
+Om en fix inte ger faktisk förändring i verklig editor- eller runtime-användning, ska den behandlas som misslyckad, oavsett hur snygg summaryn är eller hur många tester Codex säger passerar.
+
+## Viktig regel om språk och arbetsstil
+
+Användaren och assistenten pratar svenska.
+
+Codex-prompts får skrivas på engelska om det är praktiskt.
+
+Kommunikationen mellan användaren och assistenten ska vara på svenska.
+
+## Viktig regel om arbetssätt
+
+Assistenten ska inte börja improvisera ny riktning utan att hålla sig till etablerad roadmap, tidigare beslut och projektets unika identitet.
+
+Assistenten får inte “sammanfatta bort” viktiga beslut eller skala bort tidigare kontext i framtida överlämningar.
+
+Assistenten skriver prompts för både:
+
+* utvecklingen av Editor V2
+* senare även runtime/gameplay-relaterade steg när det behövs för projektet
+
+---
+
+# NY EXTRA VIKTIG ARBETSREGEL — INGA ANTAGANDEN NÄR FAKTA GÅR ATT HÄMTA
+
+Detta har cementerats ytterligare och måste bevaras.
+
+## Låst regel
+
+När något inte fungerar i verkligheten ska assistenten inte skriva nästa Codex-prompt på magkänsla eller summarytolkning om det går att ta reda på fakta genom:
+
+* att användaren postar specifika filer
+* att användaren kör exakta terminalkommandon
+* att användaren kör exakta F12-konsolkommandon
+* att assistenten läser verklig kod innan nästa prompt
+
+## Konsekvens
+
+Summary från Codex är inte tillräcklig sanning om verkligt test säger något annat.
+
+Om användaren säger att något fortfarande inte fungerar ska assistenten först försöka fastställa om problemet ligger i:
+
+* editor-save
+* save bridge
+* persistence
+* export/PFH
+* runtime spawn
+* runtime render
+* runtime behavior
+* eller bara i visuellt scale/render-path
+
+innan nästa prompt skrivs.
+
+## Praktisk regel för assistenten
+
+Om assistenten behöver fakta från runtime/F12 ska assistenten:
+
+* ge ett steg i taget
+* säga exakt var användaren ska vara
+* editor eller runtime
+* före eller efter PFH
+* om objektet måste finnas live just då
+* inte ge långa checklistor samtidigt
+* inte anta att användaren vet vilket objekt i konsolen som är rätt
+* först bevisa vilken instans/path som är rätt innan fler kommandon ges
+
+## Viktig lärdom
+
+Det blev många onödiga Codex-varv tidigare när prompt skrevs innan rotorsaken var bevisad.
+
+Detta ska undvikas framåt.
+
+---
+
+# NY VIKTIG ARBETSREGEL — TESTDATA VS FUNKTIONSKOD
+
+Verklig insikt:
+
+När användaren testar genom att skapa nya assets i editorn, till exempel:
+
+* entity presets
+* decor
+* tiles
+* backgrounds
+* sprites
+* katalogentries
+
+så skapas riktiga lokala filändringar i repo:t.
+
+Det betyder att testning inte alltid bara är “användning”.
+
+I många fall är testning också skapande.
+
+## Viktig skillnad
+
+Funktionskod ska i detta projekt komma via:
+
+* Codex
+* PR
+* Merge
+* Git Pull
+
+## Testdata
+
+Testning i editorn kan däremot skapa:
+
+* nya png-filer
+* nya katalogentries
+* nya presetentries
+* ändringar i datafiler
+* ändringar i editor source-of-truth-filer för assets
+
+Detta är inte samma sak som ny funktionskod.
+
+## Låst arbetsregel
+
+Efter varje test där användaren skapat nya assets eller sparat något via Asset Builder ska man:
+
+* köra git status
+* avgöra om det som skapats är:
+
+  * testdata som ska kastas
+  * eller avsiktlig permanent asset som ska behållas
+
+Om det bara var test, ska det kastas innan nästa utvecklingsloop.
+
+## Praktisk rutin
+
+Efter test:
+
+kör git status
+
+om det bara är testdata:
+
+kasta det
+
+gå inte vidare till nästa Codex-prompt med lokal testdiff kvar
+
+## Viktig slutsats
+
+När användaren säger “kasta” betyder det:
+
+* nya filer som skapats av test försvinner
+* ändringar i befintliga katalog-/presetfiler återställs till repo-version
+* det ska bli som om testet aldrig hänt
+
+Detta gäller testdata, inte mergead funktionskod.
+
+---
+
+# NY VIKTIG GIT-INSIKT — ROOT CAUSE TILL GIT-SNURRAN
+
+Det som hände:
+
+* lokala commits på main
+* merge commits skapade lokalt
+* konfliktlösningar lokalt
+* testdata lokalt
+* samtidigt som origin/main fortsatte röra sig
+
+Detta gjorde att lokal main och origin/main började divergera.
+
+## Konsekvens
+
+Därför blev git pull inte längre en rak synk, utan:
+
+* Git behövde göra merge commits
+* terminaleditorn öppnades
+* ibland blev det merge conflicts
+* användaren fick den “blå textrutan”
+* arbetsflödet blev stressigt och osäkert
+
+Det viktiga:
+
+Detta var inte användarens fel i meningen “fel kommando” eller “fel beteende” i själva PR-flödet.
+
+Root cause var att lokal main inte längre var identisk med origin/main.
+
+## Hur det löstes
+
+Den verkliga fixen var att:
+
+* avbryta pågående merge när den var fel väg
+* verifiera repo-läget
+* återställa lokal main till exakt origin/main
+* kasta lokala commits/testspår som inte skulle leva kvar
+* återfå working tree clean
+
+## Låst regel
+
+Målet framåt är att alltid hålla lokal main i detta läge:
+
+* up to date with origin/main
+* nothing to commit
+* working tree clean
+
+eller, om testning pågår:
+
+* tydligt förstådd testdiff som ska kastas efter testet
+
+## Praktisk Git-rutin
+
+Om test skapat filer och ändringar som bara var test, kan repo återställas till clean state.
+
+I PowerShell:
+
+```powershell
+git restore .
+git clean -fd
+git status
+```
+
+eller med semikolon:
+
+```powershell
+git restore .; git clean -fd; git status
+```
+
+Viktig notering:
+
+`&&` fungerade inte i användarens PowerShell-version.
+
+Det betyder inte Git-fel, bara PowerShell-syntax.
+
+---
+
+# VIKTIG REGEL OM CHATTBYTE
+
+När användaren säger att det är dags att byta chat ska assistenten:
+
+* skapa en full överlämningstext
+* bevara all viktig kontext
+* förklara arbetssättet
+* inkludera roadmap
+* inkludera vad som redan byggts
+* inkludera beslut om UX och system
+* inkludera backlog
+* inkludera vad nästa steg är
+* inkludera buggar som fortfarande är öppna
+* inte korta ned
+* inte reducera
+* inte sammanfatta bort
+* bara bygga vidare och lägga till nytt
+
+Användaren ska inte behöva påminna om detta varje gång.
+
+---
+
+# VID MERGE CONFLICT
+
+Användaren måste få pedagogisk steg-för-steg-guidning utan antagande om förkunskap.
+
+Särskilt viktiga principer:
+
+* ett steg i taget
+* tydligt säga om “kör detta i terminalen” eller “öppna filen i Windows”
+* inte rusa för långt framåt i instruktionen
+* inte anta att användaren vet vad “öppna i VS Code” betyder i terminalkontext
+* konflikter måste ibland lösas genom att användaren kopierar konfliktblocket hit och assistenten säger exakt vad som ska vara kvar
+
+---
+
+# VIKTIG REGEL OM TESTBARHET
+
+Användaren har uttryckligen sagt att det enda sättet att testa något över huvud taget är att göra:
+
+PR → merge → git pull
+
+Detta måste tas på allvar.
+
+Det innebär:
+
+* verklig testning sker först efter merge/pull
+* “safe to merge” är ofta ett nödvändigt steg för att alls kunna få sant utfall
+* om användaren redan testat efter merge/pull, är det den sanningen som gäller
+
+Det betyder också att lokala console-inspektioner och liknande bara är stöd för analys, inte ersättning för verkligt test.
+
+---
+
+# REPO / STRUKTUR / ARKITEKTUR
+
+LumoEditor V2 byggs som eget delprojekt i samma repo som tidigare editor.
+
+Gamla editorn finns kvar, men V2 utvecklas separat.
+
+V2 ligger i:
+
+`Lumo/editor-v2/`
+
+Gamla editorn/legacy får inte röras av misstag.
+
+Alla prompts måste därför vara tydliga med:
+
+* arbeta endast i `Lumo/editor-v2/**` när det gäller Editor V2
+* rör inte legacy-editorn
+
+V2 är modulärt uppdelad i:
+
+* app
+* state
+* render
+* domain
+* data
+* ui
+
+---
+
+# MYCKET VIKTIG SYSTEMSANNING — RÄTT EDITOR-V2-PATH
+
+Det som bevisades:
+
+`http://localhost:4173/editor-v2/` var inte en pålitlig sanningskälla för verklig sourceverifiering i denna arbetsfas.
+
+Rätt väg som bevisades fungera:
+
+servera repo-root lokalt
+
+öppna:
+
+`http://localhost:3000/editor-v2/`
+
+Viktigt:
+
+avslutande `/` måste finnas.
+
+## Praktiskt under denna chat
+
+Lokal server startades via:
+
+```bash
+npx http-server -p 3000
+```
+
+Runtime nås via:
+
+`http://127.0.0.1:3000/Lumo.html`
+
+Editor V2 nås via:
+
+`http://127.0.0.1:3000/editor-v2/`
+
+Gamla `LumoEditor.html` ska inte användas för V2-arbete.
+
+---
+
+# NUVARANDE ARKITEKTUR OCH SYSTEM SOM FINNS I V2
+
+# A. CORE EDITOR / WORKSPACE
+
+Finns:
+
+* canvas-baserad editor
+* read-only foundation byggdes först
+* därefter riktig editorfunktionalitet
+* grid-rendering
+* HUD
+* minimap
+* pan / zoom
+* pointer-anchored zoom
+* middle mouse pan
+* space + drag pan
+* arrow key pan finns nu också
+
+## Ny roadmap/notering
+
+Arrow key pan fungerar, men hastigheten upplevdes för hög.
+
+Senare tuning-pass ska sänka hastigheten ungefär 50 %, gärna med Shift kvar som snabbare läge.
+
+## Ny UX-fix
+
+Alla paneler i vänster menyn ska vara collapsed när Editorn startar.
+
+Detta är fixat och betraktas som en del av premium/start-state-grammatiken.
+
+---
+
+# B. TILE SYSTEM
+
+Tilesystemet bygger på modellen:
+
+* behavior
+* size
+* sprite
+
+Det som finns:
+
+* Paint
+* Erase
+* Rect
+* Line
+* Fill
+* Brush preview
+* Brush size
+* Tile rendering
+* Undo / Redo
+* Keyboard shortcuts
+
+## Beslut
+
+TILES-panelen ska innehålla:
+
+* Mode
+* Size
+* Sprite
+* Current
+
+“Fine tuning”-rad ska bort.
+
+## Viktigt nytillägg
+
+Tiles använder riktiga sprites och vänsterpanelen visar riktiga asset previews.
+
+## Tile size-semantik
+
+Låst riktning:
+
+* 2x2 = en enda tile-asset/sprite som täcker 2x2
+* 3x3 = en enda tile-asset/sprite som täcker 3x3
+
+## Status som tidigare var uppnådd
+
+* 1x1 tiles fungerar
+* 2x2 tiles ritas ut rätt
+* 3x3 tiles ritas ut rätt
+* 2x2/3x3 har rätt collision
+* visual footprint och collision footprint är i parity
+* Stone CT ghost-collision/anchor-mismatch är fixad
+* Stone CT i 1x1 kolliderar inte längre som osynlig 2x2
+* Stone CT i 2x2/3x3 följer authored storlek
+
+## Tile cleanup
+
+Två tiles har medvetet tagits bort från editorns bibliotek, inte fixats:
+
+* `LAVA_01`
+* `VOID_1`
+
+## Tile behavior parity
+
+* sized tile behavior lookup för ice fixades
+* one-way collision för sized tiles visade sig redan vara korrekt i runtime
+* global behavior-lookup för täckande footprints fixades
+
+## VIKTIG SYSTEMSANNING — TILE IDENTITY
+
+Det upptäcktes att:
+
+`tileId` i Lumo är inte bara behavior
+
+det är också en unik runtime/render-identitet
+
+## M26 — Tile Identity System Fix
+
+M26 betraktades som i praktiken löst tidigare:
+
+* save-pipelinen måste ignorera inkommande wizard/canonical tileId för persistence
+* bridgen måste alltid generera nytt tileId från befintlig katalog
+* editorn får inte fallback-registrera på gammal canonical wizard-id
+* runtime/editor truth måste separera behavior semantics från persistent identity
+
+## TILE PIPELINE / PFH / M17C
+
+Fortsatt sant:
+
+nya tiles kan skapas via Asset Builder, sparas till disk, syns i editorn, går att måla med, överlever F5 och fungerar i runtime/PFH.
+
+### Viktig systemsanning
+
+Problemet tidigare satt inte i save till disk, utan i att brush picker byggdes från hårdkodad core-lista i stället för från katalogdata vid boot.
+
+Det verkliga fixet blev:
+
+* picker måste byggas från den laddade tile-katalogen
+* custom tiles får inte bara vara session-live, utan måste komma tillbaka från source-of-truth efter F5
+
+PFH tile visual identity för custom tiles är löst.
+
+PFH-exporten skickar nu inte bara storlek/anchor utan även faktisk tile-identitet.
+
+### Resultat
+
+* nya custom tiles blir inte placeholder i PFH
+* 2x2/3x3 custom tiles behåller rätt visual size i PFH
+* tile visual identity följer hela vägen till runtime/PFH
+
+Guarded/core tileId-skydd finns.
+
+Builder-created tiles får inte längre återanvända skyddade core IDs på samma farliga sätt.
+
+Gammal permanent testdata togs bort:
+
+`Grass-green-ct` på tileId 15 var tidigare kvar och saboterade `stone_ct`
+
+detta är rensat.
+
+### Visuell kedja verifierad
+
+Fungerar för:
+
+* solid
+* ice
+* one-way
+* hazard
+* brake
+* nya custom tiles via builder
+
+Gäller för:
+
+* Asset Builder
+* editor-katalog
+* målning i editorn
+* F5
+* PFH/runtime
+
+Storlekar verifierade:
+
+* 1x1
+* 2x2
+* 3x3
+
+## BRAKE / STICKY / RAPID
+
+Detta spår är etablerat och ska inte tappas bort.
+
+### Viktig designklarhet
+
+Tre olika beteendetyper måste hållas isär:
+
+**Brake**
+tvärstopp / hög friktion / ingen glidning
+fokus: stopp och grepp
+
+**Sticky**
+sänkt rörelsehastighet medan man rör sig
+fokus: lera / klister / seg mark / tung framfart
+
+**Rapid**
+ökad rörelsehastighet utan boost
+fokus: snabb mark / snabbare underlag
+
+Brake ska inte omdefinieras till sticky.
+
+### Implementerat i kod
+
+Två nya tile behavior families finns:
+
+* `tile.solid.sticky`
+* `tile.solid.rapid`
+
+med authored parameter:
+
+* `movementMul`
+
+Builder/UI/pipeline uppdaterades så att:
+
+* Sticky och Rapid finns i Asset Builder
+* de har styrkeparameter i wizardn
+* de sparas via tile save bridge
+* de fungerar i editor och PFH visuellt
+* de kan skapas som riktiga custom tiles
+
+### Verifierat i verkligheten
+
+Efter rätt Editor V2-path användes verifierades att:
+
+* Sticky och Rapid finns i vänsterpanelen
+* Sticky och Rapid finns i Asset Builder
+* tiles kan skapas och sparas
+* de syns i katalogen
+* de kan placeras i editorn
+* de syns korrekt i PFH med rätt sprite
+
+### Viktig systemsanning från denna fas
+
+När Sticky/Rapid först verkade “inte sparas” var det inte save som var trasig.
+
+Det som bevisades:
+
+* Node bridge loggade `Save request: tile`
+* Node bridge loggade `Save OK: tile`
+* `git status` visade verkliga ändringar i `data/catalog_tiles.js`
+* nya png-filer skapades i `data/assets/tiles/`
+
+Alltså fungerade save till disk.
+
+Det verkliga problemet då var att vänsterpanelens behavior-filter dolde nya tiles tills rätt family valdes.
+
+## VIKTIG UX-STATUS — VÄNSTERPANELENS BEHAVIOR-DROPDOWN
+
+Vad som bevisades:
+
+Vänsterpanelens dropdown var inte kopplad till riktiga behaviorfamilies från början.
+
+Den innehöll en gammal hårdkodad lista i `brushOptions.js`, inklusive:
+
+* Solid
+* Hazard
+* Accent
+
+Accent visade sig vara gammalt debug/legacy-skräp.
+
+### Vad som fixades
+
+Codex ersatte den gamla behavior-listan i vänsterpanelen med en kanonisk lista över riktiga behaviorfamilies:
+
+* All
+* Solid
+* Ice
+* Brake
+* Sticky
+* Rapid
+* One-way
+* Hazard
+
+### Viktig UX-insikt
+
+Strikt family-filter som default kändes trasigt, eftersom nya tiles “försvann” om man inte valde rätt family.
+
+Det rätta beteendet blev därför:
+
+* behavior-filter i vänsterpanelen ska starta på All
+* när användaren väljer family filtreras listan
+
+### Resultat
+
+* editorn startar i läget All
+* alla tiles syns direkt
+* väljer man family filtreras listan
+* nya Sticky/Rapid-tiles syns direkt när filter = All
+
+## STICKY/RAPID FEEL-PROBLEMET BLEV SEDAN ÅTGÄRDAT
+
+Tidigare verkligt utfall:
+
+både Sticky och Rapid verkade fungera men effekten kändes ryckig / sen / instabil
+
+särskilt över korta 24x24-tiles blev effekten för kortvarig per tile.
+
+### Kodsanning som bekräftades
+
+I `player.js` visade koden att:
+
+* surface behavior samplades under spelarens fötter
+* surface application låg på fel ställe i flödet i förhållande till aktuell frame-rörelse
+* samplingordningen kunde ge seam-instabilitet
+* korta missar över tile-gräns kunde återställa till base values för snabbt
+
+### Codex-fix
+
+En smal runtime-fix gjordes i `Lumo/src/game/player.js`:
+
+* center-first surface sampling under spelarens fötter
+* surface tuning appliceras före horisontell acceleration varje frame
+* liten surface-state hold/hysteresis dämpar enstaka seam-missar
+
+Ingen bred physics rewrite gjordes.
+
+### Verkligt utfall
+
+Det verkliga testutfallet blev mycket positivt:
+
+* Sticky känns rätt
+* Rapid känns rätt
+
+Problemet var timing/stabilitet i runtime-surface application.
+
+Fixen träffade rätt.
+
+### Slutsats
+
+M17C — Tile Behavior Runtime Alignment ska nu betraktas som klar.
+
+---
+
+# C. LEVEL SYSTEM
+
+Finns:
+
+* New level
+* Import
+* Export
+* Resize
+* Metadata
+
+## Beslut
+
+Level metadata ska inte ligga permanent i högerpanelen.
+
+Name/ID ska kunna justeras i export-modal innan export.
+
+## New Level flow
+
+Implementerat:
+
+* New öppnar storleks-flow i canvas/workspace
+* width/height väljs innan ny level skapas
+* default 32x18
+* om level redan finns används nuvarande storlek som utgångspunkt
+* Escape avbryter
+* Enter bekräftar när giltigt
+* validering finns
+
+## Caps
+
+Nuvarande caps:
+
+* `MAX_LEVEL_WIDTH = 1024`
+* `MAX_LEVEL_HEIGHT = 64`
+
+## Öppet kvar
+
+Large Level Support:
+
+målnivå: upp till ca 4000 tiles i bredd, låg höjd, typ 20–40
+
+---
+
+# D. ENTITY SYSTEM
+
+Finns:
+
+* entity presets
+* canvas placement
+* click-select
+* drag
+* multi-select
+* box select
+* group drag
+* duplicate
+* delete
+* params-system
+* dynamic param editing
+* visuals/icons per entitytyp
+* import/export
+* hover/highlight
+
+## Params-system
+
+Entities kan bära params-objekt.
+
+Presets definierar default params.
+
+UI renderas dynamiskt för:
+
+* text
+* number
+* boolean
+
+Import/export bevarar params.
+
+## Spawn / Exit
+
+**Spawn**
+
+* exakt 1
+* auto-placeras
+* kan flyttas
+* kan inte raderas
+
+**Exit**
+
+* minst 1
+* auto-placeras
+* kan dupliceras
+* sista exit får inte raderas
+
+## Entity-systemets status
+
+Det som fungerar i verklig editor:
+
+* place
+* select
+* delete
+* update/params
+* move/drag
+* undo
+* redo
+
+## ENTITY BUILDER PHASE 1
+
+Låst designbeslut:
+
+`entityPresets.js` = source of truth
+
+### Godkända behavior families i Phase 1
+
+* lantern_01
+* firefly_01
+* dark_creature_01
+* hover_void_01
+* checkpoint
+* powercell_01
+* flare_pickup_01
+
+### Uttryckligen exkluderade i Phase 1
+
+* player-spawn
+* player-exit
+* fog_volume
+* water_volume
+* lava_volume
+* bubbling_liquid_volume
+* generic trigger
+
+### Entity Builder Phase 1 gör nu
+
+* skapa nytt preset id
+* display name
+* sprite/visual identity
+* välja existerande behavior family
+* redigera säkra defaults för familjen
+* spara som nytt reusable preset
+* live-registrera i sessionen
+* överleva F5
+* dyka upp i picker
+* vara placebar
+* fungera i runtime via existerande behavior family
+
+### Låst AAA-princip
+
+Entity Builder ska i första hand bygga presets ovanpå existerande runtime behavior families, inte skapa ny engine-logik för varje upplevd ny sak.
+
+Många upplevda variationer ovanpå få robusta system är en uttrycklig Lumo-princip.
+
+## VIKTIG BUGGHISTORIK — ENTITY CUSTOM SPRITE / RUNTIME VISUAL CHAIN
+
+Det stora verkliga problemet efter första implementationen var:
+
+custom entity presets kunde sparas, de överlevde F5, de dök upp i katalogen, de gick att placera men i editor/runtime visades ofta fortfarande family-default-sprite.
+
+### Buggar som tidigare upptäcktes och löstes
+
+* Editor canvas/render använde ibland type/family i stället för presetId för visual lookup
+* placerade entities tappade presetId i vissa create/duplicate-paths
+* level import/normalisering tappade presetId
+* runtime export behövde bära med visuell identitet
+* runtime `entities.js` hade korrupt/dubblerad lantern-render-path
+
+### Viktig systemsanning
+
+Precis som för tiles måste entities skilja tydligt på:
+
+* behavior family / runtime type
+* visual identity / preset identity
+
+Alltså:
+
+`type` = hur objektet beter sig
+
+`presetId + img/customSpritePath` = hur det ska se ut
+
+## M28 — ENTITY FAMILY RESTORE / PARITY PASS ÄR KLAR
+
+Samtliga whitelistade Phase 1-familjer är nu verkligt klara:
+
+* lantern_01 ✅
+* firefly_01 ✅
+* flare_pickup_01 ✅
+* powercell_01 ✅
+* checkpoint ✅
+* hover_void_01 ✅
+* dark_creature_01 ✅
+
+### Viktig systemsanning som nu är bevisad
+
+För custom entity visuals i Lumo gäller nu bevisat:
+
+`presetId` räcker inte
+
+`customSpritePath` måste följa hela kedjan:
+
+Preset → editor instance → PFH export → runtime spawn → runtime instance → runtime render
+
+Och i vissa families krävs dessutom fler specialfält, t.ex. `projectileSpritePath`.
+
+### Slutsats
+
+M28 — Entity Runtime Visual Override Audit betraktas som i praktiken färdig för samtliga whitelistade Phase 1-familjer.
+
+---
+
+# E. DECOR SYSTEM
+
+Decor är separerat från entities och ska vara world-building/visuellt, inte gameplaytungt.
+
+Det som finns:
+
+* decor datamodell
+* decor presets
+* canvas placement
+* select
+* drag
+* duplicate/delete
+* minimap support
+* import/export
+
+## Status
+
+Decor har frisk canonical lane och fungerar i verklig editor:
+
+* place
+* select
+* delete
+* move/drag
+* undo
+* redo
+
+## Decor anchor parity
+
+Fixad i runtime för:
+
+* alla tavlor
+* boar
+* banner
+* flower variant
+
+## Decor persistence
+
+Genomförd på riktigt:
+
+* lokal bridge-save endpoint för Decor sprite skrivs till `data/assets/sprites/decor`
+* duplicate protection på decor ids
+* catalog append till `data/catalog_entities.js`
+* editor live registration via `decorPresets.js`
+* preset direkt användbar i sessionen
+* överlever F5
+* syns i editor
+* kan placeras
+* finns kvar efter reload
+
+## Decor flipX
+
+Decor flipX genomfördes och verifierades hela vägen.
+
+Det som nu fungerar:
+
+* flipX som instance-level state
+* toggle i editor
+* canvas rendering spegelvänds
+* duplicate bevarar flipX
+* undo/redo bevarar flipX
+* save/reload bevarar flipX
+* export/import bevarar flipX
+* runtime/PFH bevarar och visar flipX korrekt
+
+### Slutsats
+
+Decor flipX är verkligt klar i både editor och runtime/PFH.
+
+---
+
+# F. DECOR SCATTER
+
+Byggt:
+
+* scatter mode
+* drag ut område
+* density/procent
+* randomness
+* variant mode
+* preview area
+* undo-batch i ett steg
+
+## Beslut
+
+Count bort.
+
+Endast density/procent kvar.
+
+## Ny idé som ska ligga i roadmap men inte byggas ännu
+
+Multi-sprite / family-based decor scatter
+
+Exempel:
+
+användaren väljer en familj av gräsdecor
+
+systemet placerar inte bara random enligt density/randomness utan slumpmässigt mellan flera sprites/varianter i samma familj
+
+Status:
+
+roadmap-tillägg, ej beslutat att byggas nu
+
+---
+
+# G. BACKGROUND SYSTEM
+
+Viktig systemsanning:
+
+Detta är authored BACKGROUND, inte:
+
+* theme/parallax background
+* workspace background
+* decor
+
+Det är ett eget lager som ska vara:
+
+* paintbart
+* fill/rect/line-kompatibelt
+* grid-baserat
+* rent visuellt
+* utan collision
+* utan gameplay-behavior
+* baserat på sprites/material
+* kunna ha olika storlek
+* alltid använda BL anchor
+
+## Låst renderordning
+
+Background → Decor → Tiles → Entities
+
+## Status som tidigare etablerats
+
+BACKGROUND finns som eget authoring-lager separat från theme/parallax.
+
+* Paint / Erase / Rect / Line / Fill fungerar
+* Undo/Redo fungerar
+* import/export/dokumentstruktur har grundstöd
+* renderordningen följer Background → Decor → Tiles → Entities
+* minimap följer samma logik
+* vänsterpanelen har BACKGROUND som eget lager/panel
+
+## BACKGROUND RESTORE
+
+Background-spåret regressade efter repo-reset men återställdes.
+
+Verkligt verifierat nu:
+
+* existerande authored backgrounds fungerar i PFH/runtime
+* ny skapad background via Asset Builder fungerar
+* F5 fungerar
+* runtime visibility fungerar
+
+### Viktig systemsanning från background-spåret
+
+PFH-exporten måste använda samma background-katalogsanning som runtime-rendern faktiskt läser.
+
+### Viktigt konkret resultat
+
+* authored background i editor syns nu i runtime
+* trasiga Stone Wall-entryn (`bg_stone_wall`) togs bort från editor background picker
+* nya backgrounds skapade via Asset Builder fungerar hela vägen
+
+### Viktig arbetsregel
+
+Om ny skapad background inte syns i runtime direkt efter save trots att allt annat ser rätt ut, kan Node-bridgen behöva startas om.
+
+### Slutsats
+
+Background-systemet är återställt och verkligt verifierat igen i både editor och PFH/runtime.
+
+---
+
+# H. ASSET MANAGER / ASSET BUILDER
+
+Detta är en kärndel i projektet och ska ses som ett verkligt verktyg, inte debugpanel.
+
+## M24 — Asset Manager / Wizard Foundation
+
+Byggt som:
+
+* inbyggd feature i editor-v2
+* topbar-knapp: Assets
+* egen modal/workbench
+* wizard-first workflow
+
+## Wizard-flöde
+
+* Mode
+* Type
+* Identity
+* Metadata
+* Review
+* Save/Register
+
+## Type
+
+* Tile
+* Background
+* Decor
+* Entity
+
+## Viktiga UX-regler som är etablerade
+
+* file picker istället för rå path-inmatning
+* validation + inline errors
+* tooltips/helptext där det behövs
+* smart defaults
+* review-scroll fixad
+* post-save UX ska stänga modal och föra användaren tillbaka till rätt workflow
+* små numeriska fält ska ligga bredvid varandra
+* unika tekniska ids ska autoföreslås och kollisionskollas
+* stora fält ska inte vara 70% luft i onödan
+
+## WIZARD UI/UX POLISH ÄR I PRAKTIKEN KLAR
+
+Det som är etablerat:
+
+* onödiga luftytor trimmades bort
+* step 3/4 blev tätare och effektivare
+* scroll minskades kraftigt
+* fälthopp på grund av helper/error-slotar fixades via stabil field-skeleton
+* korta selectfält som draw anchor gjordes kompakta
+* specialrader och dubblett-UI-element togs bort
+* layouten för entity families i step 4 polerades family för family
+* wizardn bedömdes som clean / premium
+
+### Viktig systemsanning från polish-spåret
+
+Det räckte inte med generella gap-ändringar.
+
+Problem satt i:
+
+* fel gridstruktur
+* fel fältspans
+* felaktigt stora fältzoner
+* tomma layoutblock
+* redundanta label-rader
+
+## Låst UI-regel
+
+Om plats finns horisontellt ska den användas innan ny rad skapas.
+
+## Låst grammar
+
+Wizard-former ska vara:
+
+* tighta
+* effektiva
+* kompakta
+* men inte trånga
+* inte “hero UI”
+
+Preview/workbench får vara luftig.
+
+Formdelen ska vara arbetsyta.
+
+## Save vs Done
+
+Fixat:
+
+där det handlar om create/save används Save
+
+“Done” ska inte längre vara final-label i relevanta save-lägen.
+
+### Slutsats
+
+Asset Builder-wizardens UI/UX betraktas som i praktiken premiumklar för nuvarande scope.
+
+## TILE / BACKGROUND / DECOR / ENTITY ASSET PIPELINES
+
+Dessa spår är fortsatt giltiga och verkligt verifierade.
+
+### Tile asset pipeline fungerar i praktiken för
+
+* wizard create flow
+* behavior-baserad selector
+* file picker
+* smart catalogId-förslag
+* Save
+* post-save auto-close
+* auto-select som current brush
+* Paint redo direkt
+* local save bridge
+* sprite skrivs till disk
+* `catalog_tiles.js` uppdateras
+* asset överlever F5
+* asset syns i editor
+* asset kan användas i PFH/runtime
+* rätt sprite följer med
+* rätt storlek följer med
+
+Detta gäller nu också för Sticky och Rapid.
+
+### Background asset pipeline fungerar
+
+* sprite skrivs till `data/assets/sprites/bg/`
+* runtime-katalog uppdateras i `data/catalog_bg.js`
+* editor source of truth uppdateras i `editor-v2/src/domain/background/materialCatalog.js`
+* ny background dyker upp i editorn
+* den kan målas
+* den överlever F5
+* går igenom till runtime
+
+### Decor asset pipeline fungerar
+
+* sprite skrivs till `data/assets/sprites/decor`
+* catalog append till `data/catalog_entities.js`
+* editor live registration via `decorPresets.js`
+* överlever F5
+* syns i editor
+* kan placeras
+* fungerar i runtime
+
+Decor flipX fungerar också hela vägen.
+
+### Entity asset pipeline fungerar i praktiken för samtliga whitelistade Phase 1-familjer
+
+* lantern-family ✅
+* firefly-family ✅
+* flare_pickup_01 ✅
+* powercell_01 ✅
+* checkpoint ✅
+* hover_void_01 ✅
+* dark_creature_01 ✅
+
+---
+
+# AUDIO / SOUND / SCAN
+
+Detta ska absolut bevaras som en central del av projektets identitet.
+
+## Sound types som finns
+
+* Spot Sound
+* Trigger Sound
+* Music Zone
+* Ambient Zone
+
+Spatial är parameter, inte egen typ.
+
+## Sound System — byggt
+
+* sound layer
+* placement
+* select/move/delete
+* bottom panel editing
+* import/export
+* history/undo/redo
+* visuals för varje typ
+* source picker i bottom panel
+* preview/audition i bottom panel
+* riktig playback
+* fallback placeholder om ingen source finns
+* batch select & batch assign
+* multi-select batch editing
+* same type / same source / type+source
+
+## Scan System — byggt
+
+* play / pause / stop
+* speed
+* start/end
+* camera follow
+* sound layer auto-aktiv när scan kör
+* scrub/playhead drag när pausad
+* debug feed/monitor
+* scan visuals polerade
+* audio evaluation model
+* riktig playback under scan
+* fades/balancing/spatial första version
+* visual presence system
+
+## Viktig interaktionsregel
+
+För object layers (Entities / Decor / Sound):
+
+* vanligt klick/drag = select/move/delete
+* Alt/Option + LMB = place
+* Shift för additive selection / box select
+* Clear ska inte behövas för normal workflow
+
+---
+
+# MYCKET VIKTIG SYSTEMSANNING FRÅN DENNA CHATT — EDITORNS SOUND DROPDOWNS BYGGER INTE FRÅN MAPPARNA
+
+Detta blev nu fullständigt bevisat och måste bevaras.
+
+Sound source-dropdownen i Editor V2 läser inte direkt från filsystemet under `data/assets/audio/...`
+
+Den läser från:
+
+`editor-v2/src/domain/sound/audioAssetCatalog.js`
+
+och UI:t i:
+
+`editor-v2/src/ui/selectionEditorPanel.js`
+
+använder uttryckligen:
+
+* `getSoundAssetCatalog()`
+* `getSoundAssetOptionsForType(soundType)`
+* `findSoundAssetByPath(path)`
+
+## Konsekvens
+
+Att en `.ogg`-fil finns i rätt ljudmapp betyder inte automatiskt att den blir valbar i editorn.
+
+För att ett ljud ska dyka upp i dropdownen måste det också vara registrerat i Editor V2:s audio-katalog.
+
+Detta är samma övergripande princip som redan gäller för andra asset-system i Lumo:
+
+* filer på disk = assets
+* katalog/registry = vad editorn faktiskt får visa/använda
+
+Detta måste bevaras som systemsanning framåt.
+
+---
+
+# VIKTIG NY UX-INSIKT — SOUND SOURCE-LISTAN MÅSTE FILTRERAS PER SOUND-TYP
+
+Detta blev ett stort fokus i denna chatt och ska bevaras.
+
+## Tidigare verkligt problem
+
+Editorn visade i praktiken nästan hela ljudkatalogen oavsett vilken sound-entitet användaren arbetade med.
+
+Det gjorde att användaren kunde välja ljud som:
+
+* syntes i dropdownen
+* men inte var rimliga för vald sound-entitet
+* och senare kunde ge förvirrande PFH/runtime-beteenden
+
+Det ledde till en tydlig UX-insikt:
+
+Editorn ska inte bara prioritera vissa ljud högre i listan.
+
+Den ska faktiskt filtrera så att bara relevanta ljud syns för vald sound-entitet.
+
+## Låst riktning efter denna chat
+
+* Music Zone ska visa music-kompatibla ljud
+* Ambient Zone ska visa ambient-kompatibla ljud
+* Spot Sound ska visa spot-kompatibla ljud
+* Trigger Sound ska visa trigger-kompatibla ljud
+
+Viss överlappning är tillåten, men den ska vara medvetet klassad, inte uppstå av slapp fallback-logik.
+
+---
+
+# VIKTIG SYSTEMSANNING — TYPE-AWARE SOUND FILTERING VAR REDAN PÅBÖRJAD, MEN GAV FÖRST FEL LIVE-UTFALL
+
+Detta spår måste bevaras i detalj eftersom det innehåller flera viktiga lärdomar.
+
+## 1. Första Codex-passet räckte inte i verkligheten
+
+Codex lade till typklassning och filtering i `audioAssetCatalog.js`, men verkligt test i editorn visade fortfarande att alla ljud syntes i listan.
+
+Detta behandlades korrekt som misslyckat i praktiken, trots snygg summary.
+
+## 2. Faktabaserad felsökning visade att katalogfunktionen delvis fungerade
+
+Med terminalkörning bevisades att:
+
+* `getSoundAssetOptionsForType('spot')` gav filtrerad spot-lista
+* `getSoundAssetOptionsForType('trigger')` gav filtrerad trigger-lista
+* `getSoundAssetOptionsForType('ambientZone')` gav filtrerad ambient-lista
+* `getSoundAssetOptionsForType('musicZone')` gav filtrerad music-lista
+
+Men:
+
+* `getSoundAssetOptionsForType('ambient-zone')` gav full katalog
+* `getSoundAssetOptionsForType('music-zone')` gav full katalog
+
+Detta visade att hyphen-varianter av sound types fortfarande föll tillbaka till full katalog.
+
+## 3. Rotorsaken lokaliserades till alias-normalisering
+
+Det verkliga problemet satt i sound type-normalisering för:
+
+* ambient-zone
+* music-zone
+
+Dessa behövde normaliseras till:
+
+* ambientZone
+* musicZone
+
+Detta fixades sedan i:
+
+`editor-v2/src/domain/sound/soundVisuals.js`
+
+## 4. Även efter korrekt kodfix såg live-editorn fortfarande fel ut
+
+Här kom nästa viktiga systemsanning:
+
+Node-test och kodläsning visade att filtreringen nu var rätt, men live-editorn visade ändå gammalt beteende.
+
+Detta visade sig bero på:
+
+* gammal laddad modul
+* browser-cache
+* session-cache
+
+Det verkliga beviset kom när:
+
+* filtexten i browsern innehöll de nya posterna
+* vanlig live-import fortfarande gav gammal katalogdata
+* cache-bustad modulimport (`?ts=`) gav de nya ljuden korrekt
+
+### Slutsats
+
+När verklig filtext och live-beteende inte matchar måste man också överväga:
+
+* browser cache
+* gammal modulinstans
+* behov av full flikstängning / ny session / hård refresh
+
+Detta var ett viktigt lärdomsspår.
+
+## 5. Slutligt verkligt utfall
+
+Efter korrekt refresh/ny session fungerade type-aware filtering i editorn som avsett.
+
+### Slutsats
+
+Editor V2 sound source filtering per sound type ska nu betraktas som verkligt fungerande.
+
+---
+
+# NYA LJUD SOM NU LAGTS IN I EDITORNS AUDIO-KATALOG MED EXPLICIT KLASSNING
+
+Detta är nytt efter denna chatt och måste bevaras exakt.
+
+Följande nyare ljud lades till i `editor-v2/src/domain/sound/audioAssetCatalog.js` och fick explicita `allowedUsages` så att de bara dyker upp i rätt dropdownar.
+
+## Music
+
+* `data/assets/audio/music/menu_loop_01.ogg`
+* `data/assets/audio/music/menu_loop_02.ogg`
+
+Klassning:
+
+`["musicZone"]`
+
+## Ambient
+
+* `data/assets/audio/ambient/futuristic/ambient_hum_01.ogg`
+* `data/assets/audio/ambient/futuristic/ambient_hum_02.ogg`
+* `data/assets/audio/ambient/futuristic/ambient_hum_03.ogg`
+* `data/assets/audio/ambient/futuristic/ambient_hum_04.ogg`
+* `data/assets/audio/ambient/futuristic/ambient_hum_05.ogg`
+* `data/assets/audio/ambient/futuristic/ambient_hum_06.ogg`
+* `data/assets/audio/ambient/futuristic/ambient_hum_07.ogg`
+* `data/assets/audio/ambient/futuristic/ambient_hum_08.ogg`
+* `data/assets/audio/ambient/ruin/ambient_girlhumming.ogg`
+
+Klassning:
+
+`["ambientZone"]`
+
+## Spot
+
+* `data/assets/audio/spot/hum/spot_hum_01.ogg`
+
+Klassning:
+
+`["spot", "trigger"]`
+
+## Trigger / event-like
+
+* `data/assets/audio/events/enemies/common/swoosh_01.ogg`
+* `data/assets/audio/events/enemies/common/swoosh_02.ogg`
+* `data/assets/audio/events/enemies/common/swoosh_03.ogg`
+* `data/assets/audio/events/enemies/common/swoosh_04.ogg`
+* `data/assets/audio/events/creatures/firefly_01.ogg`
+
+Klassning:
+
+* `swoosh_* -> ["trigger", "spot"]`
+* `firefly_01 -> ["trigger"]`
+
+## Viktigt resultat
+
+Efter att den nya katalogdatan faktiskt laddades in i ny editor-session blev dessa nya ljud valbara i rätt dropdownar och fungerade även i PFH.
+
+---
+
+# VIKTIG NY UX/FUNKTIONALITETSFIX — LOOP TOGS BORT FÖR SPOT SOUND I EDITORN
+
+Detta är nu fixat och måste bevaras.
+
+## Verklig användarinsikt
+
+Spot Sound beter sig redan semantiskt som:
+
+* spelar så länge Lumo befinner sig inom räckvidd/aggro
+* slutar när spelaren lämnar området
+
+Då skapade en separat Loop-checkbox för Spot mer skada än nytta:
+
+* med loop på kunde upplevt spam/restart-beteende uppstå
+* utan loop betedde sig Spot ändå i praktiken kontinuerligt medan spelaren var kvar
+* UI:t antydde en frihet som inte passade Spot-semantiken
+
+## Fix
+
+I Editor V2 döljs Loop-fältet nu för Spot Sound.
+
+## Viktiga detaljer
+
+* gamla `params.loop` förstörs inte i data
+* runtime/logik ändrades inte
+* Trigger / Ambient Zone / Music Zone behåller Loop
+
+## Slutsats
+
+Detta är en editor-UX-fix, inte en runtime-omskrivning.
+
+Den ska betraktas som klar.
+
+---
+
+# DARKNESS / LIGHT PREVIEW
+
+Darkness preview fixades tidigare och har rätt känsla nu.
+
+Nu är darkness-previewn runtime-lik:
+
+* near-black darkness layer
+* destination-out cutouts preview
+* player light
+* lantern parity runt 170/0.85
+* checkpoints/powercells inte emitters
+* förenklad player shaping/downward suppression
+
+Användaren bedömde att darkness nu har rätt känsla.
+
+---
+
+# RUNTIME / PLAY FROM HERE / BRIDGE
+
+Det som finns:
+
+* `v2ToRuntimeLevelObject()`
+* `editorPlaySessionBridge`
+* PFH-topbar action
+* runtime öppnas via `../Lumo.html`
+
+## Det som i praktiken lösts
+
+* editor-v2 export körs i runtime
+* spawn/exit fungerar
+* tiles fungerar
+* background fungerar
+* decor fungerar
+* sounds fungerar
+* liquids fungerar
+* Dark Creature fungerar
+* PFH kan starta från vald cell
+
+## PFH-status
+
+PFH använder nu:
+
+* explicit vald cell som startposition
+* fallback till authored spawn
+* sedan runtime fallback
+
+Selected cell / hover footprint syns igen i editorn.
+
+## VIKTIGT
+
+PFH/runtime visual identity för entities är nu verkligt verifierat för:
+
+* lantern-family ✅
+* firefly-family ✅
+* flare_pickup_01 ✅
+* powercell_01 ✅
+* checkpoint ✅
+* hover_void_01 ✅
+* dark_creature_01 ✅
+
+PFH/runtime background fungerar igen.
+
+Decor flipX fungerar också i runtime.
+
+---
+
+# NODE BRIDGE — UPPDATERING
+
+`node editor-v2/dev/localTileSaveBridge.js` startas fortfarande manuellt av användaren.
+
+Autostart byggdes inte, medvetet.
+
+## Det som förbättrats
+
+* tydlig startup-logg
+* tydlig “running / ready”-signal
+* tydliga per-request save-loggar
+* tydliga Save OK / Save FAILED-rader
+* tydligare felutskrifter
+* enkel `/health` endpoint
+
+## Viktig slutsats
+
+Node bridge ergonomin är bättre nu, utan att systemet designats om.
+
+Användaren startar fortfarande bridgen manuellt, men statusen är mindre oklar än tidigare.
+
+## Ny verifiering från tidigare fas
+
+Vid Sticky-save visade bridgen:
+
+* `[Lumo Bridge] Save request: tile`
+* `[Lumo Bridge] Save OK: tile`
+
+Alltså fungerar save-anropet faktiskt från editorn till bridgen.
+
+---
+
+# SPECIAL VOLUMES — STATUS
+
+Det gamla kaotiska volume/fog-spåret i editor-v2 är medvetet borttaget.
+
+Det ska inte återupplivas.
+
+## Ny strategi
+
+* bygg om från början i små säkra steg
+* `smooke.html` som behavioral source of truth för fog-preview-riktning
+* egen modal/workbench
+* inte gammal bottom-panel-logik
+
+## Viktig regel
+
+VOLUMES workflow får aldrig öppna ENTITIES-panelen.
+
+## Nuvarande volume-status i editor
+
+Fungerar mycket bra:
+
+* Fog
+* Water
+* Lava
+* Liquid Acid / Swamp
+
+Alla fyra volume-familjer finns och fungerar bra i editor-v2.
+
+---
+
+# MYCKET VIKTIG STOR DEL — AUDIO PIPELINE MIGRATION OCH PLAYER CORE AUDIO
+
+# M27 — AUDIO PIPELINE MIGRATION (.mp3 → .ogg) ÄR NU VERKLIGT KLAR
+
+Detta spår var tidigare öppet.
+
+Efter denna och föregående audiochattar ska det betraktas som klart i praktiken.
+
+## Vad som gjordes
+
+Först gjordes audit av nuvarande audio root och användning.
+
+Det bevisades att:
+
+* kanonisk audio-root i aktiv användning är `data/assets/audio/`
+* runtime, editor-v2 och data manifester/cataloger använder denna root
+* det fanns äldre kompatibilitetsrester kring `data/assets/sound/`, men `data/assets/audio/` är sanningskällan
+
+## Safe scaffold-pass
+
+Codex skapade säkra scaffold-mappar under existerande kanonisk struktur, utan att skapa nya konkurrerande roots.
+
+## Verklig mp3→ogg-migration
+
+Det bevisades sedan att `.mp3` fortfarande refererades i:
+
+* runtime
+* editor-v2
+* data
+* audio manifest
+* level docs
+* entity defaults
+
+Därefter gjordes migrationen i flera verkliga steg:
+
+* säkra referensbyten från `.mp3` till `.ogg` där `.ogg`-tvilling redan fanns
+* lokal ffmpeg-konvertering av saknade blockerfiler
+* staged tillägg av nya `.ogg` i repo
+* lokalt textbyte i verkliga filer när Codex-miljön inte kunde se de lokala binärfilerna
+* slutlig cleanup där alla `.mp3` under `data/assets/audio/` togs bort efter att det verifierats att inga `.mp3`-referenser fanns kvar
+
+## Viktig systemsanning från denna fas
+
+Summary var inte tillräckligt.
+
+Lokala `.ogg`-filer som bara fanns på användarens dator kunde inte “magiskt” bli repo-sanning via Codex.
+
+För att undvika två världar måste riktiga assets in i Git/repo på riktigt.
+
+Detta löstes korrekt via `git add`, staged assets och riktiga commits.
+
+## Definition of Done som nu faktiskt uppnåddes
+
+* inga `.mp3`-referenser kvar i kod/data
+* alla aktiva audio paths pekar på `.ogg`
+* `.mp3`-filerna togs bort
+* runtime spelade ljud korrekt efter migration
+* editor påverkades inte negativt
+
+## Slutsats
+
+M27 — Audio Pipeline Migration (.mp3 → .ogg) ska nu betraktas som klar.
+
+---
+
+# WAV→OGG-MIGRATIONEN FÖR KVARVARANDE WAV-RESTER ÄR NU VERKLIGT KLAR
+
+Detta är nytt efter denna chatt och ska ses som färdigställt.
+
+Efter kontrollerad audit konstaterades att det fortfarande fanns 11 kvarvarande `.wav`-filer under `data/assets/audio/`.
+
+Dessa var:
+
+* `data/assets/audio/ambient/rain/rain.wav`
+* `data/assets/audio/ambient/void/nominal.wav`
+* `data/assets/audio/ambient/void/nominal_monolith.wav`
+* `data/assets/audio/ambient/void/void_pressure_02.wav`
+* `data/assets/audio/music/space_loop_short.wav`
+* `data/assets/audio/sfx/hit/slap_01.wav`
+* `data/assets/audio/sfx/hurt/hurt_01.wav`
+* `data/assets/audio/spot/drip/one_drip.wav`
+* `data/assets/audio/spot/machinery/door_close.wav`
+* `data/assets/audio/spot/wind/blowing.wav`
+* `data/assets/audio/spot/wind/wind.wav`
+
+## Viktig arbetsregel från denna fas
+
+Detta fick inte behandlas som en blind extension-rename.
+
+Precis som tidigare `.mp3 -> .ogg`-migration måste usage först bevisas i:
+
+* editor-katalog
+* `data/audio_manifest.js`
+* levels
+* övrig data/runtime-kedja
+
+Audit gjordes och användning verifierades.
+
+Därefter gjordes en kontrollerad path-migrering i kod/data så att referenserna gick från `.wav` till `.ogg`.
+
+## Viktig detalj
+
+Codex kunde inte göra själva binärkonverteringen i sin miljö.
+
+Det verkliga slutsteget blev därför:
+
+* Codex uppdaterade referenser och editor-katalog
+* användaren konverterade de 11 filerna lokalt med ffmpeg
+* de nya `.ogg`-filerna stagades och committades på riktigt
+* push gjordes efter att repo faktiskt innehöll de riktiga `.ogg`-filerna
+
+## Viktig systemsanning från denna fas
+
+Summary som säger “referenser uppdaterade” är inte tillräckligt om de verkliga binärfilerna inte finns i repo ännu.
+
+Precis som i tidigare audio-migration gäller:
+
+För att migrationen ska vara sann måste både:
+
+* paths i kod/data vara uppdaterade
+* de faktiska `.ogg`-filerna finnas i repo
+
+Detta blev nu uppfyllt.
+
+## Resultat
+
+WAV→OGG-paths som migrerades:
+
+* `space_loop_short.wav -> space_loop_short.ogg`
+* `one_drip.wav -> one_drip.ogg`
+* `door_close.wav -> door_close.ogg`
+* `blowing.wav -> blowing.ogg`
+* `wind.wav -> wind.ogg`
+* `rain.wav -> rain.ogg`
+* `nominal.wav -> nominal.ogg`
+* `nominal_monolith.wav -> nominal_monolith.ogg`
+* `void_pressure_02.wav -> void_pressure_02.ogg`
+* `slap_01.wav -> slap_01.ogg`
+* `hurt_01.wav -> hurt_01.ogg`
+
+## Slutsats
+
+Den tidigare kvarvarande WAV-restmigreringen ska nu betraktas som klar i praktiken.
+
+---
+
+# NY AUDIO-STRUKTUR OCH NYA ASSETS SOM LADES IN I DENNA CHATT
+
+Detta är nytt i denna chat och måste bevaras exakt.
+
+## Befintlig mappstruktur under `data/assets/audio/` verifierades
+
+Det bevisades att dessa mappar redan fanns:
+
+* ambient/
+* events/
+* music/
+* sfx/
+* spot/
+
+med relevanta underkategorier som bl.a.:
+
+* ambient/cave
+* ambient/forest
+* ambient/rain
+* ambient/ruin
+* ambient/space
+* ambient/void
+* events/creatures
+* events/enemies/common
+* events/enemies/dark_creature
+* events/enemies/hover_void
+* sfx/player/abilities
+* sfx/player/damage
+* sfx/player/interaction
+* sfx/player/movement
+* sfx/ui
+
+## Viktig regel som cementerades
+
+Använd befintliga mappar när de passar.
+
+Skapa ny mapp endast om befintlig struktur inte passar ljudets roll.
+
+## Nya mappar som medvetet skapades i denna chat
+
+Två nya mappar skapades, och bara dessa var berättigade:
+
+* `data/assets/audio/ambient/futuristic/`
+* `data/assets/audio/spot/hum/`
+
+### Anledning
+
+* `ambient_hum_01` till `ambient_hum_08` passade inte rent tematiskt i cave/forest/rain/ruin/space/void, utan var mer loopbara futuristiska bakgrundstexturer
+* `spot_hum_01` behövde egen spot-kategori
+
+## Nya ljud som konverterades från root .mp3 till permanenta .ogg i repo
+
+Alla följande filer låg temporärt i repo-root lokalt, konverterades till `.ogg`, flyttades till rätt permanenta mappar och root-`.mp3` raderades efteråt.
+
+### Music
+
+* `menu_loop_01.mp3 → data/assets/audio/music/menu_loop_01.ogg`
+* `menu_loop_02.mp3 → data/assets/audio/music/menu_loop_02.ogg`
+
+### Player
+
+* `player_death.mp3 → data/assets/audio/sfx/player/damage/player_death.ogg`
+* `surface_01.mp3 → data/assets/audio/sfx/player/movement/surface_01.ogg`
+
+### Creature / entity / event
+
+* `firefly_01.mp3 → data/assets/audio/events/creatures/firefly_01.ogg`
+
+### Ambient futuristic
+
+* `ambient_hum_01.mp3 → data/assets/audio/ambient/futuristic/ambient_hum_01.ogg`
+* `ambient_hum_02.mp3 → data/assets/audio/ambient/futuristic/ambient_hum_02.ogg`
+* `ambient_hum_03.mp3 → data/assets/audio/ambient/futuristic/ambient_hum_03.ogg`
+* `ambient_hum_04.mp3 → data/assets/audio/ambient/futuristic/ambient_hum_04.ogg`
+* `ambient_hum_05.mp3 → data/assets/audio/ambient/futuristic/ambient_hum_05.ogg`
+* `ambient_hum_06.mp3 → data/assets/audio/ambient/futuristic/ambient_hum_06.ogg`
+* `ambient_hum_07.mp3 → data/assets/audio/ambient/futuristic/ambient_hum_07.ogg`
+* `ambient_hum_08.mp3 → data/assets/audio/ambient/futuristic/ambient_hum_08.ogg`
+
+### Ambient ruin
+
+* `ambient_girlhumming.mp3 → data/assets/audio/ambient/ruin/ambient_girlhumming.ogg`
+
+### Spot
+
+* `spot_hum_01.mp3 → data/assets/audio/spot/hum/spot_hum_01.ogg`
+
+### Enemy/common event
+
+* `swoosh_01.mp3 → data/assets/audio/events/enemies/common/swoosh_01.ogg`
+* `swoosh_02.mp3 → data/assets/audio/events/enemies/common/swoosh_02.ogg`
+* `swoosh_03.mp3 → data/assets/audio/events/enemies/common/swoosh_03.ogg`
+* `swoosh_04.mp3 → data/assets/audio/events/enemies/common/swoosh_04.ogg`
+
+Detta committades och pushades clean.
+
+## Viktig systemsanning från denna fas
+
+Audio-strukturen i repo är nu betydligt rikare och mer semantiskt organiserad.
+
+Inga nya “slaskmappar” skapades utöver de två berättigade.
+
+Nya assets lades direkt i permanenta mappar, inte i temporära extra paths.
+
+---
+
+# PLAYER CORE AUDIO — UPPDATERAD STATUS EFTER DENNA CHATT
+
+Detta har utvecklats mycket i denna chat och måste beskrivas exakt.
+
+## Tidigare verkligt verifierat innan denna chat
+
+Detta var sant innan denna chat började:
+
+* jump fungerade
+* land fungerade
+* hurt fungerade
+* pulse hade inte ännu aktiverats i gameplay
+* menu music var inte korrekt routed
+* firefly och player death var ännu inte helt färdigkopplade
+* movement-ljudet var redan öppet och trasigt
+
+## Nya runtime-kopplingar som byggdes i denna chat
+
+## 1. Menu music
+
+Nya asseten `menu_loop_01.ogg` kopplades till huvudmenyn.
+
+### Viktig systemsanning som bevisades
+
+Det räckte inte att ändra fallbacken i `src/app.js`.
+
+Det verkliga aktiva truth-lagret för meny/state-musik var:
+
+`data/audio_global_config.js`
+
+Detta bevisades via sökning i repo:
+
+* `src/app.js` fallback pekade till `menu_loop_01.ogg`
+* men `window.LUMO_AUDIO_GLOBAL_CONFIG` i `data/audio_global_config.js` override:ade fortfarande till gamla `menu_music.ogg`
+
+### Det verkliga fixet blev därför
+
+ändra `menu`, `settings`, `fan_art` i `data/audio_global_config.js` från `menu_music.ogg` till `menu_loop_01.ogg`
+
+Efter detta fungerade menymusiken korrekt i verkligheten.
+
+## 2. Firefly trigger-ljud
+
+`data/assets/audio/events/creatures/firefly_01.ogg` kopplades in när firefly går från rest-läge till takeoff/aktivering.
+
+Det fungerade i verklig test.
+
+## 3. Player death-ljud
+
+`data/assets/audio/sfx/player/damage/player_death.ogg` kopplades in vid riktiga death-entry points.
+
+Det fungerade i verkligheten tidigare under denna chat, men är senare nu regressat tillsammans med jump/land.
+
+Se öppna buggar nedan.
+
+## 4. Pulse-ljud
+
+`data/assets/audio/sfx/player/abilities/player_pulse.ogg` aktiverades i gameplay när Lumo använder pulse.
+
+Detta spår fungerade.
+
+Sedan gjordes ljuddesignjustering:
+
+* playbackRate / pitch upp ca 35%
+* volym ner till 75%
+
+Detta fungerade perfekt i verklig test och användaren var mycket nöjd.
+
+### Viktig systemsanning
+
+Pulse-ljudet ligger just nu som ett särskilt lokalt specialfall i `startPulse()` efter senare refaktor/felsökning, och detta måste bevaras i analysen av nuvarande regressionsbugg.
+
+## 5. Game over audio leak fix
+
+Det upptäcktes i verkligheten att om ett gameplay-ljud, t.ex. music zone, var aktivt när Lumo dog och kom till game over / huvudmeny, så fortsatte gameplay-ljudet spela samtidigt med menymusiken.
+
+### Faktabaserad kodanalys visade
+
+* `saveAndExitToMenu()` stoppade redan gameplay-audio via `ents.stopGameplayAudio()`
+* `returnToStartAfterGameOver()` gjorde det inte
+
+### Det verkliga fixet blev
+
+lägga till `ents.stopGameplayAudio()` i `returnToStartAfterGameOver()` i `src/app.js`
+
+Detta fungerade i verklig test för just den buggen:
+
+* gameplay-ljudet stängdes av
+* bara menymusiken hördes i menyn
+
+MEN detta sammanföll senare med en större regression på jump/land/death-spåret.
+
+Det finns ännu ingen bevisad direkt kausalitet mellan just `app.js`-ändringen och den större regressionen.
+
+---
+
+# VIKTIG NY ROADMAP-INSIKT — ENTITY-BOUND AUDIO SKA SENARE BLI MER WORLD-AWARE
+
+Detta ska läggas in i roadmap men inte tas nu.
+
+## Ny observation från verkligt test
+
+Firefly-ljudet kan triggas när firefly aktiveras, men om Lumo sedan springer vidare och fireflyn lämnar relevans/bild så kan ljudet ändå ligga kvar för länge i upplevelsen.
+
+## Designinsikt
+
+För vissa entity-bundna/world-bundna ljud känns det rimligt att de:
+
+* får starta som one-shot/trigger när beteendet händer
+* men sedan fadear ut eller stängs ner när källan inte längre är relevant för spelaren
+
+Detta ska inte lösas nu, men måste läggas in som framtida roadmap/insikt under audio/entity-bound audio.
+
+## Viktig skillnad
+
+Detta gäller inte nödvändigtvis vanliga Trigger Sound-zoner i level-authoring.
+
+Det gäller snarare entity-coupled world sounds, t.ex. firefly-aktivering.
+
+---
+
+# VIKTIG STOR NY BUGG FRÅN DENNA CHATT — PLAYER JUMP / LAND / DEATH REGRESSION
+
+Detta är nu det viktigaste öppna problemet i hela projektet.
+
+## Vad som är sant i verkligheten just nu
+
+Efter flera ändringar och merge/pull är detta nu verkligt sant.
+
+### Fungerar
+
+* sound entities fungerar
+* firefly-ljud fungerar
+* hurt-ljud fungerar
+* movement loop / move-ljud fungerar
+* pulse-ljud fungerar
+* menu music fungerar
+* gameplay zone/ambient/trigger-system i grunden fungerar
+* game over → stoppa gameplay-audio → meny fungerar
+
+### Fungerar INTE
+
+* jump-ljud hörs inte
+* land-ljud hörs inte
+* player death-ljud hörs inte
+
+Detta är inte summary.
+
+Detta är verklig användartest efter merge/pull.
+
+## Varför denna regression är extra allvarlig
+
+För att tidigare under audio-spåret var detta verkligt verifierat:
+
+* jump fungerade
+* land fungerade
+* hurt fungerade
+
+Nu är jump/land/death trasiga samtidigt som andra ljud fortfarande fungerar.
+
+Det betyder att:
+
+* det är inte ett allmänt “all audio död”-problem
+* det är inte ett generellt assetproblem
+* det är inte ett enkelt pathproblem
+* det är ett smalt men mycket förvirrande runtime-kedjeproblem i player-audio-spåret
+
+## Faktabaserad analys som redan gjorts i denna chat
+
+Följande är bevisat, inte gissat.
+
+### A. Filpaths finns kvar i `src/game/player.js`
+
+Nuvarande `_sfx` innehåller:
+
+* jump: `data/assets/audio/sfx/player/movement/player_jump_01.ogg`
+* land: `data/assets/audio/sfx/player/movement/player_land.ogg`
+* death: `data/assets/audio/sfx/player/damage/player_death.ogg`
+* pulse: `data/assets/audio/sfx/player/abilities/player_pulse.ogg`
+
+### B. `_playGameplaySfx(...)` är nu tillbaka till enkel passthrough
+
+Aktuell kod i `player.js` visar:
+
+```js
+_playGameplaySfx(world, path, volume = 1){
+  if (!path || !world || !world._ents || typeof world._ents._playOneShot !== "function") return;
+  world._ents._playOneShot(path, volume);
+}
+```
+
+Alltså är den senare split-varianten med playbackRate i hjälpfunktionen redan borttagen igen.
+
+### C. `_playDeathSfx()` anropas faktiskt
+
+Runtime-hook bevisade att `_playDeathSfx()` faktiskt kallas vid death-pathen, med:
+
+* `hasLastWorld: true`
+* `passedWorld: false`
+
+Alltså: death-pathen uteblir inte.
+
+### D. `_playGameplaySfx(...)` anropas för death
+
+Runtime-hook bevisade också att death-ljudet når `_playGameplaySfx(...)` med:
+
+* `hasWorld: true`
+* `hasEnts: true`
+* `hasPlayOneShot: true`
+
+Alltså når death-ljudet ända fram till one-shot-pathen logiskt sett.
+
+### E. `_playOneShot(...)` i live runtime är ren och korrekt
+
+`window.Lumo.debug.ents._playOneShot.toString()` visade den rena versionen:
+
+```js
+_playOneShot(path, volume){
+  if (!path) return;
+  const a = new Audio(path);
+  a.preload = "auto";
+  a.loop = false;
+  a.volume = Math.max(0, Math.min(1, volume)) * this._getSfxVolume();
+  const p = a.play();
+  if (p && typeof p.catch === "function") p.catch(() => {});
+}
+```
+
+Alltså finns inte längre någon console-hook kvar där som förklarar tystnaden.
+
+### F. `_getSfxVolume()` returnerar 0.6
+
+Det är bevisat att SFX-volymen inte är noll.
+
+### G. Jump-filen går att spela manuellt i browsern
+
+I runtime/F12:
+
+```js
+new Audio("data/assets/audio/sfx/player/movement/player_jump_01.ogg").play()
+```
+
+gav:
+
+* `JUMP_PLAY_STARTED`
+* `JUMP_CANPLAY`
+
+Alltså:
+
+* filen finns
+* pathen är rätt
+* browsern kan spela den
+* asseten i sig är inte trasig
+
+### H. En manuell Audio-instans med samma volymskalning fungerar också
+
+Det bevisades att:
+
+```js
+const a = new Audio("...player_jump_01.ogg");
+a.volume = 1.0 * window.Lumo.debug.ents._getSfxVolume();
+a.play();
+```
+
+också fungerar.
+
+Detta betyder:
+
+* filen fungerar
+* volymen fungerar
+* browser playback fungerar
+* `_getSfxVolume()` är inte boven
+
+### I. Men direkt anrop av `_playOneShot(...)` med jump-filen gav inget hörbart ljud
+
+Detta är mycket viktigt och motsägelsefullt.
+
+```js
+window.Lumo.debug.ents._playOneShot("data/assets/audio/sfx/player/movement/player_jump_01.ogg", 1.0)
+```
+
+gav inget hörbart ljud, trots att manuell `new Audio(...).play()` fungerade.
+
+Detta är en av de konstigaste och viktigaste fakta i hela spåret.
+
+## Git-historik som lästs i denna chat
+
+Detta gjordes korrekt och måste bevaras.
+
+Vi slutade till slut med gissningar och läste faktisk git-historik:
+
+```bash
+git log -p -n 12 -- src/game/player.js src/game/entities.js src/app.js data/audio_global_config.js
+```
+
+Det visade bl.a.:
+
+* commit `23799915...` hookade menu, death, firefly
+
+* lade till death i player `_sfx`
+
+* lade till `_playDeathSfx()`
+
+* lade till anrop i `beginRespawn()` och `beginLiquidHazardDeath()`
+
+* lade till `this._lastWorld = world || this._lastWorld || null;`
+
+* commit `330e8da...` lade till pulse-ljud
+
+* commit `c9b41f3...` ändrade `_playGameplaySfx(...)` från enkel passthrough till split:
+
+  * vanlig väg via `_playOneShot`
+  * playbackRate-väg via lokal `new Audio(...)`
+
+* pulse använde sedan den speciella playbackRate-grenen
+
+* sen senare fix återställde `_playGameplaySfx(...)` till enkel passthrough
+
+* pulse hanterades lokalt i `startPulse()`
+
+Detta gjordes baserat på faktabild, men löste inte regressionen i verkligheten.
+
+## Viktig systemsanning
+
+Codex gjorde faktiskt den återställningen men det räckte inte.
+
+Alltså sitter regressionsorsaken antingen i något annat än den splitten, eller i någon annan senare/överlappande förändring som ännu inte är bevisad.
+
+## Viktig lärdom från denna regression
+
+Det går inte längre att säga:
+
+“det borde vara X”.
+
+I detta spår måste nästa chat vara extremt strikt:
+
+* läs verklig kod
+* jämför verklig kodväg för jump/land/death mot pulse/hurt/move
+* håll isär:
+
+  * asset fungerar
+  * browser playback fungerar
+  * `_playOneShot`-funktion finns
+  * verkligt gameplay-call hörs inte ändå
+
+Det här är nu en faktisk teknisk paradox i spåret, och måste behandlas så.
+
+---
+
+# ROADMAPSTATUS — UPPDATERAD EFTER DENNA CHATT
+
+## Klart / mycket långt komna
+
+* M0 — Editor Architecture ✅
+* M1 — Tile System ✅
+* M2 — Core Editor UX ✅
+* M3 — Level Data ✅
+* M4 — Entity System ✅
+* M5 — Advanced Entity Workflow ✅
+* M6 — Background System under huven ✅
+* M7 — Decor System ✅
+* M8 — Scatter Decor ✅ foundation
+* M9 — Panel / UX Cleanup ✅
+* M10 — Parameter Panel / Bottom Panel ✅
+* M11 — Sound System ✅
+* M12A-D — Scan / Audio foundation / playback / polish ✅
+* M13 — Visual Sound Identity ✅
+* M14A — Real Asset Pipeline Foundation ✅
+* M14B — Batch Select & Batch Assign (Sound) ✅
+* M15 — Sound Asset Audition / Preview ✅
+* M16 — Sound Presence / Visual Feedback ✅
+* M17 — Asset Visual Identity ✅ i mycket hög grad
+* M17C — Tile Behavior Runtime Alignment ✅
+* M17D — Darkness Preview / Lighting Toggle ✅
+* M17E — New Level Size Flow ✅
+* M18A — Background Paint Layer Foundation ✅
+* M18B — Tile Size Semantics + BL Anchor + Spacing ✅
+* M18D — Truthful Preview + Fill Restore ✅
+* M18E — Left Panel Default Collapsed State ✅
+* M18F — Keyboard Canvas Navigation ✅
+* M18I — Decor Anchor Semantics / Anchor Rules ✅
+* M18J — Special Entities: Spawn & Exit ✅
+* M18N — New Clean Rebuild of Special Volumes ✅
+* M18 — Runtime Bridge / Play From Here ✅
+* M19A — Proximity / Aggro Radius Overlays + Toggle ✅
+* M24 — Asset Manager / Wizard Foundation ✅
+* M24C — Wizard UX Upgrade ✅
+* M24F — Post-save completion UX ✅
+* M25A — Local Asset Save Bridge for Tiles ✅ foundation
+* M25B — Background persistent save pipeline ✅
+* M25C — Asset Builder Form Grammar Cleanup ✅ i huvudsak
+* M26 — Tile Identity System Fix ✅
+* M27 — Audio Pipeline Migration (.mp3 → .ogg) ✅
+* Decor create/save persistence pipeline ✅
+* Decor F5 persistence i editor ✅
+* Decor flipX ✅ editor + runtime
+* Entity Builder Phase 1 create/save pipeline ✅
+* Entity source of truth låst till entityPresets.js ✅
+* Entity F5 persistence i editor ✅
+* Entity preset import-identity preservation ✅
+* Lantern-family full custom visual parity ✅
+* Firefly-family custom visual parity ✅
+* Flare_pickup full custom visual parity ✅
+* Powercell full custom visual parity ✅
+* Checkpoint full custom visual parity ✅
+* Hover Void full custom visual parity ✅
+* Dark Creature full custom visual parity ✅
+* Background runtime restore ✅
+* New background via Asset Builder whole chain ✅
+* Repo recovery / merge-conflict steg-för-steg guidning ✅
+* Git root-cause analys och arbetsflödesfix ✅
+* Testdata-clean workflow etablerat ✅
+* Save vs Done UX-konsistens ✅
+* Node bridge ergonomi förbättrad ✅
+* Sticky tile family införd ✅
+* Rapid tile family införd ✅
+* Sticky/Rapid valbara i Asset Builder ✅
+* Sticky/Rapid synliga i vänsterpanelen ✅
+* Vänsterpanelens behavior-dropdown städad från Accent ✅
+* Vänsterpanelens defaultfilter satt till All ✅
+* Sticky/Rapid save till disk verifierat ✅
+* Sticky/Rapid visuellt i PFH verifierat ✅
+* Sticky/Rapid gameplayeffekt verifierad ✅
+* Sticky/Rapid runtime feel/timing stabiliserad i praktiken ✅
+* Brake omtolkat korrekt som hard-stop / hög-friktion i stället för sticky ✅
+* Menu music mappar nu korrekt till menu_loop_01.ogg via data/audio_global_config.js ✅
+* Firefly trigger-ljud fungerar i verkligheten ✅
+* Pulse-ljud fungerar i verkligheten ✅
+* Pulse pitch/volym-tuning fungerar i verkligheten ✅
+* Gameplay audio stoppas vid game over → meny ✅
+* Nya audio-assets för ambient/menu/entity/player inlagda i repo ✅
+* Kvarvarande WAV→OGG migration för 11 gamla audiofiler ✅
+* Spot Sound Loop UX cleanup i Editor V2 ✅
+* Type-aware sound source filtering i Editor V2 ✅
+* Nya editor-katalogposter för menu_loop / ambient_hum / ambient_girlhumming / spot_hum / swoosh / firefly ✅
+
+## Påbörjat / öppet
+
+* M18C — Tile Asset Parity / Size Exceptions ◐
+* M18G — Decor / Background Asset Parity / Real Sizes + Metadata ◐
+* M18M — Global Native Input Behavior Cleanup ◐ påbörjad, vilande tills verkliga symptom uppstår
+* Player movement gameplay SFX ◐
+* Player jump/land/death regression ◐ nytt mycket viktigt akutspår
+
+## Planerat / öppet framåt
+
+* M19 — Overlays bredare
+* M20 — Batch Edit bredare än sound
+* M21 — Scatter V2 / Polish
+* M21B — Decor Scatter Multi-Sprite / Family Variation
+* M22 — Audio Layer Editor / Advanced Audio Control
+* M22B — Entity-bound Audio / Behavior-Coupled Sounds
+* M23 — Asset Experience bredare än sound
+* Theme System ❗ viktigt men inte nu
+* Large Level Support ❗ viktigt och ej färdigt
+* M30 — Level Flow / Completion / Transition
+* M31 — Energy / Life Model Review
+* M32 — Score / Pickups / Extra Lives / Between-Level Summary
+* M33 — Save Game / Resume Flow
+* Exit sprite saknas ❗
+* M34 — Large Sprite Render/Culling Investigation
+* Repo / Asset Cleanup Pass ❗ viktigt men senare
+* Entity-bound audio fade/relevance pass ❗ viktigt men inte nu
+
+---
+
+# NYA MYCKET VIKTIGA INSIGHTS FRÅN DENNA CHATT
+
+Detta måste bevaras.
+
+## 1. `data/audio_global_config.js` kan vara den verkliga sanningen, inte fallback i `app.js`
+
+Detta blev mycket tydligt i menu music-spåret.
+
+### Lärdom
+
+När runtime-beteende inte matchar fallback i kod måste man söka efter:
+
+* `window.*CONFIG`
+* externa data/js-configfiler
+* global overrides
+
+innan man skriver nästa prompt.
+
+## 2. Audio-asset-organisationen har mognat mycket
+
+Ljud placeras nu semantiskt rätt i repo:
+
+* `music/`
+* `ambient/futuristic/`
+* `ambient/ruin/`
+* `events/creatures/`
+* `events/enemies/common/`
+* `sfx/player/damage/`
+* `sfx/player/movement/`
+* `spot/hum/`
+
+Detta är ett viktigt steg mot en vuxen audio pipeline.
+
+## 3. Samma symptom kan ha flera falska spår
+
+Exempel från denna chat:
+
+* menu music verkade först som unlock/path-problem men verkliga rotorsaken var config override
+* game over audio leak såg allmänt ut men var i praktiken en missad cleanup-path
+* jump/land/death-regressionen ser nu först ut som `_playGameplaySfx`-problem, men det är ännu inte bevisat att det är hela sanningen
+
+## 4. Runtime/F12-hooks kan ge mycket stöd, men får inte bli ny sanning i stället för verkligt beteende
+
+Vi körde flera hooks i runtime för att isolera call-paths, men den viktigaste lärdomen kvarstår:
+
+verkligt test efter merge/pull är sanningen
+
+console-hooks är bara stöd för analys.
+
+## 5. Användarens frustration i detta spår är helt legitim
+
+Det blev för många varv där analys eller prompt var ofullständig innan all fakta var hämtad.
+
+Det måste nästa chat kompensera för genom att vara:
+
+* lugnare
+* smalare
+* mer bevisstyrd
+* utan “det borde”-resonemang
+
+## 6. Audio-katalogen är source of truth för editorns sound dropdowns
+
+Inte mapparna själva.
+
+## 7. Summary räcker inte när binärfiler saknas
+
+Referensmigrering utan faktiska `.ogg`-filer i repo är inte klar migration.
+
+## 8. Live-editor kan köra gammal modul/cache trots att filen på disk är rätt
+
+När kodtest och live-beteende skiljer sig åt måste cache/modulinstans kontrolleras innan fler Codex-varv startas.
+
+## 9. UI ska guida rätt användning, inte bara sortera allt lite bättre
+
+Type-aware filtering per sound-entitet var en viktig UX-fix, inte bara kosmetik.
+
+## 10. Spot Sound ska inte exponera Loop i editorn
+
+Spot har redan sin egen närvarologik.
+
+Extra loop-toggle skapar förvirring.
+
+---
+
+# NY ROADMAP-PUNKT — REPO / ASSET CLEANUP PASS
+
+Detta ska läggas till i roadmapen som ett framtida, medvetet steg.
+
+## Bakgrund
+
+Repo:t börjar växa, och det är redan tydligt att senare i projektet kommer det behövas ett dedikerat rensnings-/curation-pass.
+
+## Denna roadmap-punkt ska omfatta
+
+* audio
+* sprites
+* testdata
+* gamla katalogposter
+* gamla fallback-paths
+* överblivna assets
+* gamla prototypgrejer
+* nivåfiler / experiment som inte ska vara officiell repo-sanning
+
+## För varje del ska man ta ställning till
+
+* behåll
+* migrera
+* arkivera utanför repo
+* ta bort
+
+## Viktig systemsanning
+
+Allt som skapas i projektet måste inte för alltid hamna på GitHub.
+
+Senare, när projektets kärna är stabilare, ska man bli mer selektiv med vad som faktiskt är:
+
+* officiell kod
+* officiella assets
+* officiella levels
+* officiella kataloger
+
+Detta cleanup-pass ska ske senare, inte mitt i aktiv systembyggfas.
+
+---
+
+# REPO-STORLEK / GIT INSIGHT FRÅN DENNA CHATT
+
+Detta är nytt och ska bevaras som orienteringsinfo.
+
+`git count-objects -vH` visade lokalt ungefär:
+
+`size: 722.95 MiB`
+
+## Viktig systemsanning
+
+Detta betyder inte att användaren “bara har ~280 MB kvar” i GitHub.
+
+Det betyder att den lokala Git-databasen är runt 723 MB, vilket är:
+
+* fortfarande okej
+* men tillräckligt stort för att repo/asset-curation längre fram är klokt
+
+Detta är ännu inte ett akut problem, men förstärker behovet av ett framtida cleanup-pass.
+
+---
+
+# AKTUELLT VIKTIGASTE ÖPPNA PROBLEM
+
+# A. PLAYER JUMP / LAND / DEATH REGRESSION
+
+Detta är nu högsta prio.
+
+Sant nu:
+
+* jump hörs inte
+* land hörs inte
+* death hörs inte
+* hurt hörs
+* move hörs
+* pulse hörs
+* sound entities hörs
+
+Vi har alltså en mycket smal regression i delar av player one-shot-spåret.
+
+# B. PLAYER MOVE-LJUD
+
+Detta var tidigare det stora öppna audio-spåret, men just nu har projektet ett ännu akutare problem:
+
+jump/land/death-regressionen.
+
+## Viktig notering
+
+Tidigare överlämning sa att move inte fungerade.
+
+I denna chat rapporterade användaren att move fungerar medan jump/land/death inte gör det.
+
+Detta är ny sanning och måste respekteras.
+
+Alltså:
+
+tidigare move-spår behöver omvärderas i nästa chat
+
+det kan vara att en senare ändring fick move att börja fungera, eller att testmiljön förändrats
+
+man får inte utgå från den gamla sanningen utan ny verifiering.
+
+---
+
+# AKTUELLT NÄSTA STEG I NÄSTA CHAT
+
+Detta är nu det absolut viktigaste.
+
+## 1. Börja inte med ny gissningsprompt
+
+Nästa chat ska inte börja med ännu en ny Codex-prompt.
+
+## 2. Börja med repo-status
+
+Först:
+
+`git status`
+
+Bekräfta att repo är clean och att användaren faktiskt står på det mergeade läget.
+
+## 3. Börja sedan med verklig kodläsning, inte summary
+
+Det som måste läsas i nästa chat är nu den större delen av `player.js` runt:
+
+* `_playGameplaySfx`
+* `_playDeathSfx`
+* `startPulse`
+* jump-blocket
+* land-blocket
+
+Det sista kommando som påbörjades i denna chat men inte fullföljdes var:
+
+```powershell
+Get-Content "src/game/player.js" | Select-Object -Skip 430 -First 410
+```
+
+Detta ska klistras in i nästa chat och läsas noggrant.
+
+Det är viktigt eftersom vi redan vet:
+
+* hjälpfunktionen är enkel igen
+* paths finns
+* manual playback fungerar
+* vissa player-ljud gör inte det ändå
+
+Vi behöver alltså se hela call-site-koden i sammanhang.
+
+## 4. Håll isär vad som är bevisat
+
+Nästa chat måste hålla dessa sanningar separata:
+
+* filen finns
+* filen går att spela manuellt
+* `_playOneShot`-koden ser korrekt ut
+* SFX-volymen är inte noll
+* vissa player-ljud hörs ändå inte i verkligheten
+
+Det får inte kollapsa tillbaka till “då borde det vara X”.
+
+## 5. Om prompt behövs efter kodläsning ska den vara extremt smal
+
+Den prompten ska:
+
+* bara röra verklig root cause
+* inte röra `app.js` om det inte bevisats nödvändigt
+* inte röra `entities.js` om det inte bevisats nödvändigt
+* inte bygga om audio-systemet
+* inte ändra fungerande ljud som hurt/move/pulse
+* inte ändra menu-spåret som nu fungerar
+
+---
+
+# KORT SLUTRAD TILL NÄSTA CHAT
+
+Vi är nu på en punkt där:
+
+* Git-arbetsflödet är under kontroll
+* testdata-clean-rutinen är etablerad
+* rätt Editor V2 körs via `http://localhost:3000/editor-v2/`
+* lokal runtime körs via `http://127.0.0.1:3000/Lumo.html`
+* M17C ska betraktas som klar
+* M27 (.mp3 → .ogg) är verkligt klar
+* WAV→OGG-restmigreringen är klar
+* audio-pipeline i repo är mycket rikare och bättre organiserad
+* de nya audio-assetsen är registrerade i editor-katalogen
+* sound source-dropdowns filtreras nu per sound-entitet
+* Spot Sound visar inte längre Loop i editorn
+* de nya ljuden syns och fungerar i rätt dropdownar / PFH
+* menu music fungerar nu korrekt via `data/audio_global_config.js`
+* gameplay audio stoppas korrekt vid game over → meny
+* firefly fungerar
+* pulse fungerar och låter rätt
+* hurt fungerar
+* move fungerar enligt senaste verkliga test
+* repo-storlek är noterad men ännu inte akut
+* framtida roadmap ska innehålla både cleanup-pass och entity-bound audio fade/relevance-pass
+* jump fungerar inte
+* land fungerar inte
+* death fungerar inte
+* player jump/land/death-regressionen är fortfarande ett viktigt separat öppet problem
+* nästa chat ska inte glömma att den delen fortfarande finns kvar, även om kvällens fokus låg på editor/audio-katalog och UX
+* problemet är nu smalt men fortfarande oklart
+* nästa steg måste bygga på verklig kodläsning av `player.js`, inte Codex-summary eller antaganden
+
+Och först därefter ska nästa analys börja.
