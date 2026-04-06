@@ -2368,8 +2368,10 @@ if (e.type === "lantern"){
           }
 
           const fireflyIsAudibleMode = (e.mode === "takeoff" || e.mode === "fly" || e.mode === "landing" || e.mode === "landed");
+          const fireflyVolumeBoost = 1.35;
+          const fireflyTargetVolume = Math.min(1, fireflyGain * fireflyVolumeBoost);
           this._setHandlePan(fireflyHandle, fireflyPan);
-          this._setHandleVolume(fireflyHandle, fireflyIsAudibleMode ? fireflyGain : 0);
+          this._setHandleVolume(fireflyHandle, fireflyIsAudibleMode ? fireflyTargetVolume : 0);
         }
 
 
