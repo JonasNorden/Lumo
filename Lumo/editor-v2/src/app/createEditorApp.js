@@ -79,6 +79,7 @@ import {
 } from "../domain/tiles/history.js";
 import { createDefaultBackgroundLayer, getTileIndex } from "../domain/level/levelDocument.js";
 import { DEFAULT_BACKGROUND_MATERIAL_ID, isBackgroundMaterialIdTaken, registerBackgroundMaterialOption } from "../domain/background/materialCatalog.js";
+import { DEFAULT_THEME_ID, getThemeById, getThemeCatalog, normalizeThemeId } from "../domain/theme/themeCatalog.js";
 import { eraseBackgroundMaterial } from "../domain/background/paint.js";
 import { getBackgroundFloodFillCells } from "../domain/background/floodFill.js";
 import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
@@ -582,6 +583,9 @@ function renderNewLevelSizePopover(state) {
 
   const widthValue = newLevelSize.width ?? String(DEFAULT_NEW_LEVEL_WIDTH);
   const heightValue = newLevelSize.height ?? String(DEFAULT_NEW_LEVEL_HEIGHT);
+  const themeId = normalizeThemeId(newLevelSize.themeId);
+  const themeCatalog = getThemeCatalog();
+  const selectedTheme = getThemeById(themeId);
   const validationMessage = newLevelSize.error || getNewLevelSizeValidationMessage(widthValue, heightValue);
   const isValid = !validationMessage;
 
@@ -615,6 +619,17 @@ function renderNewLevelSizePopover(state) {
             value="${escapeHtml(heightValue)}"
             data-new-level-field="height"
           />
+        </label>
+        <label class="fieldRow fieldRowCompact topBarCompactFieldFull">
+          <span class="label">Theme</span>
+          <select data-new-level-field="themeId">
+            ${themeCatalog.map((theme) => `
+              <option value="${escapeHtml(theme.id)}" ${theme.id === themeId ? "selected" : ""}>
+                ${escapeHtml(theme.label)}
+              </option>
+            `).join("")}
+          </select>
+          <span class="fieldMeta">${escapeHtml(selectedTheme.description)}</span>
         </label>
       </div>
       <div class="newLevelPopoverError">${validationMessage ? escapeHtml(validationMessage) : "&nbsp;"}</div>
@@ -6704,6 +6719,7 @@ if (event.shiftKey) {
       isOpen: false,
       width: String(nextDocument?.dimensions?.width || DEFAULT_NEW_LEVEL_WIDTH),
       height: String(nextDocument?.dimensions?.height || DEFAULT_NEW_LEVEL_HEIGHT),
+      themeId: normalizeThemeId(nextDocument?.meta?.themeId),
       error: null,
     };
     syncScanWithDocument(draft, { preserveRange: false, preserveLog: false });
@@ -6716,6 +6732,7 @@ if (event.shiftKey) {
       draft.ui.newLevelSize.isOpen = true;
       draft.ui.newLevelSize.width = String(active?.dimensions?.width || DEFAULT_NEW_LEVEL_WIDTH);
       draft.ui.newLevelSize.height = String(active?.dimensions?.height || DEFAULT_NEW_LEVEL_HEIGHT);
+      draft.ui.newLevelSize.themeId = normalizeThemeId(active?.meta?.themeId || draft.ui.newLevelSize.themeId || DEFAULT_THEME_ID);
       draft.ui.newLevelSize.error = null;
     });
     requestAnimationFrame(() => {
@@ -6735,12 +6752,16 @@ if (event.shiftKey) {
   };
 
   const updateNewLevelSizeField = (field, rawValue, options = {}) => {
-    if (field !== "width" && field !== "height") return false;
+    if (field !== "width" && field !== "height" && field !== "themeId") return false;
     const { commit = false } = options;
     store.setState((draft) => {
-      draft.ui.newLevelSize[field] = commit
-        ? String(sanitizeLevelDimension(rawValue, field === "width" ? DEFAULT_NEW_LEVEL_WIDTH : DEFAULT_NEW_LEVEL_HEIGHT, field))
-        : rawValue;
+      if (field === "themeId") {
+        draft.ui.newLevelSize.themeId = normalizeThemeId(rawValue);
+      } else {
+        draft.ui.newLevelSize[field] = commit
+          ? String(sanitizeLevelDimension(rawValue, field === "width" ? DEFAULT_NEW_LEVEL_WIDTH : DEFAULT_NEW_LEVEL_HEIGHT, field))
+          : rawValue;
+      }
       draft.ui.newLevelSize.error = null;
     });
     return true;
@@ -6759,6 +6780,7 @@ if (event.shiftKey) {
     const newDocument = createNewLevelDocument({
       width: newLevelSize.width,
       height: newLevelSize.height,
+      themeId: newLevelSize.themeId,
     });
 
     store.setState((draft) => {
@@ -8015,6 +8037,12 @@ if (event.shiftKey) {
     }
 
     if (target instanceof HTMLSelectElement) {
+      const newLevelField = target.dataset.newLevelField;
+      if (newLevelField) {
+        updateNewLevelSizeField(newLevelField, target.value, { commit: true });
+        return;
+      }
+
       const assetDraftField = typeof target.dataset.assetManagerDraftField === "string" ? target.dataset.assetManagerDraftField.trim() : "";
       if (assetDraftField) {
         store.setState((draft) => {
@@ -8396,6 +8424,7 @@ if (event.shiftKey) {
           isOpen: false,
           width: String(doc?.dimensions?.width || DEFAULT_NEW_LEVEL_WIDTH),
           height: String(doc?.dimensions?.height || DEFAULT_NEW_LEVEL_HEIGHT),
+          themeId: normalizeThemeId(doc?.meta?.themeId),
           error: null,
         };
         state.ui.assetManager.isOpen = false;

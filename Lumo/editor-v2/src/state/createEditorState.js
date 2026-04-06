@@ -2,6 +2,7 @@ import { createDefaultBrushDraft } from "../domain/tiles/brushDraft.js";
 import { createGlobalHistoryTimelineState } from "../domain/history/globalTimeline.js";
 import { createInitialAssetManagerWizardState } from "../domain/assets/assetManagerWizardModel.js";
 import { DEFAULT_NEW_LEVEL_HEIGHT, DEFAULT_NEW_LEVEL_WIDTH } from "../data/createNewLevelDocument.js";
+import { DEFAULT_THEME_ID } from "../domain/theme/themeCatalog.js";
 
 export function createEditorState() {
   return {
@@ -119,6 +120,7 @@ export function createEditorState() {
         isOpen: false,
         width: String(DEFAULT_NEW_LEVEL_WIDTH),
         height: String(DEFAULT_NEW_LEVEL_HEIGHT),
+        themeId: DEFAULT_THEME_ID,
         error: null,
       },
       panelSections: {
