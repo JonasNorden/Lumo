@@ -10,6 +10,7 @@ import {
   getSoundAssetOptionsForType,
 } from "../domain/sound/audioAssetCatalog.js";
 import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
+import { getThemeDefaultAmbientAssetPath, rankSoundAssetOptionsForTheme } from "../domain/theme/themeProfiles.js";
 import { stopNativeInputKeyboardPropagation } from "./nativeInputGuards.js";
 
 const MIXED_FIELD_VALUE = "__mixed__";
@@ -436,18 +437,25 @@ function renderSoundPreviewControls(sound, selectedSoundIndex, previewState, sca
   `;
 }
 
-function renderSoundSourceField(sound, selectedSoundIndex, previewState, scanState) {
+function renderSoundSourceField(sound, selectedSoundIndex, previewState, scanState, themeId) {
   const authoredSource = getAuthoredSoundSource(sound) || "";
   const selectedAsset = findSoundAssetByPath(authoredSource);
-  const assetOptions = getSoundAssetOptionsForType(sound?.type);
+  const assetOptions = rankSoundAssetOptionsForTheme(getSoundAssetOptionsForType(sound?.type), themeId, sound?.type);
   const hasAuthoredOption = assetOptions.some((asset) => asset.value === authoredSource);
+  const recommendedAmbientPath = sound?.type === "ambientZone" ? getThemeDefaultAmbientAssetPath(themeId) : null;
+  const recommendedAmbientAsset = recommendedAmbientPath ? findSoundAssetByPath(recommendedAmbientPath) : null;
+  const unassignedLabel = recommendedAmbientAsset
+    ? `Recommended · ${recommendedAmbientAsset.label}`
+    : recommendedAmbientPath
+      ? `Recommended · ${recommendedAmbientPath.split("/").at(-1) || recommendedAmbientPath}`
+      : "Unassigned";
 
   const fieldMarkup = !assetOptions.length
     ? renderTextField("sound", "source", "Source", authoredSource, selectedSoundIndex, "selectionFieldVariant selectionParamField selectionSourceField", sound?.id || null)
     : (() => {
       const optionMarkup = [];
 
-      optionMarkup.push(`<option value="" ${!authoredSource ? "selected" : ""}>Unassigned</option>`);
+      optionMarkup.push(`<option value="" ${!authoredSource ? "selected" : ""}>${escapeHtml(unassignedLabel)}</option>`);
 
       const seenCategories = new Set();
       for (const asset of assetOptions) {
@@ -487,11 +495,11 @@ function renderSoundSourceField(sound, selectedSoundIndex, previewState, scanSta
   `;
 }
 
-function getBatchSoundAssetOptions(selectedSounds) {
+function getBatchSoundAssetOptions(selectedSounds, themeId) {
   const selectedTypes = new Set(selectedSounds.map((sound) => sound?.type).filter(Boolean));
   const assetOptions = selectedTypes.size > 1
     ? [...selectedTypes].flatMap((soundType) => getSoundAssetOptionsForType(soundType))
-    : getSoundAssetOptionsForType(selectedSounds[0]?.type);
+    : rankSoundAssetOptionsForTheme(getSoundAssetOptionsForType(selectedSounds[0]?.type), themeId, selectedSounds[0]?.type);
   const seen = new Set();
 
   return assetOptions.filter((option) => {
@@ -512,10 +520,10 @@ function renderBatchSoundTypeSummary(selectedSounds, selectedSoundIndex) {
   `;
 }
 
-function renderBatchSoundSourceField(selectedSounds, selectedSoundIndex) {
+function renderBatchSoundSourceField(selectedSounds, selectedSoundIndex, themeId) {
   const sharedSource = resolveSharedValue(selectedSounds.map((sound) => getAuthoredSoundSource(sound) || ""));
   const selectedAsset = sharedSource && sharedSource !== MIXED_FIELD_VALUE ? findSoundAssetByPath(sharedSource) : null;
-  const assetOptions = getBatchSoundAssetOptions(selectedSounds);
+  const assetOptions = getBatchSoundAssetOptions(selectedSounds, themeId);
   const hasSharedOption = sharedSource && sharedSource !== MIXED_FIELD_VALUE
     ? assetOptions.some((asset) => asset.value === sharedSource)
     : false;
@@ -611,7 +619,7 @@ function renderBatchSoundParamField(paramKey, label, inputType, value, options =
   `;
 }
 
-function renderBatchSoundEditor(selectedSounds, selectedSoundIndex) {
+function renderBatchSoundEditor(selectedSounds, selectedSoundIndex, themeId) {
   const sharedSpatial = resolveSharedValue(selectedSounds.map((sound) => Boolean(sound?.params?.spatial)));
   const sharedVolume = resolveSharedValue(selectedSounds.map((sound) => sound?.params?.volume ?? 0));
   const sharedPitch = resolveSharedValue(selectedSounds.map((sound) => sound?.params?.pitch ?? 1));
@@ -620,7 +628,7 @@ function renderBatchSoundEditor(selectedSounds, selectedSoundIndex) {
 
   return renderSelectionFields([
     renderBatchSoundTypeSummary(selectedSounds, selectedSoundIndex),
-    renderBatchSoundSourceField(selectedSounds, selectedSoundIndex),
+    renderBatchSoundSourceField(selectedSounds, selectedSoundIndex, themeId),
     renderBatchSoundParamField("spatial", "Spatial", "boolean-select", sharedSpatial),
     renderBatchSoundParamField("volume", "Volume", "number", sharedVolume),
     renderBatchSoundParamField("pitch", "Pitch", "number", sharedPitch),
@@ -676,7 +684,7 @@ function renderDecorEditor(decor, selectedDecorIndex) {
   ].join(""));
 }
 
-function renderSoundEditor(sound, selectedSoundIndex, previewState, scanState) {
+function renderSoundEditor(sound, selectedSoundIndex, previewState, scanState, themeId) {
   const soundParams = cloneEntityParams(sound?.params);
   // Spot Sound does not expose loop because it already plays continuously while the player is within range.
   if (!isLoopSupportedSoundType(sound?.type) && Object.prototype.hasOwnProperty.call(soundParams, "loop")) {
@@ -686,7 +694,7 @@ function renderSoundEditor(sound, selectedSoundIndex, previewState, scanState) {
   return renderSelectionFields([
     renderTextField("sound", "name", "Name", sound.name, selectedSoundIndex, "selectionFieldName", sound?.id || null),
     renderSoundTypeField(sound, selectedSoundIndex),
-    renderSoundSourceField(sound, selectedSoundIndex, previewState, scanState),
+    renderSoundSourceField(sound, selectedSoundIndex, previewState, scanState, themeId),
     renderNumberField("sound", "x", "X", sound.x, selectedSoundIndex, "", sound?.id || null),
     renderNumberField("sound", "y", "Y", sound.y, selectedSoundIndex, "", sound?.id || null),
     renderCheckboxField("sound", "visible", "Visible", sound.visible, selectedSoundIndex, "selectionFieldToggle", sound?.id || null),
@@ -755,6 +763,7 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   const selectedSounds = selectedSoundIndices
     .map((index) => active.sounds?.[index] || null)
     .filter(Boolean);
+  const themeId = active?.meta?.themeId;
 
   if (selectedEntityIndices.length > 1) {
     return { markup: renderMultiSelectionState("entity", selectedEntityIndices.length, selectedEntity?.name || "Entity"), isEmpty: false };
@@ -768,7 +777,7 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
     if (soundMode === "summary") {
       return { markup: "", isEmpty: true };
     }
-    return { markup: renderBatchSoundEditor(selectedSounds, resolvedSelectedSoundIndex), isEmpty: false };
+    return { markup: renderBatchSoundEditor(selectedSounds, resolvedSelectedSoundIndex, themeId), isEmpty: false };
   }
 
   if (selectedEntity) {
@@ -786,7 +795,7 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
     if (soundMode === "summary") {
       return { markup: "", isEmpty: true };
     }
-    return { markup: renderSoundEditor(selectedSound, resolvedSelectedSoundIndex, state.soundPreview, state.scan), isEmpty: false };
+    return { markup: renderSoundEditor(selectedSound, resolvedSelectedSoundIndex, state.soundPreview, state.scan, themeId), isEmpty: false };
   }
 
   return {
