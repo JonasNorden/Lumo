@@ -19,6 +19,7 @@ import {
   getStepsForWizard,
   isStepComplete,
 } from "../domain/assets/assetManagerWizardModel.js";
+import { getThemeCatalog } from "../domain/theme/themeCatalog.js";
 
 export { createInitialAssetManagerWizardState, getAssetWizardDraftWithDefaults, getFirstIncompleteStep, getStepsForWizard, isStepComplete };
 
@@ -214,6 +215,34 @@ function renderFieldGroup(title, description, content, options = {}) {
   `;
 }
 
+function renderThemeAffinityField(selectedThemeIds = []) {
+  const themeCatalog = getThemeCatalog();
+  const selected = new Set(Array.isArray(selectedThemeIds) ? selectedThemeIds : []);
+  return renderFieldGroup(
+    "Themes",
+    "Optional guidance for theme-aware curation. Assets stay available in every theme.",
+    `
+      <div class="assetWizardThemeTagList assetWizardFieldSpan12">
+        ${themeCatalog.map((theme) => {
+    const isActive = selected.has(theme.id);
+    return `
+            <button
+              type="button"
+              class="assetWizardTypeButton assetWizardThemeTag${isActive ? " isActive" : ""}"
+              data-asset-manager-action="toggle-theme-tag"
+              data-asset-manager-theme-id="${escapeHtml(theme.id)}"
+              aria-pressed="${isActive ? "true" : "false"}"
+            >
+              ${escapeHtml(theme.label)}
+            </button>
+          `;
+  }).join("")}
+      </div>
+    `,
+    { groupClass: "isDenseGrid" },
+  );
+}
+
 function getReviewLabel(fieldKey) {
   const REVIEW_LABELS = {
     catalogId: "Catalog id",
@@ -230,6 +259,7 @@ function getReviewLabel(fieldKey) {
     fallbackColor: "Fallback color",
     footprint: "Footprint (JSON)",
     behaviorFamilyId: "Behavior family",
+    themeIds: "Themes",
     presetId: "Preset id",
     safeDefaults: "Safe defaults",
   };
@@ -482,6 +512,7 @@ function renderStepBody(wizard, validation) {
             `,
             { groupClass: "isDenseGrid isTileSizingCompact" },
           )}
+          ${renderThemeAffinityField(draft.themeIds)}
         </div>
       `;
     }
@@ -509,6 +540,7 @@ function renderStepBody(wizard, validation) {
             `,
             { groupClass: "isDenseGrid" },
           )}
+          ${renderThemeAffinityField(draft.themeIds)}
         </div>
       `;
     }
@@ -545,6 +577,7 @@ function renderStepBody(wizard, validation) {
             `,
             { groupClass: "isDenseGrid" },
           )}
+          ${renderThemeAffinityField(draft.themeIds)}
         </div>
       `;
     }
@@ -615,6 +648,7 @@ function renderStepBody(wizard, validation) {
               `,
             { groupClass: `${isHoverVoidFamily ? "isHoverVoidDrawRow" : "isEntityDrawCompact"} ${isDarkCreatureFamily ? "isDarkCreatureDrawRow" : ""} ${isFireflyFamily ? "isFireflyDrawCompact" : ""}`.trim() },
           )}
+          ${renderThemeAffinityField(draft.themeIds)}
         </div>
       `;
     }
@@ -642,13 +676,15 @@ function renderStepBody(wizard, validation) {
       "footprint",
       "collisionType",
       "behaviorFamilyId",
+      "themeIds",
     ];
     const mappedDraftRows = orderedDraftKeys
       .filter((key) => {
         const value = draft?.[key];
+        if (Array.isArray(value)) return value.length > 0;
         return typeof value === "string" && value.trim().length > 0;
       })
-      .map((key) => [getReviewLabel(key), String(draft[key])]);
+      .map((key) => [getReviewLabel(key), Array.isArray(draft[key]) ? draft[key].join(", ") : String(draft[key])]);
     const rows = [
       ["Mode", mode || "—"],
       ["Asset type", type || "—"],

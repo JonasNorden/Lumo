@@ -2,6 +2,7 @@ import { BRUSH_SPRITE_OPTIONS, isTileCatalogIdTaken } from "../tiles/tileSpriteC
 import { BACKGROUND_MATERIAL_OPTIONS, isBackgroundMaterialIdTaken } from "../background/materialCatalog.js";
 import { DECOR_PRESETS, isDecorPresetIdTaken } from "../decor/decorPresets.js";
 import { ENTITY_PRESETS, isEntityPresetIdTaken } from "../entities/entityPresets.js";
+import { normalizeThemeIds } from "../theme/themeTagging.js";
 
 export const ASSET_WIZARD_MODES = {
   CREATE: "create",
@@ -502,6 +503,7 @@ export function suggestDecorPresetId({ displayName = "", spriteFileName = "", cu
 
 export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
   const baseDraft = { ...(draft || {}) };
+  const normalizedThemeIds = normalizeThemeIds(baseDraft.themeIds);
   if (assetType === ASSET_WIZARD_TYPES.TILE) {
     const syncedBehaviorDraft = syncTileBehaviorDraftFields(baseDraft);
     const tileBehavior = normalizeString(syncedBehaviorDraft.tileBehavior) || "solid";
@@ -518,6 +520,7 @@ export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
       drawHeight: withFallback(syncedBehaviorDraft.drawHeight, "24"),
       footprint: withFallback(syncedBehaviorDraft.footprint, '{"w":1,"h":1}'),
       tileMovementMul: withFallback(syncedBehaviorDraft.tileMovementMul, defaultMovementMul),
+      themeIds: normalizedThemeIds,
     });
   }
   if (assetType === ASSET_WIZARD_TYPES.BACKGROUND) {
@@ -528,6 +531,7 @@ export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
       drawHeight: withFallback(baseDraft.drawHeight, "24"),
       fallbackColor: withFallback(baseDraft.fallbackColor, "#3d4b63"),
       footprint: withFallback(baseDraft.footprint, '{"w":1,"h":1}'),
+      themeIds: normalizedThemeIds,
     };
   }
   if (assetType === ASSET_WIZARD_TYPES.DECOR) {
@@ -537,6 +541,7 @@ export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
       drawWidth: withFallback(baseDraft.drawWidth, "24"),
       drawHeight: withFallback(baseDraft.drawHeight, "24"),
       footprint: withFallback(baseDraft.footprint, '{"w":1,"h":1}'),
+      themeIds: normalizedThemeIds,
     };
   }
   if (assetType === ASSET_WIZARD_TYPES.ENTITY) {
@@ -562,6 +567,7 @@ export function getAssetWizardDraftWithDefaults(assetType, draft = {}) {
       drawWidth: familyId === "dark_creature_01" ? String(darkCreatureDrawSize.drawW) : withFallback(baseDraft.drawWidth, "24"),
       drawHeight: familyId === "dark_creature_01" ? String(darkCreatureDrawSize.drawH) : withFallback(baseDraft.drawHeight, "24"),
       safeDefaults: normalizedSafeDefaults,
+      themeIds: normalizedThemeIds,
     };
   }
   return baseDraft;

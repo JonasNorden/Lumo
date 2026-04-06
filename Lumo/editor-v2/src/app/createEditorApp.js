@@ -80,6 +80,7 @@ import {
 import { createDefaultBackgroundLayer, getTileIndex } from "../domain/level/levelDocument.js";
 import { DEFAULT_BACKGROUND_MATERIAL_ID, isBackgroundMaterialIdTaken, registerBackgroundMaterialOption } from "../domain/background/materialCatalog.js";
 import { DEFAULT_THEME_ID, getThemeById, getThemeCatalog, normalizeThemeId } from "../domain/theme/themeCatalog.js";
+import { normalizeThemeIds } from "../domain/theme/themeTagging.js";
 import { eraseBackgroundMaterial } from "../domain/background/paint.js";
 import { getBackgroundFloodFillCells } from "../domain/background/floodFill.js";
 import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
@@ -7381,6 +7382,7 @@ if (event.shiftKey) {
     }
 
     const resolvedDraft = getAssetWizardDraftWithDefaults(currentWizard.assetType, currentWizard.draft || {});
+    const themeIds = normalizeThemeIds(resolvedDraft.themeIds);
     const selectedTileBehavior = getTileBehaviorById(resolvedDraft.tileBehavior);
     const authoredMovementMul = Number.parseFloat(resolvedDraft.tileMovementMul);
     const behaviorParams = Number.isFinite(authoredMovementMul)
@@ -7403,6 +7405,7 @@ if (event.shiftKey) {
         footprint,
         collisionType: selectedTileBehavior?.collisionType || resolvedDraft.collisionType,
         group: "Custom",
+        themeIds,
       },
       spriteFile: selectedAssetWizardSpriteFile,
       projectileSpriteFile: selectedAssetWizardProjectileSpriteFile,
@@ -7433,6 +7436,7 @@ if (event.shiftKey) {
       collisionType: bridgeResult.persistedTile?.collisionType || selectedTileBehavior?.collisionType || resolvedDraft.collisionType,
       group: bridgeResult.persistedTile?.group || "Custom",
       behaviorParams: bridgeResult.persistedTile?.behaviorParams || behaviorParams,
+      themeIds: bridgeResult.persistedTile?.themeIds || themeIds,
     });
     if (!registerResult.ok) {
       store.setState((draft) => {
@@ -7485,6 +7489,7 @@ if (event.shiftKey) {
     }
 
     const resolvedDraft = getAssetWizardDraftWithDefaults(currentWizard.assetType, currentWizard.draft || {});
+    const themeIds = normalizeThemeIds(resolvedDraft.themeIds);
     const drawW = Number.parseInt(resolvedDraft.drawWidth, 10);
     const drawH = Number.parseInt(resolvedDraft.drawHeight, 10);
     const footprint = parseFootprint(resolvedDraft.footprint);
@@ -7501,6 +7506,7 @@ if (event.shiftKey) {
         footprint,
         fallbackColor: resolvedDraft.fallbackColor,
         group: "Custom",
+        themeIds,
       },
       spriteFile: selectedAssetWizardSpriteFile,
       projectileSpriteFile: selectedAssetWizardProjectileSpriteFile,
@@ -7530,6 +7536,7 @@ if (event.shiftKey) {
       footprint: bridgeResult.persistedBackground?.footprint || footprint,
       fallbackColor: bridgeResult.persistedBackground?.fallbackColor || resolvedDraft.fallbackColor,
       group: bridgeResult.persistedBackground?.group || "Custom",
+      themeIds: bridgeResult.persistedBackground?.themeIds || themeIds,
     });
     if (!registerResult.ok) {
       store.setState((draft) => {
@@ -7577,6 +7584,7 @@ if (event.shiftKey) {
     }
 
     const resolvedDraft = getAssetWizardDraftWithDefaults(currentWizard.assetType, currentWizard.draft || {});
+    const themeIds = normalizeThemeIds(resolvedDraft.themeIds);
     const drawW = Number.parseInt(resolvedDraft.drawWidth, 10);
     const drawH = Number.parseInt(resolvedDraft.drawHeight, 10);
     const footprint = parseFootprint(resolvedDraft.footprint);
@@ -7592,6 +7600,7 @@ if (event.shiftKey) {
         drawOffY: 0,
         footprint,
         group: "Decor",
+        themeIds,
       },
       spriteFile: selectedAssetWizardSpriteFile,
       projectileSpriteFile: selectedAssetWizardProjectileSpriteFile,
@@ -7623,6 +7632,7 @@ if (event.shiftKey) {
       variants: bridgeResult.persistedDecor?.variants || ["a"],
       defaultVariant: bridgeResult.persistedDecor?.defaultVariant || "a",
       group: bridgeResult.persistedDecor?.group || "Decor",
+      themeIds: bridgeResult.persistedDecor?.themeIds || themeIds,
     });
     if (!registerResult.ok) {
       store.setState((draft) => {
@@ -7670,6 +7680,7 @@ if (event.shiftKey) {
     }
 
     const resolvedDraft = getAssetWizardDraftWithDefaults(currentWizard.assetType, currentWizard.draft || {});
+    const themeIds = normalizeThemeIds(resolvedDraft.themeIds);
     const drawW = Math.max(1, Math.round(Number.parseFloat(resolvedDraft.drawWidth) || 24));
     const drawH = Math.max(1, Math.round(Number.parseFloat(resolvedDraft.drawHeight) || 24));
     const includeFixedBodySize = resolvedDraft.behaviorFamilyId === "hover_void_01" || resolvedDraft.behaviorFamilyId === "dark_creature_01";
@@ -7695,6 +7706,7 @@ if (event.shiftKey) {
         drawH,
         drawAnchor: resolvedDraft.drawAnchor || "BL",
         defaultParams: entityDefaultParams,
+        themeIds,
       },
       spriteFile: selectedAssetWizardSpriteFile,
       projectileSpriteFile: selectedAssetWizardProjectileSpriteFile,
@@ -7724,6 +7736,7 @@ if (event.shiftKey) {
       footprintW: bridgeResult.persistedEntity?.footprintW || bridgeResult.persistedEntity?.drawW || drawW,
       footprintH: bridgeResult.persistedEntity?.footprintH || bridgeResult.persistedEntity?.drawH || drawH,
       hitRadius: bridgeResult.persistedEntity?.hitRadius,
+      themeIds: bridgeResult.persistedEntity?.themeIds || themeIds,
     });
     if (!registerResult.ok) {
       store.setState((draft) => {
@@ -7864,6 +7877,21 @@ if (event.shiftKey) {
             draft.ui.assetManager.wizard = wizard;
           });
         }
+      }
+      if (action === "toggle-theme-tag") {
+        const themeId = String(assetManagerActionButton.dataset.assetManagerThemeId || "").trim().toLowerCase();
+        if (!themeId) return;
+        store.setState((draft) => {
+          const wizard = draft.ui.assetManager.wizard || createInitialAssetManagerWizardState();
+          wizard.draft = wizard.draft || {};
+          const existingThemeIds = normalizeThemeIds(wizard.draft.themeIds);
+          const nextThemeIds = existingThemeIds.includes(themeId)
+            ? existingThemeIds.filter((id) => id !== themeId)
+            : normalizeThemeIds([...existingThemeIds, themeId]);
+          wizard.draft.themeIds = nextThemeIds;
+          applyWizardDraftDefaults(wizard);
+          draft.ui.assetManager.wizard = wizard;
+        });
       }
       if (action === "choose-file") {
         const field = assetManagerActionButton.dataset.assetManagerFileField;

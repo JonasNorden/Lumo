@@ -1,5 +1,6 @@
 import { cloneEntityParams, mergeEntityParams } from "./entityParams.js";
 import { normalizeEditableObjectType } from "../placeables/editableObjectBuckets.js";
+import { normalizeThemeIds } from "../theme/themeTagging.js";
 
 export const ENTITY_PRESETS = [
   {
@@ -342,6 +343,7 @@ export function registerEntityPresetOption(entry = {}) {
     footprintH: Math.max(1, Number.parseInt(entry?.footprintH, 10) || Number.parseInt(entry?.drawH, 10) || 24),
     drawAnchor: String(entry?.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL",
     hitRadius: Number.isFinite(Number(entry?.hitRadius)) ? Number(entry.hitRadius) : 8.5,
+    themeIds: normalizeThemeIds(entry?.themeIds),
   };
 
   ENTITY_PRESET_BY_ID.set(normalizedPreset.id, normalizedPreset);

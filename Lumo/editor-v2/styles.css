@@ -2881,6 +2881,19 @@ kbd {
   color: #ebf3ff;
 }
 
+.assetWizardThemeTagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.assetWizardThemeTag {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
 .assetWizardFieldGrid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));

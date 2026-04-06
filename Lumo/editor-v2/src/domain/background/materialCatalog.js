@@ -1,3 +1,5 @@
+import { normalizeThemeIds } from "../theme/themeTagging.js";
+
 const BUILTIN_BACKGROUND_MATERIALS = [
   {
     id: "stone_block_ct",
@@ -111,6 +113,7 @@ export function normalizeBackgroundMaterial(material, index = 0) {
       typeof material?.group === "string" && material.group.trim()
         ? material.group.trim()
         : fallback?.group || "Custom",
+    themeIds: normalizeThemeIds(material?.themeIds),
   };
 }
 
@@ -148,6 +151,7 @@ export function registerBackgroundMaterialOption(entry) {
       footprint: entry?.footprint,
       fallbackColor: entry?.fallbackColor,
       group: entry?.group || "Custom",
+      themeIds: entry?.themeIds,
     },
     BACKGROUND_MATERIAL_OPTIONS.length
   );
