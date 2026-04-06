@@ -192,7 +192,7 @@
         this._moveLoopHandle = ents._getSoundHandle(path, true);
       }
       if (shouldPlay){
-        ents._setHandleVolume(this._moveLoopHandle, 1.0);
+        ents._setHandleVolume(this._moveLoopHandle, 0.35);
         this._moveLoopPlaying = true;
         return;
       }
@@ -795,7 +795,7 @@
           "data/assets/audio/sfx/player/movement/player_jump_04.ogg"
         ];
         const pick = jumpVariants[Math.floor(Math.random() * jumpVariants.length)];
-        this._playGameplaySfx(world, pick, 0.75);
+        this._playGameplaySfx(world, pick, 0.35);
       }
 
       // variable jump
@@ -820,7 +820,7 @@
       const qualifiesAsRealLanding = landedThisStep
         && (airborneTimeBeforeStep >= MIN_LAND_AIRTIME || preCollideVy >= MIN_LAND_IMPACT_VY);
       if (qualifiesAsRealLanding){
-        this._playGameplaySfx(world, this._sfx.land, 1.0);
+        this._playGameplaySfx(world, this._sfx.land, 0.35);
       }
 
       this._airborneTime = this.onGround ? 0 : (airborneTimeBeforeStep + dt);
