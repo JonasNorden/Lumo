@@ -114,7 +114,7 @@ const THEME_CATALOG = [
   },
   {
     id: "void",
-    label: "Touch the Void",
+    label: "Void",
     description: "Even the Air Feels Heavy — psychological tension and unseen presence.",
     defaultBackgroundLayerColor: "#080a12",
     editorProfile: {
@@ -137,6 +137,92 @@ const THEME_CATALOG = [
         preferredPathKeywords: ["void", "space", "dark", "pressure"],
         preferredHintKeywords: ["void", "space", "ambient"],
         defaultAmbientAssetPath: "data/assets/audio/ambient/void/void_pressure_01.ogg",
+      },
+    },
+  },
+  {
+    id: "swamp",
+    label: "Swamp",
+    description: "Mind Your Step — toxic stillness, drag, fog, and one mistake too many.",
+    defaultBackgroundLayerColor: "#213224",
+    defaultBackgroundMaterialId: "bg_stone_wall_cc",
+    editorProfile: {
+      tile: {
+        preferredCatalogIds: ["soil_c", "grass_bt", "grass_bl", "grass_br"],
+        preferredGroups: ["tiles", "core"],
+        keywordHints: ["swamp", "mud", "grass", "moss"],
+      },
+      background: {
+        preferredMaterialIds: ["bg_stone_wall_cc", "stone_block_ct"],
+        keywordHints: ["swamp", "fog", "stone", "wet"],
+      },
+      audio: {
+        preferredAmbientAssetPaths: [
+          "data/assets/audio/ambient/void/dark_ambient.ogg",
+          "data/assets/audio/spot/drip/waterdrip.ogg",
+        ],
+        preferredCategories: ["ambient", "spot"],
+        preferredPathKeywords: ["swamp", "mud", "drip", "fog"],
+        preferredHintKeywords: ["swamp", "drip", "ambient"],
+        defaultAmbientAssetPath: "data/assets/audio/ambient/void/dark_ambient.ogg",
+      },
+    },
+  },
+  {
+    id: "polar_night",
+    label: "Polar Night",
+    description: "When Light Guides Your Way — freezing openness where light is survival.",
+    defaultBackgroundLayerColor: "#0b1a2f",
+    defaultBackgroundMaterialId: "bg_stone_wall_cc",
+    editorProfile: {
+      tile: {
+        preferredCatalogIds: ["ice_01", "ice_00", "stone_ct"],
+        preferredGroups: ["tiles", "core"],
+        preferredBehaviorProfileIds: ["tile.solid.ice", "tile.solid.default"],
+        keywordHints: ["ice", "snow", "polar", "night"],
+      },
+      background: {
+        preferredMaterialIds: ["bg_stone_wall_cc", "bg_stone_block_c_vinjett"],
+        keywordHints: ["ice", "cold", "night", "open"],
+      },
+      audio: {
+        preferredAmbientAssetPaths: [
+          "data/assets/audio/ambient/space/empty_space_void.ogg",
+          "data/assets/audio/spot/drip/one_drip.wav",
+        ],
+        preferredCategories: ["ambient", "spot"],
+        preferredPathKeywords: ["wind", "cold", "space", "night"],
+        preferredHintKeywords: ["polar", "night", "ambient"],
+        defaultAmbientAssetPath: "data/assets/audio/ambient/space/empty_space_void.ogg",
+      },
+    },
+  },
+  {
+    id: "machine",
+    label: "The Machine",
+    description: "Time Is Decisive — rhythm, force, precision, and a world that moves without you.",
+    defaultBackgroundLayerColor: "#0f141f",
+    defaultBackgroundMaterialId: "bg_stone_block_c_vinjett",
+    editorProfile: {
+      tile: {
+        preferredCatalogIds: ["stone_ct", "ice_01"],
+        preferredGroups: ["tiles", "core"],
+        preferredBehaviorProfileIds: ["tile.solid.default", "tile.solid.ice"],
+        keywordHints: ["machine", "metal", "mechanic", "industrial"],
+      },
+      background: {
+        preferredMaterialIds: ["bg_stone_block_c_vinjett", "bg_stone_wall_cc"],
+        keywordHints: ["machine", "metal", "industrial", "vinjett"],
+      },
+      audio: {
+        preferredAmbientAssetPaths: [
+          "data/assets/audio/ambient/futuristic/ambient_hum_01.ogg",
+          "data/assets/audio/ambient/futuristic/ambient_hum_02.ogg",
+        ],
+        preferredCategories: ["ambient", "music"],
+        preferredPathKeywords: ["machinery", "industrial", "hum", "futuristic"],
+        preferredHintKeywords: ["machine", "rhythm", "ambient"],
+        defaultAmbientAssetPath: "data/assets/audio/ambient/futuristic/ambient_hum_01.ogg",
       },
     },
   },
