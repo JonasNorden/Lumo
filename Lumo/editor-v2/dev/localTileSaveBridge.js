@@ -550,9 +550,11 @@ async function saveTile(payload) {
 
 function readBackgroundMaterialEntries(source) {
   const context = vm.createContext({});
-  const executableSource = source.replace(/^export\s+/gm, "");
+  const bounds = findBackgroundEditorMaterialArrayBounds(source);
+  if (!bounds) return [];
+  const arrayLiteral = source.slice(bounds.arrayStartIndex, bounds.arrayEndIndex + 1);
   vm.runInContext(
-    `${executableSource}\n;globalThis.__bg = BUILTIN_BACKGROUND_MATERIALS;`,
+    `globalThis.__bg = ${arrayLiteral};`,
     context,
     { filename: "materialCatalog.js" }
   );
