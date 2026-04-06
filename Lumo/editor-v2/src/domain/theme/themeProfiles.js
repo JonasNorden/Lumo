@@ -1,4 +1,5 @@
 import { getThemeById, normalizeThemeId } from "./themeCatalog.js";
+import { hasThemeAffinity } from "./themeTagging.js";
 
 function normalizeToken(value) {
   return String(value || "").trim().toLowerCase();
@@ -101,6 +102,7 @@ export function rankTileSpriteOptionsForTheme(tileOptions, themeId) {
     const label = normalizeToken(option?.label);
 
     let score = 0;
+    if (hasThemeAffinity(option?.themeIds, profile.themeId)) score += 260;
     score += getScoreByOrderedMatch(catalogId, profile.tile.preferredCatalogIds, 120);
     score += getScoreByOrderedMatch(group, profile.tile.preferredGroups, 70);
     score += getScoreByOrderedMatch(behaviorProfileId, profile.tile.preferredBehaviorProfileIds, 55);
@@ -121,6 +123,7 @@ export function rankBackgroundMaterialOptionsForTheme(materialOptions, themeId) 
     const img = normalizeToken(option?.img);
 
     let score = 0;
+    if (hasThemeAffinity(option?.themeIds, profile.themeId)) score += 260;
     score += getScoreByOrderedMatch(materialId, profile.background.preferredMaterialIds, 120);
     score += getScoreByKeywordMatch(`${materialId} ${label} ${group} ${img}`, profile.background.keywordHints, 6, 30);
     return score;

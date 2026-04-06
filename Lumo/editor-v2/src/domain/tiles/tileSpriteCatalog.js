@@ -1,3 +1,5 @@
+import { normalizeThemeIds } from "../theme/themeTagging.js";
+
 function resolveTileScriptCatalog() {
   if (typeof window === "undefined") return [];
   if (Array.isArray(window.LUMO_CATALOG_TILES)) return window.LUMO_CATALOG_TILES;
@@ -142,6 +144,7 @@ function normalizeTileEntry(entry) {
     behaviorParams: entry.behaviorParams && typeof entry.behaviorParams === "object" ? { ...entry.behaviorParams } : null,
     collisionType: entry.collisionType || null,
     group: entry.group || "Tiles",
+    themeIds: normalizeThemeIds(entry?.themeIds),
   };
 }
 
@@ -205,6 +208,7 @@ function toBrushSpriteOption(tileAsset) {
     behaviorParams: tileAsset?.behaviorParams && typeof tileAsset.behaviorParams === "object" ? { ...tileAsset.behaviorParams } : null,
     collisionType: tileAsset?.collisionType || null,
     group: tileAsset?.group || "Tiles",
+    themeIds: normalizeThemeIds(tileAsset?.themeIds),
   };
 }
 
@@ -296,6 +300,7 @@ export function registerTileSpriteOption(entry) {
     behaviorParams: entry.behaviorParams && typeof entry.behaviorParams === "object" ? { ...entry.behaviorParams } : null,
     collisionType: entry.collisionType || null,
     group: entry.group || "Custom",
+    themeIds: normalizeThemeIds(entry?.themeIds),
   };
 
   if (isGuardedTileIdHijack(normalizedOption.tileId, normalizedOption.id)) {
@@ -323,6 +328,7 @@ export function registerTileSpriteOption(entry) {
       behaviorParams: normalizedOption.behaviorParams,
       collisionType: normalizedOption.collisionType,
       group: normalizedOption.group,
+      themeIds: normalizedOption.themeIds,
     });
   }
 

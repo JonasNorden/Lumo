@@ -23,6 +23,9 @@ const BACKGROUND_EDITOR_MATERIAL_FILE = path.join(
 );
 const PORT = Number.parseInt(process.env.LUMO_TILE_BRIDGE_PORT || "4180", 10);
 const GUARDED_CORE_TILE_IDS = new Set([15]);
+const THEME_ID_ORDER = ["ruins", "cave", "forest", "futuristic", "void", "swamp", "polar_night", "machine"];
+const THEME_ID_SET = new Set(THEME_ID_ORDER);
+const THEME_ORDER_BY_ID = new Map(THEME_ID_ORDER.map((themeId, index) => [themeId, index]));
 
 function writeJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
@@ -142,6 +145,20 @@ function normalizeEntityRuntimeSpritePath(value) {
   return normalized;
 }
 
+function normalizeThemeIds(themeIds) {
+  if (!Array.isArray(themeIds) || !themeIds.length) return [];
+  const seen = new Set();
+  const normalized = [];
+  for (const rawThemeId of themeIds) {
+    const themeId = typeof rawThemeId === "string" ? rawThemeId.trim().toLowerCase() : "";
+    if (!themeId || !THEME_ID_SET.has(themeId) || seen.has(themeId)) continue;
+    seen.add(themeId);
+    normalized.push(themeId);
+  }
+  normalized.sort((left, right) => (THEME_ORDER_BY_ID.get(left) ?? Number.MAX_SAFE_INTEGER) - (THEME_ORDER_BY_ID.get(right) ?? Number.MAX_SAFE_INTEGER));
+  return normalized;
+}
+
 function readProjectileSpritePayload(payload, selectedProjectilePath = "") {
   const payloadCandidates = [
     payload?.projectileSprite,
@@ -169,7 +186,7 @@ function readCatalogTiles(catalogSource) {
 }
 
 function serializeCatalogEntry(entry) {
-  return `  {\n    id: ${JSON.stringify(entry.id)},\n    name: ${JSON.stringify(entry.name)},\n    group: ${JSON.stringify(entry.group)},\n    img: ${JSON.stringify(entry.img)},\n    footprint: { w: ${entry.footprint.w}, h: ${entry.footprint.h} },\n    tileId: ${entry.tileId},\n    behaviorProfileId: ${JSON.stringify(entry.behaviorProfileId || null)},\n    behaviorParams: ${JSON.stringify(entry.behaviorParams || null)},\n    collisionType: ${JSON.stringify(entry.collisionType)},\n    special: null,\n    drawW: ${entry.drawW},\n    drawH: ${entry.drawH},\n    drawAnchor: ${JSON.stringify(entry.drawAnchor)},\n    drawOffX: 0,\n    drawOffY: 0\n  }`;
+  return `  {\n    id: ${JSON.stringify(entry.id)},\n    name: ${JSON.stringify(entry.name)},\n    group: ${JSON.stringify(entry.group)},\n    img: ${JSON.stringify(entry.img)},\n    footprint: { w: ${entry.footprint.w}, h: ${entry.footprint.h} },\n    tileId: ${entry.tileId},\n    behaviorProfileId: ${JSON.stringify(entry.behaviorProfileId || null)},\n    behaviorParams: ${JSON.stringify(entry.behaviorParams || null)},\n    collisionType: ${JSON.stringify(entry.collisionType)},\n    themeIds: ${JSON.stringify(entry.themeIds || [])},\n    special: null,\n    drawW: ${entry.drawW},\n    drawH: ${entry.drawH},\n    drawAnchor: ${JSON.stringify(entry.drawAnchor)},\n    drawOffX: 0,\n    drawOffY: 0\n  }`;
 }
 
 function resolveBehaviorProfileId({ explicitBehaviorProfileId, tileBehavior, collisionType }) {
@@ -243,6 +260,7 @@ export function buildPersistedTileEntry({ tile = {}, existingEntries = [], catal
     tileId: newTileId,
     behaviorProfileId: resolvedBehaviorProfileId,
     behaviorParams,
+    themeIds: normalizeThemeIds(tile.themeIds),
     collisionType: String(tile.collisionType || "solid"),
     drawW: Number.isInteger(drawW) && drawW > 0 ? drawW : 24,
     drawH: Number.isInteger(drawH) && drawH > 0 ? drawH : 24,
@@ -251,7 +269,7 @@ export function buildPersistedTileEntry({ tile = {}, existingEntries = [], catal
 }
 
 function serializeBackgroundMaterialEntry(entry) {
-  return `  {\n    id: ${JSON.stringify(entry.id)},\n    label: ${JSON.stringify(entry.label)},\n    img: ${JSON.stringify(entry.img)},\n    drawW: ${entry.drawW},\n    drawH: ${entry.drawH},\n    drawAnchor: "BL",\n    drawOffX: 0,\n    drawOffY: 0,\n    footprint: { w: ${entry.footprint.w}, h: ${entry.footprint.h} },\n    fallbackColor: ${JSON.stringify(entry.fallbackColor)},\n    group: ${JSON.stringify(entry.group)}\n  }`;
+  return `  {\n    id: ${JSON.stringify(entry.id)},\n    label: ${JSON.stringify(entry.label)},\n    img: ${JSON.stringify(entry.img)},\n    drawW: ${entry.drawW},\n    drawH: ${entry.drawH},\n    drawAnchor: "BL",\n    drawOffX: 0,\n    drawOffY: 0,\n    footprint: { w: ${entry.footprint.w}, h: ${entry.footprint.h} },\n    fallbackColor: ${JSON.stringify(entry.fallbackColor)},\n    group: ${JSON.stringify(entry.group)},\n    themeIds: ${JSON.stringify(entry.themeIds || [])}\n  }`;
 }
 
 function serializeRuntimeBackgroundCatalogEntry(entry) {
@@ -259,7 +277,7 @@ function serializeRuntimeBackgroundCatalogEntry(entry) {
 }
 
 function serializeDecorCatalogEntry(entry) {
-  return `  {\n    "id": ${JSON.stringify(entry.id)},\n    "name": ${JSON.stringify(entry.name)},\n    "group": ${JSON.stringify(entry.group)},\n    "category": "decor",\n    "img": ${JSON.stringify(entry.img)},\n    "w": ${entry.w},\n    "h": ${entry.h},\n    "anchor": ${JSON.stringify(entry.anchor)}\n  }`;
+  return `  {\n    "id": ${JSON.stringify(entry.id)},\n    "name": ${JSON.stringify(entry.name)},\n    "group": ${JSON.stringify(entry.group)},\n    "category": "decor",\n    "img": ${JSON.stringify(entry.img)},\n    "w": ${entry.w},\n    "h": ${entry.h},\n    "anchor": ${JSON.stringify(entry.anchor)},\n    "themeIds": ${JSON.stringify(entry.themeIds || [])}\n  }`;
 }
 
 function readEditorEntityPresets(source) {
@@ -276,7 +294,7 @@ function readEditorEntityPresets(source) {
 }
 
 function serializeEntityPresetEntry(entry) {
-  return `  {\n    id: ${JSON.stringify(entry.id)},\n    type: ${JSON.stringify(entry.type)},\n    defaultName: ${JSON.stringify(entry.defaultName)},\n    defaultParams: ${JSON.stringify(entry.defaultParams, null, 2).replace(/\n/g, "\n    ")},\n    img: ${JSON.stringify(entry.img)},\n    drawW: ${entry.drawW},\n    drawH: ${entry.drawH},\n    footprintW: ${entry.footprintW},\n    footprintH: ${entry.footprintH},\n    drawAnchor: ${JSON.stringify(entry.drawAnchor)},\n    hitRadius: ${entry.hitRadius},\n  }`;
+  return `  {\n    id: ${JSON.stringify(entry.id)},\n    type: ${JSON.stringify(entry.type)},\n    defaultName: ${JSON.stringify(entry.defaultName)},\n    defaultParams: ${JSON.stringify(entry.defaultParams, null, 2).replace(/\n/g, "\n    ")},\n    img: ${JSON.stringify(entry.img)},\n    drawW: ${entry.drawW},\n    drawH: ${entry.drawH},\n    footprintW: ${entry.footprintW},\n    footprintH: ${entry.footprintH},\n    drawAnchor: ${JSON.stringify(entry.drawAnchor)},\n    hitRadius: ${entry.hitRadius},\n    themeIds: ${JSON.stringify(entry.themeIds || [])},\n  }`;
 }
 
 function findArrayBoundsFromIndex(source, startIndex) {
@@ -524,6 +542,7 @@ async function saveTile(payload) {
       footprint: tileEntry.footprint,
       collisionType: tileEntry.collisionType,
       group: tileEntry.group,
+      themeIds: tileEntry.themeIds,
       spriteFileName,
     },
   };
@@ -564,6 +583,7 @@ export function buildPersistedDecorEntry({ decor = {}, presetId, spriteFileName 
     w: Number.isInteger(drawW) && drawW > 0 ? drawW : 24,
     h: Number.isInteger(drawH) && drawH > 0 ? drawH : 24,
     anchor: String(decor.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL",
+    themeIds: normalizeThemeIds(decor.themeIds),
   };
 }
 
@@ -644,6 +664,7 @@ async function saveBackground(payload) {
     drawH: Number.isInteger(drawH) && drawH > 0 ? drawH : 24,
     fallbackColor: String(background.fallbackColor || "#3d4b63"),
     footprint: { w: footprintW, h: footprintH },
+    themeIds: normalizeThemeIds(background.themeIds),
   };
 
   const editorBounds = findBackgroundEditorMaterialArrayBounds(editorMaterialSource);
@@ -708,6 +729,7 @@ async function saveBackground(payload) {
       footprint: entry.footprint,
       fallbackColor: entry.fallbackColor,
       group: entry.group,
+      themeIds: entry.themeIds,
       spriteFileName,
     },
   };
@@ -809,6 +831,7 @@ async function saveDecor(payload) {
       variants: ["a"],
       defaultVariant: "a",
       group: entry.group,
+      themeIds: entry.themeIds,
       spriteFileName,
     },
   };
@@ -865,6 +888,7 @@ export function buildPersistedEntityPresetEntry({ entity = {}, presetId, spriteF
     footprintH: drawH,
     drawAnchor: String(entity.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL",
     hitRadius: Number.isFinite(Number(entity.hitRadius)) ? Number(entity.hitRadius) : 8.5,
+    themeIds: normalizeThemeIds(entity.themeIds),
   };
 }
 
@@ -984,6 +1008,7 @@ async function saveEntity(payload) {
       footprintH: entry.footprintH,
       drawAnchor: entry.drawAnchor,
       hitRadius: entry.hitRadius,
+      themeIds: entry.themeIds,
       spriteFileName,
       projectileSpriteFileName,
     },

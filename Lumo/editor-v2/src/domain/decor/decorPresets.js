@@ -1,5 +1,6 @@
 import { isDecorEditableType } from "../placeables/editableObjectBuckets.js";
 import { findEntityPresetByType } from "../entities/entityPresets.js";
+import { normalizeThemeIds } from "../theme/themeTagging.js";
 const TILE_SIZE = 24;
 const DECOR_CATALOG_DENYLIST = new Set([
   "start_01",
@@ -250,6 +251,7 @@ function normalizeDecorPresetShape(raw, index = 0) {
       h: normalizeTiles(raw.sizeTiles?.h) ?? normalizeTiles(drawH / TILE_SIZE) ?? 1,
     },
     group: typeof raw.group === "string" && raw.group.trim() ? raw.group.trim() : "Decor",
+    themeIds: normalizeThemeIds(raw?.themeIds),
   };
 }
 
@@ -318,6 +320,7 @@ export function registerDecorPresetOption(entry) {
       defaultVariant: entry?.defaultVariant || "a",
       variants: Array.isArray(entry?.variants) && entry.variants.length ? entry.variants : ["a"],
       group: entry?.group || "Decor",
+      themeIds: entry?.themeIds,
     },
     DECOR_PRESETS.length
   );
