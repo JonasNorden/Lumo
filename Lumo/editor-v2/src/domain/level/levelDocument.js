@@ -1,5 +1,5 @@
 import { cloneEntityParams } from "../entities/entityParams.js";
-import { getEntityPresetParamsForType } from "../entities/entityPresets.js";
+import { findEntityPresetById, getEntityPresetParamsForType } from "../entities/entityPresets.js";
 import { isSpecialVolumeEntityType, syncSpecialVolumeEntityToAnchor } from "../entities/specialVolumeTypes.js";
 import { DEFAULT_SOUND_PRESET_ID, getSoundPresetDefaultParams, getSoundPresetForType } from "../sound/soundPresets.js";
 import { isEntityLikeEditableType, normalizeEditableObjectType } from "../placeables/editableObjectBuckets.js";
@@ -139,12 +139,22 @@ function normalizeDecor(decor, index) {
 function normalizeEntity(entity, index, tileSize = 24) {
   const fallbackId = `entity-${index + 1}`;
   const nextId = typeof entity?.id === "string" && entity.id.trim() ? entity.id : fallbackId;
-  const nextName = typeof entity?.name === "string" && entity.name.trim() ? entity.name : `Entity ${index + 1}`;
-  const nextType = typeof entity?.type === "string" && entity.type.trim() ? normalizeEditableObjectType(entity.type) : "generic";
+  const authoredPresetId = typeof entity?.params?.presetId === "string" && entity.params.presetId.trim()
+    ? entity.params.presetId.trim()
+    : "";
+  const authoredPreset = authoredPresetId ? findEntityPresetById(authoredPresetId) : null;
+  const fallbackType = typeof entity?.type === "string" && entity.type.trim()
+    ? normalizeEditableObjectType(entity.type)
+    : "generic";
+  const nextType = authoredPreset?.type || fallbackType;
+  const nextName = typeof entity?.name === "string" && entity.name.trim()
+    ? entity.name
+    : authoredPreset?.defaultName || `Entity ${index + 1}`;
   const nextX = Number.isFinite(entity?.x) ? Math.round(entity.x) : 0;
   const nextY = Number.isFinite(entity?.y) ? Math.round(entity.y) : 0;
   const nextVisible = typeof entity?.visible === "boolean" ? entity.visible : true;
-  const nextParams = getEntityPresetParamsForType(nextType, entity?.params);
+  const presetParamsId = authoredPreset?.id || nextType;
+  const nextParams = getEntityPresetParamsForType(presetParamsId, entity?.params);
   const normalizedEntity = {
     id: nextId,
     name: nextName,
