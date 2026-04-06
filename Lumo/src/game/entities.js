@@ -40,6 +40,9 @@
       this._triggerSounds = [];
       this._soundHandles = new Map();
       this._prevPlayerCenterX = null;
+      this._nextFireflyAudioId = 1;
+      this._fireflyAudioPath = "data/assets/audio/events/creatures/firefly_01.ogg";
+      this._sfxSpatialCtx = null;
 
             // Sprites (HUD använder flare.png, kastad flare använder flare_2.png)
       // Runtime-sprites för entities
@@ -102,14 +105,15 @@
       return 1;
     }
 
-    _getSoundHandle(path, loop){
-      const key = `${path}::${loop ? "L" : "O"}`;
+    _getSoundHandle(path, loop, keySuffix=null){
+      const suffix = (keySuffix == null || keySuffix === "") ? "" : `::${keySuffix}`;
+      const key = `${path}::${loop ? "L" : "O"}${suffix}`;
       if (this._soundHandles.has(key)) return this._soundHandles.get(key);
       const audio = new Audio(path);
       audio.preload = "auto";
       audio.loop = !!loop;
       audio.volume = 0;
-      const h = { audio, path, loop: !!loop, started:false, lastTarget:0, lastCrossSide:null, oneShotCooldown:0 };
+      const h = { audio, path, loop: !!loop, keySuffix: (keySuffix == null ? "" : String(keySuffix)), started:false, lastTarget:0, lastCrossSide:null, oneShotCooldown:0 };
       this._soundHandles.set(key, h);
       return h;
     }
@@ -118,8 +122,12 @@
       if (!handle || !handle.audio) return;
       const t = Math.max(0, Math.min(1, target)) * this._getSfxVolume();
       handle.lastTarget = t;
-      // Avoid redundant no-op volume writes when effective target is unchanged.
-      if (Math.abs(handle.audio.volume - t) > 0.0001) handle.audio.volume = t;
+      if (handle.gainNode){
+        if (Math.abs(handle.gainNode.gain.value - t) > 0.0001) handle.gainNode.gain.value = t;
+      } else if (Math.abs(handle.audio.volume - t) > 0.0001){
+        // Avoid redundant no-op volume writes when effective target is unchanged.
+        handle.audio.volume = t;
+      }
       if (t > 0.001){
         if (handle.audio.paused){
           const p = handle.audio.play();
@@ -128,6 +136,53 @@
       } else if (!handle.loop){
         try { handle.audio.pause(); handle.audio.currentTime = 0; } catch(_){ }
       }
+    }
+
+    _ensureSpatialHandle(handle){
+      if (!handle || !handle.audio || handle.spatialReady) return;
+      handle.spatialReady = true;
+      try{
+        const Ctor = window.AudioContext || window.webkitAudioContext;
+        if (!Ctor) return;
+        if (!this._sfxSpatialCtx) this._sfxSpatialCtx = new Ctor();
+        const ctx = this._sfxSpatialCtx;
+        if (!ctx) return;
+        const source = ctx.createMediaElementSource(handle.audio);
+        const gain = ctx.createGain();
+        gain.gain.value = Math.max(0, Math.min(1, handle.lastTarget || 0));
+        if (typeof ctx.createStereoPanner === "function"){
+          const panner = ctx.createStereoPanner();
+          panner.pan.value = 0;
+          source.connect(gain);
+          gain.connect(panner);
+          panner.connect(ctx.destination);
+          handle.panNode = panner;
+        } else {
+          source.connect(gain);
+          gain.connect(ctx.destination);
+        }
+        handle.gainNode = gain;
+        handle.audio.volume = 1;
+      }catch(_){ }
+    }
+
+    _setHandlePan(handle, pan){
+      if (!handle || !handle.audio) return;
+      const p = Math.max(-1, Math.min(1, Number.isFinite(pan) ? pan : 0));
+      handle.lastPan = p;
+      if (handle.panNode){
+        if (Math.abs(handle.panNode.pan.value - p) > 0.0001) handle.panNode.pan.value = p;
+      }
+    }
+
+    _getFireflyAudioHandle(e){
+      if (!e) return null;
+      if (!e._fireflyAudioKey){
+        e._fireflyAudioKey = `firefly-${this._nextFireflyAudioId++}`;
+      }
+      const handle = this._getSoundHandle(this._fireflyAudioPath, true, e._fireflyAudioKey);
+      this._ensureSpatialHandle(handle);
+      return handle;
     }
 
     _playOneShot(path, volume){
@@ -1451,6 +1506,7 @@ if (this._catById){
       const playerCx = player ? (player.x + player.w * 0.5) : null;
       const playerCy = player ? (player.y + player.h * 0.5) : null;
       const prevCx = this._prevPlayerCenterX;
+      const audibleFireflyKeys = new Set();
 
       for (const z of this._musicZones){
         if (!z.soundFile) continue;
@@ -2108,6 +2164,23 @@ if (e.type === "lantern"){
 
         if (e.type === "firefly"){
           const ts = Lumo.TILE || 24;
+          const fireflyHandle = this._getFireflyAudioHandle(e);
+          if (fireflyHandle && e._fireflyAudioKey) audibleFireflyKeys.add(e._fireflyAudioKey);
+          const fireflyCx = e.x + e.w * 0.5;
+          const fireflyCy = e.y + e.h * 0.5;
+          const fireflyRange = ts * 20;
+          let fireflyGain = 0;
+          let fireflyPan = 0;
+          if (playerCx != null && playerCy != null){
+            const dxToPlayer = fireflyCx - playerCx;
+            const dyToPlayer = fireflyCy - playerCy;
+            const dToPlayer = Math.hypot(dxToPlayer, dyToPlayer);
+            if (dToPlayer < fireflyRange){
+              const t = 1 - (dToPlayer / fireflyRange);
+              fireflyGain = t * t;
+            }
+            fireflyPan = Math.max(-0.65, Math.min(0.65, dxToPlayer / fireflyRange));
+          }
 
           if (!e._tail) e._tail = [];
           for (let i = e._tail.length - 1; i >= 0; i--){
@@ -2199,7 +2272,6 @@ if (e.type === "lantern"){
               if (near){
                 e.mode = "takeoff";
                 e.tFly = (e.flyTime != null ? e.flyTime : 2.5);
-                this._playOneShot("data/assets/audio/events/creatures/firefly_01.ogg", 0.9);
                 pickWanderTarget();
               }
             }
@@ -2294,6 +2366,10 @@ if (e.type === "lantern"){
               e.cdT = (typeof e.cooldown === "number") ? e.cooldown : 2.0;
             }
           }
+
+          const fireflyIsAudibleMode = (e.mode === "takeoff" || e.mode === "fly" || e.mode === "landing" || e.mode === "landed");
+          this._setHandlePan(fireflyHandle, fireflyPan);
+          this._setHandleVolume(fireflyHandle, fireflyIsAudibleMode ? fireflyGain : 0);
         }
 
 
@@ -2381,6 +2457,16 @@ if (e.type === "lantern"){
               player.setCheckpoint(e.x, e.y);
             }
           }
+        }
+      }
+
+      for (const h of this._soundHandles.values()){
+        if (!h || typeof h.path !== "string" || h.path !== this._fireflyAudioPath) continue;
+        const key = String(h.keySuffix || "");
+        if (!key.startsWith("firefly-")) continue;
+        if (!audibleFireflyKeys.has(key)){
+          this._setHandlePan(h, 0);
+          this._setHandleVolume(h, 0);
         }
       }
 
