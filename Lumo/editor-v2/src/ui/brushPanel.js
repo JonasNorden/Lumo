@@ -20,6 +20,7 @@ import {
   rankBackgroundMaterialOptionsForTheme,
   rankTileSpriteOptionsForTheme,
 } from "../domain/theme/themeProfiles.js";
+import { getThemeMatchScore } from "../domain/theme/themeAffinity.js";
 
 const PANEL_LAYERS = {
   TOOLS: "tools",
@@ -221,9 +222,28 @@ function renderTileSelectionSummary(activeTileSprite) {
   `;
 }
 
+function getActiveThemeId(state) {
+  return state?.document?.active?.meta?.themeId || null;
+}
+
+function rankAssetOptionsForTheme(options, activeThemeId) {
+  if (!Array.isArray(options) || !options.length) return [];
+  return options
+    .map((item, index) => ({
+      ...item,
+      __themeScore: getThemeMatchScore(item?.themeIds, activeThemeId),
+      __baseIndex: index,
+    }))
+    .sort((a, b) => {
+      if (b.__themeScore !== a.__themeScore) return b.__themeScore - a.__themeScore;
+      return a.__baseIndex - b.__baseIndex;
+    })
+    .map(({ __themeScore, __baseIndex, ...rest }) => rest);
+}
+
 
 function renderBackgroundSettings(state) {
-  const themeId = state?.document?.active?.meta?.themeId;
+  const themeId = getActiveThemeId(state);
   const materialOptions = rankBackgroundMaterialOptionsForTheme(BACKGROUND_MATERIAL_OPTIONS, themeId);
   const activeMaterialId = state.interaction.activeBackgroundMaterialId;
   const activeMaterial = materialOptions.find((material) => material.id === activeMaterialId) || null;
@@ -241,9 +261,13 @@ function renderBackgroundSettings(state) {
 }
 
 function renderEntitiesSettings(state) {
+  const themeId = getActiveThemeId(state);
   const activePresetId = state.interaction.activeEntityPresetId;
   const activePreset = ENTITY_PRESETS.find((preset) => preset.id === activePresetId) || null;
-  const placeableEntityPresets = ENTITY_PRESETS.filter((preset) => !HIDDEN_ENTITY_PRESET_IDS.has(preset.id));
+  const placeableEntityPresets = rankAssetOptionsForTheme(
+    ENTITY_PRESETS.filter((preset) => !HIDDEN_ENTITY_PRESET_IDS.has(preset.id)),
+    themeId,
+  );
   const placementStatus = activePreset ? `${activePreset.defaultName} · Alt/Option + Click` : "Select an entity preset";
 
   return `
@@ -311,8 +335,10 @@ function renderFogVolumeSettings(state) {
 }
 
 function renderDecorSettings(state) {
+  const themeId = getActiveThemeId(state);
   const activePresetId = state.interaction.activeDecorPresetId;
   const activePreset = DECOR_PRESETS.find((preset) => preset.id === activePresetId) || null;
+  const rankedDecorPresets = rankAssetOptionsForTheme(DECOR_PRESETS, themeId);
   const scatterSettings = state.interaction.decorScatterSettings || {};
   const scatterDensity = Number.isFinite(scatterSettings.density) ? Math.max(0, Math.min(1, scatterSettings.density)) : 0.3;
   const scatterRandomness = Number.isFinite(scatterSettings.randomness) ? Math.max(0, Math.min(1, scatterSettings.randomness)) : 0.6;
@@ -328,7 +354,7 @@ function renderDecorSettings(state) {
     : "Decor asset metadata appears here";
 
   return `
-    ${renderAssetPicker("Decor presets", "decor-preset-button", DECOR_PRESETS, activePresetId, "No decor selected", "assetPickerDecorCompact")}
+    ${renderAssetPicker("Decor presets", "decor-preset-button", rankedDecorPresets, activePresetId, "No decor selected", "assetPickerDecorCompact")}
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton isSecondary" data-decor-action="clear-preset" ${activePreset ? "" : "disabled"}>Clear</button>
     </div>
@@ -396,7 +422,7 @@ function renderSoundSection(activePresetId, isOpen) {
 export function renderBrushPanel(panel, state) {
   const brushDraft = state.brush.activeDraft;
   const filteredSpriteOptions = getBrushSpriteOptionsForBehavior(brushDraft.behavior);
-  const themeId = state?.document?.active?.meta?.themeId;
+  const themeId = getActiveThemeId(state);
   const visibleSpriteOptions = rankTileSpriteOptionsForTheme(
     filteredSpriteOptions.length ? filteredSpriteOptions : BRUSH_SPRITE_OPTIONS,
     themeId,
