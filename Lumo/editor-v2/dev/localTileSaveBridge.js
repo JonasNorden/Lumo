@@ -1032,6 +1032,9 @@ export function createLocalTileSaveBridgeServer() {
       writeJson(res, result.statusCode, result);
     } catch (error) {
       const reason = error instanceof Error ? error.message : "unknown-error";
+      if (routeLabel === "background") {
+        console.error("[Lumo Bridge] Background save error:", error);
+      }
       console.error(`[Lumo Bridge] Save FAILED: ${routeLabel} (${reason})`);
       writeJson(res, 500, {
         ok: false,
