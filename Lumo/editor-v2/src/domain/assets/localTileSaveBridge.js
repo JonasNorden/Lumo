@@ -1,5 +1,5 @@
 const LOCAL_TILE_SAVE_BRIDGE_URL = "http://localhost:4180/api/editor-v2/tiles/save";
-const LOCAL_BACKGROUND_SAVE_BRIDGE_URL = "/api/editor-v2/background/save";
+const LOCAL_BACKGROUND_SAVE_BRIDGE_URL = "http://localhost:4180/api/editor-v2/background/save";
 const LOCAL_DECOR_SAVE_BRIDGE_URL = "http://localhost:4180/api/editor-v2/decor/save";
 const LOCAL_ENTITY_SAVE_BRIDGE_URL = "http://localhost:4180/api/editor-v2/entities/save";
 
