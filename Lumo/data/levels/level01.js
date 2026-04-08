@@ -15715,7 +15715,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/spot/wind/blowing.wav",
+          "soundFile": "data/assets/audio/spot/wind/blowing.ogg",
           "radius": 180,
           "loop": false
         }
@@ -15731,7 +15731,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/spot/wind/wind.wav",
+          "soundFile": "data/assets/audio/spot/wind/wind.ogg",
           "radius": 100,
           "loop": false
         }
@@ -15920,7 +15920,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/spot/drip/one_drip.wav",
+          "soundFile": "data/assets/audio/spot/drip/one_drip.ogg",
           "radius": 200,
           "fadeTiles": 7
         }
@@ -15936,7 +15936,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/spot/drip/one_drip.wav",
+          "soundFile": "data/assets/audio/spot/drip/one_drip.ogg",
           "radius": 200,
           "fadeTiles": 15
         }
@@ -15952,7 +15952,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/spot/wind/wind.wav",
+          "soundFile": "data/assets/audio/spot/wind/wind.ogg",
           "radius": 300,
           "loop": false,
           "fadeTiles": 0
@@ -16332,7 +16332,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/music/space_loop_short.wav",
+          "soundFile": "data/assets/audio/music/space_loop_short.ogg",
           "xStart": 672,
           "xEnd": 4500,
           "volume": ".5",
@@ -37797,7 +37797,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/spot/wind/blowing.wav",
+          "soundFile": "data/assets/audio/spot/wind/blowing.ogg",
           "radius": 180,
           "loop": false
         }
@@ -37813,7 +37813,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/spot/wind/wind.wav",
+          "soundFile": "data/assets/audio/spot/wind/wind.ogg",
           "radius": 100,
           "loop": false
         }
@@ -38002,7 +38002,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/spot/drip/one_drip.wav",
+          "soundFile": "data/assets/audio/spot/drip/one_drip.ogg",
           "radius": 200,
           "fadeTiles": 7
         }
@@ -38018,7 +38018,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/spot/drip/one_drip.wav",
+          "soundFile": "data/assets/audio/spot/drip/one_drip.ogg",
           "radius": 200,
           "fadeTiles": 15
         }
@@ -38034,7 +38034,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/spot/wind/wind.wav",
+          "soundFile": "data/assets/audio/spot/wind/wind.ogg",
           "radius": 300,
           "loop": false,
           "fadeTiles": 0
@@ -38414,7 +38414,7 @@
         "offsetY": 4,
         "aggroRadius": 0,
         "params": {
-          "soundFile": "data/assets/audio/music/space_loop_short.wav",
+          "soundFile": "data/assets/audio/music/space_loop_short.ogg",
           "xStart": 672,
           "xEnd": 4500,
           "volume": ".5",

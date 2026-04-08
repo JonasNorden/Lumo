@@ -2825,8 +2825,8 @@ function parseSmart(v){
     if (m && typeof m === "object" && (m.music || m.spot || m.events)) return m;
     if (window.LUMO_AUDIO_MANIFEST && typeof window.LUMO_AUDIO_MANIFEST === "object") return window.LUMO_AUDIO_MANIFEST;
     return {
-      music: ["data/assets/audio/music/space_loop_short.wav"],
-      spot: ["data/assets/audio/spot/machinery/door_close.wav"],
+      music: ["data/assets/audio/music/space_loop_short.ogg"],
+      spot: ["data/assets/audio/spot/machinery/door_close.ogg"],
       events: ["data/assets/audio/events/creatures/void_creature.mp3"],
     };
   }
@@ -2835,7 +2835,7 @@ function parseSmart(v){
     let p = String(rawPath || "").trim();
     if (!p) return "";
     if (p.includes("data/assets/sound/")) p = p.replace("data/assets/sound/", "data/assets/audio/");
-    if (String(entId) === "trigger_sound" && /data\/assets\/audio\/events\/creatures\/void_creature\.wav$/i.test(p)){
+    if (String(entId) === "trigger_sound" && /data\/assets\/audio\/events\/creatures\/void_creature\.ogg$/i.test(p)){
       p = "data/assets/audio/events/creatures/void_creature.mp3";
     }
     return p;

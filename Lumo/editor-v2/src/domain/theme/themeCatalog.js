@@ -49,7 +49,7 @@ const THEME_CATALOG = [
       audio: {
         preferredAmbientAssetPaths: [
           "data/assets/audio/spot/drip/waterdrip.ogg",
-          "data/assets/audio/spot/drip/one_drip.wav",
+          "data/assets/audio/spot/drip/one_drip.ogg",
         ],
         preferredCategories: ["ambient", "spot"],
         preferredPathKeywords: ["drip", "cave", "ambient"],
@@ -188,7 +188,7 @@ const THEME_CATALOG = [
       audio: {
         preferredAmbientAssetPaths: [
           "data/assets/audio/ambient/space/empty_space_void.ogg",
-          "data/assets/audio/spot/drip/one_drip.wav",
+          "data/assets/audio/spot/drip/one_drip.ogg",
         ],
         preferredCategories: ["ambient", "spot"],
         preferredPathKeywords: ["wind", "cold", "space", "night"],

@@ -46,7 +46,7 @@ window.LUMO_ENTITY_BEHAVIOR_PROFILES = [
   {
     id: "entity.sound.music_zone.v1",
     defaults: {
-      soundFile: "data/assets/audio/music/space_loop_short.wav",
+      soundFile: "data/assets/audio/music/space_loop_short.ogg",
       xStart: 0,
       xEnd: 240,
       volume: 0.7,
