@@ -10,7 +10,7 @@ window.LUMO_CATALOG_ENTITIES = [
     "visualProfileId": "visual.entity.bl",
     "themeTags": ["tech"],
     "defaults": {
-      "soundFile": "data/assets/audio/music/space_loop_short.wav",
+      "soundFile": "data/assets/audio/music/space_loop_short.ogg",
       "xStart": 0,
       "xEnd": 240,
       "volume": 0.7,
@@ -34,7 +34,7 @@ window.LUMO_CATALOG_ENTITIES = [
     "img": "data/assets/sprites/sound/spot.png",
     "anchor": "BL",
     "defaults": {
-      "soundFile": "data/assets/audio/spot/machinery/door_close.wav",
+      "soundFile": "data/assets/audio/spot/machinery/door_close.ogg",
       "radius": 120,
       "volume": 0.8,
       "loop": true,
