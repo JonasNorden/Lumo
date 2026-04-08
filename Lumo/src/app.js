@@ -13,7 +13,6 @@
     BOOTING: "booting",
     MENU: "menu",
     SETTINGS: "settings",
-    FAN_ART: "fan_art",
     PLAYING: "playing",
     PAUSED: "paused",
     GAME_OVER: "game_over",
@@ -125,7 +124,6 @@
       musicByState: {
         [GameState.MENU]: "data/assets/audio/music/menu_loop_01.ogg",
         [GameState.SETTINGS]: "data/assets/audio/music/menu_loop_01.ogg",
-        [GameState.FAN_ART]: "data/assets/audio/music/menu_loop_01.ogg",
         [GameState.PLAYING]: null,
         [GameState.PAUSED]: null,
         [GameState.GAME_OVER]: null,
@@ -232,7 +230,7 @@
     + '</svg>'
   );
 
-  const menuItemsBase = ["Begin Quest", "Settings", "Fan Art"];
+  const menuItemsBase = ["Begin Quest", "Settings"];
   const menuUi = {
     beginQuestBounds: null,
     itemBounds: [],
@@ -241,12 +239,6 @@
     confirmBounds: [],
     panelMode: "menu",
     creditsBackBounds: null
-  };
-  const fanArtUi = {
-    images: [],
-    selectedIndex: 0,
-    isLoading: false,
-    loaded: false
   };
   const menuAmbientGlows = [
     { x: 0.135, y: 0.238, r: 0.025, amp: 0.48, speed: 0.52, phase: 0.3 },
@@ -856,48 +848,6 @@
     playUiSfx("confirm");
   }
 
-  function fanArtSrcByIndex(index){
-    return `data/assets/ui/fanart/fanart_${String(index).padStart(2, "0")}.png`;
-  }
-
-  function loadImage(src){
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve(img);
-      img.onerror = () => resolve(null);
-      img.src = src;
-    });
-  }
-
-  async function loadFanArtGallery(){
-    if (fanArtUi.loaded || fanArtUi.isLoading) return;
-    fanArtUi.isLoading = true;
-    const out = [];
-
-    for (let i = 1; i <= 999; i++){
-      const img = await loadImage(fanArtSrcByIndex(i));
-      if (!img) break;
-      out.push(img);
-    }
-
-    fanArtUi.images = out;
-    fanArtUi.selectedIndex = 0;
-    fanArtUi.loaded = true;
-    fanArtUi.isLoading = false;
-  }
-
-  function enterFanArt(){
-    gameState = GameState.FAN_ART;
-    fanArtUi.selectedIndex = 0;
-    loadFanArtGallery();
-    playUiSfx("confirm");
-  }
-
-  function returnToMenuFromFanArt(){
-    gameState = GameState.MENU;
-    playUiSfx("confirm");
-  }
-
   function activateMenuItem(index){
     const items = getMenuItems();
     const label = items[index];
@@ -923,9 +873,6 @@
     if (label === "Settings"){
       enterSettings();
       return;
-    }
-    if (label === "Fan Art"){
-      enterFanArt();
     }
   }
 
@@ -1352,28 +1299,6 @@
       return;
     }
 
-    if (gameState === GameState.FAN_ART){
-      if (e.repeat) return;
-      if (e.key === "Escape" || e.key === "Backspace"){
-        returnToMenuFromFanArt();
-        e.preventDefault();
-        return;
-      }
-      if (!fanArtUi.images.length) return;
-      if (e.key === "ArrowLeft"){
-        fanArtUi.selectedIndex = (fanArtUi.selectedIndex - 1 + fanArtUi.images.length) % fanArtUi.images.length;
-        playUiSfx("navigate");
-        e.preventDefault();
-        return;
-      }
-      if (e.key === "ArrowRight"){
-        fanArtUi.selectedIndex = (fanArtUi.selectedIndex + 1) % fanArtUi.images.length;
-        playUiSfx("navigate");
-        e.preventDefault();
-      }
-      return;
-    }
-
     if (gameState === GameState.SETTINGS){
       if (e.repeat) return;
       if (e.key === "Escape"){
@@ -1458,9 +1383,6 @@
       return;
     }
     if (gameState === GameState.SETTINGS){
-      return;
-    }
-    if (gameState === GameState.FAN_ART){
       return;
     }
     if (player.lives <= 0){
@@ -2260,45 +2182,6 @@
       return;
     }
 
-    if (gameState === GameState.FAN_ART){
-      ctx.fillStyle = "#05080D";
-      ctx.fillRect(0, 0, r.w, r.h);
-
-      const hasImage = fanArtUi.images.length > 0;
-      const activeImage = hasImage ? fanArtUi.images[fanArtUi.selectedIndex] : null;
-      const maxW = r.w * 0.9;
-      const maxH = r.h * 0.82;
-
-      if (activeImage && activeImage.naturalWidth > 0 && activeImage.naturalHeight > 0){
-        const scale = Math.min(maxW / activeImage.naturalWidth, maxH / activeImage.naturalHeight);
-        const drawW = activeImage.naturalWidth * scale;
-        const drawH = activeImage.naturalHeight * scale;
-        const drawX = (r.w - drawW) * 0.5;
-        const drawY = (r.h - drawH) * 0.5;
-        ctx.drawImage(activeImage, drawX, drawY, drawW, drawH);
-
-        ctx.fillStyle = "rgba(236,246,255,0.9)";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.font = `${Math.max(14, Math.round(r.h * 0.027))}px "Trebuchet MS",sans-serif`;
-        ctx.fillText(`Image ${fanArtUi.selectedIndex + 1} / ${fanArtUi.images.length}`, r.w * 0.5, r.h * 0.06);
-      } else {
-        ctx.fillStyle = "rgba(236,246,255,0.9)";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.font = `${Math.max(18, Math.round(r.h * 0.04))}px "Trebuchet MS",sans-serif`;
-        ctx.fillText(fanArtUi.isLoading ? "Loading fan art..." : "No fan art found", r.w * 0.5, r.h * 0.5);
-      }
-
-      ctx.fillStyle = "rgba(190,220,238,0.94)";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = `${Math.max(14, Math.round(r.h * 0.024))}px "Trebuchet MS",sans-serif`;
-      ctx.fillText("Left / Right - Browse", r.w * 0.5, r.h * 0.93);
-      ctx.fillText("Esc - Back to menu", r.w * 0.5, r.h * 0.965);
-      return;
-    }
-
     // WORLD_CLIP_BEGIN: prevent drawing outside level bounds (eg BG stamps below grid)
     const worldHpx = (world.h || 30) * (world.tileSize || 24);
     const worldTop = Math.round(-cam.y); // screen-space Y where world y=0 begins (handles letterboxing)
@@ -2691,8 +2574,6 @@
   player.lives = 4;
   player.flares = 1;
   player.refill();
-  loadFanArtGallery();
-
   const editorPlayPayload = consumeEditorPlayPayload();
   if (editorPlayPayload && startEditorPlaySession(editorPlayPayload)){
     requestAnimationFrame(tick);
