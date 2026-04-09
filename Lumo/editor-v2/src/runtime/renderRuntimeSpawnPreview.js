@@ -157,14 +157,21 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDeb
   const hasAuthoredSpawn = hasValidPixelPosition(authoredSpawn);
   const authoredX = safeNumber(authoredSpawn?.x, 0);
   const authoredY = safeNumber(authoredSpawn?.y, 0);
-  const landingPixelY = landingCell ? landingCell.y * tileSize : null;
+  const authoredSpawnPixelY = authoredY;
+  const resolvedStartPixel = playerSpawnPacket?.startPixel;
+  const resolvedLandingPixelY = hasValidPixelPosition(resolvedStartPixel)
+    ? resolvedStartPixel.y
+    : null;
   const shouldAnimateFall =
-    hasAuthoredSpawn && Number.isFinite(landingPixelY) && landingPixelY > authoredY;
+    hasAuthoredSpawn &&
+    Number.isFinite(authoredSpawnPixelY) &&
+    Number.isFinite(resolvedLandingPixelY) &&
+    resolvedLandingPixelY > authoredSpawnPixelY;
 
   const animationState = {
     enabled: shouldAnimateFall,
-    currentY: authoredY,
-    targetY: shouldAnimateFall ? landingPixelY : authoredY,
+    currentY: authoredSpawnPixelY,
+    targetY: shouldAnimateFall ? resolvedLandingPixelY : authoredSpawnPixelY,
     velocityY: 0,
     phase: shouldAnimateFall ? "start-delay" : "static",
     phaseUntilMs: 0,
@@ -189,8 +196,8 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDeb
       animationEnabled: animationState.enabled,
       animationPhase: animationState.phase,
       animatedPlayerY: Math.round(animationState.currentY),
-      spawnY: Math.round(authoredY),
-      targetY: Math.round(animationState.targetY),
+      authoredSpawnY: Number.isFinite(authoredSpawnPixelY) ? Math.round(authoredSpawnPixelY) : null,
+      resolvedLandingY: Number.isFinite(resolvedLandingPixelY) ? Math.round(resolvedLandingPixelY) : null,
     });
   }
 
@@ -240,7 +247,6 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDeb
     }
 
     // Draw authored→resolved drop path to visualize runtime spawn settling.
-    const resolvedStartPixel = playerSpawnPacket?.startPixel;
     if (
       hasAuthoredSpawn &&
       hasValidPixelPosition(resolvedStartPixel) &&
@@ -318,7 +324,7 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDeb
       if (animationState.phaseUntilMs === 0) {
         animationState.phaseUntilMs = nowMs + PREVIEW_FALL_START_DELAY_MS;
       }
-      animationState.currentY = authoredY;
+      animationState.currentY = authoredSpawnPixelY;
       animationState.velocityY = 0;
       if (nowMs >= animationState.phaseUntilMs) {
         animationState.phase = "falling";
@@ -338,7 +344,7 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDeb
     } else if (animationState.phase === "landing-delay") {
       animationState.currentY = animationState.targetY;
       if (nowMs >= animationState.phaseUntilMs) {
-        animationState.currentY = authoredY;
+        animationState.currentY = authoredSpawnPixelY;
         animationState.velocityY = 0;
         animationState.phase = "start-delay";
         animationState.phaseUntilMs = nowMs + PREVIEW_FALL_START_DELAY_MS;
@@ -388,8 +394,8 @@ function buildSummaryText(levelPath, loaderResult, playerSpawnPacket, animationD
     `animationEnabled: ${animationDebug.animationEnabled}`,
     `animationPhase: ${animationDebug.animationPhase}`,
     `animatedPlayerY: ${animationDebug.animatedPlayerY}`,
-    `spawnY: ${animationDebug.spawnY}`,
-    `targetY: ${animationDebug.targetY}`,
+    `authoredSpawnY: ${animationDebug.authoredSpawnY}`,
+    `resolvedLandingY: ${animationDebug.resolvedLandingY}`,
   ];
 
   const loaderErrors = Array.isArray(loaderResult?.errors) ? loaderResult.errors : [];
@@ -435,8 +441,8 @@ export async function renderRuntimeSpawnPreview({
         animationEnabled: false,
         animationPhase: "static",
         animatedPlayerY: null,
-        spawnY: null,
-        targetY: null,
+        authoredSpawnY: null,
+        resolvedLandingY: null,
       };
       const updateSummary = () => {
         summary.textContent = buildSummaryText(
@@ -455,8 +461,8 @@ export async function renderRuntimeSpawnPreview({
           animationDebugState.animationEnabled = nextAnimationDebugState.animationEnabled;
           animationDebugState.animationPhase = nextAnimationDebugState.animationPhase;
           animationDebugState.animatedPlayerY = nextAnimationDebugState.animatedPlayerY;
-          animationDebugState.spawnY = nextAnimationDebugState.spawnY;
-          animationDebugState.targetY = nextAnimationDebugState.targetY;
+          animationDebugState.authoredSpawnY = nextAnimationDebugState.authoredSpawnY;
+          animationDebugState.resolvedLandingY = nextAnimationDebugState.resolvedLandingY;
           updateSummary();
         },
       );
