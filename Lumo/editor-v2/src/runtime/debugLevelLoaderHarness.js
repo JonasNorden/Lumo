@@ -2,6 +2,7 @@ import { loadLevelDocument } from "./loadLevelDocument.js";
 import { buildRuntimeLevelSummary } from "./buildRuntimeLevelSummary.js";
 import { buildRuntimeWorldSkeleton } from "./buildRuntimeWorldSkeleton.js";
 import { buildRuntimeTileEntries } from "./buildRuntimeTileEntries.js";
+import { buildRuntimeTileBounds } from "./buildRuntimeTileBounds.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -72,6 +73,12 @@ export function runDebugLevelLoaderHarness() {
   const partialValidTileEntries = partialValidSkeleton
     ? buildRuntimeTileEntries(partialValidSkeleton)
     : null;
+  const validTileBounds = validTileEntries
+    ? buildRuntimeTileBounds(validTileEntries)
+    : buildRuntimeTileBounds([]);
+  const partialValidTileBounds = partialValidTileEntries
+    ? buildRuntimeTileBounds(partialValidTileEntries)
+    : buildRuntimeTileBounds([]);
 
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   if (validSummary) {
@@ -86,6 +93,8 @@ export function runDebugLevelLoaderHarness() {
     console.log("\n=== Runtime tile entries (valid sample) ===");
     console.dir(validTileEntries, { depth: null });
   }
+  console.log("\n=== Runtime tile bounds (valid sample) ===");
+  console.log(validTileBounds);
 
   logLoaderResult("Partial valid sample (world + spawn, sparse layers)", partialValidResult);
   if (partialValidSummary) {
@@ -100,6 +109,8 @@ export function runDebugLevelLoaderHarness() {
     console.log("\n=== Runtime tile entries (partial valid sample) ===");
     console.dir(partialValidTileEntries, { depth: null });
   }
+  console.log("\n=== Runtime tile bounds (partial valid sample) ===");
+  console.log(partialValidTileBounds);
 
   logLoaderResult("Invalid sample (missing world.spawn)", invalidResult);
 
@@ -112,6 +123,8 @@ export function runDebugLevelLoaderHarness() {
     partialValidSkeleton,
     validTileEntries,
     partialValidTileEntries,
+    validTileBounds,
+    partialValidTileBounds,
     invalidResult,
   };
 }
