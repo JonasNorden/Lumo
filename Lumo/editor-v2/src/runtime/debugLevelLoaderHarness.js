@@ -11,6 +11,7 @@ import { isRuntimeGridSolid } from "./isRuntimeGridSolid.js";
 import { buildRuntimeSpawnNeighborhood } from "./buildRuntimeSpawnNeighborhood.js";
 import { hasRuntimeGroundBelowSpawn } from "./hasRuntimeGroundBelowSpawn.js";
 import { buildRuntimeSpawnValidation } from "./buildRuntimeSpawnValidation.js";
+import { findRuntimeLandingCellBelowSpawn } from "./findRuntimeLandingCellBelowSpawn.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -120,6 +121,10 @@ export function runDebugLevelLoaderHarness() {
   const validSpawnValidation = buildRuntimeSpawnValidation(validWorldPacket);
   const partialValidSpawnValidation = buildRuntimeSpawnValidation(partialValidWorldPacket);
   const invalidSpawnValidation = buildRuntimeSpawnValidation(null);
+  // Scan downward from spawn to find the first supported empty landing cell.
+  const validLandingCellBelowSpawn = findRuntimeLandingCellBelowSpawn(validWorldPacket);
+  const partialLandingCellBelowSpawn = findRuntimeLandingCellBelowSpawn(partialValidWorldPacket);
+  const invalidLandingCellBelowSpawn = findRuntimeLandingCellBelowSpawn(null);
 
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   if (validSummary) {
@@ -149,6 +154,9 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== SPAWN VALIDATION ===");
   console.log("(valid sample)");
   console.dir(validSpawnValidation, { depth: null });
+  console.log("\n=== LANDING CELL BELOW SPAWN ===");
+  console.log("(valid sample)");
+  console.dir(validLandingCellBelowSpawn, { depth: null });
   // Run a few fixed grid lookups for easy runtime tile hit-test inspection.
   console.log("\n=== Runtime tile lookup (valid sample) ===");
   const validLookupTests = [
@@ -195,6 +203,9 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== SPAWN VALIDATION ===");
   console.log("(partial valid sample)");
   console.dir(partialValidSpawnValidation, { depth: null });
+  console.log("\n=== LANDING CELL BELOW SPAWN ===");
+  console.log("(partial valid sample)");
+  console.dir(partialLandingCellBelowSpawn, { depth: null });
   // Keep one sparse-sample lookup so missing tiles remain easy to verify.
   console.log("\n=== Runtime tile lookup (partial valid sample) ===");
   const partialLookupTests = [
@@ -212,6 +223,9 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== SPAWN VALIDATION ===");
   console.log("(invalid sample)");
   console.dir(invalidSpawnValidation, { depth: null });
+  console.log("\n=== LANDING CELL BELOW SPAWN ===");
+  console.log("(invalid sample)");
+  console.dir(invalidLandingCellBelowSpawn, { depth: null });
 
   return {
     validResult,
@@ -237,6 +251,9 @@ export function runDebugLevelLoaderHarness() {
     validSpawnValidation,
     partialValidSpawnValidation,
     invalidSpawnValidation,
+    validLandingCellBelowSpawn,
+    partialLandingCellBelowSpawn,
+    invalidLandingCellBelowSpawn,
     invalidResult,
   };
 }
