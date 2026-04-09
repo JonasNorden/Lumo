@@ -195,17 +195,11 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
   }
 
   const spawnValid = playerSpawnPacket?.spawnValid === true;
-  const spawnStatus = playerSpawnPacket?.status;
-  const spawnPlacementSource = playerSpawnPacket?.placementSource;
-  const spawnErrors = Array.isArray(playerSpawnPacket?.errors) ? playerSpawnPacket.errors : [];
   const spawnWarnings = Array.isArray(playerSpawnPacket?.warnings) ? playerSpawnPacket.warnings : [];
   const spawnPixel = playerSpawnPacket?.startPixel;
   const hasSpawnPixel = hasValidPixelPosition(spawnPixel);
-  const hasSpawnWarning = spawnWarnings.length > 0;
-  const hasSpawnError = !spawnValid || spawnErrors.length > 0 || spawnStatus === "error";
-
-  // Keep placementSource tied to draw-state evaluation while using packet validation data only.
-  void spawnPlacementSource;
+  const hasSpawnWarning = spawnValid && spawnWarnings.length > 0;
+  const hasSpawnError = playerSpawnPacket?.spawnValid === false;
 
   if (hasSpawnPixel) {
     if (hasSpawnError) {
