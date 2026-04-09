@@ -25,6 +25,24 @@ const invalidSampleLevel = {
   },
 };
 
+// Partially valid Recharged sample level for runtime missing-list checks.
+const partialValidSampleLevel = {
+  identity: {
+    id: "debug-partial-001",
+    name: "Debug Harness - Partial Valid",
+    formatVersion: 1,
+    themeId: "forest",
+  },
+  world: {
+    width: 20,
+    height: 12,
+    tileSize: 16,
+    spawn: { x: 2, y: 2 },
+  },
+  // Keep layers intentionally sparse so runtime summary can expose missing requirements.
+  layers: {},
+};
+
 // Logs the key loader output fields in a consistent, readable format.
 function logLoaderResult(label, result) {
   console.log(`\n=== ${label} ===`);
@@ -34,23 +52,36 @@ function logLoaderResult(label, result) {
   console.log("debug.summary:", result.debug?.summary);
 }
 
-// Runs both debug scenarios: one valid document file and one invalid inline sample.
+// Runs three debug scenarios: valid file, partial-valid inline sample, and invalid inline sample.
 export function runDebugLevelLoaderHarness() {
   const validResult = loadLevelDocument(testLevelDocument);
+  const partialValidResult = loadLevelDocument(partialValidSampleLevel);
   const invalidResult = loadLevelDocument(invalidSampleLevel);
-  // Keep this summary log simple; it now includes previews, readiness, and missing requirements.
+  // Keep these summary logs simple; they include previews, readiness, and missing requirements.
   const validSummary = validResult.ok ? buildRuntimeLevelSummary(validResult.level) : null;
+  const partialValidSummary = partialValidResult.ok
+    ? buildRuntimeLevelSummary(partialValidResult.level)
+    : null;
 
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   if (validSummary) {
     console.log("\n=== Runtime level summary (valid sample) ===");
     console.log(validSummary);
   }
+
+  logLoaderResult("Partial valid sample (world + spawn, sparse layers)", partialValidResult);
+  if (partialValidSummary) {
+    console.log("\n=== Runtime level summary (partial valid sample) ===");
+    console.log(partialValidSummary);
+  }
+
   logLoaderResult("Invalid sample (missing world.spawn)", invalidResult);
 
   return {
     validResult,
     validSummary,
+    partialValidResult,
+    partialValidSummary,
     invalidResult,
   };
 }
