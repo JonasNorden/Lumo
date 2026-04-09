@@ -136,7 +136,7 @@ function drawTileGrid(context, worldWidthPx, worldHeightPx, tileSize) {
 function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
   const context = canvas.getContext("2d");
   if (!context) {
-    return;
+    return () => {};
   }
 
   const rawTileSize = worldPacket?.world?.tileSize;
@@ -147,120 +147,172 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
   const worldWidthPx = worldWidth * tileSize;
   const worldHeightPx = worldHeight * tileSize;
 
-  canvas.width = Math.max(1, worldWidthPx);
-  canvas.height = Math.max(1, worldHeightPx);
-
-  context.fillStyle = "#0b0f17";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  // Draw world bounds and grid first so later overlays remain legible on top.
-  drawWorldBounds(context, worldWidthPx, worldHeightPx);
-  if (hasValidTileSize) {
-    drawTileGrid(context, worldWidthPx, worldHeightPx, tileSize);
-  }
-
-  // Draw authored tile coverage as solid debug blocks.
-  const tiles = Array.isArray(worldPacket?.layers?.tiles) ? worldPacket.layers.tiles : [];
-  context.fillStyle = "#2a3a4a";
-  context.strokeStyle = "#3f556b";
-  context.lineWidth = 1;
-  for (const tile of tiles) {
-    const tileX = safeNumber(tile?.x, 0) * tileSize;
-    const tileY = safeNumber(tile?.y, 0) * tileSize;
-    const tileW = Math.max(1, safeNumber(tile?.w, 1) * tileSize);
-    const tileH = Math.max(1, safeNumber(tile?.h, 1) * tileSize);
-    context.fillRect(tileX, tileY, tileW, tileH);
-    context.strokeRect(tileX, tileY, tileW, tileH);
-  }
-
   const landingCell = readGridCell(playerSpawnPacket?.landingCell);
-  if (landingCell) {
-    const landingX = landingCell.x * tileSize;
-    const landingY = landingCell.y * tileSize;
-    context.fillStyle = "rgba(80,255,160,0.25)";
-    context.strokeStyle = "rgba(80,255,160,0.95)";
-    context.lineWidth = 2;
-    context.fillRect(landingX, landingY, tileSize, tileSize);
-    context.strokeRect(landingX, landingY, tileSize, tileSize);
-  }
-
   const supportCell = readGridCell(playerSpawnPacket?.supportCell);
-  if (supportCell) {
-    const supportX = supportCell.x * tileSize;
-    const supportY = supportCell.y * tileSize;
-    context.fillStyle = "rgba(255,255,100,0.15)";
-    context.strokeStyle = "rgba(255,255,100,0.6)";
-    context.lineWidth = 2;
-    context.fillRect(supportX, supportY, tileSize, tileSize);
-    context.strokeRect(supportX, supportY, tileSize, tileSize);
-  }
-
   const authoredSpawn = worldPacket?.spawn;
   const hasAuthoredSpawn = hasValidPixelPosition(authoredSpawn);
   const authoredX = safeNumber(authoredSpawn?.x, 0);
   const authoredY = safeNumber(authoredSpawn?.y, 0);
+  const landingPixelY = landingCell ? landingCell.y * tileSize : null;
+  const shouldAnimateFall =
+    hasAuthoredSpawn && Number.isFinite(landingPixelY) && landingPixelY > authoredY;
 
-  // Draw authored→resolved drop path to visualize runtime spawn settling.
-  const resolvedStartPixel = playerSpawnPacket?.startPixel;
-  if (
-    hasAuthoredSpawn &&
-    hasValidPixelPosition(resolvedStartPixel) &&
-    (authoredSpawn.x !== resolvedStartPixel.x || authoredSpawn.y !== resolvedStartPixel.y)
-  ) {
-    context.save();
-    context.strokeStyle = "#ffcc66";
-    context.lineWidth = 2;
-    context.setLineDash([4, 4]);
-    context.beginPath();
-    context.moveTo(authoredSpawn.x, authoredSpawn.y);
-    context.lineTo(authoredSpawn.x, resolvedStartPixel.y);
-    context.stroke();
-    context.restore();
-  }
+  const animationState = {
+    currentY: authoredY,
+    targetY: shouldAnimateFall ? landingPixelY : authoredY,
+    velocityY: 0,
+  };
+  const gravity = 0.5;
 
-  // Draw authored spawn as a hollow ring so it differs from landing visuals.
-  if (hasAuthoredSpawn) {
-    context.strokeStyle = "#ffb13b";
-    context.lineWidth = 3;
-    context.beginPath();
-    context.arc(authoredX, authoredY, Math.max(5, tileSize * 0.2), 0, Math.PI * 2);
-    context.stroke();
-  }
+  canvas.width = Math.max(1, worldWidthPx);
+  canvas.height = Math.max(1, worldHeightPx);
 
-  const spawnValid = playerSpawnPacket?.spawnValid === true;
-  const spawnWarnings = Array.isArray(playerSpawnPacket?.warnings) ? playerSpawnPacket.warnings : [];
-  const spawnPixel = playerSpawnPacket?.startPixel;
-  const hasSpawnPixel = hasValidPixelPosition(spawnPixel);
-  const hasSpawnWarning = spawnValid && spawnWarnings.length > 0;
-  const hasSpawnError = playerSpawnPacket?.spawnValid === false;
+  function drawFrame(playerY) {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#0b0f17";
+    context.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Draw player at authored spawn (runtime starts here, then falls to landing).
-  if (hasAuthoredSpawn) {
-    const playerWidth = tileSize * 0.6;
-    const playerHeight = tileSize * 0.9;
-    const playerLeft = authoredX - playerWidth * 0.5;
-    const playerTop = authoredY - playerHeight;
-    context.fillStyle = "rgba(80,255,160,0.9)";
-    context.fillRect(playerLeft, playerTop, playerWidth, playerHeight);
+    // Draw world bounds and grid first so later overlays remain legible on top.
+    drawWorldBounds(context, worldWidthPx, worldHeightPx);
+    if (hasValidTileSize) {
+      drawTileGrid(context, worldWidthPx, worldHeightPx, tileSize);
+    }
 
-    // Draw a thin connector so the spawn ring remains visible under the player box.
-    const markerRadius = Math.max(4, tileSize * 0.18);
-    context.strokeStyle = "#ffffff";
+    // Draw authored tile coverage as solid debug blocks.
+    const tiles = Array.isArray(worldPacket?.layers?.tiles) ? worldPacket.layers.tiles : [];
+    context.fillStyle = "#2a3a4a";
+    context.strokeStyle = "#3f556b";
     context.lineWidth = 1;
-    context.beginPath();
-    context.moveTo(authoredX - markerRadius - 4, authoredY - markerRadius - 4);
-    context.lineTo(authoredX + markerRadius + 4, authoredY + markerRadius + 4);
-    context.stroke();
-  }
+    for (const tile of tiles) {
+      const tileX = safeNumber(tile?.x, 0) * tileSize;
+      const tileY = safeNumber(tile?.y, 0) * tileSize;
+      const tileW = Math.max(1, safeNumber(tile?.w, 1) * tileSize);
+      const tileH = Math.max(1, safeNumber(tile?.h, 1) * tileSize);
+      context.fillRect(tileX, tileY, tileW, tileH);
+      context.strokeRect(tileX, tileY, tileW, tileH);
+    }
 
-  // Draw warnings/errors last so they remain on top of all other markers.
-  if (hasSpawnPixel) {
-    if (hasSpawnError) {
-      drawSpawnInvalidX(context, spawnPixel, tileSize);
-    } else if (hasSpawnWarning) {
-      drawSpawnWarningTriangle(context, spawnPixel, tileSize);
+    if (landingCell) {
+      const landingX = landingCell.x * tileSize;
+      const landingY = landingCell.y * tileSize;
+      context.fillStyle = "rgba(80,255,160,0.25)";
+      context.strokeStyle = "rgba(80,255,160,0.95)";
+      context.lineWidth = 2;
+      context.fillRect(landingX, landingY, tileSize, tileSize);
+      context.strokeRect(landingX, landingY, tileSize, tileSize);
+    }
+
+    if (supportCell) {
+      const supportX = supportCell.x * tileSize;
+      const supportY = supportCell.y * tileSize;
+      context.fillStyle = "rgba(255,255,100,0.15)";
+      context.strokeStyle = "rgba(255,255,100,0.6)";
+      context.lineWidth = 2;
+      context.fillRect(supportX, supportY, tileSize, tileSize);
+      context.strokeRect(supportX, supportY, tileSize, tileSize);
+    }
+
+    // Draw authored→resolved drop path to visualize runtime spawn settling.
+    const resolvedStartPixel = playerSpawnPacket?.startPixel;
+    if (
+      hasAuthoredSpawn &&
+      hasValidPixelPosition(resolvedStartPixel) &&
+      (authoredSpawn.x !== resolvedStartPixel.x || authoredSpawn.y !== resolvedStartPixel.y)
+    ) {
+      context.save();
+      context.strokeStyle = "#ffcc66";
+      context.lineWidth = 2;
+      context.setLineDash([4, 4]);
+      context.beginPath();
+      context.moveTo(authoredSpawn.x, authoredSpawn.y);
+      context.lineTo(authoredSpawn.x, resolvedStartPixel.y);
+      context.stroke();
+      context.restore();
+    }
+
+    // Draw authored spawn as a hollow ring so it differs from landing visuals.
+    if (hasAuthoredSpawn) {
+      context.strokeStyle = "#ffb13b";
+      context.lineWidth = 3;
+      context.beginPath();
+      context.arc(authoredX, authoredY, Math.max(5, tileSize * 0.2), 0, Math.PI * 2);
+      context.stroke();
+    }
+
+    const spawnValid = playerSpawnPacket?.spawnValid === true;
+    const spawnWarnings = Array.isArray(playerSpawnPacket?.warnings) ? playerSpawnPacket.warnings : [];
+    const spawnPixel = playerSpawnPacket?.startPixel;
+    const hasSpawnPixel = hasValidPixelPosition(spawnPixel);
+    const hasSpawnWarning = spawnValid && spawnWarnings.length > 0;
+    const hasSpawnError = playerSpawnPacket?.spawnValid === false;
+
+    // Draw player at authored spawn (runtime starts here, then falls to landing).
+    if (hasAuthoredSpawn) {
+      const playerWidth = tileSize * 0.6;
+      const playerHeight = tileSize * 0.9;
+      const playerLeft = authoredX - playerWidth * 0.5;
+      const playerTop = playerY - playerHeight;
+      context.fillStyle = "rgba(80,255,160,0.9)";
+      context.fillRect(playerLeft, playerTop, playerWidth, playerHeight);
+
+      // Draw a thin connector so the spawn ring remains visible under the player box.
+      const markerRadius = Math.max(4, tileSize * 0.18);
+      context.strokeStyle = "#ffffff";
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(authoredX - markerRadius - 4, authoredY - markerRadius - 4);
+      context.lineTo(authoredX + markerRadius + 4, authoredY + markerRadius + 4);
+      context.stroke();
+    }
+
+    // Draw warnings/errors last so they remain on top of all other markers.
+    if (hasSpawnPixel) {
+      if (hasSpawnError) {
+        drawSpawnInvalidX(context, spawnPixel, tileSize);
+      } else if (hasSpawnWarning) {
+        drawSpawnWarningTriangle(context, spawnPixel, tileSize);
+      }
     }
   }
+
+  let animationFrameId = null;
+  let cancelled = false;
+
+  function step() {
+    if (cancelled) {
+      return;
+    }
+
+    animationState.velocityY += gravity;
+    animationState.currentY += animationState.velocityY;
+    if (animationState.currentY >= animationState.targetY) {
+      animationState.currentY = animationState.targetY;
+      animationState.velocityY = 0;
+    }
+
+    drawFrame(animationState.currentY);
+    if (animationState.currentY < animationState.targetY) {
+      animationFrameId = window.requestAnimationFrame(step);
+    } else {
+      animationFrameId = null;
+    }
+  }
+
+  if (!shouldAnimateFall || typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+    drawFrame(animationState.currentY);
+    return () => {};
+  }
+
+  drawFrame(animationState.currentY);
+  animationFrameId = window.requestAnimationFrame(step);
+
+  return () => {
+    cancelled = true;
+    if (animationFrameId !== null && typeof window.cancelAnimationFrame === "function") {
+      window.cancelAnimationFrame(animationFrameId);
+    }
+    animationFrameId = null;
+  };
 }
 
 // Builds a compact, debug-first summary text block for packet status.
@@ -306,6 +358,7 @@ export async function renderRuntimeSpawnPreview({
   levelPathInput,
   loadLevelButton,
 }) {
+  let stopCurrentPreviewAnimation = () => {};
   const requestedLevelPath = readLevelPathFromQuery();
 
   if (levelPathInput) {
@@ -316,9 +369,15 @@ export async function renderRuntimeSpawnPreview({
     const activeLevelPath = levelPath || DEFAULT_LEVEL_PATH;
 
     try {
+      stopCurrentPreviewAnimation();
+      stopCurrentPreviewAnimation = () => {};
       const previewState = await buildPreviewState(activeLevelPath);
 
-      drawSpawnPreview(canvas, previewState.worldPacket, previewState.playerSpawnPacket);
+      stopCurrentPreviewAnimation = drawSpawnPreview(
+        canvas,
+        previewState.worldPacket,
+        previewState.playerSpawnPacket,
+      );
       summary.textContent = buildSummaryText(
         previewState.levelPath,
         previewState.loaderResult,
