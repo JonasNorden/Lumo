@@ -8,6 +8,7 @@ import { buildRuntimeSpawnPoint } from "./buildRuntimeSpawnPoint.js";
 import { buildRuntimeWorldPacket } from "./buildRuntimeWorldPacket.js";
 import { getRuntimeTileAtGrid } from "./getRuntimeTileAtGrid.js";
 import { isRuntimeGridSolid } from "./isRuntimeGridSolid.js";
+import { buildRuntimeSpawnNeighborhood } from "./buildRuntimeSpawnNeighborhood.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -101,6 +102,12 @@ export function runDebugLevelLoaderHarness() {
     tileBounds: partialValidTileBounds,
     tileMap: partialValidTileMap,
   });
+  // Build a fixed spawn neighborhood for quick collision probes around spawn.
+  const validSpawnNeighborhood = buildRuntimeSpawnNeighborhood(validWorldPacket, validSpawnPoint);
+  const partialValidSpawnNeighborhood = buildRuntimeSpawnNeighborhood(
+    partialValidWorldPacket,
+    partialValidSpawnPoint,
+  );
 
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   if (validSummary) {
@@ -123,6 +130,8 @@ export function runDebugLevelLoaderHarness() {
   console.log(validSpawnPoint);
   console.log("\n=== Runtime world packet (valid sample) ===");
   console.dir(validWorldPacket, { depth: null });
+  console.log("\n=== Runtime spawn neighborhood (valid sample) ===");
+  console.dir(validSpawnNeighborhood, { depth: null });
   // Run a few fixed grid lookups for easy runtime tile hit-test inspection.
   console.log("\n=== Runtime tile lookup (valid sample) ===");
   const validLookupTests = [
@@ -162,6 +171,8 @@ export function runDebugLevelLoaderHarness() {
   console.log(partialValidSpawnPoint);
   console.log("\n=== Runtime world packet (partial valid sample) ===");
   console.dir(partialValidWorldPacket, { depth: null });
+  console.log("\n=== Runtime spawn neighborhood (partial valid sample) ===");
+  console.dir(partialValidSpawnNeighborhood, { depth: null });
   // Keep one sparse-sample lookup so missing tiles remain easy to verify.
   console.log("\n=== Runtime tile lookup (partial valid sample) ===");
   const partialLookupTests = [
@@ -194,6 +205,8 @@ export function runDebugLevelLoaderHarness() {
     partialValidSpawnPoint,
     validWorldPacket,
     partialValidWorldPacket,
+    validSpawnNeighborhood,
+    partialValidSpawnNeighborhood,
     invalidResult,
   };
 }
