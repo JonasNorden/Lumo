@@ -14,6 +14,7 @@ import { buildRuntimeSpawnValidation } from "./buildRuntimeSpawnValidation.js";
 import { findRuntimeLandingCellBelowSpawn } from "./findRuntimeLandingCellBelowSpawn.js";
 import { buildRuntimeSpawnDropSummary } from "./buildRuntimeSpawnDropSummary.js";
 import { buildRuntimePlayerStartPlacement } from "./buildRuntimePlayerStartPlacement.js";
+import { buildRuntimePlayerSpawnPacket } from "./buildRuntimePlayerSpawnPacket.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -135,6 +136,10 @@ export function runDebugLevelLoaderHarness() {
   const validPlayerStartPlacement = buildRuntimePlayerStartPlacement(validWorldPacket);
   const partialPlayerStartPlacement = buildRuntimePlayerStartPlacement(partialValidWorldPacket);
   const invalidPlayerStartPlacement = buildRuntimePlayerStartPlacement(null);
+  // Build the first compact runtime-ready player spawn packet for each scenario.
+  const validPlayerSpawnPacket = buildRuntimePlayerSpawnPacket(validWorldPacket);
+  const partialPlayerSpawnPacket = buildRuntimePlayerSpawnPacket(partialValidWorldPacket);
+  const invalidPlayerSpawnPacket = buildRuntimePlayerSpawnPacket(null);
 
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   if (validSummary) {
@@ -173,6 +178,9 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== PLAYER START PLACEMENT ===");
   console.log("(valid sample)");
   console.dir(validPlayerStartPlacement, { depth: null });
+  console.log("\n=== PLAYER SPAWN PACKET ===");
+  console.log("(valid sample)");
+  console.dir(validPlayerSpawnPacket, { depth: null });
   // Run a few fixed grid lookups for easy runtime tile hit-test inspection.
   console.log("\n=== Runtime tile lookup (valid sample) ===");
   const validLookupTests = [
@@ -228,6 +236,9 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== PLAYER START PLACEMENT ===");
   console.log("(partial valid sample)");
   console.dir(partialPlayerStartPlacement, { depth: null });
+  console.log("\n=== PLAYER SPAWN PACKET ===");
+  console.log("(partial valid sample)");
+  console.dir(partialPlayerSpawnPacket, { depth: null });
   // Keep one sparse-sample lookup so missing tiles remain easy to verify.
   console.log("\n=== Runtime tile lookup (partial valid sample) ===");
   const partialLookupTests = [
@@ -254,6 +265,9 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== PLAYER START PLACEMENT ===");
   console.log("(invalid sample)");
   console.dir(invalidPlayerStartPlacement, { depth: null });
+  console.log("\n=== PLAYER SPAWN PACKET ===");
+  console.log("(invalid sample)");
+  console.dir(invalidPlayerSpawnPacket, { depth: null });
 
   return {
     validResult,
@@ -288,6 +302,9 @@ export function runDebugLevelLoaderHarness() {
     validPlayerStartPlacement,
     partialPlayerStartPlacement,
     invalidPlayerStartPlacement,
+    validPlayerSpawnPacket,
+    partialPlayerSpawnPacket,
+    invalidPlayerSpawnPacket,
     invalidResult,
   };
 }
