@@ -4,6 +4,7 @@ export function buildRuntimeLevelSummary(level) {
   const world = isPlainObject(safeLevel.world) ? safeLevel.world : {};
   const layers = isPlainObject(safeLevel.layers) ? safeLevel.layers : {};
   const tilePreview = buildTilePreview(layers.tiles);
+  const backgroundPreview = buildBackgroundPreview(layers.background);
 
   // Keep all collection counts defensive so malformed debug input is still readable.
   const counts = {
@@ -25,6 +26,7 @@ export function buildRuntimeLevelSummary(level) {
     themeId: safeLevel.identity?.themeId,
     formatVersion: safeLevel.identity?.formatVersion,
     tilePreview,
+    backgroundPreview,
   };
 }
 
@@ -45,6 +47,19 @@ function buildTilePreview(tilesLayer) {
     y: tile?.y,
     w: tile?.w,
     h: tile?.h,
+  }));
+}
+
+// Builds a tiny text-friendly background sample for quick parallax debug checks.
+function buildBackgroundPreview(backgroundLayer) {
+  if (!Array.isArray(backgroundLayer)) {
+    return [];
+  }
+
+  return backgroundLayer.slice(0, 5).map((backgroundLayerEntry) => ({
+    backgroundId: backgroundLayerEntry?.backgroundId,
+    order: backgroundLayerEntry?.order,
+    parallax: backgroundLayerEntry?.parallax,
   }));
 }
 

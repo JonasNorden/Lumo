@@ -38,7 +38,7 @@ function logLoaderResult(label, result) {
 export function runDebugLevelLoaderHarness() {
   const validResult = loadLevelDocument(testLevelDocument);
   const invalidResult = loadLevelDocument(invalidSampleLevel);
-  // Keep this summary log simple; it now includes tilePreview from tiles.
+  // Keep this summary log simple; it now includes tile/background previews.
   const validSummary = validResult.ok ? buildRuntimeLevelSummary(validResult.level) : null;
 
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
