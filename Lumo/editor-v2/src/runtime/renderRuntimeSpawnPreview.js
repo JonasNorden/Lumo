@@ -64,6 +64,15 @@ function hasValidPixelPosition(position) {
   return Number.isFinite(position?.x) && Number.isFinite(position?.y);
 }
 
+function readGridCell(cell) {
+  const cellX = Number.isFinite(cell?.gridX) ? cell.gridX : cell?.x;
+  const cellY = Number.isFinite(cell?.gridY) ? cell.gridY : cell?.y;
+  if (!Number.isFinite(cellX) || !Number.isFinite(cellY)) {
+    return null;
+  }
+  return { x: cellX, y: cellY };
+}
+
 // Draws the top-down debug snapshot for world tiles and spawn markers.
 function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
   const context = canvas.getContext("2d");
@@ -90,13 +99,38 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
 
   // Draw authored tile coverage as solid debug blocks.
   const tiles = Array.isArray(worldPacket?.layers?.tiles) ? worldPacket.layers.tiles : [];
-  context.fillStyle = "#4d79ff";
+  context.fillStyle = "#2a3a4a";
+  context.strokeStyle = "#3f556b";
+  context.lineWidth = 1;
   for (const tile of tiles) {
     const tileX = safeNumber(tile?.x, 0) * tileSize;
     const tileY = safeNumber(tile?.y, 0) * tileSize;
     const tileW = Math.max(1, safeNumber(tile?.w, 1) * tileSize);
     const tileH = Math.max(1, safeNumber(tile?.h, 1) * tileSize);
     context.fillRect(tileX, tileY, tileW, tileH);
+    context.strokeRect(tileX, tileY, tileW, tileH);
+  }
+
+  const landingCell = readGridCell(playerSpawnPacket?.landingCell);
+  if (landingCell) {
+    const landingX = landingCell.x * tileSize;
+    const landingY = landingCell.y * tileSize;
+    context.fillStyle = "rgba(80,255,160,0.25)";
+    context.strokeStyle = "rgba(80,255,160,0.95)";
+    context.lineWidth = 2;
+    context.fillRect(landingX, landingY, tileSize, tileSize);
+    context.strokeRect(landingX, landingY, tileSize, tileSize);
+  }
+
+  const supportCell = readGridCell(playerSpawnPacket?.supportCell);
+  if (supportCell) {
+    const supportX = supportCell.x * tileSize;
+    const supportY = supportCell.y * tileSize;
+    context.fillStyle = "rgba(255,255,100,0.15)";
+    context.strokeStyle = "rgba(255,255,100,0.6)";
+    context.lineWidth = 2;
+    context.fillRect(supportX, supportY, tileSize, tileSize);
+    context.strokeRect(supportX, supportY, tileSize, tileSize);
   }
 
   // Draw authored spawn as a hollow ring so it differs from resolved start.
