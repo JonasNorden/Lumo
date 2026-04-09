@@ -31,6 +31,30 @@
         white-space: pre-wrap;
       }
 
+      .level-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      #levelPathInput {
+        min-width: 320px;
+        flex: 1 1 420px;
+        padding: 8px;
+        color: #e5e7eb;
+        background: #0f172a;
+        border: 1px solid #4b5563;
+      }
+
+      #loadLevelButton {
+        padding: 8px 12px;
+        border: 1px solid #6b7280;
+        background: #1f2937;
+        color: #e5e7eb;
+        cursor: pointer;
+      }
+
       #error {
         margin: 0;
         padding: 10px;
@@ -49,6 +73,15 @@
   <body>
     <main>
       <h1>Recharged Runtime Spawn Preview (Debug)</h1>
+      <div class="level-controls">
+        <input
+          id="levelPathInput"
+          type="text"
+          value="./src/data/testLevelDocument.v1.json"
+          aria-label="Level file path"
+        />
+        <button id="loadLevelButton" type="button">Load Level</button>
+      </div>
       <pre id="summary">Loading preview...</pre>
       <p id="error" hidden></p>
       <canvas id="preview" width="640" height="384"></canvas>
@@ -62,6 +95,8 @@
         canvas: document.querySelector("#preview"),
         summary: document.querySelector("#summary"),
         error: document.querySelector("#error"),
+        levelPathInput: document.querySelector("#levelPathInput"),
+        loadLevelButton: document.querySelector("#loadLevelButton"),
       });
     </script>
   </body>
