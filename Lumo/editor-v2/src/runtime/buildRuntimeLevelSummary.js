@@ -6,6 +6,7 @@ export function buildRuntimeLevelSummary(level) {
   const tilePreview = buildTilePreview(layers.tiles);
   const backgroundPreview = buildBackgroundPreview(layers.background);
   const decorPreview = buildDecorPreview(layers.decor);
+  const entityPreview = buildEntityPreview(layers.entities);
 
   // Keep all collection counts defensive so malformed debug input is still readable.
   const counts = {
@@ -29,6 +30,7 @@ export function buildRuntimeLevelSummary(level) {
     tilePreview,
     backgroundPreview,
     decorPreview,
+    entityPreview,
   };
 }
 
@@ -76,6 +78,19 @@ function buildDecorPreview(decorLayer) {
     x: decorLayerEntry?.x,
     y: decorLayerEntry?.y,
     order: decorLayerEntry?.order,
+  }));
+}
+
+// Builds a tiny text-friendly entity sample for quick placement/type debug checks.
+function buildEntityPreview(entitiesLayer) {
+  if (!Array.isArray(entitiesLayer)) {
+    return [];
+  }
+
+  return entitiesLayer.slice(0, 5).map((entityLayerEntry) => ({
+    entityType: entityLayerEntry?.entityType,
+    x: entityLayerEntry?.x,
+    y: entityLayerEntry?.y,
   }));
 }
 
