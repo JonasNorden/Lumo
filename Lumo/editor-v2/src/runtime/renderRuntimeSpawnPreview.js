@@ -73,6 +73,36 @@ function readGridCell(cell) {
   return { x: cellX, y: cellY };
 }
 
+function drawSpawnInvalidX(context, spawnPixel, tileSize) {
+  const markerSize = Math.max(6, tileSize * 0.8);
+  const halfMarkerSize = markerSize * 0.5;
+  context.save();
+  context.strokeStyle = "#ff5555";
+  context.lineWidth = 3;
+  context.beginPath();
+  context.moveTo(spawnPixel.x - halfMarkerSize, spawnPixel.y - halfMarkerSize);
+  context.lineTo(spawnPixel.x + halfMarkerSize, spawnPixel.y + halfMarkerSize);
+  context.moveTo(spawnPixel.x + halfMarkerSize, spawnPixel.y - halfMarkerSize);
+  context.lineTo(spawnPixel.x - halfMarkerSize, spawnPixel.y + halfMarkerSize);
+  context.stroke();
+  context.restore();
+}
+
+function drawSpawnWarningTriangle(context, spawnPixel, tileSize) {
+  const triangleSize = Math.max(6, tileSize * 0.35);
+  const tipY = spawnPixel.y - tileSize * 0.65;
+  const baseY = tipY + triangleSize;
+  context.save();
+  context.fillStyle = "#ffcc00";
+  context.beginPath();
+  context.moveTo(spawnPixel.x, tipY);
+  context.lineTo(spawnPixel.x - triangleSize * 0.5, baseY);
+  context.lineTo(spawnPixel.x + triangleSize * 0.5, baseY);
+  context.closePath();
+  context.fill();
+  context.restore();
+}
+
 // Draws the top-down debug snapshot for world tiles and spawn markers.
 function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
   const context = canvas.getContext("2d");
@@ -162,6 +192,27 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
     context.lineTo(authoredSpawn.x, resolvedStartPixel.y);
     context.stroke();
     context.restore();
+  }
+
+  const spawnValid = playerSpawnPacket?.spawnValid === true;
+  const spawnStatus = playerSpawnPacket?.status;
+  const spawnPlacementSource = playerSpawnPacket?.placementSource;
+  const spawnErrors = Array.isArray(playerSpawnPacket?.errors) ? playerSpawnPacket.errors : [];
+  const spawnWarnings = Array.isArray(playerSpawnPacket?.warnings) ? playerSpawnPacket.warnings : [];
+  const spawnPixel = playerSpawnPacket?.startPixel;
+  const hasSpawnPixel = hasValidPixelPosition(spawnPixel);
+  const hasSpawnWarning = spawnWarnings.length > 0;
+  const hasSpawnError = !spawnValid || spawnErrors.length > 0 || spawnStatus === "error";
+
+  // Keep placementSource tied to draw-state evaluation while using packet validation data only.
+  void spawnPlacementSource;
+
+  if (hasSpawnPixel) {
+    if (hasSpawnError) {
+      drawSpawnInvalidX(context, spawnPixel, tileSize);
+    } else if (hasSpawnWarning) {
+      drawSpawnWarningTriangle(context, spawnPixel, tileSize);
+    }
   }
 
   // Draw player at authored spawn (runtime starts here, then falls to landing).
