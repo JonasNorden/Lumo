@@ -5,6 +5,7 @@ export function buildRuntimeLevelSummary(level) {
   const layers = isPlainObject(safeLevel.layers) ? safeLevel.layers : {};
   const tilePreview = buildTilePreview(layers.tiles);
   const backgroundPreview = buildBackgroundPreview(layers.background);
+  const decorPreview = buildDecorPreview(layers.decor);
 
   // Keep all collection counts defensive so malformed debug input is still readable.
   const counts = {
@@ -27,6 +28,7 @@ export function buildRuntimeLevelSummary(level) {
     formatVersion: safeLevel.identity?.formatVersion,
     tilePreview,
     backgroundPreview,
+    decorPreview,
   };
 }
 
@@ -60,6 +62,20 @@ function buildBackgroundPreview(backgroundLayer) {
     backgroundId: backgroundLayerEntry?.backgroundId,
     order: backgroundLayerEntry?.order,
     parallax: backgroundLayerEntry?.parallax,
+  }));
+}
+
+// Builds a tiny text-friendly decor sample for quick placement/order debug checks.
+function buildDecorPreview(decorLayer) {
+  if (!Array.isArray(decorLayer)) {
+    return [];
+  }
+
+  return decorLayer.slice(0, 5).map((decorLayerEntry) => ({
+    decorId: decorLayerEntry?.decorId,
+    x: decorLayerEntry?.x,
+    y: decorLayerEntry?.y,
+    order: decorLayerEntry?.order,
   }));
 }
 
