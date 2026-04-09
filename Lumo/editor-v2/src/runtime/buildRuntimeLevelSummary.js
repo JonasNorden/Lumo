@@ -7,6 +7,7 @@ export function buildRuntimeLevelSummary(level) {
   const backgroundPreview = buildBackgroundPreview(layers.background);
   const decorPreview = buildDecorPreview(layers.decor);
   const entityPreview = buildEntityPreview(layers.entities);
+  const audioPreview = buildAudioPreview(layers.audio);
 
   // Keep all collection counts defensive so malformed debug input is still readable.
   const counts = {
@@ -31,6 +32,7 @@ export function buildRuntimeLevelSummary(level) {
     backgroundPreview,
     decorPreview,
     entityPreview,
+    audioPreview,
   };
 }
 
@@ -91,6 +93,20 @@ function buildEntityPreview(entitiesLayer) {
     entityType: entityLayerEntry?.entityType,
     x: entityLayerEntry?.x,
     y: entityLayerEntry?.y,
+  }));
+}
+
+// Builds a tiny text-friendly audio sample for quick placement/type debug checks.
+function buildAudioPreview(audioLayer) {
+  if (!Array.isArray(audioLayer)) {
+    return [];
+  }
+
+  return audioLayer.slice(0, 5).map((audioLayerEntry) => ({
+    audioId: audioLayerEntry?.audioId,
+    audioType: audioLayerEntry?.audioType,
+    x: audioLayerEntry?.x,
+    y: audioLayerEntry?.y,
   }));
 }
 
