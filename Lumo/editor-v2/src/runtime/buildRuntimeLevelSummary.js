@@ -46,6 +46,9 @@ export function buildRuntimeLevelSummary(level) {
     hasAudio: hasLayerEntries(summary.counts.audio),
   };
 
+  // Mirrors readiness in a short missing list so debug output shows what is still required.
+  summary.missing = buildMissingFromReadiness(summary.readiness);
+
   return summary;
 }
 
@@ -121,6 +124,39 @@ function buildAudioPreview(audioLayer) {
     x: audioLayerEntry?.x,
     y: audioLayerEntry?.y,
   }));
+}
+
+// Converts readiness booleans into a stable missing list for completion checks.
+function buildMissingFromReadiness(readiness) {
+  if (!isPlainObject(readiness)) {
+    return ["world", "spawn", "tiles", "background", "decor", "entities", "audio"];
+  }
+
+  const missing = [];
+
+  if (!readiness.hasWorld) {
+    missing.push("world");
+  }
+  if (!readiness.hasSpawn) {
+    missing.push("spawn");
+  }
+  if (!readiness.hasTiles) {
+    missing.push("tiles");
+  }
+  if (!readiness.hasBackground) {
+    missing.push("background");
+  }
+  if (!readiness.hasDecor) {
+    missing.push("decor");
+  }
+  if (!readiness.hasEntities) {
+    missing.push("entities");
+  }
+  if (!readiness.hasAudio) {
+    missing.push("audio");
+  }
+
+  return missing;
 }
 
 function isPlainObject(value) {
