@@ -12,6 +12,8 @@ const PREVIEW_FALL_START_DELAY_MS = 1000;
 const PREVIEW_FALL_REPLAY_DELAY_MS = 1200;
 const PREVIEW_FALL_GRAVITY = 0.25;
 const PREVIEW_FALL_MANUAL_STEP_PX = 3.5;
+const PREVIEW_CAMERA_FOLLOW_STRENGTH = 0.35;
+const PREVIEW_CAMERA_SMOOTHING = 0.12;
 const PLAYER_VISUAL_IDLE = "idle";
 const PLAYER_VISUAL_FALLING = "falling";
 const PLAYER_VISUAL_LANDED = "landed";
@@ -91,6 +93,20 @@ function resolvePlayerVisualState(phase) {
     return PLAYER_VISUAL_LANDED;
   }
   return PLAYER_VISUAL_IDLE;
+}
+
+function resolveCameraTargetOffsetY(phase, playerY, authoredY) {
+  if (phase === "falling" || phase === "landing-delay") {
+    const deltaY = safeNumber(playerY, authoredY) - safeNumber(authoredY, 0);
+    return Math.max(0, deltaY) * PREVIEW_CAMERA_FOLLOW_STRENGTH;
+  }
+  return 0;
+}
+
+function smoothCameraOffsetY(currentOffsetY, targetOffsetY) {
+  const safeCurrentOffsetY = safeNumber(currentOffsetY, 0);
+  const safeTargetOffsetY = safeNumber(targetOffsetY, 0);
+  return safeCurrentOffsetY + (safeTargetOffsetY - safeCurrentOffsetY) * PREVIEW_CAMERA_SMOOTHING;
 }
 
 function drawSpawnInvalidX(context, spawnPixel, tileSize) {
@@ -192,6 +208,9 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDeb
     phase: shouldAnimateFall ? "start-delay" : "static",
     phaseUntilMs: 0,
   };
+  const cameraState = {
+    offsetY: 0,
+  };
 
   canvas.width = Math.max(1, worldWidthPx);
   canvas.height = Math.max(1, worldHeightPx);
@@ -230,10 +249,13 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDeb
     });
   }
 
-  function drawFrame(playerY, playerVisualState = PLAYER_VISUAL_IDLE) {
+  function drawFrame(playerY, playerVisualState = PLAYER_VISUAL_IDLE, cameraOffsetY = 0) {
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = "#0b0f17";
     context.fillRect(0, 0, canvas.width, canvas.height);
+
+    context.save();
+    context.translate(0, -safeNumber(cameraOffsetY, 0));
 
     // Draw world bounds and grid first so later overlays remain legible on top.
     drawWorldBounds(context, worldWidthPx, worldHeightPx);
@@ -362,6 +384,7 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDeb
         drawSpawnWarningTriangle(context, spawnPixel, tileSize);
       }
     }
+    context.restore();
 
     drawAnimationMarker(context, animationState.phase);
     drawPlayerStateLabel(context, playerVisualState);
@@ -409,21 +432,32 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDeb
     }
 
     const playerVisualState = resolvePlayerVisualState(animationState.phase);
+    const targetCameraOffsetY = resolveCameraTargetOffsetY(
+      animationState.phase,
+      animationState.currentY,
+      authoredSpawnPixelY,
+    );
+    cameraState.offsetY = smoothCameraOffsetY(cameraState.offsetY, targetCameraOffsetY);
     emitAnimationDebug();
-    drawFrame(animationState.currentY, playerVisualState);
+    drawFrame(animationState.currentY, playerVisualState, cameraState.offsetY);
     animationFrameId = window.requestAnimationFrame(step);
   }
 
   if (!shouldAnimateFall || typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
     const playerVisualState = resolvePlayerVisualState(animationState.phase);
+    cameraState.offsetY = 0;
     emitAnimationDebug();
-    drawFrame(animationState.currentY, playerVisualState);
+    drawFrame(animationState.currentY, playerVisualState, cameraState.offsetY);
     return () => {};
   }
 
   const playerVisualState = resolvePlayerVisualState(animationState.phase);
+  cameraState.offsetY = smoothCameraOffsetY(
+    cameraState.offsetY,
+    resolveCameraTargetOffsetY(animationState.phase, animationState.currentY, authoredSpawnPixelY),
+  );
   emitAnimationDebug();
-  drawFrame(animationState.currentY, playerVisualState);
+  drawFrame(animationState.currentY, playerVisualState, cameraState.offsetY);
   animationFrameId = window.requestAnimationFrame(step);
 
   return () => {
