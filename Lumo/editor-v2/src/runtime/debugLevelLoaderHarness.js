@@ -1,30 +1,5 @@
 import { loadLevelDocument } from "./loadLevelDocument.js";
-
-// Valid Recharged sample level used to verify the happy path.
-const validSampleLevel = {
-  identity: {
-    id: "debug-valid-001",
-    name: "Debug Harness - Valid",
-    formatVersion: 1,
-    themeId: "forest",
-  },
-  world: {
-    width: 20,
-    height: 12,
-    tileSize: 16,
-    spawn: { x: 2, y: 3 },
-  },
-  layers: {
-    tiles: [{ tileId: "grass", x: 0, y: 0 }],
-    background: [{ backgroundId: "sky", order: 0 }],
-    decor: [{ decorId: "bush", x: 4, y: 2 }],
-    entities: [{ entityType: "slime", x: 6, y: 5, params: { hp: 3 } }],
-    audio: [{ audioId: "wind", audioType: "ambient", x: 0, y: 0 }],
-  },
-  meta: {
-    createdBy: "debug-harness",
-  },
-};
+import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
 const invalidSampleLevel = {
@@ -58,12 +33,12 @@ function logLoaderResult(label, result) {
   console.log("debug.summary:", result.debug?.summary);
 }
 
-// Runs both debug scenarios: one valid sample and one invalid sample.
+// Runs both debug scenarios: one valid document file and one invalid inline sample.
 export function runDebugLevelLoaderHarness() {
-  const validResult = loadLevelDocument(validSampleLevel);
+  const validResult = loadLevelDocument(testLevelDocument);
   const invalidResult = loadLevelDocument(invalidSampleLevel);
 
-  logLoaderResult("Valid sample", validResult);
+  logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   logLoaderResult("Invalid sample (missing world.spawn)", invalidResult);
 
   return {
