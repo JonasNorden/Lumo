@@ -7,12 +7,23 @@ import { buildRuntimeWorldPacket } from "./buildRuntimeWorldPacket.js";
 import { buildRuntimePlayerSpawnPacket } from "./buildRuntimePlayerSpawnPacket.js";
 
 const DEFAULT_TILE_SIZE = 32;
+const DEFAULT_LEVEL_PATH = "./src/data/testLevelDocument.v1.json";
+
+function readLevelPathFromQuery() {
+  if (typeof window === "undefined") {
+    return DEFAULT_LEVEL_PATH;
+  }
+
+  const searchParams = new URLSearchParams(window.location.search);
+  const requestedLevelPath = searchParams.get("level");
+  return requestedLevelPath || DEFAULT_LEVEL_PATH;
+}
 
 // Loads the test level JSON, then runs the Recharged loader + packet helpers.
-async function buildPreviewState() {
-  const response = await fetch("./src/data/testLevelDocument.v1.json");
+async function buildPreviewState(levelPath) {
+  const response = await fetch(levelPath);
   if (!response.ok) {
-    throw new Error(`Failed to fetch test level (${response.status} ${response.statusText}).`);
+    throw new Error(`Failed to fetch level "${levelPath}" (${response.status} ${response.statusText}).`);
   }
 
   const levelDocument = await response.json();
@@ -20,6 +31,7 @@ async function buildPreviewState() {
 
   if (!loaderResult.ok || !loaderResult.level) {
     return {
+      levelPath,
       loaderResult,
       worldPacket: null,
       playerSpawnPacket: null,
@@ -36,6 +48,7 @@ async function buildPreviewState() {
   const playerSpawnPacket = buildRuntimePlayerSpawnPacket(worldPacket);
 
   return {
+    levelPath,
     loaderResult,
     worldPacket,
     playerSpawnPacket,
@@ -116,7 +129,7 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
 }
 
 // Builds a compact, debug-first summary text block for packet status.
-function buildSummaryText(loaderResult, playerSpawnPacket) {
+function buildSummaryText(levelPath, loaderResult, playerSpawnPacket) {
   const spawnPacketOk = playerSpawnPacket?.ok === true;
   const status = playerSpawnPacket?.status ?? "missing-spawn";
   const placementSource = playerSpawnPacket?.placementSource ?? "missing-spawn";
@@ -124,6 +137,7 @@ function buildSummaryText(loaderResult, playerSpawnPacket) {
   const startPixel = playerSpawnPacket?.startPixel ?? { x: null, y: null };
 
   const lines = [
+    `levelPath: ${levelPath}`,
     `loader ok: ${loaderResult?.ok === true}`,
     `player spawn packet ok: ${spawnPacketOk}`,
     `status: ${status}`,
@@ -155,15 +169,21 @@ export async function renderRuntimeSpawnPreview({
   summary,
   error,
 }) {
+  const levelPath = readLevelPathFromQuery();
+
   try {
-    const previewState = await buildPreviewState();
+    const previewState = await buildPreviewState(levelPath);
 
     drawSpawnPreview(canvas, previewState.worldPacket, previewState.playerSpawnPacket);
-    summary.textContent = buildSummaryText(previewState.loaderResult, previewState.playerSpawnPacket);
+    summary.textContent = buildSummaryText(
+      previewState.levelPath,
+      previewState.loaderResult,
+      previewState.playerSpawnPacket,
+    );
     error.textContent = "";
     error.hidden = true;
   } catch (caughtError) {
-    summary.textContent = "loader ok: false\nplayer spawn packet ok: false\nstatus: load-failed";
+    summary.textContent = `levelPath: ${levelPath}\nloader ok: false\nplayer spawn packet ok: false\nstatus: load-failed`;
     error.hidden = false;
     error.textContent = `Error: ${caughtError?.message ?? "Unknown failure while building preview."}`;
   }
