@@ -1,5 +1,6 @@
 import { loadLevelDocument } from "./loadLevelDocument.js";
 import { buildRuntimeLevelSummary } from "./buildRuntimeLevelSummary.js";
+import { buildRuntimeWorldSkeleton } from "./buildRuntimeWorldSkeleton.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -62,17 +63,29 @@ export function runDebugLevelLoaderHarness() {
   const partialValidSummary = partialValidResult.ok
     ? buildRuntimeLevelSummary(partialValidResult.level)
     : null;
+  const validSkeleton = validResult.ok ? buildRuntimeWorldSkeleton(validResult.level) : null;
+  const partialValidSkeleton = partialValidResult.ok
+    ? buildRuntimeWorldSkeleton(partialValidResult.level)
+    : null;
 
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   if (validSummary) {
     console.log("\n=== Runtime level summary (valid sample) ===");
     console.log(validSummary);
   }
+  if (validSkeleton) {
+    console.log("\n=== Runtime world skeleton (valid sample) ===");
+    console.dir(validSkeleton, { depth: null });
+  }
 
   logLoaderResult("Partial valid sample (world + spawn, sparse layers)", partialValidResult);
   if (partialValidSummary) {
     console.log("\n=== Runtime level summary (partial valid sample) ===");
     console.log(partialValidSummary);
+  }
+  if (partialValidSkeleton) {
+    console.log("\n=== Runtime world skeleton (partial valid sample) ===");
+    console.dir(partialValidSkeleton, { depth: null });
   }
 
   logLoaderResult("Invalid sample (missing world.spawn)", invalidResult);
@@ -82,6 +95,8 @@ export function runDebugLevelLoaderHarness() {
     validSummary,
     partialValidResult,
     partialValidSummary,
+    validSkeleton,
+    partialValidSkeleton,
     invalidResult,
   };
 }
