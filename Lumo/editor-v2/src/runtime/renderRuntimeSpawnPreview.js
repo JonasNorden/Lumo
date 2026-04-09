@@ -8,9 +8,10 @@ import { buildRuntimePlayerSpawnPacket } from "./buildRuntimePlayerSpawnPacket.j
 
 const DEFAULT_TILE_SIZE = 32;
 const DEFAULT_LEVEL_PATH = "./src/data/testLevelDocument.v1.json";
-const PREVIEW_FALL_START_DELAY_MS = 600;
-const PREVIEW_FALL_REPLAY_DELAY_MS = 900;
-const PREVIEW_FALL_GRAVITY = 0.35;
+const PREVIEW_FALL_START_DELAY_MS = 1000;
+const PREVIEW_FALL_REPLAY_DELAY_MS = 1200;
+const PREVIEW_FALL_GRAVITY = 0.25;
+const PREVIEW_FALL_MANUAL_STEP_PX = 3.5;
 
 function readLevelPathFromQuery() {
   if (typeof window === "undefined") {
@@ -136,7 +137,7 @@ function drawTileGrid(context, worldWidthPx, worldHeightPx, tileSize) {
 }
 
 // Draws the top-down debug snapshot for world tiles and spawn markers.
-function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
+function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDebugUpdate = () => {}) {
   const context = canvas.getContext("2d");
   if (!context) {
     return () => {};
@@ -161,15 +162,37 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
     hasAuthoredSpawn && Number.isFinite(landingPixelY) && landingPixelY > authoredY;
 
   const animationState = {
+    enabled: shouldAnimateFall,
     currentY: authoredY,
     targetY: shouldAnimateFall ? landingPixelY : authoredY,
     velocityY: 0,
-    phase: "start-delay",
+    phase: shouldAnimateFall ? "start-delay" : "static",
     phaseUntilMs: 0,
   };
 
   canvas.width = Math.max(1, worldWidthPx);
   canvas.height = Math.max(1, worldHeightPx);
+
+  function drawAnimationMarker(context2d, phase) {
+    context2d.save();
+    context2d.fillStyle = "rgba(0,0,0,0.6)";
+    context2d.fillRect(8, 8, 130, 24);
+    context2d.fillStyle = "#7df7c5";
+    context2d.font = "bold 13px monospace";
+    context2d.textBaseline = "middle";
+    context2d.fillText(`ANIM: ${phase}`, 14, 20);
+    context2d.restore();
+  }
+
+  function emitAnimationDebug() {
+    onAnimationDebugUpdate({
+      animationEnabled: animationState.enabled,
+      animationPhase: animationState.phase,
+      animatedPlayerY: Math.round(animationState.currentY),
+      spawnY: Math.round(authoredY),
+      targetY: Math.round(animationState.targetY),
+    });
+  }
 
   function drawFrame(playerY) {
     context.clearRect(0, 0, canvas.width, canvas.height);
@@ -277,6 +300,8 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
         drawSpawnWarningTriangle(context, spawnPixel, tileSize);
       }
     }
+
+    drawAnimationMarker(context, animationState.phase);
   }
 
   let animationFrameId = null;
@@ -301,7 +326,9 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
       }
     } else if (animationState.phase === "falling") {
       animationState.velocityY += PREVIEW_FALL_GRAVITY;
-      animationState.currentY += animationState.velocityY;
+      const velocityStep = Math.max(0, animationState.velocityY);
+      const manualInterpolationStep = PREVIEW_FALL_MANUAL_STEP_PX;
+      animationState.currentY += Math.max(velocityStep, manualInterpolationStep);
       if (animationState.currentY >= animationState.targetY) {
         animationState.currentY = animationState.targetY;
         animationState.velocityY = 0;
@@ -318,15 +345,18 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
       }
     }
 
+    emitAnimationDebug();
     drawFrame(animationState.currentY);
     animationFrameId = window.requestAnimationFrame(step);
   }
 
   if (!shouldAnimateFall || typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+    emitAnimationDebug();
     drawFrame(animationState.currentY);
     return () => {};
   }
 
+  emitAnimationDebug();
   drawFrame(animationState.currentY);
   animationFrameId = window.requestAnimationFrame(step);
 
@@ -340,7 +370,7 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
 }
 
 // Builds a compact, debug-first summary text block for packet status.
-function buildSummaryText(levelPath, loaderResult, playerSpawnPacket) {
+function buildSummaryText(levelPath, loaderResult, playerSpawnPacket, animationDebug) {
   const spawnPacketOk = playerSpawnPacket?.ok === true;
   const status = playerSpawnPacket?.status ?? "missing-spawn";
   const placementSource = playerSpawnPacket?.placementSource ?? "missing-spawn";
@@ -355,6 +385,11 @@ function buildSummaryText(levelPath, loaderResult, playerSpawnPacket) {
     `placementSource: ${placementSource}`,
     `startGrid: (${startGrid.x}, ${startGrid.y})`,
     `startPixel: (${startPixel.x}, ${startPixel.y})`,
+    `animationEnabled: ${animationDebug.animationEnabled}`,
+    `animationPhase: ${animationDebug.animationPhase}`,
+    `animatedPlayerY: ${animationDebug.animatedPlayerY}`,
+    `spawnY: ${animationDebug.spawnY}`,
+    `targetY: ${animationDebug.targetY}`,
   ];
 
   const loaderErrors = Array.isArray(loaderResult?.errors) ? loaderResult.errors : [];
@@ -396,17 +431,36 @@ export async function renderRuntimeSpawnPreview({
       stopCurrentPreviewAnimation();
       stopCurrentPreviewAnimation = () => {};
       const previewState = await buildPreviewState(activeLevelPath);
+      const animationDebugState = {
+        animationEnabled: false,
+        animationPhase: "static",
+        animatedPlayerY: null,
+        spawnY: null,
+        targetY: null,
+      };
+      const updateSummary = () => {
+        summary.textContent = buildSummaryText(
+          previewState.levelPath,
+          previewState.loaderResult,
+          previewState.playerSpawnPacket,
+          animationDebugState,
+        );
+      };
 
       stopCurrentPreviewAnimation = drawSpawnPreview(
         canvas,
         previewState.worldPacket,
         previewState.playerSpawnPacket,
+        (nextAnimationDebugState) => {
+          animationDebugState.animationEnabled = nextAnimationDebugState.animationEnabled;
+          animationDebugState.animationPhase = nextAnimationDebugState.animationPhase;
+          animationDebugState.animatedPlayerY = nextAnimationDebugState.animatedPlayerY;
+          animationDebugState.spawnY = nextAnimationDebugState.spawnY;
+          animationDebugState.targetY = nextAnimationDebugState.targetY;
+          updateSummary();
+        },
       );
-      summary.textContent = buildSummaryText(
-        previewState.levelPath,
-        previewState.loaderResult,
-        previewState.playerSpawnPacket,
-      );
+      updateSummary();
       error.textContent = "";
       error.hidden = true;
     } catch (caughtError) {
