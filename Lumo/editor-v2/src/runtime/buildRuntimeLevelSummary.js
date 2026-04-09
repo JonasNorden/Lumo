@@ -18,7 +18,7 @@ export function buildRuntimeLevelSummary(level) {
     audio: countArrayEntries(layers.audio),
   };
 
-  return {
+  const summary = {
     world: {
       width: world.width,
       height: world.height,
@@ -34,6 +34,19 @@ export function buildRuntimeLevelSummary(level) {
     entityPreview,
     audioPreview,
   };
+
+  // Readiness is derived from summary data only, so debug output stays consistent and defensive.
+  summary.readiness = {
+    hasWorld: hasWorldData(summary.world),
+    hasSpawn: isPlainObject(summary.spawn),
+    hasTiles: hasLayerEntries(summary.counts.tiles),
+    hasBackground: hasLayerEntries(summary.counts.background),
+    hasDecor: hasLayerEntries(summary.counts.decor),
+    hasEntities: hasLayerEntries(summary.counts.entities),
+    hasAudio: hasLayerEntries(summary.counts.audio),
+  };
+
+  return summary;
 }
 
 // Treat only real arrays as layer collections.
@@ -112,4 +125,22 @@ function buildAudioPreview(audioLayer) {
 
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// Keeps readiness checks strict enough for quick debug confidence in core world data.
+function hasWorldData(worldSummary) {
+  if (!isPlainObject(worldSummary)) {
+    return false;
+  }
+
+  return (
+    Number.isFinite(worldSummary.width) &&
+    Number.isFinite(worldSummary.height) &&
+    Number.isFinite(worldSummary.tileSize)
+  );
+}
+
+// Ensures readiness booleans stay resilient if count fields are missing or malformed.
+function hasLayerEntries(count) {
+  return Number.isInteger(count) && count > 0;
 }
