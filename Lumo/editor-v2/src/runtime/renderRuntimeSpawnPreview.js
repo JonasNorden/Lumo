@@ -103,6 +103,35 @@ function drawSpawnWarningTriangle(context, spawnPixel, tileSize) {
   context.restore();
 }
 
+function drawWorldBounds(context, worldWidthPx, worldHeightPx) {
+  context.save();
+  context.strokeStyle = "#4a6a8a";
+  context.lineWidth = 2;
+  context.strokeRect(1, 1, Math.max(0, worldWidthPx - 2), Math.max(0, worldHeightPx - 2));
+  context.restore();
+}
+
+function drawTileGrid(context, worldWidthPx, worldHeightPx, tileSize) {
+  if (!Number.isFinite(tileSize) || tileSize <= 0) {
+    return;
+  }
+
+  context.save();
+  context.strokeStyle = "rgba(100,140,180,0.15)";
+  context.lineWidth = 1;
+  context.beginPath();
+  for (let x = tileSize; x < worldWidthPx; x += tileSize) {
+    context.moveTo(x, 0);
+    context.lineTo(x, worldHeightPx);
+  }
+  for (let y = tileSize; y < worldHeightPx; y += tileSize) {
+    context.moveTo(0, y);
+    context.lineTo(worldWidthPx, y);
+  }
+  context.stroke();
+  context.restore();
+}
+
 // Draws the top-down debug snapshot for world tiles and spawn markers.
 function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
   const context = canvas.getContext("2d");
@@ -110,7 +139,9 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
     return;
   }
 
-  const tileSize = safeNumber(worldPacket?.world?.tileSize, DEFAULT_TILE_SIZE);
+  const rawTileSize = worldPacket?.world?.tileSize;
+  const hasValidTileSize = Number.isFinite(rawTileSize) && rawTileSize > 0;
+  const tileSize = hasValidTileSize ? rawTileSize : DEFAULT_TILE_SIZE;
   const worldWidth = safeNumber(worldPacket?.world?.width, 20);
   const worldHeight = safeNumber(worldPacket?.world?.height, 12);
   const worldWidthPx = worldWidth * tileSize;
@@ -122,10 +153,11 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
   context.fillStyle = "#0b0f17";
   context.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Draw world bounds first so tile extents are easy to read.
-  context.strokeStyle = "#8da2c0";
-  context.lineWidth = 2;
-  context.strokeRect(1, 1, Math.max(0, worldWidthPx - 2), Math.max(0, worldHeightPx - 2));
+  // Draw world bounds and grid first so later overlays remain legible on top.
+  drawWorldBounds(context, worldWidthPx, worldHeightPx);
+  if (hasValidTileSize) {
+    drawTileGrid(context, worldWidthPx, worldHeightPx, tileSize);
+  }
 
   // Draw authored tile coverage as solid debug blocks.
   const tiles = Array.isArray(worldPacket?.layers?.tiles) ? worldPacket.layers.tiles : [];
@@ -163,18 +195,10 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
     context.strokeRect(supportX, supportY, tileSize, tileSize);
   }
 
-  // Draw authored spawn as a hollow ring so it differs from landing visuals.
   const authoredSpawn = worldPacket?.spawn;
   const hasAuthoredSpawn = hasValidPixelPosition(authoredSpawn);
   const authoredX = safeNumber(authoredSpawn?.x, 0);
   const authoredY = safeNumber(authoredSpawn?.y, 0);
-  if (hasAuthoredSpawn) {
-    context.strokeStyle = "#ffb13b";
-    context.lineWidth = 3;
-    context.beginPath();
-    context.arc(authoredX, authoredY, Math.max(5, tileSize * 0.2), 0, Math.PI * 2);
-    context.stroke();
-  }
 
   // Draw authored→resolved drop path to visualize runtime spawn settling.
   const resolvedStartPixel = playerSpawnPacket?.startPixel;
@@ -194,20 +218,21 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
     context.restore();
   }
 
+  // Draw authored spawn as a hollow ring so it differs from landing visuals.
+  if (hasAuthoredSpawn) {
+    context.strokeStyle = "#ffb13b";
+    context.lineWidth = 3;
+    context.beginPath();
+    context.arc(authoredX, authoredY, Math.max(5, tileSize * 0.2), 0, Math.PI * 2);
+    context.stroke();
+  }
+
   const spawnValid = playerSpawnPacket?.spawnValid === true;
   const spawnWarnings = Array.isArray(playerSpawnPacket?.warnings) ? playerSpawnPacket.warnings : [];
   const spawnPixel = playerSpawnPacket?.startPixel;
   const hasSpawnPixel = hasValidPixelPosition(spawnPixel);
   const hasSpawnWarning = spawnValid && spawnWarnings.length > 0;
   const hasSpawnError = playerSpawnPacket?.spawnValid === false;
-
-  if (hasSpawnPixel) {
-    if (hasSpawnError) {
-      drawSpawnInvalidX(context, spawnPixel, tileSize);
-    } else if (hasSpawnWarning) {
-      drawSpawnWarningTriangle(context, spawnPixel, tileSize);
-    }
-  }
 
   // Draw player at authored spawn (runtime starts here, then falls to landing).
   if (hasAuthoredSpawn) {
@@ -226,6 +251,15 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
     context.moveTo(authoredX - markerRadius - 4, authoredY - markerRadius - 4);
     context.lineTo(authoredX + markerRadius + 4, authoredY + markerRadius + 4);
     context.stroke();
+  }
+
+  // Draw warnings/errors last so they remain on top of all other markers.
+  if (hasSpawnPixel) {
+    if (hasSpawnError) {
+      drawSpawnInvalidX(context, spawnPixel, tileSize);
+    } else if (hasSpawnWarning) {
+      drawSpawnWarningTriangle(context, spawnPixel, tileSize);
+    }
   }
 }
 
