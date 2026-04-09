@@ -1,0 +1,71 @@
+{
+  "identity": {
+    "id": "test-level-001",
+    "name": "Lumo Test: First Steps",
+    "formatVersion": "1.0.0",
+    "themeId": "sunrise-grove"
+  },
+  "meta": {
+    "author": "recharged-editor",
+    "createdAt": "2026-04-09T00:00:00Z",
+    "tags": ["test", "debug", "sample"],
+    "notes": "Small sample document for debug loader harness."
+  },
+  "world": {
+    "width": 640,
+    "height": 360,
+    "tileSize": 32,
+    "spawn": { "x": 64, "y": 256 },
+    "exit": { "x": 576, "y": 224 },
+    "checkpoints": [
+      { "id": "cp-1", "x": 320, "y": 256 }
+    ]
+  },
+  "layers": {
+    "tiles": [
+      { "tileId": "ground_grass", "x": 0, "y": 320, "w": 320, "h": 32 },
+      { "tileId": "ground_stone", "x": 352, "y": 320, "w": 288, "h": 32 },
+      { "tileId": "platform_wood", "x": 224, "y": 224, "w": 96, "h": 32 }
+    ],
+    "background": [
+      { "backgroundId": "sky_sunrise", "order": 0 },
+      { "backgroundId": "hills_soft", "order": 1 }
+    ],
+    "decor": [
+      { "decorId": "lamp_post", "x": 288, "y": 288, "order": 2 }
+    ],
+    "entities": [
+      {
+        "entityType": "firefly_swarm",
+        "x": 400,
+        "y": 180,
+        "params": {
+          "count": 6,
+          "radius": 28
+        }
+      }
+    ],
+    "audio": [
+      {
+        "audioId": "ambient_forest_loop",
+        "audioType": "ambient",
+        "x": 320,
+        "y": 180,
+        "params": {
+          "volume": 0.55,
+          "radius": 500
+        }
+      }
+    ]
+  },
+  "systems": {
+    "validation": {
+      "strictBounds": true,
+      "requireSpawnAndExit": true
+    },
+    "progression": {
+      "mode": "checkpointed",
+      "startCheckpointId": "cp-1"
+    }
+  }
+}
