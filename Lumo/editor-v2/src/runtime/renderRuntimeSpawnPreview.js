@@ -133,20 +133,23 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
     context.strokeRect(supportX, supportY, tileSize, tileSize);
   }
 
-  // Draw authored spawn as a hollow ring so it differs from resolved start.
-  const authoredX = safeNumber(worldPacket?.spawn?.x, 0);
-  const authoredY = safeNumber(worldPacket?.spawn?.y, 0);
-  context.strokeStyle = "#ffb13b";
-  context.lineWidth = 3;
-  context.beginPath();
-  context.arc(authoredX, authoredY, Math.max(5, tileSize * 0.2), 0, Math.PI * 2);
-  context.stroke();
+  // Draw authored spawn as a hollow ring so it differs from landing visuals.
+  const authoredSpawn = worldPacket?.spawn;
+  const hasAuthoredSpawn = hasValidPixelPosition(authoredSpawn);
+  const authoredX = safeNumber(authoredSpawn?.x, 0);
+  const authoredY = safeNumber(authoredSpawn?.y, 0);
+  if (hasAuthoredSpawn) {
+    context.strokeStyle = "#ffb13b";
+    context.lineWidth = 3;
+    context.beginPath();
+    context.arc(authoredX, authoredY, Math.max(5, tileSize * 0.2), 0, Math.PI * 2);
+    context.stroke();
+  }
 
   // Draw authored→resolved drop path to visualize runtime spawn settling.
-  const authoredSpawn = worldPacket?.spawn;
   const resolvedStartPixel = playerSpawnPacket?.startPixel;
   if (
-    hasValidPixelPosition(authoredSpawn) &&
+    hasAuthoredSpawn &&
     hasValidPixelPosition(resolvedStartPixel) &&
     (authoredSpawn.x !== resolvedStartPixel.x || authoredSpawn.y !== resolvedStartPixel.y)
   ) {
@@ -161,24 +164,22 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
     context.restore();
   }
 
-  // Draw resolved runtime start as a simple player box.
-  const resolvedX = safeNumber(playerSpawnPacket?.startPixel?.x, authoredX);
-  const resolvedY = safeNumber(playerSpawnPacket?.startPixel?.y, authoredY);
-  const playerWidth = tileSize * 0.6;
-  const playerHeight = tileSize * 0.9;
-  const playerLeft = resolvedX - playerWidth * 0.5;
-  const playerTop = resolvedY - playerHeight;
-  context.fillStyle = "rgba(80,255,160,0.9)";
-  context.fillRect(playerLeft, playerTop, playerWidth, playerHeight);
+  // Draw player at authored spawn (runtime starts here, then falls to landing).
+  if (hasAuthoredSpawn) {
+    const playerWidth = tileSize * 0.6;
+    const playerHeight = tileSize * 0.9;
+    const playerLeft = authoredX - playerWidth * 0.5;
+    const playerTop = authoredY - playerHeight;
+    context.fillStyle = "rgba(80,255,160,0.9)";
+    context.fillRect(playerLeft, playerTop, playerWidth, playerHeight);
 
-  // Draw a thin connector when both markers overlap to keep both visible.
-  if (resolvedX === authoredX && resolvedY === authoredY) {
+    // Draw a thin connector so the spawn ring remains visible under the player box.
     const markerRadius = Math.max(4, tileSize * 0.18);
     context.strokeStyle = "#ffffff";
     context.lineWidth = 1;
     context.beginPath();
-    context.moveTo(resolvedX - markerRadius - 4, resolvedY - markerRadius - 4);
-    context.lineTo(resolvedX + markerRadius + 4, resolvedY + markerRadius + 4);
+    context.moveTo(authoredX - markerRadius - 4, authoredY - markerRadius - 4);
+    context.lineTo(authoredX + markerRadius + 4, authoredY + markerRadius + 4);
     context.stroke();
   }
 }
