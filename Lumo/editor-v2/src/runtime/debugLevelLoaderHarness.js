@@ -1,6 +1,7 @@
 import { loadLevelDocument } from "./loadLevelDocument.js";
 import { buildRuntimeLevelSummary } from "./buildRuntimeLevelSummary.js";
 import { buildRuntimeWorldSkeleton } from "./buildRuntimeWorldSkeleton.js";
+import { buildRuntimeTileEntries } from "./buildRuntimeTileEntries.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -67,6 +68,10 @@ export function runDebugLevelLoaderHarness() {
   const partialValidSkeleton = partialValidResult.ok
     ? buildRuntimeWorldSkeleton(partialValidResult.level)
     : null;
+  const validTileEntries = validSkeleton ? buildRuntimeTileEntries(validSkeleton) : null;
+  const partialValidTileEntries = partialValidSkeleton
+    ? buildRuntimeTileEntries(partialValidSkeleton)
+    : null;
 
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   if (validSummary) {
@@ -76,6 +81,10 @@ export function runDebugLevelLoaderHarness() {
   if (validSkeleton) {
     console.log("\n=== Runtime world skeleton (valid sample) ===");
     console.dir(validSkeleton, { depth: null });
+  }
+  if (validTileEntries) {
+    console.log("\n=== Runtime tile entries (valid sample) ===");
+    console.dir(validTileEntries, { depth: null });
   }
 
   logLoaderResult("Partial valid sample (world + spawn, sparse layers)", partialValidResult);
@@ -87,6 +96,10 @@ export function runDebugLevelLoaderHarness() {
     console.log("\n=== Runtime world skeleton (partial valid sample) ===");
     console.dir(partialValidSkeleton, { depth: null });
   }
+  if (partialValidTileEntries) {
+    console.log("\n=== Runtime tile entries (partial valid sample) ===");
+    console.dir(partialValidTileEntries, { depth: null });
+  }
 
   logLoaderResult("Invalid sample (missing world.spawn)", invalidResult);
 
@@ -97,6 +110,8 @@ export function runDebugLevelLoaderHarness() {
     partialValidSummary,
     validSkeleton,
     partialValidSkeleton,
+    validTileEntries,
+    partialValidTileEntries,
     invalidResult,
   };
 }
