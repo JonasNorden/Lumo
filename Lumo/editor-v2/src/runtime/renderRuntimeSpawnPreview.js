@@ -60,6 +60,10 @@ function safeNumber(value, fallback = 0) {
   return Number.isFinite(value) ? value : fallback;
 }
 
+function hasValidPixelPosition(position) {
+  return Number.isFinite(position?.x) && Number.isFinite(position?.y);
+}
+
 // Draws the top-down debug snapshot for world tiles and spawn markers.
 function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
   const context = canvas.getContext("2d");
@@ -104,21 +108,38 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
   context.arc(authoredX, authoredY, Math.max(5, tileSize * 0.2), 0, Math.PI * 2);
   context.stroke();
 
-  // Draw resolved runtime start as a filled diamond marker.
+  // Draw authored→resolved drop path to visualize runtime spawn settling.
+  const authoredSpawn = worldPacket?.spawn;
+  const resolvedStartPixel = playerSpawnPacket?.startPixel;
+  if (
+    hasValidPixelPosition(authoredSpawn) &&
+    hasValidPixelPosition(resolvedStartPixel) &&
+    (authoredSpawn.x !== resolvedStartPixel.x || authoredSpawn.y !== resolvedStartPixel.y)
+  ) {
+    context.save();
+    context.strokeStyle = "#ffcc66";
+    context.lineWidth = 2;
+    context.setLineDash([4, 4]);
+    context.beginPath();
+    context.moveTo(authoredSpawn.x, authoredSpawn.y);
+    context.lineTo(authoredSpawn.x, resolvedStartPixel.y);
+    context.stroke();
+    context.restore();
+  }
+
+  // Draw resolved runtime start as a simple player box.
   const resolvedX = safeNumber(playerSpawnPacket?.startPixel?.x, authoredX);
   const resolvedY = safeNumber(playerSpawnPacket?.startPixel?.y, authoredY);
-  const markerRadius = Math.max(4, tileSize * 0.18);
-  context.fillStyle = "#5cff8a";
-  context.beginPath();
-  context.moveTo(resolvedX, resolvedY - markerRadius);
-  context.lineTo(resolvedX + markerRadius, resolvedY);
-  context.lineTo(resolvedX, resolvedY + markerRadius);
-  context.lineTo(resolvedX - markerRadius, resolvedY);
-  context.closePath();
-  context.fill();
+  const playerWidth = tileSize * 0.6;
+  const playerHeight = tileSize * 0.9;
+  const playerLeft = resolvedX - playerWidth * 0.5;
+  const playerTop = resolvedY - playerHeight;
+  context.fillStyle = "rgba(80,255,160,0.9)";
+  context.fillRect(playerLeft, playerTop, playerWidth, playerHeight);
 
   // Draw a thin connector when both markers overlap to keep both visible.
   if (resolvedX === authoredX && resolvedY === authoredY) {
+    const markerRadius = Math.max(4, tileSize * 0.18);
     context.strokeStyle = "#ffffff";
     context.lineWidth = 1;
     context.beginPath();
