@@ -168,23 +168,43 @@ export async function renderRuntimeSpawnPreview({
   canvas,
   summary,
   error,
+  levelPathInput,
+  loadLevelButton,
 }) {
-  const levelPath = readLevelPathFromQuery();
+  const requestedLevelPath = readLevelPathFromQuery();
 
-  try {
-    const previewState = await buildPreviewState(levelPath);
+  if (levelPathInput) {
+    levelPathInput.value = requestedLevelPath;
+  }
 
-    drawSpawnPreview(canvas, previewState.worldPacket, previewState.playerSpawnPacket);
-    summary.textContent = buildSummaryText(
-      previewState.levelPath,
-      previewState.loaderResult,
-      previewState.playerSpawnPacket,
-    );
-    error.textContent = "";
-    error.hidden = true;
-  } catch (caughtError) {
-    summary.textContent = `levelPath: ${levelPath}\nloader ok: false\nplayer spawn packet ok: false\nstatus: load-failed`;
-    error.hidden = false;
-    error.textContent = `Error: ${caughtError?.message ?? "Unknown failure while building preview."}`;
+  async function renderLevel(levelPath) {
+    const activeLevelPath = levelPath || DEFAULT_LEVEL_PATH;
+
+    try {
+      const previewState = await buildPreviewState(activeLevelPath);
+
+      drawSpawnPreview(canvas, previewState.worldPacket, previewState.playerSpawnPacket);
+      summary.textContent = buildSummaryText(
+        previewState.levelPath,
+        previewState.loaderResult,
+        previewState.playerSpawnPacket,
+      );
+      error.textContent = "";
+      error.hidden = true;
+    } catch (caughtError) {
+      summary.textContent = `levelPath: ${activeLevelPath}\nloader ok: false\nplayer spawn packet ok: false\nstatus: load-failed`;
+      error.hidden = false;
+      error.textContent = `Error: ${caughtError?.message ?? "Unknown failure while building preview."}`;
+    }
+  }
+
+  await renderLevel(requestedLevelPath);
+
+  if (loadLevelButton && levelPathInput) {
+    loadLevelButton.addEventListener("click", async () => {
+      const nextLevelPath = levelPathInput.value.trim() || DEFAULT_LEVEL_PATH;
+      levelPathInput.value = nextLevelPath;
+      await renderLevel(nextLevelPath);
+    });
   }
 }
