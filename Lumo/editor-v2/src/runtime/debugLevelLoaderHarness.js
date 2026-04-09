@@ -7,6 +7,7 @@ import { buildRuntimeTileMap } from "./buildRuntimeTileMap.js";
 import { buildRuntimeSpawnPoint } from "./buildRuntimeSpawnPoint.js";
 import { buildRuntimeWorldPacket } from "./buildRuntimeWorldPacket.js";
 import { getRuntimeTileAtGrid } from "./getRuntimeTileAtGrid.js";
+import { isRuntimeGridSolid } from "./isRuntimeGridSolid.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -130,6 +131,15 @@ export function runDebugLevelLoaderHarness() {
     { grid: [7, 7], tile: getRuntimeTileAtGrid(validWorldPacket, 7, 7) },
   ];
   console.dir(validLookupTests, { depth: null });
+  // Keep solidity checks separate so true/false behavior stays easy to read.
+  console.log("\n=== Runtime grid solidity (valid sample) ===");
+  const validSolidityTests = [
+    { grid: [0, 10], solid: isRuntimeGridSolid(validWorldPacket, 0, 10) },
+    { grid: [7, 10], solid: isRuntimeGridSolid(validWorldPacket, 7, 10) },
+    { grid: [7, 7], solid: isRuntimeGridSolid(validWorldPacket, 7, 7) },
+    { grid: [10, 7], solid: isRuntimeGridSolid(validWorldPacket, 10, 7) },
+  ];
+  console.dir(validSolidityTests, { depth: null });
 
   logLoaderResult("Partial valid sample (world + spawn, sparse layers)", partialValidResult);
   if (partialValidSummary) {
@@ -158,6 +168,12 @@ export function runDebugLevelLoaderHarness() {
     { grid: [0, 0], tile: getRuntimeTileAtGrid(partialValidWorldPacket, 0, 0) },
   ];
   console.dir(partialLookupTests, { depth: null });
+  // Run one solidity probe against sparse data to verify false behavior.
+  console.log("\n=== Runtime grid solidity (partial valid sample) ===");
+  const partialSolidityTests = [
+    { grid: [0, 0], solid: isRuntimeGridSolid(partialValidWorldPacket, 0, 0) },
+  ];
+  console.dir(partialSolidityTests, { depth: null });
 
   logLoaderResult("Invalid sample (missing world.spawn)", invalidResult);
 
