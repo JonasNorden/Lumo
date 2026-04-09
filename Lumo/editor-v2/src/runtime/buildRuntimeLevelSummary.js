@@ -1,0 +1,36 @@
+// Builds a small, debug-friendly runtime summary from a validated Recharged level.
+export function buildRuntimeLevelSummary(level) {
+  const safeLevel = isPlainObject(level) ? level : {};
+  const world = isPlainObject(safeLevel.world) ? safeLevel.world : {};
+  const layers = isPlainObject(safeLevel.layers) ? safeLevel.layers : {};
+
+  // Keep all collection counts defensive so malformed debug input is still readable.
+  const counts = {
+    tiles: countArrayEntries(layers.tiles),
+    background: countArrayEntries(layers.background),
+    decor: countArrayEntries(layers.decor),
+    entities: countArrayEntries(layers.entities),
+    audio: countArrayEntries(layers.audio),
+  };
+
+  return {
+    world: {
+      width: world.width,
+      height: world.height,
+      tileSize: world.tileSize,
+    },
+    spawn: isPlainObject(world.spawn) ? { ...world.spawn } : null,
+    counts,
+    themeId: safeLevel.identity?.themeId,
+    formatVersion: safeLevel.identity?.formatVersion,
+  };
+}
+
+// Treat only real arrays as layer collections.
+function countArrayEntries(value) {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

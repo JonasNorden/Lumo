@@ -1,4 +1,5 @@
 import { loadLevelDocument } from "./loadLevelDocument.js";
+import { buildRuntimeLevelSummary } from "./buildRuntimeLevelSummary.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -37,12 +38,18 @@ function logLoaderResult(label, result) {
 export function runDebugLevelLoaderHarness() {
   const validResult = loadLevelDocument(testLevelDocument);
   const invalidResult = loadLevelDocument(invalidSampleLevel);
+  const validSummary = validResult.ok ? buildRuntimeLevelSummary(validResult.level) : null;
 
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
+  if (validSummary) {
+    console.log("\n=== Runtime level summary (valid sample) ===");
+    console.log(validSummary);
+  }
   logLoaderResult("Invalid sample (missing world.spawn)", invalidResult);
 
   return {
     validResult,
+    validSummary,
     invalidResult,
   };
 }
