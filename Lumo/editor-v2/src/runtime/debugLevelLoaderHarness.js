@@ -5,6 +5,7 @@ import { buildRuntimeTileEntries } from "./buildRuntimeTileEntries.js";
 import { buildRuntimeTileBounds } from "./buildRuntimeTileBounds.js";
 import { buildRuntimeTileMap } from "./buildRuntimeTileMap.js";
 import { buildRuntimeSpawnPoint } from "./buildRuntimeSpawnPoint.js";
+import { buildRuntimeWorldPacket } from "./buildRuntimeWorldPacket.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -87,6 +88,17 @@ export function runDebugLevelLoaderHarness() {
   // Build runtime spawn points from skeleton data for simple runtime positioning checks.
   const validSpawnPoint = buildRuntimeSpawnPoint(validSkeleton);
   const partialValidSpawnPoint = buildRuntimeSpawnPoint(partialValidSkeleton);
+  // Build one packet from already computed runtime parts for quick world-pipeline inspection.
+  const validWorldPacket = buildRuntimeWorldPacket({
+    skeleton: validSkeleton,
+    tileBounds: validTileBounds,
+    tileMap: validTileMap,
+  });
+  const partialValidWorldPacket = buildRuntimeWorldPacket({
+    skeleton: partialValidSkeleton,
+    tileBounds: partialValidTileBounds,
+    tileMap: partialValidTileMap,
+  });
 
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   if (validSummary) {
@@ -107,6 +119,8 @@ export function runDebugLevelLoaderHarness() {
   console.dir(validTileMap, { depth: null });
   console.log("\n=== Runtime spawn point (valid sample) ===");
   console.log(validSpawnPoint);
+  console.log("\n=== Runtime world packet (valid sample) ===");
+  console.dir(validWorldPacket, { depth: null });
 
   logLoaderResult("Partial valid sample (world + spawn, sparse layers)", partialValidResult);
   if (partialValidSummary) {
@@ -127,6 +141,8 @@ export function runDebugLevelLoaderHarness() {
   console.dir(partialValidTileMap, { depth: null });
   console.log("\n=== Runtime spawn point (partial valid sample) ===");
   console.log(partialValidSpawnPoint);
+  console.log("\n=== Runtime world packet (partial valid sample) ===");
+  console.dir(partialValidWorldPacket, { depth: null });
 
   logLoaderResult("Invalid sample (missing world.spawn)", invalidResult);
 
@@ -145,6 +161,8 @@ export function runDebugLevelLoaderHarness() {
     partialValidTileMap,
     validSpawnPoint,
     partialValidSpawnPoint,
+    validWorldPacket,
+    partialValidWorldPacket,
     invalidResult,
   };
 }
