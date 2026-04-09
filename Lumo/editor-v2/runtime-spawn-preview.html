@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lumo Recharged - Runtime Spawn Preview</title>
+    <style>
+      body {
+        margin: 0;
+        background: #111827;
+        color: #e5e7eb;
+        font-family: monospace;
+      }
+
+      main {
+        margin: 20px;
+        display: grid;
+        gap: 12px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      #summary {
+        margin: 0;
+        padding: 10px;
+        background: #1f2937;
+        border: 1px solid #374151;
+        white-space: pre-wrap;
+      }
+
+      #error {
+        margin: 0;
+        padding: 10px;
+        border: 1px solid #7f1d1d;
+        background: #3f1010;
+        color: #fecaca;
+      }
+
+      canvas {
+        border: 1px solid #4b5563;
+        background: #0b0f17;
+        image-rendering: pixelated;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Recharged Runtime Spawn Preview (Debug)</h1>
+      <pre id="summary">Loading preview...</pre>
+      <p id="error" hidden></p>
+      <canvas id="preview" width="640" height="384"></canvas>
+    </main>
+
+    <script type="module">
+      import { renderRuntimeSpawnPreview } from "./src/runtime/renderRuntimeSpawnPreview.js";
+
+      // Wire one standalone debug render pass for the first browser-side preview.
+      renderRuntimeSpawnPreview({
+        canvas: document.querySelector("#preview"),
+        summary: document.querySelector("#summary"),
+        error: document.querySelector("#error"),
+      });
+    </script>
+  </body>
+</html>
