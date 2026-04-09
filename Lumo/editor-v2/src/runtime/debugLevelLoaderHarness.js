@@ -6,6 +6,7 @@ import { buildRuntimeTileBounds } from "./buildRuntimeTileBounds.js";
 import { buildRuntimeTileMap } from "./buildRuntimeTileMap.js";
 import { buildRuntimeSpawnPoint } from "./buildRuntimeSpawnPoint.js";
 import { buildRuntimeWorldPacket } from "./buildRuntimeWorldPacket.js";
+import { getRuntimeTileAtGrid } from "./getRuntimeTileAtGrid.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -121,6 +122,14 @@ export function runDebugLevelLoaderHarness() {
   console.log(validSpawnPoint);
   console.log("\n=== Runtime world packet (valid sample) ===");
   console.dir(validWorldPacket, { depth: null });
+  // Run a few fixed grid lookups for easy runtime tile hit-test inspection.
+  console.log("\n=== Runtime tile lookup (valid sample) ===");
+  const validLookupTests = [
+    { grid: [0, 10], tile: getRuntimeTileAtGrid(validWorldPacket, 0, 10) },
+    { grid: [7, 10], tile: getRuntimeTileAtGrid(validWorldPacket, 7, 10) },
+    { grid: [7, 7], tile: getRuntimeTileAtGrid(validWorldPacket, 7, 7) },
+  ];
+  console.dir(validLookupTests, { depth: null });
 
   logLoaderResult("Partial valid sample (world + spawn, sparse layers)", partialValidResult);
   if (partialValidSummary) {
@@ -143,6 +152,12 @@ export function runDebugLevelLoaderHarness() {
   console.log(partialValidSpawnPoint);
   console.log("\n=== Runtime world packet (partial valid sample) ===");
   console.dir(partialValidWorldPacket, { depth: null });
+  // Keep one sparse-sample lookup so missing tiles remain easy to verify.
+  console.log("\n=== Runtime tile lookup (partial valid sample) ===");
+  const partialLookupTests = [
+    { grid: [0, 0], tile: getRuntimeTileAtGrid(partialValidWorldPacket, 0, 0) },
+  ];
+  console.dir(partialLookupTests, { depth: null });
 
   logLoaderResult("Invalid sample (missing world.spawn)", invalidResult);
 
