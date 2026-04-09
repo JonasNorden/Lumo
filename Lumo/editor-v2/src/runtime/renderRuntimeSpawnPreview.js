@@ -12,6 +12,9 @@ const PREVIEW_FALL_START_DELAY_MS = 1000;
 const PREVIEW_FALL_REPLAY_DELAY_MS = 1200;
 const PREVIEW_FALL_GRAVITY = 0.25;
 const PREVIEW_FALL_MANUAL_STEP_PX = 3.5;
+const PLAYER_VISUAL_IDLE = "idle";
+const PLAYER_VISUAL_FALLING = "falling";
+const PLAYER_VISUAL_LANDED = "landed";
 
 function readLevelPathFromQuery() {
   if (typeof window === "undefined") {
@@ -75,6 +78,19 @@ function readGridCell(cell) {
     return null;
   }
   return { x: cellX, y: cellY };
+}
+
+function resolvePlayerVisualState(phase) {
+  if (phase === "start-delay") {
+    return PLAYER_VISUAL_IDLE;
+  }
+  if (phase === "falling") {
+    return PLAYER_VISUAL_FALLING;
+  }
+  if (phase === "landing-delay") {
+    return PLAYER_VISUAL_LANDED;
+  }
+  return PLAYER_VISUAL_IDLE;
 }
 
 function drawSpawnInvalidX(context, spawnPixel, tileSize) {
@@ -191,17 +207,30 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDeb
     context2d.restore();
   }
 
+  function drawPlayerStateLabel(context2d, playerVisualState) {
+    context2d.save();
+    context2d.fillStyle = "rgba(0,0,0,0.6)";
+    context2d.fillRect(8, 36, 160, 22);
+    context2d.fillStyle = "#9ed9ff";
+    context2d.font = "bold 12px monospace";
+    context2d.textBaseline = "middle";
+    context2d.fillText(`STATE: ${playerVisualState}`, 14, 47);
+    context2d.restore();
+  }
+
   function emitAnimationDebug() {
+    const playerVisualState = resolvePlayerVisualState(animationState.phase);
     onAnimationDebugUpdate({
       animationEnabled: animationState.enabled,
       animationPhase: animationState.phase,
+      playerVisualState,
       animatedPlayerY: Math.round(animationState.currentY),
       authoredSpawnY: Number.isFinite(authoredSpawnPixelY) ? Math.round(authoredSpawnPixelY) : null,
       resolvedLandingY: Number.isFinite(resolvedLandingPixelY) ? Math.round(resolvedLandingPixelY) : null,
     });
   }
 
-  function drawFrame(playerY) {
+  function drawFrame(playerY, playerVisualState = PLAYER_VISUAL_IDLE) {
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = "#0b0f17";
     context.fillRect(0, 0, canvas.width, canvas.height);
@@ -281,10 +310,37 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDeb
 
     // Draw player at authored spawn (runtime starts here, then falls to landing).
     if (hasAuthoredSpawn) {
-      const playerWidth = tileSize * 0.6;
-      const playerHeight = tileSize * 0.9;
+      const idlePlayerWidth = tileSize * 0.6;
+      const idlePlayerHeight = tileSize * 0.9;
+      let playerWidth = idlePlayerWidth;
+      let playerHeight = idlePlayerHeight;
+      if (playerVisualState === PLAYER_VISUAL_FALLING) {
+        playerWidth = idlePlayerWidth * 0.85;
+        playerHeight = idlePlayerHeight * 1.15;
+      } else if (playerVisualState === PLAYER_VISUAL_LANDED) {
+        playerWidth = idlePlayerWidth * 1.15;
+        playerHeight = idlePlayerHeight * 0.82;
+      }
       const playerLeft = authoredX - playerWidth * 0.5;
       const playerTop = playerY - playerHeight;
+
+      if (playerVisualState === PLAYER_VISUAL_FALLING) {
+        const trailTop = playerY + tileSize * 0.06;
+        const trailBottom = trailTop + tileSize * 0.35;
+        context.save();
+        context.strokeStyle = "rgba(120,255,200,0.45)";
+        context.lineWidth = Math.max(1, tileSize * 0.06);
+        context.beginPath();
+        context.moveTo(authoredX, trailTop);
+        context.lineTo(authoredX, trailBottom);
+        context.moveTo(authoredX - playerWidth * 0.32, trailTop + tileSize * 0.04);
+        context.lineTo(authoredX - playerWidth * 0.32, trailBottom - tileSize * 0.04);
+        context.moveTo(authoredX + playerWidth * 0.32, trailTop + tileSize * 0.04);
+        context.lineTo(authoredX + playerWidth * 0.32, trailBottom - tileSize * 0.04);
+        context.stroke();
+        context.restore();
+      }
+
       context.fillStyle = "rgba(80,255,160,0.9)";
       context.fillRect(playerLeft, playerTop, playerWidth, playerHeight);
 
@@ -308,6 +364,7 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDeb
     }
 
     drawAnimationMarker(context, animationState.phase);
+    drawPlayerStateLabel(context, playerVisualState);
   }
 
   let animationFrameId = null;
@@ -351,19 +408,22 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket, onAnimationDeb
       }
     }
 
+    const playerVisualState = resolvePlayerVisualState(animationState.phase);
     emitAnimationDebug();
-    drawFrame(animationState.currentY);
+    drawFrame(animationState.currentY, playerVisualState);
     animationFrameId = window.requestAnimationFrame(step);
   }
 
   if (!shouldAnimateFall || typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+    const playerVisualState = resolvePlayerVisualState(animationState.phase);
     emitAnimationDebug();
-    drawFrame(animationState.currentY);
+    drawFrame(animationState.currentY, playerVisualState);
     return () => {};
   }
 
+  const playerVisualState = resolvePlayerVisualState(animationState.phase);
   emitAnimationDebug();
-  drawFrame(animationState.currentY);
+  drawFrame(animationState.currentY, playerVisualState);
   animationFrameId = window.requestAnimationFrame(step);
 
   return () => {
@@ -393,6 +453,7 @@ function buildSummaryText(levelPath, loaderResult, playerSpawnPacket, animationD
     `startPixel: (${startPixel.x}, ${startPixel.y})`,
     `animationEnabled: ${animationDebug.animationEnabled}`,
     `animationPhase: ${animationDebug.animationPhase}`,
+    `playerVisualState: ${animationDebug.playerVisualState}`,
     `animatedPlayerY: ${animationDebug.animatedPlayerY}`,
     `authoredSpawnY: ${animationDebug.authoredSpawnY}`,
     `resolvedLandingY: ${animationDebug.resolvedLandingY}`,
@@ -440,6 +501,7 @@ export async function renderRuntimeSpawnPreview({
       const animationDebugState = {
         animationEnabled: false,
         animationPhase: "static",
+        playerVisualState: PLAYER_VISUAL_IDLE,
         animatedPlayerY: null,
         authoredSpawnY: null,
         resolvedLandingY: null,
@@ -460,6 +522,7 @@ export async function renderRuntimeSpawnPreview({
         (nextAnimationDebugState) => {
           animationDebugState.animationEnabled = nextAnimationDebugState.animationEnabled;
           animationDebugState.animationPhase = nextAnimationDebugState.animationPhase;
+          animationDebugState.playerVisualState = nextAnimationDebugState.playerVisualState;
           animationDebugState.animatedPlayerY = nextAnimationDebugState.animatedPlayerY;
           animationDebugState.authoredSpawnY = nextAnimationDebugState.authoredSpawnY;
           animationDebugState.resolvedLandingY = nextAnimationDebugState.resolvedLandingY;
