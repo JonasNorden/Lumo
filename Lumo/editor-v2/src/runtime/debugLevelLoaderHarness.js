@@ -3,6 +3,7 @@ import { buildRuntimeLevelSummary } from "./buildRuntimeLevelSummary.js";
 import { buildRuntimeWorldSkeleton } from "./buildRuntimeWorldSkeleton.js";
 import { buildRuntimeTileEntries } from "./buildRuntimeTileEntries.js";
 import { buildRuntimeTileBounds } from "./buildRuntimeTileBounds.js";
+import { buildRuntimeTileMap } from "./buildRuntimeTileMap.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -79,6 +80,9 @@ export function runDebugLevelLoaderHarness() {
   const partialValidTileBounds = partialValidTileEntries
     ? buildRuntimeTileBounds(partialValidTileEntries)
     : buildRuntimeTileBounds([]);
+  // Build runtime tile maps directly from entries to verify world-build shape.
+  const validTileMap = buildRuntimeTileMap(validTileEntries);
+  const partialValidTileMap = buildRuntimeTileMap(partialValidTileEntries);
 
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   if (validSummary) {
@@ -95,6 +99,8 @@ export function runDebugLevelLoaderHarness() {
   }
   console.log("\n=== Runtime tile bounds (valid sample) ===");
   console.log(validTileBounds);
+  console.log("\n=== Runtime tile map (valid sample) ===");
+  console.dir(validTileMap, { depth: null });
 
   logLoaderResult("Partial valid sample (world + spawn, sparse layers)", partialValidResult);
   if (partialValidSummary) {
@@ -111,6 +117,8 @@ export function runDebugLevelLoaderHarness() {
   }
   console.log("\n=== Runtime tile bounds (partial valid sample) ===");
   console.log(partialValidTileBounds);
+  console.log("\n=== Runtime tile map (partial valid sample) ===");
+  console.dir(partialValidTileMap, { depth: null });
 
   logLoaderResult("Invalid sample (missing world.spawn)", invalidResult);
 
@@ -125,6 +133,8 @@ export function runDebugLevelLoaderHarness() {
     partialValidTileEntries,
     validTileBounds,
     partialValidTileBounds,
+    validTileMap,
+    partialValidTileMap,
     invalidResult,
   };
 }
