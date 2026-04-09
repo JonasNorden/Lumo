@@ -8,6 +8,9 @@ import { buildRuntimePlayerSpawnPacket } from "./buildRuntimePlayerSpawnPacket.j
 
 const DEFAULT_TILE_SIZE = 32;
 const DEFAULT_LEVEL_PATH = "./src/data/testLevelDocument.v1.json";
+const PREVIEW_FALL_START_DELAY_MS = 600;
+const PREVIEW_FALL_REPLAY_DELAY_MS = 900;
+const PREVIEW_FALL_GRAVITY = 0.35;
 
 function readLevelPathFromQuery() {
   if (typeof window === "undefined") {
@@ -161,8 +164,9 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
     currentY: authoredY,
     targetY: shouldAnimateFall ? landingPixelY : authoredY,
     velocityY: 0,
+    phase: "start-delay",
+    phaseUntilMs: 0,
   };
-  const gravity = 0.5;
 
   canvas.width = Math.max(1, worldWidthPx);
   canvas.height = Math.max(1, worldHeightPx);
@@ -283,19 +287,39 @@ function drawSpawnPreview(canvas, worldPacket, playerSpawnPacket) {
       return;
     }
 
-    animationState.velocityY += gravity;
-    animationState.currentY += animationState.velocityY;
-    if (animationState.currentY >= animationState.targetY) {
-      animationState.currentY = animationState.targetY;
+    const nowMs = typeof performance !== "undefined" ? performance.now() : Date.now();
+
+    if (animationState.phase === "start-delay") {
+      if (animationState.phaseUntilMs === 0) {
+        animationState.phaseUntilMs = nowMs + PREVIEW_FALL_START_DELAY_MS;
+      }
+      animationState.currentY = authoredY;
       animationState.velocityY = 0;
+      if (nowMs >= animationState.phaseUntilMs) {
+        animationState.phase = "falling";
+        animationState.phaseUntilMs = 0;
+      }
+    } else if (animationState.phase === "falling") {
+      animationState.velocityY += PREVIEW_FALL_GRAVITY;
+      animationState.currentY += animationState.velocityY;
+      if (animationState.currentY >= animationState.targetY) {
+        animationState.currentY = animationState.targetY;
+        animationState.velocityY = 0;
+        animationState.phase = "landing-delay";
+        animationState.phaseUntilMs = nowMs + PREVIEW_FALL_REPLAY_DELAY_MS;
+      }
+    } else if (animationState.phase === "landing-delay") {
+      animationState.currentY = animationState.targetY;
+      if (nowMs >= animationState.phaseUntilMs) {
+        animationState.currentY = authoredY;
+        animationState.velocityY = 0;
+        animationState.phase = "start-delay";
+        animationState.phaseUntilMs = nowMs + PREVIEW_FALL_START_DELAY_MS;
+      }
     }
 
     drawFrame(animationState.currentY);
-    if (animationState.currentY < animationState.targetY) {
-      animationFrameId = window.requestAnimationFrame(step);
-    } else {
-      animationFrameId = null;
-    }
+    animationFrameId = window.requestAnimationFrame(step);
   }
 
   if (!shouldAnimateFall || typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
