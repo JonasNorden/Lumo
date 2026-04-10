@@ -23,6 +23,9 @@ import { buildRuntimeInitializationPacket } from "./buildRuntimeInitializationPa
 import { buildRuntimeSessionState } from "./buildRuntimeSessionState.js";
 import { buildNextRuntimeSessionState } from "./buildNextRuntimeSessionState.js";
 import { updateRuntimeSession } from "./updateRuntimeSession.js";
+import { createRuntimeRunnerSession } from "./createRuntimeRunnerSession.js";
+import { runRuntimeRunnerTicks } from "./runRuntimeRunnerTicks.js";
+import { runRuntimeLevelSimulation } from "./runRuntimeLevelSimulation.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -193,6 +196,33 @@ export function runDebugLevelLoaderHarness() {
   const partialRuntimeSessionUpdate = updateRuntimeSession(partialRuntimeSessionState, { steps: 5 });
   const invalidRuntimeSessionUpdate = updateRuntimeSession(invalidRuntimeSessionState, { steps: 3 });
 
+  // Build the first top-level runtime runner session chain from loaded level documents.
+  const validRuntimeRunnerSession = createRuntimeRunnerSession(validResult.level);
+  const partialRuntimeRunnerSession = createRuntimeRunnerSession(partialValidResult.level);
+  const invalidRuntimeRunnerSession = createRuntimeRunnerSession(invalidResult.level);
+  // Run compact runtime runner tick batches from the prepared runner sessions.
+  const validRuntimeRunnerTicks = runRuntimeRunnerTicks(validRuntimeRunnerSession.session, {
+    steps: 5,
+    stopOnGrounded: true,
+  });
+  const partialRuntimeRunnerTicks = runRuntimeRunnerTicks(partialRuntimeRunnerSession.session, {
+    steps: 4,
+  });
+  const invalidRuntimeRunnerTicks = runRuntimeRunnerTicks(invalidRuntimeRunnerSession.session, {
+    steps: 3,
+  });
+  // Run first end-to-end level simulation wrapper: level -> session -> N ticks.
+  const validRuntimeLevelSimulation = runRuntimeLevelSimulation(validResult.level, {
+    steps: 5,
+    stopOnGrounded: true,
+  });
+  const partialRuntimeLevelSimulation = runRuntimeLevelSimulation(partialValidResult.level, {
+    steps: 4,
+  });
+  const invalidRuntimeLevelSimulation = runRuntimeLevelSimulation(invalidResult.level, {
+    steps: 3,
+  });
+
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   if (validSummary) {
     console.log("\n=== Runtime level summary (valid sample) ===");
@@ -257,6 +287,15 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== RUNTIME SESSION UPDATE ===");
   console.log("(valid sample)");
   console.dir(validRuntimeSessionUpdate, { depth: null });
+  console.log("\n=== RUNTIME RUNNER SESSION ===");
+  console.log("(valid sample)");
+  console.dir(validRuntimeRunnerSession, { depth: null });
+  console.log("\n=== RUNTIME RUNNER TICKS ===");
+  console.log("(valid sample)");
+  console.dir(validRuntimeRunnerTicks, { depth: null });
+  console.log("\n=== RUNTIME LEVEL SIMULATION ===");
+  console.log("(valid sample)");
+  console.dir(validRuntimeLevelSimulation, { depth: null });
   // Run a few fixed grid lookups for easy runtime tile hit-test inspection.
   console.log("\n=== Runtime tile lookup (valid sample) ===");
   const validLookupTests = [
@@ -339,6 +378,15 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== RUNTIME SESSION UPDATE ===");
   console.log("(partial valid sample)");
   console.dir(partialRuntimeSessionUpdate, { depth: null });
+  console.log("\n=== RUNTIME RUNNER SESSION ===");
+  console.log("(partial valid sample)");
+  console.dir(partialRuntimeRunnerSession, { depth: null });
+  console.log("\n=== RUNTIME RUNNER TICKS ===");
+  console.log("(partial valid sample)");
+  console.dir(partialRuntimeRunnerTicks, { depth: null });
+  console.log("\n=== RUNTIME LEVEL SIMULATION ===");
+  console.log("(partial valid sample)");
+  console.dir(partialRuntimeLevelSimulation, { depth: null });
   // Keep one sparse-sample lookup so missing tiles remain easy to verify.
   console.log("\n=== Runtime tile lookup (partial valid sample) ===");
   const partialLookupTests = [
@@ -392,6 +440,16 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== RUNTIME SESSION UPDATE ===");
   console.log("(invalid sample)");
   console.dir(invalidRuntimeSessionUpdate, { depth: null });
+
+  console.log("\n=== RUNTIME RUNNER SESSION ===");
+  console.log("(invalid sample)");
+  console.dir(invalidRuntimeRunnerSession, { depth: null });
+  console.log("\n=== RUNTIME RUNNER TICKS ===");
+  console.log("(invalid sample)");
+  console.dir(invalidRuntimeRunnerTicks, { depth: null });
+  console.log("\n=== RUNTIME LEVEL SIMULATION ===");
+  console.log("(invalid sample)");
+  console.dir(invalidRuntimeLevelSimulation, { depth: null });
 
   return {
     validResult,
@@ -453,6 +511,15 @@ export function runDebugLevelLoaderHarness() {
     validRuntimeSessionUpdate,
     partialRuntimeSessionUpdate,
     invalidRuntimeSessionUpdate,
+    validRuntimeRunnerSession,
+    partialRuntimeRunnerSession,
+    invalidRuntimeRunnerSession,
+    validRuntimeRunnerTicks,
+    partialRuntimeRunnerTicks,
+    invalidRuntimeRunnerTicks,
+    validRuntimeLevelSimulation,
+    partialRuntimeLevelSimulation,
+    invalidRuntimeLevelSimulation,
     invalidResult,
   };
 }
