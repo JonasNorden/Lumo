@@ -120,6 +120,47 @@ function runPartialLevelChecks() {
   assert.equal(typeof summary.status, "string");
 }
 
+function runBottomBoundaryLandingJumpChecks() {
+  const bottomBoundaryLevel = {
+    identity: { id: "bottom-boundary-level", formatVersion: "1.0.0", themeId: "test", name: "Bottom Boundary" },
+    world: {
+      width: 8,
+      height: 4,
+      tileSize: 32,
+      spawn: { x: 32, y: 16 },
+    },
+    layers: {
+      tiles: [],
+      background: [],
+      decor: [],
+      entities: [],
+      audio: [],
+    },
+  };
+
+  const session = createRuntimeGameSession({ levelDocument: bottomBoundaryLevel });
+  assert.equal(session.start().ok, true);
+
+  const fallToBottom = session.tickSteps(200);
+  const landedSnapshot = session.getPlayerSnapshot();
+
+  assert.equal(fallToBottom.ok, true);
+  assert.equal(landedSnapshot.y, bottomBoundaryLevel.world.height * bottomBoundaryLevel.world.tileSize - 1);
+  assert.equal(landedSnapshot.grounded, true);
+  assert.equal(landedSnapshot.falling, false);
+
+  const jumpTick = session.tick({ left: false, right: false, jump: true });
+  const jumpSnapshot = session.getPlayerSnapshot();
+
+  assert.equal(jumpTick.ok, true);
+  assert.equal(jumpTick.stepped, true);
+  assert.equal(jumpSnapshot.y < landedSnapshot.y, true);
+  assert.equal(jumpSnapshot.grounded, false);
+  assert.equal(jumpSnapshot.falling, false);
+
+  console.log("session bottom boundary landing + jump ok");
+}
+
 function runInvalidLevelChecks() {
   const session = createRuntimeGameSession({ levelDocument: null });
 
@@ -138,6 +179,7 @@ function runInvalidLevelChecks() {
 runValidLevelChecks();
 runInputIntentMovementChecks();
 runPartialLevelChecks();
+runBottomBoundaryLandingJumpChecks();
 runInvalidLevelChecks();
 
 console.log("runtime-game-session-checks: ok");
