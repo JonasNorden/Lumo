@@ -1,8 +1,12 @@
 import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 
-const lumoHtmlPath = resolve(process.cwd(), "Lumo/Lumo.html");
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const repoRoot = resolve(__dirname, "..", "..");
+const lumoHtmlPath = resolve(repoRoot, "Lumo.html");
 const html = readFileSync(lumoHtmlPath, "utf8");
 
 assert.equal(html.includes("__LumoRechargedCanvas"), true, "expected compact canvas marker");
