@@ -42,6 +42,59 @@
   <script defer src="data/catalog_entities.js"></script>
   <script defer src="src/game/entities.js"></script>
   <script defer src="data/audio_global_config.js"></script>
-  <script defer src="src/app.js"></script>
+  <script type="module" defer>
+    import { bootLumoRechargedFromQuery } from "./editor-v2/src/runtime/bootLumoRechargedFromQuery.js";
+
+    // Loads legacy app.js only when Recharged mode is not active or did not boot.
+    function loadLegacyBootScript() {
+      return new Promise((resolve) => {
+        const script = document.createElement("script");
+        script.src = "src/app.js";
+        script.defer = true;
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        document.body.appendChild(script);
+      });
+    }
+
+    // Runs query-driven Recharged opt-in boot with safe legacy fallback behavior.
+    async function bootLumoRuntime() {
+      let queryBootResult = null;
+
+      try {
+        queryBootResult = await bootLumoRechargedFromQuery({
+          search: window.location.search,
+        });
+      } catch (error) {
+        queryBootResult = {
+          ok: false,
+          enabled: true,
+          booted: false,
+          mode: "recharged",
+          status: "invalid",
+          errors: [error?.message || "Lumo query boot failed."],
+          warnings: [],
+        };
+      }
+
+      window.__LumoRechargedBoot = queryBootResult;
+
+      if (queryBootResult?.enabled === true && queryBootResult?.booted === true) {
+        console.info("[Lumo] Recharged query boot active", queryBootResult);
+        return;
+      }
+
+      if (queryBootResult?.enabled === true && queryBootResult?.booted !== true) {
+        console.warn("[Lumo] Recharged query boot failed; falling back to legacy boot", queryBootResult);
+      }
+
+      const legacyLoaded = await loadLegacyBootScript();
+      if (!legacyLoaded) {
+        console.error("[Lumo] Legacy app.js failed to load.");
+      }
+    }
+
+    void bootLumoRuntime();
+  </script>
 </body>
 </html>
