@@ -145,10 +145,14 @@
         }
 
         const nextPayload = adapter.getBootPayload?.();
+        const nextPlayerSnapshot = adapter.getPlayerSnapshot?.();
         if (nextPayload && typeof nextPayload === "object") {
           window.__LumoRechargedBoot = {
             ...(payload && typeof payload === "object" ? payload : {}),
             ...nextPayload,
+            player: nextPlayerSnapshot && typeof nextPlayerSnapshot === "object"
+              ? nextPlayerSnapshot
+              : (payload?.player && typeof payload.player === "object" ? payload.player : null),
             adapter,
           };
         }

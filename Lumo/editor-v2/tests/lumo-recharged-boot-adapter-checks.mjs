@@ -74,6 +74,41 @@ async function runValidDirectSourceChecks() {
   console.log("boot adapter ticked 14");
 }
 
+async function runTickIntentUpdatesLivePlayerChecks() {
+  const levelDocument = loadFixtureLevelDocument();
+  const adapter = createLumoRechargedBootAdapter({ sourceDescriptor: levelDocument });
+
+  await adapter.prepare();
+  await adapter.boot();
+
+  const before = adapter.getPlayerSnapshot();
+  const rightTick = adapter.tick({ right: true, left: false, jump: false });
+  const afterRight = adapter.getPlayerSnapshot();
+  const leftTick = adapter.tick({ right: false, left: true, jump: false });
+  const leftTickTwo = adapter.tick({ right: false, left: true, jump: false });
+  const afterLeft = adapter.getPlayerSnapshot();
+  const jumpTick = adapter.tick({ right: false, left: false, jump: true });
+  const afterJump = adapter.getPlayerSnapshot();
+  const payloadAfterJump = adapter.getBootPayload();
+
+  assert.equal(rightTick.ok, true);
+  assert.equal(rightTick.stepped, true);
+  assert.equal(afterRight.x > before.x, true);
+
+  assert.equal(leftTick.ok, true);
+  assert.equal(leftTick.stepped, true);
+  assert.equal(leftTickTwo.ok, true);
+  assert.equal(leftTickTwo.stepped, true);
+  assert.equal(afterLeft.x < afterRight.x, true);
+
+  assert.equal(jumpTick.ok, true);
+  assert.equal(jumpTick.stepped, true);
+  assert.equal(afterJump.y < afterLeft.y, true);
+  assert.equal(payloadAfterJump.playerY, afterJump.y);
+
+  console.log("boot adapter tick input updates player snapshot");
+}
+
 async function runLoaderDescriptorChecks() {
   const levelDocument = loadFixtureLevelDocument();
   let loaderCalls = 0;
@@ -147,6 +182,7 @@ async function runInvalidSourceChecks() {
 }
 
 await runValidDirectSourceChecks();
+await runTickIntentUpdatesLivePlayerChecks();
 await runLoaderDescriptorChecks();
 await runPartialSourceChecks();
 await runInvalidSourceChecks();

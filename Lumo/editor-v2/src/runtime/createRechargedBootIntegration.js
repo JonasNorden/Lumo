@@ -272,7 +272,7 @@ export function createRechargedBootIntegration(options = {}) {
     }
 
     // Runs exactly one runtime step when integration is started.
-    function tick() {
+    function tick(inputIntent = {}) {
       integrationState.lastAction = "tick";
 
       if (integrationState.started !== true || integrationState.status === "invalid") {
@@ -282,7 +282,7 @@ export function createRechargedBootIntegration(options = {}) {
       }
 
       try {
-        const tickResult = runtime.tick();
+        const tickResult = runtime.tick(inputIntent);
         syncFromRuntime();
 
         const result = buildActionResult(integrationState, { stepped: tickResult?.stepped === true });

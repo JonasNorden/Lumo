@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
+import assert from 'node:assert/strict';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,23 +19,12 @@ if (!lumoHtmlPath) {
 
 const html = readFileSync(lumoHtmlPath, 'utf8');
 
-if (
-  html.includes('src/core/input.js') ||
-  html.includes('./src/core/input.js') ||
-  html.includes('keydown') ||
-  html.includes('keyup')
-) {
-  console.log('playable contract input ok');
-}
+assert.equal(html.includes('adapter.tick('), true, 'Expected playable path to call adapter.tick(...).');
+assert.equal(html.includes('getPlayerSnapshot'), true, 'Expected playable path to reference getPlayerSnapshot.');
+assert.equal(html.includes('getBootPayload'), true, 'Expected playable path to reference getBootPayload.');
+assert.equal(html.includes('__LumoRechargedBoot'), true, 'Expected playable path to reference __LumoRechargedBoot.');
 
-if (html.includes('requestAnimationFrame')) {
-  console.log('playable contract loop ok');
-}
-
-if (html.includes('__LumoRechargedCanvas')) {
-  console.log('playable contract canvas ok');
-}
-
-if (html.includes('src/app.js')) {
-  console.log('playable contract legacy ok');
-}
+console.log('playable contract adapter.tick ok');
+console.log('playable contract getPlayerSnapshot ok');
+console.log('playable contract getBootPayload ok');
+console.log('playable contract __LumoRechargedBoot ok');

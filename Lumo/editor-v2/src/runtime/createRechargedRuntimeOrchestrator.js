@@ -323,7 +323,7 @@ export function createRechargedRuntimeOrchestrator(options = {}) {
     }
 
     // Runs one safe runtime tick while synchronizing orchestrator state.
-    function tick() {
+    function tick(inputIntent = {}) {
       state.lastAction = "tick";
 
       if (state.started !== true || !runtime) {
@@ -331,7 +331,7 @@ export function createRechargedRuntimeOrchestrator(options = {}) {
       }
 
       try {
-        runtime.tick();
+        runtime.tick(inputIntent);
         syncFromRuntime();
       } catch (_error) {
         return fail("tick", { stepped: false, reason: "tick-failed" });
