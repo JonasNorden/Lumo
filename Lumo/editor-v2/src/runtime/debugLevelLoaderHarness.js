@@ -4,6 +4,7 @@ import { createRuntimeBridgeSummary } from "./createRuntimeBridgeSummary.js";
 import { createRuntimeGlobalDebugApi } from "./createRuntimeGlobalDebugApi.js";
 import { attachRuntimeDebugApi } from "./attachRuntimeDebugApi.js";
 import { bootRuntimeBridge } from "./bootRuntimeBridge.js";
+import { startRuntimeFromLevelPathNode } from "./startRuntimeFromLevelPathNode.js";
 import testLevelDocument from "../data/testLevelDocument.v1.json" with { type: "json" };
 
 const validLevelPath = new URL("../data/testLevelDocument.v1.json", import.meta.url).href;
@@ -115,6 +116,12 @@ export async function runDebugLevelLoaderHarness() {
   const validClear = bridge.clear();
   printSection("RUNTIME BRIDGE CLEAR", compactResult(validClear));
 
+  const validStartFromPathNode = await startRuntimeFromLevelPathNode(validLevelPath, {
+    steps: 2,
+    stopOnGrounded: true,
+  });
+  printSection("RUNTIME START FROM PATH (NODE ENTRY)", compactResult(validStartFromPathNode));
+
   const validStartFromPath = await bridge.startFromLevelPath(validLevelPath, {
     startOptions: { steps: 2, stopOnGrounded: true },
   });
@@ -170,6 +177,7 @@ export async function runDebugLevelLoaderHarness() {
 
   const invalidBridge = createRuntimeBridge().bridge;
   const invalidStart = invalidBridge.startFromLevelDocument(invalidLoaded.level, { startOptions: { steps: 0 } });
+  const invalidPathStartNode = await startRuntimeFromLevelPathNode(invalidLevelPath, { steps: 0 });
   const invalidPathStart = await invalidBridge.startFromLevelPath(invalidLevelPath, { startOptions: { steps: 0 } });
   const invalidBoot = await bootRuntimeBridge({
     levelPath: invalidLevelPath,
@@ -179,6 +187,7 @@ export async function runDebugLevelLoaderHarness() {
 
   printSection("INVALID SAMPLE", {
     invalidDocumentStart: compactResult(invalidStart),
+    invalidPathStartNode: compactResult(invalidPathStartNode),
     invalidPathStart: compactResult(invalidPathStart),
     summary: createRuntimeBridgeSummary(invalidBridge),
     status: invalidBridge.getStatus(),
@@ -195,6 +204,7 @@ export async function runDebugLevelLoaderHarness() {
     valid: {
       bridgeCreate,
       validStartFromDocument,
+      validStartFromPathNode,
       validStartFromPath,
       validTick,
       validUpdate,
@@ -216,6 +226,7 @@ export async function runDebugLevelLoaderHarness() {
     },
     invalid: {
       invalidStart,
+      invalidPathStartNode,
       invalidPathStart,
       invalidBoot,
     },
