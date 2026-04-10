@@ -56,7 +56,12 @@ export function buildRuntimePlayerIntent(input = {}) {
     warnings.push("Runtime player intent input was not an object; defaults were applied.");
   }
 
-  const moveX = normalizeMoveX(source.moveX, warnings);
+  // Accept browser-friendly left/right booleans when explicit moveX is not provided.
+  const hasMoveX = source.moveX !== undefined;
+  const leftPressed = source.left === true;
+  const rightPressed = source.right === true;
+  const derivedMoveX = rightPressed === leftPressed ? 0 : rightPressed ? 1 : -1;
+  const moveX = hasMoveX ? normalizeMoveX(source.moveX, warnings) : derivedMoveX;
 
   if (source.jump !== undefined && source.jump !== true && source.jump !== false) {
     warnings.push("Runtime jump intent must be a boolean; defaulted to false.");

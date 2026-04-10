@@ -220,7 +220,7 @@ export function createRechargedGameRuntime(options = {}) {
     }
 
     // Advances runtime by one deterministic step after boot.
-    function tick() {
+    function tick(inputIntent = {}) {
       runtimeState.lastAction = "tick";
 
       if (runtimeState.booted !== true || runtimeState.status === "invalid") {
@@ -230,7 +230,7 @@ export function createRechargedGameRuntime(options = {}) {
       }
 
       try {
-        const tickResult = session.tick();
+        const tickResult = session.tick(inputIntent);
         syncRuntimeFromSession(runtimeState, tickResult?.state ?? session?.getState?.());
 
         const result = buildActionResult(runtimeState, { stepped: tickResult?.stepped === true });

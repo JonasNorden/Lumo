@@ -171,7 +171,7 @@ export function createRuntimeGameSession(options = {}) {
     }
 
     // Executes one deterministic runtime tick through the runner.
-    function tick() {
+    function tick(inputIntent = {}) {
       if (sessionState.status === "invalid" || sessionState.started !== true) {
         const result = {
           ok: false,
@@ -185,7 +185,7 @@ export function createRuntimeGameSession(options = {}) {
       }
 
       try {
-        const tickResult = runner.step();
+        const tickResult = runner.step({ input: inputIntent });
         syncSessionFromRunner(sessionState, tickResult?.state ?? runner.getState?.());
 
         if (tickResult?.ok !== true || tickResult?.stepped !== true) {

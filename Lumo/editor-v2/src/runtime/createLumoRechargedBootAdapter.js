@@ -234,7 +234,7 @@ export function createLumoRechargedBootAdapter(options = {}) {
     }
 
     // Runs one safe tick through the orchestrator once booted.
-    function tick() {
+    function tick(inputIntent = {}) {
       state.lastAction = "tick";
       syncFromOrchestrator();
 
@@ -244,7 +244,7 @@ export function createLumoRechargedBootAdapter(options = {}) {
 
       let tickResult = null;
       try {
-        tickResult = orchestrator.tick();
+        tickResult = orchestrator.tick(inputIntent);
       } catch (_error) {
         tickResult = null;
       }

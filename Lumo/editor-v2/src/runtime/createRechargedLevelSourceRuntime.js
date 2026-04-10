@@ -272,8 +272,8 @@ export function createRechargedLevelSourceRuntime(options = {}) {
       start() {
         return runAction("start", () => integration?.start?.(), { startedNow: false, bootedNow: false });
       },
-      tick() {
-        return runAction("tick", () => integration?.tick?.(), { stepped: false });
+      tick(inputIntent = {}) {
+        return runAction("tick", () => integration?.tick?.(inputIntent), { stepped: false });
       },
       tickSteps(n = 1) {
         const stepsRequested = Number.isInteger(n) && n > 0 ? n : 0;
