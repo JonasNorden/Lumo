@@ -24,6 +24,8 @@ const html = readFileSync(htmlPath, "utf8");
 const hasRechargedInputHook =
   html.includes('src="src/core/input.js"') ||
   html.includes("src='src/core/input.js'") ||
+  html.includes('src="./src/core/input.js"') ||
+  html.includes("src='./src/core/input.js'") ||
   (html.includes("keydown") && html.includes("keyup"));
 assert.equal(hasRechargedInputHook, true, "expected Recharged keyboard input listeners/hooks in Lumo.html");
 console.log("playable contract input ok");
