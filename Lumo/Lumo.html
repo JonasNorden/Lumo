@@ -89,6 +89,78 @@
       }
     }
 
+    function readRechargedPlayerSnapshot(payload) {
+      try {
+        const nestedPlayer = payload && typeof payload.player === "object" ? payload.player : null;
+        const flatX = Number.isFinite(payload?.playerX) ? payload.playerX : null;
+        const flatY = Number.isFinite(payload?.playerY) ? payload.playerY : null;
+        const nestedX = Number.isFinite(nestedPlayer?.x) ? nestedPlayer.x : null;
+        const nestedY = Number.isFinite(nestedPlayer?.y) ? nestedPlayer.y : null;
+        const x = flatX !== null ? flatX : nestedX;
+        const y = flatY !== null ? flatY : nestedY;
+        const status = typeof payload?.playerStatus === "string"
+          ? payload.playerStatus
+          : (
+            nestedPlayer?.grounded === true
+              ? "grounded"
+              : (nestedPlayer?.falling === true ? "falling" : "")
+          );
+        return {
+          x,
+          y,
+          status,
+        };
+      } catch (_error) {
+        return {
+          x: null,
+          y: null,
+          status: "",
+        };
+      }
+    }
+
+    function renderRechargedCanvasFrame(canvas, state) {
+      if (!canvas || typeof canvas.getContext !== "function") {
+        return false;
+      }
+
+      try {
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          return false;
+        }
+
+        const payload = readLatestRechargedBootPayload() || {};
+        const player = readRechargedPlayerSnapshot(payload);
+        const tileSize = Number.isFinite(payload?.tileSize) && payload.tileSize > 0 ? payload.tileSize : 24;
+        const worldWidth = Number.isFinite(payload?.worldWidth) ? payload.worldWidth : Number.isFinite(payload?.cols) ? payload.cols * tileSize : canvas.width;
+        const worldHeight = Number.isFinite(payload?.worldHeight) ? payload.worldHeight : Number.isFinite(payload?.rows) ? payload.rows * tileSize : canvas.height;
+        const playerX = Number.isFinite(player.x) ? player.x : Math.max(0, (worldWidth - tileSize) * 0.5);
+        const playerY = Number.isFinite(player.y) ? player.y : Math.max(0, (worldHeight - tileSize) * 0.5);
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        const drawX = Math.max(0, Math.min(canvas.width - tileSize, Math.round(playerX)));
+        const drawY = Math.max(0, Math.min(canvas.height - tileSize, Math.round(playerY)));
+        const playerStatus = typeof player.status === "string" ? player.status.toLowerCase() : "";
+        const isGrounded = playerStatus.includes("ground");
+        ctx.fillStyle = isGrounded ? "#16a34a" : "#2563eb";
+        ctx.fillRect(drawX, drawY, tileSize, tileSize);
+
+        if (state && typeof state === "object") {
+          state.lastPlayerX = Number.isFinite(player.x) ? player.x : null;
+          state.lastPlayerY = Number.isFinite(player.y) ? player.y : null;
+          state.lastRenderOk = true;
+        }
+        return true;
+      } catch (_error) {
+        if (state && typeof state === "object") {
+          state.lastRenderOk = false;
+        }
+        return false;
+      }
+    }
+
     function resolveAutoplayTickStatus(queryBootResult) {
       try {
         if (queryBootResult?.autoplay !== true) {
@@ -153,15 +225,11 @@
         return;
       }
 
+      const canvas = document.getElementById("game");
       const runFrame = () => {
         try {
           state.frameCount = Number.isFinite(state.frameCount) ? state.frameCount + 1 : 1;
-          const payload = readLatestRechargedBootPayload();
-          if (payload && typeof payload === "object") {
-            state.lastPlayerX = Number.isFinite(payload.playerX) ? payload.playerX : null;
-            state.lastPlayerY = Number.isFinite(payload.playerY) ? payload.playerY : null;
-          }
-          state.lastRenderOk = true;
+          renderRechargedCanvasFrame(canvas, state);
         } catch (_error) {
           state.lastRenderOk = false;
         }
