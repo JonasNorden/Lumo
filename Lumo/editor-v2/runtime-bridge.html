@@ -62,6 +62,23 @@
         border: 1px solid #374151;
         white-space: pre-wrap;
       }
+
+      .view-block {
+        display: grid;
+        gap: 6px;
+      }
+
+      .view-block h2 {
+        margin: 0;
+        font-size: 14px;
+      }
+
+      canvas {
+        width: 100%;
+        max-width: 860px;
+        border: 1px solid #374151;
+        background: #0b1220;
+      }
     </style>
   </head>
   <body>
@@ -84,6 +101,12 @@
         <button id="runtimeBridgeRestartButton" type="button">Restart</button>
         <button id="runtimeBridgeClearButton" type="button">Clear</button>
         <button id="runtimeBridgeRefreshSummaryButton" type="button">Refresh Summary</button>
+      </div>
+
+      <div class="view-block">
+        <h2>Runtime View (Recharged session state)</h2>
+        <p id="runtimeBridgeViewStatus" class="status-line">Runtime view waiting for bridge state...</p>
+        <canvas id="runtimeBridgeViewCanvas" width="860" height="420"></canvas>
       </div>
 
       <pre id="runtimeBridgeActionResult">No actions yet.</pre>

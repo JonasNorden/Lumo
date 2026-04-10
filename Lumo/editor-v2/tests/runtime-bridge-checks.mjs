@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import { v2ToRuntimeLevelObject } from "../src/runtime/v2ToRuntimeLevelObject.js";
 import { renderRuntimeBridgeStatus } from "../src/runtime/renderRuntimeBridgeStatus.js";
+import { renderRuntimeBridgeViewModel } from "../src/runtime/renderRuntimeBridgeViewModel.js";
 import {
   EDITOR_PLAY_LEVEL_KEY,
   EDITOR_PLAY_SPAWN_KEY,
@@ -141,6 +142,70 @@ function runBridgeStatusRenderChecks() {
   assert.equal(Array.isArray(idleStatus.errors), true);
 }
 
+
+function runBridgeViewModelChecks() {
+  const viewModel = renderRuntimeBridgeViewModel({
+    bridge: {
+      getStatus() {
+        return "running";
+      },
+      getActiveController() {
+        return {
+          getStatus() {
+            return "running";
+          },
+          isPaused() {
+            return false;
+          },
+          getSummary() {
+            return {
+              worldId: "vm-world",
+              themeId: "vm-theme",
+              runtimeTick: 7,
+              playerStatus: "spawn-grounded",
+              grounded: true,
+              falling: false,
+            };
+          },
+          getDebugSnapshot() {
+            return {
+              sourceType: "level-path",
+              status: "running",
+            };
+          },
+        };
+      },
+      getActiveSession() {
+        return {
+          world: {
+            width: 4,
+            height: 3,
+            tileSize: 16,
+            spawn: { x: 32, y: 16 },
+            identity: { id: "vm-world", themeId: "vm-theme" },
+            layers: { tiles: [{ tileId: "stone", x: 1, y: 1, w: 2, h: 1 }] },
+          },
+          player: {
+            position: { x: 32, y: 32 },
+            grounded: true,
+            falling: false,
+            mode: "grounded",
+          },
+          runtime: { tick: 7 },
+        };
+      },
+    },
+  });
+
+  assert.equal(viewModel.ok, true);
+  assert.equal(viewModel.world.width, 4);
+  assert.equal(viewModel.tiles.length, 1);
+  assert.equal(viewModel.tiles[0].worldW, 32);
+  assert.equal(viewModel.spawn.x, 32);
+  assert.equal(viewModel.player.y, 32);
+  assert.equal(viewModel.overlay.runtimeTick, 7);
+}
+
 function runSessionBridgeChecks() {
   const { runtimeLevel } = v2ToRuntimeLevelObject(createMockLevelDocument());
   const sessionStorageRef = createMemorySessionStorage();
@@ -158,5 +223,6 @@ function runSessionBridgeChecks() {
 runAdapterChecks();
 runSessionBridgeChecks();
 runBridgeStatusRenderChecks();
+runBridgeViewModelChecks();
 
 console.log("runtime bridge checks passed");

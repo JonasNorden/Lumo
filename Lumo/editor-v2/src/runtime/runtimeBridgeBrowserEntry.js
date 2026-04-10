@@ -1,5 +1,6 @@
 import { bootRuntimeBridge } from "./bootRuntimeBridge.js";
 import { renderRuntimeBridgeStatus } from "./renderRuntimeBridgeStatus.js";
+import { updateRuntimeBridgeView } from "./updateRuntimeBridgeView.js";
 
 const DEFAULT_LEVEL_PATH = "./src/data/testLevelDocument.v1.json";
 const DEFAULT_UPDATE_STEPS = 3;
@@ -27,6 +28,8 @@ function getDomRefs(root = document) {
     summary: root.querySelector("#runtimeBridgeSummary"),
     levelPathInput: root.querySelector("#runtimeBridgeLevelPath"),
     actionResult: root.querySelector("#runtimeBridgeActionResult"),
+    viewStatus: root.querySelector("#runtimeBridgeViewStatus"),
+    viewCanvas: root.querySelector("#runtimeBridgeViewCanvas"),
     startButton: root.querySelector("#runtimeBridgeStartButton"),
     tickButton: root.querySelector("#runtimeBridgeTickButton"),
     updateButton: root.querySelector("#runtimeBridgeUpdateButton"),
@@ -75,6 +78,20 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
         ? JSON.stringify(model.lastAction, null, 2)
         : "No actions yet.";
       setElementText(refs.actionResult, actionText);
+    }
+
+    // Keeps runtime canvas view in sync with active bridge/controller/session state.
+    const viewResult = updateRuntimeBridgeView({
+      bridge: state.bridge,
+      debugApi: state.debugApi,
+      canvas: refs.viewCanvas,
+    });
+
+    if (refs.viewStatus) {
+      const message = viewResult.ok
+        ? `Runtime view ok | tick=${viewResult?.viewModel?.overlay?.runtimeTick ?? "-"}`
+        : `Runtime view issues | ${viewResult.errors.join(" | ")}`;
+      setElementText(refs.viewStatus, message);
     }
 
     return model;
