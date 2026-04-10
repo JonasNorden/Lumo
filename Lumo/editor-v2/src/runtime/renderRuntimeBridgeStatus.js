@@ -73,14 +73,18 @@ export function renderRuntimeBridgeStatus(runtimeState = {}) {
   }
 
   const bridgeSummary = bridgeSummaryResult.value ?? {};
-  const summary = debugSummaryResult.value ?? bridgeSummary;
+  const debugSummary = debugSummaryResult.value ?? {};
+  const summary = {
+    ...debugSummary,
+    ...bridgeSummary,
+  };
   const snapshot = debugSnapshotResult.value ?? {};
 
   errors.push(...(bridgeSummary?.errors ?? []));
-  errors.push(...(summary?.errors ?? []));
+  errors.push(...(debugSummary?.errors ?? []));
   errors.push(...(snapshot?.errors ?? []));
   warnings.push(...(bridgeSummary?.warnings ?? []));
-  warnings.push(...(summary?.warnings ?? []));
+  warnings.push(...(debugSummary?.warnings ?? []));
   warnings.push(...(snapshot?.warnings ?? []));
 
   const bridgeStatus = summary?.bridgeStatus ?? bridgeSummary?.bridgeStatus ?? bootResult?.debug?.bridgeStatus ?? "invalid";
@@ -90,8 +94,10 @@ export function renderRuntimeBridgeStatus(runtimeState = {}) {
   const tickRate = Number.isFinite(summary?.tickRate) ? summary.tickRate : null;
   const autoPlay = summary?.autoPlay === true;
   const playerStatus = summary?.playerStatus ?? null;
+  const locomotion = summary?.locomotion ?? null;
   const grounded = summary?.grounded === true;
   const falling = summary?.falling === true;
+  const rising = summary?.rising === true;
 
   return {
     title: "Recharged Runtime Bridge",
@@ -107,8 +113,10 @@ export function renderRuntimeBridgeStatus(runtimeState = {}) {
       tickRate,
       autoPlay,
       playerStatus,
+      locomotion,
       grounded,
       falling,
+      rising,
       paused: summary?.paused === true,
       hasActiveController: summary?.hasActiveController === true,
       levelPath: runtimeState?.levelPath ?? null,

@@ -115,8 +115,11 @@ function compactResult(result) {
         themeId: result.summary.themeId,
         runtimeTick: result.summary.runtimeTick,
         playerStatus: result.summary.playerStatus,
+        locomotion: result.summary.locomotion,
         grounded: result.summary.grounded,
         falling: result.summary.falling,
+        rising: result.summary.rising,
+        playbackStatus: result.summary.playbackStatus,
         bridgeStatus: result.summary.bridgeStatus,
       }
       : null,
@@ -147,6 +150,30 @@ function compactTrace(trace) {
     blockedRight: entry?.blockedRight === true,
     status: entry?.status ?? null,
   }));
+}
+
+function isLocomotionConsistent(player) {
+  if (!player || typeof player !== "object") {
+    return false;
+  }
+
+  if (player.landed === true) {
+    return player.locomotion === "landing";
+  }
+
+  if (player.rising === true) {
+    return player.locomotion === "rising";
+  }
+
+  if (player.falling === true && player.grounded !== true) {
+    return player.locomotion === "falling" || player.locomotion === "airborne-moving";
+  }
+
+  if (player.grounded === true) {
+    return player.locomotion === "idle-grounded" || player.locomotion === "moving-grounded" || player.locomotion === "landing";
+  }
+
+  return player.locomotion === "airborne-neutral" || player.locomotion === "airborne-moving";
 }
 
 // Runs focused boot/bridge/debug-api checks for valid, partial-valid, and invalid samples.
@@ -281,8 +308,22 @@ export async function runDebugLevelLoaderHarness() {
   const sessionStepWithJump = buildNextRuntimeSessionState(bridge.getActiveSession(), { input: { jump: true, moveX: 1 } });
   printSection("RUNTIME SESSION STEP WITH JUMP", {
     ok: sessionStepWithJump?.ok === true,
-    step: sessionStepWithJump?.step,
-    player: sessionStepWithJump?.session?.player ?? null,
+    step: {
+      status: sessionStepWithJump?.step?.status ?? null,
+      locomotion: sessionStepWithJump?.step?.locomotion ?? null,
+    },
+    player: (() => {
+      const player = sessionStepWithJump?.session?.player ?? null;
+      return player ? {
+        status: player.status ?? null,
+        locomotion: player.locomotion ?? null,
+        grounded: player.grounded === true,
+        rising: player.rising === true,
+        falling: player.falling === true,
+        landed: player.landed === true,
+        consistent: isLocomotionConsistent(player),
+      } : null;
+    })(),
     errors: sessionStepWithJump?.errors ?? [],
     warnings: sessionStepWithJump?.warnings ?? [],
   });
@@ -312,13 +353,29 @@ export async function runDebugLevelLoaderHarness() {
   printSection("RUNTIME SESSION UPDATE WITH LOCOMOTION", {
     ok: sessionUpdateWithLocomotion?.ok === true,
     trace: compactTrace(sessionUpdateWithLocomotion?.trace),
-    finalPlayer: sessionUpdateWithLocomotion?.session?.player ?? null,
+    finalPlayer: (() => {
+      const player = sessionUpdateWithLocomotion?.session?.player ?? null;
+      return player ? {
+        status: player.status ?? null,
+        locomotion: player.locomotion ?? null,
+        grounded: player.grounded === true,
+        rising: player.rising === true,
+        falling: player.falling === true,
+        landed: player.landed === true,
+        consistent: isLocomotionConsistent(player),
+      } : null;
+    })(),
     errors: sessionUpdateWithLocomotion?.errors ?? [],
     warnings: sessionUpdateWithLocomotion?.warnings ?? [],
   });
 
   const validTick = await bridge.tick({ input: { moveX: -1 } });
-  printSection("RUNTIME BRIDGE TICK", compactResult(validTick));
+  printSection("RUNTIME BRIDGE TICK", {
+    ...compactResult(validTick),
+    controllerStatus: validTick?.summary?.status ?? null,
+    playbackStatus: validTick?.summary?.playbackStatus ?? null,
+    runtimeTick: validTick?.summary?.runtimeTick ?? null,
+  });
 
   const validUpdate = await bridge.update({
     steps: 8,
@@ -328,6 +385,9 @@ export async function runDebugLevelLoaderHarness() {
   printSection("RUNTIME BRIDGE UPDATE", {
     ...compactResult(validUpdate),
     trace: compactTrace(validUpdate?.trace),
+    controllerStatus: validUpdate?.summary?.status ?? null,
+    playbackStatus: validUpdate?.summary?.playbackStatus ?? null,
+    runtimeTick: validUpdate?.summary?.runtimeTick ?? null,
   });
 
   const validPause = await bridge.pause();
@@ -354,7 +414,13 @@ export async function runDebugLevelLoaderHarness() {
     stop: await bridge.stop(),
     playbackState: await bridge.getPlaybackState(),
   };
-  printSection("RUNTIME BRIDGE PLAYBACK", bridgePlaybackChecks);
+  printSection("RUNTIME BRIDGE PLAYBACK", {
+    setTickRate: compactResult(bridgePlaybackChecks.setTickRate),
+    play: compactResult(bridgePlaybackChecks.play),
+    step: compactResult(bridgePlaybackChecks.step),
+    stop: compactResult(bridgePlaybackChecks.stop),
+    playbackState: bridgePlaybackChecks.playbackState?.playback ?? bridgePlaybackChecks.playbackState,
+  });
 
   const validStartFromPathNode = await startRuntimeFromLevelPathNode(validLevelPath, {
     steps: 2,
@@ -412,6 +478,7 @@ export async function runDebugLevelLoaderHarness() {
     steps: 8,
     inputSequence: [{ jump: true }, { moveX: 1 }, { moveX: 1 }, { moveX: 1 }],
   });
+  const partialSummaryAfterUpdate = createRuntimeBridgeSummary(partialBridge);
   const partialPause = await partialBridge.pause();
   const partialResume = await partialBridge.resume();
   const partialReset = await partialBridge.reset();
@@ -423,7 +490,17 @@ export async function runDebugLevelLoaderHarness() {
       ...compactResult(partialUpdate),
       trace: compactTrace(partialUpdate?.trace),
     },
-    summaryAfterUpdate: createRuntimeBridgeSummary(partialBridge),
+    summaryAfterUpdate: (() => {
+      const summary = partialSummaryAfterUpdate;
+      return {
+        bridgeStatus: summary.bridgeStatus,
+        controllerStatus: summary.controllerStatus,
+        runtimeTick: summary.runtimeTick,
+        playerStatus: summary.playerStatus,
+        locomotion: summary.locomotion,
+        playbackStatus: summary.playbackStatus,
+      };
+    })(),
     pause: compactResult(partialPause),
     resume: compactResult(partialResume),
     reset: compactResult(partialReset),
