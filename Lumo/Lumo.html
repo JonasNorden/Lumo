@@ -55,6 +55,8 @@
         lastPlayerY: null,
         lastRenderOk: false,
         lastTickOk: null,
+        width: null,
+        height: null,
       };
     }
 
@@ -104,6 +106,45 @@
         return hasAutoplayWarning !== true && queryBootResult?.booted === true;
       } catch (_error) {
         return false;
+      }
+    }
+
+
+    function syncRechargedCanvasDrawingBuffer(canvas, state) {
+      if (!canvas || typeof canvas !== "object") {
+        return;
+      }
+
+      const nextWidth = Math.max(1, Math.floor(canvas.clientWidth || canvas.offsetWidth || 0));
+      const nextHeight = Math.max(1, Math.floor(canvas.clientHeight || canvas.offsetHeight || 0));
+
+      if (canvas.width !== nextWidth) {
+        canvas.width = nextWidth;
+      }
+      if (canvas.height !== nextHeight) {
+        canvas.height = nextHeight;
+      }
+
+      if (state && typeof state === "object") {
+        state.width = canvas.width;
+        state.height = canvas.height;
+      }
+    }
+
+    function installRechargedCanvasResizeSync(canvas, state) {
+      if (!canvas || typeof canvas !== "object") {
+        return;
+      }
+
+      const resizeHandler = () => {
+        syncRechargedCanvasDrawingBuffer(canvas, state);
+      };
+
+      resizeHandler();
+      try {
+        window.addEventListener("resize", resizeHandler, { passive: true });
+      } catch (_error) {
+        // Resize sync is best-effort and must never throw.
       }
     }
 
@@ -184,6 +225,8 @@
         rechargedCanvasVerification.lastPlayerY = Number.isFinite(payload?.playerY) ? payload.playerY : null;
 
         if (rechargedCanvasVerification.active === true) {
+          syncRechargedCanvasDrawingBuffer(canvas, rechargedCanvasVerification);
+          installRechargedCanvasResizeSync(canvas, rechargedCanvasVerification);
           startRechargedCanvasVerificationLoop(rechargedCanvasVerification);
         }
       } catch (_error) {
