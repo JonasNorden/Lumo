@@ -15,6 +15,7 @@ function resolveWorldSnapshot(worldPacket) {
   const spawn = worldPacket?.spawn;
   const tileBounds = worldPacket?.tileBounds;
   const tileMap = worldPacket?.tileMap;
+  const layers = worldPacket?.layers;
 
   return {
     identity: {
@@ -44,6 +45,9 @@ function resolveWorldSnapshot(worldPacket) {
     tileMapSummary: {
       count: Number.isFinite(tileMap?.count) ? tileMap.count : 0,
       keyCount: Array.isArray(tileMap?.keys) ? tileMap.keys.length : 0,
+    },
+    layers: {
+      tiles: Array.isArray(layers?.tiles) ? [...layers.tiles] : [],
     },
     id: typeof identity?.id === "string" && identity.id.length > 0 ? identity.id : null,
     formatVersion: identity?.formatVersion ?? null,
