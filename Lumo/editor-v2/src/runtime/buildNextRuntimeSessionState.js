@@ -1,4 +1,4 @@
-import { stepRuntimePlayerState } from "./stepRuntimePlayerState.js";
+import { stepRuntimePlayerSimulation } from "./stepRuntimePlayerSimulation.js";
 
 const FIXED_RUNTIME_TICK_MS = 16;
 
@@ -83,8 +83,8 @@ function validateSessionForStep(session) {
   return errors;
 }
 
-// Builds the next session state by running one runtime gravity tick.
-export function buildNextRuntimeSessionState(sessionState) {
+// Builds the next session state by running one runtime simulation tick with optional input intent.
+export function buildNextRuntimeSessionState(sessionState, options = {}) {
   const session = cloneSessionForStep(sessionState);
   const validationErrors = validateSessionForStep(session);
 
@@ -138,7 +138,7 @@ export function buildNextRuntimeSessionState(sessionState) {
     },
   };
 
-  const playerStep = stepRuntimePlayerState(worldPacket, session.player);
+  const playerStep = stepRuntimePlayerSimulation(worldPacket, session.player, options);
   if (playerStep.ok !== true) {
     return {
       ok: false,
@@ -153,15 +153,15 @@ export function buildNextRuntimeSessionState(sessionState) {
   }
 
   session.player.position = {
-    x: playerStep.position.x,
-    y: playerStep.position.y,
+    x: playerStep.player.position.x,
+    y: playerStep.player.position.y,
   };
   session.player.velocity = {
-    x: playerStep.velocity.x,
-    y: playerStep.velocity.y,
+    x: playerStep.player.velocity.x,
+    y: playerStep.player.velocity.y,
   };
-  session.player.grounded = playerStep.grounded === true;
-  session.player.falling = playerStep.falling === true;
+  session.player.grounded = playerStep.player.grounded === true;
+  session.player.falling = playerStep.player.falling === true;
   session.player.status = typeof playerStep.status === "string" ? playerStep.status : session.player.status;
   session.runtime.tick += 1;
   session.runtime.elapsedMs += FIXED_RUNTIME_TICK_MS;
@@ -172,7 +172,11 @@ export function buildNextRuntimeSessionState(sessionState) {
       tick: session.runtime.tick,
       status: playerStep.status,
       stepped: true,
-      collidedBelow: playerStep.collidedBelow === true,
+      moveX: playerStep?.debug?.intent?.moveX ?? 0,
+      blockedLeft: playerStep?.collisions?.blockedLeft === true,
+      blockedRight: playerStep?.collisions?.blockedRight === true,
+      grounded: playerStep.player.grounded === true,
+      falling: playerStep.player.falling === true,
     },
   };
 
@@ -184,6 +188,12 @@ export function buildNextRuntimeSessionState(sessionState) {
     step: {
       stepped: true,
       status: playerStep.status ?? "updated",
+      moveX: playerStep?.debug?.intent?.moveX ?? 0,
+      blockedLeft: playerStep?.collisions?.blockedLeft === true,
+      blockedRight: playerStep?.collisions?.blockedRight === true,
+      grounded: playerStep.player.grounded === true,
+      falling: playerStep.player.falling === true,
+      debug: playerStep.debug,
     },
   };
 }

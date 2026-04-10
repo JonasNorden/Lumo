@@ -8,14 +8,19 @@ function uniqueMessages(messages) {
   return [...new Set(messages.filter((message) => typeof message === "string" && message.length > 0))];
 }
 
-function getTraceEntry(session, status) {
+// Builds one trace row with compact, machine-readable runtime player state.
+function getTraceEntry(session, status, step) {
   return {
     tick: Number.isFinite(session?.runtime?.tick) ? session.runtime.tick : null,
     x: Number.isFinite(session?.player?.position?.x) ? session.player.position.x : null,
     y: Number.isFinite(session?.player?.position?.y) ? session.player.position.y : null,
+    velocityX: Number.isFinite(session?.player?.velocity?.x) ? session.player.velocity.x : null,
     velocityY: Number.isFinite(session?.player?.velocity?.y) ? session.player.velocity.y : null,
     grounded: session?.player?.grounded === true,
     falling: session?.player?.falling === true,
+    moveX: Number.isFinite(step?.moveX) ? step.moveX : 0,
+    blockedLeft: step?.blockedLeft === true,
+    blockedRight: step?.blockedRight === true,
     status,
   };
 }
@@ -30,6 +35,40 @@ function normalizeStepCount(steps) {
   }
 
   return steps;
+}
+
+// Resolves step input: sequence > callback > static input/options.
+function resolveStepInput(options, stepIndex, session) {
+  const sequence = options?.inputSequence;
+  if (Array.isArray(sequence)) {
+    return sequence[stepIndex] ?? null;
+  }
+
+  if (typeof options?.inputForStep === "function") {
+    try {
+      return options.inputForStep({ index: stepIndex, session });
+    } catch {
+      return null;
+    }
+  }
+
+  if (options?.input !== undefined) {
+    return options.input;
+  }
+
+  if (options?.intent !== undefined) {
+    return options.intent;
+  }
+
+  if (options?.moveX !== undefined || options?.jump !== undefined || options?.run !== undefined) {
+    return {
+      moveX: options?.moveX,
+      jump: options?.jump,
+      run: options?.run,
+    };
+  }
+
+  return null;
 }
 
 // Updates runtime session state by running one or many deterministic runtime ticks.
@@ -53,7 +92,8 @@ export function updateRuntimeSession(sessionState, options = {}) {
   let currentSessionState = sessionState;
 
   for (let index = 0; index < steps; index += 1) {
-    const stepResult = buildNextRuntimeSessionState(currentSessionState);
+    const stepInput = resolveStepInput(options, index, currentSessionState);
+    const stepResult = buildNextRuntimeSessionState(currentSessionState, { input: stepInput });
 
     errors.push(...(stepResult.errors ?? []));
     warnings.push(...(stepResult.warnings ?? []));
@@ -70,7 +110,7 @@ export function updateRuntimeSession(sessionState, options = {}) {
 
     currentSessionState = stepResult.session;
     const traceStatus = stepResult.step?.status ?? (stepResult.step?.stepped ? "updated" : "skipped");
-    trace.push(getTraceEntry(stepResult.session, traceStatus));
+    trace.push(getTraceEntry(stepResult.session, traceStatus, stepResult.step));
 
     if (stepResult.step?.stepped !== true) {
       break;
