@@ -1,6 +1,9 @@
 const DEFAULT_OPTIONS = {
   padding: 16,
+  hudHeight: 38,
 };
+import { buildRuntimeCameraState } from "./buildRuntimeCameraState.js";
+import { renderRuntimeHudModel } from "./renderRuntimeHudModel.js";
 
 function toFiniteOrNull(value) {
   return Number.isFinite(value) ? value : null;
@@ -10,6 +13,10 @@ function drawOverlayText(ctx, text, x, y, color = "#e5e7eb") {
   ctx.fillStyle = color;
   ctx.font = "12px monospace";
   ctx.fillText(text, x, y);
+}
+
+function worldToScreen(cameraState, valuePx) {
+  return valuePx - (cameraState?.cameraX ?? 0);
 }
 
 // Draws one neutral empty-state frame when runtime data is missing/idle/invalid.
@@ -52,17 +59,23 @@ function resolveDrawState(viewModel) {
   };
 }
 
-function drawBackgroundLayers(ctx, originX, originY, worldWidthPx, worldHeightPx, scale, layers) {
+function drawBackgroundLayers(ctx, viewportWidthPx, viewportHeightPx, scale, cameraState, layers, worldWidthPx) {
   const sorted = [...layers].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const total = sorted.length;
   sorted.forEach((layer, index) => {
-    const bandHeight = (worldHeightPx / Math.max(total, 1)) * scale;
-    const y = originY + index * bandHeight;
+    const bandHeight = viewportHeightPx / Math.max(total, 1);
+    const y = index * bandHeight;
     const hue = 205 + (index * 16) % 60;
     ctx.fillStyle = `hsla(${hue}, 55%, 30%, 0.24)`;
-    ctx.fillRect(originX, y, worldWidthPx * scale, bandHeight);
+    ctx.fillRect(0, y, viewportWidthPx, bandHeight);
 
-    drawOverlayText(ctx, `bg:${layer.backgroundId} o=${layer.order}`, originX + 4, y + 14, "#93c5fd");
+    const parallax = Number.isFinite(layer?.parallax) ? layer.parallax : 0.25;
+    const markerX = ((cameraState?.cameraX ?? 0) * parallax) % Math.max(worldWidthPx * scale, 1);
+    ctx.fillStyle = "rgba(148,163,184,0.18)";
+    ctx.fillRect(-markerX, y, 80, bandHeight);
+    ctx.fillRect(viewportWidthPx - markerX, y, 80, bandHeight);
+
+    drawOverlayText(ctx, `bg:${layer.backgroundId} o=${layer.order}`, 8, y + 14, "#93c5fd");
   });
 }
 
@@ -108,24 +121,57 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
   const tileSize = toFiniteOrNull(viewModel?.world?.tileSize);
   const worldWidthPx = worldWidthTiles * tileSize;
   const worldHeightPx = worldHeightTiles * tileSize;
-  const drawScale = Math.min(
-    (canvas.width - mergedOptions.padding * 2) / worldWidthPx,
-    (canvas.height - mergedOptions.padding * 2) / worldHeightPx,
-  );
+  const availableWidth = canvas.width - mergedOptions.padding * 2;
+  const availableHeight = canvas.height - mergedOptions.padding * 2 - mergedOptions.hudHeight;
+  const drawScale = Math.min(availableWidth / worldWidthPx, availableHeight / worldHeightPx);
   const scale = Number.isFinite(drawScale) && drawScale > 0 ? drawScale : 1;
+  const viewportWidthPx = availableWidth / scale;
+  const viewportHeightPx = availableHeight / scale;
   const originX = mergedOptions.padding;
-  const originY = mergedOptions.padding;
+  const originY = mergedOptions.padding + mergedOptions.hudHeight;
+  const targetX = toFiniteOrNull(viewModel?.player?.x) ?? toFiniteOrNull(viewModel?.spawn?.x) ?? worldWidthPx * 0.5;
+  const targetY = toFiniteOrNull(viewModel?.player?.y) ?? toFiniteOrNull(viewModel?.spawn?.y) ?? worldHeightPx * 0.5;
+  const cameraState = buildRuntimeCameraState({
+    worldWidthPx,
+    worldHeightPx,
+    viewportWidthPx,
+    viewportHeightPx,
+    targetX,
+    targetY,
+    fallbackX: worldWidthPx * 0.5,
+    fallbackY: worldHeightPx * 0.5,
+  });
+  const hudModel = renderRuntimeHudModel({
+    bridgeStatus: viewModel?.overlay?.bridgeStatus,
+    controllerStatus: viewModel?.overlay?.controllerStatus,
+    playerStatus: viewModel?.overlay?.playerStatus,
+    runtimeTick: viewModel?.overlay?.runtimeTick,
+    grounded: viewModel?.overlay?.grounded,
+    locomotion: viewModel?.overlay?.locomotion,
+    playbackStatus: viewModel?.overlay?.playbackStatus,
+  });
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "#0b1220";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   const background = Array.isArray(viewModel?.background) ? viewModel.background : [];
-  drawBackgroundLayers(ctx, originX, originY, worldWidthPx, worldHeightPx, scale, background);
+  ctx.fillStyle = "#0f172a";
+  ctx.fillRect(originX - 2, 8, canvas.width - mergedOptions.padding * 2 + 4, mergedOptions.hudHeight - 4);
+  drawOverlayText(ctx, hudModel.line, originX + 8, 30, "#e2e8f0");
+
+  ctx.save();
+  ctx.translate(originX, originY);
+  ctx.scale(scale, scale);
+  ctx.beginPath();
+  ctx.rect(0, 0, viewportWidthPx, viewportHeightPx);
+  ctx.clip();
+
+  drawBackgroundLayers(ctx, viewportWidthPx, viewportHeightPx, scale, cameraState, background, worldWidthPx);
 
   ctx.strokeStyle = "#60a5fa";
   ctx.lineWidth = 1;
-  ctx.strokeRect(originX, originY, worldWidthPx * scale, worldHeightPx * scale);
+  ctx.strokeRect(-cameraState.cameraX, -cameraState.cameraY, worldWidthPx, worldHeightPx);
 
   const tiles = Array.isArray(viewModel?.tiles) ? viewModel.tiles : [];
   ctx.fillStyle = "#334155";
@@ -138,7 +184,7 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
       continue;
     }
 
-    ctx.fillRect(originX + x * scale, originY + y * scale, w * scale, h * scale);
+    ctx.fillRect(worldToScreen(cameraState, x), y - cameraState.cameraY, w, h);
   }
 
   const decor = Array.isArray(viewModel?.decor) ? viewModel.decor : [];
@@ -150,7 +196,7 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
       continue;
     }
 
-    ctx.fillRect(originX + (x - 4) * scale, originY + (y - 4) * scale, 8 * scale, 8 * scale);
+    ctx.fillRect(worldToScreen(cameraState, x - 4), y - 4 - cameraState.cameraY, 8, 8);
   }
 
   const entities = Array.isArray(viewModel?.entities) ? viewModel.entities : [];
@@ -162,7 +208,7 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
       continue;
     }
 
-    ctx.fillRect(originX + (x - 3) * scale, originY + (y - 10) * scale, 6 * scale, 10 * scale);
+    ctx.fillRect(worldToScreen(cameraState, x - 3), y - 10 - cameraState.cameraY, 6, 10);
   }
 
   const audio = Array.isArray(viewModel?.audio) ? viewModel.audio : [];
@@ -178,78 +224,69 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
       ctx.strokeStyle = "rgba(251, 146, 60, 0.42)";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(originX + x * scale, originY + y * scale, radius * scale, 0, Math.PI * 2);
+      ctx.arc(worldToScreen(cameraState, x), y - cameraState.cameraY, radius, 0, Math.PI * 2);
       ctx.stroke();
     }
 
     ctx.fillStyle = "#fb923c";
     ctx.beginPath();
-    ctx.arc(originX + x * scale, originY + y * scale, 4 * scale, 0, Math.PI * 2);
+    ctx.arc(worldToScreen(cameraState, x), y - cameraState.cameraY, 4, 0, Math.PI * 2);
     ctx.fill();
   }
 
   const spawnX = toFiniteOrNull(viewModel?.spawn?.x);
   const spawnY = toFiniteOrNull(viewModel?.spawn?.y);
   if (spawnX !== null && spawnY !== null) {
-    ctx.fillStyle = "#facc15";
-    ctx.fillRect(
-      originX + (spawnX - tileSize * 0.2) * scale,
-      originY + (spawnY - tileSize * 0.2) * scale,
-      tileSize * 0.4 * scale,
-      tileSize * 0.4 * scale,
-    );
+    ctx.strokeStyle = "#facc15";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(worldToScreen(cameraState, spawnX), spawnY - cameraState.cameraY, Math.max(6, tileSize * 0.32), 0, Math.PI * 2);
+    ctx.stroke();
   }
 
   const playerX = toFiniteOrNull(viewModel?.player?.x);
   const playerY = toFiniteOrNull(viewModel?.player?.y);
   if (playerX !== null && playerY !== null) {
     const falling = viewModel?.player?.falling === true;
-    ctx.fillStyle = "#22c55e";
-    ctx.fillRect(
-      originX + (playerX - tileSize * 0.35) * scale,
-      originY + (playerY - tileSize * 0.8) * scale,
-      tileSize * 0.7 * scale,
-      tileSize * 0.8 * scale,
-    );
+    const grounded = viewModel?.player?.grounded === true;
+    ctx.fillStyle = grounded ? "#22c55e" : "#38bdf8";
+    ctx.fillRect(worldToScreen(cameraState, playerX - tileSize * 0.35), playerY - tileSize * 0.8 - cameraState.cameraY, tileSize * 0.7, tileSize * 0.8);
+    ctx.fillStyle = "#e2e8f0";
+    ctx.fillRect(worldToScreen(cameraState, playerX - tileSize * 0.18), playerY - tileSize * 0.62 - cameraState.cameraY, tileSize * 0.12, tileSize * 0.12);
+    ctx.fillRect(worldToScreen(cameraState, playerX + tileSize * 0.06), playerY - tileSize * 0.62 - cameraState.cameraY, tileSize * 0.12, tileSize * 0.12);
 
     if (falling) {
       ctx.strokeStyle = "#f97316";
       ctx.lineWidth = 2;
       ctx.strokeRect(
-        originX + (playerX - tileSize * 0.38) * scale,
-        originY + (playerY - tileSize * 0.85) * scale,
-        tileSize * 0.76 * scale,
-        tileSize * 0.86 * scale,
+        worldToScreen(cameraState, playerX - tileSize * 0.38),
+        playerY - tileSize * 0.85 - cameraState.cameraY,
+        tileSize * 0.76,
+        tileSize * 0.86,
       );
     }
   }
+  ctx.restore();
 
   const overlay = viewModel?.overlay ?? {};
-  drawOverlayText(ctx, `world=${overlay.worldId ?? "-"} theme=${overlay.themeId ?? "-"}`, 12, canvas.height - 68);
+  drawOverlayText(ctx, `world=${overlay.worldId ?? "-"} theme=${overlay.themeId ?? "-"}`, 12, canvas.height - 52);
   drawOverlayText(
     ctx,
     `tick=${overlay.runtimeTick ?? "-"} bridge=${overlay.bridgeStatus ?? "-"} controller=${overlay.controllerStatus ?? "-"}`,
     12,
-    canvas.height - 52,
+    canvas.height - 38,
   );
   drawOverlayText(
     ctx,
-    `player=${overlay.playerStatus ?? "-"} grounded=${overlay.grounded === true} falling=${overlay.falling === true}`,
+    `player=${overlay.playerStatus ?? "-"} grounded=${overlay.grounded === true} falling=${overlay.falling === true} view=(${Math.round(cameraState.cameraX)},${Math.round(cameraState.cameraY)})`,
     12,
-    canvas.height - 36,
+    canvas.height - 24,
   );
   drawOverlayText(
     ctx,
-    `input moveX=${overlay?.input?.moveX ?? 0} jump=${overlay?.input?.jump === true} run=${overlay?.input?.run === true} loop=${overlay?.loopActive === true} attached=${overlay?.inputAttached === true}`,
+    `bounds 0..${worldWidthPx} x 0..${worldHeightPx} | spawn=yellow ring | player=${viewModel?.player?.grounded === true ? "green" : "blue"} | input ${overlay?.input?.moveX ?? 0}/${overlay?.input?.jump === true ? "J" : "-"}${overlay?.input?.run === true ? "/R" : ""}`,
     12,
-    canvas.height - 20,
-    "#93c5fd",
-  );
-  drawOverlayText(
-    ctx,
-    `counts tiles=${overlay?.counts?.tiles ?? 0} bg=${overlay?.counts?.background ?? 0} decor=${overlay?.counts?.decor ?? 0} ents=${overlay?.counts?.entities ?? 0} audio=${overlay?.counts?.audio ?? 0}`,
-    12,
-    canvas.height - 8,
+    canvas.height - 10,
     "#93c5fd",
   );
 

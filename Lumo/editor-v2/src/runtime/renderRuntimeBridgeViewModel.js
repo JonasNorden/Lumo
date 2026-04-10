@@ -267,6 +267,8 @@ export function renderRuntimeBridgeViewModel(input = {}) {
     bridgeStatus,
     controllerStatus,
     playerStatus: player.status,
+    locomotion: toStringOrNull(session?.player?.locomotion) ?? toStringOrNull(bridgeSummary?.locomotion),
+    playbackStatus: toStringOrNull(bridgeSummary?.playbackStatus),
     grounded: player.grounded,
     falling: player.falling,
     counts: {

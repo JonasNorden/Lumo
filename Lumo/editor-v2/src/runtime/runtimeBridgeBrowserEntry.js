@@ -4,6 +4,7 @@ import { updateRuntimeBridgeView } from "./updateRuntimeBridgeView.js";
 import { normalizeRuntimeSummaryShape } from "./normalizeRuntimeSummaryShape.js";
 import { createRuntimeBrowserInputState } from "./createRuntimeBrowserInputState.js";
 import { runRuntimeBrowserLoopStep } from "./runRuntimeBrowserLoopStep.js";
+import { renderRuntimeHudModel } from "./renderRuntimeHudModel.js";
 
 const DEFAULT_LEVEL_PATH = "./src/data/testLevelDocument.v1.json";
 const DEFAULT_UPDATE_STEPS = 3;
@@ -138,7 +139,7 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
   // Renders compact debug state to plain text fields so failures are always visible.
   function refreshView() {
     const model = renderRuntimeBridgeStatus(state);
-    setElementText(refs.title, model.title);
+    setElementText(refs.title, "Lumo Runtime Prototype");
     setElementText(refs.statusLine, model.statusLine);
     setElementText(refs.summary, JSON.stringify(model, null, 2));
 
@@ -149,15 +150,13 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
       setElementText(refs.actionResult, actionText);
     }
     if (refs.playbackLine) {
-      setElementText(
-        refs.playbackLine,
-        `Playback: ${model?.summary?.playbackStatus ?? "stopped"} | tickRate=${model?.summary?.tickRate ?? "-"} | autoPlay=${model?.summary?.autoPlay === true ? "on" : "off"} | loop=${model?.summary?.loopActive === true ? "on" : "off"} | tick=${model?.summary?.runtimeTick ?? "-"}`,
-      );
+      const hud = renderRuntimeHudModel(model?.summary ?? {});
+      setElementText(refs.playbackLine, `Runtime HUD: ${hud.line}`);
     }
     if (refs.inputLine) {
       setElementText(
         refs.inputLine,
-        `Input: moveX=${model?.summary?.inputState?.moveX ?? 0} jump=${model?.summary?.inputState?.jump === true ? "on" : "off"} run=${model?.summary?.inputState?.run === true ? "on" : "off"} | playerControl=${model?.summary?.playerControlActive === true ? "active" : "idle"}`,
+        `Input moveX=${model?.summary?.inputState?.moveX ?? 0} | jump=${model?.summary?.inputState?.jump === true ? "on" : "off"} | run=${model?.summary?.inputState?.run === true ? "on" : "off"} | playerControl=${model?.summary?.playerControlActive === true ? "active" : "idle"} | loop=${model?.summary?.loopActive === true ? "on" : "off"}`,
       );
     }
 
@@ -179,7 +178,7 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
 
     if (refs.viewLegend) {
       const counts = viewResult?.viewModel?.overlay?.counts ?? {};
-      const legend = `bg=${counts.background ?? 0} tiles=${counts.tiles ?? 0} decor=${counts.decor ?? 0} entities=${counts.entities ?? 0} audio=${counts.audio ?? 0} spawn=yellow player=green`;
+      const legend = `spawn: yellow ring | player: green=grounded/blue=airborne | bounds: cyan | tiles=${counts.tiles ?? 0} bg=${counts.background ?? 0} decor=${counts.decor ?? 0} entities=${counts.entities ?? 0} audio=${counts.audio ?? 0}`;
       setElementText(refs.viewLegend, legend);
     }
 
