@@ -167,6 +167,53 @@ function runBottomBoundaryLandingJumpChecks() {
   console.log("session bottom boundary landing + jump ok");
 }
 
+function runOutOfBoundsRespawnChecks() {
+  const tallWorldLevel = {
+    identity: { id: "tall-world-level", formatVersion: "1.0.0", themeId: "test", name: "Tall World" },
+    world: {
+      width: 32,
+      height: 360,
+      tileSize: 32,
+      spawn: { x: 64, y: 16 },
+    },
+    layers: {
+      tiles: [],
+      background: [],
+      decor: [],
+      entities: [],
+      audio: [],
+    },
+  };
+
+  const session = createRuntimeGameSession({ levelDocument: tallWorldLevel });
+  assert.equal(session.start().ok, true);
+
+  let sawRespawnReset = false;
+  let maxObservedY = Number.NEGATIVE_INFINITY;
+  let previousY = session.getPlayerSnapshot().y;
+
+  for (let index = 0; index < 180; index += 1) {
+    const tickResult = session.tick({ left: false, right: false, jump: false });
+    const player = session.getPlayerSnapshot();
+    assert.equal(tickResult.ok, true);
+    assert.equal(tickResult.stepped, true);
+    maxObservedY = Math.max(maxObservedY, player.y);
+    if (player.y < previousY) {
+      sawRespawnReset = true;
+    }
+    previousY = player.y;
+  }
+
+  const finalPlayer = session.getPlayerSnapshot();
+  assert.equal(sawRespawnReset, true, "falling past the lower playable bound should force a respawn reset");
+  assert.equal(maxObservedY <= 160, true, "player should never reach deep-world runaway Y values");
+  assert.equal(finalPlayer.x, tallWorldLevel.world.spawn.x, "respawn/fall loop should preserve authored spawn X path");
+  assert.equal(finalPlayer.grounded, false);
+  assert.equal(finalPlayer.falling, true);
+
+  console.log("session out-of-bounds respawn ok");
+}
+
 function runInvalidLevelChecks() {
   const session = createRuntimeGameSession({ levelDocument: null });
 
@@ -186,6 +233,7 @@ runValidLevelChecks();
 runInputIntentMovementChecks();
 runPartialLevelChecks();
 runBottomBoundaryLandingJumpChecks();
+runOutOfBoundsRespawnChecks();
 runInvalidLevelChecks();
 
 console.log("runtime-game-session-checks: ok");

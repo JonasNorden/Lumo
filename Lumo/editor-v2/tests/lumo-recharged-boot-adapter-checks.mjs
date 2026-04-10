@@ -222,11 +222,59 @@ async function runBottomBoundaryLandingJumpChecks() {
   console.log("boot adapter bottom boundary landing + jump ok");
 }
 
+async function runOutOfBoundsRespawnChecks() {
+  const tallWorldLevel = {
+    identity: { id: "tall-world-level", formatVersion: "1.0.0", themeId: "test", name: "Tall World" },
+    world: {
+      width: 32,
+      height: 360,
+      tileSize: 32,
+      spawn: { x: 64, y: 16 },
+    },
+    layers: {
+      tiles: [],
+      background: [],
+      decor: [],
+      entities: [],
+      audio: [],
+    },
+  };
+
+  const adapter = createLumoRechargedBootAdapter({ sourceDescriptor: tallWorldLevel });
+  await adapter.prepare();
+  await adapter.boot();
+  let sawRespawnReset = false;
+  let maxObservedY = Number.NEGATIVE_INFINITY;
+  let previousY = adapter.getPlayerSnapshot().y;
+
+  for (let index = 0; index < 180; index += 1) {
+    const tickResult = adapter.tick({ left: false, right: false, jump: false });
+    const player = adapter.getPlayerSnapshot();
+    assert.equal(tickResult.ok, true);
+    assert.equal(tickResult.stepped, true);
+    maxObservedY = Math.max(maxObservedY, player.y);
+    if (player.y < previousY) {
+      sawRespawnReset = true;
+    }
+    previousY = player.y;
+  }
+
+  const player = adapter.getPlayerSnapshot();
+  assert.equal(sawRespawnReset, true, "adapter runtime should expose out-of-bounds respawn resets");
+  assert.equal(maxObservedY <= 160, true, "adapter snapshot should not drift into deep-world runaway");
+  assert.equal(player.x, tallWorldLevel.world.spawn.x);
+  assert.equal(player.grounded, false);
+  assert.equal(player.falling, true);
+
+  console.log("boot adapter out-of-bounds respawn ok");
+}
+
 await runValidDirectSourceChecks();
 await runTickIntentUpdatesLivePlayerChecks();
 await runLoaderDescriptorChecks();
 await runPartialSourceChecks();
 await runInvalidSourceChecks();
 await runBottomBoundaryLandingJumpChecks();
+await runOutOfBoundsRespawnChecks();
 
 console.log("lumo-recharged-boot-adapter-checks: ok");
