@@ -26,6 +26,9 @@ import { updateRuntimeSession } from "./updateRuntimeSession.js";
 import { createRuntimeRunnerSession } from "./createRuntimeRunnerSession.js";
 import { runRuntimeRunnerTicks } from "./runRuntimeRunnerTicks.js";
 import { runRuntimeLevelSimulation } from "./runRuntimeLevelSimulation.js";
+import { startRuntimeFromLevelDocument } from "./startRuntimeFromLevelDocument.js";
+import { startRuntimeFromLevelPath } from "./startRuntimeFromLevelPath.js";
+import { createRuntimeStartSummary } from "./createRuntimeStartSummary.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -68,6 +71,9 @@ const partialValidSampleLevel = {
   // Keep layers intentionally sparse so runtime summary can expose missing requirements.
   layers: {},
 };
+const validLevelPath = new URL("../data/testLevelDocument.v1.json", import.meta.url).href;
+const invalidLevelPath = "./missing-level-document.v1.json";
+
 
 // Logs the key loader output fields in a consistent, readable format.
 function logLoaderResult(label, result) {
@@ -79,7 +85,7 @@ function logLoaderResult(label, result) {
 }
 
 // Runs three debug scenarios: valid file, partial-valid inline sample, and invalid inline sample.
-export function runDebugLevelLoaderHarness() {
+export async function runDebugLevelLoaderHarness() {
   const validResult = loadLevelDocument(testLevelDocument);
   const partialValidResult = loadLevelDocument(partialValidSampleLevel);
   const invalidResult = loadLevelDocument(invalidSampleLevel);
@@ -223,6 +229,35 @@ export function runDebugLevelLoaderHarness() {
     steps: 3,
   });
 
+  // Start runtime directly from loaded level documents (steps=0 should not tick).
+  const validRuntimeStartFromDocument = startRuntimeFromLevelDocument(validResult.level, {
+    steps: 0,
+  });
+  const partialRuntimeStartFromDocument = startRuntimeFromLevelDocument(partialValidResult.level, {
+    steps: 4,
+  });
+  const invalidRuntimeStartFromDocument = startRuntimeFromLevelDocument(invalidResult.level, {
+    steps: 2,
+  });
+  // Start runtime from filesystem path and a clearly invalid path.
+  const validRuntimeStartFromPath = await startRuntimeFromLevelPath(validLevelPath, {
+    steps: 3,
+    stopOnGrounded: true,
+  });
+  const invalidRuntimeStartFromPath = await startRuntimeFromLevelPath(invalidLevelPath, {
+    steps: 3,
+  });
+  // Build compact top-level start summaries for easy harness verification.
+  const validRuntimeStartSummaryFromDocument = createRuntimeStartSummary(validRuntimeStartFromDocument);
+  const validRuntimeStartSummaryFromPath = createRuntimeStartSummary(validRuntimeStartFromPath);
+  const partialRuntimeStartSummaryFromDocument = createRuntimeStartSummary(
+    partialRuntimeStartFromDocument,
+  );
+  const invalidRuntimeStartSummaryFromDocument = createRuntimeStartSummary(
+    invalidRuntimeStartFromDocument,
+  );
+  const invalidRuntimeStartSummaryFromPath = createRuntimeStartSummary(invalidRuntimeStartFromPath);
+
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   if (validSummary) {
     console.log("\n=== Runtime level summary (valid sample) ===");
@@ -296,6 +331,21 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== RUNTIME LEVEL SIMULATION ===");
   console.log("(valid sample)");
   console.dir(validRuntimeLevelSimulation, { depth: null });
+  console.log("\n=== RUNTIME START FROM DOCUMENT ===");
+  console.log("(valid sample)");
+  console.dir(validRuntimeStartFromDocument, { depth: null });
+  console.log("\n=== RUNTIME START FROM PATH ===");
+  console.log("(valid sample)");
+  console.dir(validRuntimeStartFromPath, { depth: null });
+  console.log("\n=== RUNTIME START SUMMARY ===");
+  console.log("(valid sample)");
+  console.dir(
+    {
+      fromDocument: validRuntimeStartSummaryFromDocument,
+      fromPath: validRuntimeStartSummaryFromPath,
+    },
+    { depth: null },
+  );
   // Run a few fixed grid lookups for easy runtime tile hit-test inspection.
   console.log("\n=== Runtime tile lookup (valid sample) ===");
   const validLookupTests = [
@@ -387,6 +437,12 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== RUNTIME LEVEL SIMULATION ===");
   console.log("(partial valid sample)");
   console.dir(partialRuntimeLevelSimulation, { depth: null });
+  console.log("\n=== RUNTIME START FROM DOCUMENT ===");
+  console.log("(partial valid sample)");
+  console.dir(partialRuntimeStartFromDocument, { depth: null });
+  console.log("\n=== RUNTIME START SUMMARY ===");
+  console.log("(partial valid sample)");
+  console.dir(partialRuntimeStartSummaryFromDocument, { depth: null });
   // Keep one sparse-sample lookup so missing tiles remain easy to verify.
   console.log("\n=== Runtime tile lookup (partial valid sample) ===");
   const partialLookupTests = [
@@ -450,6 +506,21 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== RUNTIME LEVEL SIMULATION ===");
   console.log("(invalid sample)");
   console.dir(invalidRuntimeLevelSimulation, { depth: null });
+  console.log("\n=== RUNTIME START FROM DOCUMENT ===");
+  console.log("(invalid sample)");
+  console.dir(invalidRuntimeStartFromDocument, { depth: null });
+  console.log("\n=== RUNTIME START FROM PATH ===");
+  console.log("(invalid sample)");
+  console.dir(invalidRuntimeStartFromPath, { depth: null });
+  console.log("\n=== RUNTIME START SUMMARY ===");
+  console.log("(invalid sample)");
+  console.dir(
+    {
+      fromDocument: invalidRuntimeStartSummaryFromDocument,
+      fromPath: invalidRuntimeStartSummaryFromPath,
+    },
+    { depth: null },
+  );
 
   return {
     validResult,
@@ -520,9 +591,19 @@ export function runDebugLevelLoaderHarness() {
     validRuntimeLevelSimulation,
     partialRuntimeLevelSimulation,
     invalidRuntimeLevelSimulation,
+    validRuntimeStartFromDocument,
+    partialRuntimeStartFromDocument,
+    invalidRuntimeStartFromDocument,
+    validRuntimeStartFromPath,
+    invalidRuntimeStartFromPath,
+    validRuntimeStartSummaryFromDocument,
+    validRuntimeStartSummaryFromPath,
+    partialRuntimeStartSummaryFromDocument,
+    invalidRuntimeStartSummaryFromDocument,
+    invalidRuntimeStartSummaryFromPath,
     invalidResult,
   };
 }
 
 // Invoke automatically so importing/running this file prints output immediately.
-runDebugLevelLoaderHarness();
+await runDebugLevelLoaderHarness();
