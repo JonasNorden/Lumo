@@ -44,6 +44,7 @@
   <script defer src="data/audio_global_config.js"></script>
   <script type="module" defer>
     import { bootLumoRechargedFromQuery } from "./editor-v2/src/runtime/bootLumoRechargedFromQuery.js";
+    import { createLumoRechargedBootAdapter } from "./editor-v2/src/runtime/createLumoRechargedBootAdapter.js";
 
     function createLumoRechargedCanvasVerificationState() {
       return {
@@ -86,6 +87,75 @@
         return payload;
       } catch (_error) {
         return null;
+      }
+    }
+
+    function createRechargedInputIntentState() {
+      return {
+        left: false,
+        right: false,
+        jump: false,
+      };
+    }
+
+    function installRechargedInputIntentSync() {
+      const state = createRechargedInputIntentState();
+
+      const readKey = (event) => (typeof event?.key === "string" ? event.key.toLowerCase() : "");
+      const update = (event, pressed) => {
+        const key = readKey(event);
+        if (key === "arrowleft" || key === "a") {
+          state.left = pressed;
+        } else if (key === "arrowright" || key === "d") {
+          state.right = pressed;
+        } else if (key === "arrowup" || key === "w" || key === " ") {
+          state.jump = pressed;
+        }
+      };
+
+      try {
+        window.addEventListener("keydown", (event) => update(event, true), { passive: true });
+        window.addEventListener("keyup", (event) => update(event, false), { passive: true });
+      } catch (_error) {
+        // Input sync is best-effort and must never throw.
+      }
+
+      return state;
+    }
+
+    function tickLiveRechargedAdapter(state) {
+      try {
+        const payload = readLatestRechargedBootPayload();
+        const adapter = payload && typeof payload.adapter === "object" ? payload.adapter : null;
+        if (!adapter || typeof adapter.tick !== "function") {
+          if (state && typeof state === "object") {
+            state.lastTickOk = null;
+          }
+          return;
+        }
+
+        const intent = {
+          left: state?.input?.left === true,
+          right: state?.input?.right === true,
+          jump: state?.input?.jump === true,
+        };
+        const tickResult = adapter.tick(intent);
+        if (state && typeof state === "object") {
+          state.lastTickOk = tickResult?.ok === true && tickResult?.stepped === true;
+        }
+
+        const nextPayload = adapter.getBootPayload?.();
+        if (nextPayload && typeof nextPayload === "object") {
+          window.__LumoRechargedBoot = {
+            ...(payload && typeof payload === "object" ? payload : {}),
+            ...nextPayload,
+            adapter,
+          };
+        }
+      } catch (_error) {
+        if (state && typeof state === "object") {
+          state.lastTickOk = false;
+        }
       }
     }
 
@@ -229,6 +299,7 @@
       const runFrame = () => {
         try {
           state.frameCount = Number.isFinite(state.frameCount) ? state.frameCount + 1 : 1;
+          tickLiveRechargedAdapter(state);
           renderRechargedCanvasFrame(canvas, state);
         } catch (_error) {
           state.lastRenderOk = false;
@@ -264,10 +335,16 @@
     async function bootLumoRuntime() {
       const rechargedCanvasVerification = ensureLumoRechargedCanvasVerificationState();
       let queryBootResult = null;
+      let liveAdapter = null;
 
       try {
         queryBootResult = await bootLumoRechargedFromQuery({
           search: window.location.search,
+          createAdapter(options = {}) {
+            const adapter = createLumoRechargedBootAdapter(options);
+            liveAdapter = adapter;
+            return adapter;
+          },
         });
       } catch (error) {
         queryBootResult = {
@@ -281,6 +358,9 @@
         };
       }
 
+      if (queryBootResult && typeof queryBootResult === "object" && liveAdapter && typeof liveAdapter === "object") {
+        queryBootResult.adapter = liveAdapter;
+      }
       window.__LumoRechargedBoot = queryBootResult;
       try {
         const canvas = document.getElementById("game");
@@ -293,6 +373,7 @@
         rechargedCanvasVerification.lastPlayerY = Number.isFinite(payload?.playerY) ? payload.playerY : null;
 
         if (rechargedCanvasVerification.active === true) {
+          rechargedCanvasVerification.input = installRechargedInputIntentSync();
           syncRechargedCanvasDrawingBuffer(canvas, rechargedCanvasVerification);
           installRechargedCanvasResizeSync(canvas, rechargedCanvasVerification);
           startRechargedCanvasVerificationLoop(rechargedCanvasVerification);
