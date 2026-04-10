@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Lumo Recharged - Runtime Bridge</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: monospace;
+        background: #111827;
+        color: #e5e7eb;
+      }
+
+      main {
+        margin: 20px;
+        display: grid;
+        gap: 10px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 16px;
+      }
+
+      .status-line {
+        margin: 0;
+        padding: 8px;
+        border: 1px solid #374151;
+        background: #1f2937;
+      }
+
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      input,
+      button {
+        font: inherit;
+        color: #e5e7eb;
+        background: #0f172a;
+        border: 1px solid #4b5563;
+        padding: 6px 8px;
+      }
+
+      input {
+        min-width: 320px;
+        flex: 1 1 420px;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      pre {
+        margin: 0;
+        padding: 10px;
+        background: #1f2937;
+        border: 1px solid #374151;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="runtimeBridgeTitle">Recharged Runtime Bridge</h1>
+      <p id="runtimeBridgeStatusLine" class="status-line">Booting runtime bridge...</p>
+
+      <div class="row">
+        <label for="runtimeBridgeLevelPath">Level Path</label>
+        <input id="runtimeBridgeLevelPath" type="text" value="./src/data/testLevelDocument.v1.json" />
+      </div>
+
+      <div class="row">
+        <button id="runtimeBridgeStartButton" type="button">Start</button>
+        <button id="runtimeBridgeTickButton" type="button">Tick</button>
+        <button id="runtimeBridgeUpdateButton" type="button">Update</button>
+        <button id="runtimeBridgePauseButton" type="button">Pause</button>
+        <button id="runtimeBridgeResumeButton" type="button">Resume</button>
+        <button id="runtimeBridgeResetButton" type="button">Reset</button>
+        <button id="runtimeBridgeRestartButton" type="button">Restart</button>
+        <button id="runtimeBridgeClearButton" type="button">Clear</button>
+        <button id="runtimeBridgeRefreshSummaryButton" type="button">Refresh Summary</button>
+      </div>
+
+      <pre id="runtimeBridgeActionResult">No actions yet.</pre>
+      <pre id="runtimeBridgeSummary">Waiting for summary...</pre>
+    </main>
+
+    <script type="module">
+      import { startRuntimeBridgeBrowserEntry } from "./src/runtime/runtimeBridgeBrowserEntry.js";
+
+      // Boot and wire the debug-first bridge surface.
+      startRuntimeBridgeBrowserEntry();
+    </script>
+  </body>
+</html>

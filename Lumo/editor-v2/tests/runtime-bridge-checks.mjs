@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { v2ToRuntimeLevelObject } from "../src/runtime/v2ToRuntimeLevelObject.js";
+import { renderRuntimeBridgeStatus } from "../src/runtime/renderRuntimeBridgeStatus.js";
 import {
   EDITOR_PLAY_LEVEL_KEY,
   EDITOR_PLAY_SPAWN_KEY,
@@ -129,6 +130,17 @@ function createMemorySessionStorage() {
   };
 }
 
+
+function runBridgeStatusRenderChecks() {
+  const idleStatus = renderRuntimeBridgeStatus({ query: { steps: 2 }, levelPath: "./src/data/testLevelDocument.v1.json" });
+
+  assert.equal(idleStatus.title, "Recharged Runtime Bridge");
+  assert.equal(typeof idleStatus.statusLine, "string");
+  assert.equal(idleStatus.summary.bridgeStatus, "idle");
+  assert.equal(idleStatus.summary.sourceType, "unknown");
+  assert.equal(Array.isArray(idleStatus.errors), true);
+}
+
 function runSessionBridgeChecks() {
   const { runtimeLevel } = v2ToRuntimeLevelObject(createMockLevelDocument());
   const sessionStorageRef = createMemorySessionStorage();
@@ -145,5 +157,6 @@ function runSessionBridgeChecks() {
 
 runAdapterChecks();
 runSessionBridgeChecks();
+runBridgeStatusRenderChecks();
 
 console.log("runtime bridge checks passed");
