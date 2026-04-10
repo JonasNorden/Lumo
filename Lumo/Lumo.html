@@ -45,6 +45,100 @@
   <script type="module" defer>
     import { bootLumoRechargedFromQuery } from "./editor-v2/src/runtime/bootLumoRechargedFromQuery.js";
 
+    function createLumoRechargedCanvasVerificationState() {
+      return {
+        active: false,
+        canvasId: "",
+        autoplay: false,
+        frameCount: 0,
+        lastPlayerX: null,
+        lastPlayerY: null,
+        lastRenderOk: false,
+        lastTickOk: null,
+      };
+    }
+
+    function ensureLumoRechargedCanvasVerificationState() {
+      try {
+        if (!window.__LumoRechargedCanvas || typeof window.__LumoRechargedCanvas !== "object") {
+          window.__LumoRechargedCanvas = createLumoRechargedCanvasVerificationState();
+        }
+      } catch (_error) {
+        // Keeps this verification support strictly non-fatal.
+      }
+
+      try {
+        return window.__LumoRechargedCanvas || createLumoRechargedCanvasVerificationState();
+      } catch (_error) {
+        return createLumoRechargedCanvasVerificationState();
+      }
+    }
+
+    function readLatestRechargedBootPayload() {
+      try {
+        const payload = window.__LumoRechargedBoot;
+        if (!payload || typeof payload !== "object") {
+          return null;
+        }
+
+        return payload;
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    function resolveAutoplayTickStatus(queryBootResult) {
+      try {
+        if (queryBootResult?.autoplay !== true) {
+          return null;
+        }
+
+        if (!Array.isArray(queryBootResult?.warnings)) {
+          return queryBootResult?.booted === true;
+        }
+
+        const hasAutoplayWarning = queryBootResult.warnings.some((warning) => (
+          typeof warning === "string" && warning.includes("Autoplay tick burst did not complete cleanly.")
+        ));
+
+        return hasAutoplayWarning !== true && queryBootResult?.booted === true;
+      } catch (_error) {
+        return false;
+      }
+    }
+
+    function startRechargedCanvasVerificationLoop(state) {
+      if (!state || typeof state !== "object") {
+        return;
+      }
+
+      const runFrame = () => {
+        try {
+          state.frameCount = Number.isFinite(state.frameCount) ? state.frameCount + 1 : 1;
+          const payload = readLatestRechargedBootPayload();
+          if (payload && typeof payload === "object") {
+            state.lastPlayerX = Number.isFinite(payload.playerX) ? payload.playerX : null;
+            state.lastPlayerY = Number.isFinite(payload.playerY) ? payload.playerY : null;
+          }
+          state.lastRenderOk = true;
+        } catch (_error) {
+          state.lastRenderOk = false;
+        }
+
+        try {
+          window.requestAnimationFrame(runFrame);
+        } catch (_error) {
+          // Verification loop is best-effort and must never throw.
+        }
+      };
+
+      try {
+        window.requestAnimationFrame(runFrame);
+      } catch (_error) {
+        // Verification loop is best-effort and must never throw.
+      }
+    }
+
     // Loads legacy app.js only when Recharged mode is not active or did not boot.
     function loadLegacyBootScript() {
       return new Promise((resolve) => {
@@ -59,6 +153,7 @@
 
     // Runs query-driven Recharged opt-in boot with safe legacy fallback behavior.
     async function bootLumoRuntime() {
+      const rechargedCanvasVerification = ensureLumoRechargedCanvasVerificationState();
       let queryBootResult = null;
 
       try {
@@ -78,6 +173,22 @@
       }
 
       window.__LumoRechargedBoot = queryBootResult;
+      try {
+        const canvas = document.getElementById("game");
+        rechargedCanvasVerification.active = queryBootResult?.enabled === true && queryBootResult?.booted === true;
+        rechargedCanvasVerification.canvasId = typeof canvas?.id === "string" ? canvas.id : "";
+        rechargedCanvasVerification.autoplay = queryBootResult?.autoplay === true;
+        rechargedCanvasVerification.lastTickOk = resolveAutoplayTickStatus(queryBootResult);
+        const payload = readLatestRechargedBootPayload();
+        rechargedCanvasVerification.lastPlayerX = Number.isFinite(payload?.playerX) ? payload.playerX : null;
+        rechargedCanvasVerification.lastPlayerY = Number.isFinite(payload?.playerY) ? payload.playerY : null;
+
+        if (rechargedCanvasVerification.active === true) {
+          startRechargedCanvasVerificationLoop(rechargedCanvasVerification);
+        }
+      } catch (_error) {
+        // Keeps verification support non-fatal and behavior-neutral.
+      }
 
       if (queryBootResult?.enabled === true && queryBootResult?.booted === true) {
         console.info("[Lumo] Recharged query boot active", queryBootResult);
