@@ -37,6 +37,10 @@ function cloneSessionForStep(sessionState) {
     },
     player: {
       ...(source.player ?? {}),
+      grounded: source?.player?.grounded === true,
+      falling: source?.player?.falling === true,
+      rising: source?.player?.rising === true,
+      landed: source?.player?.landed === true,
       position: {
         x: Number.isFinite(source?.player?.position?.x) ? source.player.position.x : null,
         y: Number.isFinite(source?.player?.position?.y) ? source.player.position.y : null,
@@ -162,6 +166,8 @@ export function buildNextRuntimeSessionState(sessionState, options = {}) {
   };
   session.player.grounded = playerStep.player.grounded === true;
   session.player.falling = playerStep.player.falling === true;
+  session.player.rising = playerStep.player.rising === true;
+  session.player.landed = playerStep.player.landed === true;
   session.player.status = typeof playerStep.status === "string" ? playerStep.status : session.player.status;
   session.runtime.tick += 1;
   session.runtime.elapsedMs += FIXED_RUNTIME_TICK_MS;
@@ -173,10 +179,14 @@ export function buildNextRuntimeSessionState(sessionState, options = {}) {
       status: playerStep.status,
       stepped: true,
       moveX: playerStep?.debug?.intent?.moveX ?? 0,
+      jump: playerStep?.debug?.intent?.jump === true,
       blockedLeft: playerStep?.collisions?.blockedLeft === true,
       blockedRight: playerStep?.collisions?.blockedRight === true,
       grounded: playerStep.player.grounded === true,
       falling: playerStep.player.falling === true,
+      rising: playerStep.player.rising === true,
+      landed: playerStep.player.landed === true,
+      collidedBelow: playerStep?.collisions?.collidedBelow === true,
     },
   };
 
@@ -189,10 +199,14 @@ export function buildNextRuntimeSessionState(sessionState, options = {}) {
       stepped: true,
       status: playerStep.status ?? "updated",
       moveX: playerStep?.debug?.intent?.moveX ?? 0,
+      jump: playerStep?.debug?.intent?.jump === true,
       blockedLeft: playerStep?.collisions?.blockedLeft === true,
       blockedRight: playerStep?.collisions?.blockedRight === true,
       grounded: playerStep.player.grounded === true,
       falling: playerStep.player.falling === true,
+      rising: playerStep.player.rising === true,
+      landed: playerStep.player.landed === true,
+      collidedBelow: playerStep?.collisions?.collidedBelow === true,
       debug: playerStep.debug,
     },
   };
