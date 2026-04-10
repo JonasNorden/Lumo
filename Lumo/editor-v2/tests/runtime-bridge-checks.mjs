@@ -144,6 +144,12 @@ function runBridgeStatusRenderChecks() {
   assert.equal(idleStatus.summary.playbackStatus, "stopped");
   assert.equal(idleStatus.summary.tickRate, 4);
   assert.equal(idleStatus.summary.autoPlay, false);
+  assert.equal(idleStatus.summary.bridgeStatus, "idle");
+  assert.equal(idleStatus.summary.controllerStatus, "invalid");
+  assert.equal(idleStatus.summary.locomotion, null);
+  assert.equal(idleStatus.summary.playerStatus, null);
+  assert.equal(idleStatus.summary.runtimeTick, null);
+  assert.equal(idleStatus.summary.paused, false);
   assert.equal(Array.isArray(idleStatus.errors), true);
 }
 
@@ -167,6 +173,9 @@ function runRuntimePlaybackChecks() {
   assert.equal(rateWithoutController.ok, false);
   assert.equal(playbackWithoutController.ok, false);
   assert.equal(playWithoutController.errors[0].includes("active controller"), true);
+  assert.equal(playWithoutController.summary.bridgeStatus, "idle");
+  assert.equal(playWithoutController.summary.controllerStatus, "invalid");
+  assert.equal(playWithoutController.summary.playbackStatus, "stopped");
 }
 
 

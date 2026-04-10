@@ -1,4 +1,5 @@
 import { createRuntimeBridgeSummary } from "./createRuntimeBridgeSummary.js";
+import { normalizeRuntimeSummaryShape } from "./normalizeRuntimeSummaryShape.js";
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -74,7 +75,7 @@ export function renderRuntimeBridgeStatus(runtimeState = {}) {
 
   const bridgeSummary = bridgeSummaryResult.value ?? {};
   const debugSummary = debugSummaryResult.value ?? {};
-  const summary = {
+  const rawSummary = {
     ...debugSummary,
     ...bridgeSummary,
   };
@@ -87,38 +88,29 @@ export function renderRuntimeBridgeStatus(runtimeState = {}) {
   warnings.push(...(debugSummary?.warnings ?? []));
   warnings.push(...(snapshot?.warnings ?? []));
 
-  const bridgeStatus = summary?.bridgeStatus ?? bridgeSummary?.bridgeStatus ?? bootResult?.debug?.bridgeStatus ?? "invalid";
-  const controllerStatus = summary?.controllerStatus ?? summary?.status ?? "invalid";
-  const runtimeTick = Number.isFinite(summary?.runtimeTick) ? summary.runtimeTick : null;
-  const playbackStatus = typeof summary?.playbackStatus === "string" ? summary.playbackStatus : "stopped";
-  const tickRate = Number.isFinite(summary?.tickRate) ? summary.tickRate : null;
-  const autoPlay = summary?.autoPlay === true;
-  const playerStatus = summary?.playerStatus ?? null;
-  const locomotion = summary?.locomotion ?? null;
-  const grounded = summary?.grounded === true;
-  const falling = summary?.falling === true;
-  const rising = summary?.rising === true;
+  const summary = normalizeRuntimeSummaryShape(rawSummary, {
+    bridgeStatus: rawSummary?.bridgeStatus ?? bridgeSummary?.bridgeStatus ?? bootResult?.debug?.bridgeStatus ?? "invalid",
+    controllerStatus: rawSummary?.controllerStatus ?? rawSummary?.status ?? "invalid",
+    hasActiveController: bridgeSummary?.hasActiveController === true,
+  });
+
+  const bridgeStatus = summary.bridgeStatus;
+  const controllerStatus = summary.controllerStatus;
+  const runtimeTick = summary.runtimeTick;
+  const playbackStatus = summary.playbackStatus;
+  const tickRate = summary.tickRate;
+  const autoPlay = summary.autoPlay;
+  const playerStatus = summary.playerStatus;
+  const locomotion = summary.locomotion;
+  const grounded = summary.grounded;
+  const falling = summary.falling;
+  const rising = summary.rising;
 
   return {
     title: "Recharged Runtime Bridge",
     statusLine: `bridge=${bridgeStatus} | controller=${controllerStatus} | playback=${playbackStatus} | tick=${runtimeTick ?? "-"} | rate=${tickRate ?? "-"} | auto=${autoPlay ? "on" : "off"} | player=${playerStatus ?? "-"}`,
     summary: {
-      bridgeStatus,
-      controllerStatus,
-      playbackStatus,
-      sourceType: summary?.sourceType ?? "unknown",
-      worldId: summary?.worldId ?? null,
-      themeId: summary?.themeId ?? null,
-      runtimeTick,
-      tickRate,
-      autoPlay,
-      playerStatus,
-      locomotion,
-      grounded,
-      falling,
-      rising,
-      paused: summary?.paused === true,
-      hasActiveController: summary?.hasActiveController === true,
+      ...summary,
       levelPath: runtimeState?.levelPath ?? null,
       query: runtimeState?.query ?? null,
       bootStage: bootResult?.debug?.stage ?? null,
