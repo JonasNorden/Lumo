@@ -1,3 +1,5 @@
+import { RUNTIME_PLAYER_PHYSICS_BASELINE } from "./runtimePlayerPhysicsBaseline.js";
+
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
     return [];
@@ -19,16 +21,16 @@ function resolveConfig(options = {}, grounded = false) {
 
   if (grounded) {
     return {
-      maxSpeedX: Number.isFinite(physics?.groundMaxSpeedX) ? Math.abs(physics.groundMaxSpeedX) : 4,
-      accelerationX: Number.isFinite(physics?.groundAccelerationX) ? Math.abs(physics.groundAccelerationX) : 1,
-      frictionX: Number.isFinite(physics?.groundFrictionX) ? Math.abs(physics.groundFrictionX) : 1,
+      maxSpeedX: Number.isFinite(physics?.groundMaxSpeedX) ? Math.abs(physics.groundMaxSpeedX) : RUNTIME_PLAYER_PHYSICS_BASELINE.groundMaxSpeedX,
+      accelerationX: Number.isFinite(physics?.groundAccelerationX) ? Math.abs(physics.groundAccelerationX) : RUNTIME_PLAYER_PHYSICS_BASELINE.groundAccelerationX,
+      frictionX: Number.isFinite(physics?.groundFrictionX) ? Math.abs(physics.groundFrictionX) : RUNTIME_PLAYER_PHYSICS_BASELINE.groundFrictionX,
     };
   }
 
   return {
-    maxSpeedX: Number.isFinite(physics?.airMaxSpeedX) ? Math.abs(physics.airMaxSpeedX) : 3,
-    accelerationX: Number.isFinite(physics?.airAccelerationX) ? Math.abs(physics.airAccelerationX) : 0.5,
-    frictionX: Number.isFinite(physics?.airFrictionX) ? Math.abs(physics.airFrictionX) : 0,
+    maxSpeedX: Number.isFinite(physics?.airMaxSpeedX) ? Math.abs(physics.airMaxSpeedX) : RUNTIME_PLAYER_PHYSICS_BASELINE.airMaxSpeedX,
+    accelerationX: Number.isFinite(physics?.airAccelerationX) ? Math.abs(physics.airAccelerationX) : RUNTIME_PLAYER_PHYSICS_BASELINE.airAccelerationX,
+    frictionX: Number.isFinite(physics?.airFrictionX) ? Math.abs(physics.airFrictionX) : RUNTIME_PLAYER_PHYSICS_BASELINE.airFrictionX,
   };
 }
 

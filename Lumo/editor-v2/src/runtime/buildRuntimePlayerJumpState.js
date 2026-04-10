@@ -1,4 +1,5 @@
 import { isRuntimeGridSolid } from "./isRuntimeGridSolid.js";
+import { RUNTIME_PLAYER_PHYSICS_BASELINE } from "./runtimePlayerPhysicsBaseline.js";
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -16,7 +17,7 @@ function resolveJumpVelocityY(options = {}) {
     return configuredVelocityY;
   }
 
-  return -8;
+  return RUNTIME_PLAYER_PHYSICS_BASELINE.jumpVelocityY;
 }
 
 // Detects if player stands directly above solid ground when grounded flag is stale/missing.
