@@ -105,12 +105,22 @@ export function renderRuntimeBridgeStatus(runtimeState = {}) {
   const grounded = summary.grounded;
   const falling = summary.falling;
   const rising = summary.rising;
+  const browserInputSnapshot = runtimeState?.browserInput?.getSnapshot?.() ?? null;
+  const inputState = browserInputSnapshot?.input ?? { moveX: 0, jump: false, run: false };
+  const loopActive = runtimeState?.browserLoop?.active === true || runtimeState?.browserLoop?.running === true;
+  const runtimeLifecycle = summary.bridgeStatus === "idle" ? "stopped" : summary.bridgeStatus;
+  const playerControlActive = summary.hasActiveController === true && runtimeLifecycle !== "stopped" && runtimeLifecycle !== "idle";
 
   return {
     title: "Recharged Runtime Bridge",
-    statusLine: `bridge=${bridgeStatus} | controller=${controllerStatus} | playback=${playbackStatus} | tick=${runtimeTick ?? "-"} | rate=${tickRate ?? "-"} | auto=${autoPlay ? "on" : "off"} | player=${playerStatus ?? "-"}`,
+    statusLine: `bridge=${bridgeStatus} | controller=${controllerStatus} | playback=${playbackStatus} | loop=${loopActive ? "on" : "off"} | tick=${runtimeTick ?? "-"} | rate=${tickRate ?? "-"} | auto=${autoPlay ? "on" : "off"} | player=${playerStatus ?? "-"}`,
     summary: {
       ...summary,
+      runtimeLifecycle,
+      loopActive,
+      playerControlActive,
+      inputState,
+      inputAttached: browserInputSnapshot?.attached === true,
       levelPath: runtimeState?.levelPath ?? null,
       query: runtimeState?.query ?? null,
       bootStage: bootResult?.debug?.stage ?? null,

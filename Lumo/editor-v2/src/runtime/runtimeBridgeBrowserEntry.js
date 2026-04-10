@@ -2,6 +2,8 @@ import { bootRuntimeBridge } from "./bootRuntimeBridge.js";
 import { renderRuntimeBridgeStatus } from "./renderRuntimeBridgeStatus.js";
 import { updateRuntimeBridgeView } from "./updateRuntimeBridgeView.js";
 import { normalizeRuntimeSummaryShape } from "./normalizeRuntimeSummaryShape.js";
+import { createRuntimeBrowserInputState } from "./createRuntimeBrowserInputState.js";
+import { runRuntimeBrowserLoopStep } from "./runRuntimeBrowserLoopStep.js";
 
 const DEFAULT_LEVEL_PATH = "./src/data/testLevelDocument.v1.json";
 const DEFAULT_UPDATE_STEPS = 3;
@@ -31,6 +33,7 @@ function getDomRefs(root = document) {
     levelPathInput: root.querySelector("#runtimeBridgeLevelPath"),
     actionResult: root.querySelector("#runtimeBridgeActionResult"),
     playbackLine: root.querySelector("#runtimeBridgePlaybackLine"),
+    inputLine: root.querySelector("#runtimeBridgeInputLine"),
     viewStatus: root.querySelector("#runtimeBridgeViewStatus"),
     viewCanvas: root.querySelector("#runtimeBridgeViewCanvas"),
     viewLegend: root.querySelector("#runtimeBridgeViewLegend"),
@@ -73,7 +76,9 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
     browserLoop: {
       frameHandle: null,
       running: false,
+      active: false,
     },
+    browserInput: createRuntimeBrowserInputState(),
     actionOptions: {
       steps: query.steps,
       stopOnGrounded: query.stopOnGrounded,
@@ -146,7 +151,13 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
     if (refs.playbackLine) {
       setElementText(
         refs.playbackLine,
-        `Playback: ${model?.summary?.playbackStatus ?? "stopped"} | tickRate=${model?.summary?.tickRate ?? "-"} | autoPlay=${model?.summary?.autoPlay === true ? "on" : "off"} | tick=${model?.summary?.runtimeTick ?? "-"}`,
+        `Playback: ${model?.summary?.playbackStatus ?? "stopped"} | tickRate=${model?.summary?.tickRate ?? "-"} | autoPlay=${model?.summary?.autoPlay === true ? "on" : "off"} | loop=${model?.summary?.loopActive === true ? "on" : "off"} | tick=${model?.summary?.runtimeTick ?? "-"}`,
+      );
+    }
+    if (refs.inputLine) {
+      setElementText(
+        refs.inputLine,
+        `Input: moveX=${model?.summary?.inputState?.moveX ?? 0} jump=${model?.summary?.inputState?.jump === true ? "on" : "off"} run=${model?.summary?.inputState?.run === true ? "on" : "off"} | playerControl=${model?.summary?.playerControlActive === true ? "active" : "idle"}`,
       );
     }
 
@@ -154,12 +165,14 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
     const viewResult = updateRuntimeBridgeView({
       bridge: state.bridge,
       debugApi: state.debugApi,
+      browserLoop: state.browserLoop,
+      browserInputSnapshot: state.browserInput.getSnapshot(),
       canvas: refs.viewCanvas,
     });
 
     if (refs.viewStatus) {
       const message = viewResult.ok
-        ? `Runtime view ${viewResult.state} | tick=${viewResult?.viewModel?.overlay?.runtimeTick ?? "-"}`
+        ? `Runtime view ${viewResult.state} | tick=${viewResult?.viewModel?.overlay?.runtimeTick ?? "-"} | control=${model?.summary?.playerControlActive === true ? "player control active" : "no active runtime"}`
         : `Runtime view issues | ${viewResult.errors.join(" | ")}`;
       setElementText(refs.viewStatus, message);
     }
@@ -200,28 +213,39 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
       state.browserLoop.frameHandle = null;
     }
     state.browserLoop.running = false;
+    state.browserLoop.active = false;
   }
 
   async function runBrowserPlaybackFrame(now) {
-    const playbackResult = await state.debugApi.advanceFrame({ now });
-    if (playbackResult?.ok !== true) {
-      state.lastAction = buildActionRecord("advanceFrame", playbackResult);
+    const loopStep = await runRuntimeBrowserLoopStep({
+      debugApi: state.debugApi,
+      now,
+      inputState: state.browserInput,
+    });
+
+    if (loopStep?.ok !== true || !loopStep?.result) {
+      state.lastAction = buildActionRecord("advanceFrame", {
+        ok: false,
+        status: "invalid",
+        errors: loopStep?.errors ?? ["Runtime browser loop frame failed."],
+        warnings: loopStep?.warnings ?? [],
+      });
       refreshView();
       stopBrowserLoop();
       return;
     }
 
-    if (playbackResult?.stepped === true) {
-      state.lastAction = buildActionRecord("playback-step", playbackResult);
+    if (loopStep?.result?.stepped === true) {
+      state.lastAction = buildActionRecord("playback-step", loopStep.result);
       refreshView();
     } else {
       refreshView();
     }
 
-    const playbackStatus = playbackResult?.playback?.status ?? "stopped";
-    if (playbackStatus === "running") {
+    if (loopStep.loopShouldContinue) {
       state.browserLoop.frameHandle = globalThis.requestAnimationFrame(runBrowserPlaybackFrame);
       state.browserLoop.running = true;
+      state.browserLoop.active = true;
       return;
     }
 
@@ -233,7 +257,16 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
       return;
     }
     state.browserLoop.running = true;
+    state.browserLoop.active = true;
     state.browserLoop.frameHandle = globalThis.requestAnimationFrame(runBrowserPlaybackFrame);
+  }
+
+  async function activatePlayerControl() {
+    const playResult = await runAction("play", () => state.debugApi.play());
+    if (playResult?.ok === true) {
+      startBrowserLoop();
+    }
+    return playResult;
   }
 
   if (state.debugApi && typeof state.debugApi === "object") {
@@ -263,11 +296,7 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
         tick: () => runAction("tick", () => state.debugApi.tick()),
         update: () => runAction("update", () => state.debugApi.update({ steps: state.actionOptions.steps, stopOnGrounded: state.actionOptions.stopOnGrounded })),
         play: async () => {
-          const playResult = await runAction("play", () => state.debugApi.play());
-          if (playResult.ok) {
-            startBrowserLoop();
-          }
-          return playResult;
+          return activatePlayerControl();
         },
         stop: async () => {
           const stopResult = await runAction("stop", () => state.debugApi.stop());
@@ -296,7 +325,10 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
   refs.startButton?.addEventListener("click", async () => {
     updateLevelPathFromInput();
     syncActionOptionsFromInputs();
-    await runAction("start", () => state.debugApi.startFromLevelPath(state.levelPath, { stopOnGrounded: state.actionOptions.stopOnGrounded }));
+    const startResult = await runAction("start", () => state.debugApi.startFromLevelPath(state.levelPath, { stopOnGrounded: state.actionOptions.stopOnGrounded }));
+    if (startResult?.ok === true) {
+      await activatePlayerControl();
+    }
   });
   refs.tickButton?.addEventListener("click", async () => runAction("tick", () => state.debugApi.tick()));
   refs.updateButton?.addEventListener("click", async () => {
@@ -306,14 +338,12 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
   refs.playButton?.addEventListener("click", async () => {
     const tickRate = readTickRateInput();
     await runAction("setTickRate", () => state.debugApi.setTickRate(tickRate));
-    const playResult = await runAction("play", () => state.debugApi.play());
-    if (playResult.ok) {
-      startBrowserLoop();
-    }
+    await activatePlayerControl();
   });
   refs.stopButton?.addEventListener("click", async () => {
     await runAction("stop", () => state.debugApi.stop());
     stopBrowserLoop();
+    state.browserInput.clear();
   });
   refs.stepButton?.addEventListener("click", async () => runAction("step", () => state.debugApi.step({ steps: 1 })));
   refs.tickRateInput?.addEventListener("change", async () => {
@@ -328,17 +358,32 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
       startBrowserLoop();
     }
   });
-  refs.resetButton?.addEventListener("click", async () => runAction("reset", () => state.debugApi.reset()));
-  refs.restartButton?.addEventListener("click", async () => runAction("restart", () => state.debugApi.restart()));
+  refs.resetButton?.addEventListener("click", async () => {
+    state.browserInput.clear();
+    await runAction("reset", () => state.debugApi.reset());
+  });
+  refs.restartButton?.addEventListener("click", async () => {
+    state.browserInput.clear();
+    const restartResult = await runAction("restart", () => state.debugApi.restart());
+    if (restartResult?.ok === true) {
+      await activatePlayerControl();
+    }
+  });
   refs.clearButton?.addEventListener("click", async () => {
     stopBrowserLoop();
+    state.browserInput.clear();
     await runAction("clear", () => state.debugApi.clear());
   });
   refs.refreshSummaryButton?.addEventListener("click", () => refreshView());
 
+  state.browserInput.attach(globalThis);
+
   if (query.autoStart && state.debugApi) {
     syncActionOptionsFromInputs();
-    await runAction("autostart", () => state.debugApi.startFromLevelPath(state.levelPath, { stopOnGrounded: state.actionOptions.stopOnGrounded }));
+    const autoStartResult = await runAction("autostart", () => state.debugApi.startFromLevelPath(state.levelPath, { stopOnGrounded: state.actionOptions.stopOnGrounded }));
+    if (autoStartResult?.ok === true) {
+      await activatePlayerControl();
+    }
   }
 
   return {

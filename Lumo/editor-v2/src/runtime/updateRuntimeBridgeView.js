@@ -17,6 +17,8 @@ export function updateRuntimeBridgeView(runtimePageState = {}) {
   const viewModel = renderRuntimeBridgeViewModel({
     bridge: runtimePageState?.bridge ?? null,
     debugApi: runtimePageState?.debugApi ?? null,
+    browserLoop: runtimePageState?.browserLoop ?? null,
+    browserInputSnapshot: runtimePageState?.browserInputSnapshot ?? null,
   });
 
   errors.push(...(viewModel?.errors ?? []));

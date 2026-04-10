@@ -276,6 +276,9 @@ export function renderRuntimeBridgeViewModel(input = {}) {
       entities: entities.length,
       audio: audio.length,
     },
+    input: input?.browserInputSnapshot?.input ?? { moveX: 0, jump: false, run: false },
+    loopActive: input?.browserLoop?.active === true || input?.browserLoop?.running === true,
+    inputAttached: input?.browserInputSnapshot?.attached === true,
   };
 
   if ((session || worldSource) && (world.width === null || world.height === null || world.tileSize === null)) {

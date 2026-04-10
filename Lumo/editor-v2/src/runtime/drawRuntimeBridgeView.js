@@ -240,9 +240,16 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
   );
   drawOverlayText(
     ctx,
-    `counts tiles=${overlay?.counts?.tiles ?? 0} bg=${overlay?.counts?.background ?? 0} decor=${overlay?.counts?.decor ?? 0} ents=${overlay?.counts?.entities ?? 0} audio=${overlay?.counts?.audio ?? 0}`,
+    `input moveX=${overlay?.input?.moveX ?? 0} jump=${overlay?.input?.jump === true} run=${overlay?.input?.run === true} loop=${overlay?.loopActive === true} attached=${overlay?.inputAttached === true}`,
     12,
     canvas.height - 20,
+    "#93c5fd",
+  );
+  drawOverlayText(
+    ctx,
+    `counts tiles=${overlay?.counts?.tiles ?? 0} bg=${overlay?.counts?.background ?? 0} decor=${overlay?.counts?.decor ?? 0} ents=${overlay?.counts?.entities ?? 0} audio=${overlay?.counts?.audio ?? 0}`,
+    12,
+    canvas.height - 8,
     "#93c5fd",
   );
 

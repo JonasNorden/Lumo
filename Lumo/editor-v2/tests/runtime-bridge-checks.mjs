@@ -1,15 +1,27 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { v2ToRuntimeLevelObject } from "../src/runtime/v2ToRuntimeLevelObject.js";
 import { renderRuntimeBridgeStatus } from "../src/runtime/renderRuntimeBridgeStatus.js";
 import { renderRuntimeBridgeViewModel } from "../src/runtime/renderRuntimeBridgeViewModel.js";
 import { createRuntimeBridge } from "../src/runtime/createRuntimeBridge.js";
 import { buildRuntimePlaybackState } from "../src/runtime/buildRuntimePlaybackState.js";
+import { createRuntimeBrowserInputState, normalizeRuntimeBrowserInput } from "../src/runtime/createRuntimeBrowserInputState.js";
+import { runRuntimeBrowserLoopStep } from "../src/runtime/runRuntimeBrowserLoopStep.js";
 import {
   EDITOR_PLAY_LEVEL_KEY,
   EDITOR_PLAY_SPAWN_KEY,
   writeEditorPlaySessionPayload,
 } from "../src/runtime/editorPlaySessionBridge.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function loadRuntimeFixtureDocument() {
+  const fixturePath = path.resolve(__dirname, "../src/data/testLevelDocument.v1.json");
+  return JSON.parse(fs.readFileSync(fixturePath, "utf8"));
+}
 
 function createMockLevelDocument() {
   return {
@@ -257,6 +269,125 @@ function runBridgeViewModelChecks() {
   assert.equal(viewModel.overlay.counts.audio, 1);
 }
 
+function runRuntimeBrowserInputChecks() {
+  const normalized = normalizeRuntimeBrowserInput(new Set(["keya", "space"]));
+  assert.equal(normalized.moveX, -1);
+  assert.equal(normalized.jump, true);
+  assert.equal(normalized.run, false);
+
+  const inputState = createRuntimeBrowserInputState();
+  const pressLeft = inputState.applyKeyboardEvent({ code: "ArrowLeft" }, true);
+  const pressJump = inputState.applyKeyboardEvent({ code: "KeyW" }, true);
+  assert.equal(pressLeft.ok, true);
+  assert.equal(pressJump.ok, true);
+  assert.deepEqual(inputState.getNormalizedInput(), { moveX: -1, jump: true, run: false });
+
+  inputState.applyKeyboardEvent({ code: "ArrowLeft" }, false);
+  inputState.applyKeyboardEvent({ code: "KeyW" }, false);
+  const idleSnapshot = inputState.getSnapshot();
+  assert.equal(idleSnapshot.input.moveX, 0);
+  assert.equal(idleSnapshot.input.jump, false);
+}
+
+async function runRuntimeBrowserLoopChecks() {
+  const frameCalls = [];
+  const debugApi = {
+    async advanceFrame(payload) {
+      frameCalls.push(payload);
+      return {
+        ok: true,
+        stepped: true,
+        playback: { status: "running" },
+        summary: { bridgeStatus: "running", controllerStatus: "running" },
+        errors: [],
+        warnings: [],
+      };
+    },
+  };
+  const inputState = createRuntimeBrowserInputState();
+  inputState.applyKeyboardEvent({ code: "KeyD" }, true);
+  inputState.applyKeyboardEvent({ code: "ShiftLeft" }, true);
+
+  const loopResult = await runRuntimeBrowserLoopStep({
+    debugApi,
+    inputState,
+    now: 1234,
+  });
+  assert.equal(loopResult.ok, true);
+  assert.equal(loopResult.loopShouldContinue, true);
+  assert.equal(frameCalls.length, 1);
+  assert.equal(frameCalls[0].input.moveX, 1);
+  assert.equal(frameCalls[0].input.run, true);
+
+  const noApiResult = await runRuntimeBrowserLoopStep({});
+  assert.equal(noApiResult.ok, false);
+  assert.equal(noApiResult.errors[0].includes("advanceFrame"), true);
+}
+
+async function runBridgeControllerInputLoopChecks() {
+  const runtimeFixture = loadRuntimeFixtureDocument();
+  const bridge = createRuntimeBridge().bridge;
+  const started = bridge.startFromLevelDocument(runtimeFixture);
+  assert.equal(started.ok, true);
+
+  const played = bridge.play();
+  assert.equal(played.ok, true);
+
+  const before = bridge.getActiveSession();
+  const beforeX = before?.player?.position?.x;
+
+  for (let index = 0; index < 4; index += 1) {
+    const stepResult = await runRuntimeBrowserLoopStep({
+      debugApi: {
+        advanceFrame: (payload) => bridge.advanceFrame({ ...payload, forceStep: true }),
+      },
+      input: { moveX: 1, jump: false, run: false },
+      now: 2000 + index * 16,
+    });
+    assert.equal(stepResult.ok, true);
+  }
+
+  const movedSession = bridge.getActiveSession();
+  const movedX = movedSession?.player?.position?.x;
+  assert.equal(Number.isFinite(beforeX), true);
+  assert.equal(Number.isFinite(movedX), true);
+  assert.equal(movedX > beforeX, true, "player x should advance while holding right input");
+
+  const jumpResult = await runRuntimeBrowserLoopStep({
+    debugApi: {
+      advanceFrame: (payload) => bridge.advanceFrame({ ...payload, forceStep: true }),
+    },
+    input: { moveX: 0, jump: true, run: false },
+    now: 2100,
+  });
+  assert.equal(jumpResult.ok, true);
+
+  const jumpedSession = bridge.getActiveSession();
+  const jumpVelocity = jumpedSession?.player?.velocity?.y;
+  assert.equal(Number.isFinite(jumpVelocity), true);
+  assert.equal(jumpVelocity !== 0, true, "jump input should produce a vertical velocity change");
+}
+
+function runRuntimeStatusInputLoopChecks() {
+  const status = renderRuntimeBridgeStatus({
+    bridge: createRuntimeBridge().bridge,
+    browserLoop: { running: true, active: true },
+    browserInput: {
+      getSnapshot() {
+        return {
+          attached: true,
+          input: { moveX: 1, jump: true, run: false },
+        };
+      },
+    },
+  });
+
+  assert.equal(status.summary.loopActive, true);
+  assert.equal(status.summary.inputAttached, true);
+  assert.equal(status.summary.inputState.moveX, 1);
+  assert.equal(status.summary.inputState.jump, true);
+}
+
 function runSessionBridgeChecks() {
   const { runtimeLevel } = v2ToRuntimeLevelObject(createMockLevelDocument());
   const sessionStorageRef = createMemorySessionStorage();
@@ -276,5 +407,9 @@ runSessionBridgeChecks();
 runBridgeStatusRenderChecks();
 runRuntimePlaybackChecks();
 runBridgeViewModelChecks();
+runRuntimeBrowserInputChecks();
+await runRuntimeBrowserLoopChecks();
+await runBridgeControllerInputLoopChecks();
+runRuntimeStatusInputLoopChecks();
 
 console.log("runtime bridge checks passed");
