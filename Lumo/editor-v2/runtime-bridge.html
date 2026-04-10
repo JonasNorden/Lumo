@@ -97,6 +97,7 @@
     <main>
       <h1 id="runtimeBridgeTitle">Recharged Runtime Bridge</h1>
       <p id="runtimeBridgeStatusLine" class="status-line">Booting runtime bridge...</p>
+      <p id="runtimeBridgePlaybackLine" class="status-line">Playback: stopped | tickRate=4 | autoPlay=off | tick=-</p>
 
       <section class="section">
         <h2>Controls</h2>
@@ -109,6 +110,11 @@
           <button id="runtimeBridgeStartButton" type="button">Start</button>
           <button id="runtimeBridgeTickButton" type="button">Tick</button>
           <button id="runtimeBridgeUpdateButton" type="button">Update</button>
+          <button id="runtimeBridgePlayButton" type="button">Play</button>
+          <button id="runtimeBridgeStopButton" type="button">Stop</button>
+          <button id="runtimeBridgeStepButton" type="button">Step</button>
+          <label for="runtimeBridgeTickRate">Tick rate</label>
+          <input id="runtimeBridgeTickRate" type="number" value="4" min="1" step="1" style="min-width: 80px; flex: 0 0 100px;" />
           <button id="runtimeBridgePauseButton" type="button">Pause</button>
           <button id="runtimeBridgeResumeButton" type="button">Resume</button>
           <button id="runtimeBridgeResetButton" type="button">Reset</button>

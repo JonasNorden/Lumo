@@ -1,4 +1,5 @@
 import { buildNextRuntimeSessionState } from "./buildNextRuntimeSessionState.js";
+import { buildRuntimePlaybackState } from "./buildRuntimePlaybackState.js";
 import { createRuntimeStartSummary } from "./createRuntimeStartSummary.js";
 import { startRuntimeFromLevelDocument } from "./startRuntimeFromLevelDocument.js";
 import { startRuntimeFromLevelPath } from "./startRuntimeFromLevelPath.js";
@@ -47,12 +48,16 @@ function resolveStatus(state) {
     return "invalid";
   }
 
-  if (state.paused) {
+  if (state.playback.running && state.playback.paused) {
     return "paused";
   }
 
-  if (state.stepsRun > 0) {
+  if (state.playback.running) {
     return "running";
+  }
+
+  if (state.stepsRun > 0) {
+    return "stopped";
   }
 
   return "ready";
@@ -113,7 +118,22 @@ export function createRuntimeController(startResult, options = {}) {
     stepsRun: Number.isFinite(startResult?.simulation?.stepsRun) ? startResult.simulation.stepsRun : 0,
     errors: uniqueMessages(startResult.errors),
     warnings: uniqueMessages(startResult.warnings),
+    playback: buildRuntimePlaybackState({
+      running: false,
+      paused: currentSession?.runtime?.paused === true,
+      autoAdvance: false,
+      tickRate: 4,
+      stepsPerFrame: 1,
+      ready: true,
+    }).state,
   };
+
+  function updatePlaybackState(nextState) {
+    const playbackResult = buildRuntimePlaybackState(nextState);
+    state.playback = playbackResult.state;
+    state.warnings = uniqueMessages([...(state.warnings ?? []), ...(playbackResult?.warnings ?? [])]);
+    return playbackResult;
+  }
 
   // Returns a safe copy of the current mutable runtime session.
   function getSession() {
@@ -142,12 +162,16 @@ export function createRuntimeController(startResult, options = {}) {
 
   // True when controller can keep ticking and is not currently paused.
   function isRunning() {
-    return state.valid && !state.paused;
+    return state.valid && state.playback.running === true && state.playback.paused !== true;
   }
 
   // True when the controller has an active paused runtime state.
   function isPaused() {
-    return state.paused === true;
+    return state.playback.paused === true;
+  }
+
+  function getPlaybackState() {
+    return cloneRuntimeValue(state.playback);
   }
 
   // Pauses runtime stepping without destroying current session state.
@@ -163,18 +187,26 @@ export function createRuntimeController(startResult, options = {}) {
     }
 
     state.paused = true;
+    updatePlaybackState({
+      ...state.playback,
+      running: true,
+      paused: true,
+      autoAdvance: false,
+      ready: true,
+    });
     state.currentSession.runtime = {
       ...(state.currentSession.runtime ?? {}),
       paused: true,
     };
 
     return {
-      ok: true,
-      status: getStatus(),
-      paused: true,
-      errors: [],
-      warnings: [],
-    };
+        ok: true,
+        status: getStatus(),
+        paused: true,
+        playback: getPlaybackState(),
+        errors: [],
+        warnings: [],
+      };
   }
 
   // Resumes runtime stepping from the current paused session snapshot.
@@ -190,6 +222,47 @@ export function createRuntimeController(startResult, options = {}) {
     }
 
     state.paused = false;
+    updatePlaybackState({
+      ...state.playback,
+      running: true,
+      paused: false,
+      autoAdvance: true,
+      ready: true,
+    });
+    state.currentSession.runtime = {
+      ...(state.currentSession.runtime ?? {}),
+      paused: false,
+    };
+
+    return {
+        ok: true,
+        status: getStatus(),
+        paused: false,
+        playback: getPlaybackState(),
+        errors: [],
+        warnings: [],
+      };
+  }
+
+  function play() {
+    if (!state.valid || !state.currentSession) {
+      return {
+        ok: false,
+        status: getStatus(),
+        playback: getPlaybackState(),
+        errors: ["Runtime controller cannot play because session is invalid."],
+        warnings: [],
+      };
+    }
+
+    state.paused = false;
+    updatePlaybackState({
+      ...state.playback,
+      running: true,
+      paused: false,
+      autoAdvance: true,
+      ready: true,
+    });
     state.currentSession.runtime = {
       ...(state.currentSession.runtime ?? {}),
       paused: false,
@@ -198,9 +271,61 @@ export function createRuntimeController(startResult, options = {}) {
     return {
       ok: true,
       status: getStatus(),
-      paused: false,
+      playback: getPlaybackState(),
       errors: [],
       warnings: [],
+    };
+  }
+
+  function stop() {
+    if (!state.valid || !state.currentSession) {
+      return {
+        ok: false,
+        status: getStatus(),
+        playback: getPlaybackState(),
+        errors: ["Runtime controller cannot stop because session is invalid."],
+        warnings: [],
+      };
+    }
+
+    state.paused = false;
+    updatePlaybackState({
+      ...state.playback,
+      running: false,
+      paused: false,
+      autoAdvance: false,
+      accumulatedMs: 0,
+      lastUpdateAt: null,
+      ready: true,
+    });
+    state.currentSession.runtime = {
+      ...(state.currentSession.runtime ?? {}),
+      paused: false,
+    };
+
+    return {
+      ok: true,
+      status: getStatus(),
+      playback: getPlaybackState(),
+      errors: [],
+      warnings: [],
+    };
+  }
+
+  function setTickRate(tickRate, options = {}) {
+    const playbackResult = updatePlaybackState({
+      ...state.playback,
+      tickRate,
+      stepsPerFrame: options?.stepsPerFrame ?? state.playback.stepsPerFrame,
+      ready: state.valid && Boolean(state.currentSession),
+    });
+
+    return {
+      ok: playbackResult.ok === true,
+      status: getStatus(),
+      playback: getPlaybackState(),
+      errors: uniqueMessages(playbackResult?.errors),
+      warnings: uniqueMessages(playbackResult?.warnings),
     };
   }
 
@@ -226,6 +351,7 @@ export function createRuntimeController(startResult, options = {}) {
           stepped: false,
           status: "paused",
         },
+        playback: getPlaybackState(),
         errors: [],
         warnings: [pausedWarning],
       };
@@ -259,6 +385,11 @@ export function createRuntimeController(startResult, options = {}) {
     if (nextResult?.step?.stepped === true) {
       state.stepsRun += 1;
     }
+    updatePlaybackState({
+      ...state.playback,
+      frameCounter: state.playback.frameCounter + 1,
+      ready: true,
+    });
 
     state.warnings = uniqueMessages([...(state.warnings ?? []), ...(nextResult?.warnings ?? [])]);
 
@@ -267,6 +398,7 @@ export function createRuntimeController(startResult, options = {}) {
       status: getStatus(),
       summary: getSummary(),
       step: nextResult.step,
+      playback: getPlaybackState(),
       errors: uniqueMessages(nextResult?.errors),
       warnings: uniqueMessages(nextResult?.warnings),
     };
@@ -292,6 +424,7 @@ export function createRuntimeController(startResult, options = {}) {
         status: getStatus(),
         summary: getSummary(),
         trace: [],
+        playback: getPlaybackState(),
         errors: [],
         warnings: [pausedWarning],
       };
@@ -325,6 +458,11 @@ export function createRuntimeController(startResult, options = {}) {
 
     const stepsFromTrace = Array.isArray(updateResult?.trace) ? updateResult.trace.length : 0;
     state.stepsRun += stepsFromTrace;
+    updatePlaybackState({
+      ...state.playback,
+      frameCounter: state.playback.frameCounter + 1,
+      ready: true,
+    });
     state.warnings = uniqueMessages([...(state.warnings ?? []), ...(updateResult?.warnings ?? [])]);
 
     return {
@@ -332,8 +470,80 @@ export function createRuntimeController(startResult, options = {}) {
       status: getStatus(),
       summary: getSummary(),
       trace: updateResult.trace,
+      playback: getPlaybackState(),
       errors: uniqueMessages(updateResult?.errors),
       warnings: uniqueMessages(updateResult?.warnings),
+    };
+  }
+
+  function step(stepOptions = {}) {
+    const steps = Number.isFinite(stepOptions?.steps) && stepOptions.steps > 0
+      ? Math.floor(stepOptions.steps)
+      : state.playback.stepsPerFrame;
+    if (steps <= 1) {
+      return tick(stepOptions);
+    }
+
+    return update({
+      ...stepOptions,
+      steps,
+    });
+  }
+
+  function advanceFrame(frameOptions = {}) {
+    if (!state.valid || !state.currentSession) {
+      return {
+        ok: false,
+        status: getStatus(),
+        playback: getPlaybackState(),
+        errors: ["Runtime controller advanceFrame requires a valid runtime session."],
+        warnings: [],
+      };
+    }
+
+    const now = Number.isFinite(frameOptions?.now) ? frameOptions.now : Date.now();
+    const tickRate = Number.isFinite(state.playback.tickRate) && state.playback.tickRate > 0 ? state.playback.tickRate : 4;
+    const frameDurationMs = 1000 / tickRate;
+    const deltaMs = state.playback.lastUpdateAt === null ? frameDurationMs : Math.max(0, now - state.playback.lastUpdateAt);
+    let accumulatedMs = state.playback.accumulatedMs + deltaMs;
+    let stepsToRun = 0;
+    while (accumulatedMs >= frameDurationMs) {
+      stepsToRun += 1;
+      accumulatedMs -= frameDurationMs;
+    }
+
+    if (frameOptions?.forceStep === true && stepsToRun === 0) {
+      stepsToRun = 1;
+    }
+
+    updatePlaybackState({
+      ...state.playback,
+      lastUpdateAt: now,
+      accumulatedMs,
+      ready: true,
+    });
+
+    if (state.playback.running !== true || state.playback.paused === true || state.playback.autoAdvance !== true || stepsToRun === 0) {
+      return {
+        ok: true,
+        status: getStatus(),
+        playback: getPlaybackState(),
+        stepped: false,
+        stepsRun: 0,
+        errors: [],
+        warnings: [],
+      };
+    }
+
+    const result = step({
+      ...frameOptions,
+      steps: stepsToRun * state.playback.stepsPerFrame,
+    });
+    return {
+      ...result,
+      stepped: result?.ok === true,
+      stepsRun: stepsToRun,
+      playback: getPlaybackState(),
     };
   }
 
@@ -352,6 +562,15 @@ export function createRuntimeController(startResult, options = {}) {
 
     state.currentSession = resetSession;
     state.paused = resetSession?.runtime?.paused === true;
+    updatePlaybackState({
+      ...state.playback,
+      running: false,
+      paused: state.paused,
+      autoAdvance: false,
+      accumulatedMs: 0,
+      lastUpdateAt: null,
+      ready: true,
+    });
     state.stepsRun = Number.isFinite(state.startResultSnapshot?.simulation?.stepsRun)
       ? state.startResultSnapshot.simulation.stepsRun
       : 0;
@@ -387,6 +606,15 @@ export function createRuntimeController(startResult, options = {}) {
       state.source.levelDocument = cloneRuntimeValue(restartResult.levelDocument);
       state.stepsRun = Number.isFinite(restartResult?.simulation?.stepsRun) ? restartResult.simulation.stepsRun : 0;
       state.paused = state.currentSession?.runtime?.paused === true;
+      updatePlaybackState({
+        ...state.playback,
+        running: false,
+        paused: state.paused,
+        autoAdvance: false,
+        accumulatedMs: 0,
+        lastUpdateAt: null,
+        ready: true,
+      });
       state.valid = true;
 
       return {
@@ -417,6 +645,15 @@ export function createRuntimeController(startResult, options = {}) {
       state.startResultSnapshot = cloneRuntimeValue(restartResult);
       state.stepsRun = Number.isFinite(restartResult?.simulation?.stepsRun) ? restartResult.simulation.stepsRun : 0;
       state.paused = state.currentSession?.runtime?.paused === true;
+      updatePlaybackState({
+        ...state.playback,
+        running: false,
+        paused: state.paused,
+        autoAdvance: false,
+        accumulatedMs: 0,
+        lastUpdateAt: null,
+        ready: true,
+      });
       state.valid = true;
 
       return {
@@ -446,6 +683,9 @@ export function createRuntimeController(startResult, options = {}) {
       worldId: state.initialization?.world?.id ?? null,
       themeId: state.initialization?.world?.themeId ?? null,
       runtimeTick: Number.isFinite(state.currentSession?.runtime?.tick) ? state.currentSession.runtime.tick : null,
+      playbackStatus: state.playback.status,
+      playbackTickRate: state.playback.tickRate,
+      playbackAutoAdvance: state.playback.autoAdvance === true,
       playerStatus: typeof state.currentSession?.player?.status === "string" ? state.currentSession.player.status : null,
       stepsRun: state.stepsRun,
       levelPath: state.source?.levelPath ?? null,
@@ -460,8 +700,14 @@ export function createRuntimeController(startResult, options = {}) {
     getStatus,
     isRunning,
     isPaused,
+    getPlaybackState,
+    play,
+    stop,
     pause,
     resume,
+    step,
+    setTickRate,
+    advanceFrame,
     tick,
     update,
     reset,

@@ -22,6 +22,9 @@ export function createRuntimeBridgeSummary(bridgeOrState) {
       themeId: null,
       runtimeTick: null,
       elapsedMs: null,
+      playbackStatus: "stopped",
+      tickRate: 4,
+      autoPlay: false,
       playerStatus: null,
       grounded: false,
       falling: false,
@@ -44,7 +47,7 @@ export function createRuntimeBridgeSummary(bridgeOrState) {
     : createRuntimeControllerSummary({ status: "invalid", sourceType: "unknown" });
 
   return {
-    ok: bridgeStatus !== "invalid" && (bridgeStatus === "idle" || controllerSummary.ok === true),
+    ok: bridgeStatus !== "invalid" && (bridgeStatus === "idle" || bridgeStatus === "stopped" || controllerSummary.ok === true),
     bridgeStatus,
     hasActiveController,
     controllerStatus: controllerSummary.status,
@@ -54,6 +57,9 @@ export function createRuntimeBridgeSummary(bridgeOrState) {
     themeId: controllerSummary.themeId,
     runtimeTick: controllerSummary.runtimeTick,
     elapsedMs: controllerSummary.elapsedMs,
+    playbackStatus: controllerSummary.playbackStatus ?? "stopped",
+    tickRate: controllerSummary.tickRate ?? 4,
+    autoPlay: controllerSummary.autoPlay === true,
     playerStatus: controllerSummary.playerStatus,
     grounded: controllerSummary.grounded === true,
     falling: controllerSummary.falling === true,
