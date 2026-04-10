@@ -29,6 +29,9 @@ import { runRuntimeLevelSimulation } from "./runRuntimeLevelSimulation.js";
 import { startRuntimeFromLevelDocument } from "./startRuntimeFromLevelDocument.js";
 import { startRuntimeFromLevelPath } from "./startRuntimeFromLevelPath.js";
 import { createRuntimeStartSummary } from "./createRuntimeStartSummary.js";
+import { createRuntimeControllerFromLevelDocument } from "./createRuntimeControllerFromLevelDocument.js";
+import { createRuntimeControllerFromLevelPath } from "./createRuntimeControllerFromLevelPath.js";
+import { createRuntimeControllerSummary } from "./createRuntimeControllerSummary.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -258,6 +261,78 @@ export async function runDebugLevelLoaderHarness() {
   );
   const invalidRuntimeStartSummaryFromPath = createRuntimeStartSummary(invalidRuntimeStartFromPath);
 
+  // Build first runtime controller instances from both document and path entry points.
+  const validRuntimeControllerFromDocument = createRuntimeControllerFromLevelDocument(validResult.level, {
+    startOptions: { steps: 0 },
+  });
+  const validRuntimeControllerFromPath = await createRuntimeControllerFromLevelPath(validLevelPath, {
+    startOptions: { steps: 0 },
+  });
+  const partialRuntimeControllerFromDocument = createRuntimeControllerFromLevelDocument(
+    partialValidResult.level,
+    { startOptions: { steps: 0 } },
+  );
+  const invalidRuntimeControllerFromDocument = createRuntimeControllerFromLevelDocument(invalidResult.level, {
+    startOptions: { steps: 0 },
+  });
+  const invalidRuntimeControllerFromPath = await createRuntimeControllerFromLevelPath(invalidLevelPath, {
+    startOptions: { steps: 0 },
+  });
+
+  const validControllerFromDocumentSummary = validRuntimeControllerFromDocument.controller
+    ? createRuntimeControllerSummary(validRuntimeControllerFromDocument.controller)
+    : createRuntimeControllerSummary({ status: "invalid" });
+  const validControllerTick = validRuntimeControllerFromDocument.controller
+    ? validRuntimeControllerFromDocument.controller.tick()
+    : null;
+  const validControllerUpdate = validRuntimeControllerFromDocument.controller
+    ? validRuntimeControllerFromDocument.controller.update({ steps: 6, stopOnGrounded: true })
+    : null;
+  const validControllerPause = validRuntimeControllerFromDocument.controller
+    ? validRuntimeControllerFromDocument.controller.pause()
+    : null;
+  const validControllerPausedUpdate = validRuntimeControllerFromDocument.controller
+    ? validRuntimeControllerFromDocument.controller.update({ steps: 2 })
+    : null;
+  const validControllerResume = validRuntimeControllerFromDocument.controller
+    ? validRuntimeControllerFromDocument.controller.resume()
+    : null;
+  const validControllerReset = validRuntimeControllerFromDocument.controller
+    ? validRuntimeControllerFromDocument.controller.reset()
+    : null;
+  const validControllerRestart = validRuntimeControllerFromDocument.controller
+    ? await validRuntimeControllerFromDocument.controller.restart()
+    : null;
+  const validControllerDebugSnapshot = validRuntimeControllerFromDocument.controller
+    ? validRuntimeControllerFromDocument.controller.getDebugSnapshot()
+    : null;
+
+  const validControllerFromPathSummary = validRuntimeControllerFromPath.controller
+    ? createRuntimeControllerSummary(validRuntimeControllerFromPath.controller)
+    : createRuntimeControllerSummary({ status: "invalid" });
+
+  const partialControllerSummary = partialRuntimeControllerFromDocument.controller
+    ? createRuntimeControllerSummary(partialRuntimeControllerFromDocument.controller)
+    : createRuntimeControllerSummary({ status: "invalid" });
+  const partialControllerUpdate = partialRuntimeControllerFromDocument.controller
+    ? partialRuntimeControllerFromDocument.controller.update({ steps: 5 })
+    : null;
+  const partialControllerPause = partialRuntimeControllerFromDocument.controller
+    ? partialRuntimeControllerFromDocument.controller.pause()
+    : null;
+  const partialControllerResume = partialRuntimeControllerFromDocument.controller
+    ? partialRuntimeControllerFromDocument.controller.resume()
+    : null;
+  const partialControllerReset = partialRuntimeControllerFromDocument.controller
+    ? partialRuntimeControllerFromDocument.controller.reset()
+    : null;
+  const partialControllerRestart = partialRuntimeControllerFromDocument.controller
+    ? await partialRuntimeControllerFromDocument.controller.restart()
+    : null;
+  const partialControllerDebugSnapshot = partialRuntimeControllerFromDocument.controller
+    ? partialRuntimeControllerFromDocument.controller.getDebugSnapshot()
+    : null;
+
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   if (validSummary) {
     console.log("\n=== Runtime level summary (valid sample) ===");
@@ -456,6 +531,71 @@ export async function runDebugLevelLoaderHarness() {
   ];
   console.dir(partialSolidityTests, { depth: null });
 
+  console.log("\n=== RUNTIME CONTROLLER FROM DOCUMENT ===");
+  console.log("(valid sample)");
+  console.dir({
+    ok: validRuntimeControllerFromDocument.ok,
+    errors: validRuntimeControllerFromDocument.errors,
+    warnings: validRuntimeControllerFromDocument.warnings,
+  }, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER FROM PATH ===");
+  console.log("(valid sample)");
+  console.dir({
+    ok: validRuntimeControllerFromPath.ok,
+    errors: validRuntimeControllerFromPath.errors,
+    warnings: validRuntimeControllerFromPath.warnings,
+  }, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER SUMMARY ===");
+  console.log("(valid sample)");
+  console.dir({
+    fromDocument: validControllerFromDocumentSummary,
+    fromPath: validControllerFromPathSummary,
+  }, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER TICK ===");
+  console.log("(valid sample)");
+  console.dir(validControllerTick, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER UPDATE ===");
+  console.log("(valid sample)");
+  console.dir(validControllerUpdate, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER PAUSE RESUME ===");
+  console.log("(valid sample)");
+  console.dir({ pause: validControllerPause, pausedUpdate: validControllerPausedUpdate, resume: validControllerResume }, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER RESET ===");
+  console.log("(valid sample)");
+  console.dir(validControllerReset, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER RESTART ===");
+  console.log("(valid sample)");
+  console.dir(validControllerRestart, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER DEBUG SNAPSHOT ===");
+  console.log("(valid sample)");
+  console.dir(validControllerDebugSnapshot, { depth: null });
+
+  console.log("\n=== RUNTIME CONTROLLER FROM DOCUMENT ===");
+  console.log("(partial valid sample)");
+  console.dir({
+    ok: partialRuntimeControllerFromDocument.ok,
+    errors: partialRuntimeControllerFromDocument.errors,
+    warnings: partialRuntimeControllerFromDocument.warnings,
+  }, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER SUMMARY ===");
+  console.log("(partial valid sample)");
+  console.dir(partialControllerSummary, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER UPDATE ===");
+  console.log("(partial valid sample)");
+  console.dir(partialControllerUpdate, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER PAUSE RESUME ===");
+  console.log("(partial valid sample)");
+  console.dir({ pause: partialControllerPause, resume: partialControllerResume }, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER RESET ===");
+  console.log("(partial valid sample)");
+  console.dir(partialControllerReset, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER RESTART ===");
+  console.log("(partial valid sample)");
+  console.dir(partialControllerRestart, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER DEBUG SNAPSHOT ===");
+  console.log("(partial valid sample)");
+  console.dir(partialControllerDebugSnapshot, { depth: null });
+
   logLoaderResult("Invalid sample (missing world.spawn)", invalidResult);
   console.log("\n=== SPAWN VALIDATION ===");
   console.log("(invalid sample)");
@@ -521,6 +661,15 @@ export async function runDebugLevelLoaderHarness() {
     },
     { depth: null },
   );
+  console.log("\n=== RUNTIME CONTROLLER FROM DOCUMENT ===");
+  console.log("(invalid sample)");
+  console.dir(invalidRuntimeControllerFromDocument, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER FROM PATH ===");
+  console.log("(invalid sample)");
+  console.dir(invalidRuntimeControllerFromPath, { depth: null });
+  console.log("\n=== RUNTIME CONTROLLER SUMMARY ===");
+  console.log("(invalid sample)");
+  console.dir(createRuntimeControllerSummary({ status: "invalid", sourceType: "unknown" }), { depth: null });
 
   return {
     validResult,
@@ -601,6 +750,28 @@ export async function runDebugLevelLoaderHarness() {
     partialRuntimeStartSummaryFromDocument,
     invalidRuntimeStartSummaryFromDocument,
     invalidRuntimeStartSummaryFromPath,
+    validRuntimeControllerFromDocument,
+    validRuntimeControllerFromPath,
+    partialRuntimeControllerFromDocument,
+    invalidRuntimeControllerFromDocument,
+    invalidRuntimeControllerFromPath,
+    validControllerFromDocumentSummary,
+    validControllerFromPathSummary,
+    partialControllerSummary,
+    validControllerTick,
+    validControllerUpdate,
+    validControllerPause,
+    validControllerPausedUpdate,
+    validControllerResume,
+    validControllerReset,
+    validControllerRestart,
+    validControllerDebugSnapshot,
+    partialControllerUpdate,
+    partialControllerPause,
+    partialControllerResume,
+    partialControllerReset,
+    partialControllerRestart,
+    partialControllerDebugSnapshot,
     invalidResult,
   };
 }
