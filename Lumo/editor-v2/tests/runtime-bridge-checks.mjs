@@ -10,6 +10,8 @@ import { createRuntimeBridge } from "../src/runtime/createRuntimeBridge.js";
 import { buildRuntimePlaybackState } from "../src/runtime/buildRuntimePlaybackState.js";
 import { createRuntimeBrowserInputState, normalizeRuntimeBrowserInput } from "../src/runtime/createRuntimeBrowserInputState.js";
 import { runRuntimeBrowserLoopStep } from "../src/runtime/runRuntimeBrowserLoopStep.js";
+import { buildRuntimeCameraState } from "../src/runtime/buildRuntimeCameraState.js";
+import { renderRuntimeHudModel } from "../src/runtime/renderRuntimeHudModel.js";
 import {
   EDITOR_PLAY_LEVEL_KEY,
   EDITOR_PLAY_SPAWN_KEY,
@@ -388,6 +390,40 @@ function runRuntimeStatusInputLoopChecks() {
   assert.equal(status.summary.inputState.jump, true);
 }
 
+function runRuntimeCameraStateChecks() {
+  const camera = buildRuntimeCameraState({
+    worldWidthPx: 1000,
+    worldHeightPx: 480,
+    viewportWidthPx: 300,
+    viewportHeightPx: 200,
+    targetX: 960,
+    targetY: 460,
+  });
+  assert.equal(camera.ok, true);
+  assert.equal(camera.cameraX, 700, "camera should clamp at max world x offset");
+  assert.equal(camera.cameraY, 280, "camera should clamp at max world y offset");
+
+  const invalid = buildRuntimeCameraState({ worldWidthPx: null, viewportWidthPx: 200, viewportHeightPx: 100 });
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.warnings.length > 0, true);
+}
+
+function runRuntimeHudModelChecks() {
+  const hud = renderRuntimeHudModel({
+    playerStatus: "running",
+    runtimeTick: 23,
+    grounded: false,
+    locomotion: "run-right",
+    playbackStatus: "running",
+  });
+
+  assert.equal(hud.status, "running");
+  assert.equal(hud.tickText, "tick 23");
+  assert.equal(hud.airText, "airborne");
+  assert.equal(hud.locomotionText, "locomotion run-right");
+  assert.equal(hud.playbackText, "playback running");
+}
+
 function runSessionBridgeChecks() {
   const { runtimeLevel } = v2ToRuntimeLevelObject(createMockLevelDocument());
   const sessionStorageRef = createMemorySessionStorage();
@@ -411,5 +447,7 @@ runRuntimeBrowserInputChecks();
 await runRuntimeBrowserLoopChecks();
 await runBridgeControllerInputLoopChecks();
 runRuntimeStatusInputLoopChecks();
+runRuntimeCameraStateChecks();
+runRuntimeHudModelChecks();
 
 console.log("runtime bridge checks passed");

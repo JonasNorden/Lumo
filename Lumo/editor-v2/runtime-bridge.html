@@ -7,8 +7,8 @@
     <style>
       body {
         margin: 0;
-        font-family: monospace;
-        background: #111827;
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        background: radial-gradient(circle at top, #0f172a, #0b1020 45%, #050812);
         color: #e5e7eb;
       }
 
@@ -20,7 +20,7 @@
 
       h1 {
         margin: 0;
-        font-size: 16px;
+        font-size: 22px;
       }
 
       h2 {
@@ -32,7 +32,8 @@
         margin: 0;
         padding: 8px;
         border: 1px solid #374151;
-        background: #1f2937;
+        background: rgba(15, 23, 42, 0.75);
+        border-radius: 8px;
       }
 
       .section {
@@ -90,19 +91,26 @@
         max-width: 860px;
         border: 1px solid #374151;
         background: #0b1220;
+        border-radius: 10px;
+      }
+
+      .panel {
+        border: 1px solid #334155;
+        border-radius: 12px;
+        padding: 12px;
+        background: rgba(15, 23, 42, 0.72);
       }
     </style>
   </head>
   <body>
     <main>
-      <h1 id="runtimeBridgeTitle">Recharged Runtime Bridge</h1>
+      <h1 id="runtimeBridgeTitle">Lumo Runtime Prototype</h1>
       <p id="runtimeBridgeStatusLine" class="status-line">Booting runtime bridge...</p>
-      <p id="runtimeBridgePlaybackLine" class="status-line">Playback: stopped | tickRate=4 | autoPlay=off | tick=-</p>
-      <p id="runtimeBridgeInputLine" class="status-line">Input: moveX=0 jump=off run=off | playerControl=idle</p>
-      <p class="status-line">Spelbar nu: A/D eller pilar = rörelse, W/Space/Pil upp = hopp, Shift = run-flagga.</p>
+      <p id="runtimeBridgePlaybackLine" class="status-line">Runtime HUD: status - · tick - · airborne · locomotion - · playback stopped</p>
+      <p id="runtimeBridgeInputLine" class="status-line">Kontroller: A/D eller pilar = rörelse, W/Space/Pil upp = hopp, Shift = spring.</p>
 
-      <section class="section">
-        <h2>Controls</h2>
+      <section class="section panel">
+        <h2>Runtime Controls</h2>
         <div class="row">
           <label for="runtimeBridgeLevelPath">Level Path</label>
           <input id="runtimeBridgeLevelPath" type="text" value="./src/data/testLevelDocument.v1.json" />
@@ -130,20 +138,20 @@
         </div>
       </section>
 
-      <section class="view-block">
-        <h2>Runtime View (Recharged runtime chain)</h2>
+      <section class="view-block panel">
+        <h2>Runtime View</h2>
         <p id="runtimeBridgeViewStatus" class="status-line">Runtime view waiting for bridge state...</p>
         <p id="runtimeBridgeViewLegend" class="legend">Legend: waiting for runtime data...</p>
         <canvas id="runtimeBridgeViewCanvas" width="860" height="420"></canvas>
       </section>
 
-      <section class="section">
+      <section class="section panel">
         <h2>Last Action</h2>
         <pre id="runtimeBridgeActionResult">No actions yet.</pre>
       </section>
 
-      <section class="section">
-        <h2>Summary</h2>
+      <section class="section panel">
+        <h2>Detailed Summary</h2>
         <pre id="runtimeBridgeSummary">Waiting for summary...</pre>
       </section>
     </main>
