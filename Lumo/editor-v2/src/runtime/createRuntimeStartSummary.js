@@ -1,3 +1,5 @@
+import { normalizeRuntimeSummaryShape } from "./normalizeRuntimeSummaryShape.js";
+
 function toStringOrNull(value) {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
@@ -14,16 +16,11 @@ function toArray(value) {
 export function createRuntimeStartSummary(result) {
   if (!result || typeof result !== "object") {
     return {
+      ...normalizeRuntimeSummaryShape({}, { bridgeStatus: "invalid", controllerStatus: "invalid" }),
       ok: false,
-      worldId: null,
-      themeId: null,
       levelPath: null,
       sessionStatus: null,
-      runtimeTick: null,
       stepsRun: 0,
-      playerStatus: null,
-      grounded: false,
-      falling: false,
       errors: ["Runtime start summary requires a result object."],
       warnings: [],
     };
@@ -33,19 +30,33 @@ export function createRuntimeStartSummary(result) {
   const initializationWorld = result.initialization?.world;
   const player = session?.player;
 
+  const normalized = normalizeRuntimeSummaryShape(
+    {
+      sourceType: result?.sourceType,
+      status: session?.status,
+      worldId: toStringOrNull(initializationWorld?.id) ?? toStringOrNull(result?.levelDocument?.identity?.id),
+      themeId: toStringOrNull(initializationWorld?.themeId) ?? toStringOrNull(result?.levelDocument?.identity?.themeId),
+      runtimeTick: toFiniteOrNull(session?.runtime?.tick),
+      playerStatus: toStringOrNull(player?.status),
+      locomotion: toStringOrNull(player?.locomotion),
+      grounded: player?.grounded === true,
+      falling: player?.falling === true,
+      rising: player?.rising === true,
+      paused: session?.runtime?.paused === true,
+    },
+    {
+      bridgeStatus: result.ok === true ? "ready" : "invalid",
+      controllerStatus: toStringOrNull(session?.status) ?? "invalid",
+      hasActiveController: result.ok === true,
+    },
+  );
+
   return {
+    ...normalized,
     ok: result.ok === true,
-    worldId: toStringOrNull(initializationWorld?.id) ?? toStringOrNull(result?.levelDocument?.identity?.id),
-    themeId:
-      toStringOrNull(initializationWorld?.themeId) ??
-      toStringOrNull(result?.levelDocument?.identity?.themeId),
     levelPath: toStringOrNull(result.levelPath),
     sessionStatus: toStringOrNull(session?.status),
-    runtimeTick: toFiniteOrNull(session?.runtime?.tick),
     stepsRun: Number.isFinite(result?.simulation?.stepsRun) ? result.simulation.stepsRun : 0,
-    playerStatus: toStringOrNull(player?.status),
-    grounded: player?.grounded === true,
-    falling: player?.falling === true,
     errors: toArray(result.errors).filter((item) => typeof item === "string" && item.length > 0),
     warnings: toArray(result.warnings).filter((item) => typeof item === "string" && item.length > 0),
   };

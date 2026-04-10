@@ -1,4 +1,5 @@
 import { createRuntimeControllerSummary } from "./createRuntimeControllerSummary.js";
+import { normalizeRuntimeSummaryShape } from "./normalizeRuntimeSummaryShape.js";
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -12,24 +13,9 @@ function uniqueMessages(messages) {
 export function createRuntimeBridgeSummary(bridgeOrState) {
   if (!bridgeOrState || typeof bridgeOrState !== "object") {
     return {
+      ...normalizeRuntimeSummaryShape({}, { bridgeStatus: "invalid", controllerStatus: "invalid" }),
       ok: false,
-      bridgeStatus: "invalid",
       hasActiveController: false,
-      controllerStatus: "invalid",
-      paused: false,
-      sourceType: "unknown",
-      worldId: null,
-      themeId: null,
-      runtimeTick: null,
-      elapsedMs: null,
-      playbackStatus: "stopped",
-      tickRate: 4,
-      autoPlay: false,
-      playerStatus: null,
-      locomotion: null,
-      grounded: false,
-      falling: false,
-      rising: false,
       errors: ["Runtime bridge summary requires a bridge or bridge-like state object."],
       warnings: [],
     };
@@ -48,25 +34,19 @@ export function createRuntimeBridgeSummary(bridgeOrState) {
     ? createRuntimeControllerSummary(activeController)
     : createRuntimeControllerSummary({ status: "invalid", sourceType: "unknown" });
 
-  return {
-    ok: bridgeStatus !== "invalid" && (bridgeStatus === "idle" || bridgeStatus === "stopped" || controllerSummary.ok === true),
+  const normalized = normalizeRuntimeSummaryShape({
+    ...controllerSummary,
     bridgeStatus,
-    hasActiveController,
+  }, {
+    bridgeStatus,
     controllerStatus: controllerSummary.status,
-    paused: controllerSummary.paused === true,
-    sourceType: controllerSummary.sourceType,
-    worldId: controllerSummary.worldId,
-    themeId: controllerSummary.themeId,
-    runtimeTick: controllerSummary.runtimeTick,
-    elapsedMs: controllerSummary.elapsedMs,
-    playbackStatus: controllerSummary.playbackStatus ?? "stopped",
-    tickRate: controllerSummary.tickRate ?? 4,
-    autoPlay: controllerSummary.autoPlay === true,
-    playerStatus: controllerSummary.playerStatus,
-    locomotion: controllerSummary.locomotion ?? null,
-    grounded: controllerSummary.grounded === true,
-    falling: controllerSummary.falling === true,
-    rising: controllerSummary.rising === true,
+    hasActiveController,
+  });
+
+  return {
+    ...normalized,
+    ok: bridgeStatus !== "invalid" && (bridgeStatus === "idle" || bridgeStatus === "stopped" || controllerSummary.ok === true),
+    hasActiveController,
     errors: uniqueMessages(controllerSummary.errors),
     warnings: uniqueMessages(controllerSummary.warnings),
   };

@@ -1,3 +1,5 @@
+import { normalizeRuntimeSummaryShape } from "./normalizeRuntimeSummaryShape.js";
+
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
     return [];
@@ -52,45 +54,23 @@ function extractControllerSnapshot(controllerOrState) {
 export function createRuntimeControllerSummary(controllerOrState) {
   if (!controllerOrState || typeof controllerOrState !== "object") {
     return {
+      ...normalizeRuntimeSummaryShape({}, { bridgeStatus: "invalid", controllerStatus: "invalid" }),
       ok: false,
-      sourceType: "unknown",
-      status: "invalid",
-      paused: false,
-      worldId: null,
-      themeId: null,
-      runtimeTick: null,
-      elapsedMs: null,
-      playbackStatus: "stopped",
-      tickRate: 4,
-      autoPlay: false,
-      playerStatus: null,
-      locomotion: null,
-      grounded: false,
-      falling: false,
-      rising: false,
       errors: ["Runtime controller summary requires a controller or state object."],
       warnings: [],
     };
   }
 
   const snapshot = extractControllerSnapshot(controllerOrState);
+  const normalized = normalizeRuntimeSummaryShape(snapshot, {
+    bridgeStatus: snapshot?.bridgeStatus ?? "invalid",
+    controllerStatus: snapshot?.status,
+    hasActiveController: true,
+  });
+
   return {
+    ...normalized,
     ok: snapshot.status !== "invalid",
-    sourceType: typeof snapshot.sourceType === "string" ? snapshot.sourceType : "unknown",
-    status: typeof snapshot.status === "string" ? snapshot.status : "invalid",
-    paused: snapshot.paused === true,
-    worldId: typeof snapshot.worldId === "string" ? snapshot.worldId : null,
-    themeId: typeof snapshot.themeId === "string" ? snapshot.themeId : null,
-    runtimeTick: Number.isFinite(snapshot.runtimeTick) ? snapshot.runtimeTick : null,
-    elapsedMs: Number.isFinite(snapshot.elapsedMs) ? snapshot.elapsedMs : null,
-    playbackStatus: typeof snapshot?.playback?.status === "string" ? snapshot.playback.status : "stopped",
-    tickRate: Number.isFinite(snapshot?.playback?.tickRate) ? snapshot.playback.tickRate : 4,
-    autoPlay: snapshot?.playback?.autoAdvance === true,
-    playerStatus: typeof snapshot.playerStatus === "string" ? snapshot.playerStatus : null,
-    locomotion: typeof snapshot.locomotion === "string" ? snapshot.locomotion : null,
-    grounded: snapshot.grounded === true,
-    falling: snapshot.falling === true,
-    rising: snapshot.rising === true,
     errors: [],
     warnings: uniqueMessages(snapshot?.warnings),
   };

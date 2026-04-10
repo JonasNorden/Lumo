@@ -1,6 +1,7 @@
 import { bootRuntimeBridge } from "./bootRuntimeBridge.js";
 import { renderRuntimeBridgeStatus } from "./renderRuntimeBridgeStatus.js";
 import { updateRuntimeBridgeView } from "./updateRuntimeBridgeView.js";
+import { normalizeRuntimeSummaryShape } from "./normalizeRuntimeSummaryShape.js";
 
 const DEFAULT_LEVEL_PATH = "./src/data/testLevelDocument.v1.json";
 const DEFAULT_UPDATE_STEPS = 3;
@@ -40,6 +41,8 @@ function getDomRefs(root = document) {
     stopButton: root.querySelector("#runtimeBridgeStopButton"),
     stepButton: root.querySelector("#runtimeBridgeStepButton"),
     tickRateInput: root.querySelector("#runtimeBridgeTickRate"),
+    updateStepsInput: root.querySelector("#runtimeBridgeUpdateSteps"),
+    stopOnGroundedInput: root.querySelector("#runtimeBridgeStopOnGrounded"),
     pauseButton: root.querySelector("#runtimeBridgePauseButton"),
     resumeButton: root.querySelector("#runtimeBridgeResumeButton"),
     resetButton: root.querySelector("#runtimeBridgeResetButton"),
@@ -60,10 +63,6 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
   const query = parseQuery(options?.search ?? globalThis?.location?.search ?? "");
   const refs = getDomRefs(options?.root ?? document);
 
-  if (refs.levelPathInput) {
-    refs.levelPathInput.value = query.levelPath;
-  }
-
   const state = {
     query,
     levelPath: query.levelPath,
@@ -75,10 +74,60 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
       frameHandle: null,
       running: false,
     },
+    actionOptions: {
+      steps: query.steps,
+      stopOnGrounded: query.stopOnGrounded,
+    },
   };
+
+  if (refs.levelPathInput) {
+    refs.levelPathInput.value = query.levelPath;
+  }
+  if (refs.updateStepsInput) {
+    refs.updateStepsInput.value = String(state.actionOptions.steps);
+  }
+  if (refs.stopOnGroundedInput) {
+    refs.stopOnGroundedInput.checked = state.actionOptions.stopOnGrounded === true;
+  }
 
   function readTickRateInput() {
     return parsePositiveInteger(refs.tickRateInput?.value, DEFAULT_TICK_RATE);
+  }
+
+  function readUpdateStepsInput() {
+    return parsePositiveInteger(refs.updateStepsInput?.value, state.actionOptions.steps);
+  }
+
+  function readStopOnGroundedInput() {
+    return refs.stopOnGroundedInput?.checked === true;
+  }
+
+  function syncActionOptionsFromInputs() {
+    state.actionOptions.steps = readUpdateStepsInput();
+    state.actionOptions.stopOnGrounded = readStopOnGroundedInput();
+    if (refs.updateStepsInput) {
+      refs.updateStepsInput.value = String(state.actionOptions.steps);
+    }
+  }
+
+  function buildActionRecord(actionName, result = {}) {
+    const statusModel = renderRuntimeBridgeStatus(state);
+    const fallbackSummary = statusModel?.summary ?? {};
+    const normalizedSummary = normalizeRuntimeSummaryShape(result?.summary ?? fallbackSummary, {
+      bridgeStatus: fallbackSummary?.bridgeStatus ?? state.bridge?.getStatus?.() ?? "invalid",
+      controllerStatus: result?.status ?? fallbackSummary?.controllerStatus ?? "invalid",
+      hasActiveController: fallbackSummary?.hasActiveController === true,
+    });
+
+    return {
+      action: actionName,
+      ok: result?.ok === true,
+      status: result?.status ?? null,
+      summary: normalizedSummary,
+      playback: result?.playback ?? null,
+      errors: result?.errors ?? [],
+      warnings: result?.warnings ?? [],
+    };
   }
 
   // Renders compact debug state to plain text fields so failures are always visible.
@@ -127,15 +176,7 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
   // Runs a bridge action safely and stores result/errors for easy browser verification.
   async function runAction(actionName, actionFn) {
     const result = await actionFn();
-    state.lastAction = {
-      action: actionName,
-      ok: result?.ok === true,
-      status: result?.status ?? null,
-      summary: result?.summary ?? null,
-      playback: result?.playback ?? null,
-      errors: result?.errors ?? [],
-      warnings: result?.warnings ?? [],
-    };
+    state.lastAction = buildActionRecord(actionName, result);
 
     refreshView();
     return state.lastAction;
@@ -164,30 +205,14 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
   async function runBrowserPlaybackFrame(now) {
     const playbackResult = await state.debugApi.advanceFrame({ now });
     if (playbackResult?.ok !== true) {
-      state.lastAction = {
-        action: "advanceFrame",
-        ok: false,
-        status: playbackResult?.status ?? null,
-        summary: playbackResult?.summary ?? null,
-        playback: playbackResult?.playback ?? null,
-        errors: playbackResult?.errors ?? [],
-        warnings: playbackResult?.warnings ?? [],
-      };
+      state.lastAction = buildActionRecord("advanceFrame", playbackResult);
       refreshView();
       stopBrowserLoop();
       return;
     }
 
     if (playbackResult?.stepped === true) {
-      state.lastAction = {
-        action: "playback-step",
-        ok: true,
-        status: playbackResult?.status ?? null,
-        summary: playbackResult?.summary ?? null,
-        playback: playbackResult?.playback ?? null,
-        errors: playbackResult?.errors ?? [],
-        warnings: playbackResult?.warnings ?? [],
-      };
+      state.lastAction = buildActionRecord("playback-step", playbackResult);
       refreshView();
     } else {
       refreshView();
@@ -219,9 +244,24 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
       },
       refresh: refreshView,
       actions: {
-        start: () => runAction("start", () => state.debugApi.startFromLevelPath(state.levelPath, { stopOnGrounded: query.stopOnGrounded })),
+        setOptions: (nextOptions = {}) => {
+          if (Number.isFinite(nextOptions?.steps) && nextOptions.steps > 0) {
+            state.actionOptions.steps = Math.floor(nextOptions.steps);
+          }
+          if (typeof nextOptions?.stopOnGrounded === "boolean") {
+            state.actionOptions.stopOnGrounded = nextOptions.stopOnGrounded;
+          }
+          if (refs.updateStepsInput) {
+            refs.updateStepsInput.value = String(state.actionOptions.steps);
+          }
+          if (refs.stopOnGroundedInput) {
+            refs.stopOnGroundedInput.checked = state.actionOptions.stopOnGrounded === true;
+          }
+          return refreshView();
+        },
+        start: () => runAction("start", () => state.debugApi.startFromLevelPath(state.levelPath, { stopOnGrounded: state.actionOptions.stopOnGrounded })),
         tick: () => runAction("tick", () => state.debugApi.tick()),
-        update: () => runAction("update", () => state.debugApi.update({ steps: query.steps, stopOnGrounded: query.stopOnGrounded })),
+        update: () => runAction("update", () => state.debugApi.update({ steps: state.actionOptions.steps, stopOnGrounded: state.actionOptions.stopOnGrounded })),
         play: async () => {
           const playResult = await runAction("play", () => state.debugApi.play());
           if (playResult.ok) {
@@ -250,12 +290,19 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
     state.levelPath = candidatePath || DEFAULT_LEVEL_PATH;
   };
 
+  refs.updateStepsInput?.addEventListener("change", () => syncActionOptionsFromInputs());
+  refs.stopOnGroundedInput?.addEventListener("change", () => syncActionOptionsFromInputs());
+
   refs.startButton?.addEventListener("click", async () => {
     updateLevelPathFromInput();
-    await runAction("start", () => state.debugApi.startFromLevelPath(state.levelPath, { stopOnGrounded: query.stopOnGrounded }));
+    syncActionOptionsFromInputs();
+    await runAction("start", () => state.debugApi.startFromLevelPath(state.levelPath, { stopOnGrounded: state.actionOptions.stopOnGrounded }));
   });
   refs.tickButton?.addEventListener("click", async () => runAction("tick", () => state.debugApi.tick()));
-  refs.updateButton?.addEventListener("click", async () => runAction("update", () => state.debugApi.update({ steps: query.steps, stopOnGrounded: query.stopOnGrounded })));
+  refs.updateButton?.addEventListener("click", async () => {
+    syncActionOptionsFromInputs();
+    await runAction("update", () => state.debugApi.update({ steps: state.actionOptions.steps, stopOnGrounded: state.actionOptions.stopOnGrounded }));
+  });
   refs.playButton?.addEventListener("click", async () => {
     const tickRate = readTickRateInput();
     await runAction("setTickRate", () => state.debugApi.setTickRate(tickRate));
@@ -290,7 +337,8 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
   refs.refreshSummaryButton?.addEventListener("click", () => refreshView());
 
   if (query.autoStart && state.debugApi) {
-    await runAction("autostart", () => state.debugApi.startFromLevelPath(state.levelPath, { stopOnGrounded: query.stopOnGrounded }));
+    syncActionOptionsFromInputs();
+    await runAction("autostart", () => state.debugApi.startFromLevelPath(state.levelPath, { stopOnGrounded: state.actionOptions.stopOnGrounded }));
   }
 
   return {

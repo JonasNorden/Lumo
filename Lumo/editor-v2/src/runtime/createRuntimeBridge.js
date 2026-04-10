@@ -1,6 +1,6 @@
 import { createRuntimeControllerFromLevelDocument } from "./createRuntimeControllerFromLevelDocument.js";
 import { createRuntimeControllerFromLevelPath } from "./createRuntimeControllerFromLevelPath.js";
-import { createRuntimeControllerSummary } from "./createRuntimeControllerSummary.js";
+import { createRuntimeBridgeSummary } from "./createRuntimeBridgeSummary.js";
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -8,30 +8,6 @@ function uniqueMessages(messages) {
   }
 
   return [...new Set(messages.filter((message) => typeof message === "string" && message.length > 0))];
-}
-
-// Builds a defensive invalid summary when no active runtime controller exists.
-function createIdleSummary() {
-  return {
-    ok: false,
-    sourceType: "unknown",
-    status: "invalid",
-    paused: false,
-    worldId: null,
-    themeId: null,
-    runtimeTick: null,
-    elapsedMs: null,
-    playbackStatus: "stopped",
-    tickRate: 4,
-    autoPlay: false,
-    playerStatus: null,
-    locomotion: null,
-    grounded: false,
-    falling: false,
-    rising: false,
-    errors: ["Runtime bridge has no active controller."],
-    warnings: [],
-  };
 }
 
 // Creates a thin orchestration bridge over one active runtime controller/session.
@@ -65,11 +41,10 @@ export function createRuntimeBridge(options = {}) {
 
   // Returns compact active controller summary or a defensive invalid summary.
   function getActiveSummary() {
-    if (!state.activeController) {
-      return createIdleSummary();
-    }
-
-    return createRuntimeControllerSummary(state.activeController);
+    return createRuntimeBridgeSummary({
+      bridgeStatus: getStatus(),
+      activeController: state.activeController,
+    });
   }
 
   // Returns active controller debug snapshot or defensive invalid snapshot.
