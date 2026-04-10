@@ -4,6 +4,7 @@ import { stepRuntimePlayerVelocityX } from "./stepRuntimePlayerVelocityX.js";
 import { stepRuntimePlayerHorizontalState } from "./stepRuntimePlayerHorizontalState.js";
 import { buildRuntimePlayerJumpState } from "./buildRuntimePlayerJumpState.js";
 import { stepRuntimePlayerVerticalState } from "./stepRuntimePlayerVerticalState.js";
+import { buildRuntimePlayerStartState } from "./buildRuntimePlayerStartState.js";
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -33,6 +34,66 @@ function resolveFinalLocomotion(finalPlayerState, moveX = 0) {
   }
 
   return normalizedMoveX === 0 ? "airborne-neutral" : "airborne-moving";
+}
+
+function resolveBottomBoundRespawnY(worldPacket, options = {}) {
+  const tileSize = worldPacket?.world?.tileSize;
+  const worldHeight = worldPacket?.world?.height;
+  const tileBoundsMaxY = worldPacket?.tileBounds?.maxY;
+  const marginTiles = Number.isFinite(options?.bounds?.fallRespawnMarginTiles)
+    ? Math.max(0, Math.floor(options.bounds.fallRespawnMarginTiles))
+    : 4;
+
+  if (!Number.isFinite(tileSize) || tileSize <= 0) {
+    return null;
+  }
+
+  if (Number.isFinite(tileBoundsMaxY)) {
+    return (tileBoundsMaxY + 1 + marginTiles) * tileSize - 1;
+  }
+
+  if (Number.isFinite(worldHeight) && worldHeight > 0) {
+    return (worldHeight + marginTiles) * tileSize - 1;
+  }
+
+  return null;
+}
+
+// Respawns to authored spawn after leaving the valid playable region downward.
+function maybeResolveBottomRespawn(worldPacket, verticalStep, options = {}) {
+  const respawnY = resolveBottomBoundRespawnY(worldPacket, options);
+  const currentY = verticalStep?.position?.y;
+  const shouldRespawn = Number.isFinite(respawnY) && Number.isFinite(currentY) && currentY > respawnY;
+
+  if (!shouldRespawn) {
+    return null;
+  }
+
+  const spawnState = buildRuntimePlayerStartState(worldPacket);
+  const spawnX = Number.isFinite(spawnState?.position?.x) ? spawnState.position.x : worldPacket?.spawn?.x;
+  const spawnY = Number.isFinite(spawnState?.position?.y) ? spawnState.position.y : worldPacket?.spawn?.y;
+  const grounded = spawnState?.grounded === true;
+  const falling = spawnState?.falling === true;
+
+  return {
+    player: {
+      position: { x: spawnX, y: spawnY },
+      velocity: { x: 0, y: 0 },
+      grounded,
+      falling,
+      rising: false,
+      landed: false,
+      status: "respawned-out-of-bounds",
+    },
+    debug: {
+      respawned: true,
+      triggerY: currentY,
+      respawnY,
+      spawnX,
+      spawnY,
+    },
+    warning: "Player fell below playable world bounds and was respawned at authored spawn.",
+  };
 }
 
 // Executes one deterministic tick: intent -> locomotion -> velocityX -> horizontal -> jump -> vertical.
@@ -140,20 +201,22 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     };
   }
 
-  const status = verticalStep.status;
+  const bottomRespawn = maybeResolveBottomRespawn(worldPacket, verticalStep, options);
+  const resolvedPlayerStep = bottomRespawn?.player ?? verticalStep;
+  const status = resolvedPlayerStep.status;
   const finalPlayerState = {
-    grounded: verticalStep.grounded === true,
-    falling: verticalStep.falling === true,
-    rising: verticalStep.rising === true,
-    landed: verticalStep.landed === true,
+    grounded: resolvedPlayerStep.grounded === true,
+    falling: resolvedPlayerStep.falling === true,
+    rising: resolvedPlayerStep.rising === true,
+    landed: resolvedPlayerStep.landed === true,
   };
   const finalLocomotion = resolveFinalLocomotion(finalPlayerState, intent.moveX);
 
   return {
     ok: true,
     player: {
-      position: verticalStep.position,
-      velocity: verticalStep.velocity,
+      position: resolvedPlayerStep.position,
+      velocity: resolvedPlayerStep.velocity,
       locomotion: finalLocomotion,
       grounded: finalPlayerState.grounded,
       falling: finalPlayerState.falling,
@@ -165,18 +228,18 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       moveX: intent.moveX,
       jump: intent.jump === true,
       locomotion: finalLocomotion,
-      velocityX: verticalStep.velocity?.x ?? 0,
+      velocityX: resolvedPlayerStep.velocity?.x ?? 0,
       blockedLeft: horizontalStep.blockedLeft === true,
       blockedRight: horizontalStep.blockedRight === true,
       grounded: finalPlayerState.grounded,
       falling: finalPlayerState.falling,
       rising: finalPlayerState.rising,
       landed: finalPlayerState.landed,
-      collidedBelow: verticalStep.collidedBelow === true,
+      collidedBelow: resolvedPlayerStep.collidedBelow === true,
     },
     status,
-    errors: uniqueMessages(verticalStep.errors),
-    warnings: uniqueMessages(verticalStep.warnings),
+    errors: uniqueMessages(resolvedPlayerStep.errors),
+    warnings: uniqueMessages([...(resolvedPlayerStep.warnings ?? []), bottomRespawn?.warning]),
     debug: {
       intent,
       locomotion: locomotionState,
@@ -193,12 +256,15 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         startedJump: jumpState.startedJump === true,
       },
       vertical: {
-        status: verticalStep.status,
+        status: resolvedPlayerStep.status,
         grounded: finalPlayerState.grounded,
         falling: finalPlayerState.falling,
         rising: finalPlayerState.rising,
         landed: finalPlayerState.landed,
-        collidedBelow: verticalStep.collidedBelow === true,
+        collidedBelow: resolvedPlayerStep.collidedBelow === true,
+        respawned: bottomRespawn?.debug?.respawned === true,
+        triggerY: bottomRespawn?.debug?.triggerY ?? null,
+        respawnY: bottomRespawn?.debug?.respawnY ?? null,
       },
       finalized: {
         locomotion: finalLocomotion,
