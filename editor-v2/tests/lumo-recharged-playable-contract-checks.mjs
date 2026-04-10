@@ -1,27 +1,24 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const repoRoot = resolve(__dirname, "..", "..");
 
 const lumoHtmlCandidates = [
-  resolve(repoRoot, "Lumo.html"),
-  resolve(repoRoot, "Lumo", "Lumo.html"),
+  resolve(__dirname, "..", "..", "Lumo.html"),
+  resolve(__dirname, "..", "..", "Lumo", "Lumo.html"),
+  resolve(__dirname, "..", "..", "..", "Lumo.html"),
+  resolve(__dirname, "..", "..", "..", "Lumo", "Lumo.html"),
 ];
 
-const htmlPath = lumoHtmlCandidates.find((candidatePath) => {
-  try {
-    readFileSync(candidatePath, "utf8");
-    return true;
-  } catch {
-    return false;
-  }
-});
+const htmlPath = lumoHtmlCandidates.find((candidatePath) => existsSync(candidatePath));
 
-assert.ok(htmlPath, "expected playable Lumo.html to exist");
+assert.ok(
+  htmlPath,
+  `expected playable Lumo.html to exist; attempted paths:\n${lumoHtmlCandidates.join("\n")}`,
+);
 const html = readFileSync(htmlPath, "utf8");
 
 const hasRechargedInputHook =
