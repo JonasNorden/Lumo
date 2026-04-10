@@ -181,10 +181,52 @@ async function runInvalidSourceChecks() {
   console.log("boot adapter invalid handled");
 }
 
+async function runBottomBoundaryLandingJumpChecks() {
+  const bottomBoundaryLevel = {
+    identity: { id: "bottom-boundary-level", formatVersion: "1.0.0", themeId: "test", name: "Bottom Boundary" },
+    world: {
+      width: 8,
+      height: 4,
+      tileSize: 32,
+      spawn: { x: 32, y: 16 },
+    },
+    layers: {
+      tiles: [],
+      background: [],
+      decor: [],
+      entities: [],
+      audio: [],
+    },
+  };
+
+  const adapter = createLumoRechargedBootAdapter({ sourceDescriptor: bottomBoundaryLevel });
+  await adapter.prepare();
+  await adapter.boot();
+  adapter.tickSteps(200);
+
+  const landed = adapter.getPlayerSnapshot();
+  const jumpTick = adapter.tick({ left: false, right: false, jump: true });
+  const jumped = adapter.getPlayerSnapshot();
+  const airborneTick = adapter.tick({ left: false, right: false, jump: false });
+  const airborne = adapter.getPlayerSnapshot();
+
+  assert.equal(landed.grounded, true);
+  assert.equal(jumpTick.ok, true);
+  assert.equal(jumpTick.stepped, true);
+  assert.equal(jumped.y < landed.y, true, "jump should move upward after world-bottom landing");
+  assert.equal(jumped.grounded, false, "jump should clear grounded flag");
+  assert.equal(airborneTick.ok, true);
+  assert.equal(airborneTick.stepped, true);
+  assert.equal(airborne.y < jumped.y, true, "following tick should keep upward momentum before apex");
+
+  console.log("boot adapter bottom boundary landing + jump ok");
+}
+
 await runValidDirectSourceChecks();
 await runTickIntentUpdatesLivePlayerChecks();
 await runLoaderDescriptorChecks();
 await runPartialSourceChecks();
 await runInvalidSourceChecks();
+await runBottomBoundaryLandingJumpChecks();
 
 console.log("lumo-recharged-boot-adapter-checks: ok");

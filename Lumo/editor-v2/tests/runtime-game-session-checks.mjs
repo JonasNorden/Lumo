@@ -151,12 +151,18 @@ function runBottomBoundaryLandingJumpChecks() {
 
   const jumpTick = session.tick({ left: false, right: false, jump: true });
   const jumpSnapshot = session.getPlayerSnapshot();
+  const postJumpAirTick = session.tick({ left: false, right: false, jump: false });
+  const postJumpAirSnapshot = session.getPlayerSnapshot();
 
   assert.equal(jumpTick.ok, true);
   assert.equal(jumpTick.stepped, true);
   assert.equal(jumpSnapshot.y < landedSnapshot.y, true);
   assert.equal(jumpSnapshot.grounded, false);
   assert.equal(jumpSnapshot.falling, false);
+  assert.equal(postJumpAirTick.ok, true);
+  assert.equal(postJumpAirTick.stepped, true);
+  assert.equal(postJumpAirSnapshot.y < jumpSnapshot.y, true, "post-jump tick should continue moving upward before apex");
+  assert.equal(postJumpAirSnapshot.grounded, false);
 
   console.log("session bottom boundary landing + jump ok");
 }
