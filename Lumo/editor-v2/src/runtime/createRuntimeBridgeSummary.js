@@ -26,8 +26,10 @@ export function createRuntimeBridgeSummary(bridgeOrState) {
       tickRate: 4,
       autoPlay: false,
       playerStatus: null,
+      locomotion: null,
       grounded: false,
       falling: false,
+      rising: false,
       errors: ["Runtime bridge summary requires a bridge or bridge-like state object."],
       warnings: [],
     };
@@ -61,8 +63,10 @@ export function createRuntimeBridgeSummary(bridgeOrState) {
     tickRate: controllerSummary.tickRate ?? 4,
     autoPlay: controllerSummary.autoPlay === true,
     playerStatus: controllerSummary.playerStatus,
+    locomotion: controllerSummary.locomotion ?? null,
     grounded: controllerSummary.grounded === true,
     falling: controllerSummary.falling === true,
+    rising: controllerSummary.rising === true,
     errors: uniqueMessages(controllerSummary.errors),
     warnings: uniqueMessages(controllerSummary.warnings),
   };

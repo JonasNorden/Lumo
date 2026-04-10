@@ -13,6 +13,28 @@ function uniqueMessages(messages) {
   return [...new Set(messages.filter((message) => typeof message === "string" && message.length > 0))];
 }
 
+function resolveFinalLocomotion(finalPlayerState, moveX = 0) {
+  const normalizedMoveX = Number.isFinite(moveX) ? Math.max(-1, Math.min(1, Math.trunc(moveX))) : 0;
+
+  if (finalPlayerState?.landed === true) {
+    return "landing";
+  }
+
+  if (finalPlayerState?.rising === true) {
+    return "rising";
+  }
+
+  if (finalPlayerState?.falling === true && normalizedMoveX === 0) {
+    return "falling";
+  }
+
+  if (finalPlayerState?.grounded === true) {
+    return normalizedMoveX === 0 ? "idle-grounded" : "moving-grounded";
+  }
+
+  return normalizedMoveX === 0 ? "airborne-neutral" : "airborne-moving";
+}
+
 // Executes one deterministic tick: intent -> locomotion -> velocityX -> horizontal -> jump -> vertical.
 export function stepRuntimePlayerSimulation(worldPacket, playerState, options = {}) {
   const intent = buildRuntimePlayerIntent(options?.input ?? options?.intent ?? options);
@@ -119,30 +141,37 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   }
 
   const status = verticalStep.status;
+  const finalPlayerState = {
+    grounded: verticalStep.grounded === true,
+    falling: verticalStep.falling === true,
+    rising: verticalStep.rising === true,
+    landed: verticalStep.landed === true,
+  };
+  const finalLocomotion = resolveFinalLocomotion(finalPlayerState, intent.moveX);
 
   return {
     ok: true,
     player: {
       position: verticalStep.position,
       velocity: verticalStep.velocity,
-      locomotion: locomotionState.locomotion,
-      grounded: verticalStep.grounded === true,
-      falling: verticalStep.falling === true,
-      rising: verticalStep.rising === true,
-      landed: verticalStep.landed === true,
+      locomotion: finalLocomotion,
+      grounded: finalPlayerState.grounded,
+      falling: finalPlayerState.falling,
+      rising: finalPlayerState.rising,
+      landed: finalPlayerState.landed,
       status,
     },
     collisions: {
       moveX: intent.moveX,
       jump: intent.jump === true,
-      locomotion: locomotionState.locomotion,
+      locomotion: finalLocomotion,
       velocityX: verticalStep.velocity?.x ?? 0,
       blockedLeft: horizontalStep.blockedLeft === true,
       blockedRight: horizontalStep.blockedRight === true,
-      grounded: verticalStep.grounded === true,
-      falling: verticalStep.falling === true,
-      rising: verticalStep.rising === true,
-      landed: verticalStep.landed === true,
+      grounded: finalPlayerState.grounded,
+      falling: finalPlayerState.falling,
+      rising: finalPlayerState.rising,
+      landed: finalPlayerState.landed,
       collidedBelow: verticalStep.collidedBelow === true,
     },
     status,
@@ -165,11 +194,14 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       },
       vertical: {
         status: verticalStep.status,
-        grounded: verticalStep.grounded === true,
-        falling: verticalStep.falling === true,
-        rising: verticalStep.rising === true,
-        landed: verticalStep.landed === true,
+        grounded: finalPlayerState.grounded,
+        falling: finalPlayerState.falling,
+        rising: finalPlayerState.rising,
+        landed: finalPlayerState.landed,
         collidedBelow: verticalStep.collidedBelow === true,
+      },
+      finalized: {
+        locomotion: finalLocomotion,
       },
     },
   };

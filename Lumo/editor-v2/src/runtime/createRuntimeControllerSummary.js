@@ -11,6 +11,8 @@ function extractControllerSnapshot(controllerOrState) {
   if (controllerOrState && typeof controllerOrState.getDebugSnapshot === "function") {
     const debug = controllerOrState.getDebugSnapshot();
     const summary = typeof controllerOrState.getSummary === "function" ? controllerOrState.getSummary() : null;
+    const session = typeof controllerOrState.getSession === "function" ? controllerOrState.getSession() : null;
+    const sessionPlayer = session?.player ?? null;
 
     return {
       sourceType: debug?.sourceType ?? "unknown",
@@ -19,11 +21,13 @@ function extractControllerSnapshot(controllerOrState) {
       playback: typeof controllerOrState.getPlaybackState === "function" ? controllerOrState.getPlaybackState() : null,
       worldId: summary?.worldId ?? debug?.worldId ?? null,
       themeId: summary?.themeId ?? debug?.themeId ?? null,
-      runtimeTick: summary?.runtimeTick ?? debug?.runtimeTick ?? null,
-      elapsedMs: controllerOrState.getSession?.()?.runtime?.elapsedMs ?? null,
-      playerStatus: summary?.playerStatus ?? debug?.playerStatus ?? null,
-      grounded: summary?.grounded === true,
-      falling: summary?.falling === true,
+      runtimeTick: session?.runtime?.tick ?? summary?.runtimeTick ?? debug?.runtimeTick ?? null,
+      elapsedMs: session?.runtime?.elapsedMs ?? null,
+      playerStatus: sessionPlayer?.status ?? summary?.playerStatus ?? debug?.playerStatus ?? null,
+      locomotion: sessionPlayer?.locomotion ?? null,
+      grounded: sessionPlayer?.grounded === true || summary?.grounded === true,
+      falling: sessionPlayer?.falling === true || summary?.falling === true,
+      rising: sessionPlayer?.rising === true,
     };
   }
 
@@ -37,8 +41,10 @@ function extractControllerSnapshot(controllerOrState) {
     runtimeTick: controllerOrState?.runtimeTick ?? null,
     elapsedMs: controllerOrState?.elapsedMs ?? null,
     playerStatus: controllerOrState?.playerStatus ?? null,
+    locomotion: controllerOrState?.locomotion ?? null,
     grounded: controllerOrState?.grounded === true,
     falling: controllerOrState?.falling === true,
+    rising: controllerOrState?.rising === true,
   };
 }
 
@@ -58,8 +64,10 @@ export function createRuntimeControllerSummary(controllerOrState) {
       tickRate: 4,
       autoPlay: false,
       playerStatus: null,
+      locomotion: null,
       grounded: false,
       falling: false,
+      rising: false,
       errors: ["Runtime controller summary requires a controller or state object."],
       warnings: [],
     };
@@ -79,8 +87,10 @@ export function createRuntimeControllerSummary(controllerOrState) {
     tickRate: Number.isFinite(snapshot?.playback?.tickRate) ? snapshot.playback.tickRate : 4,
     autoPlay: snapshot?.playback?.autoAdvance === true,
     playerStatus: typeof snapshot.playerStatus === "string" ? snapshot.playerStatus : null,
+    locomotion: typeof snapshot.locomotion === "string" ? snapshot.locomotion : null,
     grounded: snapshot.grounded === true,
     falling: snapshot.falling === true,
+    rising: snapshot.rising === true,
     errors: [],
     warnings: uniqueMessages(snapshot?.warnings),
   };

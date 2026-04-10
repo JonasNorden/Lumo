@@ -48,16 +48,13 @@ function resolveStatus(state) {
     return "invalid";
   }
 
-  if (state.playback.running && state.playback.paused) {
+  if (state.paused === true || state.currentSession?.runtime?.paused === true || (state.playback.running && state.playback.paused)) {
     return "paused";
   }
 
-  if (state.playback.running) {
+  const runtimeTick = Number.isFinite(state.currentSession?.runtime?.tick) ? state.currentSession.runtime.tick : 0;
+  if (runtimeTick > 0 || state.stepsRun > 0 || state.playback.running === true) {
     return "running";
-  }
-
-  if (state.stepsRun > 0) {
-    return "stopped";
   }
 
   return "ready";
@@ -687,6 +684,10 @@ export function createRuntimeController(startResult, options = {}) {
       playbackTickRate: state.playback.tickRate,
       playbackAutoAdvance: state.playback.autoAdvance === true,
       playerStatus: typeof state.currentSession?.player?.status === "string" ? state.currentSession.player.status : null,
+      locomotion: typeof state.currentSession?.player?.locomotion === "string" ? state.currentSession.player.locomotion : null,
+      grounded: state.currentSession?.player?.grounded === true,
+      falling: state.currentSession?.player?.falling === true,
+      rising: state.currentSession?.player?.rising === true,
       stepsRun: state.stepsRun,
       levelPath: state.source?.levelPath ?? null,
     };
