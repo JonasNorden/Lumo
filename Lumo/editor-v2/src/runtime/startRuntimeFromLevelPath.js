@@ -1,14 +1,7 @@
-function isNodeRuntime() {
-  return Boolean(globalThis.process?.versions?.node);
-}
+import { startRuntimeFromLevelUrl } from "./startRuntimeFromLevelUrl.js";
 
-// Prefers browser-safe URL loading when not in a real Node runtime.
+// Browser-safe alias kept for compatibility with existing path-based callers.
+// Node-only path startup lives in startRuntimeFromLevelPathNode.js and must be imported explicitly by Node harnesses.
 export async function startRuntimeFromLevelPath(levelPath, options = {}) {
-  if (isNodeRuntime()) {
-    const { startRuntimeFromLevelPathNode } = await import("./startRuntimeFromLevelPathNode.js");
-    return startRuntimeFromLevelPathNode(levelPath, options);
-  }
-
-  const { startRuntimeFromLevelUrl } = await import("./startRuntimeFromLevelUrl.js");
   return startRuntimeFromLevelUrl(levelPath, options);
 }
