@@ -1,4 +1,5 @@
 import { isRuntimeGridSolid } from "./isRuntimeGridSolid.js";
+import { RUNTIME_PLAYER_PHYSICS_BASELINE } from "./runtimePlayerPhysicsBaseline.js";
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -16,7 +17,18 @@ function resolveGravityY(options = {}) {
     return configuredGravityY;
   }
 
-  return 1;
+  return RUNTIME_PLAYER_PHYSICS_BASELINE.gravityY;
+}
+
+// Caps downward velocity to keep first-playable fall speed readable.
+function resolveMaxFallSpeedY(options = {}) {
+  const configuredMaxFallSpeedY = options?.physics?.maxFallSpeedY;
+
+  if (Number.isFinite(configuredMaxFallSpeedY) && configuredMaxFallSpeedY > 0) {
+    return configuredMaxFallSpeedY;
+  }
+
+  return RUNTIME_PLAYER_PHYSICS_BASELINE.maxFallSpeedY;
 }
 
 // Resolves the inclusive world-bottom player Y from world height/tile size metadata.
@@ -63,6 +75,7 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
       debug: {
         currentVelocityY: Number.isFinite(playerState?.velocity?.y) ? playerState.velocity.y : 0,
         gravityY: resolveGravityY(options),
+        maxFallSpeedY: resolveMaxFallSpeedY(options),
       },
     };
   }
@@ -72,7 +85,9 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
   const currentY = playerState.position.y;
   const currentVelocityX = Number.isFinite(playerState?.velocity?.x) ? playerState.velocity.x : 0;
   const currentVelocityY = Number.isFinite(playerState?.velocity?.y) ? playerState.velocity.y : 0;
-  const nextVelocityY = currentVelocityY + gravityY;
+  const unclampedVelocityY = currentVelocityY + gravityY;
+  const maxFallSpeedY = resolveMaxFallSpeedY(options);
+  const nextVelocityY = unclampedVelocityY > 0 ? Math.min(unclampedVelocityY, maxFallSpeedY) : unclampedVelocityY;
   const nextYCandidate = currentY + nextVelocityY;
   const gridX = Math.floor(currentX / tileSize);
   const gridYBelow = Math.floor((nextYCandidate + 1) / tileSize);
@@ -117,6 +132,7 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
         gravityY,
         worldBottomY,
         collidedWithWorldBottom,
+        maxFallSpeedY,
       },
     };
   }
@@ -145,6 +161,7 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
       gravityY,
       worldBottomY,
       collidedWithWorldBottom,
+      maxFallSpeedY,
     },
   };
 }
