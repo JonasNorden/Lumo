@@ -79,9 +79,11 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
   const collidedBelow = isRuntimeGridSolid(worldPacket, gridX, gridYBelow);
   const worldBottomY = resolveWorldBottomY(worldPacket);
   const collidedWithWorldBottom = Number.isFinite(worldBottomY) && nextYCandidate >= worldBottomY;
+  const shouldResolveGroundCollision = nextVelocityY >= 0;
 
-  // Resolve landing against authored floor tiles first, then against world-bottom bounds fallback.
-  if (collidedBelow || collidedWithWorldBottom) {
+  // Resolve floor/world-bottom collisions only while descending or stationary.
+  // This prevents bottom-contact probes from pinning Y on the same tick a jump starts upward.
+  if (shouldResolveGroundCollision && (collidedBelow || collidedWithWorldBottom)) {
     const collisionFloorY = collidedBelow ? gridYBelow * tileSize - 1 : worldBottomY;
     const clampedY = Math.min(nextYCandidate, collisionFloorY);
     const previousGrounded = playerState?.grounded === true;
