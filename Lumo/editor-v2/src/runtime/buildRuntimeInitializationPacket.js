@@ -10,9 +10,41 @@ function uniqueMessages(messages) {
 
 function resolveWorldSnapshot(worldPacket) {
   const identity = worldPacket?.identity;
+  const meta = worldPacket?.meta;
   const world = worldPacket?.world;
+  const spawn = worldPacket?.spawn;
+  const tileBounds = worldPacket?.tileBounds;
+  const tileMap = worldPacket?.tileMap;
 
   return {
+    identity: {
+      id: typeof identity?.id === "string" && identity.id.length > 0 ? identity.id : null,
+      formatVersion: identity?.formatVersion ?? null,
+      themeId: typeof identity?.themeId === "string" && identity.themeId.length > 0 ? identity.themeId : null,
+      name: typeof identity?.name === "string" && identity.name.length > 0 ? identity.name : null,
+    },
+    meta: {
+      title: typeof meta?.title === "string" && meta.title.length > 0 ? meta.title : null,
+      author: typeof meta?.author === "string" && meta.author.length > 0 ? meta.author : null,
+      difficulty:
+        typeof meta?.difficulty === "string" && meta.difficulty.length > 0 ? meta.difficulty : null,
+      tags: Array.isArray(meta?.tags) ? [...meta.tags] : [],
+    },
+    spawn: {
+      x: Number.isFinite(spawn?.x) ? spawn.x : null,
+      y: Number.isFinite(spawn?.y) ? spawn.y : null,
+    },
+    tileBounds: {
+      count: Number.isFinite(tileBounds?.count) ? tileBounds.count : 0,
+      minX: Number.isFinite(tileBounds?.minX) ? tileBounds.minX : null,
+      minY: Number.isFinite(tileBounds?.minY) ? tileBounds.minY : null,
+      maxX: Number.isFinite(tileBounds?.maxX) ? tileBounds.maxX : null,
+      maxY: Number.isFinite(tileBounds?.maxY) ? tileBounds.maxY : null,
+    },
+    tileMapSummary: {
+      count: Number.isFinite(tileMap?.count) ? tileMap.count : 0,
+      keyCount: Array.isArray(tileMap?.keys) ? tileMap.keys.length : 0,
+    },
     id: typeof identity?.id === "string" && identity.id.length > 0 ? identity.id : null,
     formatVersion: identity?.formatVersion ?? null,
     themeId: typeof identity?.themeId === "string" && identity.themeId.length > 0 ? identity.themeId : null,
@@ -52,6 +84,10 @@ function resolvePlayerSnapshot(bootstrap) {
     finalPosition: {
       x: Number.isFinite(startupOutcome?.finalPosition?.x) ? startupOutcome.finalPosition.x : null,
       y: Number.isFinite(startupOutcome?.finalPosition?.y) ? startupOutcome.finalPosition.y : null,
+    },
+    finalVelocity: {
+      x: Number.isFinite(startupOutcome?.finalVelocity?.x) ? startupOutcome.finalVelocity.x : null,
+      y: Number.isFinite(startupOutcome?.finalVelocity?.y) ? startupOutcome.finalVelocity.y : null,
     },
     grounded:
       typeof startupOutcome?.grounded === "boolean"
