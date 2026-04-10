@@ -86,20 +86,26 @@ export function renderRuntimeBridgeStatus(runtimeState = {}) {
   const bridgeStatus = summary?.bridgeStatus ?? bridgeSummary?.bridgeStatus ?? bootResult?.debug?.bridgeStatus ?? "invalid";
   const controllerStatus = summary?.controllerStatus ?? summary?.status ?? "invalid";
   const runtimeTick = Number.isFinite(summary?.runtimeTick) ? summary.runtimeTick : null;
+  const playbackStatus = typeof summary?.playbackStatus === "string" ? summary.playbackStatus : "stopped";
+  const tickRate = Number.isFinite(summary?.tickRate) ? summary.tickRate : null;
+  const autoPlay = summary?.autoPlay === true;
   const playerStatus = summary?.playerStatus ?? null;
   const grounded = summary?.grounded === true;
   const falling = summary?.falling === true;
 
   return {
     title: "Recharged Runtime Bridge",
-    statusLine: `bridge=${bridgeStatus} | controller=${controllerStatus} | tick=${runtimeTick ?? "-"} | player=${playerStatus ?? "-"}`,
+    statusLine: `bridge=${bridgeStatus} | controller=${controllerStatus} | playback=${playbackStatus} | tick=${runtimeTick ?? "-"} | rate=${tickRate ?? "-"} | auto=${autoPlay ? "on" : "off"} | player=${playerStatus ?? "-"}`,
     summary: {
       bridgeStatus,
       controllerStatus,
+      playbackStatus,
       sourceType: summary?.sourceType ?? "unknown",
       worldId: summary?.worldId ?? null,
       themeId: summary?.themeId ?? null,
       runtimeTick,
+      tickRate,
+      autoPlay,
       playerStatus,
       grounded,
       falling,

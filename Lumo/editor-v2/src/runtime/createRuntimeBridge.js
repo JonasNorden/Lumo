@@ -21,6 +21,9 @@ function createIdleSummary() {
     themeId: null,
     runtimeTick: null,
     elapsedMs: null,
+    playbackStatus: "stopped",
+    tickRate: 4,
+    autoPlay: false,
     playerStatus: null,
     grounded: false,
     falling: false,
@@ -77,8 +80,11 @@ export function createRuntimeBridge(options = {}) {
         worldId: null,
         themeId: null,
         runtimeTick: null,
-        playerStatus: null,
-        stepsRun: 0,
+      playerStatus: null,
+      playbackStatus: "stopped",
+      tickRate: 4,
+      autoPlay: false,
+      stepsRun: 0,
         levelPath: null,
         errors: ["Runtime bridge has no active controller."],
         warnings: [],
@@ -118,6 +124,10 @@ export function createRuntimeBridge(options = {}) {
 
     if (controllerStatus === "ready") {
       return "ready";
+    }
+
+    if (controllerStatus === "stopped") {
+      return "stopped";
     }
 
     return "invalid";
@@ -219,6 +229,18 @@ export function createRuntimeBridge(options = {}) {
     return runWithController("update", [updateOptions], "Runtime bridge update requires an active controller.");
   }
 
+  function step(stepOptions = {}) {
+    return runWithController("step", [stepOptions], "Runtime bridge step requires an active controller.");
+  }
+
+  function play() {
+    return runWithController("play", [], "Runtime bridge play requires an active controller.");
+  }
+
+  function stop() {
+    return runWithController("stop", [], "Runtime bridge stop requires an active controller.");
+  }
+
   // Pauses active controller runtime updates.
   function pause() {
     return runWithController("pause", [], "Runtime bridge pause requires an active controller.");
@@ -227,6 +249,18 @@ export function createRuntimeBridge(options = {}) {
   // Resumes active controller runtime updates.
   function resume() {
     return runWithController("resume", [], "Runtime bridge resume requires an active controller.");
+  }
+
+  function setTickRate(tickRate, options = {}) {
+    return runWithController("setTickRate", [tickRate, options], "Runtime bridge setTickRate requires an active controller.");
+  }
+
+  function getPlaybackState() {
+    return runWithController("getPlaybackState", [], "Runtime bridge getPlaybackState requires an active controller.");
+  }
+
+  function advanceFrame(frameOptions = {}) {
+    return runWithController("advanceFrame", [frameOptions], "Runtime bridge advanceFrame requires an active controller.");
   }
 
   // Resets active controller runtime session to initial snapshot.
@@ -264,8 +298,14 @@ export function createRuntimeBridge(options = {}) {
     startFromLevelPath,
     tick,
     update,
+    step,
+    play,
+    stop,
     pause,
     resume,
+    setTickRate,
+    getPlaybackState,
+    advanceFrame,
     reset,
     restart,
     clear,

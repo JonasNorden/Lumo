@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { v2ToRuntimeLevelObject } from "../src/runtime/v2ToRuntimeLevelObject.js";
 import { renderRuntimeBridgeStatus } from "../src/runtime/renderRuntimeBridgeStatus.js";
 import { renderRuntimeBridgeViewModel } from "../src/runtime/renderRuntimeBridgeViewModel.js";
+import { createRuntimeBridge } from "../src/runtime/createRuntimeBridge.js";
+import { buildRuntimePlaybackState } from "../src/runtime/buildRuntimePlaybackState.js";
 import {
   EDITOR_PLAY_LEVEL_KEY,
   EDITOR_PLAY_SPAWN_KEY,
@@ -139,7 +141,32 @@ function runBridgeStatusRenderChecks() {
   assert.equal(typeof idleStatus.statusLine, "string");
   assert.equal(idleStatus.summary.bridgeStatus, "idle");
   assert.equal(idleStatus.summary.sourceType, "unknown");
+  assert.equal(idleStatus.summary.playbackStatus, "stopped");
+  assert.equal(idleStatus.summary.tickRate, 4);
+  assert.equal(idleStatus.summary.autoPlay, false);
   assert.equal(Array.isArray(idleStatus.errors), true);
+}
+
+function runRuntimePlaybackChecks() {
+  const validPlayback = buildRuntimePlaybackState({ running: true, tickRate: 9, stepsPerFrame: 2, autoAdvance: true });
+  const partialPlayback = buildRuntimePlaybackState({ running: true, tickRate: "5", stepSize: 2 });
+  const invalidPlayback = buildRuntimePlaybackState(null);
+
+  assert.equal(validPlayback.ok, true);
+  assert.equal(validPlayback.state.tickRate, 9);
+  assert.equal(validPlayback.state.status, "running");
+  assert.equal(partialPlayback.state.stepsPerFrame, 2);
+  assert.equal(Array.isArray(partialPlayback.warnings), true);
+  assert.equal(invalidPlayback.ok, false);
+
+  const bridge = createRuntimeBridge().bridge;
+  const playWithoutController = bridge.play();
+  const rateWithoutController = bridge.setTickRate(12);
+  const playbackWithoutController = bridge.getPlaybackState();
+  assert.equal(playWithoutController.ok, false);
+  assert.equal(rateWithoutController.ok, false);
+  assert.equal(playbackWithoutController.ok, false);
+  assert.equal(playWithoutController.errors[0].includes("active controller"), true);
 }
 
 
@@ -238,6 +265,7 @@ function runSessionBridgeChecks() {
 runAdapterChecks();
 runSessionBridgeChecks();
 runBridgeStatusRenderChecks();
+runRuntimePlaybackChecks();
 runBridgeViewModelChecks();
 
 console.log("runtime bridge checks passed");

@@ -24,11 +24,29 @@ export function createRuntimeGlobalDebugApi(bridge, options = {}) {
     update(updateOptions = {}) {
       return bridge.update(updateOptions);
     },
+    step(stepOptions = {}) {
+      return bridge.step(stepOptions);
+    },
+    play() {
+      return bridge.play();
+    },
+    stop() {
+      return bridge.stop();
+    },
     pause() {
       return bridge.pause();
     },
     resume() {
       return bridge.resume();
+    },
+    setTickRate(tickRate, options = {}) {
+      return bridge.setTickRate(tickRate, options);
+    },
+    getPlaybackState() {
+      return bridge.getPlaybackState();
+    },
+    advanceFrame(frameOptions = {}) {
+      return bridge.advanceFrame(frameOptions);
     },
     reset() {
       return bridge.reset();

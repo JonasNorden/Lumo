@@ -4,6 +4,7 @@ import { createRuntimeBridgeSummary } from "./createRuntimeBridgeSummary.js";
 import { createRuntimeGlobalDebugApi } from "./createRuntimeGlobalDebugApi.js";
 import { attachRuntimeDebugApi } from "./attachRuntimeDebugApi.js";
 import { bootRuntimeBridge } from "./bootRuntimeBridge.js";
+import { renderRuntimeBridgeStatus } from "./renderRuntimeBridgeStatus.js";
 import { startRuntimeFromLevelPathNode } from "./startRuntimeFromLevelPathNode.js";
 import { buildRuntimePlayerIntent } from "./buildRuntimePlayerIntent.js";
 import { buildRuntimePlayerLocomotionState } from "./buildRuntimePlayerLocomotionState.js";
@@ -14,6 +15,7 @@ import { stepRuntimePlayerVerticalState } from "./stepRuntimePlayerVerticalState
 import { stepRuntimePlayerSimulation } from "./stepRuntimePlayerSimulation.js";
 import { buildNextRuntimeSessionState } from "./buildNextRuntimeSessionState.js";
 import { updateRuntimeSession } from "./updateRuntimeSession.js";
+import { buildRuntimePlaybackState } from "./buildRuntimePlaybackState.js";
 import testLevelDocument from "../data/testLevelDocument.v1.json" with { type: "json" };
 
 const validLevelPath = new URL("../data/testLevelDocument.v1.json", import.meta.url).href;
@@ -235,7 +237,30 @@ export async function runDebugLevelLoaderHarness() {
   };
   printSection("RUNTIME PLAYER SIMULATION LOCOMOTION", simulationChecks);
 
-  const validStartFromDocument = createRuntimeBridge().bridge.startFromLevelDocument(validLoaded.level, { startOptions: { steps: 0 } });
+  const validControllerBridge = createRuntimeBridge().bridge;
+  const validStartFromDocument = validControllerBridge.startFromLevelDocument(validLoaded.level, { startOptions: { steps: 0 } });
+  const validControllerFromStart = validControllerBridge.getActiveController();
+  const runtimePlaybackStateChecks = {
+    valid: buildRuntimePlaybackState({ running: true, paused: false, autoAdvance: true, tickRate: 8, stepsPerFrame: 2 }),
+    partial: buildRuntimePlaybackState({ running: true, tickRate: "6", stepSize: 3 }),
+    invalid: buildRuntimePlaybackState("bad-state"),
+  };
+  printSection("RUNTIME PLAYBACK STATE", runtimePlaybackStateChecks);
+
+  if (validControllerFromStart) {
+    const controller = validControllerFromStart;
+    const controllerPlaybackChecks = {
+      initial: controller.getPlaybackState(),
+      setTickRate: controller.setTickRate(12, { stepsPerFrame: 2 }),
+      play: controller.play(),
+      step: controller.step({ steps: 1 }),
+      pause: controller.pause(),
+      resume: controller.resume(),
+      stop: controller.stop(),
+      final: controller.getPlaybackState(),
+    };
+    printSection("RUNTIME CONTROLLER PLAYBACK", controllerPlaybackChecks);
+  }
   const bridgeCreate = createRuntimeBridge();
   const bridge = bridgeCreate.bridge;
   printSection("RUNTIME BRIDGE CREATE", {
@@ -322,6 +347,15 @@ export async function runDebugLevelLoaderHarness() {
   const validClear = bridge.clear();
   printSection("RUNTIME BRIDGE CLEAR", compactResult(validClear));
 
+  const bridgePlaybackChecks = {
+    setTickRate: await bridge.setTickRate(10, { stepsPerFrame: 1 }),
+    play: await bridge.play(),
+    step: await bridge.step({ steps: 1 }),
+    stop: await bridge.stop(),
+    playbackState: await bridge.getPlaybackState(),
+  };
+  printSection("RUNTIME BRIDGE PLAYBACK", bridgePlaybackChecks);
+
   const validStartFromPathNode = await startRuntimeFromLevelPathNode(validLevelPath, {
     steps: 2,
     stopOnGrounded: true,
@@ -362,6 +396,14 @@ export async function runDebugLevelLoaderHarness() {
     debug: bootValid.debug,
     summary: bootValid.debugApi?.getSummary?.(),
   });
+  printSection("RUNTIME BROWSER/ENTRY STATUS MODEL", renderRuntimeBridgeStatus({
+    query: { steps: 2 },
+    levelPath: validLevelPath,
+    bootResult: bootValid,
+    bridge,
+    debugApi,
+    lastAction: { action: "harness-snapshot", ok: true },
+  }));
 
   const partialBridge = createRuntimeBridge().bridge;
   const partialStart = partialBridge.startFromLevelDocument(partialLoaded.level, { startOptions: { steps: 0 } });
