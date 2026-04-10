@@ -1,4 +1,6 @@
 import { buildRuntimePlayerIntent } from "./buildRuntimePlayerIntent.js";
+import { buildRuntimePlayerLocomotionState } from "./buildRuntimePlayerLocomotionState.js";
+import { stepRuntimePlayerVelocityX } from "./stepRuntimePlayerVelocityX.js";
 import { stepRuntimePlayerHorizontalState } from "./stepRuntimePlayerHorizontalState.js";
 import { buildRuntimePlayerJumpState } from "./buildRuntimePlayerJumpState.js";
 import { stepRuntimePlayerVerticalState } from "./stepRuntimePlayerVerticalState.js";
@@ -11,10 +13,17 @@ function uniqueMessages(messages) {
   return [...new Set(messages.filter((message) => typeof message === "string" && message.length > 0))];
 }
 
-// Executes one runtime simulation step in deterministic order: intent -> horizontal -> jump -> vertical.
+// Executes one deterministic tick: intent -> locomotion -> velocityX -> horizontal -> jump -> vertical.
 export function stepRuntimePlayerSimulation(worldPacket, playerState, options = {}) {
   const intent = buildRuntimePlayerIntent(options?.input ?? options?.intent ?? options);
-  const horizontalStep = stepRuntimePlayerHorizontalState(worldPacket, playerState, intent);
+  const locomotionState = buildRuntimePlayerLocomotionState(playerState, intent, options);
+  const velocityXStep = stepRuntimePlayerVelocityX(playerState, locomotionState);
+
+  const horizontalStep = stepRuntimePlayerHorizontalState(worldPacket, playerState, {
+    velocityX: velocityXStep.velocityX,
+    errors: uniqueMessages([...(locomotionState.errors ?? []), ...(velocityXStep.errors ?? [])]),
+    warnings: uniqueMessages([...(locomotionState.warnings ?? []), ...(velocityXStep.warnings ?? [])]),
+  });
 
   if (horizontalStep.ok !== true) {
     return {
@@ -23,6 +32,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       collisions: {
         moveX: intent.moveX,
         jump: intent.jump === true,
+        locomotion: locomotionState.locomotion,
+        velocityX: velocityXStep.velocityX,
         blockedLeft: horizontalStep.blockedLeft === true,
         blockedRight: horizontalStep.blockedRight === true,
         grounded: false,
@@ -36,6 +47,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       warnings: uniqueMessages([...horizontalStep.warnings, ...intent.warnings]),
       debug: {
         intent,
+        locomotion: locomotionState,
+        velocityX: velocityXStep,
         horizontal: horizontalStep,
         jump: null,
         vertical: null,
@@ -47,8 +60,20 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     ...playerState,
     position: horizontalStep.position,
     velocity: horizontalStep.velocity,
-    errors: uniqueMessages([...(playerState?.errors ?? []), ...(horizontalStep.errors ?? []), ...(intent.errors ?? [])]),
-    warnings: uniqueMessages([...(playerState?.warnings ?? []), ...(horizontalStep.warnings ?? []), ...(intent.warnings ?? [])]),
+    errors: uniqueMessages([
+      ...(playerState?.errors ?? []),
+      ...(horizontalStep.errors ?? []),
+      ...(locomotionState.errors ?? []),
+      ...(velocityXStep.errors ?? []),
+      ...(intent.errors ?? []),
+    ]),
+    warnings: uniqueMessages([
+      ...(playerState?.warnings ?? []),
+      ...(horizontalStep.warnings ?? []),
+      ...(locomotionState.warnings ?? []),
+      ...(velocityXStep.warnings ?? []),
+      ...(intent.warnings ?? []),
+    ]),
   };
 
   const jumpState = buildRuntimePlayerJumpState(worldPacket, preVerticalState, intent, options);
@@ -69,6 +94,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       collisions: {
         moveX: intent.moveX,
         jump: intent.jump === true,
+        locomotion: locomotionState.locomotion,
+        velocityX: horizontalStep.velocity?.x ?? velocityXStep.velocityX,
         blockedLeft: horizontalStep.blockedLeft === true,
         blockedRight: horizontalStep.blockedRight === true,
         grounded: false,
@@ -82,6 +109,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       warnings: uniqueMessages(verticalStep.warnings),
       debug: {
         intent,
+        locomotion: locomotionState,
+        velocityX: velocityXStep,
         horizontal: horizontalStep,
         jump: jumpState,
         vertical: verticalStep,
@@ -96,6 +125,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     player: {
       position: verticalStep.position,
       velocity: verticalStep.velocity,
+      locomotion: locomotionState.locomotion,
       grounded: verticalStep.grounded === true,
       falling: verticalStep.falling === true,
       rising: verticalStep.rising === true,
@@ -105,6 +135,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     collisions: {
       moveX: intent.moveX,
       jump: intent.jump === true,
+      locomotion: locomotionState.locomotion,
+      velocityX: verticalStep.velocity?.x ?? 0,
       blockedLeft: horizontalStep.blockedLeft === true,
       blockedRight: horizontalStep.blockedRight === true,
       grounded: verticalStep.grounded === true,
@@ -118,9 +150,13 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     warnings: uniqueMessages(verticalStep.warnings),
     debug: {
       intent,
+      locomotion: locomotionState,
+      velocityX: velocityXStep,
       horizontal: {
         status: horizontalStep.status,
         moved: horizontalStep.moved === true,
+        blockedLeft: horizontalStep.blockedLeft === true,
+        blockedRight: horizontalStep.blockedRight === true,
       },
       jump: {
         status: jumpState.status,

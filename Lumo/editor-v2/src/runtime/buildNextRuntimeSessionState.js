@@ -41,6 +41,7 @@ function cloneSessionForStep(sessionState) {
       falling: source?.player?.falling === true,
       rising: source?.player?.rising === true,
       landed: source?.player?.landed === true,
+      locomotion: typeof source?.player?.locomotion === "string" ? source.player.locomotion : "idle-grounded",
       position: {
         x: Number.isFinite(source?.player?.position?.x) ? source.player.position.x : null,
         y: Number.isFinite(source?.player?.position?.y) ? source.player.position.y : null,
@@ -164,6 +165,7 @@ export function buildNextRuntimeSessionState(sessionState, options = {}) {
     x: playerStep.player.velocity.x,
     y: playerStep.player.velocity.y,
   };
+  session.player.locomotion = typeof playerStep?.player?.locomotion === "string" ? playerStep.player.locomotion : session.player.locomotion;
   session.player.grounded = playerStep.player.grounded === true;
   session.player.falling = playerStep.player.falling === true;
   session.player.rising = playerStep.player.rising === true;
@@ -180,6 +182,11 @@ export function buildNextRuntimeSessionState(sessionState, options = {}) {
       stepped: true,
       moveX: playerStep?.debug?.intent?.moveX ?? 0,
       jump: playerStep?.debug?.intent?.jump === true,
+      locomotion: playerStep?.collisions?.locomotion ?? session.player.locomotion,
+      velocityX: playerStep?.collisions?.velocityX ?? session.player.velocity.x,
+      accelerating: playerStep?.debug?.velocityX?.accelerating === true,
+      decelerating: playerStep?.debug?.velocityX?.decelerating === true,
+      frictionApplied: playerStep?.debug?.velocityX?.frictionApplied === true,
       blockedLeft: playerStep?.collisions?.blockedLeft === true,
       blockedRight: playerStep?.collisions?.blockedRight === true,
       grounded: playerStep.player.grounded === true,
@@ -200,6 +207,11 @@ export function buildNextRuntimeSessionState(sessionState, options = {}) {
       status: playerStep.status ?? "updated",
       moveX: playerStep?.debug?.intent?.moveX ?? 0,
       jump: playerStep?.debug?.intent?.jump === true,
+      locomotion: playerStep?.collisions?.locomotion ?? session.player.locomotion,
+      velocityX: playerStep?.collisions?.velocityX ?? session.player.velocity.x,
+      accelerating: playerStep?.debug?.velocityX?.accelerating === true,
+      decelerating: playerStep?.debug?.velocityX?.decelerating === true,
+      frictionApplied: playerStep?.debug?.velocityX?.frictionApplied === true,
       blockedLeft: playerStep?.collisions?.blockedLeft === true,
       blockedRight: playerStep?.collisions?.blockedRight === true,
       grounded: playerStep.player.grounded === true,

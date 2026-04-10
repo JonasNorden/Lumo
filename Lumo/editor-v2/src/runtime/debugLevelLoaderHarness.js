@@ -6,6 +6,8 @@ import { attachRuntimeDebugApi } from "./attachRuntimeDebugApi.js";
 import { bootRuntimeBridge } from "./bootRuntimeBridge.js";
 import { startRuntimeFromLevelPathNode } from "./startRuntimeFromLevelPathNode.js";
 import { buildRuntimePlayerIntent } from "./buildRuntimePlayerIntent.js";
+import { buildRuntimePlayerLocomotionState } from "./buildRuntimePlayerLocomotionState.js";
+import { stepRuntimePlayerVelocityX } from "./stepRuntimePlayerVelocityX.js";
 import { stepRuntimePlayerHorizontalState } from "./stepRuntimePlayerHorizontalState.js";
 import { buildRuntimePlayerJumpState } from "./buildRuntimePlayerJumpState.js";
 import { stepRuntimePlayerVerticalState } from "./stepRuntimePlayerVerticalState.js";
@@ -87,6 +89,13 @@ const steppingAirPlayerState = {
   falling: true,
 };
 
+const steppingLandingState = {
+  ...steppingAirPlayerState,
+  position: { x: 64, y: 62 },
+  velocity: { x: 0, y: 2 },
+  falling: true,
+};
+
 function printSection(title, payload) {
   console.log(`\n=== ${title} ===`);
   console.dir(payload, { depth: null });
@@ -121,11 +130,16 @@ function compactTrace(trace) {
     tick: entry?.tick ?? null,
     x: entry?.x ?? null,
     y: entry?.y ?? null,
+    locomotion: entry?.locomotion ?? null,
+    velocityX: entry?.velocityX ?? null,
     grounded: entry?.grounded === true,
     falling: entry?.falling === true,
     rising: entry?.rising === true,
     landed: entry?.landed === true,
     moveX: entry?.moveX ?? 0,
+    accelerating: entry?.accelerating === true,
+    decelerating: entry?.decelerating === true,
+    frictionApplied: entry?.frictionApplied === true,
     jump: entry?.jump === true,
     blockedLeft: entry?.blockedLeft === true,
     blockedRight: entry?.blockedRight === true,
@@ -147,21 +161,41 @@ export async function runDebugLevelLoaderHarness() {
   };
   printSection("RUNTIME PLAYER INTENT", intentChecks);
 
+  const locomotionChecks = {
+    groundedIdle: buildRuntimePlayerLocomotionState(steppingPlayerState, intentChecks.defaults),
+    groundedMoving: buildRuntimePlayerLocomotionState(steppingPlayerState, intentChecks.rightString),
+    airborneMoving: buildRuntimePlayerLocomotionState(steppingAirPlayerState, intentChecks.rightString),
+    falling: buildRuntimePlayerLocomotionState(steppingAirPlayerState, intentChecks.defaults),
+    landing: buildRuntimePlayerLocomotionState({ ...steppingLandingState, landed: true }, intentChecks.defaults),
+  };
+  printSection("RUNTIME PLAYER LOCOMOTION STATE", locomotionChecks);
+
+  const velocityXChecks = {
+    groundedAccelerating: stepRuntimePlayerVelocityX(steppingPlayerState, locomotionChecks.groundedMoving),
+    groundedFriction: stepRuntimePlayerVelocityX(
+      { ...steppingPlayerState, velocity: { x: 3, y: 0 } },
+      buildRuntimePlayerLocomotionState({ ...steppingPlayerState, velocity: { x: 3, y: 0 } }, intentChecks.defaults),
+    ),
+    airborneMoving: stepRuntimePlayerVelocityX(steppingAirPlayerState, locomotionChecks.airborneMoving),
+    airborneNeutral: stepRuntimePlayerVelocityX(steppingAirPlayerState, locomotionChecks.falling),
+  };
+  printSection("RUNTIME PLAYER VELOCITY X", velocityXChecks);
+
   const horizontalChecks = {
-    moveLeftOpen: stepRuntimePlayerHorizontalState(steppingWorldPacket, steppingPlayerState, intentChecks.left),
-    moveRightOpen: stepRuntimePlayerHorizontalState(steppingWorldPacket, steppingPlayerState, intentChecks.rightString),
+    moveLeftOpen: stepRuntimePlayerHorizontalState(steppingWorldPacket, steppingPlayerState, { velocityX: -2 }),
+    moveRightOpen: stepRuntimePlayerHorizontalState(steppingWorldPacket, steppingPlayerState, { velocityX: 2 }),
     blockedLeft: stepRuntimePlayerHorizontalState(
       steppingWorldPacket,
-      { ...steppingPlayerState, position: { x: 48, y: 47 } },
-      intentChecks.left,
+      { ...steppingPlayerState, position: { x: 48, y: 47 }, velocity: { x: -3, y: 0 } },
+      { velocityX: -3 },
     ),
     blockedRight: stepRuntimePlayerHorizontalState(
       steppingWorldPacket,
-      { ...steppingPlayerState, position: { x: 78, y: 47 } },
-      intentChecks.rightString,
+      { ...steppingPlayerState, position: { x: 78, y: 47 }, velocity: { x: 3, y: 0 } },
+      { velocityX: 3 },
     ),
   };
-  printSection("RUNTIME PLAYER HORIZONTAL STEP", horizontalChecks);
+  printSection("RUNTIME PLAYER HORIZONTAL STEP WITH VELOCITY", horizontalChecks);
 
   const jumpStateChecks = {
     groundedJump: buildRuntimePlayerJumpState(steppingWorldPacket, steppingPlayerState, { jump: true }),
@@ -199,11 +233,9 @@ export async function runDebugLevelLoaderHarness() {
     ),
     invalid: stepRuntimePlayerSimulation(null, { position: { x: null, y: null } }, { input: { jump: true } }),
   };
-  printSection("RUNTIME PLAYER SIMULATION JUMP", simulationChecks);
+  printSection("RUNTIME PLAYER SIMULATION LOCOMOTION", simulationChecks);
 
   const validStartFromDocument = createRuntimeBridge().bridge.startFromLevelDocument(validLoaded.level, { startOptions: { steps: 0 } });
-  const validSessionSeed = validStartFromDocument?.summary?.ok ? validStartFromDocument : null;
-
   const bridgeCreate = createRuntimeBridge();
   const bridge = bridgeCreate.bridge;
   printSection("RUNTIME BRIDGE CREATE", {
@@ -230,16 +262,34 @@ export async function runDebugLevelLoaderHarness() {
     warnings: sessionStepWithJump?.warnings ?? [],
   });
 
-  const sessionUpdateWithJump = updateRuntimeSession(bridge.getActiveSession(), {
-    steps: 16,
-    inputSequence: [{ jump: true, moveX: 1 }, ...new Array(15).fill({ moveX: 1 })],
+  const locomotionInputSequence = [
+    { moveX: 1 },
+    { moveX: 1 },
+    { moveX: 1 },
+    { moveX: 1 },
+    { moveX: 0 },
+    { moveX: 0 },
+    { moveX: 0 },
+    { moveX: 0 },
+    { jump: true, moveX: 1 },
+    { moveX: 1 },
+    { moveX: 1 },
+    { moveX: 0 },
+    { moveX: 0 },
+    { moveX: 0 },
+    { moveX: 0 },
+    { moveX: 0 },
+  ];
+  const sessionUpdateWithLocomotion = updateRuntimeSession(bridge.getActiveSession(), {
+    steps: locomotionInputSequence.length,
+    inputSequence: locomotionInputSequence,
   });
-  printSection("RUNTIME SESSION UPDATE WITH JUMP", {
-    ok: sessionUpdateWithJump?.ok === true,
-    trace: compactTrace(sessionUpdateWithJump?.trace),
-    finalPlayer: sessionUpdateWithJump?.session?.player ?? null,
-    errors: sessionUpdateWithJump?.errors ?? [],
-    warnings: sessionUpdateWithJump?.warnings ?? [],
+  printSection("RUNTIME SESSION UPDATE WITH LOCOMOTION", {
+    ok: sessionUpdateWithLocomotion?.ok === true,
+    trace: compactTrace(sessionUpdateWithLocomotion?.trace),
+    finalPlayer: sessionUpdateWithLocomotion?.session?.player ?? null,
+    errors: sessionUpdateWithLocomotion?.errors ?? [],
+    warnings: sessionUpdateWithLocomotion?.warnings ?? [],
   });
 
   const validTick = await bridge.tick({ input: { moveX: -1 } });
@@ -365,13 +415,15 @@ export async function runDebugLevelLoaderHarness() {
   return {
     runtimeChecks: {
       intentChecks,
+      locomotionChecks,
+      velocityXChecks,
       horizontalChecks,
       simulationChecks,
       jumpStateChecks,
       verticalStepChecks,
       sessionStepWithJump,
-      sessionUpdateWithJump,
-      validSessionSeed,
+      sessionUpdateWithLocomotion,
+      validStartFromDocument,
     },
     valid: {
       bridgeCreate,

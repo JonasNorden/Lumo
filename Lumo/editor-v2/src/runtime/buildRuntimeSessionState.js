@@ -43,6 +43,7 @@ function resolveSessionPlayer(player) {
     spawnSource: "authored-spawn",
     landed: player?.landed === true,
     steps: isFiniteNumber(player?.steps) ? player.steps : 0,
+    locomotion: player?.grounded === true ? "idle-grounded" : player?.falling === true ? "falling" : "airborne-neutral",
   };
 }
 
