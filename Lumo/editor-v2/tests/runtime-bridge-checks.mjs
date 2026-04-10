@@ -183,7 +183,13 @@ function runBridgeViewModelChecks() {
             tileSize: 16,
             spawn: { x: 32, y: 16 },
             identity: { id: "vm-world", themeId: "vm-theme" },
-            layers: { tiles: [{ tileId: "stone", x: 1, y: 1, w: 2, h: 1 }] },
+            layers: {
+              tiles: [{ tileId: "stone", x: 1, y: 1, w: 2, h: 1 }],
+              background: [{ backgroundId: "bg-sky", order: 0, parallax: 0.3 }],
+              decor: [{ decorId: "flower", x: 12, y: 14, order: 2, variant: "blue" }],
+              entities: [{ entityType: "enemy-slime", x: 44, y: 16 }],
+              audio: [{ audioId: "wind-loop", audioType: "spot", x: 20, y: 20, radius: 48 }],
+            },
           },
           player: {
             position: { x: 32, y: 32 },
@@ -204,6 +210,15 @@ function runBridgeViewModelChecks() {
   assert.equal(viewModel.spawn.x, 32);
   assert.equal(viewModel.player.y, 32);
   assert.equal(viewModel.overlay.runtimeTick, 7);
+  assert.equal(viewModel.background.length, 1);
+  assert.equal(viewModel.decor.length, 1);
+  assert.equal(viewModel.entities.length, 1);
+  assert.equal(viewModel.audio.length, 1);
+  assert.equal(viewModel.overlay.counts.tiles, 1);
+  assert.equal(viewModel.overlay.counts.background, 1);
+  assert.equal(viewModel.overlay.counts.decor, 1);
+  assert.equal(viewModel.overlay.counts.entities, 1);
+  assert.equal(viewModel.overlay.counts.audio, 1);
 }
 
 function runSessionBridgeChecks() {
