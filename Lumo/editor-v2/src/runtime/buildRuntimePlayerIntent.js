@@ -57,6 +57,11 @@ export function buildRuntimePlayerIntent(input = {}) {
   }
 
   const moveX = normalizeMoveX(source.moveX, warnings);
+
+  if (source.jump !== undefined && source.jump !== true && source.jump !== false) {
+    warnings.push("Runtime jump intent must be a boolean; defaulted to false.");
+  }
+
   const jump = source.jump === true;
   const run = source.run === true;
 
