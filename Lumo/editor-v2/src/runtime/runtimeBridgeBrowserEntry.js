@@ -30,6 +30,7 @@ function getDomRefs(root = document) {
     actionResult: root.querySelector("#runtimeBridgeActionResult"),
     viewStatus: root.querySelector("#runtimeBridgeViewStatus"),
     viewCanvas: root.querySelector("#runtimeBridgeViewCanvas"),
+    viewLegend: root.querySelector("#runtimeBridgeViewLegend"),
     startButton: root.querySelector("#runtimeBridgeStartButton"),
     tickButton: root.querySelector("#runtimeBridgeTickButton"),
     updateButton: root.querySelector("#runtimeBridgeUpdateButton"),
@@ -89,9 +90,15 @@ export async function startRuntimeBridgeBrowserEntry(options = {}) {
 
     if (refs.viewStatus) {
       const message = viewResult.ok
-        ? `Runtime view ok | tick=${viewResult?.viewModel?.overlay?.runtimeTick ?? "-"}`
+        ? `Runtime view ${viewResult.state} | tick=${viewResult?.viewModel?.overlay?.runtimeTick ?? "-"}`
         : `Runtime view issues | ${viewResult.errors.join(" | ")}`;
       setElementText(refs.viewStatus, message);
+    }
+
+    if (refs.viewLegend) {
+      const counts = viewResult?.viewModel?.overlay?.counts ?? {};
+      const legend = `bg=${counts.background ?? 0} tiles=${counts.tiles ?? 0} decor=${counts.decor ?? 0} entities=${counts.entities ?? 0} audio=${counts.audio ?? 0} spawn=yellow player=green`;
+      setElementText(refs.viewLegend, legend);
     }
 
     return model;

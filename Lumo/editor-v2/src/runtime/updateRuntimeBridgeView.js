@@ -28,6 +28,7 @@ export function updateRuntimeBridgeView(runtimePageState = {}) {
 
   return {
     ok: errors.length === 0,
+    state: drawResult?.state ?? (viewModel?.ok ? "active" : "invalid"),
     viewModel,
     errors: uniqueMessages(errors),
     warnings: uniqueMessages(warnings),

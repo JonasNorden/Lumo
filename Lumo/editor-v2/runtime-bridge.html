@@ -23,11 +23,21 @@
         font-size: 16px;
       }
 
+      h2 {
+        margin: 0;
+        font-size: 14px;
+      }
+
       .status-line {
         margin: 0;
         padding: 8px;
         border: 1px solid #374151;
         background: #1f2937;
+      }
+
+      .section {
+        display: grid;
+        gap: 6px;
       }
 
       .row {
@@ -68,9 +78,11 @@
         gap: 6px;
       }
 
-      .view-block h2 {
+      .legend {
         margin: 0;
-        font-size: 14px;
+        padding: 6px 8px;
+        border: 1px dashed #334155;
+        color: #93c5fd;
       }
 
       canvas {
@@ -86,31 +98,42 @@
       <h1 id="runtimeBridgeTitle">Recharged Runtime Bridge</h1>
       <p id="runtimeBridgeStatusLine" class="status-line">Booting runtime bridge...</p>
 
-      <div class="row">
-        <label for="runtimeBridgeLevelPath">Level Path</label>
-        <input id="runtimeBridgeLevelPath" type="text" value="./src/data/testLevelDocument.v1.json" />
-      </div>
+      <section class="section">
+        <h2>Controls</h2>
+        <div class="row">
+          <label for="runtimeBridgeLevelPath">Level Path</label>
+          <input id="runtimeBridgeLevelPath" type="text" value="./src/data/testLevelDocument.v1.json" />
+        </div>
 
-      <div class="row">
-        <button id="runtimeBridgeStartButton" type="button">Start</button>
-        <button id="runtimeBridgeTickButton" type="button">Tick</button>
-        <button id="runtimeBridgeUpdateButton" type="button">Update</button>
-        <button id="runtimeBridgePauseButton" type="button">Pause</button>
-        <button id="runtimeBridgeResumeButton" type="button">Resume</button>
-        <button id="runtimeBridgeResetButton" type="button">Reset</button>
-        <button id="runtimeBridgeRestartButton" type="button">Restart</button>
-        <button id="runtimeBridgeClearButton" type="button">Clear</button>
-        <button id="runtimeBridgeRefreshSummaryButton" type="button">Refresh Summary</button>
-      </div>
+        <div class="row">
+          <button id="runtimeBridgeStartButton" type="button">Start</button>
+          <button id="runtimeBridgeTickButton" type="button">Tick</button>
+          <button id="runtimeBridgeUpdateButton" type="button">Update</button>
+          <button id="runtimeBridgePauseButton" type="button">Pause</button>
+          <button id="runtimeBridgeResumeButton" type="button">Resume</button>
+          <button id="runtimeBridgeResetButton" type="button">Reset</button>
+          <button id="runtimeBridgeRestartButton" type="button">Restart</button>
+          <button id="runtimeBridgeClearButton" type="button">Clear</button>
+          <button id="runtimeBridgeRefreshSummaryButton" type="button">Refresh Summary</button>
+        </div>
+      </section>
 
-      <div class="view-block">
-        <h2>Runtime View (Recharged session state)</h2>
+      <section class="view-block">
+        <h2>Runtime View (Recharged runtime chain)</h2>
         <p id="runtimeBridgeViewStatus" class="status-line">Runtime view waiting for bridge state...</p>
+        <p id="runtimeBridgeViewLegend" class="legend">Legend: waiting for runtime data...</p>
         <canvas id="runtimeBridgeViewCanvas" width="860" height="420"></canvas>
-      </div>
+      </section>
 
-      <pre id="runtimeBridgeActionResult">No actions yet.</pre>
-      <pre id="runtimeBridgeSummary">Waiting for summary...</pre>
+      <section class="section">
+        <h2>Last Action</h2>
+        <pre id="runtimeBridgeActionResult">No actions yet.</pre>
+      </section>
+
+      <section class="section">
+        <h2>Summary</h2>
+        <pre id="runtimeBridgeSummary">Waiting for summary...</pre>
+      </section>
     </main>
 
     <script type="module">
