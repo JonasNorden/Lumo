@@ -17,6 +17,9 @@ function resolveSessionWorld(world) {
     spawn: world?.spawn ?? null,
     tileBounds: world?.tileBounds ?? null,
     tileMapSummary: world?.tileMapSummary ?? null,
+    layers: {
+      tiles: Array.isArray(world?.layers?.tiles) ? [...world.layers.tiles] : [],
+    },
     width: isFiniteNumber(world?.width) ? world.width : null,
     height: isFiniteNumber(world?.height) ? world.height : null,
     tileSize: isFiniteNumber(world?.tileSize) ? world.tileSize : null,

@@ -21,6 +21,8 @@ import { simulateRuntimePlayerFall } from "./simulateRuntimePlayerFall.js";
 import { buildRuntimePlayerBootstrap } from "./buildRuntimePlayerBootstrap.js";
 import { buildRuntimeInitializationPacket } from "./buildRuntimeInitializationPacket.js";
 import { buildRuntimeSessionState } from "./buildRuntimeSessionState.js";
+import { buildNextRuntimeSessionState } from "./buildNextRuntimeSessionState.js";
+import { updateRuntimeSession } from "./updateRuntimeSession.js";
 import testLevelDocument from "../../../../editor-v2/src/data/testLevelDocument.v1.json" with { type: "json" };
 
 // Invalid Recharged sample level used to verify validation errors.
@@ -179,6 +181,17 @@ export function runDebugLevelLoaderHarness() {
   const validRuntimeSessionState = buildRuntimeSessionState(validRuntimeInitializationPacket);
   const partialRuntimeSessionState = buildRuntimeSessionState(partialRuntimeInitializationPacket);
   const invalidRuntimeSessionState = buildRuntimeSessionState(invalidRuntimeInitializationPacket);
+  // Advance one session tick from each sample to validate the new session update chain.
+  const validNextRuntimeSessionState = buildNextRuntimeSessionState(validRuntimeSessionState);
+  const partialNextRuntimeSessionState = buildNextRuntimeSessionState(partialRuntimeSessionState);
+  const invalidNextRuntimeSessionState = buildNextRuntimeSessionState(invalidRuntimeSessionState);
+  // Run a compact multi-step session simulation for each sample.
+  const validRuntimeSessionUpdate = updateRuntimeSession(validRuntimeSessionState, {
+    steps: 5,
+    stopOnGrounded: true,
+  });
+  const partialRuntimeSessionUpdate = updateRuntimeSession(partialRuntimeSessionState, { steps: 5 });
+  const invalidRuntimeSessionUpdate = updateRuntimeSession(invalidRuntimeSessionState, { steps: 3 });
 
   logLoaderResult("Valid file sample (testLevelDocument.v1.json)", validResult);
   if (validSummary) {
@@ -238,6 +251,12 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== RUNTIME SESSION STATE ===");
   console.log("(valid sample)");
   console.dir(validRuntimeSessionState, { depth: null });
+  console.log("\n=== RUNTIME NEXT SESSION STATE ===");
+  console.log("(valid sample)");
+  console.dir(validNextRuntimeSessionState, { depth: null });
+  console.log("\n=== RUNTIME SESSION UPDATE ===");
+  console.log("(valid sample)");
+  console.dir(validRuntimeSessionUpdate, { depth: null });
   // Run a few fixed grid lookups for easy runtime tile hit-test inspection.
   console.log("\n=== Runtime tile lookup (valid sample) ===");
   const validLookupTests = [
@@ -314,6 +333,12 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== RUNTIME SESSION STATE ===");
   console.log("(partial valid sample)");
   console.dir(partialRuntimeSessionState, { depth: null });
+  console.log("\n=== RUNTIME NEXT SESSION STATE ===");
+  console.log("(partial valid sample)");
+  console.dir(partialNextRuntimeSessionState, { depth: null });
+  console.log("\n=== RUNTIME SESSION UPDATE ===");
+  console.log("(partial valid sample)");
+  console.dir(partialRuntimeSessionUpdate, { depth: null });
   // Keep one sparse-sample lookup so missing tiles remain easy to verify.
   console.log("\n=== Runtime tile lookup (partial valid sample) ===");
   const partialLookupTests = [
@@ -361,6 +386,12 @@ export function runDebugLevelLoaderHarness() {
   console.log("\n=== RUNTIME SESSION STATE ===");
   console.log("(invalid sample)");
   console.dir(invalidRuntimeSessionState, { depth: null });
+  console.log("\n=== RUNTIME NEXT SESSION STATE ===");
+  console.log("(invalid sample)");
+  console.dir(invalidNextRuntimeSessionState, { depth: null });
+  console.log("\n=== RUNTIME SESSION UPDATE ===");
+  console.log("(invalid sample)");
+  console.dir(invalidRuntimeSessionUpdate, { depth: null });
 
   return {
     validResult,
@@ -416,6 +447,12 @@ export function runDebugLevelLoaderHarness() {
     validRuntimeSessionState,
     partialRuntimeSessionState,
     invalidRuntimeSessionState,
+    validNextRuntimeSessionState,
+    partialNextRuntimeSessionState,
+    invalidNextRuntimeSessionState,
+    validRuntimeSessionUpdate,
+    partialRuntimeSessionUpdate,
+    invalidRuntimeSessionUpdate,
     invalidResult,
   };
 }
