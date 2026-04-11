@@ -187,6 +187,7 @@ export async function bootLumoRechargedFromQuery(options = {}) {
       levelSourceType: sourceInfo.levelSourceType,
       worldId: typeof payload.worldId === "string" ? payload.worldId : "",
       themeId: typeof payload.themeId === "string" ? payload.themeId : "",
+      supportTiles: Array.isArray(payload.supportTiles) ? payload.supportTiles : [],
       playerStatus: typeof payload.playerStatus === "string" ? payload.playerStatus : "unknown",
       playerX: Number.isFinite(payload.playerX) ? payload.playerX : null,
       playerY: Number.isFinite(payload.playerY) ? payload.playerY : null,
