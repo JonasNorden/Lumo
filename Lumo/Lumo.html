@@ -193,6 +193,30 @@
       }
     }
 
+    function buildRechargedWorldToCanvasMapper({ canvas, worldWidthPx, worldHeightPx, targetX, targetY }) {
+      const viewportWorldWidth = Math.max(1, Math.min(canvas.width, Math.round(worldWidthPx)));
+      const viewportWorldHeight = Math.max(1, Math.min(canvas.height, Math.round(worldHeightPx)));
+      const maxCameraX = Math.max(0, Math.round(worldWidthPx) - viewportWorldWidth);
+      const maxCameraY = Math.max(0, Math.round(worldHeightPx) - viewportWorldHeight);
+      const cameraX = Math.max(0, Math.min(maxCameraX, Math.round(targetX - viewportWorldWidth * 0.5)));
+      const cameraY = Math.max(0, Math.min(maxCameraY, Math.round(targetY - viewportWorldHeight * 0.5)));
+      const offsetX = Math.floor((canvas.width - viewportWorldWidth) * 0.5);
+      const offsetY = Math.floor((canvas.height - viewportWorldHeight) * 0.5);
+
+      return {
+        viewportWorldWidth,
+        viewportWorldHeight,
+        worldToCanvasRect(rectX, rectY, rectW, rectH) {
+          return {
+            x: Math.round(rectX - cameraX + offsetX),
+            y: Math.round(rectY - cameraY + offsetY),
+            w: Math.max(1, Math.round(rectW)),
+            h: Math.max(1, Math.round(rectH)),
+          };
+        },
+      };
+    }
+
     function renderRechargedCanvasFrame(canvas, state) {
       if (!canvas || typeof canvas.getContext !== "function") {
         return false;
@@ -207,44 +231,79 @@
         const payload = readLatestRechargedBootPayload() || {};
         const player = readRechargedPlayerSnapshot(payload);
         const tileSize = Number.isFinite(payload?.tileSize) && payload.tileSize > 0 ? payload.tileSize : 24;
-        const worldWidth = Number.isFinite(payload?.worldWidth) ? payload.worldWidth : Number.isFinite(payload?.cols) ? payload.cols * tileSize : canvas.width;
-        const worldHeight = Number.isFinite(payload?.worldHeight) ? payload.worldHeight : Number.isFinite(payload?.rows) ? payload.rows * tileSize : canvas.height;
-        const playerX = Number.isFinite(player.x) ? player.x : Math.max(0, (worldWidth - tileSize) * 0.5);
-        const playerY = Number.isFinite(player.y) ? player.y : Math.max(0, (worldHeight - tileSize) * 0.5);
+        const worldWidthRaw = Number.isFinite(payload?.worldWidth)
+          ? payload.worldWidth
+          : (Number.isFinite(payload?.cols) ? payload.cols : Math.max(1, Math.round(canvas.width / tileSize)));
+        const worldHeightRaw = Number.isFinite(payload?.worldHeight)
+          ? payload.worldHeight
+          : (Number.isFinite(payload?.rows) ? payload.rows : Math.max(1, Math.round(canvas.height / tileSize)));
         const supportTiles = Array.isArray(payload?.supportTiles) ? payload.supportTiles : [];
-        const viewportWorldWidth = Math.max(1, Math.min(canvas.width, Math.round(worldWidth)));
-        const viewportWorldHeight = Math.max(1, Math.min(canvas.height, Math.round(worldHeight)));
+        const maxSupportTileSpan = supportTiles.reduce((maxSpan, tile) => {
+          const spanW = Number.isFinite(tile?.w) ? tile.w : 0;
+          const spanH = Number.isFinite(tile?.h) ? tile.h : 0;
+          return Math.max(maxSpan, spanW, spanH);
+        }, 0);
+        const coordinatesLookTileBased = (
+          (Number.isFinite(player.x) && player.x > worldWidthRaw + tileSize) ||
+          (Number.isFinite(player.y) && player.y > worldHeightRaw + tileSize) ||
+          (maxSupportTileSpan > 0 && maxSupportTileSpan <= 4)
+        );
+        const worldUnitsToPx = coordinatesLookTileBased ? tileSize : 1;
+        const worldWidthPx = Math.max(tileSize, Math.round(worldWidthRaw * worldUnitsToPx));
+        const worldHeightPx = Math.max(tileSize, Math.round(worldHeightRaw * worldUnitsToPx));
+        const playerCenterX = Number.isFinite(player.x) ? player.x : worldWidthPx * 0.5;
+        const playerFootY = Number.isFinite(player.y) ? player.y : worldHeightPx - 1;
+
+        const mapper = buildRechargedWorldToCanvasMapper({
+          canvas,
+          worldWidthPx,
+          worldHeightPx,
+          targetX: playerCenterX,
+          targetY: playerFootY,
+        });
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#0b1220";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Draw real runtime support geometry from Recharged world tile data.
+        // Draw real runtime support geometry from Recharged world tile data in tileSize-scaled world pixels.
         for (const supportTile of supportTiles) {
-          const tileX = Number.isFinite(supportTile?.x) ? Math.round(supportTile.x) : null;
-          const tileY = Number.isFinite(supportTile?.y) ? Math.round(supportTile.y) : null;
-          const tileW = Number.isFinite(supportTile?.w) ? Math.round(supportTile.w) : null;
-          const tileH = Number.isFinite(supportTile?.h) ? Math.round(supportTile.h) : null;
+          const tileX = Number.isFinite(supportTile?.x) ? supportTile.x : null;
+          const tileY = Number.isFinite(supportTile?.y) ? supportTile.y : null;
+          const tileW = Number.isFinite(supportTile?.w) ? supportTile.w : null;
+          const tileH = Number.isFinite(supportTile?.h) ? supportTile.h : null;
           if (tileX === null || tileY === null || tileW === null || tileH === null || tileW <= 0 || tileH <= 0) {
             continue;
           }
 
+          const worldRectX = tileX * worldUnitsToPx;
+          const worldRectY = tileY * worldUnitsToPx;
+          const worldRectW = tileW * worldUnitsToPx;
+          const worldRectH = tileH * worldUnitsToPx;
+          const supportCanvasRect = mapper.worldToCanvasRect(worldRectX, worldRectY, worldRectW, worldRectH);
+
           ctx.fillStyle = "#334155";
-          ctx.fillRect(tileX, tileY, tileW, tileH);
+          ctx.fillRect(supportCanvasRect.x, supportCanvasRect.y, supportCanvasRect.w, supportCanvasRect.h);
           ctx.fillStyle = "#94a3b8";
-          ctx.fillRect(tileX, tileY, tileW, Math.min(3, tileH));
+          ctx.fillRect(supportCanvasRect.x, supportCanvasRect.y, supportCanvasRect.w, Math.min(3, supportCanvasRect.h));
         }
 
-        // Draw world bounds so support/floor edges remain visible even on larger canvases.
+        // Draw true world bounds in the same world-to-canvas mapping used by player and support geometry.
         ctx.strokeStyle = "#475569";
         ctx.lineWidth = 1;
-        ctx.strokeRect(0.5, 0.5, Math.max(0, viewportWorldWidth - 1), Math.max(0, viewportWorldHeight - 1));
+        const worldBoundsRect = mapper.worldToCanvasRect(0, 0, worldWidthPx, worldHeightPx);
+        ctx.strokeRect(worldBoundsRect.x + 0.5, worldBoundsRect.y + 0.5, Math.max(0, worldBoundsRect.w - 1), Math.max(0, worldBoundsRect.h - 1));
 
-        const drawX = Math.max(0, Math.min(viewportWorldWidth - tileSize, Math.round(playerX)));
-        const drawY = Math.max(0, Math.min(viewportWorldHeight - tileSize, Math.round(playerY)));
+        const playerWorldRect = {
+          x: playerCenterX - tileSize * 0.5,
+          y: playerFootY + 1 - tileSize,
+          w: tileSize,
+          h: tileSize,
+        };
+        const playerCanvasRect = mapper.worldToCanvasRect(playerWorldRect.x, playerWorldRect.y, playerWorldRect.w, playerWorldRect.h);
         // Keep player color neutral in real Recharged mode to avoid misleading grounded/airborne signals.
         ctx.fillStyle = "#60a5fa";
-        ctx.fillRect(drawX, drawY, tileSize, tileSize);
+        ctx.fillRect(playerCanvasRect.x, playerCanvasRect.y, playerCanvasRect.w, playerCanvasRect.h);
 
         if (state && typeof state === "object") {
           state.lastPlayerX = Number.isFinite(player.x) ? player.x : null;
