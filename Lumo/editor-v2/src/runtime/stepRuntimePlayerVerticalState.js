@@ -31,22 +31,6 @@ function resolveMaxFallSpeedY(options = {}) {
   return RUNTIME_PLAYER_PHYSICS_BASELINE.maxFallSpeedY;
 }
 
-// Resolves the inclusive world-bottom player Y from world height/tile size metadata.
-function resolveWorldBottomY(worldPacket) {
-  const tileSize = worldPacket?.world?.tileSize;
-  const worldHeight = worldPacket?.world?.height;
-
-  if (!Number.isFinite(tileSize) || tileSize <= 0) {
-    return null;
-  }
-
-  if (!Number.isFinite(worldHeight) || worldHeight <= 0) {
-    return null;
-  }
-
-  return worldHeight * tileSize - 1;
-}
-
 // Handles jump/gravity vertical integration and collision against floor solids.
 export function stepRuntimePlayerVerticalState(worldPacket, playerState, options = {}) {
   const inheritedWarnings = Array.isArray(playerState?.warnings) ? [...playerState.warnings] : [];
@@ -92,24 +76,15 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
   const gridX = Math.floor(currentX / tileSize);
   const gridYBelow = Math.floor((nextYCandidate + 1) / tileSize);
   const collidedBelow = isRuntimeGridSolid(worldPacket, gridX, gridYBelow);
-  const worldBottomY = resolveWorldBottomY(worldPacket);
-  const collidedWithWorldBottom = Number.isFinite(worldBottomY) && nextYCandidate >= worldBottomY;
   const shouldResolveGroundCollision = nextVelocityY >= 0;
 
-  // Resolve floor/world-bottom collisions only while descending or stationary.
+  // Resolve floor collisions only while descending or stationary.
   // This prevents bottom-contact probes from pinning Y on the same tick a jump starts upward.
-  if (shouldResolveGroundCollision && (collidedBelow || collidedWithWorldBottom)) {
-    const collisionFloorY = collidedBelow ? gridYBelow * tileSize - 1 : worldBottomY;
-    const clampedY = Math.min(nextYCandidate, collisionFloorY);
+  if (shouldResolveGroundCollision && collidedBelow) {
+    const clampedY = Math.min(nextYCandidate, gridYBelow * tileSize - 1);
     const previousGrounded = playerState?.grounded === true;
     const landed = previousGrounded !== true;
-    const status = landed
-      ? collidedBelow
-        ? "landed"
-        : "landed-world-bottom"
-      : collidedBelow
-        ? "grounded"
-        : "grounded-world-bottom";
+    const status = landed ? "landed" : "grounded";
 
     return {
       ok: true,
@@ -118,7 +93,7 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
       grounded: true,
       falling: false,
       rising: false,
-      collidedBelow: collidedBelow || collidedWithWorldBottom,
+      collidedBelow,
       landed,
       status,
       errors: uniqueMessages(inheritedErrors),
@@ -130,8 +105,6 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
         gridX,
         gridYBelow,
         gravityY,
-        worldBottomY,
-        collidedWithWorldBottom,
         maxFallSpeedY,
       },
     };
@@ -159,8 +132,6 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
       gridX,
       gridYBelow,
       gravityY,
-      worldBottomY,
-      collidedWithWorldBottom,
       maxFallSpeedY,
     },
   };

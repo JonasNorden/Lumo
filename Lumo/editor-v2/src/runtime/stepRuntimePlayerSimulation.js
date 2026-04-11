@@ -40,6 +40,7 @@ function resolveBottomBoundRespawnY(worldPacket, options = {}) {
   const tileSize = worldPacket?.world?.tileSize;
   const worldHeight = worldPacket?.world?.height;
   const tileBoundsMaxY = worldPacket?.tileBounds?.maxY;
+  const spawnY = worldPacket?.spawn?.y;
   const marginTiles = Number.isFinite(options?.bounds?.fallRespawnMarginTiles)
     ? Math.max(0, Math.floor(options.bounds.fallRespawnMarginTiles))
     : 4;
@@ -48,12 +49,29 @@ function resolveBottomBoundRespawnY(worldPacket, options = {}) {
     return null;
   }
 
+  function resolveWorldYUnit(value) {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+
+    if (!Number.isFinite(spawnY)) {
+      return value;
+    }
+
+    const directDistance = Math.abs(spawnY - value);
+    const tiledValue = (value + 1) * tileSize - 1;
+    const tiledDistance = Math.abs(spawnY - tiledValue);
+    return tiledDistance < directDistance ? tiledValue : value;
+  }
+
   if (Number.isFinite(tileBoundsMaxY)) {
-    return (tileBoundsMaxY + 1 + marginTiles) * tileSize - 1;
+    const playableBottomY = resolveWorldYUnit(tileBoundsMaxY);
+    return playableBottomY + marginTiles * tileSize;
   }
 
   if (Number.isFinite(worldHeight) && worldHeight > 0) {
-    return (worldHeight + marginTiles) * tileSize - 1;
+    const playableBottomY = resolveWorldYUnit(worldHeight);
+    return playableBottomY + marginTiles * tileSize;
   }
 
   return null;
@@ -210,7 +228,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     rising: resolvedPlayerStep.rising === true,
     landed: resolvedPlayerStep.landed === true,
   };
-  const finalLocomotion = resolveFinalLocomotion(finalPlayerState, intent.moveX);
+  const finalLocomotion = status === "respawned-out-of-bounds"
+    ? "respawning-out-of-bounds"
+    : resolveFinalLocomotion(finalPlayerState, intent.moveX);
 
   return {
     ok: true,
