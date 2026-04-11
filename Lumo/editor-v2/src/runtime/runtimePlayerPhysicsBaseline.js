@@ -8,7 +8,7 @@ export const RUNTIME_PLAYER_PHYSICS_BASELINE = {
   airAccelerationX: 0.16,
   airFrictionX: 0.05,
   // Jump/fall values are tuned for visible arc readability in Lumo.html.
-  jumpVelocityY: -3.6,
-  gravityY: 0.24,
-  maxFallSpeedY: 2.4,
+  jumpVelocityY: -3.2,
+  gravityY: 0.18,
+  maxFallSpeedY: 1.9,
 };
