@@ -211,22 +211,37 @@
         const worldHeight = Number.isFinite(payload?.worldHeight) ? payload.worldHeight : Number.isFinite(payload?.rows) ? payload.rows * tileSize : canvas.height;
         const playerX = Number.isFinite(player.x) ? player.x : Math.max(0, (worldWidth - tileSize) * 0.5);
         const playerY = Number.isFinite(player.y) ? player.y : Math.max(0, (worldHeight - tileSize) * 0.5);
-        const groundBandTopY = Math.max(0, Math.min(canvas.height, Math.round(worldHeight - tileSize)));
+        const supportTiles = Array.isArray(payload?.supportTiles) ? payload.supportTiles : [];
+        const viewportWorldWidth = Math.max(1, Math.min(canvas.width, Math.round(worldWidth)));
+        const viewportWorldHeight = Math.max(1, Math.min(canvas.height, Math.round(worldHeight)));
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#0b1220";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Draw an explicit world floor band so bottom grounded contact reads as world support.
-        if (groundBandTopY < canvas.height) {
-          ctx.fillStyle = "#1f2937";
-          ctx.fillRect(0, groundBandTopY, canvas.width, canvas.height - groundBandTopY);
+        // Draw real runtime support geometry from Recharged world tile data.
+        for (const supportTile of supportTiles) {
+          const tileX = Number.isFinite(supportTile?.x) ? Math.round(supportTile.x) : null;
+          const tileY = Number.isFinite(supportTile?.y) ? Math.round(supportTile.y) : null;
+          const tileW = Number.isFinite(supportTile?.w) ? Math.round(supportTile.w) : null;
+          const tileH = Number.isFinite(supportTile?.h) ? Math.round(supportTile.h) : null;
+          if (tileX === null || tileY === null || tileW === null || tileH === null || tileW <= 0 || tileH <= 0) {
+            continue;
+          }
+
           ctx.fillStyle = "#334155";
-          ctx.fillRect(0, Math.max(0, groundBandTopY - 2), canvas.width, 2);
+          ctx.fillRect(tileX, tileY, tileW, tileH);
+          ctx.fillStyle = "#94a3b8";
+          ctx.fillRect(tileX, tileY, tileW, Math.min(3, tileH));
         }
 
-        const drawX = Math.max(0, Math.min(canvas.width - tileSize, Math.round(playerX)));
-        const drawY = Math.max(0, Math.min(canvas.height - tileSize, Math.round(playerY)));
+        // Draw world bounds so support/floor edges remain visible even on larger canvases.
+        ctx.strokeStyle = "#475569";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(0.5, 0.5, Math.max(0, viewportWorldWidth - 1), Math.max(0, viewportWorldHeight - 1));
+
+        const drawX = Math.max(0, Math.min(viewportWorldWidth - tileSize, Math.round(playerX)));
+        const drawY = Math.max(0, Math.min(viewportWorldHeight - tileSize, Math.round(playerY)));
         // Keep player color neutral in real Recharged mode to avoid misleading grounded/airborne signals.
         ctx.fillStyle = "#60a5fa";
         ctx.fillRect(drawX, drawY, tileSize, tileSize);

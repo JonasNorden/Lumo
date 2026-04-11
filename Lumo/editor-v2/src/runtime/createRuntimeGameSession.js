@@ -24,6 +24,24 @@ function buildPlayerSnapshot(playerState) {
 
 // Builds a stable world snapshot shape from any runtime state input.
 function buildWorldSnapshot(worldState) {
+  const supportTiles = Array.isArray(worldState?.layers?.tiles)
+    ? worldState.layers.tiles
+      .map((tile) => ({
+        x: Number.isFinite(tile?.x) ? tile.x : null,
+        y: Number.isFinite(tile?.y) ? tile.y : null,
+        w: Number.isFinite(tile?.w) ? tile.w : null,
+        h: Number.isFinite(tile?.h) ? tile.h : null,
+      }))
+      .filter((tile) => (
+        tile.x !== null &&
+        tile.y !== null &&
+        tile.w !== null &&
+        tile.h !== null &&
+        tile.w > 0 &&
+        tile.h > 0
+      ))
+    : [];
+
   return {
     ok: worldState && typeof worldState === "object",
     worldId: typeof worldState?.identity?.id === "string" ? worldState.identity.id : "",
@@ -31,6 +49,7 @@ function buildWorldSnapshot(worldState) {
     width: Number.isFinite(worldState?.world?.width) ? worldState.world.width : 0,
     height: Number.isFinite(worldState?.world?.height) ? worldState.world.height : 0,
     tileSize: Number.isFinite(worldState?.world?.tileSize) ? worldState.world.tileSize : 0,
+    supportTiles,
   };
 }
 

@@ -12,6 +12,16 @@ function normalizeStatus(status, fallback = "invalid") {
 // Builds a compact world snapshot with non-undefined values.
 function buildWorldSnapshot(snapshot) {
   const source = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const supportTiles = Array.isArray(source.supportTiles)
+    ? source.supportTiles
+      .map((tile) => ({
+        x: Number.isFinite(tile?.x) ? tile.x : null,
+        y: Number.isFinite(tile?.y) ? tile.y : null,
+        w: Number.isFinite(tile?.w) ? tile.w : null,
+        h: Number.isFinite(tile?.h) ? tile.h : null,
+      }))
+      .filter((tile) => tile.x !== null && tile.y !== null && tile.w !== null && tile.h !== null && tile.w > 0 && tile.h > 0)
+    : [];
 
   return {
     worldId: typeof source.worldId === "string" ? source.worldId : "",
@@ -19,6 +29,7 @@ function buildWorldSnapshot(snapshot) {
     width: Number.isFinite(source.width) ? source.width : 0,
     height: Number.isFinite(source.height) ? source.height : 0,
     tileSize: Number.isFinite(source.tileSize) ? source.tileSize : 0,
+    supportTiles,
   };
 }
 
