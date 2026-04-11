@@ -50,6 +50,9 @@ function assertBootPayloadShape(payload) {
   assert.equal(typeof payload.loadMode, "string");
   assert.equal(typeof payload.worldId, "string");
   assert.equal(typeof payload.themeId, "string");
+  assert.equal(typeof payload.worldWidth, "number");
+  assert.equal(typeof payload.worldHeight, "number");
+  assert.equal(typeof payload.tileSize, "number");
   assert.equal(typeof payload.playerStatus, "string");
 }
 
