@@ -211,14 +211,24 @@
         const worldHeight = Number.isFinite(payload?.worldHeight) ? payload.worldHeight : Number.isFinite(payload?.rows) ? payload.rows * tileSize : canvas.height;
         const playerX = Number.isFinite(player.x) ? player.x : Math.max(0, (worldWidth - tileSize) * 0.5);
         const playerY = Number.isFinite(player.y) ? player.y : Math.max(0, (worldHeight - tileSize) * 0.5);
+        const groundBandTopY = Math.max(0, Math.min(canvas.height, Math.round(worldHeight - tileSize)));
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#0b1220";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw an explicit world floor band so bottom grounded contact reads as world support.
+        if (groundBandTopY < canvas.height) {
+          ctx.fillStyle = "#1f2937";
+          ctx.fillRect(0, groundBandTopY, canvas.width, canvas.height - groundBandTopY);
+          ctx.fillStyle = "#334155";
+          ctx.fillRect(0, Math.max(0, groundBandTopY - 2), canvas.width, 2);
+        }
 
         const drawX = Math.max(0, Math.min(canvas.width - tileSize, Math.round(playerX)));
         const drawY = Math.max(0, Math.min(canvas.height - tileSize, Math.round(playerY)));
-        const playerStatus = typeof player.status === "string" ? player.status.toLowerCase() : "";
-        const isGrounded = playerStatus.includes("ground");
-        ctx.fillStyle = isGrounded ? "#16a34a" : "#2563eb";
+        // Keep player color neutral in real Recharged mode to avoid misleading grounded/airborne signals.
+        ctx.fillStyle = "#60a5fa";
         ctx.fillRect(drawX, drawY, tileSize, tileSize);
 
         if (state && typeof state === "object") {
