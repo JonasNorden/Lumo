@@ -30,9 +30,9 @@ function runBaselineConstantChecks() {
     airMaxSpeedX: 1,
     airAccelerationX: 0.16,
     airFrictionX: 0.05,
-    jumpVelocityY: -3.6,
-    gravityY: 0.24,
-    maxFallSpeedY: 2.4,
+    jumpVelocityY: -3.2,
+    gravityY: 0.18,
+    maxFallSpeedY: 1.9,
   });
 }
 
@@ -77,11 +77,17 @@ function runReadableJumpArcChecks() {
   player = jumpStart.player;
   let sawRising = player.rising === true;
   let sawFalling = false;
-  for (let tick = 0; tick < 40; tick += 1) {
+  let firstFallingTick = null;
+  for (let tick = 1; tick <= 50; tick += 1) {
     const step = stepRuntimePlayerSimulation(worldPacket, player, { input: { moveX: 0, jump: false } });
     assert.equal(step.ok, true);
     player = step.player;
     sawRising = sawRising || player.rising === true;
+
+    if (player.falling === true && firstFallingTick === null) {
+      firstFallingTick = tick;
+    }
+
     sawFalling = sawFalling || player.falling === true;
 
     if (player.grounded === true && sawFalling) {
@@ -91,6 +97,7 @@ function runReadableJumpArcChecks() {
 
   assert.equal(sawRising, true, "expected readable rising phase");
   assert.equal(sawFalling, true, "expected readable falling phase");
+  assert.equal(firstFallingTick >= 14, true, `expected slower jump apex, got falling at tick ${firstFallingTick}`);
 }
 
 function runOutOfBoundsRespawnChecks() {

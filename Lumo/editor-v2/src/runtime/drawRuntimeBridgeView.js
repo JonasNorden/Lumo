@@ -5,6 +5,13 @@ const DEFAULT_OPTIONS = {
 import { buildRuntimeCameraState } from "./buildRuntimeCameraState.js";
 import { renderRuntimeHudModel } from "./renderRuntimeHudModel.js";
 
+const PLAYER_RENDER_COLORS = Object.freeze({
+  body: "#60a5fa",
+  eyes: "#e2e8f0",
+});
+
+export { PLAYER_RENDER_COLORS as RUNTIME_PLAYER_RENDER_COLORS };
+
 function toFiniteOrNull(value) {
   return Number.isFinite(value) ? value : null;
 }
@@ -248,10 +255,10 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
   const playerY = toFiniteOrNull(viewModel?.player?.y);
   if (playerX !== null && playerY !== null) {
     const falling = viewModel?.player?.falling === true;
-    const grounded = viewModel?.player?.grounded === true;
-    ctx.fillStyle = grounded ? "#22c55e" : "#38bdf8";
+    // Keep play-mode player visuals neutral so state colors are not mistaken for product signals.
+    ctx.fillStyle = PLAYER_RENDER_COLORS.body;
     ctx.fillRect(worldToScreen(cameraState, playerX - tileSize * 0.35), playerY - tileSize * 0.8 - cameraState.cameraY, tileSize * 0.7, tileSize * 0.8);
-    ctx.fillStyle = "#e2e8f0";
+    ctx.fillStyle = PLAYER_RENDER_COLORS.eyes;
     ctx.fillRect(worldToScreen(cameraState, playerX - tileSize * 0.18), playerY - tileSize * 0.62 - cameraState.cameraY, tileSize * 0.12, tileSize * 0.12);
     ctx.fillRect(worldToScreen(cameraState, playerX + tileSize * 0.06), playerY - tileSize * 0.62 - cameraState.cameraY, tileSize * 0.12, tileSize * 0.12);
 
