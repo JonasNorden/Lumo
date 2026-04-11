@@ -183,12 +183,14 @@
           x,
           y,
           status,
+          hidden: status === "respawning-out-of-bounds",
         };
       } catch (_error) {
         return {
           x: null,
           y: null,
           status: "",
+          hidden: false,
         };
       }
     }
@@ -294,16 +296,18 @@
         const worldBoundsRect = mapper.worldToCanvasRect(0, 0, worldWidthPx, worldHeightPx);
         ctx.strokeRect(worldBoundsRect.x + 0.5, worldBoundsRect.y + 0.5, Math.max(0, worldBoundsRect.w - 1), Math.max(0, worldBoundsRect.h - 1));
 
-        const playerWorldRect = {
-          x: playerCenterX - tileSize * 0.5,
-          y: playerFootY + 1 - tileSize,
-          w: tileSize,
-          h: tileSize,
-        };
-        const playerCanvasRect = mapper.worldToCanvasRect(playerWorldRect.x, playerWorldRect.y, playerWorldRect.w, playerWorldRect.h);
-        // Keep player color neutral in real Recharged mode to avoid misleading grounded/airborne signals.
-        ctx.fillStyle = "#60a5fa";
-        ctx.fillRect(playerCanvasRect.x, playerCanvasRect.y, playerCanvasRect.w, playerCanvasRect.h);
+        if (player.hidden !== true) {
+          const playerWorldRect = {
+            x: playerCenterX - tileSize * 0.5,
+            y: playerFootY + 1 - tileSize,
+            w: tileSize,
+            h: tileSize,
+          };
+          const playerCanvasRect = mapper.worldToCanvasRect(playerWorldRect.x, playerWorldRect.y, playerWorldRect.w, playerWorldRect.h);
+          // Keep player color neutral in real Recharged mode to avoid misleading grounded/airborne signals.
+          ctx.fillStyle = "#60a5fa";
+          ctx.fillRect(playerCanvasRect.x, playerCanvasRect.y, playerCanvasRect.w, playerCanvasRect.h);
+        }
 
         if (state && typeof state === "object") {
           state.lastPlayerX = Number.isFinite(player.x) ? player.x : null;

@@ -184,7 +184,7 @@ async function runInvalidSourceChecks() {
   console.log("boot adapter invalid handled");
 }
 
-async function runBottomBoundaryLandingJumpChecks() {
+async function runBottomBoundaryOutOfBoundsRespawnChecks() {
   const bottomBoundaryLevel = {
     identity: { id: "bottom-boundary-level", formatVersion: "1.0.0", themeId: "test", name: "Bottom Boundary" },
     world: {
@@ -205,24 +205,30 @@ async function runBottomBoundaryLandingJumpChecks() {
   const adapter = createLumoRechargedBootAdapter({ sourceDescriptor: bottomBoundaryLevel });
   await adapter.prepare();
   await adapter.boot();
-  adapter.tickSteps(200);
 
-  const landed = adapter.getPlayerSnapshot();
-  const jumpTick = adapter.tick({ left: false, right: false, jump: true });
-  const jumped = adapter.getPlayerSnapshot();
-  const airborneTick = adapter.tick({ left: false, right: false, jump: false });
-  const airborne = adapter.getPlayerSnapshot();
+  let sawRespawnReset = false;
+  let previousY = adapter.getPlayerSnapshot().y;
 
-  assert.equal(landed.grounded, true);
-  assert.equal(jumpTick.ok, true);
-  assert.equal(jumpTick.stepped, true);
-  assert.equal(jumped.y < landed.y, true, "jump should move upward after world-bottom landing");
-  assert.equal(jumped.grounded, false, "jump should clear grounded flag");
-  assert.equal(airborneTick.ok, true);
-  assert.equal(airborneTick.stepped, true);
-  assert.equal(airborne.y < jumped.y, true, "following tick should keep upward momentum before apex");
+  for (let index = 0; index < 80; index += 1) {
+    const tickResult = adapter.tick({ left: false, right: false, jump: false });
+    const snapshot = adapter.getPlayerSnapshot();
+    assert.equal(tickResult.ok, true);
+    assert.equal(tickResult.stepped, true);
+    if (snapshot.y < previousY) {
+      sawRespawnReset = true;
+      break;
+    }
+    previousY = snapshot.y;
+  }
 
-  console.log("boot adapter bottom boundary landing + jump ok");
+  const respawned = adapter.getPlayerSnapshot();
+  assert.equal(sawRespawnReset, true, "adapter runtime should reset after bottom out-of-bounds fall");
+  assert.equal(respawned.x, bottomBoundaryLevel.world.spawn.x);
+  assert.equal(respawned.y, bottomBoundaryLevel.world.spawn.y);
+  assert.equal(respawned.grounded, false);
+  assert.equal(respawned.falling, true);
+
+  console.log("boot adapter bottom boundary out-of-bounds respawn ok");
 }
 
 async function runOutOfBoundsRespawnChecks() {
@@ -277,7 +283,7 @@ await runTickIntentUpdatesLivePlayerChecks();
 await runLoaderDescriptorChecks();
 await runPartialSourceChecks();
 await runInvalidSourceChecks();
-await runBottomBoundaryLandingJumpChecks();
+await runBottomBoundaryOutOfBoundsRespawnChecks();
 await runOutOfBoundsRespawnChecks();
 
 console.log("lumo-recharged-boot-adapter-checks: ok");

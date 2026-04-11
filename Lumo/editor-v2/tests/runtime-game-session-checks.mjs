@@ -120,7 +120,7 @@ function runPartialLevelChecks() {
   assert.equal(typeof summary.status, "string");
 }
 
-function runBottomBoundaryLandingJumpChecks() {
+function runBottomBoundaryOutOfBoundsRespawnChecks() {
   const bottomBoundaryLevel = {
     identity: { id: "bottom-boundary-level", formatVersion: "1.0.0", themeId: "test", name: "Bottom Boundary" },
     world: {
@@ -141,30 +141,29 @@ function runBottomBoundaryLandingJumpChecks() {
   const session = createRuntimeGameSession({ levelDocument: bottomBoundaryLevel });
   assert.equal(session.start().ok, true);
 
-  const fallToBottom = session.tickSteps(200);
-  const landedSnapshot = session.getPlayerSnapshot();
+  const spawnY = bottomBoundaryLevel.world.spawn.y;
+  let sawRespawnReset = false;
+  let previousY = session.getPlayerSnapshot().y;
 
-  assert.equal(fallToBottom.ok, true);
-  assert.equal(landedSnapshot.y, bottomBoundaryLevel.world.height * bottomBoundaryLevel.world.tileSize - 1);
-  assert.equal(landedSnapshot.grounded, true);
-  assert.equal(landedSnapshot.falling, false);
+  for (let index = 0; index < 80; index += 1) {
+    const tickResult = session.tick({ left: false, right: false, jump: false });
+    const snapshot = session.getPlayerSnapshot();
+    assert.equal(tickResult.ok, true);
+    assert.equal(tickResult.stepped, true);
+    if (snapshot.y < previousY) {
+      sawRespawnReset = true;
+      break;
+    }
+    previousY = snapshot.y;
+  }
 
-  const jumpTick = session.tick({ left: false, right: false, jump: true });
-  const jumpSnapshot = session.getPlayerSnapshot();
-  const postJumpAirTick = session.tick({ left: false, right: false, jump: false });
-  const postJumpAirSnapshot = session.getPlayerSnapshot();
+  const afterRespawn = session.getPlayerSnapshot();
+  assert.equal(sawRespawnReset, true, "falling below world should trigger respawn reset");
+  assert.equal(afterRespawn.y, spawnY);
+  assert.equal(afterRespawn.grounded, false);
+  assert.equal(afterRespawn.falling, true);
 
-  assert.equal(jumpTick.ok, true);
-  assert.equal(jumpTick.stepped, true);
-  assert.equal(jumpSnapshot.y < landedSnapshot.y, true);
-  assert.equal(jumpSnapshot.grounded, false);
-  assert.equal(jumpSnapshot.falling, false);
-  assert.equal(postJumpAirTick.ok, true);
-  assert.equal(postJumpAirTick.stepped, true);
-  assert.equal(postJumpAirSnapshot.y < jumpSnapshot.y, true, "post-jump tick should continue moving upward before apex");
-  assert.equal(postJumpAirSnapshot.grounded, false);
-
-  console.log("session bottom boundary landing + jump ok");
+  console.log("session bottom boundary out-of-bounds respawn ok");
 }
 
 function runOutOfBoundsRespawnChecks() {
@@ -232,7 +231,7 @@ function runInvalidLevelChecks() {
 runValidLevelChecks();
 runInputIntentMovementChecks();
 runPartialLevelChecks();
-runBottomBoundaryLandingJumpChecks();
+runBottomBoundaryOutOfBoundsRespawnChecks();
 runOutOfBoundsRespawnChecks();
 runInvalidLevelChecks();
 
