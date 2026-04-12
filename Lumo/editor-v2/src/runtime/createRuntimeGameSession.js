@@ -52,6 +52,24 @@ function buildPlayerSnapshot(playerState) {
         }))
         .filter((flare) => flare.id !== null && flare.x !== null && flare.y !== null && flare.radius !== null)
       : [],
+    entities: Array.isArray(playerState?.entities)
+      ? playerState.entities
+        .map((entity) => ({
+          id: typeof entity?.id === "string" ? entity.id : null,
+          type: typeof entity?.type === "string" ? entity.type : "dummy",
+          x: Number.isFinite(entity?.x) ? entity.x : null,
+          y: Number.isFinite(entity?.y) ? entity.y : null,
+          size: Number.isFinite(entity?.size) ? entity.size : 24,
+          hp: Number.isFinite(entity?.hp) ? entity.hp : 0,
+          maxHp: Number.isFinite(entity?.maxHp) ? entity.maxHp : 0,
+          alive: entity?.alive === true,
+          active: entity?.active === true,
+          state: typeof entity?.state === "string" ? entity.state : "idle",
+          hitFlashTicks: Number.isFinite(entity?.hitFlashTicks) ? entity.hitFlashTicks : 0,
+          lastPulseIdHit: Number.isFinite(entity?.lastPulseIdHit) ? entity.lastPulseIdHit : -1,
+        }))
+        .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null)
+      : [],
   };
 }
 

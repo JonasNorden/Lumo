@@ -339,6 +339,33 @@
       }
     }
 
+    function readRechargedEntitySnapshots(payload, state) {
+      try {
+        const adapter = payload?.adapter && typeof payload.adapter === "object" ? payload.adapter : null;
+        const adapterPlayerSnapshot = adapter?.getPlayerSnapshot?.();
+        const playerSnapshot = (
+          (adapterPlayerSnapshot && typeof adapterPlayerSnapshot === "object" ? adapterPlayerSnapshot : null)
+          || (state?.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object" ? state.currentPlayerSnapshot : null)
+        );
+        const entities = Array.isArray(playerSnapshot?.entities) ? playerSnapshot.entities : [];
+        return entities
+          .map((entity) => ({
+            id: typeof entity?.id === "string" ? entity.id : null,
+            type: typeof entity?.type === "string" ? entity.type : "dummy",
+            x: Number.isFinite(entity?.x) ? entity.x : null,
+            y: Number.isFinite(entity?.y) ? entity.y : null,
+            size: Number.isFinite(entity?.size) && entity.size > 0 ? entity.size : 24,
+            alive: entity?.alive === true,
+            active: entity?.active === true,
+            state: typeof entity?.state === "string" ? entity.state : "idle",
+            hitFlashTicks: Number.isFinite(entity?.hitFlashTicks) ? entity.hitFlashTicks : 0,
+          }))
+          .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null && entity.active === true);
+      } catch (_error) {
+        return [];
+      }
+    }
+
     function buildRechargedWorldToCanvasMapper({ canvas, worldWidthPx, worldHeightPx, targetX, targetY }) {
       const viewportWorldWidth = Math.max(1, Math.min(canvas.width, Math.round(worldWidthPx)));
       const viewportWorldHeight = Math.max(1, Math.min(canvas.height, Math.round(worldHeightPx)));
@@ -379,6 +406,7 @@
         const flareSnapshots = readRechargedFlareSnapshots(payload, state);
         const pulseSnapshot = readRechargedPulseSnapshot(payload, state);
         const boostSnapshot = readRechargedBoostSnapshot(payload, state);
+        const entitySnapshots = readRechargedEntitySnapshots(payload, state);
         const previousSnapshot = readRechargedPlayerSnapshot({
           player: state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
             ? state.previousPlayerSnapshot
@@ -522,6 +550,25 @@
           ctx.fillRect(playerCanvasRect.x + playerCanvasRect.w - eyeOffsetX - eyeSize, eyeY, eyeSize, eyeSize);
         }
 
+        for (const entity of entitySnapshots) {
+          const entityRect = mapper.worldToCanvasRect(
+            entity.x - entity.size * 0.5,
+            entity.y - entity.size,
+            entity.size,
+            entity.size,
+          );
+          const hitAlpha = entity.hitFlashTicks > 0 ? 0.9 : 0.45;
+          ctx.fillStyle = entity.hitFlashTicks > 0 ? `rgba(250, 204, 21, ${hitAlpha})` : "rgba(239, 68, 68, 0.72)";
+          ctx.fillRect(entityRect.x, entityRect.y, entityRect.w, entityRect.h);
+          ctx.fillStyle = entity.type === "dark_creature_01" ? "rgba(15, 23, 42, 0.8)" : "rgba(30, 41, 59, 0.8)";
+          ctx.fillRect(
+            entityRect.x + 2,
+            entityRect.y + 2,
+            Math.max(1, entityRect.w - 4),
+            Math.max(1, entityRect.h - 4),
+          );
+        }
+
         if (
           player.hidden !== true &&
           pulseSnapshot?.active === true &&
@@ -616,6 +663,7 @@
           state.lastFlareVisibleCount = visibleFlares;
           state.lastPulseActive = pulseSnapshot?.active === true;
           state.lastBoostActive = boostSnapshot?.active === true;
+          state.lastEntityCount = entitySnapshots.length;
           state.renderAlpha = alpha;
           state.lastRenderOk = true;
         }

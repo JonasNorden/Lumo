@@ -20,6 +20,7 @@ function buildSafeState() {
     tick: 0,
     playerState: null,
     world: null,
+    entities: [],
     status: "idle",
     lastStep: null,
     errors: [],
@@ -83,9 +84,13 @@ function cloneState(state) {
           flares: Array.isArray(state?.playerState?.flares)
             ? state.playerState.flares.map((flare) => ({ ...flare }))
             : [],
+          entities: Array.isArray(state?.playerState?.entities)
+            ? state.playerState.entities.map((entity) => ({ ...entity }))
+            : [],
         }
       : null,
     world: state.world ? { ...state.world } : null,
+    entities: Array.isArray(state.entities) ? state.entities.map((entity) => ({ ...entity })) : [],
     status: typeof state.status === "string" ? state.status : "idle",
     lastStep: state.lastStep ? { ...state.lastStep } : null,
     errors: Array.isArray(state.errors) ? [...state.errors] : [],
@@ -117,6 +122,7 @@ export function createRuntimeRunner(options = {}) {
   if (lastBuild.ok === true && lastBuild.initialization) {
     runtimeState.ok = true;
     runtimeState.world = lastBuild.worldPacket;
+    runtimeState.entities = [];
     runtimeState.playerState = {
       position: {
         x: lastBuild.initialization.player?.finalPosition?.x ?? null,
@@ -145,6 +151,7 @@ export function createRuntimeRunner(options = {}) {
       energy: 1,
       facingX: 1,
       nextFlareId: 1,
+      entities: [],
     };
     runtimeState.errors = [];
     runtimeState.warnings = uniqueMessages(lastBuild.warnings);
@@ -184,7 +191,10 @@ export function createRuntimeRunner(options = {}) {
       }
 
       try {
-        const result = stepRuntimePlayerSimulation(runtimeState.world, runtimeState.playerState, stepOptions);
+        const result = stepRuntimePlayerSimulation(runtimeState.world, runtimeState.playerState, {
+          ...stepOptions,
+          entities: runtimeState.entities,
+        });
         runtimeState.lastStep = result ?? null;
 
         if (result?.ok !== true || !result?.player) {
@@ -200,6 +210,9 @@ export function createRuntimeRunner(options = {}) {
           ...runtimeState.playerState,
           ...result.player,
         };
+        runtimeState.entities = Array.isArray(result?.entities)
+          ? result.entities.map((entity) => ({ ...entity }))
+          : runtimeState.entities;
         runtimeState.tick += 1;
         runtimeState.errors = uniqueMessages(result.errors);
         runtimeState.warnings = uniqueMessages(result.warnings);
@@ -253,6 +266,7 @@ export function createRuntimeRunner(options = {}) {
       if (lastBuild.ok === true && lastBuild.initialization) {
         next.ok = true;
         next.world = lastBuild.worldPacket;
+        next.entities = [];
         next.playerState = {
           position: {
             x: lastBuild.initialization.player?.finalPosition?.x ?? null,
@@ -281,6 +295,7 @@ export function createRuntimeRunner(options = {}) {
           energy: 1,
           facingX: 1,
           nextFlareId: 1,
+          entities: [],
         };
         next.warnings = uniqueMessages(lastBuild.warnings);
       } else {
@@ -293,6 +308,7 @@ export function createRuntimeRunner(options = {}) {
       runtimeState.tick = next.tick;
       runtimeState.playerState = next.playerState;
       runtimeState.world = next.world;
+      runtimeState.entities = next.entities;
       runtimeState.status = next.status;
       runtimeState.lastStep = next.lastStep;
       runtimeState.errors = next.errors;
