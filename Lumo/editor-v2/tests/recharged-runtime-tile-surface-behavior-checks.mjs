@@ -65,6 +65,7 @@ function runSurfaceFeelChecks() {
   const brakeSpeedBeforeRelease = Math.abs(brakePlayer.velocity.x);
   assert.equal(iceSpeedBeforeRelease > brakeSpeedBeforeRelease, true, "ice should build more speed than brake while moving");
 
+  const iceReleaseX = icePlayer.position.x;
   for (let tick = 0; tick < 6; tick += 1) {
     icePlayer = stepRuntimePlayerSimulation(iceWorld, icePlayer, { input: { moveX: 0, jump: false } }).player;
     brakePlayer = stepRuntimePlayerSimulation(brakeWorld, brakePlayer, { input: { moveX: 0, jump: false } }).player;
@@ -72,6 +73,26 @@ function runSurfaceFeelChecks() {
 
   assert.equal(Math.abs(icePlayer.velocity.x) > 10, true, "ice should still slide after releasing input");
   assert.equal(Math.abs(brakePlayer.velocity.x) < 1, true, "brake should stop quickly after releasing input");
+  assert.equal(icePlayer.locomotion, "braking-grounded", "ice release should enter grounded brake locomotion state");
+
+  let settleTicks = 0;
+  let settleDistancePx = 0;
+  let settled = false;
+  let settlingPlayer = icePlayer;
+  for (let tick = 0; tick < 120; tick += 1) {
+    settleTicks = tick + 1;
+    settlingPlayer = stepRuntimePlayerSimulation(iceWorld, settlingPlayer, { input: { moveX: 0, jump: false } }).player;
+    settleDistancePx = settlingPlayer.position.x - iceReleaseX;
+    if (Math.abs(settlingPlayer.velocity.x) <= 0.5) {
+      settled = true;
+      break;
+    }
+  }
+
+  assert.equal(settled, true, "ice release should settle to rest");
+  assert.equal(settleTicks <= 70, true, `ice should not overslide forever; settle ticks=${settleTicks}`);
+  assert.equal(settleDistancePx > 3.5 * 24, true, `ice should still glide noticeably; distance=${settleDistancePx.toFixed(2)}px`);
+  assert.equal(settleDistancePx < 6.5 * 24, true, `ice stop distance should stay near V1 short glide; distance=${settleDistancePx.toFixed(2)}px`);
 }
 
 function runOneWayAndHazardCollisionChecks() {

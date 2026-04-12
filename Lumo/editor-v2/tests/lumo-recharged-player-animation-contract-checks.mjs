@@ -16,6 +16,11 @@ function runAnimationResolverChecks() {
     "grounded animation should resolve to idle/run from grounded locomotion truth",
   );
   assert.equal(
+    html.includes('if (locomotion === "braking-grounded") {'),
+    true,
+    "grounded braking locomotion should resolve through runtime locomotion truth",
+  );
+  assert.equal(
     html.includes('if (rising || locomotion === "rising" || velocityY < -RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON)'),
     true,
     "jump animation should resolve from rising truth",
@@ -86,9 +91,18 @@ function runGroundedRunAnimationParityChecks() {
   );
 }
 
+function runBrakeAnimationAssetChecks() {
+  assert.equal(
+    html.includes('const RECHARGED_PLAYER_SPRITE_BRAKE = "data/assets/sprites/lumo/lumo_brake_1.png";'),
+    true,
+    "recharged should preload canonical V1 brake sprite for braking locomotion state",
+  );
+}
+
 runAnimationResolverChecks();
 runFacingSourceChecks();
 runIdleAnimationParityChecks();
 runGroundedRunAnimationParityChecks();
+runBrakeAnimationAssetChecks();
 
 console.log("lumo-recharged-player-animation-contract-checks: ok");

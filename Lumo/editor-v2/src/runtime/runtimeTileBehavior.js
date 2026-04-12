@@ -3,8 +3,9 @@ const LEGACY_TILE_BEHAVIOR_BY_ID = {
   1: { name: "stone", solid: true, oneWay: false, hazard: false, groundAccelMul: 1, groundFrictionMul: 1, maxSpeedMul: 1 },
   2: { name: "platform", solid: true, oneWay: true, hazard: false, groundAccelMul: 1, groundFrictionMul: 1, maxSpeedMul: 1 },
   3: { name: "spikes", solid: false, oneWay: false, hazard: true, groundAccelMul: 1, groundFrictionMul: 1, maxSpeedMul: 1 },
-  4: { name: "ice", solid: true, oneWay: false, hazard: false, groundAccelMul: 0.45, groundFrictionMul: 0.01, maxSpeedMul: 1.10 },
-  5: { name: "brake", solid: true, oneWay: false, hazard: false, groundAccelMul: 0.75, groundFrictionMul: 6.40, maxSpeedMul: 0.40 },
+  // V1 truth from src/game/world.js fallback/runtime tile defs.
+  4: { name: "ice", solid: true, oneWay: false, hazard: false, groundAccelMul: 0.85, groundFrictionMul: 0.12, maxSpeedMul: 1.25 },
+  5: { name: "brake", solid: true, oneWay: false, hazard: false, groundAccelMul: 1.00, groundFrictionMul: 3.00, maxSpeedMul: 0.80 },
 };
 
 function parseMovementMul(source) {
