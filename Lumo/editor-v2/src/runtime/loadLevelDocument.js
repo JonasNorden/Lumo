@@ -73,7 +73,7 @@ function convertEditorV2ToRecharged(editorLevel, warnings) {
     ? Math.round(editorLevel.dimensions.tileSize)
     : DEFAULT_TILE_SIZE;
 
-  const spawn = resolveEditorSpawn(editorLevel, warnings);
+  const spawn = resolveEditorSpawn(editorLevel, tileSize, warnings);
 
   return {
     identity: {
@@ -105,16 +105,50 @@ function convertEditorV2ToRecharged(editorLevel, warnings) {
   };
 }
 
-function resolveEditorSpawn(editorLevel, warnings) {
+function resolveEditorSpawn(editorLevel, tileSize, warnings) {
+  const safeTileSize = Number.isFinite(tileSize) && tileSize > 0 ? Math.round(tileSize) : DEFAULT_TILE_SIZE;
+  const worldSpawnGrid = toEditorGridPosition(editorLevel?.world?.spawn);
   const entitySpawn = Array.isArray(editorLevel?.entities)
     ? editorLevel.entities.find((entity) => String(entity?.type || "").trim().toLowerCase() === "player-spawn")
     : null;
-  if (Number.isFinite(entitySpawn?.x) && Number.isFinite(entitySpawn?.y)) {
-    return { x: Math.round(entitySpawn.x), y: Math.round(entitySpawn.y) };
+  const entitySpawnGrid = toEditorGridPosition(entitySpawn);
+  const authoredSpawnGrid = worldSpawnGrid ?? entitySpawnGrid;
+
+  if (authoredSpawnGrid) {
+    return {
+      x: authoredSpawnGrid.x * safeTileSize,
+      y: authoredSpawnGrid.y * safeTileSize,
+    };
   }
 
-  pushWarning(warnings, "Editor level has no player-spawn entity; defaulting spawn to (1,1).");
-  return { x: 1, y: 1 };
+  pushWarning(warnings, "Editor level is missing player spawn data; defaulting to grid (1,1).");
+  return { x: safeTileSize, y: safeTileSize };
+}
+
+function toEditorGridPosition(value) {
+  if (!isPlainObject(value)) {
+    return null;
+  }
+
+  const xCandidates = [value.x, value.gridX, value.tileX, value.cellX, value?.position?.x];
+  const yCandidates = [value.y, value.gridY, value.tileY, value.cellY, value?.position?.y];
+  const x = firstFinite(xCandidates);
+  const y = firstFinite(yCandidates);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return null;
+  }
+
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
+function firstFinite(values) {
+  for (const value of values) {
+    if (Number.isFinite(value)) {
+      return Number(value);
+    }
+  }
+
+  return null;
 }
 
 function convertEditorTiles(editorLevel, width, height, warnings) {
