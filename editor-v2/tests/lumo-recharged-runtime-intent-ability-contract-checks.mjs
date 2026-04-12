@@ -92,6 +92,7 @@ function runFlareSpawnAndMovementChecks() {
 
   const trackedFlareId = spawned.id;
   const sampledPositions = [];
+  let survivedAtLeastTenTicks = false;
   for (let index = 0; index < 8; index += 1) {
     session.tick({ left: false, right: false, jump: false, flare: false });
     const snapshot = session.getPlayerSnapshot();
@@ -111,6 +112,13 @@ function runFlareSpawnAndMovementChecks() {
     );
   }
 
+  for (let index = 0; index < 10; index += 1) {
+    session.tick({ flare: false });
+  }
+  const afterTenTicks = session.getPlayerSnapshot();
+  survivedAtLeastTenTicks = afterTenTicks.flares.some((flare) => flare.id === trackedFlareId);
+  assert.equal(survivedAtLeastTenTicks, true, "expected spawned flare to survive at least 10 ticks");
+
   console.log("recharged runtime flare spawn and movement ok");
 }
 
@@ -121,9 +129,15 @@ function runFlareLifetimeCleanupChecks() {
   session.tick({ flare: false });
 
   let sawActiveFlare = false;
-  for (let index = 0; index < 90; index += 1) {
+  const afterOneTick = session.getPlayerSnapshot();
+  assert.equal(afterOneTick.flares.length > 0, true, "expected flare to survive at least one tick");
+
+  for (let index = 0; index < 120; index += 1) {
     session.tick({ flare: false });
     const snapshot = session.getPlayerSnapshot();
+    if (index < 10) {
+      assert.equal(snapshot.flares.length > 0, true, "expected flare to survive first 10 ticks");
+    }
     if (snapshot.flares.length > 0) {
       sawActiveFlare = true;
     }

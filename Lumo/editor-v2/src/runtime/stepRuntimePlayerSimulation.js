@@ -39,7 +39,7 @@ function resolveFinalLocomotion(finalPlayerState, moveX = 0) {
 }
 
 const DEFAULT_FLARE_SPEED_PX_PER_SECOND = 560;
-const DEFAULT_FLARE_LIFETIME_SECONDS = 0.55;
+const DEFAULT_FLARE_LIFETIME_TICKS = 45;
 const DEFAULT_FLARE_RADIUS_PX = 5;
 const DEFAULT_FLARE_SPAWN_OFFSET_PX = 10;
 const FLARE_MAX_ACTIVE = 8;
@@ -82,7 +82,9 @@ function buildFlareProjectile(playerState, facingX, flareId) {
     y: playerY - 8,
     vx: directionX * DEFAULT_FLARE_SPEED_PX_PER_SECOND,
     vy: 0,
-    ttl: DEFAULT_FLARE_LIFETIME_SECONDS,
+    ttlTicks: DEFAULT_FLARE_LIFETIME_TICKS,
+    ttl: DEFAULT_FLARE_LIFETIME_TICKS * (1 / 60),
+    ageTicks: 0,
     radius: DEFAULT_FLARE_RADIUS_PX,
     collided: false,
     expired: false,
@@ -101,16 +103,29 @@ function normalizeExistingFlares(playerState) {
       y: Number.isFinite(flare?.y) ? flare.y : null,
       vx: Number.isFinite(flare?.vx) ? flare.vx : 0,
       vy: Number.isFinite(flare?.vy) ? flare.vy : 0,
-      ttl: Number.isFinite(flare?.ttl) ? flare.ttl : 0,
+      ttlTicks: Number.isFinite(flare?.ttlTicks) && flare.ttlTicks > 0
+        ? Math.floor(flare.ttlTicks)
+        : (Number.isFinite(flare?.ttl) && flare.ttl > 0 ? Math.ceil(flare.ttl * 60) : 0),
+      ageTicks: Number.isFinite(flare?.ageTicks) && flare.ageTicks >= 0 ? Math.floor(flare.ageTicks) : 0,
       radius: Number.isFinite(flare?.radius) && flare.radius > 0 ? flare.radius : DEFAULT_FLARE_RADIUS_PX,
     }))
-    .filter((flare) => flare.x !== null && flare.y !== null && flare.ttl > 0);
+    .filter((flare) => flare.x !== null && flare.y !== null && flare.ttlTicks > 0);
+}
+
+function resolveWorldDimensionPx(value, tileSize) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  if (!Number.isFinite(tileSize) || tileSize <= 0) {
+    return value;
+  }
+  return value * tileSize;
 }
 
 function stepFlares(worldPacket, playerState, intent, options = {}) {
   const tileSize = worldPacket?.world?.tileSize;
-  const worldWidth = worldPacket?.world?.width;
-  const worldHeight = worldPacket?.world?.height;
+  const worldWidthPx = resolveWorldDimensionPx(worldPacket?.world?.width, tileSize);
+  const worldHeightPx = resolveWorldDimensionPx(worldPacket?.world?.height, tileSize);
   const dt = resolveRuntimeDeltaSeconds(options);
   const facingX = resolvePlayerFacingX(playerState, intent.moveX);
   const previousHeld = playerState?.flareHeldLastTick === true;
@@ -124,7 +139,8 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
   for (const flare of existingFlares) {
     const nextX = flare.x + flare.vx * dt;
     const nextY = flare.y + flare.vy * dt;
-    const nextTtl = flare.ttl - dt;
+    const nextTtlTicks = flare.ttlTicks - 1;
+    const nextAgeTicks = flare.ageTicks + 1;
 
     let collided = false;
     if (Number.isFinite(tileSize) && tileSize > 0) {
@@ -134,10 +150,10 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
     }
 
     const outsideBounds = (
-      Number.isFinite(worldWidth) && Number.isFinite(worldHeight)
-      && (nextX < -tileSize || nextX > worldWidth + tileSize || nextY < -tileSize || nextY > worldHeight + tileSize)
+      Number.isFinite(worldWidthPx) && Number.isFinite(worldHeightPx)
+      && (nextX < -tileSize || nextX > worldWidthPx + tileSize || nextY < -tileSize || nextY > worldHeightPx + tileSize)
     );
-    const expired = nextTtl <= 0;
+    const expired = nextTtlTicks <= 0;
 
     if (collided || expired || outsideBounds) {
       if (collided) {
@@ -154,7 +170,9 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
       ...flare,
       x: nextX,
       y: nextY,
-      ttl: nextTtl,
+      ttlTicks: nextTtlTicks,
+      ttl: nextTtlTicks * dt,
+      ageTicks: nextAgeTicks,
       collided: false,
       expired: false,
     });
