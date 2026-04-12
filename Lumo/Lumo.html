@@ -45,6 +45,7 @@
   <script type="module" defer>
     import { bootLumoRechargedFromQuery } from "./editor-v2/src/runtime/bootLumoRechargedFromQuery.js";
     import { createLumoRechargedBootAdapter } from "./editor-v2/src/runtime/createLumoRechargedBootAdapter.js";
+    import { buildRechargedHudSnapshot } from "./editor-v2/src/runtime/buildRechargedHudSnapshot.js";
 
     const RECHARGED_FIXED_STEP_MS = 1000 / 60;
     const RECHARGED_MAX_CATCH_UP_STEPS = 6;
@@ -66,6 +67,7 @@
         lastStepAtMs: null,
         width: null,
         height: null,
+        hud: null,
       };
     }
 
@@ -138,6 +140,63 @@
       }
 
       return state;
+    }
+
+    function createRechargedHudOverlay() {
+      const host = document.createElement("div");
+      host.id = "rechargedHud";
+      host.setAttribute("aria-live", "polite");
+
+      const buildRow = (label, value) => {
+        const row = document.createElement("div");
+        row.className = "rechargedHudRow";
+        const labelNode = document.createElement("span");
+        labelNode.className = "rechargedHudLabel";
+        labelNode.textContent = label;
+        const valueNode = document.createElement("span");
+        valueNode.className = "rechargedHudValue";
+        valueNode.textContent = value;
+        row.appendChild(labelNode);
+        row.appendChild(valueNode);
+        return { row, valueNode };
+      };
+
+      const flare = buildRow("Flare", "--");
+      const energy = buildRow("Energy", "--");
+      const lives = buildRow("Lives", "--");
+      const score = buildRow("Score", "--");
+
+      host.appendChild(flare.row);
+      host.appendChild(energy.row);
+      host.appendChild(lives.row);
+      host.appendChild(score.row);
+      document.body.appendChild(host);
+
+      return {
+        host,
+        values: {
+          flare: flare.valueNode,
+          energy: energy.valueNode,
+          lives: lives.valueNode,
+          score: score.valueNode,
+        },
+      };
+    }
+
+    // Updates Recharged HUD from live adapter snapshots with safe fallbacks.
+    function updateRechargedHudOverlay(hud, payload, state) {
+      if (!hud || !hud.values) {
+        return;
+      }
+
+      const snapshot = buildRechargedHudSnapshot(payload, state);
+      const formatCount = (value) => (Number.isFinite(value) ? String(Math.max(0, Math.floor(value))) : "--");
+      const formatEnergy = (value) => (Number.isFinite(value) ? value.toFixed(2) : "--");
+
+      hud.values.flare.textContent = formatCount(snapshot.flareStash);
+      hud.values.energy.textContent = formatEnergy(snapshot.energy);
+      hud.values.lives.textContent = formatCount(snapshot.lives);
+      hud.values.score.textContent = formatCount(snapshot.score);
     }
 
     function tickLiveRechargedAdapter(state) {
@@ -772,6 +831,8 @@
         try {
           state.frameCount = Number.isFinite(state.frameCount) ? state.frameCount + 1 : 1;
           tickLiveRechargedAdapter(state);
+          const payload = readLatestRechargedBootPayload() || {};
+          updateRechargedHudOverlay(state?.hud, payload, state);
           renderRechargedCanvasFrame(canvas, state);
         } catch (_error) {
           state.lastRenderOk = false;
@@ -848,6 +909,8 @@
         rechargedCanvasVerification.lastPlayerY = Number.isFinite(payload?.playerY) ? payload.playerY : null;
 
         if (rechargedCanvasVerification.active === true) {
+          rechargedCanvasVerification.hud = createRechargedHudOverlay();
+          updateRechargedHudOverlay(rechargedCanvasVerification.hud, payload || {}, rechargedCanvasVerification);
           rechargedCanvasVerification.input = installRechargedInputIntentSync();
           syncRechargedCanvasDrawingBuffer(canvas, rechargedCanvasVerification);
           installRechargedCanvasResizeSync(canvas, rechargedCanvasVerification);
