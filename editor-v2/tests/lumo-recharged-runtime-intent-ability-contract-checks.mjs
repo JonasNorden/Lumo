@@ -61,25 +61,20 @@ function runFlareSpawnAndMovementChecks() {
   assert.equal(afterSpawn.flares.length, 1, "expected flare spawn on first S press");
   const spawned = afterSpawn.flares[0];
   assert.equal(spawned.x > noFlareBefore.x, true, "expected flare spawn ahead of player facing");
+  assert.equal(spawned.y < noFlareBefore.y, true, "expected flare to spawn slightly above player");
   assert.equal(Number.isFinite(spawned.id), true, "expected flare id");
   assert.equal(Number.isFinite(spawned.x), true, "expected flare x");
   assert.equal(Number.isFinite(spawned.y), true, "expected flare y");
-  assert.equal(
-    spawned.vx === undefined || Number.isFinite(spawned.vx),
-    true,
-    "expected flare vx to be finite when exposed",
-  );
-  assert.equal(
-    spawned.vy === undefined || Number.isFinite(spawned.vy),
-    true,
-    "expected flare vy to be finite when exposed",
-  );
+  assert.equal(Number.isFinite(spawned.vx), true, "expected flare vx to be finite");
+  assert.equal(Number.isFinite(spawned.vy), true, "expected flare vy to be finite");
+  assert.equal(spawned.vy < 0, true, "expected flare to start with upward impulse");
 
   session.tick({ left: false, right: true, jump: false, flare: true });
   const whileHeld = session.getPlayerSnapshot();
   assert.equal(whileHeld.flares.length, 1, "expected hold to not spam flare");
   assert.equal(whileHeld.flares[0].id, spawned.id, "expected same flare instance while key held");
   assert.equal(whileHeld.flares[0].x > spawned.x, true, "expected flare x to move while held");
+  assert.equal(whileHeld.flares[0].y !== spawned.y, true, "expected flare y to move while held");
 
   session.tick({ left: false, right: false, jump: false, flare: false });
   session.tick({ left: false, right: false, jump: false, flare: true });
@@ -92,6 +87,7 @@ function runFlareSpawnAndMovementChecks() {
 
   const trackedFlareId = spawned.id;
   const sampledPositions = [];
+  const sampledHeights = [];
   let survivedAtLeastTenTicks = false;
   for (let index = 0; index < 8; index += 1) {
     session.tick({ left: false, right: false, jump: false, flare: false });
@@ -101,6 +97,7 @@ function runFlareSpawnAndMovementChecks() {
       break;
     }
     sampledPositions.push(trackedFlare.x);
+    sampledHeights.push(trackedFlare.y);
   }
 
   assert.equal(sampledPositions.length >= 3, true, "expected spawned flare to exist across multiple ticks");
@@ -111,6 +108,8 @@ function runFlareSpawnAndMovementChecks() {
       "expected flare x position to increase while flare remains active",
     );
   }
+  const yRange = Math.max(...sampledHeights) - Math.min(...sampledHeights);
+  assert.equal(yRange > 0, true, "expected flare arc to move across y-axis");
 
   for (let index = 0; index < 10; index += 1) {
     session.tick({ flare: false });
@@ -122,67 +121,75 @@ function runFlareSpawnAndMovementChecks() {
   console.log("recharged runtime flare spawn and movement ok");
 }
 
-function runFlareLifetimeCleanupChecks() {
-  const session = createRuntimeGameSession({ levelDocument: loadFixtureLevelDocument() });
-  assert.equal(session.start().ok, true);
-  session.tick({ flare: true });
-  session.tick({ flare: false });
+function runFlarePhysicsBounceSettleAndLifetimeChecks() {
+  const physicsSession = createRuntimeGameSession({ levelDocument: loadFixtureLevelDocument() });
+  assert.equal(physicsSession.start().ok, true);
+  physicsSession.tick({ flare: true });
+  physicsSession.tick({ flare: false });
 
-  let sawActiveFlare = false;
-  const afterOneTick = session.getPlayerSnapshot();
-  assert.equal(afterOneTick.flares.length > 0, true, "expected flare to survive at least one tick");
+  const initial = physicsSession.getPlayerSnapshot().flares[0];
+  assert.equal(Number.isFinite(initial.ttlTicks), true, "expected flare to expose ttlTicks");
+  assert.equal(initial.ttlTicks >= 600 && initial.ttlTicks <= 900, true, "expected long flare ttl range");
 
-  for (let index = 0; index < 120; index += 1) {
-    session.tick({ flare: false });
-    const snapshot = session.getPlayerSnapshot();
-    if (index < 10) {
-      assert.equal(snapshot.flares.length > 0, true, "expected flare to survive first 10 ticks");
-    }
-    if (snapshot.flares.length > 0) {
-      sawActiveFlare = true;
-    }
-    if (sawActiveFlare && snapshot.flares.length === 0) {
-      console.log("recharged runtime flare lifetime cleanup ok");
-      return;
-    }
-  }
+  let trackedFlare = null;
+  let hitGround = false;
+  let bouncedAtLeastOnce = false;
+  let settled = false;
+  let settledTick = null;
 
-  assert.fail("expected flare to cleanup after lifetime");
-}
-
-function runFlareCollisionCleanupChecks() {
-  const level = loadFixtureLevelDocument();
-  level.layers.tiles.push({
-    tileId: "ground_stone",
-    x: 112,
-    y: 280,
-    w: 32,
-    h: 64,
-  });
-  const session = createRuntimeGameSession({
-    levelDocument: level,
-  });
-  assert.equal(session.start().ok, true);
-
-  session.tick({ right: true, flare: true });
-  session.tick({ flare: false });
-
-  let collidedCleanup = false;
-  for (let index = 0; index < 40; index += 1) {
-    session.tick({ flare: false });
-    const snapshot = session.getPlayerSnapshot();
-    if (snapshot.flares.length === 0) {
-      collidedCleanup = true;
+  for (let index = 0; index < 300; index += 1) {
+    physicsSession.tick({ flare: false });
+    const snapshot = physicsSession.getPlayerSnapshot();
+    trackedFlare = snapshot.flares.find((flare) => flare.id === initial.id) || null;
+    if (!trackedFlare) {
       break;
     }
-    const flare = snapshot.flares[0];
-    assert.equal(flare.x < 156, true, "expected flare to not tunnel through blocker");
+
+    if (trackedFlare.bounceCount > 0) {
+      hitGround = true;
+      bouncedAtLeastOnce = true;
+    }
+    if (trackedFlare.settled === true) {
+      settled = true;
+      settledTick = index;
+      break;
+    }
   }
 
-  assert.equal(collidedCleanup, true, "expected flare collision cleanup");
-  console.log("recharged runtime flare collision cleanup ok");
+  assert.equal(hitGround, true, "expected flare to hit ground");
+  assert.equal(bouncedAtLeastOnce, true, "expected flare to bounce at least once");
+  assert.equal(settled, true, "expected flare to eventually settle");
+  assert.equal(trackedFlare.grounded, true, "expected settled flare to be grounded");
+  assert.equal(settledTick !== null && settledTick < 280, true, "expected settling before ttl expires");
+
+  const lifetimeSession = createRuntimeGameSession({ levelDocument: loadFixtureLevelDocument() });
+  assert.equal(lifetimeSession.start().ok, true);
+  lifetimeSession.tick({ flare: true });
+  lifetimeSession.tick({ flare: false });
+  const lifetimeId = lifetimeSession.getPlayerSnapshot().flares[0].id;
+
+  let flareAtTick600 = null;
+  for (let index = 0; index < 600; index += 1) {
+    lifetimeSession.tick({ flare: false });
+    const snapshot = lifetimeSession.getPlayerSnapshot();
+    flareAtTick600 = snapshot.flares.find((flare) => flare.id === lifetimeId) || null;
+  }
+  assert.equal(flareAtTick600 !== null, true, "expected flare to persist across long lifetime window");
+
+  let removedAfterTtl = false;
+  for (let index = 0; index < 320; index += 1) {
+    lifetimeSession.tick({ flare: false });
+    const snapshot = lifetimeSession.getPlayerSnapshot();
+    const activeFlare = snapshot.flares.find((flare) => flare.id === lifetimeId);
+    if (!activeFlare) {
+      removedAfterTtl = true;
+      break;
+    }
+  }
+  assert.equal(removedAfterTtl, true, "expected flare removal after ttl");
+
+  console.log("recharged runtime flare arc bounce settle lifetime ok");
 }
 
 runFlareSpawnAndMovementChecks();
-runFlareLifetimeCleanupChecks();
-runFlareCollisionCleanupChecks();
+runFlarePhysicsBounceSettleAndLifetimeChecks();

@@ -25,6 +25,12 @@ function buildPlayerSnapshot(playerState) {
           id: Number.isFinite(flare?.id) ? flare.id : null,
           x: Number.isFinite(flare?.x) ? flare.x : null,
           y: Number.isFinite(flare?.y) ? flare.y : null,
+          vx: Number.isFinite(flare?.vx) ? flare.vx : null,
+          vy: Number.isFinite(flare?.vy) ? flare.vy : null,
+          grounded: flare?.grounded === true,
+          settled: flare?.settled === true,
+          bounceCount: Number.isFinite(flare?.bounceCount) ? flare.bounceCount : 0,
+          ttlTicks: Number.isFinite(flare?.ttlTicks) ? flare.ttlTicks : null,
           radius: Number.isFinite(flare?.radius) ? flare.radius : null,
         }))
         .filter((flare) => flare.id !== null && flare.x !== null && flare.y !== null && flare.radius !== null)
