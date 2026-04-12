@@ -59,6 +59,9 @@
         lastPlayerY: null,
         lastRenderOk: false,
         lastTickOk: null,
+        previousPlayerSnapshot: null,
+        currentPlayerSnapshot: null,
+        renderAlpha: 0,
         stepAccumulatorMs: 0,
         lastStepAtMs: null,
         width: null,
@@ -161,16 +164,29 @@
           nextAccumulatorMs = RECHARGED_FIXED_STEP_MS * RECHARGED_MAX_CATCH_UP_STEPS;
         }
 
+        const readSnapshot = () => {
+          const snapshot = adapter.getPlayerSnapshot?.();
+          return snapshot && typeof snapshot === "object" ? snapshot : null;
+        };
+
         let tickResult = {
           ok: true,
           stepped: false,
         };
+        let previousPlayerSnapshot = state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
+          ? state.previousPlayerSnapshot
+          : null;
+        let currentPlayerSnapshot = readSnapshot();
+        let steppedAtLeastOnce = false;
 
         for (let stepIndex = 0; stepIndex < stepsToRun; stepIndex += 1) {
           tickResult = adapter.tick(intent);
           if (tickResult?.ok !== true || tickResult?.stepped !== true) {
             break;
           }
+          previousPlayerSnapshot = currentPlayerSnapshot;
+          currentPlayerSnapshot = readSnapshot();
+          steppedAtLeastOnce = true;
           nextAccumulatorMs -= RECHARGED_FIXED_STEP_MS;
         }
 
@@ -178,10 +194,19 @@
           state.lastTickOk = tickResult?.ok === true && tickResult?.stepped === true;
           state.lastStepAtMs = nowMs;
           state.stepAccumulatorMs = Math.max(0, nextAccumulatorMs);
+          if (steppedAtLeastOnce) {
+            state.previousPlayerSnapshot = previousPlayerSnapshot && typeof previousPlayerSnapshot === "object"
+              ? previousPlayerSnapshot
+              : currentPlayerSnapshot;
+            state.currentPlayerSnapshot = currentPlayerSnapshot;
+          } else if (!state.currentPlayerSnapshot || typeof state.currentPlayerSnapshot !== "object") {
+            state.currentPlayerSnapshot = currentPlayerSnapshot;
+            state.previousPlayerSnapshot = currentPlayerSnapshot;
+          }
         }
 
         const nextPayload = adapter.getBootPayload?.();
-        const nextPlayerSnapshot = adapter.getPlayerSnapshot?.();
+        const nextPlayerSnapshot = currentPlayerSnapshot || readSnapshot();
         if (nextPayload && typeof nextPayload === "object") {
           window.__LumoRechargedBoot = {
             ...(payload && typeof payload === "object" ? payload : {}),
@@ -268,6 +293,27 @@
 
         const payload = readLatestRechargedBootPayload() || {};
         const player = readRechargedPlayerSnapshot(payload);
+        const previousSnapshot = readRechargedPlayerSnapshot({
+          player: state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
+            ? state.previousPlayerSnapshot
+            : payload?.player,
+        });
+        const currentSnapshot = readRechargedPlayerSnapshot({
+          player: state?.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object"
+            ? state.currentPlayerSnapshot
+            : payload?.player,
+        });
+        const alphaRaw = Number.isFinite(state?.stepAccumulatorMs)
+          ? state.stepAccumulatorMs / RECHARGED_FIXED_STEP_MS
+          : 0;
+        const alpha = Math.max(0, Math.min(1, alphaRaw));
+        const lerp = (from, to, t) => from + (to - from) * t;
+        const playerCenterX = Number.isFinite(previousSnapshot.x) && Number.isFinite(currentSnapshot.x)
+          ? lerp(previousSnapshot.x, currentSnapshot.x, alpha)
+          : (Number.isFinite(player.x) ? player.x : null);
+        const playerFootY = Number.isFinite(previousSnapshot.y) && Number.isFinite(currentSnapshot.y)
+          ? lerp(previousSnapshot.y, currentSnapshot.y, alpha)
+          : (Number.isFinite(player.y) ? player.y : null);
         const tileSize = Number.isFinite(payload?.tileSize) && payload.tileSize > 0 ? payload.tileSize : 24;
         const worldWidthRaw = Number.isFinite(payload?.worldWidth)
           ? payload.worldWidth
@@ -289,15 +335,12 @@
         const worldUnitsToPx = coordinatesLookTileBased ? tileSize : 1;
         const worldWidthPx = Math.max(tileSize, Math.round(worldWidthRaw * worldUnitsToPx));
         const worldHeightPx = Math.max(tileSize, Math.round(worldHeightRaw * worldUnitsToPx));
-        const playerCenterX = Number.isFinite(player.x) ? player.x : worldWidthPx * 0.5;
-        const playerFootY = Number.isFinite(player.y) ? player.y : worldHeightPx - 1;
-
         const mapper = buildRechargedWorldToCanvasMapper({
           canvas,
           worldWidthPx,
           worldHeightPx,
-          targetX: playerCenterX,
-          targetY: playerFootY,
+          targetX: Number.isFinite(playerCenterX) ? playerCenterX : worldWidthPx * 0.5,
+          targetY: Number.isFinite(playerFootY) ? playerFootY : worldHeightPx - 1,
         });
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -382,8 +425,9 @@
         }
 
         if (state && typeof state === "object") {
-          state.lastPlayerX = Number.isFinite(player.x) ? player.x : null;
-          state.lastPlayerY = Number.isFinite(player.y) ? player.y : null;
+          state.lastPlayerX = Number.isFinite(playerCenterX) ? playerCenterX : null;
+          state.lastPlayerY = Number.isFinite(playerFootY) ? playerFootY : null;
+          state.renderAlpha = alpha;
           state.lastRenderOk = true;
         }
         return true;
@@ -533,6 +577,9 @@
         rechargedCanvasVerification.autoplay = queryBootResult?.autoplay === true;
         rechargedCanvasVerification.lastTickOk = resolveAutoplayTickStatus(queryBootResult);
         const payload = readLatestRechargedBootPayload();
+        const initialPlayerSnapshot = payload?.player && typeof payload.player === "object" ? payload.player : null;
+        rechargedCanvasVerification.previousPlayerSnapshot = initialPlayerSnapshot;
+        rechargedCanvasVerification.currentPlayerSnapshot = initialPlayerSnapshot;
         rechargedCanvasVerification.lastPlayerX = Number.isFinite(payload?.playerX) ? payload.playerX : null;
         rechargedCanvasVerification.lastPlayerY = Number.isFinite(payload?.playerY) ? payload.playerY : null;
 
