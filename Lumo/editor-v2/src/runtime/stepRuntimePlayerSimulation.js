@@ -63,6 +63,24 @@ const DEFAULT_BOOST_ENERGY_DRAIN_PER_SECOND = 0.18;
 const ENTITY_HIT_FLASH_TICKS = 6;
 const ENTITY_DARK_CREATURE_PULSE_SCALE = 0.55;
 const ENTITY_HOVER_VOID_PULSE_SCALE = 0.6;
+const PULSE_TARGET_TYPES = new Set(["dark_creature", "hover_void"]);
+
+function resolvePulseTargetType(entityType) {
+  if (typeof entityType !== "string") {
+    return "";
+  }
+  const trimmedType = entityType.trim().toLowerCase();
+  if (trimmedType.length === 0) {
+    return "";
+  }
+  if (trimmedType.startsWith("dark_creature")) {
+    return "dark_creature";
+  }
+  if (trimmedType.startsWith("hover_void")) {
+    return "hover_void";
+  }
+  return "";
+}
 
 function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, worldHeight) {
   const source = sourceEntity && typeof sourceEntity === "object" ? sourceEntity : {};
@@ -190,13 +208,19 @@ function stepPulseEntityInteractions(worldPacket, playerState, pulse, sourceEnti
 
   const nextEntities = entities.map((entity) => {
     const next = { ...entity };
-    if (next.hitFlashTicks > 0) {
-      next.hitFlashTicks -= 1;
-    }
-
+    const pulseTargetType = resolvePulseTargetType(next.type);
+    const isPulseTarget = PULSE_TARGET_TYPES.has(pulseTargetType);
     if (next.alive !== true || next.active !== true) {
       next.state = "inactive";
       return next;
+    }
+
+    if (!isPulseTarget) {
+      return next;
+    }
+
+    if (next.hitFlashTicks > 0) {
+      next.hitFlashTicks -= 1;
     }
 
     if (!pulseActive || pulseId <= 0 || pulseId === next.lastPulseIdHit || !Number.isFinite(pulseCenterX) || !Number.isFinite(pulseCenterY)) {
@@ -209,7 +233,7 @@ function stepPulseEntityInteractions(worldPacket, playerState, pulse, sourceEnti
     const dx = pulseCenterX - next.x;
     const dy = pulseCenterY - next.y;
     const dist = Math.hypot(dx, dy);
-    const pulseScale = next.type === "hover_void_01" ? ENTITY_HOVER_VOID_PULSE_SCALE : ENTITY_DARK_CREATURE_PULSE_SCALE;
+    const pulseScale = pulseTargetType === "hover_void" ? ENTITY_HOVER_VOID_PULSE_SCALE : ENTITY_DARK_CREATURE_PULSE_SCALE;
     const threshold = pulse.r + Math.max(1, next.size) * pulseScale;
     if (dist > threshold) {
       if (next.state !== "hit") {
