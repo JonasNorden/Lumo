@@ -1,0 +1,63 @@
+{
+  "meta": {
+    "id": "editor-v2-authored-sample",
+    "name": "Editor V2 Authored Sample",
+    "version": "2.0.0",
+    "themeId": "cavern"
+  },
+  "dimensions": {
+    "width": 8,
+    "height": 6,
+    "tileSize": 24
+  },
+  "tiles": {
+    "base": [
+      0,0,0,0,0,0,0,0,
+      0,1,1,1,1,1,1,0,
+      0,0,0,0,0,0,0,0,
+      0,0,0,0,0,0,0,0,
+      0,0,0,0,0,0,0,0,
+      1,1,1,1,1,1,1,1
+    ],
+    "placements": []
+  },
+  "backgrounds": {
+    "layers": [
+      {
+        "id": "sky",
+        "name": "Sky",
+        "type": "color",
+        "depth": 0,
+        "visible": true,
+        "color": "#1b2436"
+      }
+    ]
+  },
+  "background": {
+    "base": [
+      null,null,null,null,null,null,null,null,
+      null,null,null,null,null,null,null,null,
+      null,null,null,null,null,null,null,null,
+      null,null,null,null,null,null,null,null,
+      null,null,null,null,null,null,null,null,
+      null,null,null,null,null,null,null,null
+    ],
+    "placements": [],
+    "materials": [],
+    "defaultMaterialId": "bg_void"
+  },
+  "decor": [],
+  "entities": [
+    {
+      "id": "player-spawn-a",
+      "name": "Player Spawn",
+      "type": "player-spawn",
+      "x": 2,
+      "y": 1,
+      "visible": true,
+      "params": {}
+    }
+  ],
+  "sounds": [],
+  "extra": {}
+}
