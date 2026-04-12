@@ -44,6 +44,8 @@ const DEFAULT_FLARE_LIFETIME_TICKS = 12 * 60;
 const DEFAULT_FLARE_RADIUS_PX = 5;
 const DEFAULT_FLARE_LIGHT_RADIUS_PX = 220;
 const DEFAULT_FLARE_FADE_LAST_TICKS = 3 * 60;
+const DEFAULT_FLARE_THROW_ENERGY_COST = 0.11;
+const DEFAULT_PLAYER_FLARE_STASH = 1;
 const DEFAULT_FLARE_SPAWN_OFFSET_PX = 10;
 const DEFAULT_FLARE_SPAWN_HEIGHT_OFFSET_PX = 8;
 const DEFAULT_FLARE_GRAVITY_PX_PER_SECOND = 980;
@@ -143,7 +145,90 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     flareExposure: Number.isFinite(source?.flareExposure) ? Math.max(0, source.flareExposure) : 0,
     lastFlareIdHit: Number.isFinite(source?.lastFlareIdHit) ? Math.floor(source.lastFlareIdHit) : -1,
     consumesFlare: source?.consumesFlare === true,
+    amount: Number.isFinite(source?.amount) ? Math.max(1, Math.floor(source.amount)) : 1,
   };
+}
+
+function isFlarePickupEntityType(entityType) {
+  if (typeof entityType !== "string") {
+    return false;
+  }
+  const normalizedType = entityType.trim().toLowerCase();
+  return normalizedType === "flare_pickup_01" || normalizedType === "flarepickup" || normalizedType === "flairpickup";
+}
+
+function buildPlayerPickupBounds(playerState, tileSize) {
+  const width = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24;
+  const height = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24;
+  const footX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0;
+  const footY = Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0;
+  return {
+    x: footX - width * 0.5,
+    y: footY + 1 - height,
+    w: width,
+    h: height,
+  };
+}
+
+function resolvePlayerFlareStash(playerState) {
+  if (Number.isFinite(playerState?.flareStash)) {
+    return Math.max(0, Math.floor(playerState.flareStash));
+  }
+  return DEFAULT_PLAYER_FLARE_STASH;
+}
+
+function isAabbOverlap(a, b) {
+  if (!a || !b) {
+    return false;
+  }
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function stepFlarePickupCollection(worldPacket, playerState, sourceEntities) {
+  if (!Array.isArray(sourceEntities) || sourceEntities.length === 0) {
+    return {
+      entities: [],
+      flareStash: resolvePlayerFlareStash(playerState),
+      collectedCount: 0,
+      collectedIds: [],
+    };
+  }
+
+  const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0 ? worldPacket.world.tileSize : 24;
+  const playerBounds = buildPlayerPickupBounds(playerState, tileSize);
+  let flareStash = resolvePlayerFlareStash(playerState);
+  let collectedCount = 0;
+  const collectedIds = [];
+
+  const entities = sourceEntities.map((entity) => {
+    const next = { ...entity };
+    if (next.active !== true || !isFlarePickupEntityType(next.type)) {
+      return next;
+    }
+
+    const size = Number.isFinite(next?.size) && next.size > 0 ? next.size : Math.max(12, tileSize * 0.5);
+    const entityBounds = {
+      x: Number.isFinite(next?.x) ? next.x : 0,
+      y: Number.isFinite(next?.y) ? next.y : 0,
+      w: size,
+      h: size,
+    };
+    if (!isAabbOverlap(playerBounds, entityBounds)) {
+      return next;
+    }
+
+    next.active = false;
+    next.alive = false;
+    next.state = "collected";
+    flareStash += Number.isFinite(next?.amount) ? Math.max(1, Math.floor(next.amount)) : 1;
+    collectedCount += 1;
+    if (typeof next.id === "string" && next.id.length > 0) {
+      collectedIds.push(next.id);
+    }
+    return next;
+  });
+
+  return { entities, flareStash, collectedCount, collectedIds };
 }
 
 function getEntityCenter(entity) {
@@ -515,6 +600,12 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
   const facingX = resolvePlayerFacingX(playerState, intent.moveX);
   const previousHeld = playerState?.flareHeldLastTick === true;
   const pressedThisTick = intent?.flare === true && previousHeld !== true;
+  const flareStash = Number.isFinite(options?.flareStash)
+    ? Math.max(0, Math.floor(options.flareStash))
+    : resolvePlayerFlareStash(playerState);
+  const availableEnergy = Number.isFinite(options?.availableEnergy)
+    ? options.availableEnergy
+    : (Number.isFinite(playerState?.energy) ? playerState.energy : 1);
 
   const existingFlares = normalizeExistingFlares(playerState);
   const existingEntities = normalizeRuntimeEntities(options?.entities, worldPacket, playerState);
@@ -628,15 +719,26 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
   }
 
   let nextFlareId = nextFlareIdBase;
-  if (pressedThisTick && nextFlares.length < FLARE_MAX_ACTIVE) {
+  const canThrowByStash = flareStash > 0;
+  const canThrowByEnergy = availableEnergy >= DEFAULT_FLARE_THROW_ENERGY_COST;
+  let nextFlareStash = flareStash;
+  let nextEnergy = availableEnergy;
+  const throwAllowed = pressedThisTick && nextFlares.length < FLARE_MAX_ACTIVE && canThrowByStash && canThrowByEnergy;
+  if (throwAllowed) {
     nextFlares.push(buildFlareProjectile(playerState, facingX, nextFlareId));
     nextFlareId += 1;
+    nextFlareStash = Math.max(0, flareStash - 1);
+    nextEnergy = Math.max(0, availableEnergy - DEFAULT_FLARE_THROW_ENERGY_COST);
   }
 
   return {
     flares: nextFlares,
     flareHeldLastTick: intent?.flare === true,
-    flareSpawned: pressedThisTick && nextFlares.length > existingFlares.length,
+    flareSpawned: throwAllowed,
+    flareStash: nextFlareStash,
+    energy: nextEnergy,
+    flareThrowSuppressedByEmptyStash: pressedThisTick && !canThrowByStash,
+    flareThrowSuppressedByEnergy: pressedThisTick && canThrowByStash && !canThrowByEnergy,
     facingX,
     nextFlareId,
     cleanup: cleanupStats,
@@ -841,15 +943,24 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
 
   const bottomRespawn = maybeResolveBottomRespawn(worldPacket, verticalStep, options);
   const resolvedPlayerStep = bottomRespawn?.player ?? verticalStep;
-  const flareStep = stepFlares(worldPacket, playerState, intent, options);
+  const normalizedEntities = normalizeRuntimeEntities(options?.entities, worldPacket, playerState);
+  const flarePickupStep = stepFlarePickupCollection(worldPacket, {
+    ...playerState,
+    position: resolvedPlayerStep.position,
+  }, normalizedEntities);
+  const flareStep = stepFlares(worldPacket, playerState, intent, {
+    ...options,
+    flareStash: flarePickupStep.flareStash,
+    availableEnergy: pulseStep.energy,
+  });
   const flareEntityStep = stepFlareEntityInteractions(
-    normalizeRuntimeEntities(options?.entities, worldPacket, playerState),
+    flarePickupStep.entities,
     flareStep.flares,
   );
   const entityStep = stepPulseEntityInteractions(worldPacket, playerState, pulseStep.pulse, flareEntityStep.entities, options);
   const dt = resolveRuntimeDeltaSeconds(options);
   const moving = intent?.moveX !== 0;
-  let nextEnergy = pulseStep.energy;
+  let nextEnergy = flareStep.energy;
   if (moving) {
     nextEnergy -= DEFAULT_MOVE_ENERGY_DRAIN_PER_SECOND * dt;
   }
@@ -895,6 +1006,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         attack: { supported: false, wired: false },
       },
       flares: bottomRespawn ? [] : flareStep.flares,
+      flareStash: bottomRespawn ? DEFAULT_PLAYER_FLARE_STASH : flareStep.flareStash,
       flareHeldLastTick: flareStep.flareHeldLastTick,
       pulse: pulseStep.pulse,
       pulseHeldLastTick: pulseStep.pulseHeldLastTick,
@@ -959,6 +1071,11 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         boostSuppressedByEnergy: intent?.boost === true && !boostActive,
         flareSpawned: flareStep.flareSpawned,
         flareCount: flareStep.flares.length,
+        flareStash: flareStep.flareStash,
+        flarePickupCollected: flarePickupStep.collectedCount,
+        flarePickupCollectedIds: flarePickupStep.collectedIds,
+        flareThrowSuppressedByEmptyStash: flareStep.flareThrowSuppressedByEmptyStash,
+        flareThrowSuppressedByEnergy: flareStep.flareThrowSuppressedByEnergy,
         flareCleanup: flareStep.cleanup,
         pulseEntityHits: entityStep.hits.length,
         flareEntityAffects: flareEntityStep.flareAffects.length,

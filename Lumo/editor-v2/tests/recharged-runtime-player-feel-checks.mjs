@@ -289,6 +289,8 @@ function runFlareSpawnChecks() {
     landed: false,
     facingX: 1,
     flares: [],
+    flareStash: 2,
+    energy: 1,
     flareHeldLastTick: false,
     nextFlareId: 1,
   };
@@ -297,6 +299,70 @@ function runFlareSpawnChecks() {
   assert.equal(step.ok, true);
   assert.equal(Array.isArray(step.player.flares), true);
   assert.equal(step.player.flares.length, 1, "expected flare throw to spawn exactly one flare");
+  assert.equal(step.player.flareStash, 1, "expected flare throw to consume one flare from stash");
+}
+
+function runFlareThrowSuppressedWhenEmptyChecks() {
+  const worldPacket = buildFlatWorldPacket();
+  const player = {
+    position: { x: 4 * 24, y: (10 * 24) - 1 },
+    velocity: { x: 0, y: 0 },
+    grounded: true,
+    falling: false,
+    rising: false,
+    landed: false,
+    facingX: 1,
+    flares: [],
+    flareStash: 0,
+    energy: 1,
+    flareHeldLastTick: false,
+    nextFlareId: 1,
+  };
+
+  const step = stepRuntimePlayerSimulation(worldPacket, player, { input: { flare: true } });
+  assert.equal(step.ok, true);
+  assert.equal(step.player.flares.length, 0, "expected empty stash to block flare throw");
+  assert.equal(step.player.flareStash, 0, "expected flare stash to remain empty after blocked throw");
+}
+
+function runFlarePickupCollectionChecks() {
+  const worldPacket = buildFlatWorldPacket();
+  const player = {
+    position: { x: 4 * 24, y: (10 * 24) - 1 },
+    velocity: { x: 0, y: 0 },
+    grounded: true,
+    falling: false,
+    rising: false,
+    landed: false,
+    facingX: 1,
+    flares: [],
+    flareStash: 0,
+    energy: 1,
+    flareHeldLastTick: false,
+    nextFlareId: 1,
+    entities: [],
+  };
+  const entities = [{
+    id: "pickup-1",
+    type: "flare_pickup_01",
+    x: player.position.x - 6,
+    y: player.position.y - 11,
+    size: 12,
+    active: true,
+    alive: true,
+    amount: 1,
+  }];
+
+  const pickupStep = stepRuntimePlayerSimulation(worldPacket, player, { input: { flare: false }, entities });
+  assert.equal(pickupStep.ok, true);
+  assert.equal(pickupStep.player.flareStash, 1, "expected pickup overlap to add one flare to stash");
+  const pickupAfter = pickupStep.player.entities.find((entity) => entity.id === "pickup-1");
+  assert.equal(pickupAfter?.active, false, "expected collected flare pickup to deactivate");
+
+  const throwStep = stepRuntimePlayerSimulation(worldPacket, pickupStep.player, { input: { flare: true }, entities: pickupStep.player.entities });
+  assert.equal(throwStep.ok, true);
+  assert.equal(throwStep.player.flares.length, 1, "expected collected flare to be throwable");
+  assert.equal(throwStep.player.flareStash, 0, "expected throw to consume collected flare stash");
 }
 
 runBaselineConstantChecks();
@@ -309,5 +375,7 @@ runBoostTriggerAndVelocityChecks();
 runBoostHoldDurationChecks();
 runBoostJumpCompatibilityChecks();
 runFlareSpawnChecks();
+runFlareThrowSuppressedWhenEmptyChecks();
+runFlarePickupCollectionChecks();
 
 console.log("recharged-runtime-player-feel-checks: ok");
