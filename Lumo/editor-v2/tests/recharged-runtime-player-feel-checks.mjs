@@ -7,12 +7,16 @@ function buildFlatWorldPacket() {
   const width = 20;
   const height = 12;
   const tileSize = 24;
-  const tiles = new Array(width * height).fill(0);
-
-  // Build a simple floor on the last row.
-  for (let x = 0; x < width; x += 1) {
-    tiles[(height - 1) * width + x] = 1;
-  }
+  const tiles = [
+    {
+      x: 0,
+      y: height - 1,
+      w: width,
+      h: 1,
+      solid: true,
+      coordinateSpace: "grid",
+    },
+  ];
 
   return {
     world: { width, height, tileSize },
@@ -24,15 +28,20 @@ function buildFlatWorldPacket() {
 
 function runBaselineConstantChecks() {
   assert.deepEqual(RUNTIME_PLAYER_PHYSICS_BASELINE, {
-    groundMaxSpeedX: 1.2,
-    groundAccelerationX: 0.2,
-    groundFrictionX: 0.25,
-    airMaxSpeedX: 1,
-    airAccelerationX: 0.16,
-    airFrictionX: 0.05,
-    jumpVelocityY: -3.45,
-    gravityY: 0.17,
-    maxFallSpeedY: 1.85,
+    fixedStepMs: 16,
+    groundMaxSpeedX: 230,
+    groundAccelerationX: 2200,
+    groundFrictionX: 2200,
+    airMaxSpeedX: 230,
+    airAccelerationX: 1400,
+    airFrictionX: 250,
+    jumpVelocityY: -720,
+    gravityUpY: 1450,
+    gravityDownY: 2100,
+    maxFallSpeedY: 980,
+    coyoteTimeSeconds: 0.11,
+    jumpBufferSeconds: 0.1,
+    jumpCutMultiplier: 0.55,
   });
 }
 
@@ -55,7 +64,7 @@ function runHorizontalControlChecks() {
   }
 
   const distance = player.position.x - startX;
-  assert.equal(distance <= 24, true, `expected slower baseline horizontal travel, got ${distance}`);
+  assert.equal(distance > 40, true, `expected legacy-speed horizontal travel to exceed placeholder baseline, got ${distance}`);
 }
 
 function runReadableJumpArcChecks() {
@@ -72,7 +81,7 @@ function runReadableJumpArcChecks() {
   const jumpStart = stepRuntimePlayerSimulation(worldPacket, player, { input: { moveX: 0, jump: true } });
   assert.equal(jumpStart.ok, true);
   assert.equal(jumpStart.player.rising, true);
-  assert.equal(jumpStart.player.velocity.y, RUNTIME_PLAYER_PHYSICS_BASELINE.jumpVelocityY + RUNTIME_PLAYER_PHYSICS_BASELINE.gravityY);
+  assert.equal(jumpStart.player.velocity.y < -650, true, `expected strong legacy jump impulse, got ${jumpStart.player.velocity.y}`);
 
   player = jumpStart.player;
   let sawRising = player.rising === true;
@@ -81,7 +90,8 @@ function runReadableJumpArcChecks() {
   const jumpStartY = jumpStart.player.position.y;
   let apexY = jumpStartY;
   for (let tick = 1; tick <= 50; tick += 1) {
-    const step = stepRuntimePlayerSimulation(worldPacket, player, { input: { moveX: 0, jump: false } });
+    const holdJump = tick <= 10;
+    const step = stepRuntimePlayerSimulation(worldPacket, player, { input: { moveX: 0, jump: holdJump } });
     assert.equal(step.ok, true);
     player = step.player;
     sawRising = sawRising || player.rising === true;
@@ -102,8 +112,33 @@ function runReadableJumpArcChecks() {
 
   assert.equal(sawRising, true, "expected readable rising phase");
   assert.equal(sawFalling, true, "expected readable falling phase");
-  assert.equal(firstFallingTick >= 16, true, `expected slower jump apex, got falling at tick ${firstFallingTick}`);
-  assert.equal(jumpRiseDistance >= 30, true, `expected clearer jump rise distance, got ${jumpRiseDistance.toFixed(2)}`);
+  assert.equal(firstFallingTick >= 14, true, `expected legacy jump hang-time, got falling at tick ${firstFallingTick}`);
+  assert.equal(jumpRiseDistance >= 80, true, `expected legacy jump rise distance, got ${jumpRiseDistance.toFixed(2)}`);
+}
+
+function runGroundCollisionChecks() {
+  const worldPacket = buildFlatWorldPacket();
+  let player = {
+    position: { x: 4 * 24, y: 3 * 24 },
+    velocity: { x: 0, y: 0 },
+    grounded: false,
+    falling: true,
+    rising: false,
+    landed: false,
+  };
+
+  let landed = false;
+  for (let tick = 0; tick < 120; tick += 1) {
+    const step = stepRuntimePlayerSimulation(worldPacket, player, { input: { moveX: 0, jump: false } });
+    assert.equal(step.ok, true);
+    player = step.player;
+    if (player.grounded === true) {
+      landed = true;
+      break;
+    }
+  }
+
+  assert.equal(landed, true, "expected falling player to land on solid floor");
 }
 
 function runOutOfBoundsRespawnChecks() {
@@ -132,6 +167,7 @@ function runOutOfBoundsRespawnChecks() {
 runBaselineConstantChecks();
 runHorizontalControlChecks();
 runReadableJumpArcChecks();
+runGroundCollisionChecks();
 runOutOfBoundsRespawnChecks();
 
 console.log("recharged-runtime-player-feel-checks: ok");

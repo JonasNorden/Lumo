@@ -1,5 +1,5 @@
 import { isRuntimeGridSolid } from "./isRuntimeGridSolid.js";
-import { RUNTIME_PLAYER_PHYSICS_BASELINE } from "./runtimePlayerPhysicsBaseline.js";
+import { resolveLegacyJumpPhysics, resolveRuntimeDeltaSeconds } from "./runtimeLegacyPlayerPhysics.js";
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -7,17 +7,6 @@ function uniqueMessages(messages) {
   }
 
   return [...new Set(messages.filter((message) => typeof message === "string" && message.length > 0))];
-}
-
-// Resolves deterministic jump force with a defensive default.
-function resolveJumpVelocityY(options = {}) {
-  const configuredVelocityY = options?.physics?.jumpVelocityY;
-
-  if (Number.isFinite(configuredVelocityY) && configuredVelocityY < 0) {
-    return configuredVelocityY;
-  }
-
-  return RUNTIME_PLAYER_PHYSICS_BASELINE.jumpVelocityY;
 }
 
 // Detects if player stands directly above solid ground when grounded flag is stale/missing.
@@ -62,17 +51,28 @@ export function buildRuntimePlayerJumpState(worldPacket, playerState, intent = {
   const warnings = [...inheritedWarnings, ...(Array.isArray(intent?.warnings) ? intent.warnings : [])];
   const errors = [...inheritedErrors, ...(Array.isArray(intent?.errors) ? intent.errors : [])];
 
-  const jumpRequested = intent?.jump === true;
+  const jumpHeld = intent?.jump === true;
+  const jumpHeldLastTick = playerState?.jumpHeldLastTick === true;
+  const jumpPressed = jumpHeld && !jumpHeldLastTick;
+  const deltaSeconds = resolveRuntimeDeltaSeconds(options);
+  const jumpPhysics = resolveLegacyJumpPhysics(options);
   const groundedByState = playerState?.grounded === true;
   const contactProbe = detectGroundContact(worldPacket, playerState);
   const groundedByProbe = contactProbe.touchingGround === true;
-  const canJump = groundedByState || groundedByProbe;
+  const groundedNow = groundedByState || groundedByProbe;
+  const coyoteTimer = groundedNow
+    ? jumpPhysics.coyoteTimeSeconds
+    : Math.max(0, (Number.isFinite(playerState?.coyoteTimer) ? playerState.coyoteTimer : 0) - deltaSeconds);
+  const jumpBufferTimer = jumpPressed
+    ? jumpPhysics.jumpBufferSeconds
+    : Math.max(0, (Number.isFinite(playerState?.jumpBufferTimer) ? playerState.jumpBufferTimer : 0) - deltaSeconds);
+  const canJump = coyoteTimer > 0;
 
   if (contactProbe.ok !== true) {
     errors.push(...(contactProbe.errors ?? []));
   }
 
-  if (!jumpRequested) {
+  if (!(jumpBufferTimer > 0 && canJump)) {
     return {
       ok: errors.length === 0,
       canJump,
@@ -81,38 +81,21 @@ export function buildRuntimePlayerJumpState(worldPacket, playerState, intent = {
         x: Number.isFinite(playerState?.velocity?.x) ? playerState.velocity.x : 0,
         y: Number.isFinite(playerState?.velocity?.y) ? playerState.velocity.y : 0,
       },
-      grounded: canJump,
+      grounded: groundedNow,
       falling: Number.isFinite(playerState?.velocity?.y) ? playerState.velocity.y > 0 : false,
-      status: "no-jump",
+      coyoteTimer,
+      jumpBufferTimer,
+      jumpHeldLastTick: jumpHeld,
+      status: jumpBufferTimer > 0 ? "jump-buffered" : "no-jump",
       errors: uniqueMessages(errors),
       warnings: uniqueMessages(warnings),
       debug: {
-        jumpRequested,
+        jumpPressed,
+        jumpHeld,
         groundedByState,
         groundedByProbe,
-        probe: contactProbe.probe,
-      },
-    };
-  }
-
-  if (!canJump) {
-    return {
-      ok: errors.length === 0,
-      canJump: false,
-      startedJump: false,
-      velocity: {
-        x: Number.isFinite(playerState?.velocity?.x) ? playerState.velocity.x : 0,
-        y: Number.isFinite(playerState?.velocity?.y) ? playerState.velocity.y : 0,
-      },
-      grounded: false,
-      falling: Number.isFinite(playerState?.velocity?.y) ? playerState.velocity.y > 0 : true,
-      status: "jump-blocked-not-grounded",
-      errors: uniqueMessages(errors),
-      warnings: uniqueMessages(warnings),
-      debug: {
-        jumpRequested,
-        groundedByState,
-        groundedByProbe,
+        coyoteTimer,
+        jumpBufferTimer,
         probe: contactProbe.probe,
       },
     };
@@ -124,17 +107,23 @@ export function buildRuntimePlayerJumpState(worldPacket, playerState, intent = {
     startedJump: true,
     velocity: {
       x: Number.isFinite(playerState?.velocity?.x) ? playerState.velocity.x : 0,
-      y: resolveJumpVelocityY(options),
+      y: jumpPhysics.jumpVelocityY,
     },
     grounded: false,
     falling: false,
+    coyoteTimer: 0,
+    jumpBufferTimer: 0,
+    jumpHeldLastTick: jumpHeld,
     status: "jump-started",
     errors: uniqueMessages(errors),
     warnings: uniqueMessages(warnings),
     debug: {
-      jumpRequested,
+      jumpPressed,
+      jumpHeld,
       groundedByState,
       groundedByProbe,
+      coyoteTimer,
+      jumpBufferTimer,
       probe: contactProbe.probe,
     },
   };

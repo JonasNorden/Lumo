@@ -1,3 +1,5 @@
+import { resolveRuntimeDeltaSeconds } from "./runtimeLegacyPlayerPhysics.js";
+
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
     return [];
@@ -30,8 +32,11 @@ export function stepRuntimePlayerVelocityX(playerState, locomotionState) {
   const currentVelocityX = Number.isFinite(playerState?.velocity?.x) ? playerState.velocity.x : 0;
   const moveX = Number.isFinite(locomotionState?.moveX) ? locomotionState.moveX : 0;
   const desiredVelocityX = Number.isFinite(locomotionState?.desiredVelocityX) ? locomotionState.desiredVelocityX : 0;
+  const deltaSeconds = resolveRuntimeDeltaSeconds(locomotionState?.options ?? {});
   const accelerationX = Number.isFinite(locomotionState?.accelerationX) ? Math.abs(locomotionState.accelerationX) : 1;
   const frictionX = Number.isFinite(locomotionState?.frictionX) ? Math.abs(locomotionState.frictionX) : 0;
+  const accelerationStep = accelerationX * deltaSeconds;
+  const frictionStep = frictionX * deltaSeconds;
   const maxSpeedX = Number.isFinite(locomotionState?.maxSpeedX) ? Math.max(0, Math.abs(locomotionState.maxSpeedX)) : 4;
 
   let nextVelocityX = currentVelocityX;
@@ -40,10 +45,10 @@ export function stepRuntimePlayerVelocityX(playerState, locomotionState) {
   let frictionApplied = false;
 
   if (moveX !== 0) {
-    if (Math.abs(desiredVelocityX - currentVelocityX) <= accelerationX) {
+    if (Math.abs(desiredVelocityX - currentVelocityX) <= accelerationStep) {
       nextVelocityX = desiredVelocityX;
     } else {
-      nextVelocityX = currentVelocityX + Math.sign(desiredVelocityX - currentVelocityX) * accelerationX;
+      nextVelocityX = currentVelocityX + Math.sign(desiredVelocityX - currentVelocityX) * accelerationStep;
     }
 
     if (Math.abs(nextVelocityX) > Math.abs(currentVelocityX)) {
@@ -51,8 +56,8 @@ export function stepRuntimePlayerVelocityX(playerState, locomotionState) {
     } else if (Math.abs(nextVelocityX) < Math.abs(currentVelocityX) || Math.sign(nextVelocityX) !== Math.sign(currentVelocityX)) {
       decelerating = true;
     }
-  } else if (frictionX > 0) {
-    nextVelocityX = moveTowardsZero(currentVelocityX, frictionX);
+  } else if (frictionStep > 0) {
+    nextVelocityX = moveTowardsZero(currentVelocityX, frictionStep);
     frictionApplied = nextVelocityX !== currentVelocityX;
     decelerating = frictionApplied;
   }
@@ -85,6 +90,7 @@ export function stepRuntimePlayerVelocityX(playerState, locomotionState) {
       nextVelocityX,
       accelerationX,
       frictionX,
+      deltaSeconds,
       maxSpeedX,
     },
   };

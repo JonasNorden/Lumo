@@ -1,4 +1,5 @@
 import { isRuntimeGridSolid } from "./isRuntimeGridSolid.js";
+import { resolveLegacyJumpPhysics, resolveRuntimeDeltaSeconds } from "./runtimeLegacyPlayerPhysics.js";
 
 // Advances runtime player state by one tiny gravity-only tick.
 export function stepRuntimePlayerState(worldPacket, playerState) {
@@ -28,8 +29,10 @@ export function stepRuntimePlayerState(worldPacket, playerState) {
   const currentPositionY = playerState.position.y;
   const currentVelocityX = Number.isFinite(playerState?.velocity?.x) ? playerState.velocity.x : 0;
   const currentVelocityY = Number.isFinite(playerState?.velocity?.y) ? playerState.velocity.y : 0;
-  const nextVelocityY = currentVelocityY + 1;
-  const nextPositionY = currentPositionY + nextVelocityY;
+  const deltaSeconds = resolveRuntimeDeltaSeconds();
+  const jumpPhysics = resolveLegacyJumpPhysics();
+  const nextVelocityY = Math.min(currentVelocityY + jumpPhysics.gravityDownY * deltaSeconds, jumpPhysics.maxFallSpeedY);
+  const nextPositionY = currentPositionY + nextVelocityY * deltaSeconds;
   const gridX = Math.floor(currentPositionX / tileSize);
   const gridYBelow = Math.floor((nextPositionY + 1) / tileSize);
   const solidBelow = isRuntimeGridSolid(worldPacket, gridX, gridYBelow);

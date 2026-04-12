@@ -1,4 +1,4 @@
-import { RUNTIME_PLAYER_PHYSICS_BASELINE } from "./runtimePlayerPhysicsBaseline.js";
+import { resolveLegacyHorizontalPhysics } from "./runtimeLegacyPlayerPhysics.js";
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -16,24 +16,6 @@ function clampMoveX(value) {
   return Math.max(-1, Math.min(1, Math.trunc(value)));
 }
 
-function resolveConfig(options = {}, grounded = false) {
-  const physics = options?.physics ?? {};
-
-  if (grounded) {
-    return {
-      maxSpeedX: Number.isFinite(physics?.groundMaxSpeedX) ? Math.abs(physics.groundMaxSpeedX) : RUNTIME_PLAYER_PHYSICS_BASELINE.groundMaxSpeedX,
-      accelerationX: Number.isFinite(physics?.groundAccelerationX) ? Math.abs(physics.groundAccelerationX) : RUNTIME_PLAYER_PHYSICS_BASELINE.groundAccelerationX,
-      frictionX: Number.isFinite(physics?.groundFrictionX) ? Math.abs(physics.groundFrictionX) : RUNTIME_PLAYER_PHYSICS_BASELINE.groundFrictionX,
-    };
-  }
-
-  return {
-    maxSpeedX: Number.isFinite(physics?.airMaxSpeedX) ? Math.abs(physics.airMaxSpeedX) : RUNTIME_PLAYER_PHYSICS_BASELINE.airMaxSpeedX,
-    accelerationX: Number.isFinite(physics?.airAccelerationX) ? Math.abs(physics.airAccelerationX) : RUNTIME_PLAYER_PHYSICS_BASELINE.airAccelerationX,
-    frictionX: Number.isFinite(physics?.airFrictionX) ? Math.abs(physics.airFrictionX) : RUNTIME_PLAYER_PHYSICS_BASELINE.airFrictionX,
-  };
-}
-
 // Builds a compact locomotion packet so movement rules can differ for grounded vs air ticks.
 export function buildRuntimePlayerLocomotionState(playerState, intent = {}, options = {}) {
   const warnings = [...(Array.isArray(playerState?.warnings) ? playerState.warnings : []), ...(Array.isArray(intent?.warnings) ? intent.warnings : [])];
@@ -45,7 +27,7 @@ export function buildRuntimePlayerLocomotionState(playerState, intent = {}, opti
   const landed = playerState?.landed === true;
   const moveX = clampMoveX(intent?.moveX);
 
-  const { maxSpeedX, accelerationX, frictionX } = resolveConfig(options, grounded);
+  const { maxSpeedX, accelerationX, frictionX } = resolveLegacyHorizontalPhysics(options, grounded);
   const desiredVelocityX = moveX * maxSpeedX;
 
   let locomotion = "airborne-neutral";
@@ -71,6 +53,7 @@ export function buildRuntimePlayerLocomotionState(playerState, intent = {}, opti
     accelerationX,
     maxSpeedX,
     frictionX,
+    options,
     errors: uniqueMessages(errors),
     warnings: uniqueMessages(warnings),
     debug: {

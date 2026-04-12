@@ -122,6 +122,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
 
   const horizontalStep = stepRuntimePlayerHorizontalState(worldPacket, playerState, {
     velocityX: velocityXStep.velocityX,
+    options,
     errors: uniqueMessages([...(locomotionState.errors ?? []), ...(velocityXStep.errors ?? [])]),
     warnings: uniqueMessages([...(locomotionState.warnings ?? []), ...(velocityXStep.warnings ?? [])]),
   });
@@ -182,6 +183,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     ...preVerticalState,
     grounded: jumpState.grounded === true,
     velocity: jumpState.velocity,
+    coyoteTimer: Number.isFinite(jumpState?.coyoteTimer) ? jumpState.coyoteTimer : preVerticalState?.coyoteTimer,
+    jumpBufferTimer: Number.isFinite(jumpState?.jumpBufferTimer) ? jumpState.jumpBufferTimer : preVerticalState?.jumpBufferTimer,
+    jumpHeldLastTick: jumpState?.jumpHeldLastTick === true,
     errors: uniqueMessages([...(preVerticalState?.errors ?? []), ...(jumpState.errors ?? [])]),
     warnings: uniqueMessages([...(preVerticalState?.warnings ?? []), ...(jumpState.warnings ?? [])]),
   };
@@ -237,11 +241,19 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     player: {
       position: resolvedPlayerStep.position,
       velocity: resolvedPlayerStep.velocity,
+      coyoteTimer: Number.isFinite(verticalInputState?.coyoteTimer) ? verticalInputState.coyoteTimer : 0,
+      jumpBufferTimer: Number.isFinite(verticalInputState?.jumpBufferTimer) ? verticalInputState.jumpBufferTimer : 0,
+      jumpHeldLastTick: verticalInputState?.jumpHeldLastTick === true,
       locomotion: finalLocomotion,
       grounded: finalPlayerState.grounded,
       falling: finalPlayerState.falling,
       rising: finalPlayerState.rising,
       landed: finalPlayerState.landed,
+      abilities: {
+        pulse: { supported: true, wired: false },
+        flare: { supported: true, wired: false },
+        attack: { supported: false, wired: false },
+      },
       status,
     },
     collisions: {
