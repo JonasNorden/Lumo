@@ -252,6 +252,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       abilities: {
         pulse: { supported: true, wired: false },
         flare: { supported: true, wired: false },
+        boost: { supported: true, wired: false },
         attack: { supported: false, wired: false },
       },
       status,
