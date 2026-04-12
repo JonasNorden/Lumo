@@ -123,7 +123,9 @@ export function createRuntimeRunner(options = {}) {
   if (lastBuild.ok === true && lastBuild.initialization) {
     runtimeState.ok = true;
     runtimeState.world = lastBuild.worldPacket;
-    runtimeState.entities = [];
+    runtimeState.entities = Array.isArray(lastBuild?.worldPacket?.layers?.entities)
+      ? lastBuild.worldPacket.layers.entities.map((entity) => ({ ...entity }))
+      : [];
     runtimeState.playerState = {
       position: {
         x: lastBuild.initialization.player?.finalPosition?.x ?? null,
@@ -152,7 +154,7 @@ export function createRuntimeRunner(options = {}) {
       energy: 1,
       facingX: 1,
       nextFlareId: 1,
-      entities: [],
+      entities: runtimeState.entities.map((entity) => ({ ...entity })),
     };
     runtimeState.errors = [];
     runtimeState.warnings = uniqueMessages(lastBuild.warnings);
@@ -268,7 +270,9 @@ export function createRuntimeRunner(options = {}) {
       if (lastBuild.ok === true && lastBuild.initialization) {
         next.ok = true;
         next.world = lastBuild.worldPacket;
-        next.entities = [];
+        next.entities = Array.isArray(lastBuild?.worldPacket?.layers?.entities)
+          ? lastBuild.worldPacket.layers.entities.map((entity) => ({ ...entity }))
+          : [];
         next.playerState = {
           position: {
             x: lastBuild.initialization.player?.finalPosition?.x ?? null,
@@ -297,7 +301,7 @@ export function createRuntimeRunner(options = {}) {
           energy: 1,
           facingX: 1,
           nextFlareId: 1,
-          entities: [],
+          entities: next.entities.map((entity) => ({ ...entity })),
         };
         next.warnings = uniqueMessages(lastBuild.warnings);
       } else {

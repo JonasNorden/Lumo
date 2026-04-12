@@ -7,6 +7,7 @@ import { loadLevelDocument } from "../src/runtime/loadLevelDocument.js";
 import { startRuntimeFromLevelDocument } from "../src/runtime/startRuntimeFromLevelDocument.js";
 import { startRuntimeFromLevelUrl } from "../src/runtime/startRuntimeFromLevelUrl.js";
 import { bootLumoRechargedFromQuery } from "../src/runtime/bootLumoRechargedFromQuery.js";
+import { createRuntimeGameSession } from "../src/runtime/createRuntimeGameSession.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixtureRelativePath = "../src/data/editorV2SavedLevel.sample.json";
@@ -84,6 +85,47 @@ function runEditorFixtureConversionChecks() {
   assert.equal(loaded.level.layers.tiles.length > 0, true);
 
   console.log("editor v2 conversion ok");
+}
+
+
+function runEditorEntityRuntimePipelineChecks() {
+  const source = loadEditorFixture();
+  source.entities = [
+    ...(Array.isArray(source.entities) ? source.entities : []),
+    {
+      id: "editor-dark-creature",
+      name: "Dark Creature",
+      type: "dark_creature_01",
+      x: 2,
+      y: 1,
+      visible: true,
+      params: { hp: 2 },
+    },
+  ];
+
+  const loaded = loadLevelDocument(source);
+  assert.equal(loaded.ok, true, "expected fixture to load successfully");
+
+  const runtimeEntity = loaded.level.layers.entities.find((entity) => entity.id === "editor-dark-creature");
+  assert.ok(runtimeEntity, "expected converted runtime entity");
+  assert.equal(runtimeEntity.type, "dark_creature_01", "expected runtime type");
+  assert.equal(runtimeEntity.x, 2 * 24, "expected grid x to convert to pixels");
+  assert.equal(runtimeEntity.y, 1 * 24, "expected grid y to convert to pixels");
+  assert.equal(runtimeEntity.hp, 2, "expected hp sourced from params");
+
+  const session = createRuntimeGameSession({ levelDocument: loaded.level });
+  assert.equal(session.start().ok, true, "expected session start");
+
+  const startSnapshot = session.getPlayerSnapshot();
+  assert.equal(startSnapshot.entities.some((entity) => entity.id === "editor-dark-creature"), true, "expected entity in initial snapshot");
+
+  session.tick({ pulse: true });
+  const afterPulse = session.getPlayerSnapshot();
+  const pulsedEntity = afterPulse.entities.find((entity) => entity.id === "editor-dark-creature");
+  assert.ok(pulsedEntity, "expected entity after pulse tick");
+  assert.equal(pulsedEntity.hp, 1, "expected pulse interaction to reduce hp");
+
+  console.log("editor v2 entity runtime pipeline ok");
 }
 
 async function runRuntimeStartChecks() {
@@ -187,6 +229,7 @@ async function runQueryContractChecks() {
 }
 
 runEditorFixtureConversionChecks();
+runEditorEntityRuntimePipelineChecks();
 runMissingSpawnWarningChecks();
 await runRuntimeStartChecks();
 await runNoRespawnLoopOnValidSpawnChecks();
