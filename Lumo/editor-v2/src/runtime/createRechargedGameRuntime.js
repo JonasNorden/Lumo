@@ -28,6 +28,9 @@ function buildPlayerSnapshot(player) {
     grounded: source.grounded === true,
     falling: source.falling === true,
     locomotion: typeof source.locomotion === "string" ? source.locomotion : "unknown",
+    energy: Number.isFinite(source.energy) ? source.energy : null,
+    lives: Number.isFinite(source.lives) ? source.lives : null,
+    score: Number.isFinite(source.score) ? source.score : null,
     boostActive: source.boostActive === true,
     flareStash: Number.isFinite(source.flareStash) ? source.flareStash : 1,
     pulse: pulse

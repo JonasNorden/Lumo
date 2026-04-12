@@ -114,6 +114,7 @@ async function runTickIntentUpdatesLivePlayerChecks() {
   assert.equal(boostTick.stepped, true);
   assert.equal(typeof afterBoost.boostActive, "boolean");
   assert.equal(afterBoost.boostActive, true);
+  assert.equal(Number.isFinite(afterBoost.energy) || afterBoost.energy === null, true);
 
   console.log("boot adapter tick input updates player snapshot");
 }
