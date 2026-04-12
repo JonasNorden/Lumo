@@ -365,6 +365,88 @@ function runFlarePickupCollectionChecks() {
   assert.equal(throwStep.player.flareStash, 0, "expected throw to consume collected flare stash");
 }
 
+function runPowerCellRechargeChecks() {
+  const worldPacket = buildFlatWorldPacket();
+  const player = {
+    position: { x: 4 * 24, y: (10 * 24) - 1 },
+    velocity: { x: 0, y: 0 },
+    grounded: true,
+    falling: false,
+    rising: false,
+    landed: false,
+    facingX: 1,
+    flares: [],
+    flareStash: 1,
+    energy: 0.25,
+    flareHeldLastTick: false,
+    nextFlareId: 1,
+    entities: [],
+  };
+  const entities = [{
+    id: "powercell-1",
+    type: "powercell_01",
+    x: player.position.x - 8,
+    y: player.position.y - 12,
+    size: 14,
+    active: true,
+    alive: true,
+  }];
+
+  const pickupStep = stepRuntimePlayerSimulation(worldPacket, player, { input: {}, entities });
+  assert.equal(pickupStep.ok, true);
+  assert.equal(pickupStep.player.energy > 0.25, true, "expected power-cell pickup to start timed recharge");
+  assert.equal(Boolean(pickupStep.player.powerCellFill), true, "expected power-cell fill state to persist while recharging");
+  const powerCellAfter = pickupStep.player.entities.find((entity) => entity.id === "powercell-1");
+  assert.equal(powerCellAfter?.active, false, "expected collected power-cell to deactivate");
+
+  let rolling = pickupStep.player;
+  for (let index = 0; index < 140; index += 1) {
+    const tickStep = stepRuntimePlayerSimulation(worldPacket, rolling, { input: {}, entities: rolling.entities });
+    assert.equal(tickStep.ok, true);
+    rolling = tickStep.player;
+  }
+  assert.equal(Math.abs(rolling.energy - 1) < 1e-6, true, `expected timed power-cell fill to complete at full energy, got ${rolling.energy}`);
+  assert.equal(rolling.powerCellFill, null, "expected power-cell fill state to clear once complete");
+}
+
+function runLanternAuraRechargeChecks() {
+  const worldPacket = buildFlatWorldPacket();
+  const player = {
+    position: { x: 4 * 24, y: (10 * 24) - 1 },
+    velocity: { x: 0, y: 0 },
+    grounded: true,
+    falling: false,
+    rising: false,
+    landed: false,
+    facingX: 1,
+    flares: [],
+    flareStash: 1,
+    energy: 0.4,
+    flareHeldLastTick: false,
+    nextFlareId: 1,
+    entities: [],
+  };
+  const lantern = {
+    id: "lantern-1",
+    type: "lantern_01",
+    x: player.position.x - 6,
+    y: player.position.y - 10,
+    size: 14,
+    active: true,
+    alive: true,
+    params: { radius: 170, strength: 0.85 },
+  };
+
+  const withLanternStep = stepRuntimePlayerSimulation(worldPacket, player, { input: {}, entities: [lantern] });
+  assert.equal(withLanternStep.ok, true);
+  assert.equal(withLanternStep.player.energy > player.energy, true, "expected lantern aura to recharge energy while inside radius");
+
+  const farLantern = { ...lantern, id: "lantern-far", x: player.position.x + 1000, y: player.position.y + 1000 };
+  const outOfAuraStep = stepRuntimePlayerSimulation(worldPacket, player, { input: {}, entities: [farLantern] });
+  assert.equal(outOfAuraStep.ok, true);
+  assert.equal(Math.abs(outOfAuraStep.player.energy - player.energy) < 1e-6, true, "expected no lantern recharge outside aura");
+}
+
 runBaselineConstantChecks();
 runHorizontalControlChecks();
 runReadableJumpArcChecks();
@@ -377,5 +459,7 @@ runBoostJumpCompatibilityChecks();
 runFlareSpawnChecks();
 runFlareThrowSuppressedWhenEmptyChecks();
 runFlarePickupCollectionChecks();
+runPowerCellRechargeChecks();
+runLanternAuraRechargeChecks();
 
 console.log("recharged-runtime-player-feel-checks: ok");
