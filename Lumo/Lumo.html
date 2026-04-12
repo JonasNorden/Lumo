@@ -695,12 +695,14 @@
         return false;
       }
 
+      const footprintW = Number.isFinite(supportTile?.w) && supportTile.w > 0 ? supportTile.w : 1;
+      const footprintH = Number.isFinite(supportTile?.h) && supportTile.h > 0 ? supportTile.h : 1;
       const drawW = Number.isFinite(supportTile?.drawW)
         ? supportTile.drawW
-        : (Number.isFinite(catalogDef?.drawW) ? catalogDef.drawW : tileSize);
+        : (Number.isFinite(catalogDef?.drawW) ? catalogDef.drawW * footprintW : tileSize * footprintW);
       const drawH = Number.isFinite(supportTile?.drawH)
         ? supportTile.drawH
-        : (Number.isFinite(catalogDef?.drawH) ? catalogDef.drawH : tileSize);
+        : (Number.isFinite(catalogDef?.drawH) ? catalogDef.drawH * footprintH : tileSize * footprintH);
       const drawOffX = Number.isFinite(supportTile?.drawOffX)
         ? supportTile.drawOffX
         : (Number.isFinite(catalogDef?.drawOffX) ? catalogDef.drawOffX : 0);
@@ -721,7 +723,7 @@
       const tileWorldY = tileY * worldUnitsToPx;
       const worldDrawX = tileWorldX + drawOffX;
       const worldDrawY = drawAnchor === "BL"
-        ? ((tileY + 1) * worldUnitsToPx) - drawH + drawOffY
+        ? ((tileY + footprintH) * worldUnitsToPx) - drawH + drawOffY
         : tileWorldY + drawOffY;
       const drawRect = mapper.worldToCanvasRect(worldDrawX, worldDrawY, Math.max(1, drawW), Math.max(1, drawH));
       ctx.drawImage(img, drawRect.x, drawRect.y, drawRect.w, drawRect.h);
