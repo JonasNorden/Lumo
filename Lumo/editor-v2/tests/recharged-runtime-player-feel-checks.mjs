@@ -196,11 +196,96 @@ function runOutOfBoundsRespawnChecks() {
   assert.equal(step.player.position.y, worldPacket.spawn.y);
 }
 
+function runBoostTriggerAndVelocityChecks() {
+  const worldPacket = buildFlatWorldPacket();
+  let noBoostPlayer = {
+    position: { x: 4 * 24, y: (10 * 24) - 1 },
+    velocity: { x: 0, y: 0 },
+    grounded: true,
+    falling: false,
+    rising: false,
+    landed: false,
+    energy: 1,
+    pulse: { active: false, r: 0, alpha: 0, thickness: 3, id: 0 },
+    pulseHeldLastTick: false,
+  };
+  let boostPlayer = { ...noBoostPlayer, position: { ...noBoostPlayer.position }, velocity: { ...noBoostPlayer.velocity } };
+
+  for (let tick = 0; tick < 12; tick += 1) {
+    const noBoostStep = stepRuntimePlayerSimulation(worldPacket, noBoostPlayer, { input: { moveX: 1, jump: false, boost: false } });
+    const boostStep = stepRuntimePlayerSimulation(worldPacket, boostPlayer, { input: { moveX: 1, jump: false, boost: true } });
+    assert.equal(noBoostStep.ok, true);
+    assert.equal(boostStep.ok, true);
+    noBoostPlayer = noBoostStep.player;
+    boostPlayer = boostStep.player;
+  }
+
+  assert.equal(boostPlayer.boostActive, true, "expected boost to activate while space is held and energy is available");
+  assert.equal(boostPlayer.velocity.x > noBoostPlayer.velocity.x, true, "expected boosted movement to exceed normal movement speed");
+  assert.equal(boostPlayer.energy < noBoostPlayer.energy, true, "expected boost to drain extra energy");
+}
+
+function runBoostHoldDurationChecks() {
+  const worldPacket = buildFlatWorldPacket();
+  let player = {
+    position: { x: 4 * 24, y: (10 * 24) - 1 },
+    velocity: { x: 0, y: 0 },
+    grounded: true,
+    falling: false,
+    rising: false,
+    landed: false,
+    energy: 1,
+    pulse: { active: false, r: 0, alpha: 0, thickness: 3, id: 0 },
+    pulseHeldLastTick: false,
+  };
+
+  const holdStep = stepRuntimePlayerSimulation(worldPacket, player, { input: { moveX: 1, jump: false, boost: true } });
+  assert.equal(holdStep.ok, true);
+  assert.equal(holdStep.player.boostActive, true);
+  player = holdStep.player;
+
+  const releaseStep = stepRuntimePlayerSimulation(worldPacket, player, { input: { moveX: 1, jump: false, boost: false } });
+  assert.equal(releaseStep.ok, true);
+  assert.equal(releaseStep.player.boostActive, false, "expected boost to stop immediately when space is released");
+}
+
+function runBoostJumpCompatibilityChecks() {
+  const worldPacket = buildFlatWorldPacket();
+  const groundedPlayer = {
+    position: { x: 4 * 24, y: (10 * 24) - 1 },
+    velocity: { x: 0, y: 0 },
+    grounded: true,
+    falling: false,
+    rising: false,
+    landed: false,
+    energy: 1,
+    pulse: { active: false, r: 0, alpha: 0, thickness: 3, id: 0 },
+    pulseHeldLastTick: false,
+  };
+
+  const jumpBoostStep = stepRuntimePlayerSimulation(worldPacket, groundedPlayer, { input: { moveX: 1, jump: true, boost: true } });
+  assert.equal(jumpBoostStep.ok, true);
+  assert.equal(jumpBoostStep.player.rising, true, "expected jump to remain functional with boost held");
+  assert.equal(jumpBoostStep.player.velocity.y < 0, true, "expected upward jump velocity during boosted jump");
+
+  const airborneBoostStep = stepRuntimePlayerSimulation(worldPacket, {
+    ...jumpBoostStep.player,
+    grounded: false,
+    rising: false,
+    falling: true,
+  }, { input: { moveX: 1, jump: false, boost: true } });
+  assert.equal(airborneBoostStep.ok, true);
+  assert.equal(airborneBoostStep.player.boostActive, true, "expected boost to remain available in air when held");
+}
+
 runBaselineConstantChecks();
 runHorizontalControlChecks();
 runReadableJumpArcChecks();
 runFallDurationChecks();
 runGroundCollisionChecks();
 runOutOfBoundsRespawnChecks();
+runBoostTriggerAndVelocityChecks();
+runBoostHoldDurationChecks();
+runBoostJumpCompatibilityChecks();
 
 console.log("recharged-runtime-player-feel-checks: ok");

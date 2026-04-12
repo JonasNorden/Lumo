@@ -20,6 +20,7 @@ function buildPlayerSnapshot(playerState) {
     falling: playerState?.falling === true,
     locomotion: typeof playerState?.locomotion === "string" ? playerState.locomotion : "unknown",
     energy: Number.isFinite(playerState?.energy) ? playerState.energy : null,
+    boostActive: playerState?.boostActive === true,
     pulse: playerState?.pulse && typeof playerState.pulse === "object"
       ? {
           active: playerState.pulse.active === true,

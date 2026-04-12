@@ -93,6 +93,8 @@ async function runTickIntentUpdatesLivePlayerChecks() {
   const jumpTick = adapter.tick({ right: false, left: false, jump: true });
   const afterJump = adapter.getPlayerSnapshot();
   const payloadAfterJump = adapter.getBootPayload();
+  const boostTick = adapter.tick({ right: true, left: false, jump: false, boost: true });
+  const afterBoost = adapter.getPlayerSnapshot();
 
   assert.equal(rightTick.ok, true);
   assert.equal(rightTick.stepped, true);
@@ -108,6 +110,10 @@ async function runTickIntentUpdatesLivePlayerChecks() {
   assert.equal(jumpTick.stepped, true);
   assert.equal(afterJump.y < afterLeft.y, true);
   assert.equal(payloadAfterJump.playerY, afterJump.y);
+  assert.equal(boostTick.ok, true);
+  assert.equal(boostTick.stepped, true);
+  assert.equal(typeof afterBoost.boostActive, "boolean");
+  assert.equal(afterBoost.boostActive, true);
 
   console.log("boot adapter tick input updates player snapshot");
 }
