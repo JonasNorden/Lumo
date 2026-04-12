@@ -41,6 +41,13 @@ assert.equal(
 );
 console.log("recharged runtime player flare wired ok");
 
+assert.equal(
+  runtimeSimulationSource.includes("pulse: {\n          supported: true,\n          wired: true"),
+  true,
+  "expected runtime player state to include real pulse wiring",
+);
+console.log("recharged runtime player pulse wired ok");
+
 function loadFixtureLevelDocument() {
   return JSON.parse(readFileSync(fixtureLevelPath, "utf8"));
 }
@@ -193,3 +200,51 @@ function runFlarePhysicsBounceSettleAndLifetimeChecks() {
 
 runFlareSpawnAndMovementChecks();
 runFlarePhysicsBounceSettleAndLifetimeChecks();
+
+function runPulseLegacySemanticsChecks() {
+  const pulseSession = createRuntimeGameSession({ levelDocument: loadFixtureLevelDocument() });
+  assert.equal(pulseSession.start().ok, true, "expected pulse session start");
+
+  const beforePulse = pulseSession.getPlayerSnapshot();
+  assert.equal(beforePulse.pulse?.active === true, false, "expected pulse inactive before D");
+
+  const firstPress = pulseSession.tick({ pulse: true });
+  assert.equal(firstPress.ok, true);
+  assert.equal(firstPress.stepped, true);
+
+  const afterFirstPress = pulseSession.getPlayerSnapshot();
+  assert.equal(afterFirstPress.pulse?.active, true, "expected pulse active on D tap");
+  assert.equal(afterFirstPress.pulse?.id >= 1, true, "expected pulse id to increment on D tap");
+  assert.equal(afterFirstPress.energy < beforePulse.energy, true, "expected pulse to consume energy");
+  assert.equal(afterFirstPress.pulse?.r > 8, true, "expected pulse radius to expand immediately after start");
+  assert.equal(afterFirstPress.pulse?.alpha < 0.9, true, "expected pulse alpha to start fading immediately");
+
+  const heldPulseId = afterFirstPress.pulse.id;
+  pulseSession.tick({ pulse: true });
+  const whileHeld = pulseSession.getPlayerSnapshot();
+  assert.equal(whileHeld.pulse?.id, heldPulseId, "expected pulse hold to not retrigger new id");
+
+  pulseSession.tick({ pulse: false });
+  pulseSession.tick({ pulse: true });
+  const secondTap = pulseSession.getPlayerSnapshot();
+  assert.equal(secondTap.pulse?.id > heldPulseId, true, "expected release + press to retrigger pulse");
+
+  let pulseEndedTick = null;
+  let previousRadius = secondTap.pulse.r;
+  for (let index = 0; index < 90; index += 1) {
+    pulseSession.tick({ pulse: false });
+    const snapshot = pulseSession.getPlayerSnapshot();
+    if (snapshot.pulse?.active !== true) {
+      pulseEndedTick = index + 1;
+      break;
+    }
+    assert.equal(snapshot.pulse.r > previousRadius, true, "expected pulse radius to keep expanding while active");
+    previousRadius = snapshot.pulse.r;
+  }
+  assert.equal(pulseEndedTick !== null, true, "expected pulse to expire after a short legacy window");
+  assert.equal(pulseEndedTick >= 35 && pulseEndedTick <= 55, true, "expected pulse duration to match legacy alpha fade window");
+
+  console.log("recharged runtime pulse tap duration fade window ok");
+}
+
+runPulseLegacySemanticsChecks();

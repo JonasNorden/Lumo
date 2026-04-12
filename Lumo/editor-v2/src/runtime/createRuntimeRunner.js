@@ -139,6 +139,9 @@ export function createRuntimeRunner(options = {}) {
       status: typeof lastBuild.initialization.player?.status === "string" ? lastBuild.initialization.player.status : "ready",
       flares: [],
       flareHeldLastTick: false,
+      pulse: { active: false, r: 0, alpha: 0, thickness: 3, id: 0 },
+      pulseHeldLastTick: false,
+      energy: 1,
       facingX: 1,
       nextFlareId: 1,
     };
@@ -271,6 +274,9 @@ export function createRuntimeRunner(options = {}) {
           status: typeof lastBuild.initialization.player?.status === "string" ? lastBuild.initialization.player.status : "ready",
           flares: [],
           flareHeldLastTick: false,
+          pulse: { active: false, r: 0, alpha: 0, thickness: 3, id: 0 },
+          pulseHeldLastTick: false,
+          energy: 1,
           facingX: 1,
           nextFlareId: 1,
         };
