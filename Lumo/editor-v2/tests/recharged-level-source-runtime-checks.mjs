@@ -72,6 +72,31 @@ function runValidLevelDocumentSourceChecks() {
   console.log("source runtime ticked 18");
 }
 
+function runLiveEnergySnapshotExposureChecks() {
+  const levelDocument = loadFixtureLevelDocument();
+  const runtime = createRechargedLevelSourceRuntime({
+    levelSource: { levelDocument },
+  });
+
+  runtime.initialize();
+  runtime.start();
+
+  const before = runtime.getPlayerSnapshot();
+  const boostStep = runtime.tick({ right: true, boost: true });
+  const afterBoost = runtime.getPlayerSnapshot();
+
+  assert.equal(boostStep.ok, true);
+  assert.equal(typeof before, "object");
+  assert.equal(typeof afterBoost, "object");
+  assert.equal(Number.isFinite(before.energy), true, "expected live player snapshot energy to be exposed before spend");
+  assert.equal(Number.isFinite(afterBoost.energy), true, "expected live player snapshot energy to remain exposed after spend");
+  assert.equal(afterBoost.energy <= before.energy, true, "expected boost step to spend or hold energy");
+  assert.equal(Object.prototype.hasOwnProperty.call(afterBoost, "lives"), true, "expected player snapshot to carry lives field for HUD mapping");
+  assert.equal(Object.prototype.hasOwnProperty.call(afterBoost, "score"), true, "expected player snapshot to carry score field for HUD mapping");
+
+  console.log("source runtime exposes live energy/lives/score snapshots");
+}
+
 function runValidDocumentSourceChecks() {
   const levelDocument = loadFixtureLevelDocument();
   const runtime = createRechargedLevelSourceRuntime({
@@ -137,6 +162,7 @@ function runInvalidSourceChecks() {
 }
 
 runValidLevelDocumentSourceChecks();
+runLiveEnergySnapshotExposureChecks();
 runValidDocumentSourceChecks();
 runDirectLevelDocumentChecks();
 runPartialSourceChecks();
