@@ -8,6 +8,7 @@ import { buildRuntimeTileBounds } from "../src/runtime/buildRuntimeTileBounds.js
 import { buildRuntimeTileMap } from "../src/runtime/buildRuntimeTileMap.js";
 import { buildRuntimeWorldPacket } from "../src/runtime/buildRuntimeWorldPacket.js";
 import { stepRuntimePlayerSimulation } from "../src/runtime/stepRuntimePlayerSimulation.js";
+import { getRuntimeTileAtGrid } from "../src/runtime/getRuntimeTileAtGrid.js";
 
 function buildEditorLevelWithGap() {
   const width = 8;
@@ -45,6 +46,44 @@ function runEditorTileNormalizationChecks() {
   const firstTile = loaded.level.layers.tiles[0];
   assert.equal(firstTile.coordinateSpace, "grid", "Editor V2 tiles should remain explicitly grid-authored for runtime collision mapping");
   assert.equal(firstTile.solid, true, "Editor V2 tile conversions should mark support tiles as solid by default");
+}
+
+function runSizedPlacementAnchorNormalizationChecks() {
+  const width = 12;
+  const height = 12;
+  const levelWithSizedPlacement = {
+    meta: { id: "editor-v2-sized-anchor", name: "Sized Anchor", version: "2.0.0", themeId: "cavern" },
+    dimensions: { width, height, tileSize: 24 },
+    tiles: {
+      base: new Array(width * height).fill(0),
+      placements: [{ x: 4, y: 7, size: 3, value: 1 }],
+    },
+    backgrounds: { layers: [] },
+    background: { base: new Array(width * height).fill(null), placements: [], materials: [], defaultMaterialId: "bg_void" },
+    decor: [],
+    entities: [{ id: "spawn-a", type: "player-spawn", x: 1, y: 1, visible: true, params: {} }],
+    sounds: [],
+    extra: {},
+  };
+
+  const loaded = loadLevelDocument(levelWithSizedPlacement);
+  assert.equal(loaded.ok, true);
+  const sizedTile = loaded.level.layers.tiles.find((tile) => tile.w === 3 && tile.h === 3);
+  assert.ok(sizedTile, "converted runtime level should include the sized placement");
+  assert.equal(sizedTile.x, 4, "sized placement x should keep authored left anchor");
+  assert.equal(sizedTile.y, 5, "sized placement y should normalize from authored bottom anchor to top row");
+
+  const skeleton = buildRuntimeWorldSkeleton(loaded.level);
+  const tileEntries = buildRuntimeTileEntries(skeleton);
+  const worldPacket = buildRuntimeWorldPacket({
+    skeleton,
+    tileBounds: buildRuntimeTileBounds(tileEntries),
+    tileMap: buildRuntimeTileMap(tileEntries),
+  });
+
+  assert.ok(getRuntimeTileAtGrid(worldPacket, 4, 5), "top row of sized footprint should be solid");
+  assert.ok(getRuntimeTileAtGrid(worldPacket, 6, 7), "bottom row of sized footprint should be solid");
+  assert.equal(getRuntimeTileAtGrid(worldPacket, 4, 8), null, "tile below a BL-authored sized placement should remain open");
 }
 
 function buildSessionWorld() {
@@ -123,6 +162,7 @@ function runGapRespawnChecks() {
 }
 
 runEditorTileNormalizationChecks();
+runSizedPlacementAnchorNormalizationChecks();
 runLandingAndStandChecks();
 runGapRespawnChecks();
 
