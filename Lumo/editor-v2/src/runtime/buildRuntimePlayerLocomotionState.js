@@ -62,6 +62,11 @@ export function buildRuntimePlayerLocomotionState(playerState, intent = {}, opti
     accelerationX: resolvedAccelerationX,
     maxSpeedX: resolvedMaxSpeedX,
     frictionX: resolvedFrictionX,
+    surface,
+    slipperyGround: grounded === true && (
+      surface?.name === "ice"
+      || (Number.isFinite(surface?.groundFrictionMul) && surface.groundFrictionMul <= 0.05)
+    ),
     options,
     errors: uniqueMessages(errors),
     warnings: uniqueMessages(warnings),

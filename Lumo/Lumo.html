@@ -63,6 +63,7 @@
     ];
     const RECHARGED_PLAYER_SPRITE_JUMP = "data/assets/sprites/lumo/lumo_jump_up.png";
     const RECHARGED_PLAYER_SPRITE_FALL = "data/assets/sprites/lumo/lumo_jump_down.png";
+    const RECHARGED_PLAYER_SPRITE_BRAKE = "data/assets/sprites/lumo/lumo_brake_1.png";
     const RECHARGED_PLAYER_HORIZONTAL_SPEED_EPSILON = 0.05;
     const RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON = 0.05;
     const RECHARGED_PLAYER_IDLE_FPS = 7;
@@ -91,6 +92,7 @@
           run: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_RUN_FRAMES[0]),
           jump: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_JUMP),
           fall: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_FALL),
+          brake: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_BRAKE),
         };
       }
 
@@ -107,6 +109,9 @@
       const movingHorizontally = Math.abs(velocityX) > RECHARGED_PLAYER_HORIZONTAL_SPEED_EPSILON;
 
       if (grounded) {
+        if (locomotion === "braking-grounded") {
+          return "brake";
+        }
         return movingHorizontally || locomotion === "moving-grounded" ? "run" : "idle";
       }
 

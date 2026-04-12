@@ -38,6 +38,44 @@ function resolveFinalLocomotion(finalPlayerState, moveX = 0) {
   return normalizedMoveX === 0 ? "airborne-neutral" : "airborne-moving";
 }
 
+function stepRuntimePlayerBrakeState(playerState, intent, locomotionState, options = {}) {
+  const dt = resolveRuntimeDeltaSeconds(options);
+  const source = playerState?.brakeState && typeof playerState.brakeState === "object" ? playerState.brakeState : {};
+  const moving = Number.isFinite(intent?.moveX) && intent.moveX !== 0;
+  const wasMoving = source.prevMoving === true;
+  const velocityX = Number.isFinite(playerState?.velocity?.x) ? playerState.velocity.x : 0;
+  const grounded = locomotionState?.grounded === true;
+  const slipperyNow = grounded === true && locomotionState?.slipperyGround === true;
+
+  let active = source.active === true;
+  let slipTimer = Number.isFinite(source.slipTimer) ? Math.max(0, source.slipTimer) : 0;
+  let lockTimer = Number.isFinite(source.lockTimer) ? Math.max(0, source.lockTimer) : 0;
+
+  // Preserve slippery state briefly to match V1 one-frame tile/ground flicker tolerance.
+  slipTimer = slipperyNow ? 0.22 : Math.max(0, slipTimer - dt);
+  if (wasMoving && !moving && slipTimer > 0 && Math.abs(velocityX) > 0.8) {
+    active = true;
+    lockTimer = 0.18;
+  }
+
+  if (moving) {
+    active = false;
+    lockTimer = 0;
+  }
+
+  lockTimer = Math.max(0, lockTimer - dt);
+  if (active && lockTimer <= 0 && Math.abs(velocityX) <= 0.5) {
+    active = false;
+  }
+
+  return {
+    active,
+    prevMoving: moving,
+    slipTimer,
+    lockTimer,
+  };
+}
+
 const DEFAULT_FLARE_SPEED_PX_PER_SECOND = 360;
 const DEFAULT_FLARE_UPWARD_IMPULSE_PX_PER_SECOND = 420;
 const DEFAULT_FLARE_LIFETIME_TICKS = 12 * 60;
@@ -932,6 +970,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const pulseStep = stepPulse(playerState, intent, options);
   const boostActive = intent?.boost === true && pulseStep.energy > DEFAULT_BOOST_MIN_ENERGY;
   const locomotionStateBase = buildRuntimePlayerLocomotionState(playerState, intent, { ...options, worldPacket });
+  const brakeState = stepRuntimePlayerBrakeState(playerState, intent, locomotionStateBase, options);
   const locomotionState = boostActive
     ? {
         ...locomotionStateBase,
@@ -1091,6 +1130,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   };
   const finalLocomotion = status === "respawned-out-of-bounds"
     ? "respawning-out-of-bounds"
+    : finalPlayerState.grounded && brakeState.active
+      ? "braking-grounded"
     : resolveFinalLocomotion(finalPlayerState, intent.moveX);
 
   return {
@@ -1131,6 +1172,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       nextFlareId: flareStep.nextFlareId,
       entities: entityStep.entities,
       status,
+      brakeState,
     },
     collisions: {
       moveX: intent.moveX,
