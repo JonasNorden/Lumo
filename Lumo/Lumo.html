@@ -49,12 +49,19 @@
 
     const RECHARGED_FIXED_STEP_MS = 1000 / 60;
     const RECHARGED_MAX_CATCH_UP_STEPS = 6;
-    const RECHARGED_PLAYER_SPRITE_IDLE = "data/assets/sprites/lumo/lumo_idle_1.png";
+    const RECHARGED_PLAYER_SPRITE_IDLE_FRAMES = [
+      "data/assets/sprites/lumo/lumo_idle_1.png",
+      "data/assets/sprites/lumo/lumo_idle_2.png",
+      "data/assets/sprites/lumo/lumo_idle_3.png",
+      "data/assets/sprites/lumo/lumo_idle_4.png",
+    ];
     const RECHARGED_PLAYER_SPRITE_RUN = "data/assets/sprites/lumo/lumo_walk_1.png";
     const RECHARGED_PLAYER_SPRITE_JUMP = "data/assets/sprites/lumo/lumo_jump_up.png";
     const RECHARGED_PLAYER_SPRITE_FALL = "data/assets/sprites/lumo/lumo_jump_down.png";
     const RECHARGED_PLAYER_HORIZONTAL_SPEED_EPSILON = 0.05;
     const RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON = 0.05;
+    const RECHARGED_PLAYER_IDLE_FPS = 7;
+    const RECHARGED_PLAYER_IDLE_LAST_INDEX = 3;
 
     function createRechargedSpriteImage(src) {
       const image = new Image();
@@ -70,7 +77,8 @@
 
       if (!state.playerSpriteCache || typeof state.playerSpriteCache !== "object") {
         state.playerSpriteCache = {
-          idle: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_IDLE),
+          idleFrames: RECHARGED_PLAYER_SPRITE_IDLE_FRAMES.map((src) => createRechargedSpriteImage(src)),
+          idle: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_IDLE_FRAMES[0]),
           run: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_RUN),
           jump: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_JUMP),
           fall: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_FALL),
@@ -108,6 +116,41 @@
       return previousAnimationState === "fall" ? "fall" : "jump";
     }
 
+    // Mirrors V1 idle animation cadence exactly: 0→1→2→3→2→1→...
+    function resolveRechargedIdleSpriteFrame(state, spriteCache, animationState, nowMs) {
+      if (!state || !spriteCache || animationState !== "idle") {
+        return spriteCache?.idle || null;
+      }
+
+      if (!state.playerIdleAnimation || typeof state.playerIdleAnimation !== "object") {
+        state.playerIdleAnimation = { i: 0, dir: 1, t: 0, lastAtMs: null };
+      }
+
+      const idleAnimation = state.playerIdleAnimation;
+      const frames = Array.isArray(spriteCache.idleFrames) ? spriteCache.idleFrames : [spriteCache.idle];
+      const frameStepMs = 1000 / Math.max(1, RECHARGED_PLAYER_IDLE_FPS);
+      const safeNowMs = Number.isFinite(nowMs) ? nowMs : performance.now();
+      const elapsedMs = idleAnimation.lastAtMs === null ? 0 : Math.max(0, safeNowMs - idleAnimation.lastAtMs);
+      idleAnimation.lastAtMs = safeNowMs;
+      idleAnimation.t += elapsedMs;
+
+      while (idleAnimation.t >= frameStepMs) {
+        idleAnimation.t -= frameStepMs;
+        idleAnimation.i += idleAnimation.dir;
+        if (idleAnimation.i >= RECHARGED_PLAYER_IDLE_LAST_INDEX) {
+          idleAnimation.i = RECHARGED_PLAYER_IDLE_LAST_INDEX;
+          idleAnimation.dir = -1;
+        }
+        if (idleAnimation.i <= 0) {
+          idleAnimation.i = 0;
+          idleAnimation.dir = 1;
+        }
+      }
+
+      const frameIndex = Math.max(0, Math.min(RECHARGED_PLAYER_IDLE_LAST_INDEX, idleAnimation.i | 0));
+      return frames[frameIndex] || frames[0] || spriteCache.idle || null;
+    }
+
     function createLumoRechargedCanvasVerificationState() {
       return {
         active: false,
@@ -121,6 +164,7 @@
         previousPlayerSnapshot: null,
         currentPlayerSnapshot: null,
         playerAnimationState: "idle",
+        playerIdleAnimation: null,
         renderAlpha: 0,
         stepAccumulatorMs: 0,
         lastStepAtMs: null,
@@ -886,7 +930,10 @@
       );
       state.playerAnimationState = animationState;
 
-      const activeSprite = spriteCache[animationState] || spriteCache.idle;
+      const nowMs = typeof performance?.now === "function" ? performance.now() : Date.now();
+      const activeSprite = animationState === "idle"
+        ? resolveRechargedIdleSpriteFrame(state, spriteCache, animationState, nowMs)
+        : (spriteCache[animationState] || spriteCache.idle);
       const safeSprite = activeSprite?.complete === true ? activeSprite : spriteCache.idle;
       if (!safeSprite?.complete) {
         return;
