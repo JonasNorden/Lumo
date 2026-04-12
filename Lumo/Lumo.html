@@ -359,6 +359,9 @@
             active: entity?.active === true,
             state: typeof entity?.state === "string" ? entity.state : "idle",
             hitFlashTicks: Number.isFinite(entity?.hitFlashTicks) ? entity.hitFlashTicks : 0,
+            illuminated: entity?.illuminated === true,
+            flareExposure: Number.isFinite(entity?.flareExposure) ? entity.flareExposure : 0,
+            consumesFlare: entity?.consumesFlare === true,
           }))
           .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null && entity.active === true);
       } catch (_error) {
@@ -557,6 +560,27 @@
             entity.size,
             entity.size,
           );
+          const flareExposure = Math.max(0, Math.min(1, entity.flareExposure || 0));
+          if (entity.illuminated === true) {
+            const glowRadius = Math.max(entityRect.w, entityRect.h) * (1.2 + flareExposure);
+            const glow = ctx.createRadialGradient(
+              entityRect.x + entityRect.w * 0.5,
+              entityRect.y + entityRect.h * 0.5,
+              1,
+              entityRect.x + entityRect.w * 0.5,
+              entityRect.y + entityRect.h * 0.5,
+              glowRadius,
+            );
+            glow.addColorStop(0, entity.consumesFlare ? "rgba(251, 146, 60, 0.30)" : "rgba(56, 189, 248, 0.32)");
+            glow.addColorStop(1, "rgba(56, 189, 248, 0)");
+            ctx.fillStyle = glow;
+            ctx.fillRect(
+              entityRect.x - glowRadius,
+              entityRect.y - glowRadius,
+              entityRect.w + glowRadius * 2,
+              entityRect.h + glowRadius * 2,
+            );
+          }
           const hitAlpha = entity.hitFlashTicks > 0 ? 0.9 : 0.45;
           ctx.fillStyle = entity.hitFlashTicks > 0 ? `rgba(250, 204, 21, ${hitAlpha})` : "rgba(239, 68, 68, 0.72)";
           ctx.fillRect(entityRect.x, entityRect.y, entityRect.w, entityRect.h);

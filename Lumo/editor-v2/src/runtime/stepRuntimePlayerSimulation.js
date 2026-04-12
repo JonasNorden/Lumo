@@ -42,6 +42,8 @@ const DEFAULT_FLARE_SPEED_PX_PER_SECOND = 360;
 const DEFAULT_FLARE_UPWARD_IMPULSE_PX_PER_SECOND = 420;
 const DEFAULT_FLARE_LIFETIME_TICKS = 12 * 60;
 const DEFAULT_FLARE_RADIUS_PX = 5;
+const DEFAULT_FLARE_LIGHT_RADIUS_PX = 220;
+const DEFAULT_FLARE_FADE_LAST_TICKS = 3 * 60;
 const DEFAULT_FLARE_SPAWN_OFFSET_PX = 10;
 const DEFAULT_FLARE_SPAWN_HEIGHT_OFFSET_PX = 8;
 const DEFAULT_FLARE_GRAVITY_PX_PER_SECOND = 980;
@@ -63,6 +65,7 @@ const DEFAULT_BOOST_ENERGY_DRAIN_PER_SECOND = 0.18;
 const ENTITY_HIT_FLASH_TICKS = 6;
 const ENTITY_DARK_CREATURE_PULSE_SCALE = 0.55;
 const ENTITY_HOVER_VOID_PULSE_SCALE = 0.6;
+const ENTITY_DARK_CREATURE_FLARE_CONSUME_BURN_MUL = 7.5;
 const PULSE_TARGET_TYPES = new Set(["dark_creature", "hover_void"]);
 
 function resolvePulseTargetType(entityType) {
@@ -134,6 +137,10 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     state: typeof source.state === "string" ? source.state : "idle",
     lastPulseIdHit: Number.isFinite(source?.lastPulseIdHit) ? Math.floor(source.lastPulseIdHit) : -1,
     hitFlashTicks: Number.isFinite(source?.hitFlashTicks) ? Math.max(0, Math.floor(source.hitFlashTicks)) : 0,
+    illuminated: source?.illuminated === true,
+    flareExposure: Number.isFinite(source?.flareExposure) ? Math.max(0, source.flareExposure) : 0,
+    lastFlareIdHit: Number.isFinite(source?.lastFlareIdHit) ? Math.floor(source.lastFlareIdHit) : -1,
+    consumesFlare: source?.consumesFlare === true,
   };
 }
 
@@ -257,6 +264,85 @@ function stepPulseEntityInteractions(worldPacket, playerState, pulse, sourceEnti
   return { entities: nextEntities, hits };
 }
 
+function buildFlareLightSnapshot(flare) {
+  if (!flare || !Number.isFinite(flare.x) || !Number.isFinite(flare.y)) {
+    return null;
+  }
+  const lightRadiusBase = Number.isFinite(flare?.lightRadius) && flare.lightRadius > 0 ? flare.lightRadius : DEFAULT_FLARE_LIGHT_RADIUS_PX;
+  const ttlTicks = Number.isFinite(flare?.ttlTicks) ? flare.ttlTicks : 0;
+  const lifetimeTicks = Number.isFinite(flare?.lifetimeTicks) && flare.lifetimeTicks > 0 ? flare.lifetimeTicks : DEFAULT_FLARE_LIFETIME_TICKS;
+  const ageTicks = Number.isFinite(flare?.ageTicks) && flare.ageTicks >= 0 ? flare.ageTicks : Math.max(0, lifetimeTicks - ttlTicks);
+  const fadeLastTicks = Number.isFinite(flare?.fadeLastTicks) && flare.fadeLastTicks > 0 ? flare.fadeLastTicks : DEFAULT_FLARE_FADE_LAST_TICKS;
+  let lightScale = 1;
+  if (fadeLastTicks > 0) {
+    const fadeStartTick = Math.max(0, lifetimeTicks - fadeLastTicks);
+    if (ageTicks > fadeStartTick) {
+      const fadeProgress = Math.max(0, Math.min(1, (ageTicks - fadeStartTick) / fadeLastTicks));
+      lightScale = Math.max(0, 1 - fadeProgress);
+    }
+  }
+  return {
+    id: Number.isFinite(flare?.id) ? Math.floor(flare.id) : -1,
+    x: flare.x,
+    y: flare.y,
+    lightRadius: lightRadiusBase * lightScale,
+  };
+}
+
+function stepFlareEntityInteractions(sourceEntities, flares) {
+  if (!Array.isArray(sourceEntities) || sourceEntities.length === 0) {
+    return { entities: [], flareAffects: [] };
+  }
+
+  const flareLights = Array.isArray(flares)
+    ? flares.map((flare) => buildFlareLightSnapshot(flare)).filter((flare) => flare && flare.lightRadius > 0)
+    : [];
+  const flareAffects = [];
+  const entities = sourceEntities.map((entity) => {
+    const next = { ...entity };
+    const targetType = resolvePulseTargetType(next.type);
+    if (next.alive !== true || next.active !== true || !PULSE_TARGET_TYPES.has(targetType)) {
+      next.illuminated = false;
+      next.flareExposure = 0;
+      next.consumesFlare = false;
+      return next;
+    }
+
+    let illuminated = false;
+    let maxExposure = 0;
+    let closestFlareId = -1;
+    let closestDist = Infinity;
+    for (const flare of flareLights) {
+      const dist = Math.hypot((flare.x - next.x), (flare.y - next.y));
+      if (dist > flare.lightRadius) {
+        continue;
+      }
+      illuminated = true;
+      maxExposure = Math.max(maxExposure, 1 - (dist / Math.max(1, flare.lightRadius)));
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestFlareId = flare.id;
+      }
+    }
+
+    next.illuminated = illuminated;
+    next.flareExposure = illuminated ? maxExposure : 0;
+    next.consumesFlare = targetType === "dark_creature" && illuminated;
+    if (illuminated && closestFlareId > 0) {
+      next.lastFlareIdHit = closestFlareId;
+      flareAffects.push({ entityId: next.id, entityType: next.type, flareId: closestFlareId });
+    }
+    if (next.state === "idle" && illuminated) {
+      next.state = targetType === "hover_void" ? "revealed" : "suppressed";
+    } else if ((next.state === "revealed" || next.state === "suppressed") && !illuminated) {
+      next.state = "idle";
+    }
+    return next;
+  });
+
+  return { entities, flareAffects };
+}
+
 function resolvePlayerFacingX(playerState, intentMoveX = 0) {
   if (intentMoveX > 0) {
     return 1;
@@ -362,6 +448,9 @@ function buildFlareProjectile(playerState, facingX, flareId) {
     ttl: DEFAULT_FLARE_LIFETIME_TICKS * (1 / 60),
     ageTicks: 0,
     radius: DEFAULT_FLARE_RADIUS_PX,
+    lightRadius: DEFAULT_FLARE_LIGHT_RADIUS_PX,
+    lifetimeTicks: DEFAULT_FLARE_LIFETIME_TICKS,
+    fadeLastTicks: DEFAULT_FLARE_FADE_LAST_TICKS,
     collided: false,
     expired: false,
   };
@@ -387,6 +476,9 @@ function normalizeExistingFlares(playerState) {
         : (Number.isFinite(flare?.ttl) && flare.ttl > 0 ? Math.ceil(flare.ttl * 60) : 0),
       ageTicks: Number.isFinite(flare?.ageTicks) && flare.ageTicks >= 0 ? Math.floor(flare.ageTicks) : 0,
       radius: Number.isFinite(flare?.radius) && flare.radius > 0 ? flare.radius : DEFAULT_FLARE_RADIUS_PX,
+      lightRadius: Number.isFinite(flare?.lightRadius) && flare.lightRadius > 0 ? flare.lightRadius : DEFAULT_FLARE_LIGHT_RADIUS_PX,
+      lifetimeTicks: Number.isFinite(flare?.lifetimeTicks) && flare.lifetimeTicks > 0 ? Math.floor(flare.lifetimeTicks) : DEFAULT_FLARE_LIFETIME_TICKS,
+      fadeLastTicks: Number.isFinite(flare?.fadeLastTicks) && flare.fadeLastTicks > 0 ? Math.floor(flare.fadeLastTicks) : DEFAULT_FLARE_FADE_LAST_TICKS,
     }))
     .filter((flare) => flare.x !== null && flare.y !== null && flare.ttlTicks > 0);
 }
@@ -411,6 +503,7 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
   const pressedThisTick = intent?.flare === true && previousHeld !== true;
 
   const existingFlares = normalizeExistingFlares(playerState);
+  const existingEntities = normalizeRuntimeEntities(options?.entities, worldPacket, playerState);
   const nextFlareIdBase = Number.isFinite(playerState?.nextFlareId) ? Math.max(1, Math.floor(playerState.nextFlareId)) : 1;
   const nextFlares = [];
   const cleanupStats = { expired: 0, collided: 0, culled: 0 };
@@ -471,7 +564,17 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
       }
     }
 
-    const nextTtlTicks = flare.ttlTicks - 1;
+    const consumesByNearbyDarkCreature = existingEntities.some((entity) => {
+      const targetType = resolvePulseTargetType(entity?.type);
+      if (targetType !== "dark_creature" || entity?.alive !== true || entity?.active !== true) {
+        return false;
+      }
+      const aggroRange = Math.max(0, (Number.isFinite(entity?.size) ? entity.size : 24) * 6);
+      const dist = Math.hypot((entity.x ?? 0) - nextX, (entity.y ?? 0) - nextY);
+      return dist <= aggroRange;
+    });
+    const burnMul = consumesByNearbyDarkCreature ? ENTITY_DARK_CREATURE_FLARE_CONSUME_BURN_MUL : 1;
+    const nextTtlTicks = flare.ttlTicks - burnMul;
     const nextAgeTicks = flare.ageTicks + 1;
 
     const outsideBounds = (
@@ -501,6 +604,9 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
       ttlTicks: nextTtlTicks,
       ttl: nextTtlTicks * dt,
       ageTicks: nextAgeTicks,
+      lightRadius: flare.lightRadius,
+      lifetimeTicks: flare.lifetimeTicks,
+      fadeLastTicks: flare.fadeLastTicks,
       collided: false,
       expired: false,
     });
@@ -721,7 +827,11 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const bottomRespawn = maybeResolveBottomRespawn(worldPacket, verticalStep, options);
   const resolvedPlayerStep = bottomRespawn?.player ?? verticalStep;
   const flareStep = stepFlares(worldPacket, playerState, intent, options);
-  const entityStep = stepPulseEntityInteractions(worldPacket, playerState, pulseStep.pulse, options?.entities, options);
+  const flareEntityStep = stepFlareEntityInteractions(
+    normalizeRuntimeEntities(options?.entities, worldPacket, playerState),
+    flareStep.flares,
+  );
+  const entityStep = stepPulseEntityInteractions(worldPacket, playerState, pulseStep.pulse, flareEntityStep.entities, options);
   const dt = resolveRuntimeDeltaSeconds(options);
   const moving = intent?.moveX !== 0;
   let nextEnergy = pulseStep.energy;
@@ -836,6 +946,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         flareCount: flareStep.flares.length,
         flareCleanup: flareStep.cleanup,
         pulseEntityHits: entityStep.hits.length,
+        flareEntityAffects: flareEntityStep.flareAffects.length,
       },
     },
     entities: entityStep.entities,
