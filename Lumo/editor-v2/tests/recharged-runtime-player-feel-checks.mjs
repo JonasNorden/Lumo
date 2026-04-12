@@ -278,6 +278,27 @@ function runBoostJumpCompatibilityChecks() {
   assert.equal(airborneBoostStep.player.boostActive, true, "expected boost to remain available in air when held");
 }
 
+function runFlareSpawnChecks() {
+  const worldPacket = buildFlatWorldPacket();
+  const player = {
+    position: { x: 4 * 24, y: (10 * 24) - 1 },
+    velocity: { x: 0, y: 0 },
+    grounded: true,
+    falling: false,
+    rising: false,
+    landed: false,
+    facingX: 1,
+    flares: [],
+    flareHeldLastTick: false,
+    nextFlareId: 1,
+  };
+
+  const step = stepRuntimePlayerSimulation(worldPacket, player, { input: { flare: true } });
+  assert.equal(step.ok, true);
+  assert.equal(Array.isArray(step.player.flares), true);
+  assert.equal(step.player.flares.length, 1, "expected flare throw to spawn exactly one flare");
+}
+
 runBaselineConstantChecks();
 runHorizontalControlChecks();
 runReadableJumpArcChecks();
@@ -287,5 +308,6 @@ runOutOfBoundsRespawnChecks();
 runBoostTriggerAndVelocityChecks();
 runBoostHoldDurationChecks();
 runBoostJumpCompatibilityChecks();
+runFlareSpawnChecks();
 
 console.log("recharged-runtime-player-feel-checks: ok");

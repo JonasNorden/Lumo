@@ -128,6 +128,83 @@ function runEditorEntityRuntimePipelineChecks() {
   console.log("editor v2 entity runtime pipeline ok");
 }
 
+function runPulseTargetFilteringChecks() {
+  const source = loadEditorFixture();
+  source.entities = [
+    { id: "enemy-dark", name: "Dark Creature", type: "dark_creature_01", x: 2, y: 1, visible: true, params: { hp: 2 } },
+    { id: "enemy-hover", name: "Hover Void", type: "hover_void_01", x: 2, y: 1, visible: true, params: { maxHp: 2 } },
+    {
+      id: "pickup-flare",
+      name: "Flare Pickup",
+      type: "flare_pickup_01",
+      x: 2,
+      y: 1,
+      visible: true,
+      hp: 5,
+      state: "idle",
+      hitFlashTicks: 2,
+      lastPulseIdHit: 77,
+      params: { hp: 5 },
+    },
+    {
+      id: "decor-flower",
+      name: "Flower Decor",
+      type: "decor_flower_01",
+      x: 2,
+      y: 1,
+      visible: true,
+      hp: 3,
+      state: "idle",
+      hitFlashTicks: 1,
+      lastPulseIdHit: 88,
+      params: { hp: 3 },
+    },
+    {
+      id: "unknown-type",
+      name: "Unknown",
+      type: "unknown_entity_type",
+      x: 2,
+      y: 1,
+      visible: true,
+      hp: 4,
+      state: "idle",
+      hitFlashTicks: 4,
+      lastPulseIdHit: 99,
+      params: { hp: 4 },
+    },
+  ];
+
+  const loaded = loadLevelDocument(source);
+  assert.equal(loaded.ok, true, "expected fixture to load successfully");
+
+  const session = createRuntimeGameSession({ levelDocument: loaded.level });
+  assert.equal(session.start().ok, true, "expected session start");
+
+  session.tick({ pulse: true });
+  const afterPulse = session.getPlayerSnapshot();
+  const byId = (entityId) => afterPulse.entities.find((entity) => entity.id === entityId);
+
+  assert.equal(byId("enemy-dark")?.hp, 1, "pulse should affect dark_creature entities");
+  assert.equal(byId("enemy-hover")?.hp, 1, "pulse should affect hover_void entities");
+
+  assert.equal(byId("pickup-flare")?.hp, 5, "pulse should not affect flare pickups");
+  assert.equal(byId("pickup-flare")?.state, "idle", "pulse should not alter flare pickup state");
+  assert.equal(byId("pickup-flare")?.hitFlashTicks, 2, "pulse should not alter flare pickup hit flash");
+  assert.equal(byId("pickup-flare")?.lastPulseIdHit, 77, "pulse should not alter flare pickup pulse tracking");
+
+  assert.equal(byId("decor-flower")?.hp, 3, "pulse should not affect decor entities");
+  assert.equal(byId("decor-flower")?.state, "idle", "pulse should not alter decor state");
+  assert.equal(byId("decor-flower")?.hitFlashTicks, 1, "pulse should not alter decor hit flash");
+  assert.equal(byId("decor-flower")?.lastPulseIdHit, 88, "pulse should not alter decor pulse tracking");
+
+  assert.equal(byId("unknown-type")?.hp, 4, "pulse should not affect unknown entity types");
+  assert.equal(byId("unknown-type")?.state, "idle", "pulse should not alter unknown entity state");
+  assert.equal(byId("unknown-type")?.hitFlashTicks, 4, "pulse should not alter unknown entity hit flash");
+  assert.equal(byId("unknown-type")?.lastPulseIdHit, 99, "pulse should not alter unknown entity pulse tracking");
+
+  console.log("editor v2 pulse target filtering ok");
+}
+
 async function runRuntimeStartChecks() {
   await withPatchedFetch(async () => {
     const result = await startRuntimeFromLevelUrl(fixtureUrlPath, { steps: 0 });
@@ -230,6 +307,7 @@ async function runQueryContractChecks() {
 
 runEditorFixtureConversionChecks();
 runEditorEntityRuntimePipelineChecks();
+runPulseTargetFilteringChecks();
 runMissingSpawnWarningChecks();
 await runRuntimeStartChecks();
 await runNoRespawnLoopOnValidSpawnChecks();
