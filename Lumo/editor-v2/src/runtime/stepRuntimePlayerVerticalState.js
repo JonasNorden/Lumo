@@ -1,5 +1,5 @@
 import { isRuntimeGridSolid } from "./isRuntimeGridSolid.js";
-import { RUNTIME_PLAYER_PHYSICS_BASELINE } from "./runtimePlayerPhysicsBaseline.js";
+import { resolveLegacyJumpPhysics, resolveRuntimeDeltaSeconds } from "./runtimeLegacyPlayerPhysics.js";
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -7,28 +7,6 @@ function uniqueMessages(messages) {
   }
 
   return [...new Set(messages.filter((message) => typeof message === "string" && message.length > 0))];
-}
-
-// Resolves deterministic gravity with a tiny fallback to keep Node harness output stable.
-function resolveGravityY(options = {}) {
-  const configuredGravityY = options?.physics?.gravityY;
-
-  if (Number.isFinite(configuredGravityY) && configuredGravityY > 0) {
-    return configuredGravityY;
-  }
-
-  return RUNTIME_PLAYER_PHYSICS_BASELINE.gravityY;
-}
-
-// Caps downward velocity to keep first-playable fall speed readable.
-function resolveMaxFallSpeedY(options = {}) {
-  const configuredMaxFallSpeedY = options?.physics?.maxFallSpeedY;
-
-  if (Number.isFinite(configuredMaxFallSpeedY) && configuredMaxFallSpeedY > 0) {
-    return configuredMaxFallSpeedY;
-  }
-
-  return RUNTIME_PLAYER_PHYSICS_BASELINE.maxFallSpeedY;
 }
 
 // Handles jump/gravity vertical integration and collision against floor solids.
@@ -58,21 +36,27 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
       warnings: uniqueMessages(inheritedWarnings),
       debug: {
         currentVelocityY: Number.isFinite(playerState?.velocity?.y) ? playerState.velocity.y : 0,
-        gravityY: resolveGravityY(options),
-        maxFallSpeedY: resolveMaxFallSpeedY(options),
+        gravityY: null,
+        maxFallSpeedY: null,
       },
     };
   }
 
-  const gravityY = resolveGravityY(options);
+  const deltaSeconds = resolveRuntimeDeltaSeconds(options);
+  const jumpPhysics = resolveLegacyJumpPhysics(options);
   const currentX = playerState.position.x;
   const currentY = playerState.position.y;
   const currentVelocityX = Number.isFinite(playerState?.velocity?.x) ? playerState.velocity.x : 0;
   const currentVelocityY = Number.isFinite(playerState?.velocity?.y) ? playerState.velocity.y : 0;
-  const unclampedVelocityY = currentVelocityY + gravityY;
-  const maxFallSpeedY = resolveMaxFallSpeedY(options);
+  const jumpHeld = playerState?.jumpHeldLastTick === true;
+  const jumpCutVelocityY = !jumpHeld && currentVelocityY < 0
+    ? currentVelocityY * jumpPhysics.jumpCutMultiplier
+    : currentVelocityY;
+  const gravityY = jumpCutVelocityY > 0 ? jumpPhysics.gravityDownY : jumpPhysics.gravityUpY;
+  const unclampedVelocityY = jumpCutVelocityY + gravityY * deltaSeconds;
+  const maxFallSpeedY = jumpPhysics.maxFallSpeedY;
   const nextVelocityY = unclampedVelocityY > 0 ? Math.min(unclampedVelocityY, maxFallSpeedY) : unclampedVelocityY;
-  const nextYCandidate = currentY + nextVelocityY;
+  const nextYCandidate = currentY + nextVelocityY * deltaSeconds;
   const gridX = Math.floor(currentX / tileSize);
   const gridYBelow = Math.floor((nextYCandidate + 1) / tileSize);
   const collidedBelow = isRuntimeGridSolid(worldPacket, gridX, gridYBelow);
@@ -105,6 +89,8 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
         gridX,
         gridYBelow,
         gravityY,
+        deltaSeconds,
+        jumpCutVelocityY,
         maxFallSpeedY,
       },
     };
@@ -132,6 +118,8 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
       gridX,
       gridYBelow,
       gravityY,
+      deltaSeconds,
+      jumpCutVelocityY,
       maxFallSpeedY,
     },
   };

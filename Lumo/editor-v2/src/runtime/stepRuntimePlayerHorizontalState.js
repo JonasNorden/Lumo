@@ -1,4 +1,5 @@
 import { isRuntimeGridSolid } from "./isRuntimeGridSolid.js";
+import { resolveRuntimeDeltaSeconds } from "./runtimeLegacyPlayerPhysics.js";
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -40,13 +41,14 @@ export function stepRuntimePlayerHorizontalState(worldPacket, playerState, horiz
   const currentX = playerState.position.x;
   const currentY = playerState.position.y;
   const currentVelocityY = Number.isFinite(playerState?.velocity?.y) ? playerState.velocity.y : 0;
+  const deltaSeconds = resolveRuntimeDeltaSeconds(horizontalInput?.options ?? {});
   const nextVelocityX = Number.isFinite(horizontalInput?.velocityX)
     ? horizontalInput.velocityX
     : Number.isFinite(playerState?.velocity?.x)
       ? playerState.velocity.x
       : 0;
 
-  const nextXCandidate = currentX + nextVelocityX;
+  const nextXCandidate = currentX + nextVelocityX * deltaSeconds;
   const probeY = Math.floor(currentY / tileSize);
 
   let blockedLeft = false;
@@ -96,6 +98,7 @@ export function stepRuntimePlayerHorizontalState(worldPacket, playerState, horiz
       nextXCandidate,
       probeY,
       requestedVelocityX: nextVelocityX,
+      deltaSeconds,
       finalVelocityX,
     },
   };
