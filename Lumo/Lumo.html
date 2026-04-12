@@ -103,21 +103,27 @@
         left: false,
         right: false,
         jump: false,
+        flare: false,
+        pulse: false,
       };
     }
 
     function installRechargedInputIntentSync() {
       const state = createRechargedInputIntentState();
 
-      const readKey = (event) => (typeof event?.key === "string" ? event.key.toLowerCase() : "");
+      const readCode = (event) => (typeof event?.code === "string" ? event.code : "");
       const update = (event, pressed) => {
-        const key = readKey(event);
-        if (key === "arrowleft" || key === "a") {
+        const code = readCode(event);
+        if (code === "ArrowLeft") {
           state.left = pressed;
-        } else if (key === "arrowright" || key === "d") {
+        } else if (code === "ArrowRight") {
           state.right = pressed;
-        } else if (key === "arrowup" || key === "w" || key === " ") {
+        } else if (code === "KeyA") {
           state.jump = pressed;
+        } else if (code === "KeyS") {
+          state.flare = pressed;
+        } else if (code === "KeyD") {
+          state.pulse = pressed;
         }
       };
 
@@ -146,6 +152,8 @@
           left: state?.input?.left === true,
           right: state?.input?.right === true,
           jump: state?.input?.jump === true,
+          flare: state?.input?.flare === true,
+          pulse: state?.input?.pulse === true,
         };
 
         const nowMs = (typeof performance !== "undefined" && typeof performance.now === "function")
