@@ -1,5 +1,6 @@
-import { isRuntimeGridSolid } from "./isRuntimeGridSolid.js";
+import { getRuntimeTileAtGrid } from "./getRuntimeTileAtGrid.js";
 import { resolveLegacyJumpPhysics, resolveRuntimeDeltaSeconds } from "./runtimeLegacyPlayerPhysics.js";
+import { isRuntimeTileBlocking, resolveRuntimeTileBehavior } from "./runtimeTileBehavior.js";
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -59,8 +60,20 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
   const nextYCandidate = currentY + nextVelocityY * deltaSeconds;
   const gridX = Math.floor(currentX / tileSize);
   const gridYBelow = Math.floor((nextYCandidate + 1) / tileSize);
-  const collidedBelow = isRuntimeGridSolid(worldPacket, gridX, gridYBelow);
+  const tileBelow = getRuntimeTileAtGrid(worldPacket, gridX, gridYBelow);
+  const behaviorBelow = tileBelow ? resolveRuntimeTileBehavior(tileBelow) : null;
   const shouldResolveGroundCollision = nextVelocityY >= 0;
+
+  let collidedBelow = false;
+  if (shouldResolveGroundCollision && behaviorBelow) {
+    if (behaviorBelow.oneWay === true) {
+      const tileTopY = gridYBelow * tileSize;
+      const crossedDown = currentY <= tileTopY + 3 && nextYCandidate >= tileTopY;
+      collidedBelow = crossedDown && isRuntimeTileBlocking(behaviorBelow, { includeOneWay: true });
+    } else {
+      collidedBelow = isRuntimeTileBlocking(behaviorBelow, { includeOneWay: false });
+    }
+  }
 
   // Resolve floor collisions only while descending or stationary.
   // This prevents bottom-contact probes from pinning Y on the same tick a jump starts upward.

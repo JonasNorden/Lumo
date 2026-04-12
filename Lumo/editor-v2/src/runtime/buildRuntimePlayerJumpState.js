@@ -29,7 +29,7 @@ function detectGroundContact(worldPacket, playerState) {
 
   const probeGridX = Math.floor(playerState.position.x / tileSize);
   const probeGridY = Math.floor((playerState.position.y + 1) / tileSize);
-  const touchingGround = isRuntimeGridSolid(worldPacket, probeGridX, probeGridY);
+  const touchingGround = isRuntimeGridSolid(worldPacket, probeGridX, probeGridY, { includeOneWay: true });
 
   return {
     ok: true,

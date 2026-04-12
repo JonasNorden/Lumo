@@ -58,7 +58,7 @@ export function stepRuntimePlayerHorizontalState(worldPacket, playerState, horiz
 
   if (nextVelocityX < 0) {
     const leftProbeGridX = Math.floor((nextXCandidate - 1) / tileSize);
-    blockedLeft = isRuntimeGridSolid(worldPacket, leftProbeGridX, probeY);
+    blockedLeft = isRuntimeGridSolid(worldPacket, leftProbeGridX, probeY, { includeOneWay: false });
 
     if (blockedLeft) {
       finalX = currentX;
@@ -66,7 +66,7 @@ export function stepRuntimePlayerHorizontalState(worldPacket, playerState, horiz
     }
   } else if (nextVelocityX > 0) {
     const rightProbeGridX = Math.floor((nextXCandidate + 1) / tileSize);
-    blockedRight = isRuntimeGridSolid(worldPacket, rightProbeGridX, probeY);
+    blockedRight = isRuntimeGridSolid(worldPacket, rightProbeGridX, probeY, { includeOneWay: false });
 
     if (blockedRight) {
       finalX = currentX;
