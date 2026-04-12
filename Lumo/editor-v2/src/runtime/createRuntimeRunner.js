@@ -116,6 +116,7 @@ function createSummary(state) {
 // Creates a minimal deterministic runtime runner that is independent from bridge/browser layers.
 export function createRuntimeRunner(options = {}) {
   const levelDocument = options?.levelDocument;
+  const runtimeConfig = options?.runtimeConfig && typeof options.runtimeConfig === "object" ? { ...options.runtimeConfig } : {};
   const runtimeState = buildSafeState();
   let lastBuild = buildInitializationFromLevel(levelDocument);
 
@@ -193,6 +194,7 @@ export function createRuntimeRunner(options = {}) {
       try {
         const result = stepRuntimePlayerSimulation(runtimeState.world, runtimeState.playerState, {
           ...stepOptions,
+          runtimeConfig,
           entities: runtimeState.entities,
         });
         runtimeState.lastStep = result ?? null;

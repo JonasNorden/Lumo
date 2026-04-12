@@ -135,6 +135,31 @@ function normalizeRuntimeEntities(sourceEntities, worldPacket, playerState) {
     return supportedFromLevel;
   }
 
+  return [];
+}
+
+function isDebugEntityFallbackEnabled(options = {}) {
+  if (options?.runtimeConfig?.debugEntities === true || options?.debugEntities === true) {
+    return true;
+  }
+
+  try {
+    const search = globalThis?.location?.search;
+    if (typeof search === "string" && search.length > 0) {
+      const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+      return params.get("debugEntities") === "1";
+    }
+  } catch (_error) {
+    // Query parsing is best-effort only and should never break runtime simulation.
+  }
+
+  return false;
+}
+
+function resolveDebugFallbackEntities(worldPacket, playerState) {
+  const tileSize = worldPacket?.world?.tileSize;
+  const worldWidth = worldPacket?.world?.width;
+  const worldHeight = worldPacket?.world?.height;
   const playerX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0;
   const playerY = Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0;
   return [normalizeRuntimeEntity({
@@ -147,8 +172,11 @@ function normalizeRuntimeEntities(sourceEntities, worldPacket, playerState) {
   }, 0, tileSize, worldWidth, worldHeight)];
 }
 
-function stepPulseEntityInteractions(worldPacket, playerState, pulse, sourceEntities) {
-  const entities = normalizeRuntimeEntities(sourceEntities, worldPacket, playerState);
+function stepPulseEntityInteractions(worldPacket, playerState, pulse, sourceEntities, runtimeOptions = {}) {
+  const normalizedEntities = normalizeRuntimeEntities(sourceEntities, worldPacket, playerState);
+  const entities = normalizedEntities.length > 0
+    ? normalizedEntities
+    : isDebugEntityFallbackEnabled(runtimeOptions) ? resolveDebugFallbackEntities(worldPacket, playerState) : [];
   if (!Array.isArray(entities) || entities.length === 0) {
     return { entities: [], hits: [] };
   }
@@ -669,7 +697,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const bottomRespawn = maybeResolveBottomRespawn(worldPacket, verticalStep, options);
   const resolvedPlayerStep = bottomRespawn?.player ?? verticalStep;
   const flareStep = stepFlares(worldPacket, playerState, intent, options);
-  const entityStep = stepPulseEntityInteractions(worldPacket, playerState, pulseStep.pulse, options?.entities);
+  const entityStep = stepPulseEntityInteractions(worldPacket, playerState, pulseStep.pulse, options?.entities, options);
   const dt = resolveRuntimeDeltaSeconds(options);
   const moving = intent?.moveX !== 0;
   let nextEnergy = pulseStep.energy;
