@@ -635,6 +635,99 @@
       };
     }
 
+    function ensureRechargedTileVisualState(state) {
+      if (!state || typeof state !== "object") {
+        return null;
+      }
+
+      if (!state.rechargedTileVisualState || typeof state.rechargedTileVisualState !== "object") {
+        const catalogByTileId = new Map();
+        const catalogById = new Map();
+        const catalog = Array.isArray(window.LUMO_CATALOG_TILES) ? window.LUMO_CATALOG_TILES : [];
+        for (const entry of catalog) {
+          if (!entry || typeof entry !== "object") continue;
+          if (Number.isFinite(entry.tileId)) {
+            catalogByTileId.set(entry.tileId | 0, entry);
+          }
+          if (typeof entry.id === "string" && entry.id.length > 0) {
+            catalogById.set(entry.id, entry);
+          }
+        }
+        state.rechargedTileVisualState = {
+          catalogByTileId,
+          catalogById,
+          imageByKey: new Map(),
+        };
+      }
+
+      return state.rechargedTileVisualState;
+    }
+
+    // Mirrors V1 tile visual selection: tile id -> catalog entry image + draw metadata (no neighbor autotile pass).
+    function drawRechargedTileV1Visual(ctx, mapper, state, supportTile, worldUnitsToPx, tileSize) {
+      const visualState = ensureRechargedTileVisualState(state);
+      if (!visualState || !supportTile || typeof supportTile !== "object") {
+        return false;
+      }
+
+      const numericTileId = Number.isFinite(supportTile?.tileId) ? (supportTile.tileId | 0) : null;
+      const catalogTileId = typeof supportTile?.catalogTileId === "string" ? supportTile.catalogTileId : null;
+      const catalogDef = (catalogTileId && visualState.catalogById.get(catalogTileId))
+        || (numericTileId !== null ? visualState.catalogByTileId.get(numericTileId) : null)
+        || null;
+      const imageSrc = typeof supportTile?.img === "string"
+        ? supportTile.img
+        : (typeof catalogDef?.img === "string" ? catalogDef.img : null);
+      if (!imageSrc) {
+        return false;
+      }
+
+      let img = visualState.imageByKey.get(imageSrc);
+      if (!img) {
+        img = new Image();
+        img.src = imageSrc;
+        img._ok = false;
+        img.onload = () => { img._ok = true; };
+        img.onerror = () => { img._ok = false; };
+        visualState.imageByKey.set(imageSrc, img);
+      }
+      if (img._ok !== true) {
+        return false;
+      }
+
+      const drawW = Number.isFinite(supportTile?.drawW)
+        ? supportTile.drawW
+        : (Number.isFinite(catalogDef?.drawW) ? catalogDef.drawW : tileSize);
+      const drawH = Number.isFinite(supportTile?.drawH)
+        ? supportTile.drawH
+        : (Number.isFinite(catalogDef?.drawH) ? catalogDef.drawH : tileSize);
+      const drawOffX = Number.isFinite(supportTile?.drawOffX)
+        ? supportTile.drawOffX
+        : (Number.isFinite(catalogDef?.drawOffX) ? catalogDef.drawOffX : 0);
+      const drawOffY = Number.isFinite(supportTile?.drawOffY)
+        ? supportTile.drawOffY
+        : (Number.isFinite(catalogDef?.drawOffY) ? catalogDef.drawOffY : 0);
+      const drawAnchor = typeof supportTile?.drawAnchor === "string"
+        ? supportTile.drawAnchor
+        : (typeof catalogDef?.drawAnchor === "string" ? catalogDef.drawAnchor : "TL");
+
+      const tileX = Number.isFinite(supportTile?.x) ? supportTile.x : null;
+      const tileY = Number.isFinite(supportTile?.y) ? supportTile.y : null;
+      if (tileX === null || tileY === null) {
+        return false;
+      }
+
+      const tileWorldX = tileX * worldUnitsToPx;
+      const tileWorldY = tileY * worldUnitsToPx;
+      const worldDrawX = tileWorldX + drawOffX;
+      const worldDrawY = drawAnchor === "BL"
+        ? ((tileY + 1) * worldUnitsToPx) - drawH + drawOffY
+        : tileWorldY + drawOffY;
+      const drawRect = mapper.worldToCanvasRect(worldDrawX, worldDrawY, Math.max(1, drawW), Math.max(1, drawH));
+      ctx.drawImage(img, drawRect.x, drawRect.y, drawRect.w, drawRect.h);
+      return true;
+    }
+
     function renderRechargedCanvasFrame(canvas, state) {
       if (!canvas || typeof canvas.getContext !== "function") {
         return false;
@@ -713,7 +806,7 @@
         ctx.fillStyle = "rgba(15, 23, 42, 0.52)";
         ctx.fillRect(playfieldRect.x, playfieldRect.y, playfieldRect.w, playfieldRect.h);
 
-        // Draw real runtime support geometry from Recharged world tile data in tileSize-scaled world pixels.
+        // Draw support tiles with V1 tile assets/placement rules first.
         for (const supportTile of supportTiles) {
           const tileX = Number.isFinite(supportTile?.x) ? supportTile.x : null;
           const tileY = Number.isFinite(supportTile?.y) ? supportTile.y : null;
@@ -728,32 +821,20 @@
           const worldRectW = tileW * worldUnitsToPx;
           const worldRectH = tileH * worldUnitsToPx;
           const supportCanvasRect = mapper.worldToCanvasRect(worldRectX, worldRectY, worldRectW, worldRectH);
+          const drewV1Visual = drawRechargedTileV1Visual(ctx, mapper, state, supportTile, worldUnitsToPx, tileSize);
+          if (drewV1Visual) {
+            continue;
+          }
 
-          ctx.fillStyle = "#1f2937";
+          // V1 fallback: plain tile fill from legacy tile behavior color when no image is available yet.
+          const fallbackTileDef = (window?.Lumo?.Tileset && Number.isFinite(supportTile?.tileId))
+            ? window.Lumo.Tileset[supportTile.tileId | 0]
+            : null;
+          ctx.fillStyle = fallbackTileDef?.color || "#2b3646";
           ctx.fillRect(supportCanvasRect.x, supportCanvasRect.y, supportCanvasRect.w, supportCanvasRect.h);
-          ctx.fillStyle = "#334155";
-          ctx.fillRect(
-            supportCanvasRect.x + 1,
-            supportCanvasRect.y + 1,
-            Math.max(1, supportCanvasRect.w - 2),
-            Math.max(1, supportCanvasRect.h - 2),
-          );
-          ctx.fillStyle = "#94a3b8";
-          ctx.fillRect(supportCanvasRect.x, supportCanvasRect.y, supportCanvasRect.w, Math.min(4, supportCanvasRect.h));
-          ctx.fillStyle = "rgba(15, 23, 42, 0.35)";
-          ctx.fillRect(
-            supportCanvasRect.x,
-            supportCanvasRect.y + Math.max(0, supportCanvasRect.h - 3),
-            supportCanvasRect.w,
-            Math.min(3, supportCanvasRect.h),
-          );
+          ctx.fillStyle = "rgba(255,255,255,0.03)";
+          ctx.fillRect(supportCanvasRect.x, supportCanvasRect.y, supportCanvasRect.w, Math.min(1, supportCanvasRect.h));
         }
-
-        // Draw true world bounds in the same world-to-canvas mapping used by player and support geometry.
-        ctx.strokeStyle = "#64748b";
-        ctx.lineWidth = 1;
-        const worldBoundsRect = mapper.worldToCanvasRect(0, 0, worldWidthPx, worldHeightPx);
-        ctx.strokeRect(worldBoundsRect.x + 0.5, worldBoundsRect.y + 0.5, Math.max(0, worldBoundsRect.w - 1), Math.max(0, worldBoundsRect.h - 1));
 
         if (player.hidden !== true) {
           drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, currentSnapshot);

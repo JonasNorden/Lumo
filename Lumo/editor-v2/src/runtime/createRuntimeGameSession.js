@@ -94,10 +94,18 @@ function buildWorldSnapshot(worldState) {
   const supportTiles = Array.isArray(worldState?.layers?.tiles)
     ? worldState.layers.tiles
       .map((tile) => ({
+        tileId: tile?.tileId ?? null,
         x: Number.isFinite(tile?.x) ? tile.x : null,
         y: Number.isFinite(tile?.y) ? tile.y : null,
         w: Number.isFinite(tile?.w) ? tile.w : null,
         h: Number.isFinite(tile?.h) ? tile.h : null,
+        catalogTileId: typeof tile?.catalogTileId === "string" ? tile.catalogTileId : null,
+        img: typeof tile?.img === "string" ? tile.img : null,
+        drawW: Number.isFinite(tile?.drawW) ? tile.drawW : null,
+        drawH: Number.isFinite(tile?.drawH) ? tile.drawH : null,
+        drawOffX: Number.isFinite(tile?.drawOffX) ? tile.drawOffX : null,
+        drawOffY: Number.isFinite(tile?.drawOffY) ? tile.drawOffY : null,
+        drawAnchor: typeof tile?.drawAnchor === "string" ? tile.drawAnchor : null,
       }))
       .filter((tile) => (
         tile.x !== null &&
