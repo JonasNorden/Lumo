@@ -40,7 +40,31 @@ function runFacingSourceChecks() {
   );
 }
 
+function runIdleAnimationParityChecks() {
+  assert.equal(
+    html.includes("const RECHARGED_PLAYER_SPRITE_IDLE_FRAMES = ["),
+    true,
+    "recharged should load the canonical four-frame idle sprite strip used by V1",
+  );
+  assert.equal(
+    html.includes("const RECHARGED_PLAYER_IDLE_FPS = 7;"),
+    true,
+    "recharged idle cadence should match V1 idle fps",
+  );
+  assert.equal(
+    html.includes("function resolveRechargedIdleSpriteFrame(state, spriteCache, animationState, nowMs)"),
+    true,
+    "recharged should expose an explicit idle frame resolver for V1 parity",
+  );
+  assert.equal(
+    html.includes("if (idleAnimation.i >= RECHARGED_PLAYER_IDLE_LAST_INDEX)"),
+    true,
+    "idle animation should ping-pong at the last idle frame instead of looping linearly",
+  );
+}
+
 runAnimationResolverChecks();
 runFacingSourceChecks();
+runIdleAnimationParityChecks();
 
 console.log("lumo-recharged-player-animation-contract-checks: ok");
