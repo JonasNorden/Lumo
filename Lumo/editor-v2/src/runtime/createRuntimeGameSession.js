@@ -49,6 +49,9 @@ function buildPlayerSnapshot(playerState) {
           bounceCount: Number.isFinite(flare?.bounceCount) ? flare.bounceCount : 0,
           ttlTicks: Number.isFinite(flare?.ttlTicks) ? flare.ttlTicks : null,
           radius: Number.isFinite(flare?.radius) ? flare.radius : null,
+          lightRadius: Number.isFinite(flare?.lightRadius) ? flare.lightRadius : null,
+          lifetimeTicks: Number.isFinite(flare?.lifetimeTicks) ? flare.lifetimeTicks : null,
+          fadeLastTicks: Number.isFinite(flare?.fadeLastTicks) ? flare.fadeLastTicks : null,
         }))
         .filter((flare) => flare.id !== null && flare.x !== null && flare.y !== null && flare.radius !== null)
       : [],
@@ -67,6 +70,10 @@ function buildPlayerSnapshot(playerState) {
           state: typeof entity?.state === "string" ? entity.state : "idle",
           hitFlashTicks: Number.isFinite(entity?.hitFlashTicks) ? entity.hitFlashTicks : 0,
           lastPulseIdHit: Number.isFinite(entity?.lastPulseIdHit) ? entity.lastPulseIdHit : -1,
+          illuminated: entity?.illuminated === true,
+          flareExposure: Number.isFinite(entity?.flareExposure) ? entity.flareExposure : 0,
+          consumesFlare: entity?.consumesFlare === true,
+          lastFlareIdHit: Number.isFinite(entity?.lastFlareIdHit) ? entity.lastFlareIdHit : -1,
         }))
         .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null)
       : [],
