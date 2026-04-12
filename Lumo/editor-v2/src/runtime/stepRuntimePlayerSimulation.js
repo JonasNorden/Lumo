@@ -64,6 +64,10 @@ const DEFAULT_BOOST_MULTIPLIER = 1.55;
 const DEFAULT_BOOST_MIN_ENERGY = 0.04;
 const DEFAULT_MOVE_ENERGY_DRAIN_PER_SECOND = 0.06;
 const DEFAULT_BOOST_ENERGY_DRAIN_PER_SECOND = 0.18;
+const DEFAULT_LANTERN_CHARGE_RATE_PER_SECOND = 0.12;
+const DEFAULT_LANTERN_RADIUS_PX = 170;
+const DEFAULT_LANTERN_STRENGTH = 0.85;
+const DEFAULT_POWERCELL_FILL_DURATION_SECONDS = 1.6;
 const ENTITY_HIT_FLASH_TICKS = 6;
 const ENTITY_DARK_CREATURE_PULSE_SCALE = 0.55;
 const ENTITY_HOVER_VOID_PULSE_SCALE = 0.6;
@@ -146,6 +150,7 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     lastFlareIdHit: Number.isFinite(source?.lastFlareIdHit) ? Math.floor(source.lastFlareIdHit) : -1,
     consumesFlare: source?.consumesFlare === true,
     amount: Number.isFinite(source?.amount) ? Math.max(1, Math.floor(source.amount)) : 1,
+    params: params && typeof params === "object" ? { ...params } : {},
   };
 }
 
@@ -155,6 +160,22 @@ function isFlarePickupEntityType(entityType) {
   }
   const normalizedType = entityType.trim().toLowerCase();
   return normalizedType === "flare_pickup_01" || normalizedType === "flarepickup" || normalizedType === "flairpickup";
+}
+
+function isPowerCellEntityType(entityType) {
+  if (typeof entityType !== "string") {
+    return false;
+  }
+  const normalizedType = entityType.trim().toLowerCase();
+  return normalizedType === "powercell_01" || normalizedType === "powercell" || normalizedType === "power_cell";
+}
+
+function isLanternEntityType(entityType) {
+  if (typeof entityType !== "string") {
+    return false;
+  }
+  const normalizedType = entityType.trim().toLowerCase();
+  return normalizedType === "lantern_01" || normalizedType === "lantern";
 }
 
 function buildPlayerPickupBounds(playerState, tileSize) {
@@ -184,25 +205,29 @@ function isAabbOverlap(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-function stepFlarePickupCollection(worldPacket, playerState, sourceEntities) {
+function stepPickupCollection(worldPacket, playerState, sourceEntities) {
   if (!Array.isArray(sourceEntities) || sourceEntities.length === 0) {
     return {
       entities: [],
       flareStash: resolvePlayerFlareStash(playerState),
-      collectedCount: 0,
-      collectedIds: [],
+      flareCollectedCount: 0,
+      flareCollectedIds: [],
+      powerCellCollectedCount: 0,
+      powerCellFill: playerState?.powerCellFill ?? playerState?.__pcFill ?? null,
     };
   }
 
   const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0 ? worldPacket.world.tileSize : 24;
   const playerBounds = buildPlayerPickupBounds(playerState, tileSize);
   let flareStash = resolvePlayerFlareStash(playerState);
-  let collectedCount = 0;
-  const collectedIds = [];
+  let flareCollectedCount = 0;
+  const flareCollectedIds = [];
+  let powerCellCollectedCount = 0;
+  let powerCellFill = playerState?.powerCellFill ?? playerState?.__pcFill ?? null;
 
   const entities = sourceEntities.map((entity) => {
     const next = { ...entity };
-    if (next.active !== true || !isFlarePickupEntityType(next.type)) {
+    if (next.active !== true || (!isFlarePickupEntityType(next.type) && !isPowerCellEntityType(next.type))) {
       return next;
     }
 
@@ -220,15 +245,93 @@ function stepFlarePickupCollection(worldPacket, playerState, sourceEntities) {
     next.active = false;
     next.alive = false;
     next.state = "collected";
-    flareStash += Number.isFinite(next?.amount) ? Math.max(1, Math.floor(next.amount)) : 1;
-    collectedCount += 1;
-    if (typeof next.id === "string" && next.id.length > 0) {
-      collectedIds.push(next.id);
+    if (isFlarePickupEntityType(next.type)) {
+      const pickupAmount = Number.isFinite(next?.amount)
+        ? next.amount
+        : (Number.isFinite(next?.params?.amount) ? next.params.amount : 1);
+      flareStash += Math.max(1, Math.floor(pickupAmount));
+      flareCollectedCount += 1;
+      if (typeof next.id === "string" && next.id.length > 0) {
+        flareCollectedIds.push(next.id);
+      }
+      return next;
     }
+    // Power-cell starts the same V1 timed ease-out refill instead of instant full.
+    powerCellFill = { t: 0, dur: DEFAULT_POWERCELL_FILL_DURATION_SECONDS, from: null };
+    powerCellCollectedCount += 1;
     return next;
   });
 
-  return { entities, flareStash, collectedCount, collectedIds };
+  return {
+    entities,
+    flareStash,
+    flareCollectedCount,
+    flareCollectedIds,
+    powerCellCollectedCount,
+    powerCellFill,
+  };
+}
+
+function stepPowerCellRecharge(playerState, currentEnergy, options = {}) {
+  const dt = resolveRuntimeDeltaSeconds(options);
+  const sourceFill = playerState?.powerCellFill ?? playerState?.__pcFill;
+  if (!sourceFill || typeof sourceFill !== "object") {
+    return { energy: currentEnergy, powerCellFill: null };
+  }
+
+  const duration = Number.isFinite(sourceFill?.dur) && sourceFill.dur > 0
+    ? sourceFill.dur
+    : DEFAULT_POWERCELL_FILL_DURATION_SECONDS;
+  const nextElapsed = (Number.isFinite(sourceFill?.t) ? sourceFill.t : 0) + dt;
+  const progress = Math.max(0, Math.min(1, nextElapsed / duration));
+  const easeOut = 1 - Math.pow(1 - progress, 3);
+  const fromEnergy = Number.isFinite(sourceFill?.from)
+    ? sourceFill.from
+    : (Number.isFinite(currentEnergy) ? currentEnergy : 0);
+  const nextEnergy = Math.max(0, Math.min(1, fromEnergy + (1 - fromEnergy) * easeOut));
+  if (progress >= 1) {
+    return { energy: 1, powerCellFill: null };
+  }
+
+  return {
+    energy: nextEnergy,
+    powerCellFill: { ...sourceFill, t: nextElapsed, dur: duration, from: fromEnergy },
+  };
+}
+
+function stepLanternAuraRecharge(playerState, sourceEntities, currentEnergy, options = {}) {
+  if (!Array.isArray(sourceEntities) || sourceEntities.length === 0) {
+    return currentEnergy;
+  }
+  const dt = resolveRuntimeDeltaSeconds(options);
+  const tileSize = Number.isFinite(options?.tileSize) && options.tileSize > 0
+    ? options.tileSize
+    : (Number.isFinite(options?.world?.tileSize) && options.world.tileSize > 0 ? options.world.tileSize : 24);
+  const playerBounds = buildPlayerPickupBounds(playerState, tileSize);
+  const playerCenterX = playerBounds.x + playerBounds.w * 0.5;
+  const playerCenterY = playerBounds.y + playerBounds.h * 0.5;
+  let chargedEnergy = currentEnergy;
+
+  // Lantern aura recharge matches V1: continuous charge while standing inside radius.
+  for (const entity of sourceEntities) {
+    if (entity?.active !== true || !isLanternEntityType(entity?.type)) {
+      continue;
+    }
+    const center = getEntityCenter(entity);
+    const radius = Number.isFinite(entity?.params?.radius) && entity.params.radius > 0
+      ? entity.params.radius
+      : DEFAULT_LANTERN_RADIUS_PX;
+    const strength = Number.isFinite(entity?.params?.strength) && entity.params.strength > 0
+      ? entity.params.strength
+      : DEFAULT_LANTERN_STRENGTH;
+    const distance = Math.hypot(playerCenterX - center.x, playerCenterY - center.y);
+    if (distance > radius) {
+      continue;
+    }
+    chargedEnergy += strength * DEFAULT_LANTERN_CHARGE_RATE_PER_SECOND * dt;
+  }
+
+  return Math.max(0, Math.min(1, chargedEnergy));
 }
 
 function getEntityCenter(entity) {
@@ -944,17 +1047,17 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const bottomRespawn = maybeResolveBottomRespawn(worldPacket, verticalStep, options);
   const resolvedPlayerStep = bottomRespawn?.player ?? verticalStep;
   const normalizedEntities = normalizeRuntimeEntities(options?.entities, worldPacket, playerState);
-  const flarePickupStep = stepFlarePickupCollection(worldPacket, {
+  const pickupStep = stepPickupCollection(worldPacket, {
     ...playerState,
     position: resolvedPlayerStep.position,
   }, normalizedEntities);
   const flareStep = stepFlares(worldPacket, playerState, intent, {
     ...options,
-    flareStash: flarePickupStep.flareStash,
+    flareStash: pickupStep.flareStash,
     availableEnergy: pulseStep.energy,
   });
   const flareEntityStep = stepFlareEntityInteractions(
-    flarePickupStep.entities,
+    pickupStep.entities,
     flareStep.flares,
   );
   const entityStep = stepPulseEntityInteractions(worldPacket, playerState, pulseStep.pulse, flareEntityStep.entities, options);
@@ -967,7 +1070,18 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   if (boostActive) {
     nextEnergy -= DEFAULT_BOOST_ENERGY_DRAIN_PER_SECOND * dt;
   }
-  nextEnergy = Math.max(0, Math.min(1, nextEnergy));
+  nextEnergy = stepLanternAuraRecharge(
+    { ...playerState, position: resolvedPlayerStep.position },
+    entityStep.entities,
+    nextEnergy,
+    { ...options, tileSize: worldPacket?.world?.tileSize, world: worldPacket?.world },
+  );
+  const powerCellRecharge = stepPowerCellRecharge(
+    { ...playerState, powerCellFill: pickupStep.powerCellFill },
+    nextEnergy,
+    options,
+  );
+  nextEnergy = powerCellRecharge.energy;
   const status = resolvedPlayerStep.status;
   const finalPlayerState = {
     grounded: resolvedPlayerStep.grounded === true,
@@ -1012,6 +1126,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       pulseHeldLastTick: pulseStep.pulseHeldLastTick,
       boostActive,
       energy: nextEnergy,
+      powerCellFill: powerCellRecharge.powerCellFill,
       facingX: flareStep.facingX,
       nextFlareId: flareStep.nextFlareId,
       entities: entityStep.entities,
@@ -1072,8 +1187,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         flareSpawned: flareStep.flareSpawned,
         flareCount: flareStep.flares.length,
         flareStash: flareStep.flareStash,
-        flarePickupCollected: flarePickupStep.collectedCount,
-        flarePickupCollectedIds: flarePickupStep.collectedIds,
+        flarePickupCollected: pickupStep.flareCollectedCount,
+        flarePickupCollectedIds: pickupStep.flareCollectedIds,
+        powerCellPickupCollected: pickupStep.powerCellCollectedCount,
         flareThrowSuppressedByEmptyStash: flareStep.flareThrowSuppressedByEmptyStash,
         flareThrowSuppressedByEnergy: flareStep.flareThrowSuppressedByEnergy,
         flareCleanup: flareStep.cleanup,
