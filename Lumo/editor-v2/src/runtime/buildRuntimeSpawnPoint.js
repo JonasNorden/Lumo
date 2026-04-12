@@ -10,7 +10,7 @@ export function buildRuntimeSpawnPoint(skeleton) {
 
   // Keep grid coords stable even if tileSize is missing/invalid.
   const gridX = tileSize > 0 ? Math.floor(x / tileSize) : 0;
-  const gridY = tileSize > 0 ? Math.floor(y / tileSize) : 0;
+  const gridY = tileSize > 0 ? Math.max(0, Math.floor((y - 1) / tileSize)) : 0;
 
   return {
     x,

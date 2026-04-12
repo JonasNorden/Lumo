@@ -169,6 +169,8 @@ function convertEditorTiles(editorLevel, width, height, warnings) {
       y: Math.floor(index / width),
       w: 1,
       h: 1,
+      solid: true,
+      coordinateSpace: "grid",
     });
   }
 
@@ -185,6 +187,8 @@ function convertEditorTiles(editorLevel, width, height, warnings) {
       y,
       w: Number.isFinite(placement?.size) && placement.size > 0 ? Math.round(placement.size) : 1,
       h: Number.isFinite(placement?.size) && placement.size > 0 ? Math.round(placement.size) : 1,
+      solid: true,
+      coordinateSpace: "grid",
     });
   }
 
@@ -344,10 +348,14 @@ export function normalizeTiles(tilesInput, errors) {
       pushError(errors, `layers.tiles[${index}].y is required.`);
     }
 
+    const normalizedSolid = typeof tile.solid === "boolean" ? tile.solid : true;
+
     return {
       ...tile,
       w: tile.w == null ? 1 : tile.w,
       h: tile.h == null ? 1 : tile.h,
+      solid: normalizedSolid,
+      coordinateSpace: typeof tile.coordinateSpace === "string" ? tile.coordinateSpace : "world",
     };
   });
 }
