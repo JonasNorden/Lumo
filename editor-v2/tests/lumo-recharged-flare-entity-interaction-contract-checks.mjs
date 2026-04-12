@@ -48,13 +48,13 @@ function runFlareEntityChecks() {
   let other = findEntity(snapshot, "other-1");
 
   assert.equal(dark.illuminated, true, "expected dark creature illuminated by flare");
-  assert.equal(hover.illuminated, true, "expected hover void illuminated by flare");
+  assert.equal(hover.illuminated, false, "expected hover void to ignore flare lighting like V1");
   assert.equal(dark.consumesFlare, true, "expected dark creature to consume flare");
   assert.equal(hover.consumesFlare, false, "expected hover void not to consume flare");
   assert.equal(dark.state === "suppressed" || dark.state === "idle", true, "expected dark creature flare response state");
-  assert.equal(hover.state === "revealed" || hover.state === "idle", true, "expected hover void flare response state");
+  assert.equal(hover.state, "idle", "expected hover void flare state to remain idle");
   assert.equal(Number.isFinite(dark.lastFlareIdHit) && dark.lastFlareIdHit > 0, true, "expected dark creature flare id tracking");
-  assert.equal(Number.isFinite(hover.lastFlareIdHit) && hover.lastFlareIdHit > 0, true, "expected hover void flare id tracking");
+  assert.equal(hover.lastFlareIdHit, -1, "expected hover void flare id tracking to stay untouched");
   assert.equal(pickup.illuminated, false, "expected pickup to ignore flare entity interaction");
   assert.equal(decor.illuminated, false, "expected decor to ignore flare entity interaction");
   assert.equal(other.illuminated, false, "expected unrelated entity to ignore flare interaction");
@@ -89,7 +89,7 @@ function runFlareEntityChecks() {
   hover = findEntity(snapshot, "hover-1");
   assert.equal(snapshot.flares.length, 0, "expected flare to expire");
   assert.equal(dark.illuminated, false, "expected dark creature no longer illuminated after flare expiry");
-  assert.equal(hover.illuminated, false, "expected hover void no longer illuminated after flare expiry");
+  assert.equal(hover.illuminated, false, "expected hover void to remain unaffected after flare expiry");
 
   const darkHpBeforePulse = dark.hp;
   const hoverHpBeforePulse = hover.hp;

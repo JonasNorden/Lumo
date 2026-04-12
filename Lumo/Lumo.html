@@ -555,8 +555,8 @@
 
         for (const entity of entitySnapshots) {
           const entityRect = mapper.worldToCanvasRect(
-            entity.x - entity.size * 0.5,
-            entity.y - entity.size,
+            entity.x,
+            entity.y,
             entity.size,
             entity.size,
           );

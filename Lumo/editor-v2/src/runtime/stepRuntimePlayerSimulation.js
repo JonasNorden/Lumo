@@ -115,6 +115,7 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     : Number.isFinite(params?.drawW) && params.drawW > 0
       ? params.drawW
       : 24;
+  const drawAnchor = String(source?.drawAnchor || params?.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL";
   const maxHp = Number.isFinite(source?.maxHp) && source.maxHp > 0
     ? Math.floor(source.maxHp)
     : type === "dark_creature_01"
@@ -128,8 +129,9 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     id: typeof source.id === "string" && source.id.length > 0 ? source.id : `runtime-entity-${index + 1}`,
     type,
     x,
-    y,
+    y: looksTileBased && drawAnchor === "BL" ? y + (tileSize - size) : y,
     size,
+    drawAnchor,
     hp,
     maxHp,
     alive: source.alive !== false && hp > 0,
@@ -141,6 +143,16 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     flareExposure: Number.isFinite(source?.flareExposure) ? Math.max(0, source.flareExposure) : 0,
     lastFlareIdHit: Number.isFinite(source?.lastFlareIdHit) ? Math.floor(source.lastFlareIdHit) : -1,
     consumesFlare: source?.consumesFlare === true,
+  };
+}
+
+function getEntityCenter(entity) {
+  const size = Number.isFinite(entity?.size) && entity.size > 0 ? entity.size : 24;
+  const x = Number.isFinite(entity?.x) ? entity.x : 0;
+  const y = Number.isFinite(entity?.y) ? entity.y : 0;
+  return {
+    x: x + size * 0.5,
+    y: y + size * 0.5,
   };
 }
 
@@ -237,8 +249,9 @@ function stepPulseEntityInteractions(worldPacket, playerState, pulse, sourceEnti
       return next;
     }
 
-    const dx = pulseCenterX - next.x;
-    const dy = pulseCenterY - next.y;
+    const center = getEntityCenter(next);
+    const dx = pulseCenterX - center.x;
+    const dy = pulseCenterY - center.y;
     const dist = Math.hypot(dx, dy);
     const pulseScale = pulseTargetType === "hover_void" ? ENTITY_HOVER_VOID_PULSE_SCALE : ENTITY_DARK_CREATURE_PULSE_SCALE;
     const threshold = pulse.r + Math.max(1, next.size) * pulseScale;
@@ -301,7 +314,7 @@ function stepFlareEntityInteractions(sourceEntities, flares) {
   const entities = sourceEntities.map((entity) => {
     const next = { ...entity };
     const targetType = resolvePulseTargetType(next.type);
-    if (next.alive !== true || next.active !== true || !PULSE_TARGET_TYPES.has(targetType)) {
+    if (next.alive !== true || next.active !== true || targetType !== "dark_creature") {
       next.illuminated = false;
       next.flareExposure = 0;
       next.consumesFlare = false;
@@ -312,8 +325,9 @@ function stepFlareEntityInteractions(sourceEntities, flares) {
     let maxExposure = 0;
     let closestFlareId = -1;
     let closestDist = Infinity;
+    const entityCenter = getEntityCenter(next);
     for (const flare of flareLights) {
-      const dist = Math.hypot((flare.x - next.x), (flare.y - next.y));
+      const dist = Math.hypot((flare.x - entityCenter.x), (flare.y - entityCenter.y));
       if (dist > flare.lightRadius) {
         continue;
       }
@@ -327,14 +341,14 @@ function stepFlareEntityInteractions(sourceEntities, flares) {
 
     next.illuminated = illuminated;
     next.flareExposure = illuminated ? maxExposure : 0;
-    next.consumesFlare = targetType === "dark_creature" && illuminated;
+    next.consumesFlare = illuminated;
     if (illuminated && closestFlareId > 0) {
       next.lastFlareIdHit = closestFlareId;
       flareAffects.push({ entityId: next.id, entityType: next.type, flareId: closestFlareId });
     }
     if (next.state === "idle" && illuminated) {
-      next.state = targetType === "hover_void" ? "revealed" : "suppressed";
-    } else if ((next.state === "revealed" || next.state === "suppressed") && !illuminated) {
+      next.state = "suppressed";
+    } else if (next.state === "suppressed" && !illuminated) {
       next.state = "idle";
     }
     return next;
@@ -570,7 +584,8 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
         return false;
       }
       const aggroRange = Math.max(0, (Number.isFinite(entity?.size) ? entity.size : 24) * 6);
-      const dist = Math.hypot((entity.x ?? 0) - nextX, (entity.y ?? 0) - nextY);
+      const entityCenter = getEntityCenter(entity);
+      const dist = Math.hypot(entityCenter.x - nextX, entityCenter.y - nextY);
       return dist <= aggroRange;
     });
     const burnMul = consumesByNearbyDarkCreature ? ENTITY_DARK_CREATURE_FLARE_CONSUME_BURN_MUL : 1;

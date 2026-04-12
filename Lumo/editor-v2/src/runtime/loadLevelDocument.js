@@ -217,17 +217,20 @@ function convertEditorDecor(editorLevel) {
   }));
 }
 
-function resolveEditorEntityPosition(entry, width, height, tileSize) {
+function resolveEditorEntityPosition(entry, width, height, tileSize, size = DEFAULT_TILE_SIZE, drawAnchor = "BL") {
   const authoredX = Number.isFinite(entry?.x) ? Number(entry.x) : 0;
   const authoredY = Number.isFinite(entry?.y) ? Number(entry.y) : 0;
   const safeTileSize = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : DEFAULT_TILE_SIZE;
   const xLooksGrid = authoredX >= 0 && authoredX <= (Number.isFinite(width) ? width + 1 : 257);
   const yLooksGrid = authoredY >= 0 && authoredY <= (Number.isFinite(height) ? height + 1 : 257);
   const looksGrid = xLooksGrid && yLooksGrid;
+  const normalizedSize = Number.isFinite(size) && size > 0 ? Number(size) : safeTileSize;
+  const normalizedAnchor = String(drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL";
+  const offsetY = normalizedAnchor === "BL" ? safeTileSize - normalizedSize : 0;
 
   return {
     x: Math.round(looksGrid ? authoredX * safeTileSize : authoredX),
-    y: Math.round(looksGrid ? authoredY * safeTileSize : authoredY),
+    y: Math.round(looksGrid ? authoredY * safeTileSize + offsetY : authoredY),
   };
 }
 
@@ -247,7 +250,13 @@ function convertEditorEntities(editorLevel) {
   return entities.map((entry, index) => {
     const params = isPlainObject(entry?.params) ? { ...entry.params } : {};
     const type = resolveEditorEntityType(entry);
-    const position = resolveEditorEntityPosition(entry, width, height, tileSize);
+    const size = Number.isFinite(entry?.size) && entry.size > 0
+      ? Number(entry.size)
+      : Number.isFinite(params?.drawW) && params.drawW > 0
+        ? Number(params.drawW)
+        : 24;
+    const drawAnchor = String(params?.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL";
+    const position = resolveEditorEntityPosition(entry, width, height, tileSize, size, drawAnchor);
     const maxHp = Number.isFinite(entry?.maxHp) && entry.maxHp > 0
       ? Math.floor(entry.maxHp)
       : Number.isFinite(params?.maxHp) && params.maxHp > 0
@@ -268,11 +277,8 @@ function convertEditorEntities(editorLevel) {
       type,
       x: position.x,
       y: position.y,
-      size: Number.isFinite(entry?.size) && entry.size > 0
-        ? Number(entry.size)
-        : Number.isFinite(params?.drawW) && params.drawW > 0
-          ? Number(params.drawW)
-          : 24,
+      size,
+      drawAnchor,
       hp,
       maxHp,
       alive: entry?.alive !== false && hp > 0,
