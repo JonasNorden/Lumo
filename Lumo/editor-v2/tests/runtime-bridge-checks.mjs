@@ -40,6 +40,7 @@ function createMockLevelDocument() {
     tiles: {
       base: Array.from({ length: 12 }, (_, index) => index),
       placements: [
+        { x: 0, y: 2, size: 1, value: 15 },
         { x: 1, y: 2, size: 2, value: 15 },
         { x: 3, y: 2, size: 3, value: 101, catalogTileId: "custom_runtime_tile", img: "../data/assets/tiles/custom_runtime_tile.png" },
       ],
@@ -88,6 +89,36 @@ function runAdapterChecks() {
   assert.equal(runtimeLevel.layers.bg.length, 12);
   assert.equal(runtimeLevel.layers.bg[0], "bg_stone_wall_cc", "background base should map to runtime-supported bg ids");
   assert.deepEqual(runtimeLevel.layers.bg, runtimeLevel.editor.bg, "runtime bg should be mirrored on editor.bg fallback path");
+  assert.equal(
+    runtimeLevel.layers.tileVisualOverrides["0,2"]?.drawW,
+    24,
+    "1x1 authored stone placement should render as 1x1 width",
+  );
+  assert.equal(
+    runtimeLevel.layers.tileVisualOverrides["0,2"]?.drawH,
+    24,
+    "1x1 authored stone placement should render as 1x1 height",
+  );
+  assert.equal(
+    runtimeLevel.layers.tileVisualOverrides["1,2"]?.drawW,
+    48,
+    "2x2 authored stone placement should render as 2x2 width",
+  );
+  assert.equal(
+    runtimeLevel.layers.tileVisualOverrides["1,2"]?.drawH,
+    48,
+    "2x2 authored stone placement should render as 2x2 height",
+  );
+  assert.equal(
+    runtimeLevel.layers.tileVisualOverrides["3,2"]?.drawW,
+    72,
+    "3x3 authored placement should render as 3x3 width",
+  );
+  assert.equal(
+    runtimeLevel.layers.tileVisualOverrides["3,2"]?.drawH,
+    72,
+    "3x3 authored placement should render as 3x3 height",
+  );
   assert.equal(
     runtimeLevel.layers.tileVisualOverrides["1,2"]?.catalogTileId,
     "stone_ct",

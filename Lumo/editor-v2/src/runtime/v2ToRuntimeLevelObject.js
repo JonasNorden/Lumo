@@ -141,14 +141,61 @@ function buildRuntimeTileVisualOverrides(levelDocument, tileSize) {
     const authoredFootprintH = Number.isFinite(Number(placement?.footprintH))
       ? Math.max(1, Number(placement.footprintH) | 0)
       : clampedSize;
+    const tileAssetFootprintW = Number.isFinite(Number(tileAsset?.footprint?.w))
+      ? Math.max(1, Number(tileAsset.footprint.w) | 0)
+      : 1;
+    const tileAssetFootprintH = Number.isFinite(Number(tileAsset?.footprint?.h))
+      ? Math.max(1, Number(tileAsset.footprint.h) | 0)
+      : 1;
+
+    // Keep visual size aligned to authored collision footprint:
+    // use explicit per-placement draw dimensions as-is, and only rescale
+    // catalog draw metadata when authored footprint differs from catalog footprint.
+    const resolveDrawSize = ({
+      hasExplicitDraw,
+      explicitDraw,
+      catalogDraw,
+      catalogFootprint,
+      authoredFootprint,
+    }) => {
+      if (hasExplicitDraw) {
+        return Math.max(1, Math.round(explicitDraw));
+      }
+
+      const normalizedCatalogDraw = Number.isFinite(catalogDraw) ? catalogDraw : tileSize;
+      const normalizedCatalogFootprint = Number.isFinite(catalogFootprint) && catalogFootprint > 0
+        ? catalogFootprint
+        : 1;
+      if (authoredFootprint === normalizedCatalogFootprint) {
+        return Math.max(1, Math.round(normalizedCatalogDraw));
+      }
+
+      const perCellDraw = normalizedCatalogDraw / normalizedCatalogFootprint;
+      if (Number.isFinite(perCellDraw) && perCellDraw > 0) {
+        return Math.max(1, Math.round(perCellDraw * authoredFootprint));
+      }
+      return Math.max(1, Math.round(tileSize * authoredFootprint));
+    };
 
     // Preserve authored tile-size semantics through runtime:
     // - draw footprint
     // - collision footprint
     // - anchor convention (BL)
     const nextOverride = {
-      drawW: Math.max(1, Math.round(authoredDrawW * clampedSize)),
-      drawH: Math.max(1, Math.round(authoredDrawH * clampedSize)),
+      drawW: resolveDrawSize({
+        hasExplicitDraw: Number.isFinite(Number(placement?.drawW)),
+        explicitDraw: authoredDrawW,
+        catalogDraw: Number.isFinite(Number(tileAsset?.drawW)) ? Number(tileAsset.drawW) : tileSize,
+        catalogFootprint: tileAssetFootprintW,
+        authoredFootprint: authoredFootprintW,
+      }),
+      drawH: resolveDrawSize({
+        hasExplicitDraw: Number.isFinite(Number(placement?.drawH)),
+        explicitDraw: authoredDrawH,
+        catalogDraw: Number.isFinite(Number(tileAsset?.drawH)) ? Number(tileAsset.drawH) : tileSize,
+        catalogFootprint: tileAssetFootprintH,
+        authoredFootprint: authoredFootprintH,
+      }),
       drawAnchor: authoredDrawAnchor,
       footprintW: authoredFootprintW,
       footprintH: authoredFootprintH,
