@@ -156,6 +156,24 @@ function firstFinite(values) {
 function convertEditorTiles(editorLevel, width, height, warnings) {
   const result = [];
   const base = Array.isArray(editorLevel?.tiles?.base) ? editorLevel.tiles.base : [];
+  const placements = Array.isArray(editorLevel?.tiles?.placements) ? editorLevel.tiles.placements : [];
+  const placementCoverage = new Set();
+  for (const placement of placements) {
+    const x = Number.isFinite(placement?.x) ? Math.round(placement.x) : null;
+    const authoredAnchorY = Number.isFinite(placement?.y) ? Math.round(placement.y) : null;
+    if (!Number.isInteger(x) || !Number.isInteger(authoredAnchorY)) continue;
+    const size = Number.isFinite(placement?.size) && placement.size > 0 ? Math.round(placement.size) : 1;
+    const topY = authoredAnchorY - (size - 1);
+    for (let dy = 0; dy < size; dy += 1) {
+      const row = topY + dy;
+      if (row < 0 || row >= height) continue;
+      for (let dx = 0; dx < size; dx += 1) {
+        const col = x + dx;
+        if (col < 0 || col >= width) continue;
+        placementCoverage.add(`${col},${row}`);
+      }
+    }
+  }
   const expected = width * height;
   if (base.length !== expected) {
     pushWarning(warnings, `Editor tile base count (${base.length}) did not match dimensions (${expected}).`);
@@ -165,11 +183,14 @@ function convertEditorTiles(editorLevel, width, height, warnings) {
   for (let index = 0; index < limit; index += 1) {
     const tileId = Number(base[index]) | 0;
     if (tileId <= 0) continue;
+    const x = index % width;
+    const y = Math.floor(index / width);
+    if (placementCoverage.has(`${x},${y}`)) continue;
     const behavior = resolveLegacyBehaviorByTileId(tileId);
     result.push({
       tileId,
-      x: index % width,
-      y: Math.floor(index / width),
+      x,
+      y,
       w: 1,
       h: 1,
       solid: behavior.solid,
@@ -182,7 +203,6 @@ function convertEditorTiles(editorLevel, width, height, warnings) {
     });
   }
 
-  const placements = Array.isArray(editorLevel?.tiles?.placements) ? editorLevel.tiles.placements : [];
   for (const placement of placements) {
     const tileId = Number(placement?.value) | 0;
     const x = Number.isFinite(placement?.x) ? Math.round(placement.x) : null;
