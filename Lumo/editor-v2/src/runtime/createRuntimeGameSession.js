@@ -19,6 +19,16 @@ function buildPlayerSnapshot(playerState) {
     grounded: playerState?.grounded === true,
     falling: playerState?.falling === true,
     locomotion: typeof playerState?.locomotion === "string" ? playerState.locomotion : "unknown",
+    flares: Array.isArray(playerState?.flares)
+      ? playerState.flares
+        .map((flare) => ({
+          id: Number.isFinite(flare?.id) ? flare.id : null,
+          x: Number.isFinite(flare?.x) ? flare.x : null,
+          y: Number.isFinite(flare?.y) ? flare.y : null,
+          radius: Number.isFinite(flare?.radius) ? flare.radius : null,
+        }))
+        .filter((flare) => flare.id !== null && flare.x !== null && flare.y !== null && flare.radius !== null)
+      : [],
   };
 }
 

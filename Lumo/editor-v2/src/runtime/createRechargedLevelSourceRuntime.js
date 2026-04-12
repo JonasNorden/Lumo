@@ -49,6 +49,7 @@ function buildPlayerSnapshot(snapshot) {
     grounded: source.grounded === true,
     falling: source.falling === true,
     locomotion: typeof source.locomotion === "string" ? source.locomotion : "unknown",
+    flares: Array.isArray(source.flares) ? source.flares.map((flare) => ({ ...flare })) : [],
   };
 }
 

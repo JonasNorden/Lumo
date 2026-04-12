@@ -268,6 +268,24 @@
       }
     }
 
+    function readRechargedFlareSnapshots(payload, state) {
+      try {
+        const playerSnapshot = state?.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object"
+          ? state.currentPlayerSnapshot
+          : (payload?.player && typeof payload.player === "object" ? payload.player : null);
+        const flares = Array.isArray(playerSnapshot?.flares) ? playerSnapshot.flares : [];
+        return flares
+          .map((flare) => ({
+            x: Number.isFinite(flare?.x) ? flare.x : null,
+            y: Number.isFinite(flare?.y) ? flare.y : null,
+            radius: Number.isFinite(flare?.radius) && flare.radius > 0 ? flare.radius : 4,
+          }))
+          .filter((flare) => flare.x !== null && flare.y !== null);
+      } catch (_error) {
+        return [];
+      }
+    }
+
     function buildRechargedWorldToCanvasMapper({ canvas, worldWidthPx, worldHeightPx, targetX, targetY }) {
       const viewportWorldWidth = Math.max(1, Math.min(canvas.width, Math.round(worldWidthPx)));
       const viewportWorldHeight = Math.max(1, Math.min(canvas.height, Math.round(worldHeightPx)));
@@ -305,6 +323,7 @@
 
         const payload = readLatestRechargedBootPayload() || {};
         const player = readRechargedPlayerSnapshot(payload);
+        const flareSnapshots = readRechargedFlareSnapshots(payload, state);
         const previousSnapshot = readRechargedPlayerSnapshot({
           player: state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
             ? state.previousPlayerSnapshot
@@ -434,6 +453,29 @@
           ctx.fillStyle = "#dbeafe";
           ctx.fillRect(playerCanvasRect.x + eyeOffsetX, eyeY, eyeSize, eyeSize);
           ctx.fillRect(playerCanvasRect.x + playerCanvasRect.w - eyeOffsetX - eyeSize, eyeY, eyeSize, eyeSize);
+        }
+
+        for (const flare of flareSnapshots) {
+          const flareRadius = Math.max(2, Math.round(flare.radius));
+          const flareRect = mapper.worldToCanvasRect(
+            flare.x - flareRadius,
+            flare.y - flareRadius,
+            flareRadius * 2,
+            flareRadius * 2,
+          );
+          const centerX = flareRect.x + flareRect.w * 0.5;
+          const centerY = flareRect.y + flareRect.h * 0.5;
+          const glowRadius = Math.max(flareRect.w, flareRect.h) * 1.8;
+          const glowGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, glowRadius);
+          glowGradient.addColorStop(0, "rgba(251, 191, 36, 0.95)");
+          glowGradient.addColorStop(1, "rgba(251, 191, 36, 0)");
+          ctx.fillStyle = glowGradient;
+          ctx.fillRect(centerX - glowRadius, centerY - glowRadius, glowRadius * 2, glowRadius * 2);
+
+          ctx.fillStyle = "#fde68a";
+          ctx.fillRect(flareRect.x, flareRect.y, flareRect.w, flareRect.h);
+          ctx.fillStyle = "#f97316";
+          ctx.fillRect(flareRect.x + 1, flareRect.y + 1, Math.max(1, flareRect.w - 2), Math.max(1, flareRect.h - 2));
         }
 
         if (state && typeof state === "object") {
