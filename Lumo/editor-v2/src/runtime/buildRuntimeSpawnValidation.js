@@ -14,6 +14,8 @@ export function buildRuntimeSpawnValidation(worldPacket) {
   const hasSpawn =
     worldPacket?.spawn !== null &&
     typeof worldPacket?.spawn === "object" &&
+    Number.isFinite(worldPacket?.spawn?.x) &&
+    Number.isFinite(worldPacket?.spawn?.y) &&
     Number.isFinite(runtimeSpawnPoint.gridX) &&
     Number.isFinite(runtimeSpawnPoint.gridY);
 
