@@ -21,10 +21,16 @@ function normalizeStatus(status, fallback = DEFAULT_STATUS) {
 function buildPlayerSnapshot(player) {
   const source = player && typeof player === "object" ? player : {};
   const pulse = source?.pulse && typeof source.pulse === "object" ? source.pulse : null;
+  const velocityX = Number.isFinite(source?.velocity?.x) ? source.velocity.x : null;
+  const velocityY = Number.isFinite(source?.velocity?.y) ? source.velocity.y : null;
 
   return {
     x: Number.isFinite(source.x) ? source.x : null,
     y: Number.isFinite(source.y) ? source.y : null,
+    velocity: {
+      x: velocityX,
+      y: velocityY,
+    },
     grounded: source.grounded === true,
     falling: source.falling === true,
     locomotion: typeof source.locomotion === "string" ? source.locomotion : "unknown",
