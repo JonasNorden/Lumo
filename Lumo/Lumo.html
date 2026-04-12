@@ -105,6 +105,7 @@
         jump: false,
         flare: false,
         pulse: false,
+        boost: false,
       };
     }
 
@@ -124,6 +125,8 @@
           state.flare = pressed;
         } else if (code === "KeyD") {
           state.pulse = pressed;
+        } else if (code === "Space") {
+          state.boost = pressed;
         }
       };
 
@@ -154,6 +157,7 @@
           jump: state?.input?.jump === true,
           flare: state?.input?.flare === true,
           pulse: state?.input?.pulse === true,
+          boost: state?.input?.boost === true,
         };
 
         const nowMs = (typeof performance !== "undefined" && typeof performance.now === "function")

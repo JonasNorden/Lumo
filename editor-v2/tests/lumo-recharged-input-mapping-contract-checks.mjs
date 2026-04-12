@@ -36,10 +36,11 @@ console.log("recharged input mapping jump-a ok");
 
 assert.equal(inputSection.includes('code === "KeyS"') && inputSection.includes("state.flare = pressed"), true, "expected flare intent to map to KeyS in Recharged input");
 assert.equal(inputSection.includes('code === "KeyD"') && inputSection.includes("state.pulse = pressed"), true, "expected pulse intent to map to KeyD in Recharged input");
-console.log("recharged input mapping flare-pulse ok");
+assert.equal(inputSection.includes('code === "Space"') && inputSection.includes("state.boost = pressed"), true, "expected boost intent to map to Space in Recharged input");
+console.log("recharged input mapping flare-pulse-boost ok");
 
 assert.equal(
-  inputSection.includes('code === "ArrowUp"') || inputSection.includes('code === "KeyW"') || inputSection.includes('code === "Space"'),
+  inputSection.includes('code === "ArrowUp"') || inputSection.includes('code === "KeyW"'),
   false,
   "expected Recharged input section to omit old fallback jump bindings",
 );
@@ -48,6 +49,11 @@ assert.equal(
     inputSection.includes('code === "KeyD") {\n          state.right = pressed;'),
   false,
   "expected Recharged input section to omit old A/D movement bindings",
+);
+assert.equal(
+  inputSection.includes('code === "ShiftLeft"') || inputSection.includes('code === "ShiftRight"'),
+  false,
+  "expected Recharged input section to omit old run/debug bindings",
 );
 console.log("recharged input mapping legacy debug keys removed ok");
 
@@ -60,4 +66,5 @@ assert.equal(intentSection.includes("right:"), true, "expected right in adapter 
 assert.equal(intentSection.includes("jump:"), true, "expected jump in adapter intent");
 assert.equal(intentSection.includes("flare:"), true, "expected flare in adapter intent");
 assert.equal(intentSection.includes("pulse:"), true, "expected pulse in adapter intent");
+assert.equal(intentSection.includes("boost:"), true, "expected boost in adapter intent");
 console.log("recharged input mapping adapter intent shape ok");

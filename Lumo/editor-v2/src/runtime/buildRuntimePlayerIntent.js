@@ -67,13 +67,31 @@ export function buildRuntimePlayerIntent(input = {}) {
     warnings.push("Runtime jump intent must be a boolean; defaulted to false.");
   }
 
+  if (source.flare !== undefined && source.flare !== true && source.flare !== false) {
+    warnings.push("Runtime flare intent must be a boolean; defaulted to false.");
+  }
+
+  if (source.pulse !== undefined && source.pulse !== true && source.pulse !== false) {
+    warnings.push("Runtime pulse intent must be a boolean; defaulted to false.");
+  }
+
+  if (source.boost !== undefined && source.boost !== true && source.boost !== false) {
+    warnings.push("Runtime boost intent must be a boolean; defaulted to false.");
+  }
+
   const jump = source.jump === true;
+  const flare = source.flare === true;
+  const pulse = source.pulse === true;
+  const boost = source.boost === true;
   const run = source.run === true;
 
   return {
     ok: errors.length === 0,
     moveX,
     jump,
+    flare,
+    pulse,
+    boost,
     run,
     errors: uniqueMessages(errors),
     warnings: uniqueMessages(warnings),
