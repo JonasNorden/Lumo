@@ -33,6 +33,8 @@ function buildPlayerSnapshot(player) {
     },
     grounded: source.grounded === true,
     falling: source.falling === true,
+    rising: source.rising === true,
+    facingX: Number.isFinite(source.facingX) ? source.facingX : null,
     locomotion: typeof source.locomotion === "string" ? source.locomotion : "unknown",
     energy: Number.isFinite(source.energy) ? source.energy : null,
     lives: Number.isFinite(source.lives) ? source.lives : null,

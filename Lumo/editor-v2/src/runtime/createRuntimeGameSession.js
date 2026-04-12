@@ -24,6 +24,8 @@ function buildPlayerSnapshot(playerState) {
     },
     grounded: playerState?.grounded === true,
     falling: playerState?.falling === true,
+    rising: playerState?.rising === true,
+    facingX: Number.isFinite(playerState?.facingX) ? playerState.facingX : null,
     locomotion: typeof playerState?.locomotion === "string" ? playerState.locomotion : "unknown",
     energy: Number.isFinite(playerState?.energy) ? playerState.energy : null,
     boostActive: playerState?.boostActive === true,
