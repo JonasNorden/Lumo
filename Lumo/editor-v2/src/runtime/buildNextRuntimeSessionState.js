@@ -1,6 +1,7 @@
 import { stepRuntimePlayerSimulation } from "./stepRuntimePlayerSimulation.js";
+import { RUNTIME_PLAYER_PHYSICS_BASELINE } from "./runtimePlayerPhysicsBaseline.js";
 
-const FIXED_RUNTIME_TICK_MS = 16;
+const FIXED_RUNTIME_TICK_MS = RUNTIME_PLAYER_PHYSICS_BASELINE.fixedStepMs;
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
