@@ -1,7 +1,7 @@
 // Original Lumo movement profile migrated for Recharged deterministic runtime ticks.
 export const RUNTIME_PLAYER_PHYSICS_BASELINE = {
-  // Runtime fixed-step size (buildNextRuntimeSessionState uses 16ms/tick).
-  fixedStepMs: 16,
+  // Runtime fixed-step size aligned to legacy ~60 Hz movement timing.
+  fixedStepMs: 1000 / 60,
   // Horizontal movement (from legacy src/game/player.js).
   groundMaxSpeedX: 230,
   groundAccelerationX: 2200,

@@ -46,6 +46,9 @@
     import { bootLumoRechargedFromQuery } from "./editor-v2/src/runtime/bootLumoRechargedFromQuery.js";
     import { createLumoRechargedBootAdapter } from "./editor-v2/src/runtime/createLumoRechargedBootAdapter.js";
 
+    const RECHARGED_FIXED_STEP_MS = 1000 / 60;
+    const RECHARGED_MAX_CATCH_UP_STEPS = 6;
+
     function createLumoRechargedCanvasVerificationState() {
       return {
         active: false,
@@ -56,6 +59,8 @@
         lastPlayerY: null,
         lastRenderOk: false,
         lastTickOk: null,
+        stepAccumulatorMs: 0,
+        lastStepAtMs: null,
         width: null,
         height: null,
       };
@@ -139,9 +144,40 @@
           right: state?.input?.right === true,
           jump: state?.input?.jump === true,
         };
-        const tickResult = adapter.tick(intent);
+
+        const nowMs = (typeof performance !== "undefined" && typeof performance.now === "function")
+          ? performance.now()
+          : Date.now();
+        const previousTickMs = Number.isFinite(state?.lastStepAtMs) ? state.lastStepAtMs : null;
+        const frameDeltaMs = previousTickMs === null
+          ? RECHARGED_FIXED_STEP_MS
+          : Math.max(0, Math.min(250, nowMs - previousTickMs));
+        const currentAccumulatorMs = Number.isFinite(state?.stepAccumulatorMs) ? state.stepAccumulatorMs : 0;
+        let nextAccumulatorMs = currentAccumulatorMs + frameDeltaMs;
+        let stepsToRun = Math.floor(nextAccumulatorMs / RECHARGED_FIXED_STEP_MS);
+
+        if (stepsToRun > RECHARGED_MAX_CATCH_UP_STEPS) {
+          stepsToRun = RECHARGED_MAX_CATCH_UP_STEPS;
+          nextAccumulatorMs = RECHARGED_FIXED_STEP_MS * RECHARGED_MAX_CATCH_UP_STEPS;
+        }
+
+        let tickResult = {
+          ok: true,
+          stepped: false,
+        };
+
+        for (let stepIndex = 0; stepIndex < stepsToRun; stepIndex += 1) {
+          tickResult = adapter.tick(intent);
+          if (tickResult?.ok !== true || tickResult?.stepped !== true) {
+            break;
+          }
+          nextAccumulatorMs -= RECHARGED_FIXED_STEP_MS;
+        }
+
         if (state && typeof state === "object") {
           state.lastTickOk = tickResult?.ok === true && tickResult?.stepped === true;
+          state.lastStepAtMs = nowMs;
+          state.stepAccumulatorMs = Math.max(0, nextAccumulatorMs);
         }
 
         const nextPayload = adapter.getBootPayload?.();

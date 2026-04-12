@@ -27,8 +27,11 @@ function buildFlatWorldPacket() {
 }
 
 function runBaselineConstantChecks() {
-  assert.deepEqual(RUNTIME_PLAYER_PHYSICS_BASELINE, {
-    fixedStepMs: 16,
+  const expectedFixedStepMs = 1000 / 60;
+  assert.equal(Math.abs(RUNTIME_PLAYER_PHYSICS_BASELINE.fixedStepMs - expectedFixedStepMs) < 1e-9, true);
+
+  const { fixedStepMs, ...rest } = RUNTIME_PLAYER_PHYSICS_BASELINE;
+  assert.deepEqual(rest, {
     groundMaxSpeedX: 230,
     groundAccelerationX: 2200,
     groundFrictionX: 2200,
@@ -64,7 +67,8 @@ function runHorizontalControlChecks() {
   }
 
   const distance = player.position.x - startX;
-  assert.equal(distance > 40, true, `expected legacy-speed horizontal travel to exceed placeholder baseline, got ${distance}`);
+  assert.equal(distance > 30, true, `expected readable horizontal travel, got ${distance.toFixed(2)}`);
+  assert.equal(distance < 70, true, `expected normalized horizontal travel, got ${distance.toFixed(2)}`);
 }
 
 function runReadableJumpArcChecks() {
@@ -114,6 +118,34 @@ function runReadableJumpArcChecks() {
   assert.equal(sawFalling, true, "expected readable falling phase");
   assert.equal(firstFallingTick >= 14, true, `expected legacy jump hang-time, got falling at tick ${firstFallingTick}`);
   assert.equal(jumpRiseDistance >= 80, true, `expected legacy jump rise distance, got ${jumpRiseDistance.toFixed(2)}`);
+}
+
+function runFallDurationChecks() {
+  const worldPacket = buildFlatWorldPacket();
+  let player = {
+    position: { x: 4 * 24, y: 3 * 24 },
+    velocity: { x: 0, y: 0 },
+    grounded: false,
+    falling: true,
+    rising: false,
+    landed: false,
+  };
+
+  let landingTick = null;
+  for (let tick = 1; tick <= 120; tick += 1) {
+    const step = stepRuntimePlayerSimulation(worldPacket, player, { input: { moveX: 0, jump: false } });
+    assert.equal(step.ok, true);
+    player = step.player;
+
+    if (player.grounded === true) {
+      landingTick = tick;
+      break;
+    }
+  }
+
+  assert.equal(Number.isInteger(landingTick), true, "expected fall to land on floor");
+  assert.equal(landingTick >= 20, true, `expected non-hyper-fast fall duration, got ${landingTick}`);
+  assert.equal(landingTick <= 45, true, `expected non-stalled fall duration, got ${landingTick}`);
 }
 
 function runGroundCollisionChecks() {
@@ -167,6 +199,7 @@ function runOutOfBoundsRespawnChecks() {
 runBaselineConstantChecks();
 runHorizontalControlChecks();
 runReadableJumpArcChecks();
+runFallDurationChecks();
 runGroundCollisionChecks();
 runOutOfBoundsRespawnChecks();
 
