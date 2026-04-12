@@ -291,73 +291,80 @@
     }
 
     function createRechargedHudOverlay() {
-      const host = document.createElement("div");
-      host.id = "rechargedHud";
-      host.setAttribute("aria-live", "polite");
-      // Keep the runtime HUD compact and grouped for real gameplay readability.
-      const flareBlock = document.createElement("div");
-      flareBlock.className = "rechargedHudFlare";
-      const flareLabel = document.createElement("span");
-      flareLabel.className = "rechargedHudKey";
-      flareLabel.textContent = "Flares";
-      const flareValue = document.createElement("span");
-      flareValue.className = "rechargedHudCount";
-      flareValue.textContent = "--";
-      flareBlock.appendChild(flareLabel);
-      flareBlock.appendChild(flareValue);
-
-      // Render energy as a real bar where fill width maps to live energy ratio.
-      const energyBlock = document.createElement("div");
-      energyBlock.className = "rechargedHudEnergy";
-      const energyHeader = document.createElement("div");
-      energyHeader.className = "rechargedHudHeader";
-      const energyLabel = document.createElement("span");
-      energyLabel.className = "rechargedHudKey";
-      energyLabel.textContent = "Energy";
-      const energyValue = document.createElement("span");
-      energyValue.className = "rechargedHudEnergyValue";
-      energyValue.textContent = "--";
-      energyHeader.appendChild(energyLabel);
-      energyHeader.appendChild(energyValue);
-
-      const energyBar = document.createElement("div");
-      energyBar.className = "rechargedHudBar";
-      const energyFill = document.createElement("div");
-      energyFill.className = "rechargedHudBarFill";
-      energyFill.style.width = "0%";
-      energyBar.appendChild(energyFill);
-
-      energyBlock.appendChild(energyHeader);
-      energyBlock.appendChild(energyBar);
-
-      host.appendChild(flareBlock);
-      host.appendChild(energyBlock);
-      document.body.appendChild(host);
-
       return {
-        host,
-        values: {
-          flare: flareValue,
-          energyValue,
-          energyFill,
-        },
+        lives: 4,
+        livesMax: 4,
+        energyPct: 100,
+        flares: 0,
+        flareFlash: 0,
+        score: 0,
+        checkpointLit: false,
+        checkpointRingT: 0,
+        popups: [],
+        _prevFlares: 0,
+        _pauseBtnHover: false,
       };
     }
 
-    // Updates Recharged HUD from live adapter snapshots with safe fallbacks.
+    function ensureRechargedHudRenderer(state, canvas) {
+      if (!state || !canvas || typeof canvas.getContext !== "function") {
+        return null;
+      }
+
+      const rendererCtor = window?.Lumo?.Renderer;
+      if (typeof rendererCtor !== "function") {
+        return null;
+      }
+
+      if (!state.rechargedHudRenderer || state.rechargedHudRenderer.cv !== canvas) {
+        state.rechargedHudRenderer = new rendererCtor(canvas);
+      }
+
+      return state.rechargedHudRenderer;
+    }
+
+    function drawRechargedHudReplica(canvas, state) {
+      const hud = state?.hud;
+      if (!hud) {
+        return;
+      }
+
+      const renderer = ensureRechargedHudRenderer(state, canvas);
+      if (!renderer || typeof renderer.drawHUD !== "function") {
+        return;
+      }
+
+      renderer.w = canvas.width;
+      renderer.h = canvas.height;
+      renderer.drawHUD(hud);
+    }
+
+    // Updates Recharged HUD model from live adapter snapshots with safe fallbacks.
     function updateRechargedHudOverlay(hud, payload, state) {
-      if (!hud || !hud.values) {
+      if (!hud) {
         return;
       }
 
       const snapshot = buildRechargedHudSnapshot(payload, state);
-      const formatCount = (value) => (Number.isFinite(value) ? String(Math.max(0, Math.floor(value))) : "--");
-      const formatEnergy = (value) => (Number.isFinite(value) ? `${Math.round(value * 100)}%` : "--");
       const energyRatio = Number.isFinite(snapshot.energy) ? Math.max(0, Math.min(1, snapshot.energy)) : 0;
+      const flareStash = Number.isFinite(snapshot.flareStash) ? Math.max(0, Math.floor(snapshot.flareStash)) : 0;
+      const nowMs = typeof performance?.now === "function" ? performance.now() : Date.now();
+      const previousMs = Number.isFinite(state?.lastHudUpdateAtMs) ? state.lastHudUpdateAtMs : nowMs;
+      const dt = Math.max(0, (nowMs - previousMs) / 1000);
 
-      hud.values.flare.textContent = formatCount(snapshot.flareStash);
-      hud.values.energyValue.textContent = formatEnergy(snapshot.energy);
-      hud.values.energyFill.style.width = `${(energyRatio * 100).toFixed(1)}%`;
+      if (flareStash !== (hud._prevFlares | 0)) {
+        hud.flareFlash = 0.25;
+      } else {
+        hud.flareFlash = Math.max(0, Number(hud.flareFlash || 0) - dt);
+      }
+
+      hud._prevFlares = flareStash;
+      hud.energyPct = Math.round(energyRatio * 100);
+      hud.flares = flareStash;
+
+      if (state && typeof state === "object") {
+        state.lastHudUpdateAtMs = nowMs;
+      }
     }
 
     function tickLiveRechargedAdapter(state) {
@@ -881,6 +888,8 @@
             ctx.fill();
           }
         }
+
+        drawRechargedHudReplica(canvas, state);
 
         if (state && typeof state === "object") {
           state.lastPlayerX = Number.isFinite(playerCenterX) ? playerCenterX : null;
