@@ -931,7 +931,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const intent = buildRuntimePlayerIntent(options?.input ?? options?.intent ?? options);
   const pulseStep = stepPulse(playerState, intent, options);
   const boostActive = intent?.boost === true && pulseStep.energy > DEFAULT_BOOST_MIN_ENERGY;
-  const locomotionStateBase = buildRuntimePlayerLocomotionState(playerState, intent, options);
+  const locomotionStateBase = buildRuntimePlayerLocomotionState(playerState, intent, { ...options, worldPacket });
   const locomotionState = boostActive
     ? {
         ...locomotionStateBase,

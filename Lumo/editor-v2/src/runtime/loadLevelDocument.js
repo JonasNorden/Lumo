@@ -1,3 +1,5 @@
+import { resolveLegacyBehaviorByTileId } from "./runtimeTileBehavior.js";
+
 // Recharged level loader v1.
 // This module validates and normalizes the new level document shape without
 // mutating caller-provided input.
@@ -163,13 +165,19 @@ function convertEditorTiles(editorLevel, width, height, warnings) {
   for (let index = 0; index < limit; index += 1) {
     const tileId = Number(base[index]) | 0;
     if (tileId <= 0) continue;
+    const behavior = resolveLegacyBehaviorByTileId(tileId);
     result.push({
       tileId,
       x: index % width,
       y: Math.floor(index / width),
       w: 1,
       h: 1,
-      solid: true,
+      solid: behavior.solid,
+      oneWay: behavior.oneWay,
+      hazard: behavior.hazard,
+      maxSpeedMul: behavior.maxSpeedMul,
+      groundAccelMul: behavior.groundAccelMul,
+      groundFrictionMul: behavior.groundFrictionMul,
       coordinateSpace: "grid",
     });
   }
@@ -181,13 +189,23 @@ function convertEditorTiles(editorLevel, width, height, warnings) {
     const y = Number.isFinite(placement?.y) ? Math.round(placement.y) : null;
     if (!Number.isInteger(x) || !Number.isInteger(y) || tileId <= 0) continue;
 
+    const behavior = resolveLegacyBehaviorByTileId(tileId);
     result.push({
       tileId,
       x,
       y,
       w: Number.isFinite(placement?.size) && placement.size > 0 ? Math.round(placement.size) : 1,
       h: Number.isFinite(placement?.size) && placement.size > 0 ? Math.round(placement.size) : 1,
-      solid: true,
+      solid: behavior.solid,
+      oneWay: behavior.oneWay,
+      hazard: behavior.hazard,
+      maxSpeedMul: behavior.maxSpeedMul,
+      groundAccelMul: behavior.groundAccelMul,
+      groundFrictionMul: behavior.groundFrictionMul,
+      behaviorProfileId: typeof placement?.behaviorProfileId === "string" ? placement.behaviorProfileId : undefined,
+      behaviorParams: placement?.behaviorParams && typeof placement.behaviorParams === "object" ? { ...placement.behaviorParams } : undefined,
+      collisionType: typeof placement?.collisionType === "string" ? placement.collisionType : undefined,
+      special: typeof placement?.special === "string" ? placement.special : undefined,
       coordinateSpace: "grid",
     });
   }
@@ -411,13 +429,19 @@ export function normalizeTiles(tilesInput, errors) {
       pushError(errors, `layers.tiles[${index}].y is required.`);
     }
 
-    const normalizedSolid = typeof tile.solid === "boolean" ? tile.solid : true;
+    const legacyBehavior = resolveLegacyBehaviorByTileId(tile?.tileId);
+    const normalizedSolid = typeof tile.solid === "boolean" ? tile.solid : legacyBehavior.solid;
 
     return {
       ...tile,
       w: tile.w == null ? 1 : tile.w,
       h: tile.h == null ? 1 : tile.h,
       solid: normalizedSolid,
+      oneWay: typeof tile.oneWay === "boolean" ? tile.oneWay : legacyBehavior.oneWay,
+      hazard: typeof tile.hazard === "boolean" ? tile.hazard : legacyBehavior.hazard,
+      maxSpeedMul: Number.isFinite(tile?.maxSpeedMul) ? tile.maxSpeedMul : legacyBehavior.maxSpeedMul,
+      groundAccelMul: Number.isFinite(tile?.groundAccelMul) ? tile.groundAccelMul : legacyBehavior.groundAccelMul,
+      groundFrictionMul: Number.isFinite(tile?.groundFrictionMul) ? tile.groundFrictionMul : legacyBehavior.groundFrictionMul,
       coordinateSpace: typeof tile.coordinateSpace === "string" ? tile.coordinateSpace : "world",
     };
   });

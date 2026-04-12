@@ -59,7 +59,20 @@ export function normalizeSizedPlacements(placements, expectedType) {
     } else {
       const value = Number.isInteger(placement?.value) && placement.value >= 0 ? placement.value : null;
       if (value === null) continue;
-      normalized.push({ x, y, size, value });
+      const normalizedPlacement = { x, y, size, value };
+      if (typeof placement?.behaviorProfileId === "string" && placement.behaviorProfileId.trim()) {
+        normalizedPlacement.behaviorProfileId = placement.behaviorProfileId.trim();
+      }
+      if (typeof placement?.collisionType === "string" && placement.collisionType.trim()) {
+        normalizedPlacement.collisionType = placement.collisionType.trim();
+      }
+      if (typeof placement?.special === "string" && placement.special.trim()) {
+        normalizedPlacement.special = placement.special.trim();
+      }
+      if (placement?.behaviorParams && typeof placement.behaviorParams === "object") {
+        normalizedPlacement.behaviorParams = { ...placement.behaviorParams };
+      }
+      normalized.push(normalizedPlacement);
     }
   }
   return normalized;

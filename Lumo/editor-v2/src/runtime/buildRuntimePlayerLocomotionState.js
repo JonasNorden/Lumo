@@ -1,4 +1,5 @@
 import { resolveLegacyHorizontalPhysics } from "./runtimeLegacyPlayerPhysics.js";
+import { resolveRuntimeGroundSurface } from "./runtimeTileBehavior.js";
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -28,7 +29,15 @@ export function buildRuntimePlayerLocomotionState(playerState, intent = {}, opti
   const moveX = clampMoveX(intent?.moveX);
 
   const { maxSpeedX, accelerationX, frictionX } = resolveLegacyHorizontalPhysics(options, grounded);
-  const desiredVelocityX = moveX * maxSpeedX;
+  const surface = grounded ? resolveRuntimeGroundSurface(options?.worldPacket, playerState) : null;
+  const surfaceSpeedMul = Number.isFinite(surface?.maxSpeedMul) ? surface.maxSpeedMul : 1;
+  const surfaceAccelMul = Number.isFinite(surface?.groundAccelMul) ? surface.groundAccelMul : 1;
+  const surfaceFrictionMul = Number.isFinite(surface?.groundFrictionMul) ? surface.groundFrictionMul : 1;
+
+  const resolvedMaxSpeedX = grounded ? maxSpeedX * surfaceSpeedMul : maxSpeedX;
+  const resolvedAccelerationX = grounded ? accelerationX * surfaceAccelMul : accelerationX;
+  const resolvedFrictionX = grounded ? frictionX * surfaceFrictionMul : frictionX;
+  const desiredVelocityX = moveX * resolvedMaxSpeedX;
 
   let locomotion = "airborne-neutral";
 
@@ -50,9 +59,9 @@ export function buildRuntimePlayerLocomotionState(playerState, intent = {}, opti
     grounded,
     moveX,
     desiredVelocityX,
-    accelerationX,
-    maxSpeedX,
-    frictionX,
+    accelerationX: resolvedAccelerationX,
+    maxSpeedX: resolvedMaxSpeedX,
+    frictionX: resolvedFrictionX,
     options,
     errors: uniqueMessages(errors),
     warnings: uniqueMessages(warnings),
@@ -63,6 +72,7 @@ export function buildRuntimePlayerLocomotionState(playerState, intent = {}, opti
       moveX,
       desiredVelocityX,
       mode: grounded ? "grounded" : "airborne",
+      surface,
     },
   };
 }

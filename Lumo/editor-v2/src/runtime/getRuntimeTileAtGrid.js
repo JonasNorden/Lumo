@@ -9,14 +9,6 @@ function isFiniteRect(tile) {
   );
 }
 
-function isTileSolid(tile) {
-  if (typeof tile?.solid === "boolean") {
-    return tile.solid;
-  }
-
-  return true;
-}
-
 function isGridSpaceByContract(worldPacket, tile) {
   const worldWidth = worldPacket?.world?.width;
   const worldHeight = worldPacket?.world?.height;
@@ -69,7 +61,7 @@ function tileCoversGridPosition(worldPacket, tile, gridX, gridY) {
   );
 }
 
-// Returns the first solid runtime tile covering a grid position in world space.
+// Returns the first runtime tile covering a grid position in world space.
 export function getRuntimeTileAtGrid(worldPacket, gridX, gridY) {
   const tiles = worldPacket?.layers?.tiles;
   if (!Array.isArray(tiles)) {
@@ -77,7 +69,7 @@ export function getRuntimeTileAtGrid(worldPacket, gridX, gridY) {
   }
 
   for (const tile of tiles) {
-    if (!isFiniteRect(tile) || !isTileSolid(tile)) {
+    if (!isFiniteRect(tile)) {
       continue;
     }
 
