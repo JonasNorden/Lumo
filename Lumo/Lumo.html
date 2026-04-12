@@ -554,6 +554,9 @@
         }
 
         for (const entity of entitySnapshots) {
+          if (entity?.active !== true) {
+            continue;
+          }
           const entityRect = mapper.worldToCanvasRect(
             entity.x,
             entity.y,

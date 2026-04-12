@@ -31,6 +31,7 @@ function runValidLevelChecks() {
   const player = session.getPlayerSnapshot();
   assert.equal(typeof player, "object");
   assert.equal(player.ok, true);
+  assert.equal(Number.isFinite(player.flareStash), true);
 
   console.log("session valid ok");
   console.log("session ticked 12");

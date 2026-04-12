@@ -45,6 +45,7 @@ function buildPlayerSnapshot(snapshot) {
     falling: source.falling === true,
     locomotion: typeof source.locomotion === "string" ? source.locomotion : "unknown",
     boostActive: source.boostActive === true,
+    flareStash: Number.isFinite(source.flareStash) ? source.flareStash : 1,
     pulse: pulse
       ? {
           active: pulse.active === true,

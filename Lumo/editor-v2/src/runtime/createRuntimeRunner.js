@@ -84,6 +84,7 @@ function cloneState(state) {
           flares: Array.isArray(state?.playerState?.flares)
             ? state.playerState.flares.map((flare) => ({ ...flare }))
             : [],
+          flareStash: Number.isFinite(state?.playerState?.flareStash) ? state.playerState.flareStash : 1,
           entities: Array.isArray(state?.playerState?.entities)
             ? state.playerState.entities.map((entity) => ({ ...entity }))
             : [],
@@ -147,6 +148,7 @@ export function createRuntimeRunner(options = {}) {
             : "falling",
       status: typeof lastBuild.initialization.player?.status === "string" ? lastBuild.initialization.player.status : "ready",
       flares: [],
+      flareStash: 1,
       flareHeldLastTick: false,
       pulse: { active: false, r: 0, alpha: 0, thickness: 3, id: 0 },
       pulseHeldLastTick: false,
