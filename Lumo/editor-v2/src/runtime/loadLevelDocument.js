@@ -186,16 +186,20 @@ function convertEditorTiles(editorLevel, width, height, warnings) {
   for (const placement of placements) {
     const tileId = Number(placement?.value) | 0;
     const x = Number.isFinite(placement?.x) ? Math.round(placement.x) : null;
-    const y = Number.isFinite(placement?.y) ? Math.round(placement.y) : null;
-    if (!Number.isInteger(x) || !Number.isInteger(y) || tileId <= 0) continue;
+    const authoredAnchorY = Number.isFinite(placement?.y) ? Math.round(placement.y) : null;
+    if (!Number.isInteger(x) || !Number.isInteger(authoredAnchorY) || tileId <= 0) continue;
+    const size = Number.isFinite(placement?.size) && placement.size > 0 ? Math.round(placement.size) : 1;
+    // Editor V2 stores sized-tile y as the bottom row anchor (BL footprint semantics).
+    // Recharged grid collision expects x/y as top-left of the occupied rect, so normalize here.
+    const y = authoredAnchorY - (size - 1);
 
     const behavior = resolveLegacyBehaviorByTileId(tileId);
     result.push({
       tileId,
       x,
       y,
-      w: Number.isFinite(placement?.size) && placement.size > 0 ? Math.round(placement.size) : 1,
-      h: Number.isFinite(placement?.size) && placement.size > 0 ? Math.round(placement.size) : 1,
+      w: size,
+      h: size,
       solid: behavior.solid,
       oneWay: behavior.oneWay,
       hazard: behavior.hazard,
