@@ -137,7 +137,8 @@ function syncSessionFromRunner(state, runnerState) {
 export function createRuntimeGameSession(options = {}) {
   try {
     const levelDocument = options?.levelDocument;
-    const runner = createRuntimeRunner({ levelDocument });
+    const runtimeConfig = options?.runtimeConfig && typeof options.runtimeConfig === "object" ? { ...options.runtimeConfig } : {};
+    const runner = createRuntimeRunner({ levelDocument, runtimeConfig });
 
     const sessionState = {
       ok: runner?.ok === true,

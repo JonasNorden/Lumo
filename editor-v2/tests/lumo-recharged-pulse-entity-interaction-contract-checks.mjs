@@ -75,4 +75,35 @@ function runPulseEntityChecks() {
   console.log("recharged pulse entity interaction checks ok");
 }
 
+function runNoFallbackEntitiesInNormalModeChecks() {
+  const levelDocument = loadFixtureLevelDocument();
+  levelDocument.layers = levelDocument.layers && typeof levelDocument.layers === "object" ? levelDocument.layers : {};
+  levelDocument.layers.entities = [];
+
+  const session = createRuntimeGameSession({ levelDocument });
+  assert.equal(session.start().ok, true, "expected session start");
+  session.tick({ pulse: true });
+  const snapshot = session.getPlayerSnapshot();
+  assert.equal(snapshot.entities.length, 0, "expected no runtime fallback entities in normal mode");
+}
+
+function runDebugFallbackEntitiesChecks() {
+  const levelDocument = loadFixtureLevelDocument();
+  levelDocument.layers = levelDocument.layers && typeof levelDocument.layers === "object" ? levelDocument.layers : {};
+  levelDocument.layers.entities = [];
+
+  const session = createRuntimeGameSession({
+    levelDocument,
+    runtimeConfig: {
+      debugEntities: true,
+    },
+  });
+  assert.equal(session.start().ok, true, "expected debug session start");
+  session.tick({ pulse: false });
+  const snapshot = session.getPlayerSnapshot();
+  assert.equal(snapshot.entities.length, 1, "expected debug fallback entity when runtimeConfig.debugEntities is enabled");
+}
+
 runPulseEntityChecks();
+runNoFallbackEntitiesInNormalModeChecks();
+runDebugFallbackEntitiesChecks();
