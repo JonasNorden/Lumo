@@ -60,6 +60,150 @@ const DEFAULT_BOOST_MULTIPLIER = 1.55;
 const DEFAULT_BOOST_MIN_ENERGY = 0.04;
 const DEFAULT_MOVE_ENERGY_DRAIN_PER_SECOND = 0.06;
 const DEFAULT_BOOST_ENERGY_DRAIN_PER_SECOND = 0.18;
+const ENTITY_HIT_FLASH_TICKS = 6;
+const ENTITY_DARK_CREATURE_PULSE_SCALE = 0.55;
+const ENTITY_HOVER_VOID_PULSE_SCALE = 0.6;
+
+function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, worldHeight) {
+  const source = sourceEntity && typeof sourceEntity === "object" ? sourceEntity : {};
+  const typeRaw = typeof source.type === "string" ? source.type.trim() : "";
+  const type = typeRaw.length > 0 ? typeRaw : "dummy";
+  const params = source?.params && typeof source.params === "object" ? source.params : {};
+  const worldWidthPx = Number.isFinite(worldWidth) && Number.isFinite(tileSize) ? worldWidth * tileSize : null;
+  const worldHeightPx = Number.isFinite(worldHeight) && Number.isFinite(tileSize) ? worldHeight * tileSize : null;
+  const authoredX = Number.isFinite(source.x) ? source.x : 0;
+  const authoredY = Number.isFinite(source.y) ? source.y : 0;
+  const worldDimensionsLookTileBased = Number.isFinite(worldWidth) && Number.isFinite(worldHeight) && worldWidth <= 256 && worldHeight <= 256;
+  const looksTileBased = (
+    worldDimensionsLookTileBased
+    && Number.isFinite(tileSize)
+    && tileSize > 0
+    && Number.isFinite(worldWidthPx)
+    && Number.isFinite(worldHeightPx)
+    && authoredX >= 0
+    && authoredY >= 0
+    && authoredX <= worldWidth + 1
+    && authoredY <= worldHeight + 1
+  );
+  const x = looksTileBased ? authoredX * tileSize : authoredX;
+  const y = looksTileBased ? authoredY * tileSize : authoredY;
+  const size = Number.isFinite(source?.size) && source.size > 0
+    ? source.size
+    : Number.isFinite(params?.drawW) && params.drawW > 0
+      ? params.drawW
+      : 24;
+  const maxHp = Number.isFinite(source?.maxHp) && source.maxHp > 0
+    ? Math.floor(source.maxHp)
+    : type === "dark_creature_01"
+      ? (Number.isFinite(params?.hp) && params.hp > 0 ? Math.floor(params.hp) : 3)
+      : type === "hover_void_01"
+        ? (Number.isFinite(params?.maxHp) && params.maxHp > 0 ? Math.floor(params.maxHp) : 3)
+        : (Number.isFinite(params?.hp) && params.hp > 0 ? Math.floor(params.hp) : 1);
+  const hp = Number.isFinite(source?.hp) && source.hp >= 0 ? Math.floor(source.hp) : maxHp;
+
+  return {
+    id: typeof source.id === "string" && source.id.length > 0 ? source.id : `runtime-entity-${index + 1}`,
+    type,
+    x,
+    y,
+    size,
+    hp,
+    maxHp,
+    alive: source.alive !== false && hp > 0,
+    active: source.active !== false && hp > 0,
+    state: typeof source.state === "string" ? source.state : "idle",
+    lastPulseIdHit: Number.isFinite(source?.lastPulseIdHit) ? Math.floor(source.lastPulseIdHit) : -1,
+    hitFlashTicks: Number.isFinite(source?.hitFlashTicks) ? Math.max(0, Math.floor(source.hitFlashTicks)) : 0,
+  };
+}
+
+function normalizeRuntimeEntities(sourceEntities, worldPacket, playerState) {
+  const tileSize = worldPacket?.world?.tileSize;
+  const worldWidth = worldPacket?.world?.width;
+  const worldHeight = worldPacket?.world?.height;
+  if (Array.isArray(sourceEntities) && sourceEntities.length > 0) {
+    return sourceEntities.map((entity, index) => normalizeRuntimeEntity(entity, index, tileSize, worldWidth, worldHeight));
+  }
+
+  const layerEntities = Array.isArray(worldPacket?.layers?.entities) ? worldPacket.layers.entities : [];
+  const supportedFromLevel = layerEntities
+    .filter((entity) => entity && typeof entity === "object" && (
+      entity.type === "dark_creature_01" || entity.type === "hover_void_01"
+    ))
+    .map((entity, index) => normalizeRuntimeEntity(entity, index, tileSize, worldWidth, worldHeight));
+  if (supportedFromLevel.length > 0) {
+    return supportedFromLevel;
+  }
+
+  const playerX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0;
+  const playerY = Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0;
+  return [normalizeRuntimeEntity({
+    id: "runtime-dummy-1",
+    type: "dummy",
+    x: playerX + 48,
+    y: playerY,
+    hp: 1,
+    maxHp: 1,
+  }, 0, tileSize, worldWidth, worldHeight)];
+}
+
+function stepPulseEntityInteractions(worldPacket, playerState, pulse, sourceEntities) {
+  const entities = normalizeRuntimeEntities(sourceEntities, worldPacket, playerState);
+  if (!Array.isArray(entities) || entities.length === 0) {
+    return { entities: [], hits: [] };
+  }
+
+  const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0 ? worldPacket.world.tileSize : 24;
+  const pulseCenterX = Number.isFinite(pulse?.x) ? pulse.x + tileSize * 0.5 : null;
+  const pulseCenterY = Number.isFinite(pulse?.y) ? pulse.y + tileSize * 0.5 : null;
+  const pulseActive = pulse?.active === true && Number.isFinite(pulse?.r) && pulse.r > 0;
+  const pulseId = Number.isFinite(pulse?.id) ? Math.floor(pulse.id) : 0;
+  const hits = [];
+
+  const nextEntities = entities.map((entity) => {
+    const next = { ...entity };
+    if (next.hitFlashTicks > 0) {
+      next.hitFlashTicks -= 1;
+    }
+
+    if (next.alive !== true || next.active !== true) {
+      next.state = "inactive";
+      return next;
+    }
+
+    if (!pulseActive || pulseId <= 0 || pulseId === next.lastPulseIdHit || !Number.isFinite(pulseCenterX) || !Number.isFinite(pulseCenterY)) {
+      if (next.state !== "hit") {
+        next.state = "idle";
+      }
+      return next;
+    }
+
+    const dx = pulseCenterX - next.x;
+    const dy = pulseCenterY - next.y;
+    const dist = Math.hypot(dx, dy);
+    const pulseScale = next.type === "hover_void_01" ? ENTITY_HOVER_VOID_PULSE_SCALE : ENTITY_DARK_CREATURE_PULSE_SCALE;
+    const threshold = pulse.r + Math.max(1, next.size) * pulseScale;
+    if (dist > threshold) {
+      if (next.state !== "hit") {
+        next.state = "idle";
+      }
+      return next;
+    }
+
+    next.lastPulseIdHit = pulseId;
+    next.hp = Math.max(0, next.hp - 1);
+    next.hitFlashTicks = ENTITY_HIT_FLASH_TICKS;
+    next.state = next.hp <= 0 ? "defeated" : "hit";
+    if (next.hp <= 0) {
+      next.alive = false;
+      next.active = false;
+    }
+    hits.push({ id: next.id, type: next.type, pulseId });
+    return next;
+  });
+
+  return { entities: nextEntities, hits };
+}
 
 function resolvePlayerFacingX(playerState, intentMoveX = 0) {
   if (intentMoveX > 0) {
@@ -525,6 +669,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const bottomRespawn = maybeResolveBottomRespawn(worldPacket, verticalStep, options);
   const resolvedPlayerStep = bottomRespawn?.player ?? verticalStep;
   const flareStep = stepFlares(worldPacket, playerState, intent, options);
+  const entityStep = stepPulseEntityInteractions(worldPacket, playerState, pulseStep.pulse, options?.entities);
   const dt = resolveRuntimeDeltaSeconds(options);
   const moving = intent?.moveX !== 0;
   let nextEnergy = pulseStep.energy;
@@ -580,6 +725,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       energy: nextEnergy,
       facingX: flareStep.facingX,
       nextFlareId: flareStep.nextFlareId,
+      entities: entityStep.entities,
       status,
     },
     collisions: {
@@ -637,7 +783,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         flareSpawned: flareStep.flareSpawned,
         flareCount: flareStep.flares.length,
         flareCleanup: flareStep.cleanup,
+        pulseEntityHits: entityStep.hits.length,
       },
     },
+    entities: entityStep.entities,
   };
 }

@@ -44,6 +44,7 @@ function buildPlayerSnapshot(snapshot) {
         }
       : null,
     flares: Array.isArray(source.flares) ? source.flares.map((flare) => ({ ...flare })) : [],
+    entities: Array.isArray(source.entities) ? source.entities.map((entity) => ({ ...entity })) : [],
   };
 }
 
