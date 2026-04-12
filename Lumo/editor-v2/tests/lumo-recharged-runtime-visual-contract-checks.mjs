@@ -12,18 +12,15 @@ const html = readFileSync(lumoHtmlPath, "utf8");
 function runRealRechargedRenderPathChecks() {
   assert.equal(html.includes("function renderRechargedCanvasFrame(canvas, state)"), true, "expected real Recharged render function in Lumo.html");
   assert.equal(html.includes("const backdropGradient = ctx.createLinearGradient"), true, "expected Recharged runtime background gradient for readability in live Lumo.html path");
-  assert.equal(html.includes('ctx.fillStyle = "#60a5fa";'), true, "expected neutral Recharged player body color in live Lumo.html path");
-  assert.equal(html.includes('ctx.fillStyle = "#93c5fd";'), true, "expected player head highlight contract in live Recharged Lumo.html path");
-  assert.equal(html.includes('ctx.fillStyle = "#dbeafe";'), true, "expected player eye/readability contract in live Recharged Lumo.html path");
-  assert.equal(html.includes("isGrounded ? \"#16a34a\" : \"#2563eb\""), false, "should not use grounded/airborne color swapping in live Recharged Lumo.html path");
+  assert.equal(html.includes("drawRechargedPlayerSprite(ctx, mapper"), true, "expected live Recharged path to use the shared player sprite renderer");
 }
 
 function runSupportGeometryPresentationChecks() {
   assert.equal(html.includes("for (const supportTile of supportTiles)"), true, "expected support drawing to come directly from runtime supportTiles data");
   assert.equal(html.includes("const supportCanvasRect = mapper.worldToCanvasRect"), true, "expected support geometry to stay in true world-to-canvas mapper");
-  assert.equal(html.includes('ctx.fillStyle = "#1f2937";'), true, "expected support block base color readability contract");
-  assert.equal(html.includes('ctx.fillStyle = "#334155";'), true, "expected support block inner fill readability contract");
-  assert.equal(html.includes('ctx.fillStyle = "#94a3b8";'), true, "expected support top-lip readability contract");
+  assert.equal(html.includes("function drawRechargedTileV1Visual("), true, "expected Recharged tile visuals to use a V1-style tile image draw helper");
+  assert.equal(html.includes("const drewV1Visual = drawRechargedTileV1Visual"), true, "expected support tile loop to attempt V1 tile visual draw before fallback");
+  assert.equal(html.includes("window?.Lumo?.Tileset"), true, "expected fallback colors to mirror V1 tile behavior palette when tile art is unavailable");
 }
 
 runRealRechargedRenderPathChecks();
