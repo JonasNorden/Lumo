@@ -171,6 +171,7 @@ export function buildNextRuntimeSessionState(sessionState, options = {}) {
   session.player.falling = playerStep.player.falling === true;
   session.player.rising = playerStep.player.rising === true;
   session.player.landed = playerStep.player.landed === true;
+  session.player.boostActive = playerStep.player.boostActive === true;
   session.player.status = typeof playerStep.status === "string" ? playerStep.status : session.player.status;
   session.runtime.tick += 1;
   session.runtime.elapsedMs += FIXED_RUNTIME_TICK_MS;

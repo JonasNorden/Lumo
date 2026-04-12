@@ -56,6 +56,10 @@ const DEFAULT_PULSE_START_ALPHA = 0.9;
 const DEFAULT_PULSE_START_THICKNESS = 3;
 const DEFAULT_PULSE_RADIUS_GROWTH_PX_PER_SECOND = 620;
 const DEFAULT_PULSE_ALPHA_FADE_PER_SECOND = 1.25;
+const DEFAULT_BOOST_MULTIPLIER = 1.55;
+const DEFAULT_BOOST_MIN_ENERGY = 0.04;
+const DEFAULT_MOVE_ENERGY_DRAIN_PER_SECOND = 0.06;
+const DEFAULT_BOOST_ENERGY_DRAIN_PER_SECOND = 0.18;
 
 function resolvePlayerFacingX(playerState, intentMoveX = 0) {
   if (intentMoveX > 0) {
@@ -403,7 +407,16 @@ function maybeResolveBottomRespawn(worldPacket, verticalStep, options = {}) {
 // Executes one deterministic tick: intent -> locomotion -> velocityX -> horizontal -> jump -> vertical.
 export function stepRuntimePlayerSimulation(worldPacket, playerState, options = {}) {
   const intent = buildRuntimePlayerIntent(options?.input ?? options?.intent ?? options);
-  const locomotionState = buildRuntimePlayerLocomotionState(playerState, intent, options);
+  const pulseStep = stepPulse(playerState, intent, options);
+  const boostActive = intent?.boost === true && pulseStep.energy > DEFAULT_BOOST_MIN_ENERGY;
+  const locomotionStateBase = buildRuntimePlayerLocomotionState(playerState, intent, options);
+  const locomotionState = boostActive
+    ? {
+        ...locomotionStateBase,
+        desiredVelocityX: locomotionStateBase.desiredVelocityX * DEFAULT_BOOST_MULTIPLIER,
+        maxSpeedX: locomotionStateBase.maxSpeedX * DEFAULT_BOOST_MULTIPLIER,
+      }
+    : locomotionStateBase;
   const velocityXStep = stepRuntimePlayerVelocityX(playerState, locomotionState);
 
   const horizontalStep = stepRuntimePlayerHorizontalState(worldPacket, playerState, {
@@ -512,7 +525,16 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const bottomRespawn = maybeResolveBottomRespawn(worldPacket, verticalStep, options);
   const resolvedPlayerStep = bottomRespawn?.player ?? verticalStep;
   const flareStep = stepFlares(worldPacket, playerState, intent, options);
-  const pulseStep = stepPulse(playerState, intent, options);
+  const dt = resolveRuntimeDeltaSeconds(options);
+  const moving = intent?.moveX !== 0;
+  let nextEnergy = pulseStep.energy;
+  if (moving) {
+    nextEnergy -= DEFAULT_MOVE_ENERGY_DRAIN_PER_SECOND * dt;
+  }
+  if (boostActive) {
+    nextEnergy -= DEFAULT_BOOST_ENERGY_DRAIN_PER_SECOND * dt;
+  }
+  nextEnergy = Math.max(0, Math.min(1, nextEnergy));
   const status = resolvedPlayerStep.status;
   const finalPlayerState = {
     grounded: resolvedPlayerStep.grounded === true,
@@ -547,14 +569,15 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
           alpha: pulseStep.pulse.alpha,
         },
         flare: { supported: true, wired: true, activeCount: flareStep.flares.length },
-        boost: { supported: true, wired: false },
+        boost: { supported: true, wired: true, active: boostActive },
         attack: { supported: false, wired: false },
       },
       flares: bottomRespawn ? [] : flareStep.flares,
       flareHeldLastTick: flareStep.flareHeldLastTick,
       pulse: pulseStep.pulse,
       pulseHeldLastTick: pulseStep.pulseHeldLastTick,
-      energy: pulseStep.energy,
+      boostActive,
+      energy: nextEnergy,
       facingX: flareStep.facingX,
       nextFlareId: flareStep.nextFlareId,
       status,
@@ -608,6 +631,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         pulseActive: pulseStep.pulse.active,
         pulseRadius: pulseStep.pulse.r,
         pulseAlpha: pulseStep.pulse.alpha,
+        boostActive,
+        boostMultiplier: boostActive ? DEFAULT_BOOST_MULTIPLIER : 1,
+        boostSuppressedByEnergy: intent?.boost === true && !boostActive,
         flareSpawned: flareStep.flareSpawned,
         flareCount: flareStep.flares.length,
         flareCleanup: flareStep.cleanup,

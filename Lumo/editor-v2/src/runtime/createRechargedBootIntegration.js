@@ -31,6 +31,7 @@ function buildPlayerSnapshot(snapshot) {
     grounded: source.grounded === true,
     falling: source.falling === true,
     locomotion: typeof source.locomotion === "string" ? source.locomotion : "unknown",
+    boostActive: source.boostActive === true,
     pulse: pulse
       ? {
           active: pulse.active === true,

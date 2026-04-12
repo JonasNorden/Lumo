@@ -323,6 +323,22 @@
       }
     }
 
+    function readRechargedBoostSnapshot(payload, state) {
+      try {
+        const adapter = payload?.adapter && typeof payload.adapter === "object" ? payload.adapter : null;
+        const adapterPlayerSnapshot = adapter?.getPlayerSnapshot?.();
+        const playerSnapshot = (
+          (adapterPlayerSnapshot && typeof adapterPlayerSnapshot === "object" ? adapterPlayerSnapshot : null)
+          || (state?.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object" ? state.currentPlayerSnapshot : null)
+        );
+        return {
+          active: playerSnapshot?.boostActive === true,
+        };
+      } catch (_error) {
+        return { active: false };
+      }
+    }
+
     function buildRechargedWorldToCanvasMapper({ canvas, worldWidthPx, worldHeightPx, targetX, targetY }) {
       const viewportWorldWidth = Math.max(1, Math.min(canvas.width, Math.round(worldWidthPx)));
       const viewportWorldHeight = Math.max(1, Math.min(canvas.height, Math.round(worldHeightPx)));
@@ -362,6 +378,7 @@
         const player = readRechargedPlayerSnapshot(payload);
         const flareSnapshots = readRechargedFlareSnapshots(payload, state);
         const pulseSnapshot = readRechargedPulseSnapshot(payload, state);
+        const boostSnapshot = readRechargedBoostSnapshot(payload, state);
         const previousSnapshot = readRechargedPlayerSnapshot({
           player: state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
             ? state.previousPlayerSnapshot
@@ -483,6 +500,18 @@
           ctx.fillStyle = "rgba(15, 23, 42, 0.35)";
           ctx.fillRect(playerCanvasRect.x + 2, playerCanvasRect.y + playerCanvasRect.h, Math.max(2, playerCanvasRect.w - 4), 2);
 
+          if (boostSnapshot?.active === true) {
+            const trailWidth = Math.max(2, Math.floor(playerCanvasRect.w * 0.4));
+            const trailX = playerCanvasRect.x + Math.floor((playerCanvasRect.w - trailWidth) * 0.5);
+            const trailY = playerCanvasRect.y + Math.floor(playerCanvasRect.h * 0.2);
+            const trailH = Math.max(4, Math.floor(playerCanvasRect.h * 0.9));
+            const trailGradient = ctx.createLinearGradient(0, trailY, 0, trailY + trailH);
+            trailGradient.addColorStop(0, "rgba(56, 189, 248, 0.45)");
+            trailGradient.addColorStop(1, "rgba(56, 189, 248, 0.00)");
+            ctx.fillStyle = trailGradient;
+            ctx.fillRect(trailX, trailY, trailWidth, trailH);
+          }
+
           // Keep player color neutral in real Recharged mode to avoid misleading grounded/airborne signals.
           ctx.fillStyle = "#60a5fa";
           ctx.fillRect(playerCanvasRect.x, playerBodyY, playerCanvasRect.w, playerBodyHeight);
@@ -586,6 +615,7 @@
           state.lastFlareCount = flareSnapshots.length;
           state.lastFlareVisibleCount = visibleFlares;
           state.lastPulseActive = pulseSnapshot?.active === true;
+          state.lastBoostActive = boostSnapshot?.active === true;
           state.renderAlpha = alpha;
           state.lastRenderOk = true;
         }
