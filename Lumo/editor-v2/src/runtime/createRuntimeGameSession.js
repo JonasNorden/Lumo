@@ -27,6 +27,12 @@ function buildPlayerSnapshot(playerState) {
           alpha: Number.isFinite(playerState?.pulse?.alpha) ? playerState.pulse.alpha : 0,
           thickness: Number.isFinite(playerState?.pulse?.thickness) ? playerState.pulse.thickness : 0,
           id: Number.isFinite(playerState?.pulse?.id) ? playerState.pulse.id : 0,
+          x: Number.isFinite(playerState?.pulse?.x)
+            ? playerState.pulse.x
+            : (Number.isFinite(playerState?.position?.x) ? playerState.position.x : null),
+          y: Number.isFinite(playerState?.pulse?.y)
+            ? playerState.pulse.y
+            : (Number.isFinite(playerState?.position?.y) ? playerState.position.y : null),
         }
       : null,
     flares: Array.isArray(playerState?.flares)

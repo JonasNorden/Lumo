@@ -12,6 +12,7 @@ function normalizeStatus(status, fallback = "invalid") {
 // Returns a compact player snapshot with stable primitive defaults.
 function buildPlayerSnapshot(snapshot) {
   const source = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const pulse = source?.pulse && typeof source.pulse === "object" ? source.pulse : null;
 
   return {
     x: Number.isFinite(source.x) ? source.x : null,
@@ -19,6 +20,17 @@ function buildPlayerSnapshot(snapshot) {
     grounded: source.grounded === true,
     falling: source.falling === true,
     locomotion: typeof source.locomotion === "string" ? source.locomotion : "unknown",
+    pulse: pulse
+      ? {
+          active: pulse.active === true,
+          r: Number.isFinite(pulse?.r) ? pulse.r : 0,
+          alpha: Number.isFinite(pulse?.alpha) ? pulse.alpha : 0,
+          thickness: Number.isFinite(pulse?.thickness) ? pulse.thickness : 0,
+          id: Number.isFinite(pulse?.id) ? pulse.id : 0,
+          x: Number.isFinite(pulse?.x) ? pulse.x : (Number.isFinite(source.x) ? source.x : null),
+          y: Number.isFinite(pulse?.y) ? pulse.y : (Number.isFinite(source.y) ? source.y : null),
+        }
+      : null,
     flares: Array.isArray(source.flares) ? source.flares.map((flare) => ({ ...flare })) : [],
   };
 }

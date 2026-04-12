@@ -124,6 +124,9 @@ function stepPulse(playerState, intent, options = {}) {
     }
   }
 
+  const pulseX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : null;
+  const pulseY = Number.isFinite(playerState?.position?.y) ? playerState.position.y : null;
+
   return {
     pulse: {
       active: pulse.active,
@@ -131,6 +134,8 @@ function stepPulse(playerState, intent, options = {}) {
       alpha: pulse.alpha,
       thickness: pulse.thickness,
       id: pulse.id,
+      x: pulseX,
+      y: pulseY,
     },
     pulseHeldLastTick: intent?.pulse === true,
     pulseStarted: canStartPulse,

@@ -304,7 +304,6 @@
         const playerSnapshot = (
           (adapterPlayerSnapshot && typeof adapterPlayerSnapshot === "object" ? adapterPlayerSnapshot : null)
           || (state?.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object" ? state.currentPlayerSnapshot : null)
-          || (payload?.player && typeof payload.player === "object" ? payload.player : null)
         );
         const pulse = playerSnapshot?.pulse && typeof playerSnapshot.pulse === "object" ? playerSnapshot.pulse : null;
         if (!pulse) {
@@ -315,6 +314,9 @@
           r: Number.isFinite(pulse?.r) ? pulse.r : 0,
           alpha: Number.isFinite(pulse?.alpha) ? pulse.alpha : 0,
           thickness: Number.isFinite(pulse?.thickness) ? pulse.thickness : 2,
+          id: Number.isFinite(pulse?.id) ? pulse.id : 0,
+          x: Number.isFinite(pulse?.x) ? pulse.x : (Number.isFinite(playerSnapshot?.x) ? playerSnapshot.x : null),
+          y: Number.isFinite(pulse?.y) ? pulse.y : (Number.isFinite(playerSnapshot?.y) ? playerSnapshot.y : null),
         };
       } catch (_error) {
         return null;
@@ -497,10 +499,12 @@
           Number.isFinite(playerCenterX) &&
           Number.isFinite(playerFootY)
         ) {
+          const pulseCenterX = Number.isFinite(pulseSnapshot.x) ? pulseSnapshot.x : playerCenterX;
+          const pulseCenterY = Number.isFinite(pulseSnapshot.y) ? pulseSnapshot.y : playerFootY;
           const pulseWorldRadius = Math.max(0.5, pulseSnapshot.r);
           const pulseRect = mapper.worldToCanvasRect(
-            playerCenterX - pulseWorldRadius,
-            playerFootY - pulseWorldRadius,
+            pulseCenterX - pulseWorldRadius,
+            pulseCenterY - pulseWorldRadius,
             pulseWorldRadius * 2,
             pulseWorldRadius * 2,
           );
