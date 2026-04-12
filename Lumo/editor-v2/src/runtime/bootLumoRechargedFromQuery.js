@@ -1,6 +1,8 @@
 import { createLumoRechargedBootAdapter } from "./createLumoRechargedBootAdapter.js";
+import { loadLevelDocument as loadRuntimeLevelDocument } from "./loadLevelDocument.js";
 
 const DEFAULT_LEVEL_URL = "editor-v2/src/data/testLevelDocument.v1.json";
+const VALID_LEVEL_QUERY_PROTOCOLS = new Set(["http:", "https:", ""]);
 const DEFAULT_AUTOPLAY_STEPS = 4;
 
 function createBaseResult(overrides = {}) {
@@ -52,9 +54,37 @@ function normalizeSearchParams(search) {
   return new URLSearchParams();
 }
 
+function normalizeLevelQueryPath(level) {
+  if (typeof level !== "string") return "";
+  const trimmed = level.trim();
+  if (!trimmed) return "";
+
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(trimmed);
+    } catch (_error) {
+      return trimmed;
+    }
+  })();
+
+  const resolved = (() => {
+    try {
+      const nextUrl = new URL(decoded, globalThis.location?.href ?? "http://localhost/");
+      if (!VALID_LEVEL_QUERY_PROTOCOLS.has(nextUrl.protocol)) {
+        return "";
+      }
+      return nextUrl.toString();
+    } catch (_error) {
+      return decoded;
+    }
+  })();
+
+  return resolved;
+}
+
 function buildSourceDescriptor(params) {
   const rawLevel = params.get("level");
-  const level = typeof rawLevel === "string" ? rawLevel.trim() : "";
+  const level = normalizeLevelQueryPath(rawLevel);
 
   if (level.length > 0) {
     return {
@@ -67,7 +97,7 @@ function buildSourceDescriptor(params) {
   return {
     descriptor: { url: DEFAULT_LEVEL_URL },
     levelSourceType: "default-url",
-    warning: "No level query provided; using default Recharged level.",
+    warning: "No level query provided; using fallback debug level document.",
   };
 }
 
@@ -95,7 +125,7 @@ async function defaultBrowserLoadLevelDocument(sourceDescriptor = {}) {
       : "";
 
   if (!rawUrl) {
-    return null;
+    throw new Error("Recharged query loader requires a non-empty level URL/path.");
   }
 
   const response = await fetch(rawUrl, {
@@ -106,11 +136,28 @@ async function defaultBrowserLoadLevelDocument(sourceDescriptor = {}) {
   });
 
   if (!response?.ok) {
-    return null;
+    throw new Error(`Failed to fetch level document (${response?.status} ${response?.statusText || ""}) from ${rawUrl}.`);
   }
 
   const parsed = await response.json();
-  return toLevelDocumentPayload(parsed);
+  const payload = toLevelDocumentPayload(parsed);
+  if (!payload?.levelDocument) {
+    throw new Error(`Loaded level payload from ${rawUrl} is not a JSON object.`);
+  }
+
+  const normalized = loadRuntimeLevelDocument(payload.levelDocument);
+  if (normalized?.ok !== true || !normalized?.level) {
+    const firstError = Array.isArray(normalized?.errors) && normalized.errors[0] ? normalized.errors[0] : "Unknown level format error.";
+    throw new Error(`Invalid level document at ${rawUrl}: ${firstError}`);
+  }
+
+  try {
+    console.info("[Lumo Recharged] Loaded level document", { source: rawUrl });
+  } catch (_error) {
+    // Keep loader side effects non-fatal.
+  }
+
+  return { levelDocument: normalized.level };
 }
 
 // Boots opt-in Recharged runtime from query flags while preserving legacy default mode.
@@ -125,6 +172,10 @@ export async function bootLumoRechargedFromQuery(options = {}) {
   const errors = [];
   const warnings = [];
   const autoplay = params.get("autoplay") === "1";
+  const rawLevel = params.get("level");
+  if (typeof rawLevel === "string" && rawLevel.trim().length > 0 && normalizeLevelQueryPath(rawLevel).length === 0) {
+    warnings.push("Invalid level query path; using fallback debug level document.");
+  }
   const sourceInfo = buildSourceDescriptor(params);
   if (sourceInfo.warning) {
     warnings.push(sourceInfo.warning);
