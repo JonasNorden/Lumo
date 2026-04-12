@@ -62,5 +62,12 @@ assert.equal(
 );
 console.log("render shape contract player/support alignment mapping ok");
 
+assert.equal(
+  html.includes("entity.x,") && html.includes("entity.y,") && !html.includes("entity.y - entity.size"),
+  true,
+  "expected Recharged entity draw rect to treat runtime entity coordinates as top-left pixels",
+);
+console.log("render shape contract entity top-left mapping ok");
+
 assert.equal(html.includes("__LumoRechargedCanvas"), true, "expected __LumoRechargedCanvas marker");
 console.log("render shape contract marker ok");
