@@ -270,14 +270,25 @@
 
     function readRechargedFlareSnapshots(payload, state) {
       try {
-        const playerSnapshot = state?.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object"
-          ? state.currentPlayerSnapshot
-          : (payload?.player && typeof payload.player === "object" ? payload.player : null);
+        const adapter = payload?.adapter && typeof payload.adapter === "object" ? payload.adapter : null;
+        const adapterPlayerSnapshot = adapter?.getPlayerSnapshot?.();
+        const adapterStatePlayerSnapshot = adapter?.getState?.()?.player;
+        const adapterWorldPlayerSnapshot = adapter?.getWorldSnapshot?.()?.player;
+        const playerSnapshot = (
+          (adapterPlayerSnapshot && typeof adapterPlayerSnapshot === "object" ? adapterPlayerSnapshot : null)
+          || (state?.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object" ? state.currentPlayerSnapshot : null)
+          || (adapterStatePlayerSnapshot && typeof adapterStatePlayerSnapshot === "object" ? adapterStatePlayerSnapshot : null)
+          || (adapterWorldPlayerSnapshot && typeof adapterWorldPlayerSnapshot === "object" ? adapterWorldPlayerSnapshot : null)
+          || (payload?.player && typeof payload.player === "object" ? payload.player : null)
+        );
         const flares = Array.isArray(playerSnapshot?.flares) ? playerSnapshot.flares : [];
         return flares
           .map((flare) => ({
+            id: Number.isFinite(flare?.id) ? flare.id : null,
             x: Number.isFinite(flare?.x) ? flare.x : null,
             y: Number.isFinite(flare?.y) ? flare.y : null,
+            vx: Number.isFinite(flare?.vx) ? flare.vx : 0,
+            vy: Number.isFinite(flare?.vy) ? flare.vy : 0,
             radius: Number.isFinite(flare?.radius) && flare.radius > 0 ? flare.radius : 4,
           }))
           .filter((flare) => flare.x !== null && flare.y !== null);
@@ -455,16 +466,27 @@
           ctx.fillRect(playerCanvasRect.x + playerCanvasRect.w - eyeOffsetX - eyeSize, eyeY, eyeSize, eyeSize);
         }
 
+        let visibleFlares = 0;
         for (const flare of flareSnapshots) {
+          const flareLooksTileBased = coordinatesLookTileBased
+            && Number.isFinite(flare.x)
+            && Number.isFinite(flare.y)
+            && flare.x <= worldWidthRaw + tileSize
+            && flare.y <= worldHeightRaw + tileSize;
+          const flareWorldX = flareLooksTileBased ? flare.x * worldUnitsToPx : flare.x;
+          const flareWorldY = flareLooksTileBased ? flare.y * worldUnitsToPx : flare.y;
           const flareRadius = Math.max(2, Math.round(flare.radius));
           const flareRect = mapper.worldToCanvasRect(
-            flare.x - flareRadius,
-            flare.y - flareRadius,
+            flareWorldX - flareRadius,
+            flareWorldY - flareRadius,
             flareRadius * 2,
             flareRadius * 2,
           );
           const centerX = flareRect.x + flareRect.w * 0.5;
           const centerY = flareRect.y + flareRect.h * 0.5;
+          if (centerX >= 0 && centerX <= canvas.width && centerY >= 0 && centerY <= canvas.height) {
+            visibleFlares += 1;
+          }
           const glowRadius = Math.max(flareRect.w, flareRect.h) * 1.8;
           const glowGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, glowRadius);
           glowGradient.addColorStop(0, "rgba(251, 191, 36, 0.95)");
@@ -478,9 +500,25 @@
           ctx.fillRect(flareRect.x + 1, flareRect.y + 1, Math.max(1, flareRect.w - 2), Math.max(1, flareRect.h - 2));
         }
 
+        // Minimal fallback marker: if flare state exists but no flare is visible, draw simple circles
+        // so renderer-vs-state issues can be diagnosed in live Lumo.html quickly.
+        if (flareSnapshots.length > 0 && visibleFlares === 0) {
+          ctx.fillStyle = "#facc15";
+          for (const flare of flareSnapshots.slice(0, 3)) {
+            const fallbackRect = mapper.worldToCanvasRect(flare.x - 3, flare.y - 3, 6, 6);
+            const fallbackCenterX = fallbackRect.x + fallbackRect.w * 0.5;
+            const fallbackCenterY = fallbackRect.y + fallbackRect.h * 0.5;
+            ctx.beginPath();
+            ctx.arc(fallbackCenterX, fallbackCenterY, 4, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
         if (state && typeof state === "object") {
           state.lastPlayerX = Number.isFinite(playerCenterX) ? playerCenterX : null;
           state.lastPlayerY = Number.isFinite(playerFootY) ? playerFootY : null;
+          state.lastFlareCount = flareSnapshots.length;
+          state.lastFlareVisibleCount = visibleFlares;
           state.renderAlpha = alpha;
           state.lastRenderOk = true;
         }

@@ -61,10 +61,25 @@ function runFlareSpawnAndMovementChecks() {
   assert.equal(afterSpawn.flares.length, 1, "expected flare spawn on first S press");
   const spawned = afterSpawn.flares[0];
   assert.equal(spawned.x > noFlareBefore.x, true, "expected flare spawn ahead of player facing");
+  assert.equal(Number.isFinite(spawned.id), true, "expected flare id");
+  assert.equal(Number.isFinite(spawned.x), true, "expected flare x");
+  assert.equal(Number.isFinite(spawned.y), true, "expected flare y");
+  assert.equal(
+    spawned.vx === undefined || Number.isFinite(spawned.vx),
+    true,
+    "expected flare vx to be finite when exposed",
+  );
+  assert.equal(
+    spawned.vy === undefined || Number.isFinite(spawned.vy),
+    true,
+    "expected flare vy to be finite when exposed",
+  );
 
   session.tick({ left: false, right: true, jump: false, flare: true });
   const whileHeld = session.getPlayerSnapshot();
   assert.equal(whileHeld.flares.length, 1, "expected hold to not spam flare");
+  assert.equal(whileHeld.flares[0].id, spawned.id, "expected same flare instance while key held");
+  assert.equal(whileHeld.flares[0].x > spawned.x, true, "expected flare x to move while held");
 
   session.tick({ left: false, right: false, jump: false, flare: false });
   session.tick({ left: false, right: false, jump: false, flare: true });
@@ -73,6 +88,28 @@ function runFlareSpawnAndMovementChecks() {
 
   const movedFlare = secondPress.flares[0];
   assert.equal(movedFlare.x > spawned.x, true, "expected flare to move forward each tick");
+  assert.equal(movedFlare.id, spawned.id, "expected original flare to persist across multiple ticks");
+
+  const trackedFlareId = spawned.id;
+  const sampledPositions = [];
+  for (let index = 0; index < 8; index += 1) {
+    session.tick({ left: false, right: false, jump: false, flare: false });
+    const snapshot = session.getPlayerSnapshot();
+    const trackedFlare = snapshot.flares.find((flare) => flare.id === trackedFlareId);
+    if (!trackedFlare) {
+      break;
+    }
+    sampledPositions.push(trackedFlare.x);
+  }
+
+  assert.equal(sampledPositions.length >= 3, true, "expected spawned flare to exist across multiple ticks");
+  for (let index = 1; index < sampledPositions.length; index += 1) {
+    assert.equal(
+      sampledPositions[index] > sampledPositions[index - 1],
+      true,
+      "expected flare x position to increase while flare remains active",
+    );
+  }
 
   console.log("recharged runtime flare spawn and movement ok");
 }
