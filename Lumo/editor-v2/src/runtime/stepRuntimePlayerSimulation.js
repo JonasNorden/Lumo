@@ -38,10 +38,17 @@ function resolveFinalLocomotion(finalPlayerState, moveX = 0) {
   return normalizedMoveX === 0 ? "airborne-neutral" : "airborne-moving";
 }
 
-const DEFAULT_FLARE_SPEED_PX_PER_SECOND = 560;
-const DEFAULT_FLARE_LIFETIME_TICKS = 45;
+const DEFAULT_FLARE_SPEED_PX_PER_SECOND = 360;
+const DEFAULT_FLARE_UPWARD_IMPULSE_PX_PER_SECOND = 420;
+const DEFAULT_FLARE_LIFETIME_TICKS = 12 * 60;
 const DEFAULT_FLARE_RADIUS_PX = 5;
 const DEFAULT_FLARE_SPAWN_OFFSET_PX = 10;
+const DEFAULT_FLARE_SPAWN_HEIGHT_OFFSET_PX = 8;
+const DEFAULT_FLARE_GRAVITY_PX_PER_SECOND = 980;
+const DEFAULT_FLARE_BOUNCE_ENERGY = 0.4;
+const DEFAULT_FLARE_BOUNCE_FRICTION = 0.85;
+const DEFAULT_FLARE_MAX_BOUNCES = 2;
+const DEFAULT_FLARE_SETTLE_SPEED_PX_PER_SECOND = 24;
 const FLARE_MAX_ACTIVE = 8;
 
 function resolvePlayerFacingX(playerState, intentMoveX = 0) {
@@ -79,9 +86,12 @@ function buildFlareProjectile(playerState, facingX, flareId) {
   return {
     id: Number.isFinite(flareId) ? flareId : 1,
     x: playerX + directionX * DEFAULT_FLARE_SPAWN_OFFSET_PX,
-    y: playerY - 8,
+    y: playerY - DEFAULT_FLARE_SPAWN_HEIGHT_OFFSET_PX,
     vx: directionX * DEFAULT_FLARE_SPEED_PX_PER_SECOND,
-    vy: 0,
+    vy: -DEFAULT_FLARE_UPWARD_IMPULSE_PX_PER_SECOND,
+    grounded: false,
+    settled: false,
+    bounceCount: 0,
     ttlTicks: DEFAULT_FLARE_LIFETIME_TICKS,
     ttl: DEFAULT_FLARE_LIFETIME_TICKS * (1 / 60),
     ageTicks: 0,
@@ -103,6 +113,9 @@ function normalizeExistingFlares(playerState) {
       y: Number.isFinite(flare?.y) ? flare.y : null,
       vx: Number.isFinite(flare?.vx) ? flare.vx : 0,
       vy: Number.isFinite(flare?.vy) ? flare.vy : 0,
+      grounded: flare?.grounded === true,
+      settled: flare?.settled === true,
+      bounceCount: Number.isFinite(flare?.bounceCount) && flare.bounceCount >= 0 ? Math.floor(flare.bounceCount) : 0,
       ttlTicks: Number.isFinite(flare?.ttlTicks) && flare.ttlTicks > 0
         ? Math.floor(flare.ttlTicks)
         : (Number.isFinite(flare?.ttl) && flare.ttl > 0 ? Math.ceil(flare.ttl * 60) : 0),
@@ -136,18 +149,64 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
   const nextFlares = [];
   const cleanupStats = { expired: 0, collided: 0, culled: 0 };
 
+  function isSolidAtPixel(pixelX, pixelY) {
+    if (!Number.isFinite(tileSize) || tileSize <= 0) {
+      return false;
+    }
+    const gridX = Math.floor(pixelX / tileSize);
+    const gridY = Math.floor(pixelY / tileSize);
+    return isRuntimeGridSolid(worldPacket, gridX, gridY);
+  }
+
   for (const flare of existingFlares) {
-    const nextX = flare.x + flare.vx * dt;
-    const nextY = flare.y + flare.vy * dt;
+    const isSettled = flare.settled === true;
+    let nextVx = Number.isFinite(flare.vx) ? flare.vx : 0;
+    let nextVy = Number.isFinite(flare.vy) ? flare.vy : 0;
+    let nextX = Number.isFinite(flare.x) ? flare.x : 0;
+    let nextY = Number.isFinite(flare.y) ? flare.y : 0;
+    let nextGrounded = flare.grounded === true;
+    let nextSettled = isSettled;
+    let nextBounceCount = Number.isFinite(flare.bounceCount) ? Math.max(0, Math.floor(flare.bounceCount)) : 0;
+
+    if (!isSettled) {
+      nextVy += DEFAULT_FLARE_GRAVITY_PX_PER_SECOND * dt;
+
+      const horizontalCandidateX = nextX + nextVx * dt;
+      const hitLeft = isSolidAtPixel(horizontalCandidateX - flare.radius, nextY);
+      const hitRight = isSolidAtPixel(horizontalCandidateX + flare.radius, nextY);
+      if (hitLeft || hitRight) {
+        nextVx *= -DEFAULT_FLARE_BOUNCE_ENERGY;
+      } else {
+        nextX = horizontalCandidateX;
+      }
+
+      const verticalCandidateY = nextY + nextVy * dt;
+      const hitCeiling = isSolidAtPixel(nextX, verticalCandidateY - flare.radius);
+      const hitGround = isSolidAtPixel(nextX, verticalCandidateY + flare.radius);
+      if (hitCeiling && nextVy < 0) {
+        nextVy *= -DEFAULT_FLARE_BOUNCE_ENERGY;
+      } else if (hitGround && nextVy > 0) {
+        const groundGridY = Math.floor((verticalCandidateY + flare.radius) / tileSize);
+        nextY = groundGridY * tileSize - flare.radius - 0.001;
+        nextBounceCount += 1;
+        if (nextBounceCount > DEFAULT_FLARE_MAX_BOUNCES || Math.abs(nextVy) < DEFAULT_FLARE_SETTLE_SPEED_PX_PER_SECOND) {
+          nextVx = 0;
+          nextVy = 0;
+          nextGrounded = true;
+          nextSettled = true;
+        } else {
+          nextVy = -Math.abs(nextVy) * DEFAULT_FLARE_BOUNCE_ENERGY;
+          nextVx *= DEFAULT_FLARE_BOUNCE_FRICTION;
+          nextGrounded = false;
+        }
+      } else {
+        nextY = verticalCandidateY;
+        nextGrounded = false;
+      }
+    }
+
     const nextTtlTicks = flare.ttlTicks - 1;
     const nextAgeTicks = flare.ageTicks + 1;
-
-    let collided = false;
-    if (Number.isFinite(tileSize) && tileSize > 0) {
-      const gridX = Math.floor(nextX / tileSize);
-      const gridY = Math.floor(nextY / tileSize);
-      collided = isRuntimeGridSolid(worldPacket, gridX, gridY);
-    }
 
     const outsideBounds = (
       Number.isFinite(worldWidthPx) && Number.isFinite(worldHeightPx)
@@ -155,10 +214,8 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
     );
     const expired = nextTtlTicks <= 0;
 
-    if (collided || expired || outsideBounds) {
-      if (collided) {
-        cleanupStats.collided += 1;
-      } else if (expired) {
+    if (expired || outsideBounds) {
+      if (expired) {
         cleanupStats.expired += 1;
       } else {
         cleanupStats.culled += 1;
@@ -170,6 +227,11 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
       ...flare,
       x: nextX,
       y: nextY,
+      vx: nextVx,
+      vy: nextVy,
+      grounded: nextGrounded,
+      settled: nextSettled,
+      bounceCount: nextBounceCount,
       ttlTicks: nextTtlTicks,
       ttl: nextTtlTicks * dt,
       ageTicks: nextAgeTicks,
