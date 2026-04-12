@@ -80,6 +80,9 @@ function cloneState(state) {
             x: Number.isFinite(state?.playerState?.velocity?.x) ? state.playerState.velocity.x : 0,
             y: Number.isFinite(state?.playerState?.velocity?.y) ? state.playerState.velocity.y : 0,
           },
+          flares: Array.isArray(state?.playerState?.flares)
+            ? state.playerState.flares.map((flare) => ({ ...flare }))
+            : [],
         }
       : null,
     world: state.world ? { ...state.world } : null,
@@ -134,6 +137,10 @@ export function createRuntimeRunner(options = {}) {
             ? "idle-grounded"
             : "falling",
       status: typeof lastBuild.initialization.player?.status === "string" ? lastBuild.initialization.player.status : "ready",
+      flares: [],
+      flareHeldLastTick: false,
+      facingX: 1,
+      nextFlareId: 1,
     };
     runtimeState.errors = [];
     runtimeState.warnings = uniqueMessages(lastBuild.warnings);
@@ -262,6 +269,10 @@ export function createRuntimeRunner(options = {}) {
                 ? "idle-grounded"
                 : "falling",
           status: typeof lastBuild.initialization.player?.status === "string" ? lastBuild.initialization.player.status : "ready",
+          flares: [],
+          flareHeldLastTick: false,
+          facingX: 1,
+          nextFlareId: 1,
         };
         next.warnings = uniqueMessages(lastBuild.warnings);
       } else {

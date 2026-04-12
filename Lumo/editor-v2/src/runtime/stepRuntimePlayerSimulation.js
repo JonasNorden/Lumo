@@ -5,6 +5,8 @@ import { stepRuntimePlayerHorizontalState } from "./stepRuntimePlayerHorizontalS
 import { buildRuntimePlayerJumpState } from "./buildRuntimePlayerJumpState.js";
 import { stepRuntimePlayerVerticalState } from "./stepRuntimePlayerVerticalState.js";
 import { buildRuntimePlayerStartState } from "./buildRuntimePlayerStartState.js";
+import { isRuntimeGridSolid } from "./isRuntimeGridSolid.js";
+import { resolveRuntimeDeltaSeconds } from "./runtimeLegacyPlayerPhysics.js";
 
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
@@ -34,6 +36,144 @@ function resolveFinalLocomotion(finalPlayerState, moveX = 0) {
   }
 
   return normalizedMoveX === 0 ? "airborne-neutral" : "airborne-moving";
+}
+
+const DEFAULT_FLARE_SPEED_PX_PER_SECOND = 560;
+const DEFAULT_FLARE_LIFETIME_SECONDS = 0.55;
+const DEFAULT_FLARE_RADIUS_PX = 5;
+const DEFAULT_FLARE_SPAWN_OFFSET_PX = 10;
+const FLARE_MAX_ACTIVE = 8;
+
+function resolvePlayerFacingX(playerState, intentMoveX = 0) {
+  if (intentMoveX > 0) {
+    return 1;
+  }
+  if (intentMoveX < 0) {
+    return -1;
+  }
+
+  const previousFacingX = Number.isFinite(playerState?.facingX) ? Math.sign(playerState.facingX) : 0;
+  if (previousFacingX > 0) {
+    return 1;
+  }
+  if (previousFacingX < 0) {
+    return -1;
+  }
+
+  const previousVelocityX = Number.isFinite(playerState?.velocity?.x) ? playerState.velocity.x : 0;
+  if (previousVelocityX > 0) {
+    return 1;
+  }
+  if (previousVelocityX < 0) {
+    return -1;
+  }
+
+  return 1;
+}
+
+function buildFlareProjectile(playerState, facingX, flareId) {
+  const playerX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0;
+  const playerY = Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0;
+  const directionX = facingX < 0 ? -1 : 1;
+
+  return {
+    id: Number.isFinite(flareId) ? flareId : 1,
+    x: playerX + directionX * DEFAULT_FLARE_SPAWN_OFFSET_PX,
+    y: playerY - 8,
+    vx: directionX * DEFAULT_FLARE_SPEED_PX_PER_SECOND,
+    vy: 0,
+    ttl: DEFAULT_FLARE_LIFETIME_SECONDS,
+    radius: DEFAULT_FLARE_RADIUS_PX,
+    collided: false,
+    expired: false,
+  };
+}
+
+function normalizeExistingFlares(playerState) {
+  if (!Array.isArray(playerState?.flares)) {
+    return [];
+  }
+
+  return playerState.flares
+    .map((flare, index) => ({
+      id: Number.isFinite(flare?.id) ? flare.id : index + 1,
+      x: Number.isFinite(flare?.x) ? flare.x : null,
+      y: Number.isFinite(flare?.y) ? flare.y : null,
+      vx: Number.isFinite(flare?.vx) ? flare.vx : 0,
+      vy: Number.isFinite(flare?.vy) ? flare.vy : 0,
+      ttl: Number.isFinite(flare?.ttl) ? flare.ttl : 0,
+      radius: Number.isFinite(flare?.radius) && flare.radius > 0 ? flare.radius : DEFAULT_FLARE_RADIUS_PX,
+    }))
+    .filter((flare) => flare.x !== null && flare.y !== null && flare.ttl > 0);
+}
+
+function stepFlares(worldPacket, playerState, intent, options = {}) {
+  const tileSize = worldPacket?.world?.tileSize;
+  const worldWidth = worldPacket?.world?.width;
+  const worldHeight = worldPacket?.world?.height;
+  const dt = resolveRuntimeDeltaSeconds(options);
+  const facingX = resolvePlayerFacingX(playerState, intent.moveX);
+  const previousHeld = playerState?.flareHeldLastTick === true;
+  const pressedThisTick = intent?.flare === true && previousHeld !== true;
+
+  const existingFlares = normalizeExistingFlares(playerState);
+  const nextFlareIdBase = Number.isFinite(playerState?.nextFlareId) ? Math.max(1, Math.floor(playerState.nextFlareId)) : 1;
+  const nextFlares = [];
+  const cleanupStats = { expired: 0, collided: 0, culled: 0 };
+
+  for (const flare of existingFlares) {
+    const nextX = flare.x + flare.vx * dt;
+    const nextY = flare.y + flare.vy * dt;
+    const nextTtl = flare.ttl - dt;
+
+    let collided = false;
+    if (Number.isFinite(tileSize) && tileSize > 0) {
+      const gridX = Math.floor(nextX / tileSize);
+      const gridY = Math.floor(nextY / tileSize);
+      collided = isRuntimeGridSolid(worldPacket, gridX, gridY);
+    }
+
+    const outsideBounds = (
+      Number.isFinite(worldWidth) && Number.isFinite(worldHeight)
+      && (nextX < -tileSize || nextX > worldWidth + tileSize || nextY < -tileSize || nextY > worldHeight + tileSize)
+    );
+    const expired = nextTtl <= 0;
+
+    if (collided || expired || outsideBounds) {
+      if (collided) {
+        cleanupStats.collided += 1;
+      } else if (expired) {
+        cleanupStats.expired += 1;
+      } else {
+        cleanupStats.culled += 1;
+      }
+      continue;
+    }
+
+    nextFlares.push({
+      ...flare,
+      x: nextX,
+      y: nextY,
+      ttl: nextTtl,
+      collided: false,
+      expired: false,
+    });
+  }
+
+  let nextFlareId = nextFlareIdBase;
+  if (pressedThisTick && nextFlares.length < FLARE_MAX_ACTIVE) {
+    nextFlares.push(buildFlareProjectile(playerState, facingX, nextFlareId));
+    nextFlareId += 1;
+  }
+
+  return {
+    flares: nextFlares,
+    flareHeldLastTick: intent?.flare === true,
+    flareSpawned: pressedThisTick && nextFlares.length > existingFlares.length,
+    facingX,
+    nextFlareId,
+    cleanup: cleanupStats,
+  };
 }
 
 function resolveBottomBoundRespawnY(worldPacket, options = {}) {
@@ -225,6 +365,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
 
   const bottomRespawn = maybeResolveBottomRespawn(worldPacket, verticalStep, options);
   const resolvedPlayerStep = bottomRespawn?.player ?? verticalStep;
+  const flareStep = stepFlares(worldPacket, playerState, intent, options);
   const status = resolvedPlayerStep.status;
   const finalPlayerState = {
     grounded: resolvedPlayerStep.grounded === true,
@@ -251,10 +392,14 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       landed: finalPlayerState.landed,
       abilities: {
         pulse: { supported: true, wired: false },
-        flare: { supported: true, wired: false },
+        flare: { supported: true, wired: true, activeCount: flareStep.flares.length },
         boost: { supported: true, wired: false },
         attack: { supported: false, wired: false },
       },
+      flares: bottomRespawn ? [] : flareStep.flares,
+      flareHeldLastTick: flareStep.flareHeldLastTick,
+      facingX: flareStep.facingX,
+      nextFlareId: flareStep.nextFlareId,
       status,
     },
     collisions: {
@@ -301,6 +446,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       },
       finalized: {
         locomotion: finalLocomotion,
+        flareSpawned: flareStep.flareSpawned,
+        flareCount: flareStep.flares.length,
+        flareCleanup: flareStep.cleanup,
       },
     },
   };
