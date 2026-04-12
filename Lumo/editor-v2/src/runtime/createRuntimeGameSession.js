@@ -19,6 +19,16 @@ function buildPlayerSnapshot(playerState) {
     grounded: playerState?.grounded === true,
     falling: playerState?.falling === true,
     locomotion: typeof playerState?.locomotion === "string" ? playerState.locomotion : "unknown",
+    energy: Number.isFinite(playerState?.energy) ? playerState.energy : null,
+    pulse: playerState?.pulse && typeof playerState.pulse === "object"
+      ? {
+          active: playerState.pulse.active === true,
+          r: Number.isFinite(playerState?.pulse?.r) ? playerState.pulse.r : 0,
+          alpha: Number.isFinite(playerState?.pulse?.alpha) ? playerState.pulse.alpha : 0,
+          thickness: Number.isFinite(playerState?.pulse?.thickness) ? playerState.pulse.thickness : 0,
+          id: Number.isFinite(playerState?.pulse?.id) ? playerState.pulse.id : 0,
+        }
+      : null,
     flares: Array.isArray(playerState?.flares)
       ? playerState.flares
         .map((flare) => ({

@@ -50,6 +50,12 @@ const DEFAULT_FLARE_BOUNCE_FRICTION = 0.85;
 const DEFAULT_FLARE_MAX_BOUNCES = 2;
 const DEFAULT_FLARE_SETTLE_SPEED_PX_PER_SECOND = 24;
 const FLARE_MAX_ACTIVE = 8;
+const DEFAULT_PULSE_ENERGY_COST = 0.08;
+const DEFAULT_PULSE_START_RADIUS_PX = 8;
+const DEFAULT_PULSE_START_ALPHA = 0.9;
+const DEFAULT_PULSE_START_THICKNESS = 3;
+const DEFAULT_PULSE_RADIUS_GROWTH_PX_PER_SECOND = 620;
+const DEFAULT_PULSE_ALPHA_FADE_PER_SECOND = 1.25;
 
 function resolvePlayerFacingX(playerState, intentMoveX = 0) {
   if (intentMoveX > 0) {
@@ -76,6 +82,61 @@ function resolvePlayerFacingX(playerState, intentMoveX = 0) {
   }
 
   return 1;
+}
+
+function normalizePulseState(playerState) {
+  const pulse = playerState?.pulse;
+  return {
+    active: pulse?.active === true,
+    r: Number.isFinite(pulse?.r) ? pulse.r : 0,
+    alpha: Number.isFinite(pulse?.alpha) ? pulse.alpha : 0,
+    thickness: Number.isFinite(pulse?.thickness) ? pulse.thickness : DEFAULT_PULSE_START_THICKNESS,
+    id: Number.isFinite(pulse?.id) ? Math.max(0, Math.floor(pulse.id)) : 0,
+    heldLastTick: playerState?.pulseHeldLastTick === true,
+  };
+}
+
+function stepPulse(playerState, intent, options = {}) {
+  const dt = resolveRuntimeDeltaSeconds(options);
+  const pulse = normalizePulseState(playerState);
+  const pressedThisTick = intent?.pulse === true && pulse.heldLastTick !== true;
+  const previousEnergy = Number.isFinite(playerState?.energy) ? playerState.energy : 1;
+  const canStartPulse = pressedThisTick && previousEnergy > DEFAULT_PULSE_ENERGY_COST;
+
+  let nextPulseId = pulse.id;
+  let nextEnergy = previousEnergy;
+  if (canStartPulse) {
+    nextPulseId += 1;
+    nextEnergy = Math.max(0, previousEnergy - DEFAULT_PULSE_ENERGY_COST);
+    pulse.active = true;
+    pulse.r = DEFAULT_PULSE_START_RADIUS_PX;
+    pulse.alpha = DEFAULT_PULSE_START_ALPHA;
+    pulse.thickness = DEFAULT_PULSE_START_THICKNESS;
+    pulse.id = nextPulseId;
+  }
+
+  if (pulse.active) {
+    pulse.r += DEFAULT_PULSE_RADIUS_GROWTH_PX_PER_SECOND * dt;
+    pulse.alpha -= DEFAULT_PULSE_ALPHA_FADE_PER_SECOND * dt;
+    pulse.thickness = 2 + Math.max(0, pulse.alpha) * 3;
+    if (pulse.alpha <= 0) {
+      pulse.active = false;
+    }
+  }
+
+  return {
+    pulse: {
+      active: pulse.active,
+      r: pulse.r,
+      alpha: pulse.alpha,
+      thickness: pulse.thickness,
+      id: pulse.id,
+    },
+    pulseHeldLastTick: intent?.pulse === true,
+    pulseStarted: canStartPulse,
+    pulseSuppressedByEnergy: pressedThisTick && !canStartPulse,
+    energy: nextEnergy,
+  };
 }
 
 function buildFlareProjectile(playerState, facingX, flareId) {
@@ -446,6 +507,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const bottomRespawn = maybeResolveBottomRespawn(worldPacket, verticalStep, options);
   const resolvedPlayerStep = bottomRespawn?.player ?? verticalStep;
   const flareStep = stepFlares(worldPacket, playerState, intent, options);
+  const pulseStep = stepPulse(playerState, intent, options);
   const status = resolvedPlayerStep.status;
   const finalPlayerState = {
     grounded: resolvedPlayerStep.grounded === true,
@@ -471,13 +533,23 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       rising: finalPlayerState.rising,
       landed: finalPlayerState.landed,
       abilities: {
-        pulse: { supported: true, wired: false },
+        pulse: {
+          supported: true,
+          wired: true,
+          active: pulseStep.pulse.active,
+          id: pulseStep.pulse.id,
+          radius: pulseStep.pulse.r,
+          alpha: pulseStep.pulse.alpha,
+        },
         flare: { supported: true, wired: true, activeCount: flareStep.flares.length },
         boost: { supported: true, wired: false },
         attack: { supported: false, wired: false },
       },
       flares: bottomRespawn ? [] : flareStep.flares,
       flareHeldLastTick: flareStep.flareHeldLastTick,
+      pulse: pulseStep.pulse,
+      pulseHeldLastTick: pulseStep.pulseHeldLastTick,
+      energy: pulseStep.energy,
       facingX: flareStep.facingX,
       nextFlareId: flareStep.nextFlareId,
       status,
@@ -526,6 +598,11 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       },
       finalized: {
         locomotion: finalLocomotion,
+        pulseStarted: pulseStep.pulseStarted,
+        pulseSuppressedByEnergy: pulseStep.pulseSuppressedByEnergy,
+        pulseActive: pulseStep.pulse.active,
+        pulseRadius: pulseStep.pulse.r,
+        pulseAlpha: pulseStep.pulse.alpha,
         flareSpawned: flareStep.flareSpawned,
         flareCount: flareStep.flares.length,
         flareCleanup: flareStep.cleanup,
