@@ -105,6 +105,8 @@ async function runTickIntentUpdatesLivePlayerChecks() {
   assert.equal(leftTickTwo.ok, true);
   assert.equal(leftTickTwo.stepped, true);
   assert.equal(afterLeft.x < afterRight.x, true);
+  assert.equal(afterRight.facingX, 1, "moving right should publish right-facing snapshot");
+  assert.equal(afterLeft.facingX, -1, "moving left should publish left-facing snapshot");
 
   assert.equal(jumpTick.ok, true);
   assert.equal(jumpTick.stepped, true);
@@ -114,6 +116,8 @@ async function runTickIntentUpdatesLivePlayerChecks() {
   assert.equal(boostTick.stepped, true);
   assert.equal(typeof afterBoost.boostActive, "boolean");
   assert.equal(afterBoost.boostActive, true);
+  assert.equal(typeof afterBoost.rising, "boolean");
+  assert.equal(typeof afterBoost.facingX, "number");
   assert.equal(Number.isFinite(afterBoost.energy) || afterBoost.energy === null, true);
 
   console.log("boot adapter tick input updates player snapshot");

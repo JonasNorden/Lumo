@@ -82,28 +82,30 @@
 
     function resolveRechargedPlayerAnimationState(playerSnapshot, previousAnimationState = "idle") {
       const grounded = playerSnapshot?.grounded === true;
+      const rising = playerSnapshot?.rising === true;
+      const falling = playerSnapshot?.falling === true;
+      const locomotion = typeof playerSnapshot?.locomotion === "string" ? playerSnapshot.locomotion : "";
       const velocityX = Number.isFinite(playerSnapshot?.velocity?.x) ? playerSnapshot.velocity.x : 0;
       const velocityY = Number.isFinite(playerSnapshot?.velocity?.y) ? playerSnapshot.velocity.y : 0;
       const movingHorizontally = Math.abs(velocityX) > RECHARGED_PLAYER_HORIZONTAL_SPEED_EPSILON;
 
       if (grounded) {
-        return movingHorizontally ? "run" : "idle";
+        return movingHorizontally || locomotion === "moving-grounded" ? "run" : "idle";
       }
 
-      if (velocityY < -RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON) {
+      if (rising || locomotion === "rising" || velocityY < -RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON) {
         return "jump";
       }
 
-      if (velocityY > RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON) {
+      if (falling || locomotion === "falling" || velocityY > RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON) {
         return "fall";
       }
 
-      // Keep air transitions stable around near-zero apex velocity.
-      if (previousAnimationState === "jump" || previousAnimationState === "fall") {
-        return previousAnimationState;
+      if (locomotion === "airborne-moving" || locomotion === "airborne-neutral") {
+        return "jump";
       }
 
-      return "jump";
+      return previousAnimationState === "fall" ? "fall" : "jump";
     }
 
     function createLumoRechargedCanvasVerificationState() {
@@ -376,6 +378,10 @@
             y: Number.isFinite(nestedPlayer?.velocity?.y) ? nestedPlayer.velocity.y : null,
           },
           grounded: nestedPlayer?.grounded === true,
+          falling: nestedPlayer?.falling === true,
+          rising: nestedPlayer?.rising === true,
+          facingX: Number.isFinite(nestedPlayer?.facingX) ? nestedPlayer.facingX : null,
+          locomotion: typeof nestedPlayer?.locomotion === "string" ? nestedPlayer.locomotion : "",
           status,
           hidden: status === "respawning-out-of-bounds",
         };
@@ -385,6 +391,10 @@
           y: null,
           velocity: { x: null, y: null },
           grounded: false,
+          falling: false,
+          rising: false,
+          facingX: null,
+          locomotion: "",
           status: "",
           hidden: false,
         };
@@ -859,13 +869,12 @@
         return;
       }
 
-      // Preserve interpolation by deriving facing from interpolated center movement.
-      const previousCenterX = Number.isFinite(state.previousRenderPlayerCenterX) ? state.previousRenderPlayerCenterX : null;
-      const movementDeltaX = previousCenterX === null ? 0 : playerCenterX - previousCenterX;
-      if (movementDeltaX > 0.05) {
-        state.playerFacing = 1;
-      } else if (movementDeltaX < -0.05) {
-        state.playerFacing = -1;
+      const snapshotFacingX = Number.isFinite(playerSnapshot?.facingX) ? playerSnapshot.facingX : 0;
+      const snapshotVelocityX = Number.isFinite(playerSnapshot?.velocity?.x) ? playerSnapshot.velocity.x : 0;
+      if (Math.abs(snapshotFacingX) > 0) {
+        state.playerFacing = snapshotFacingX < 0 ? -1 : 1;
+      } else if (Math.abs(snapshotVelocityX) > RECHARGED_PLAYER_HORIZONTAL_SPEED_EPSILON) {
+        state.playerFacing = snapshotVelocityX < 0 ? -1 : 1;
       } else if (!Number.isFinite(state.playerFacing) || state.playerFacing === 0) {
         state.playerFacing = 1;
       }

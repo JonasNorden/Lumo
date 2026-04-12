@@ -25,6 +25,8 @@ function buildPlayerSnapshot(snapshot) {
     },
     grounded: source.grounded === true,
     falling: source.falling === true,
+    rising: source.rising === true,
+    facingX: Number.isFinite(source.facingX) ? source.facingX : null,
     locomotion: typeof source.locomotion === "string" ? source.locomotion : "unknown",
     energy: Number.isFinite(source.energy) ? source.energy : null,
     lives: Number.isFinite(source.lives) ? source.lives : null,
@@ -136,6 +138,7 @@ export function createLumoRechargedBootAdapter(options = {}) {
       lastAction: "create",
       lastResult: null,
       loadMode: "unknown",
+      facingX: 1,
     };
 
     // Pulls orchestrator state up into adapter state without throwing.
@@ -278,6 +281,13 @@ export function createLumoRechargedBootAdapter(options = {}) {
         return buildActionResult({ stepped: false, reason: "not-booted" });
       }
 
+      const moveXIntent = inputIntent?.right === true && inputIntent?.left !== true
+        ? 1
+        : (inputIntent?.left === true && inputIntent?.right !== true ? -1 : 0);
+      if (moveXIntent !== 0) {
+        state.facingX = moveXIntent;
+      }
+
       let tickResult = null;
       try {
         tickResult = orchestrator.tick(inputIntent);
@@ -375,7 +385,11 @@ export function createLumoRechargedBootAdapter(options = {}) {
     // Returns stable compact player state for handoff payloads.
     function getPlayerSnapshot() {
       try {
-        return buildPlayerSnapshot(orchestrator?.getPlayerSnapshot?.());
+        const snapshot = buildPlayerSnapshot(orchestrator?.getPlayerSnapshot?.());
+        if (!Number.isFinite(snapshot.facingX) && Number.isFinite(state.facingX) && Math.abs(state.facingX) > 0) {
+          snapshot.facingX = state.facingX < 0 ? -1 : 1;
+        }
+        return snapshot;
       } catch (_error) {
         return buildPlayerSnapshot(null);
       }
