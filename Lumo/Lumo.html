@@ -294,39 +294,52 @@
       const host = document.createElement("div");
       host.id = "rechargedHud";
       host.setAttribute("aria-live", "polite");
+      // Keep the runtime HUD compact and grouped for real gameplay readability.
+      const flareBlock = document.createElement("div");
+      flareBlock.className = "rechargedHudFlare";
+      const flareLabel = document.createElement("span");
+      flareLabel.className = "rechargedHudKey";
+      flareLabel.textContent = "Flares";
+      const flareValue = document.createElement("span");
+      flareValue.className = "rechargedHudCount";
+      flareValue.textContent = "--";
+      flareBlock.appendChild(flareLabel);
+      flareBlock.appendChild(flareValue);
 
-      const buildRow = (label, value) => {
-        const row = document.createElement("div");
-        row.className = "rechargedHudRow";
-        const labelNode = document.createElement("span");
-        labelNode.className = "rechargedHudLabel";
-        labelNode.textContent = label;
-        const valueNode = document.createElement("span");
-        valueNode.className = "rechargedHudValue";
-        valueNode.textContent = value;
-        row.appendChild(labelNode);
-        row.appendChild(valueNode);
-        return { row, valueNode };
-      };
+      // Render energy as a real bar where fill width maps to live energy ratio.
+      const energyBlock = document.createElement("div");
+      energyBlock.className = "rechargedHudEnergy";
+      const energyHeader = document.createElement("div");
+      energyHeader.className = "rechargedHudHeader";
+      const energyLabel = document.createElement("span");
+      energyLabel.className = "rechargedHudKey";
+      energyLabel.textContent = "Energy";
+      const energyValue = document.createElement("span");
+      energyValue.className = "rechargedHudEnergyValue";
+      energyValue.textContent = "--";
+      energyHeader.appendChild(energyLabel);
+      energyHeader.appendChild(energyValue);
 
-      const flare = buildRow("Flare", "--");
-      const energy = buildRow("Energy", "--");
-      const lives = buildRow("Lives", "--");
-      const score = buildRow("Score", "--");
+      const energyBar = document.createElement("div");
+      energyBar.className = "rechargedHudBar";
+      const energyFill = document.createElement("div");
+      energyFill.className = "rechargedHudBarFill";
+      energyFill.style.width = "0%";
+      energyBar.appendChild(energyFill);
 
-      host.appendChild(flare.row);
-      host.appendChild(energy.row);
-      host.appendChild(lives.row);
-      host.appendChild(score.row);
+      energyBlock.appendChild(energyHeader);
+      energyBlock.appendChild(energyBar);
+
+      host.appendChild(flareBlock);
+      host.appendChild(energyBlock);
       document.body.appendChild(host);
 
       return {
         host,
         values: {
-          flare: flare.valueNode,
-          energy: energy.valueNode,
-          lives: lives.valueNode,
-          score: score.valueNode,
+          flare: flareValue,
+          energyValue,
+          energyFill,
         },
       };
     }
@@ -339,12 +352,12 @@
 
       const snapshot = buildRechargedHudSnapshot(payload, state);
       const formatCount = (value) => (Number.isFinite(value) ? String(Math.max(0, Math.floor(value))) : "--");
-      const formatEnergy = (value) => (Number.isFinite(value) ? value.toFixed(2) : "--");
+      const formatEnergy = (value) => (Number.isFinite(value) ? `${Math.round(value * 100)}%` : "--");
+      const energyRatio = Number.isFinite(snapshot.energy) ? Math.max(0, Math.min(1, snapshot.energy)) : 0;
 
       hud.values.flare.textContent = formatCount(snapshot.flareStash);
-      hud.values.energy.textContent = formatEnergy(snapshot.energy);
-      hud.values.lives.textContent = formatCount(snapshot.lives);
-      hud.values.score.textContent = formatCount(snapshot.score);
+      hud.values.energyValue.textContent = formatEnergy(snapshot.energy);
+      hud.values.energyFill.style.width = `${(energyRatio * 100).toFixed(1)}%`;
     }
 
     function tickLiveRechargedAdapter(state) {
