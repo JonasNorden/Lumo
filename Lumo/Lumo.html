@@ -49,6 +49,30 @@
 
     const RECHARGED_FIXED_STEP_MS = 1000 / 60;
     const RECHARGED_MAX_CATCH_UP_STEPS = 6;
+    const RECHARGED_PLAYER_SPRITE_IDLE = "data/assets/sprites/lumo/lumo_idle_1.png";
+    const RECHARGED_PLAYER_SPRITE_WALK = "data/assets/sprites/lumo/lumo_walk_1.png";
+
+    function createRechargedSpriteImage(src) {
+      const image = new Image();
+      image.decoding = "async";
+      image.src = src;
+      return image;
+    }
+
+    function ensureRechargedPlayerSpriteCache(state) {
+      if (!state || typeof state !== "object") {
+        return null;
+      }
+
+      if (!state.playerSpriteCache || typeof state.playerSpriteCache !== "object") {
+        state.playerSpriteCache = {
+          idle: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_IDLE),
+          walk: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_WALK),
+        };
+      }
+
+      return state.playerSpriteCache;
+    }
 
     function createLumoRechargedCanvasVerificationState() {
       return {
@@ -573,43 +597,7 @@
         ctx.strokeRect(worldBoundsRect.x + 0.5, worldBoundsRect.y + 0.5, Math.max(0, worldBoundsRect.w - 1), Math.max(0, worldBoundsRect.h - 1));
 
         if (player.hidden !== true) {
-          const playerWorldRect = {
-            x: playerCenterX - tileSize * 0.5,
-            y: playerFootY + 1 - tileSize,
-            w: tileSize,
-            h: tileSize,
-          };
-          const playerCanvasRect = mapper.worldToCanvasRect(playerWorldRect.x, playerWorldRect.y, playerWorldRect.w, playerWorldRect.h);
-          const playerHeadHeight = Math.max(4, Math.floor(playerCanvasRect.h * 0.34));
-          const playerBodyY = playerCanvasRect.y + playerHeadHeight;
-          const playerBodyHeight = Math.max(2, playerCanvasRect.h - playerHeadHeight);
-          const eyeSize = Math.max(1, Math.floor(playerCanvasRect.w * 0.12));
-          const eyeY = playerCanvasRect.y + Math.max(1, Math.floor(playerHeadHeight * 0.36));
-          const eyeOffsetX = Math.max(2, Math.floor(playerCanvasRect.w * 0.28));
-
-          ctx.fillStyle = "rgba(15, 23, 42, 0.35)";
-          ctx.fillRect(playerCanvasRect.x + 2, playerCanvasRect.y + playerCanvasRect.h, Math.max(2, playerCanvasRect.w - 4), 2);
-
-          if (boostSnapshot?.active === true) {
-            const trailWidth = Math.max(2, Math.floor(playerCanvasRect.w * 0.4));
-            const trailX = playerCanvasRect.x + Math.floor((playerCanvasRect.w - trailWidth) * 0.5);
-            const trailY = playerCanvasRect.y + Math.floor(playerCanvasRect.h * 0.2);
-            const trailH = Math.max(4, Math.floor(playerCanvasRect.h * 0.9));
-            const trailGradient = ctx.createLinearGradient(0, trailY, 0, trailY + trailH);
-            trailGradient.addColorStop(0, "rgba(56, 189, 248, 0.45)");
-            trailGradient.addColorStop(1, "rgba(56, 189, 248, 0.00)");
-            ctx.fillStyle = trailGradient;
-            ctx.fillRect(trailX, trailY, trailWidth, trailH);
-          }
-
-          // Keep player color neutral in real Recharged mode to avoid misleading grounded/airborne signals.
-          ctx.fillStyle = "#60a5fa";
-          ctx.fillRect(playerCanvasRect.x, playerBodyY, playerCanvasRect.w, playerBodyHeight);
-          ctx.fillStyle = "#93c5fd";
-          ctx.fillRect(playerCanvasRect.x, playerCanvasRect.y, playerCanvasRect.w, playerHeadHeight);
-          ctx.fillStyle = "#dbeafe";
-          ctx.fillRect(playerCanvasRect.x + eyeOffsetX, eyeY, eyeSize, eyeSize);
-          ctx.fillRect(playerCanvasRect.x + playerCanvasRect.w - eyeOffsetX - eyeSize, eyeY, eyeSize, eyeSize);
+          drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot);
         }
 
         for (const entity of entitySnapshots) {
@@ -819,6 +807,77 @@
       } catch (_error) {
         // Resize sync is best-effort and must never throw.
       }
+    }
+
+    function drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot) {
+      if (!ctx || !mapper || !state) {
+        return;
+      }
+
+      const spriteCache = ensureRechargedPlayerSpriteCache(state);
+      if (!spriteCache) {
+        return;
+      }
+
+      // Preserve interpolation by deriving facing from interpolated center movement.
+      const previousCenterX = Number.isFinite(state.previousRenderPlayerCenterX) ? state.previousRenderPlayerCenterX : null;
+      const movementDeltaX = previousCenterX === null ? 0 : playerCenterX - previousCenterX;
+      if (movementDeltaX > 0.05) {
+        state.playerFacing = 1;
+      } else if (movementDeltaX < -0.05) {
+        state.playerFacing = -1;
+      } else if (!Number.isFinite(state.playerFacing) || state.playerFacing === 0) {
+        state.playerFacing = 1;
+      }
+      state.previousRenderPlayerCenterX = playerCenterX;
+
+      const isMoving = Math.abs(movementDeltaX) > 0.05;
+      const activeSprite = isMoving ? spriteCache.walk : spriteCache.idle;
+      const safeSprite = activeSprite?.complete === true ? activeSprite : spriteCache.idle;
+      if (!safeSprite?.complete) {
+        return;
+      }
+
+      const playerWorldRect = {
+        x: playerCenterX - tileSize * 0.5,
+        y: playerFootY + 1 - tileSize,
+        w: tileSize,
+        h: tileSize,
+      };
+      const playerCanvasRect = mapper.worldToCanvasRect(playerWorldRect.x, playerWorldRect.y, playerWorldRect.w, playerWorldRect.h);
+      const footY = playerCanvasRect.y + playerCanvasRect.h;
+      const sourceWidth = Math.max(1, safeSprite.naturalWidth || safeSprite.width || 1);
+      const sourceHeight = Math.max(1, safeSprite.naturalHeight || safeSprite.height || 1);
+      const spriteHeight = Math.max(playerCanvasRect.h, playerCanvasRect.h * 2.375);
+      const spriteWidth = Math.max(playerCanvasRect.w, spriteHeight * (sourceWidth / sourceHeight));
+      const drawX = playerCanvasRect.x + (playerCanvasRect.w - spriteWidth) * 0.5;
+      const drawY = footY - spriteHeight;
+
+      ctx.fillStyle = "rgba(15, 23, 42, 0.35)";
+      ctx.fillRect(playerCanvasRect.x + 2, footY, Math.max(2, playerCanvasRect.w - 4), 2);
+
+      if (boostSnapshot?.active === true) {
+        const trailWidth = Math.max(2, Math.floor(playerCanvasRect.w * 0.4));
+        const trailX = playerCanvasRect.x + Math.floor((playerCanvasRect.w - trailWidth) * 0.5);
+        const trailY = playerCanvasRect.y + Math.floor(playerCanvasRect.h * 0.2);
+        const trailH = Math.max(4, Math.floor(playerCanvasRect.h * 0.9));
+        const trailGradient = ctx.createLinearGradient(0, trailY, 0, trailY + trailH);
+        trailGradient.addColorStop(0, "rgba(56, 189, 248, 0.45)");
+        trailGradient.addColorStop(1, "rgba(56, 189, 248, 0.00)");
+        ctx.fillStyle = trailGradient;
+        ctx.fillRect(trailX, trailY, trailWidth, trailH);
+      }
+
+      // Keep feet anchored to collision truth while flipping sprite by movement direction.
+      ctx.save();
+      if ((state.playerFacing || 1) < 0) {
+        const centerX = drawX + spriteWidth * 0.5;
+        ctx.translate(centerX, 0);
+        ctx.scale(-1, 1);
+        ctx.translate(-centerX, 0);
+      }
+      ctx.drawImage(safeSprite, drawX, drawY, spriteWidth, spriteHeight);
+      ctx.restore();
     }
 
     function startRechargedCanvasVerificationLoop(state) {
