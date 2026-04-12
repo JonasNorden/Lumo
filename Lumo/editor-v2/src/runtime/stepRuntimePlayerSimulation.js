@@ -66,7 +66,9 @@ const ENTITY_HOVER_VOID_PULSE_SCALE = 0.6;
 
 function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, worldHeight) {
   const source = sourceEntity && typeof sourceEntity === "object" ? sourceEntity : {};
-  const typeRaw = typeof source.type === "string" ? source.type.trim() : "";
+  const typeRaw = typeof source.type === "string"
+    ? source.type.trim()
+    : (typeof source.entityType === "string" ? source.entityType.trim() : "");
   const type = typeRaw.length > 0 ? typeRaw : "dummy";
   const params = source?.params && typeof source.params === "object" ? source.params : {};
   const worldWidthPx = Number.isFinite(worldWidth) && Number.isFinite(tileSize) ? worldWidth * tileSize : null;
@@ -126,13 +128,11 @@ function normalizeRuntimeEntities(sourceEntities, worldPacket, playerState) {
   }
 
   const layerEntities = Array.isArray(worldPacket?.layers?.entities) ? worldPacket.layers.entities : [];
-  const supportedFromLevel = layerEntities
-    .filter((entity) => entity && typeof entity === "object" && (
-      entity.type === "dark_creature_01" || entity.type === "hover_void_01"
-    ))
+  const authoredEntities = layerEntities
+    .filter((entity) => entity && typeof entity === "object")
     .map((entity, index) => normalizeRuntimeEntity(entity, index, tileSize, worldWidth, worldHeight));
-  if (supportedFromLevel.length > 0) {
-    return supportedFromLevel;
+  if (authoredEntities.length > 0) {
+    return authoredEntities;
   }
 
   return [];
