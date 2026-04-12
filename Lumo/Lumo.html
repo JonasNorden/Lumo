@@ -265,8 +265,15 @@
         });
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#0b1220";
+        const backdropGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        backdropGradient.addColorStop(0, "#0b1220");
+        backdropGradient.addColorStop(1, "#111b31");
+        ctx.fillStyle = backdropGradient;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        const playfieldRect = mapper.worldToCanvasRect(0, 0, worldWidthPx, worldHeightPx);
+        ctx.fillStyle = "rgba(15, 23, 42, 0.52)";
+        ctx.fillRect(playfieldRect.x, playfieldRect.y, playfieldRect.w, playfieldRect.h);
 
         // Draw real runtime support geometry from Recharged world tile data in tileSize-scaled world pixels.
         for (const supportTile of supportTiles) {
@@ -284,14 +291,28 @@
           const worldRectH = tileH * worldUnitsToPx;
           const supportCanvasRect = mapper.worldToCanvasRect(worldRectX, worldRectY, worldRectW, worldRectH);
 
-          ctx.fillStyle = "#334155";
+          ctx.fillStyle = "#1f2937";
           ctx.fillRect(supportCanvasRect.x, supportCanvasRect.y, supportCanvasRect.w, supportCanvasRect.h);
+          ctx.fillStyle = "#334155";
+          ctx.fillRect(
+            supportCanvasRect.x + 1,
+            supportCanvasRect.y + 1,
+            Math.max(1, supportCanvasRect.w - 2),
+            Math.max(1, supportCanvasRect.h - 2),
+          );
           ctx.fillStyle = "#94a3b8";
-          ctx.fillRect(supportCanvasRect.x, supportCanvasRect.y, supportCanvasRect.w, Math.min(3, supportCanvasRect.h));
+          ctx.fillRect(supportCanvasRect.x, supportCanvasRect.y, supportCanvasRect.w, Math.min(4, supportCanvasRect.h));
+          ctx.fillStyle = "rgba(15, 23, 42, 0.35)";
+          ctx.fillRect(
+            supportCanvasRect.x,
+            supportCanvasRect.y + Math.max(0, supportCanvasRect.h - 3),
+            supportCanvasRect.w,
+            Math.min(3, supportCanvasRect.h),
+          );
         }
 
         // Draw true world bounds in the same world-to-canvas mapping used by player and support geometry.
-        ctx.strokeStyle = "#475569";
+        ctx.strokeStyle = "#64748b";
         ctx.lineWidth = 1;
         const worldBoundsRect = mapper.worldToCanvasRect(0, 0, worldWidthPx, worldHeightPx);
         ctx.strokeRect(worldBoundsRect.x + 0.5, worldBoundsRect.y + 0.5, Math.max(0, worldBoundsRect.w - 1), Math.max(0, worldBoundsRect.h - 1));
@@ -304,9 +325,24 @@
             h: tileSize,
           };
           const playerCanvasRect = mapper.worldToCanvasRect(playerWorldRect.x, playerWorldRect.y, playerWorldRect.w, playerWorldRect.h);
+          const playerHeadHeight = Math.max(4, Math.floor(playerCanvasRect.h * 0.34));
+          const playerBodyY = playerCanvasRect.y + playerHeadHeight;
+          const playerBodyHeight = Math.max(2, playerCanvasRect.h - playerHeadHeight);
+          const eyeSize = Math.max(1, Math.floor(playerCanvasRect.w * 0.12));
+          const eyeY = playerCanvasRect.y + Math.max(1, Math.floor(playerHeadHeight * 0.36));
+          const eyeOffsetX = Math.max(2, Math.floor(playerCanvasRect.w * 0.28));
+
+          ctx.fillStyle = "rgba(15, 23, 42, 0.35)";
+          ctx.fillRect(playerCanvasRect.x + 2, playerCanvasRect.y + playerCanvasRect.h, Math.max(2, playerCanvasRect.w - 4), 2);
+
           // Keep player color neutral in real Recharged mode to avoid misleading grounded/airborne signals.
           ctx.fillStyle = "#60a5fa";
-          ctx.fillRect(playerCanvasRect.x, playerCanvasRect.y, playerCanvasRect.w, playerCanvasRect.h);
+          ctx.fillRect(playerCanvasRect.x, playerBodyY, playerCanvasRect.w, playerBodyHeight);
+          ctx.fillStyle = "#93c5fd";
+          ctx.fillRect(playerCanvasRect.x, playerCanvasRect.y, playerCanvasRect.w, playerHeadHeight);
+          ctx.fillStyle = "#dbeafe";
+          ctx.fillRect(playerCanvasRect.x + eyeOffsetX, eyeY, eyeSize, eyeSize);
+          ctx.fillRect(playerCanvasRect.x + playerCanvasRect.w - eyeOffsetX - eyeSize, eyeY, eyeSize, eyeSize);
         }
 
         if (state && typeof state === "object") {
