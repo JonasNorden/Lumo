@@ -63,8 +63,32 @@ function runIdleAnimationParityChecks() {
   );
 }
 
+function runGroundedRunAnimationParityChecks() {
+  assert.equal(
+    html.includes("const RECHARGED_PLAYER_SPRITE_RUN_FRAMES = ["),
+    true,
+    "recharged should load the canonical four-frame walk strip used by V1 grounded movement",
+  );
+  assert.equal(
+    html.includes("const RECHARGED_PLAYER_RUN_FPS = 9;"),
+    true,
+    "recharged grounded run cadence should start from V1 walk fps",
+  );
+  assert.equal(
+    html.includes("const runFps = RECHARGED_PLAYER_RUN_FPS * (0.65 + 0.55 * speedRatio);"),
+    true,
+    "recharged grounded run cadence should scale with horizontal velocity exactly like V1",
+  );
+  assert.equal(
+    html.includes("runAnimation.i = (runAnimation.i + 1) % (RECHARGED_PLAYER_RUN_LAST_INDEX + 1);"),
+    true,
+    "recharged grounded run animation should loop walk frames 0→1→2→3→0 like V1",
+  );
+}
+
 runAnimationResolverChecks();
 runFacingSourceChecks();
 runIdleAnimationParityChecks();
+runGroundedRunAnimationParityChecks();
 
 console.log("lumo-recharged-player-animation-contract-checks: ok");
