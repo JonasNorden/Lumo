@@ -50,7 +50,11 @@
     const RECHARGED_FIXED_STEP_MS = 1000 / 60;
     const RECHARGED_MAX_CATCH_UP_STEPS = 6;
     const RECHARGED_PLAYER_SPRITE_IDLE = "data/assets/sprites/lumo/lumo_idle_1.png";
-    const RECHARGED_PLAYER_SPRITE_WALK = "data/assets/sprites/lumo/lumo_walk_1.png";
+    const RECHARGED_PLAYER_SPRITE_RUN = "data/assets/sprites/lumo/lumo_walk_1.png";
+    const RECHARGED_PLAYER_SPRITE_JUMP = "data/assets/sprites/lumo/lumo_jump_up.png";
+    const RECHARGED_PLAYER_SPRITE_FALL = "data/assets/sprites/lumo/lumo_jump_down.png";
+    const RECHARGED_PLAYER_HORIZONTAL_SPEED_EPSILON = 0.05;
+    const RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON = 0.05;
 
     function createRechargedSpriteImage(src) {
       const image = new Image();
@@ -67,11 +71,39 @@
       if (!state.playerSpriteCache || typeof state.playerSpriteCache !== "object") {
         state.playerSpriteCache = {
           idle: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_IDLE),
-          walk: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_WALK),
+          run: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_RUN),
+          jump: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_JUMP),
+          fall: createRechargedSpriteImage(RECHARGED_PLAYER_SPRITE_FALL),
         };
       }
 
       return state.playerSpriteCache;
+    }
+
+    function resolveRechargedPlayerAnimationState(playerSnapshot, previousAnimationState = "idle") {
+      const grounded = playerSnapshot?.grounded === true;
+      const velocityX = Number.isFinite(playerSnapshot?.velocity?.x) ? playerSnapshot.velocity.x : 0;
+      const velocityY = Number.isFinite(playerSnapshot?.velocity?.y) ? playerSnapshot.velocity.y : 0;
+      const movingHorizontally = Math.abs(velocityX) > RECHARGED_PLAYER_HORIZONTAL_SPEED_EPSILON;
+
+      if (grounded) {
+        return movingHorizontally ? "run" : "idle";
+      }
+
+      if (velocityY < -RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON) {
+        return "jump";
+      }
+
+      if (velocityY > RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON) {
+        return "fall";
+      }
+
+      // Keep air transitions stable around near-zero apex velocity.
+      if (previousAnimationState === "jump" || previousAnimationState === "fall") {
+        return previousAnimationState;
+      }
+
+      return "jump";
     }
 
     function createLumoRechargedCanvasVerificationState() {
@@ -86,6 +118,7 @@
         lastTickOk: null,
         previousPlayerSnapshot: null,
         currentPlayerSnapshot: null,
+        playerAnimationState: "idle",
         renderAlpha: 0,
         stepAccumulatorMs: 0,
         lastStepAtMs: null,
@@ -338,6 +371,11 @@
         return {
           x,
           y,
+          velocity: {
+            x: Number.isFinite(nestedPlayer?.velocity?.x) ? nestedPlayer.velocity.x : null,
+            y: Number.isFinite(nestedPlayer?.velocity?.y) ? nestedPlayer.velocity.y : null,
+          },
+          grounded: nestedPlayer?.grounded === true,
           status,
           hidden: status === "respawning-out-of-bounds",
         };
@@ -345,6 +383,8 @@
         return {
           x: null,
           y: null,
+          velocity: { x: null, y: null },
+          grounded: false,
           status: "",
           hidden: false,
         };
@@ -597,7 +637,7 @@
         ctx.strokeRect(worldBoundsRect.x + 0.5, worldBoundsRect.y + 0.5, Math.max(0, worldBoundsRect.w - 1), Math.max(0, worldBoundsRect.h - 1));
 
         if (player.hidden !== true) {
-          drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot);
+          drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, currentSnapshot);
         }
 
         for (const entity of entitySnapshots) {
@@ -809,7 +849,7 @@
       }
     }
 
-    function drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot) {
+    function drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, playerSnapshot) {
       if (!ctx || !mapper || !state) {
         return;
       }
@@ -831,8 +871,13 @@
       }
       state.previousRenderPlayerCenterX = playerCenterX;
 
-      const isMoving = Math.abs(movementDeltaX) > 0.05;
-      const activeSprite = isMoving ? spriteCache.walk : spriteCache.idle;
+      const animationState = resolveRechargedPlayerAnimationState(
+        playerSnapshot,
+        typeof state.playerAnimationState === "string" ? state.playerAnimationState : "idle",
+      );
+      state.playerAnimationState = animationState;
+
+      const activeSprite = spriteCache[animationState] || spriteCache.idle;
       const safeSprite = activeSprite?.complete === true ? activeSprite : spriteCache.idle;
       if (!safeSprite?.complete) {
         return;

@@ -12,10 +12,16 @@ function normalizeStatus(status, fallback = DEFAULT_STATUS) {
 
 // Builds a stable player snapshot shape from any runtime state input.
 function buildPlayerSnapshot(playerState) {
+  const velocityX = Number.isFinite(playerState?.velocity?.x) ? playerState.velocity.x : null;
+  const velocityY = Number.isFinite(playerState?.velocity?.y) ? playerState.velocity.y : null;
   return {
     ok: playerState && typeof playerState === "object",
     x: Number.isFinite(playerState?.position?.x) ? playerState.position.x : null,
     y: Number.isFinite(playerState?.position?.y) ? playerState.position.y : null,
+    velocity: {
+      x: velocityX,
+      y: velocityY,
+    },
     grounded: playerState?.grounded === true,
     falling: playerState?.falling === true,
     locomotion: typeof playerState?.locomotion === "string" ? playerState.locomotion : "unknown",
