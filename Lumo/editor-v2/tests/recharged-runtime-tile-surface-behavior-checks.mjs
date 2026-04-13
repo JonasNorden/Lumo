@@ -140,6 +140,56 @@ function runOneWayAndHazardCollisionChecks() {
   }, { input: { moveX: 0, jump: false } });
 
   assert.equal(hazardFall.player.grounded, false, "hazard tiles should not block as solid ground");
+
+  const solidCeilingWorldPacket = {
+    world: { width: 10, height: 8, tileSize: 24 },
+    layers: {
+      tiles: [{ tileId: 1, x: 4, y: 3, w: 1, h: 1, coordinateSpace: "grid" }],
+    },
+    spawn: { x: 4 * 24, y: 5 * 24 },
+    tileBounds: { maxY: 7 },
+  };
+
+  let jumpIntoSolidCeilingPlayer = {
+    position: { x: 4 * 24, y: (4 * 24) + 4 },
+    velocity: { x: 0, y: -600 },
+    grounded: false,
+    falling: false,
+    rising: true,
+    landed: false,
+  };
+  let solidMinY = jumpIntoSolidCeilingPlayer.position.y;
+  for (let tick = 0; tick < 10; tick += 1) {
+    jumpIntoSolidCeilingPlayer = stepRuntimePlayerSimulation(solidCeilingWorldPacket, jumpIntoSolidCeilingPlayer, { input: { moveX: 0, jump: false } }).player;
+    solidMinY = Math.min(solidMinY, jumpIntoSolidCeilingPlayer.position.y);
+  }
+
+  assert.equal(solidMinY >= (3 * 24) + 24, true, "solid ceiling should clamp player below the tile");
+
+  const oneWayCeilingWorldPacket = {
+    world: { width: 10, height: 8, tileSize: 24 },
+    layers: {
+      tiles: [{ tileId: 2, x: 4, y: 3, w: 1, h: 1, coordinateSpace: "grid" }],
+    },
+    spawn: { x: 4 * 24, y: 5 * 24 },
+    tileBounds: { maxY: 7 },
+  };
+
+  let jumpIntoOneWayFromBelowPlayer = {
+    position: { x: 4 * 24, y: (4 * 24) + 4 },
+    velocity: { x: 0, y: -600 },
+    grounded: false,
+    falling: false,
+    rising: true,
+    landed: false,
+  };
+  let oneWayMinY = jumpIntoOneWayFromBelowPlayer.position.y;
+  for (let tick = 0; tick < 10; tick += 1) {
+    jumpIntoOneWayFromBelowPlayer = stepRuntimePlayerSimulation(oneWayCeilingWorldPacket, jumpIntoOneWayFromBelowPlayer, { input: { moveX: 0, jump: false } }).player;
+    oneWayMinY = Math.min(oneWayMinY, jumpIntoOneWayFromBelowPlayer.position.y);
+  }
+
+  assert.equal(oneWayMinY < (3 * 24) + 24, true, "one-way from below should allow upward travel");
 }
 
 runSurfaceFeelChecks();

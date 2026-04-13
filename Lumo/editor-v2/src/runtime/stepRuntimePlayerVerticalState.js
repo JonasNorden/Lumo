@@ -60,9 +60,13 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
   const nextYCandidate = currentY + nextVelocityY * deltaSeconds;
   const gridX = Math.floor(currentX / tileSize);
   const gridYBelow = Math.floor((nextYCandidate + 1) / tileSize);
+  const gridYAbove = Math.floor((nextYCandidate - 1) / tileSize);
   const tileBelow = getRuntimeTileAtGrid(worldPacket, gridX, gridYBelow);
+  const tileAbove = getRuntimeTileAtGrid(worldPacket, gridX, gridYAbove);
   const behaviorBelow = tileBelow ? resolveRuntimeTileBehavior(tileBelow) : null;
+  const behaviorAbove = tileAbove ? resolveRuntimeTileBehavior(tileAbove) : null;
   const shouldResolveGroundCollision = nextVelocityY >= 0;
+  const shouldResolveCeilingCollision = nextVelocityY < 0;
 
   let collidedBelow = false;
   if (shouldResolveGroundCollision && behaviorBelow) {
@@ -73,6 +77,12 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
     } else {
       collidedBelow = isRuntimeTileBlocking(behaviorBelow, { includeOneWay: false });
     }
+  }
+
+  // V1 truth: only true full solids block upward movement; one-way tiles do not.
+  let collidedAbove = false;
+  if (shouldResolveCeilingCollision && behaviorAbove) {
+    collidedAbove = isRuntimeTileBlocking(behaviorAbove, { includeOneWay: false });
   }
 
   // Resolve floor collisions only while descending or stationary.
@@ -101,6 +111,38 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
         nextYCandidate,
         gridX,
         gridYBelow,
+        gridYAbove,
+        gravityY,
+        deltaSeconds,
+        jumpCutVelocityY,
+        maxFallSpeedY,
+      },
+    };
+  }
+
+  // V1 truth: upward movement is blocked by full solids (not one-way/hazard tiles).
+  if (shouldResolveCeilingCollision && collidedAbove) {
+    const clampedY = Math.max(nextYCandidate, (gridYAbove + 1) * tileSize);
+
+    return {
+      ok: true,
+      position: { x: currentX, y: clampedY },
+      velocity: { x: currentVelocityX, y: 0 },
+      grounded: false,
+      falling: false,
+      rising: false,
+      collidedBelow: false,
+      landed: false,
+      status: "hit-ceiling",
+      errors: uniqueMessages(inheritedErrors),
+      warnings: uniqueMessages(inheritedWarnings),
+      debug: {
+        currentVelocityY,
+        nextVelocityY,
+        nextYCandidate,
+        gridX,
+        gridYBelow,
+        gridYAbove,
         gravityY,
         deltaSeconds,
         jumpCutVelocityY,
@@ -130,6 +172,7 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
       nextYCandidate,
       gridX,
       gridYBelow,
+      gridYAbove,
       gravityY,
       deltaSeconds,
       jumpCutVelocityY,
