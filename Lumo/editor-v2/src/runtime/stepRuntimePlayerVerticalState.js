@@ -63,9 +63,7 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
   const nextTopYCandidate = nextYCandidate - V1_PLAYER_HITBOX_HEIGHT_PX;
   const gridX = Math.floor(currentX / tileSize);
   const gridYBelow = Math.floor((nextYCandidate + 1) / tileSize);
-  // Probe the same ceiling row selector used by the pre-parity Recharged runtime,
-  // but clamp using the V1 top/head anchor below.
-  const gridYAbove = Math.floor((nextYCandidate - 1) / tileSize);
+  const gridYAbove = Math.floor((nextTopYCandidate + 1) / tileSize);
   const tileBelow = getRuntimeTileAtGrid(worldPacket, gridX, gridYBelow);
   const tileAbove = getRuntimeTileAtGrid(worldPacket, gridX, gridYAbove);
   const behaviorBelow = tileBelow ? resolveRuntimeTileBehavior(tileBelow) : null;
