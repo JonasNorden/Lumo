@@ -2,6 +2,8 @@ import { getRuntimeTileAtGrid } from "./getRuntimeTileAtGrid.js";
 import { resolveLegacyJumpPhysics, resolveRuntimeDeltaSeconds } from "./runtimeLegacyPlayerPhysics.js";
 import { isRuntimeTileBlocking, resolveRuntimeTileBehavior } from "./runtimeTileBehavior.js";
 
+const V1_PLAYER_HITBOX_HEIGHT_PX = 28;
+
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
     return [];
@@ -58,8 +60,11 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
   const maxFallSpeedY = jumpPhysics.maxFallSpeedY;
   const nextVelocityY = unclampedVelocityY > 0 ? Math.min(unclampedVelocityY, maxFallSpeedY) : unclampedVelocityY;
   const nextYCandidate = currentY + nextVelocityY * deltaSeconds;
+  const nextTopYCandidate = nextYCandidate - V1_PLAYER_HITBOX_HEIGHT_PX;
   const gridX = Math.floor(currentX / tileSize);
   const gridYBelow = Math.floor((nextYCandidate + 1) / tileSize);
+  // Probe the same ceiling row selector used by the pre-parity Recharged runtime,
+  // but clamp using the V1 top/head anchor below.
   const gridYAbove = Math.floor((nextYCandidate - 1) / tileSize);
   const tileBelow = getRuntimeTileAtGrid(worldPacket, gridX, gridYBelow);
   const tileAbove = getRuntimeTileAtGrid(worldPacket, gridX, gridYAbove);
@@ -122,7 +127,8 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
 
   // V1 truth: upward movement is blocked by full solids (not one-way/hazard tiles).
   if (shouldResolveCeilingCollision && collidedAbove) {
-    const clampedY = Math.max(nextYCandidate, (gridYAbove + 1) * tileSize);
+    const clampedTopY = Math.max(nextTopYCandidate, (gridYAbove + 1) * tileSize);
+    const clampedY = clampedTopY + V1_PLAYER_HITBOX_HEIGHT_PX;
 
     return {
       ok: true,
@@ -140,6 +146,7 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
         currentVelocityY,
         nextVelocityY,
         nextYCandidate,
+        nextTopYCandidate,
         gridX,
         gridYBelow,
         gridYAbove,
@@ -170,6 +177,7 @@ export function stepRuntimePlayerVerticalState(worldPacket, playerState, options
       currentVelocityY,
       nextVelocityY,
       nextYCandidate,
+      nextTopYCandidate,
       gridX,
       gridYBelow,
       gridYAbove,

@@ -71,6 +71,12 @@
     const RECHARGED_PLAYER_RUN_FPS = 9;
     const RECHARGED_PLAYER_RUN_LAST_INDEX = 3;
     const RECHARGED_PLAYER_RUN_BASE_SPEED = 230;
+    const RECHARGED_PLAYER_HITBOX_WIDTH = 22;
+    const RECHARGED_PLAYER_HITBOX_HEIGHT = 28;
+    const RECHARGED_PLAYER_SPRITE_WIDTH = 24;
+    const RECHARGED_PLAYER_SPRITE_HEIGHT = 38;
+    const RECHARGED_PLAYER_BRAKE_SPRITE_HEIGHT = 48;
+    const RECHARGED_PLAYER_BRAKE_SPRITE_MAX_WIDTH = 28;
 
     function createRechargedSpriteImage(src) {
       const image = new Image();
@@ -1104,18 +1110,38 @@
         return;
       }
 
+      // V1 parity: Recharged render follows V1 hitbox footprint (22x28),
+      // then draws the visual sprite at V1 visual size (24x38) anchored to feet.
       const playerWorldRect = {
-        x: playerCenterX - tileSize * 0.5,
-        y: playerFootY + 1 - tileSize,
-        w: tileSize,
-        h: tileSize,
+        x: playerCenterX - (RECHARGED_PLAYER_HITBOX_WIDTH * 0.5),
+        y: playerFootY + 1 - RECHARGED_PLAYER_HITBOX_HEIGHT,
+        w: RECHARGED_PLAYER_HITBOX_WIDTH,
+        h: RECHARGED_PLAYER_HITBOX_HEIGHT,
       };
       const playerCanvasRect = mapper.worldToCanvasRect(playerWorldRect.x, playerWorldRect.y, playerWorldRect.w, playerWorldRect.h);
       const footY = playerCanvasRect.y + playerCanvasRect.h;
       const sourceWidth = Math.max(1, safeSprite.naturalWidth || safeSprite.width || 1);
       const sourceHeight = Math.max(1, safeSprite.naturalHeight || safeSprite.height || 1);
-      const spriteHeight = Math.max(playerCanvasRect.h, playerCanvasRect.h * 2.375);
-      const spriteWidth = Math.max(playerCanvasRect.w, spriteHeight * (sourceWidth / sourceHeight));
+      let spriteHeight = Math.max(
+        1,
+        playerCanvasRect.h * (RECHARGED_PLAYER_SPRITE_HEIGHT / RECHARGED_PLAYER_HITBOX_HEIGHT),
+      );
+      let spriteWidth = Math.max(
+        1,
+        playerCanvasRect.w * (RECHARGED_PLAYER_SPRITE_WIDTH / RECHARGED_PLAYER_HITBOX_WIDTH),
+      );
+      if (animationState === "brake") {
+        const brakeTargetHeight = playerCanvasRect.h * (RECHARGED_PLAYER_BRAKE_SPRITE_HEIGHT / RECHARGED_PLAYER_HITBOX_HEIGHT);
+        const brakeScale = brakeTargetHeight / sourceHeight;
+        spriteHeight = Math.max(1, sourceHeight * brakeScale);
+        spriteWidth = Math.max(1, sourceWidth * brakeScale);
+        const maxBrakeWidth = playerCanvasRect.w * (RECHARGED_PLAYER_BRAKE_SPRITE_MAX_WIDTH / RECHARGED_PLAYER_HITBOX_WIDTH);
+        if (spriteWidth > maxBrakeWidth) {
+          const shrink = maxBrakeWidth / spriteWidth;
+          spriteWidth *= shrink;
+          spriteHeight *= shrink;
+        }
+      }
       const drawX = playerCanvasRect.x + (playerCanvasRect.w - spriteWidth) * 0.5;
       const drawY = footY - spriteHeight;
 
