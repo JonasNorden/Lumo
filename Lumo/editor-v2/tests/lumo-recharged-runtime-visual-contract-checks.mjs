@@ -13,6 +13,10 @@ function runRealRechargedRenderPathChecks() {
   assert.equal(html.includes("function renderRechargedCanvasFrame(canvas, state)"), true, "expected real Recharged render function in Lumo.html");
   assert.equal(html.includes("const backdropGradient = ctx.createLinearGradient"), true, "expected Recharged runtime background gradient for readability in live Lumo.html path");
   assert.equal(html.includes("drawRechargedPlayerSprite(ctx, mapper"), true, "expected live Recharged path to use the shared player sprite renderer");
+  assert.equal(html.includes("const RECHARGED_PLAYER_HITBOX_WIDTH = 22;"), true, "expected Recharged render path to mirror V1 22px player hitbox width");
+  assert.equal(html.includes("const RECHARGED_PLAYER_HITBOX_HEIGHT = 28;"), true, "expected Recharged render path to mirror V1 28px player hitbox height");
+  assert.equal(html.includes("const RECHARGED_PLAYER_SPRITE_HEIGHT = 38;"), true, "expected Recharged render path to mirror V1 38px body sprite height");
+  assert.equal(html.includes("const RECHARGED_PLAYER_BRAKE_SPRITE_HEIGHT = 48;"), true, "expected Recharged render path to keep V1 brake sprite visual height");
 }
 
 function runSupportGeometryPresentationChecks() {

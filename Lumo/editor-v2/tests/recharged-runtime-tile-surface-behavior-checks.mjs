@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { stepRuntimePlayerSimulation } from "../src/runtime/stepRuntimePlayerSimulation.js";
 import { loadLevelDocument } from "../src/runtime/loadLevelDocument.js";
 
+const V1_PLAYER_HITBOX_HEIGHT_PX = 28;
+
 function buildSurfaceWorldPacket(tileId) {
   const width = 14;
   const height = 8;
@@ -158,13 +160,18 @@ function runOneWayAndHazardCollisionChecks() {
     rising: true,
     landed: false,
   };
-  let solidMinY = jumpIntoSolidCeilingPlayer.position.y;
+  let sawSolidCeilingHit = false;
   for (let tick = 0; tick < 10; tick += 1) {
-    jumpIntoSolidCeilingPlayer = stepRuntimePlayerSimulation(solidCeilingWorldPacket, jumpIntoSolidCeilingPlayer, { input: { moveX: 0, jump: false } }).player;
-    solidMinY = Math.min(solidMinY, jumpIntoSolidCeilingPlayer.position.y);
+    const step = stepRuntimePlayerSimulation(solidCeilingWorldPacket, jumpIntoSolidCeilingPlayer, { input: { moveX: 0, jump: false } });
+    jumpIntoSolidCeilingPlayer = step.player;
+    if (step.player.status === "hit-ceiling") {
+      sawSolidCeilingHit = true;
+      const topY = step.player.position.y - V1_PLAYER_HITBOX_HEIGHT_PX;
+      assert.equal(topY >= (3 * 24) + 24, true, "solid ceiling should clamp using V1 head/top hitbox (not foot-origin probe)");
+      break;
+    }
   }
-
-  assert.equal(solidMinY >= (3 * 24) + 24, true, "solid ceiling should clamp player below the tile");
+  assert.equal(sawSolidCeilingHit, true, "jumping into a full solid ceiling should report head-hit collision");
 
   const oneWayCeilingWorldPacket = {
     world: { width: 10, height: 8, tileSize: 24 },
@@ -192,7 +199,53 @@ function runOneWayAndHazardCollisionChecks() {
   assert.equal(oneWayMinY < (3 * 24) + 24, true, "one-way from below should allow upward travel");
 }
 
+function runBehaviorProfileSemanticParityChecks() {
+  const worldPacket = {
+    world: { width: 12, height: 10, tileSize: 24 },
+    layers: {
+      tiles: [
+        // Intentionally conflicting legacy booleans reproduce the previous regression.
+        { tileId: 1, x: 4, y: 5, w: 1, h: 1, solid: true, oneWay: false, hazard: false, behaviorProfileId: "tile.one-way.default", collisionType: "oneWay", coordinateSpace: "grid" },
+        { tileId: 1, x: 8, y: 5, w: 1, h: 1, solid: true, oneWay: false, hazard: false, behaviorProfileId: "tile.hazard.default", collisionType: "hazard", coordinateSpace: "grid" },
+      ],
+    },
+    spawn: { x: 4 * 24, y: 2 * 24 },
+    tileBounds: { maxY: 8 },
+  };
+
+  const oneWayLanding = stepRuntimePlayerSimulation(worldPacket, {
+    position: { x: 4 * 24, y: (5 * 24) - 2 },
+    velocity: { x: 0, y: 220 },
+    grounded: false,
+    falling: true,
+    rising: false,
+    landed: false,
+  }, { input: { moveX: 0, jump: false }, bounds: { fallRespawnMarginTiles: 999 } });
+  assert.equal(oneWayLanding.player.grounded, true, "profile-authored one-way should still catch descending player");
+
+  const oneWayFromBelow = stepRuntimePlayerSimulation(worldPacket, {
+    position: { x: 4 * 24, y: (5 * 24) + 8 },
+    velocity: { x: 0, y: -220 },
+    grounded: false,
+    falling: false,
+    rising: true,
+    landed: false,
+  }, { input: { moveX: 0, jump: false }, bounds: { fallRespawnMarginTiles: 999 } });
+  assert.equal(oneWayFromBelow.player.grounded, false, "profile-authored one-way must not become full solid when moving upward");
+
+  const hazardDrop = stepRuntimePlayerSimulation(worldPacket, {
+    position: { x: 8 * 24, y: (5 * 24) - 4 },
+    velocity: { x: 0, y: 180 },
+    grounded: false,
+    falling: true,
+    rising: false,
+    landed: false,
+  }, { input: { moveX: 0, jump: false }, bounds: { fallRespawnMarginTiles: 999 } });
+  assert.equal(hazardDrop.player.grounded, false, "profile-authored hazard must remain non-blocking even if legacy flags say solid");
+}
+
 runSurfaceFeelChecks();
 runOneWayAndHazardCollisionChecks();
+runBehaviorProfileSemanticParityChecks();
 
 console.log("recharged-runtime-tile-surface-behavior-checks: ok");

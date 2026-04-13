@@ -53,13 +53,16 @@ export function resolveRuntimeTileBehavior(tile = {}) {
   const byId = LEGACY_TILE_BEHAVIOR_BY_ID[Number(tile?.tileId) | 0] || null;
   const byProfile = resolveProfileBehavior(tile);
   const base = byProfile || byId || LEGACY_TILE_BEHAVIOR_BY_ID[1];
+  const profileResolved = byProfile != null;
 
   const behavior = {
     ...base,
     name: typeof tile?.name === "string" && tile.name.trim() ? tile.name : base.name,
-    solid: typeof tile?.solid === "boolean" ? tile.solid : base.solid,
-    oneWay: typeof tile?.oneWay === "boolean" ? tile.oneWay : base.oneWay,
-    hazard: typeof tile?.hazard === "boolean" ? tile.hazard : base.hazard,
+    // V1 parity: when behavior profile/collision metadata resolves to a known behavior,
+    // that semantic class is authoritative over legacy/default flags.
+    solid: profileResolved ? base.solid : (typeof tile?.solid === "boolean" ? tile.solid : base.solid),
+    oneWay: profileResolved ? base.oneWay : (typeof tile?.oneWay === "boolean" ? tile.oneWay : base.oneWay),
+    hazard: profileResolved ? base.hazard : (typeof tile?.hazard === "boolean" ? tile.hazard : base.hazard),
     groundAccelMul: Number.isFinite(tile?.groundAccelMul) ? tile.groundAccelMul : base.groundAccelMul,
     groundFrictionMul: Number.isFinite(tile?.groundFrictionMul) ? tile.groundFrictionMul : base.groundFrictionMul,
     maxSpeedMul: Number.isFinite(tile?.maxSpeedMul) ? tile.maxSpeedMul : base.maxSpeedMul,
