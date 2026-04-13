@@ -153,8 +153,8 @@ function runOneWayAndHazardCollisionChecks() {
   };
 
   let jumpIntoSolidCeilingPlayer = {
-    position: { x: 4 * 24, y: (4 * 24) + 4 },
-    velocity: { x: 0, y: -600 },
+    position: { x: 4 * 24, y: (4 * 24) + 30 },
+    velocity: { x: 0, y: -1200 },
     grounded: false,
     falling: false,
     rising: true,
@@ -166,8 +166,11 @@ function runOneWayAndHazardCollisionChecks() {
     jumpIntoSolidCeilingPlayer = step.player;
     if (step.player.status === "hit-ceiling") {
       sawSolidCeilingHit = true;
+      const ceilingTileTopY = 3 * 24;
+      const ceilingTileBottomY = ceilingTileTopY + 24;
       const topY = step.player.position.y - V1_PLAYER_HITBOX_HEIGHT_PX;
-      assert.equal(topY >= (3 * 24) + 24, true, "solid ceiling should clamp using V1 head/top hitbox (not foot-origin probe)");
+      assert.equal(topY, ceilingTileBottomY, "solid ceiling should clamp head/top exactly to the tile underside (V1 parity)");
+      assert.equal(topY === ceilingTileTopY, false, "solid ceiling clamp must not mirror to tile top");
       break;
     }
   }
@@ -183,8 +186,8 @@ function runOneWayAndHazardCollisionChecks() {
   };
 
   let jumpIntoOneWayFromBelowPlayer = {
-    position: { x: 4 * 24, y: (4 * 24) + 4 },
-    velocity: { x: 0, y: -600 },
+    position: { x: 4 * 24, y: (4 * 24) + 30 },
+    velocity: { x: 0, y: -1200 },
     grounded: false,
     falling: false,
     rising: true,
@@ -196,7 +199,7 @@ function runOneWayAndHazardCollisionChecks() {
     oneWayMinY = Math.min(oneWayMinY, jumpIntoOneWayFromBelowPlayer.position.y);
   }
 
-  assert.equal(oneWayMinY < (3 * 24) + 24, true, "one-way from below should allow upward travel");
+  assert.equal((oneWayMinY - V1_PLAYER_HITBOX_HEIGHT_PX) < (3 * 24) + 24, true, "one-way from below should allow upward travel past the solid-ceiling underside clamp line");
 }
 
 function runBehaviorProfileSemanticParityChecks() {
