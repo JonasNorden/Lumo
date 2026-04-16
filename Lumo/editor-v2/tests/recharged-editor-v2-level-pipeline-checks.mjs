@@ -87,6 +87,49 @@ function runEditorFixtureConversionChecks() {
   console.log("editor v2 conversion ok");
 }
 
+function runEditorDecorConversionChecks() {
+  const source = loadEditorFixture();
+  source.decor = [
+    {
+      id: "decor-alpha",
+      name: "Flower A",
+      type: "decor_flower_01",
+      x: 4,
+      y: 3,
+      order: 9,
+      flipX: true,
+      variant: "b",
+      visible: true,
+      params: { bloom: 2 },
+    },
+  ];
+
+  const loaded = loadLevelDocument(source);
+  assert.equal(loaded.ok, true, "expected fixture to load successfully");
+  assert.equal(Array.isArray(loaded.level?.layers?.decor), true);
+  assert.equal(loaded.level.layers.decor.length, 1);
+
+  const [decor] = loaded.level.layers.decor;
+  assert.equal(decor.decorId, "decor-alpha");
+  assert.equal(decor.x, 4);
+  assert.equal(decor.y, 3);
+  assert.equal(decor.order, 9);
+  assert.equal(decor.flipX, true);
+  assert.equal(decor.variant, "b");
+  assert.equal(typeof decor.drawAnchor, "string");
+
+  const session = createRuntimeGameSession({ levelDocument: loaded.level });
+  assert.equal(session.start().ok, true, "expected session start");
+  const worldSnapshot = session.getWorldSnapshot();
+  assert.equal(Array.isArray(worldSnapshot.decorItems), true);
+  assert.equal(worldSnapshot.decorItems.length, 1);
+  assert.equal(worldSnapshot.decorItems[0].decorId, "decor-alpha");
+  assert.equal(worldSnapshot.decorItems[0].flipX, true);
+  assert.equal(worldSnapshot.decorItems[0].variant, "b");
+
+  console.log("editor v2 decor conversion ok");
+}
+
 
 function runEditorEntityRuntimePipelineChecks() {
   const source = loadEditorFixture();
@@ -306,6 +349,7 @@ async function runQueryContractChecks() {
 }
 
 runEditorFixtureConversionChecks();
+runEditorDecorConversionChecks();
 runEditorEntityRuntimePipelineChecks();
 runPulseTargetFilteringChecks();
 runMissingSpawnWarningChecks();

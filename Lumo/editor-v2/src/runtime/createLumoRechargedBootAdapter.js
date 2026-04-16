@@ -70,6 +70,26 @@ function buildWorldSnapshot(snapshot) {
       }))
       .filter((tile) => tile.x !== null && tile.y !== null && tile.w !== null && tile.h !== null && tile.w > 0 && tile.h > 0)
     : [];
+  const decorItems = Array.isArray(source.decorItems)
+    ? source.decorItems
+      .map((decor, index) => ({
+        decorId: typeof decor?.decorId === "string" ? decor.decorId : `decor-${index + 1}`,
+        decorType: typeof decor?.decorType === "string" ? decor.decorType : "decor",
+        x: Number.isFinite(decor?.x) ? decor.x : null,
+        y: Number.isFinite(decor?.y) ? decor.y : null,
+        order: Number.isFinite(decor?.order) ? decor.order : index,
+        flipX: decor?.flipX === true,
+        variant: Number.isFinite(decor?.variant) || typeof decor?.variant === "string" ? decor.variant : null,
+        img: typeof decor?.img === "string" ? decor.img : null,
+        drawW: Number.isFinite(decor?.drawW) ? decor.drawW : null,
+        drawH: Number.isFinite(decor?.drawH) ? decor.drawH : null,
+        drawOffX: Number.isFinite(decor?.drawOffX) ? decor.drawOffX : 0,
+        drawOffY: Number.isFinite(decor?.drawOffY) ? decor.drawOffY : 0,
+        drawAnchor: typeof decor?.drawAnchor === "string" ? decor.drawAnchor : "BL",
+      }))
+      .filter((decor) => decor.x !== null && decor.y !== null)
+      .sort((left, right) => (left.order - right.order) || left.decorId.localeCompare(right.decorId))
+    : [];
 
   return {
     worldId: typeof source.worldId === "string" ? source.worldId : "",
@@ -78,6 +98,7 @@ function buildWorldSnapshot(snapshot) {
     height: Number.isFinite(source.height) ? source.height : 0,
     tileSize: Number.isFinite(source.tileSize) ? source.tileSize : 0,
     supportTiles,
+    decorItems,
   };
 }
 
@@ -477,6 +498,7 @@ export function createLumoRechargedBootAdapter(options = {}) {
         worldHeight: world.height,
         tileSize: world.tileSize,
         supportTiles: world.supportTiles,
+        decorItems: world.decorItems,
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,
@@ -588,6 +610,7 @@ export function createLumoRechargedBootAdapter(options = {}) {
           worldHeight: world.height,
           tileSize: world.tileSize,
           supportTiles: world.supportTiles,
+          decorItems: world.decorItems,
           playerStatus: player.locomotion,
           playerX: player.x,
           playerY: player.y,
