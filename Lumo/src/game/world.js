@@ -23,6 +23,11 @@
         drawLogged: false,
       };
 
+      // Dedicated runtime background-theme layers (Editor V2 backgrounds.layers).
+      this.runtimeBackgroundLayers = [];
+      this._runtimeBackgroundDefMap = null;
+      this._runtimeBackgroundImg = new Map();
+
       // --- Tile visuals (catalog-driven PNG rendering) ---
       this._tileDefById = null;      // tileId -> catalog def
       this._tileImg = new Map();     // tileId -> Image
@@ -299,6 +304,11 @@
         loadLogged: false,
         drawLogged: false,
       };
+
+      // Dedicated runtime background-theme layers (Editor V2 backgrounds.layers).
+      this.runtimeBackgroundLayers = this._buildRuntimeBackgroundLayers(levelObj);
+      this._runtimeBackgroundDefMap = null;
+      this._runtimeBackgroundImg = new Map();
       const backgroundUniqueIds = new Set();
       let paintedCells = 0;
       for (const cell of bg){
@@ -504,6 +514,111 @@
       return best;
     }
 
+
+    _buildRuntimeBackgroundLayers(levelObj){
+      const sourceLayers = levelObj && levelObj.layers && Array.isArray(levelObj.layers.background)
+        ? levelObj.layers.background
+        : [];
+
+      return sourceLayers
+        .map((layer, index) => {
+          const backgroundId = (typeof layer?.backgroundId === "string" && layer.backgroundId.trim())
+            ? layer.backgroundId.trim()
+            : null;
+          if (!backgroundId) return null;
+
+          return {
+            backgroundId,
+            order: Number.isFinite(Number(layer?.order)) ? Number(layer.order) : index,
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.order - b.order);
+    }
+
+    _getRuntimeBackgroundDef(backgroundId){
+      if (!backgroundId) return null;
+      const cat = window.LUMO_CATALOG_BG;
+      if (!Array.isArray(cat) || !cat.length) return null;
+
+      if (!this._runtimeBackgroundDefMap){
+        this._runtimeBackgroundDefMap = new Map();
+        for (const def of cat){
+          if (!def) continue;
+          const key = (def.id || def.key || def.name);
+          if (!key) continue;
+          this._runtimeBackgroundDefMap.set(String(key), def);
+          this._runtimeBackgroundDefMap.set(String(key).toLowerCase(), def);
+        }
+      }
+
+      return this._runtimeBackgroundDefMap.get(backgroundId)
+        || this._runtimeBackgroundDefMap.get(String(backgroundId).toLowerCase())
+        || null;
+    }
+
+    _drawRuntimeBackgroundFallback(ctx, cam, layer){
+      const worldX = Math.round(-cam.x);
+      const worldY = Math.round(-cam.y);
+      const worldW = this.pxW || 0;
+      const worldH = this.pxH || 0;
+      const seed = String(layer?.backgroundId || "bg").length + Math.round((layer?.order || 0) * 17);
+      const base = 24 + (seed % 18);
+
+      ctx.save();
+      ctx.fillStyle = `rgba(${base}, ${base + 8}, ${base + 16}, 0.30)`;
+      ctx.fillRect(worldX, worldY, worldW, worldH);
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.14)";
+      ctx.lineWidth = 1;
+      for (let x = worldX + (seed % 14); x < worldX + worldW; x += 24){
+        ctx.beginPath();
+        ctx.moveTo(x, worldY);
+        ctx.lineTo(x, worldY + worldH);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    _drawRuntimeBackgroundPass(ctx, cam){
+      if (!Array.isArray(this.runtimeBackgroundLayers) || !this.runtimeBackgroundLayers.length) return;
+
+      const worldX = Math.round(-cam.x);
+      const worldY = Math.round(-cam.y);
+      const worldW = this.pxW || 0;
+      const worldH = this.pxH || 0;
+
+      for (const layer of this.runtimeBackgroundLayers){
+        const def = this._getRuntimeBackgroundDef(layer.backgroundId);
+        let img = null;
+        if (def && def.img){
+          img = this._runtimeBackgroundImg.get(def.img);
+          if (!img){
+            img = this._tryLoadImage(def.img);
+            if (img) this._runtimeBackgroundImg.set(def.img, img);
+          }
+        }
+
+        if (!img || !img._ok){
+          this._drawRuntimeBackgroundFallback(ctx, cam, layer);
+          continue;
+        }
+
+        const tileW = Math.max(1, Number(def?.w) || img.naturalWidth || this.tileSize);
+        const tileH = Math.max(1, Number(def?.h) || img.naturalHeight || this.tileSize);
+        const startX = worldX + Math.floor(cam.x / tileW) * tileW;
+        const startY = worldY + Math.floor(cam.y / tileH) * tileH;
+
+        ctx.save();
+        ctx.globalAlpha = 0.22;
+        for (let y = startY; y < worldY + worldH + tileH; y += tileH){
+          for (let x = startX; x < worldX + worldW + tileW; x += tileW){
+            ctx.drawImage(img, x, y, tileW, tileH);
+          }
+        }
+        ctx.restore();
+      }
+    }
+
     // ✅ RESTORED BG behavior: uses catalog_bg.js schema (w/h/anchor)
     _drawBG(ctx, cam, x0, y0, x1, y1){
       if (!this.bg || !this.bg.length) return;
@@ -647,7 +762,11 @@
       const x1 = Math.min(this.w - 1, Math.floor((cam.x + cam.w) / ts) + 2);
       const y1 = Math.min(this.h - 1, Math.floor((cam.y + cam.h) / ts) + 2);
 
-      // BG behind tiles
+      // Render order: background pass first, then tiles; decor/entities/player/HUD are drawn later by app.js.
+      // Keep background separate from decor so visual layering can change without touching gameplay/collision code.
+      this._drawRuntimeBackgroundPass(ctx, cam);
+
+      // Legacy authored per-cell background tiles remain supported behind main tiles.
       this._drawBG(ctx, cam, x0, y0, x1, y1);
 
       for (let ty = y0; ty <= y1; ty++){
