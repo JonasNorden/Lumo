@@ -116,6 +116,26 @@ function buildWorldSnapshot(worldState) {
         tile.h > 0
       ))
     : [];
+  const decorItems = Array.isArray(worldState?.layers?.decor)
+    ? worldState.layers.decor
+      .map((decor, index) => ({
+        decorId: typeof decor?.decorId === "string" ? decor.decorId : `decor-${index + 1}`,
+        decorType: typeof decor?.decorType === "string" ? decor.decorType : "decor",
+        x: Number.isFinite(decor?.x) ? decor.x : null,
+        y: Number.isFinite(decor?.y) ? decor.y : null,
+        order: Number.isFinite(decor?.order) ? decor.order : index,
+        flipX: decor?.flipX === true,
+        variant: Number.isFinite(decor?.variant) || typeof decor?.variant === "string" ? decor.variant : null,
+        img: typeof decor?.img === "string" ? decor.img : null,
+        drawW: Number.isFinite(decor?.drawW) ? decor.drawW : null,
+        drawH: Number.isFinite(decor?.drawH) ? decor.drawH : null,
+        drawOffX: Number.isFinite(decor?.drawOffX) ? decor.drawOffX : 0,
+        drawOffY: Number.isFinite(decor?.drawOffY) ? decor.drawOffY : 0,
+        drawAnchor: typeof decor?.drawAnchor === "string" ? decor.drawAnchor : "BL",
+      }))
+      .filter((decor) => decor.x !== null && decor.y !== null)
+      .sort((left, right) => (left.order - right.order) || left.decorId.localeCompare(right.decorId))
+    : [];
 
   return {
     ok: worldState && typeof worldState === "object",
@@ -125,6 +145,7 @@ function buildWorldSnapshot(worldState) {
     height: Number.isFinite(worldState?.world?.height) ? worldState.world.height : 0,
     tileSize: Number.isFinite(worldState?.world?.tileSize) ? worldState.world.tileSize : 0,
     supportTiles,
+    decorItems,
   };
 }
 

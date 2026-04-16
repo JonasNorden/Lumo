@@ -30,7 +30,23 @@ function createLevelDocumentWithVisualTileFields() {
         },
       ],
       background: [],
-      decor: [],
+      decor: [
+        {
+          decorId: "decor-top",
+          decorType: "decor_flower_01",
+          x: 3,
+          y: 1,
+          order: 5,
+          flipX: true,
+          variant: "c",
+          img: "data/assets/decor/flower.png",
+          drawW: 24,
+          drawH: 24,
+          drawOffX: 2,
+          drawOffY: -1,
+          drawAnchor: "BL",
+        },
+      ],
       entities: [],
       audio: [],
     },
@@ -53,6 +69,18 @@ function runSupportTileVisualPayloadChecks() {
   assert.equal(tile.drawH, 32);
   assert.equal(tile.drawAnchor, "BL");
   assert.equal(tile.img, "data/assets/tiles/grass_bt.png");
+
+  assert.equal(Array.isArray(worldSnapshot.decorItems), true);
+  assert.equal(worldSnapshot.decorItems.length, 1);
+  const [decor] = worldSnapshot.decorItems;
+  assert.equal(decor.decorId, "decor-top");
+  assert.equal(decor.decorType, "decor_flower_01");
+  assert.equal(decor.x, 3);
+  assert.equal(decor.y, 1);
+  assert.equal(decor.order, 5);
+  assert.equal(decor.flipX, true);
+  assert.equal(decor.variant, "c");
+  assert.equal(decor.drawAnchor, "BL");
 }
 
 runSupportTileVisualPayloadChecks();

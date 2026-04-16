@@ -617,6 +617,39 @@
       }
     }
 
+    // Reads decor from world snapshots while keeping decor flow separate from runtime entities.
+    function readRechargedDecorSnapshots(payload) {
+      try {
+        const adapter = payload?.adapter && typeof payload.adapter === "object" ? payload.adapter : null;
+        const adapterWorldSnapshot = adapter?.getWorldSnapshot?.();
+        const sourceDecor = Array.isArray(payload?.decorItems)
+          ? payload.decorItems
+          : Array.isArray(adapterWorldSnapshot?.decorItems)
+            ? adapterWorldSnapshot.decorItems
+            : [];
+        return sourceDecor
+          .map((decor, index) => ({
+            decorId: typeof decor?.decorId === "string" ? decor.decorId : `decor-${index + 1}`,
+            decorType: typeof decor?.decorType === "string" ? decor.decorType : "decor",
+            x: Number.isFinite(decor?.x) ? decor.x : null,
+            y: Number.isFinite(decor?.y) ? decor.y : null,
+            order: Number.isFinite(decor?.order) ? decor.order : index,
+            flipX: decor?.flipX === true,
+            variant: Number.isFinite(decor?.variant) || typeof decor?.variant === "string" ? decor.variant : null,
+            img: typeof decor?.img === "string" ? decor.img : null,
+            drawW: Number.isFinite(decor?.drawW) ? decor.drawW : null,
+            drawH: Number.isFinite(decor?.drawH) ? decor.drawH : null,
+            drawOffX: Number.isFinite(decor?.drawOffX) ? decor.drawOffX : 0,
+            drawOffY: Number.isFinite(decor?.drawOffY) ? decor.drawOffY : 0,
+            drawAnchor: typeof decor?.drawAnchor === "string" ? decor.drawAnchor : "BL",
+          }))
+          .filter((decor) => decor.x !== null && decor.y !== null)
+          .sort((left, right) => (left.order - right.order) || left.decorId.localeCompare(right.decorId));
+      } catch (_error) {
+        return [];
+      }
+    }
+
     function buildRechargedWorldToCanvasMapper({ canvas, worldWidthPx, worldHeightPx, targetX, targetY }) {
       const viewportWorldWidth = Math.max(1, Math.min(canvas.width, Math.round(worldWidthPx)));
       const viewportWorldHeight = Math.max(1, Math.min(canvas.height, Math.round(worldHeightPx)));
@@ -667,6 +700,20 @@
       }
 
       return state.rechargedTileVisualState;
+    }
+
+    function ensureRechargedDecorVisualState(state) {
+      if (!state || typeof state !== "object") {
+        return null;
+      }
+
+      if (!state.rechargedDecorVisualState || typeof state.rechargedDecorVisualState !== "object") {
+        state.rechargedDecorVisualState = {
+          imageByKey: new Map(),
+        };
+      }
+
+      return state.rechargedDecorVisualState;
     }
 
     // Mirrors V1 tile visual selection: tile id -> catalog entry image + draw metadata (no neighbor autotile pass).
@@ -747,6 +794,64 @@
       return true;
     }
 
+    // Draws one decor entry as a visual-only layer; never contributes collision or gameplay geometry.
+    function drawRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw) {
+      const looksTileBased = Number.isFinite(decor?.x)
+        && Number.isFinite(decor?.y)
+        && decor.x <= worldWidthRaw + tileSize
+        && decor.y <= worldHeightRaw + tileSize;
+      const worldX = looksTileBased ? decor.x * worldUnitsToPx : decor.x;
+      const worldY = looksTileBased ? decor.y * worldUnitsToPx : decor.y;
+      const drawW = Number.isFinite(decor?.drawW) && decor.drawW > 0 ? decor.drawW : tileSize;
+      const drawH = Number.isFinite(decor?.drawH) && decor.drawH > 0 ? decor.drawH : tileSize;
+      const drawOffX = Number.isFinite(decor?.drawOffX) ? decor.drawOffX : 0;
+      const drawOffY = Number.isFinite(decor?.drawOffY) ? decor.drawOffY : 0;
+      const drawAnchor = String(decor?.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL";
+      const worldDrawX = worldX + drawOffX;
+      const worldDrawY = drawAnchor === "BL"
+        ? (worldY + worldUnitsToPx) - drawH + drawOffY
+        : worldY + drawOffY;
+      const drawRect = mapper.worldToCanvasRect(worldDrawX, worldDrawY, Math.max(1, drawW), Math.max(1, drawH));
+      const visualState = ensureRechargedDecorVisualState(state);
+      const imageSrc = typeof decor?.img === "string" && decor.img.trim().length > 0 ? decor.img : null;
+
+      if (imageSrc && visualState) {
+        let img = visualState.imageByKey.get(imageSrc);
+        if (!img) {
+          img = new Image();
+          img.src = imageSrc;
+          img._ok = false;
+          img.onload = () => { img._ok = true; };
+          img.onerror = () => { img._ok = false; };
+          visualState.imageByKey.set(imageSrc, img);
+        }
+        if (img._ok === true) {
+          if (decor?.flipX === true) {
+            ctx.save();
+            ctx.translate(drawRect.x + drawRect.w, drawRect.y);
+            ctx.scale(-1, 1);
+            ctx.drawImage(img, 0, 0, drawRect.w, drawRect.h);
+            ctx.restore();
+          } else {
+            ctx.drawImage(img, drawRect.x, drawRect.y, drawRect.w, drawRect.h);
+          }
+          return;
+        }
+      }
+
+      // Lightweight fallback while art coverage grows: tinted visual marker, still in decor layer only.
+      const variantTag = decor?.variant;
+      const variantHash = typeof variantTag === "string"
+        ? variantTag.length
+        : Number.isFinite(variantTag) ? (Math.abs(variantTag) | 0) : 0;
+      const tintHue = 95 + (variantHash % 4) * 18;
+      ctx.fillStyle = `hsla(${tintHue}, 68%, 52%, 0.70)`;
+      ctx.fillRect(drawRect.x, drawRect.y, drawRect.w, drawRect.h);
+      ctx.strokeStyle = "rgba(15, 23, 42, 0.45)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(drawRect.x + 0.5, drawRect.y + 0.5, Math.max(1, drawRect.w - 1), Math.max(1, drawRect.h - 1));
+    }
+
     function renderRechargedCanvasFrame(canvas, state) {
       if (!canvas || typeof canvas.getContext !== "function") {
         return false;
@@ -764,6 +869,7 @@
         const pulseSnapshot = readRechargedPulseSnapshot(payload, state);
         const boostSnapshot = readRechargedBoostSnapshot(payload, state);
         const entitySnapshots = readRechargedEntitySnapshots(payload, state);
+        const decorSnapshots = readRechargedDecorSnapshots(payload);
         const previousSnapshot = readRechargedPlayerSnapshot({
           player: state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
             ? state.previousPlayerSnapshot
@@ -853,6 +959,11 @@
           ctx.fillRect(supportCanvasRect.x, supportCanvasRect.y, supportCanvasRect.w, supportCanvasRect.h);
           ctx.fillStyle = "rgba(255,255,255,0.03)";
           ctx.fillRect(supportCanvasRect.x, supportCanvasRect.y, supportCanvasRect.w, Math.min(1, supportCanvasRect.h));
+        }
+
+        // Decor is rendered as its own visual lane between tiles and active gameplay actors.
+        for (const decor of decorSnapshots) {
+          drawRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw);
         }
 
         if (player.hidden !== true) {

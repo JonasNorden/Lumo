@@ -1,4 +1,5 @@
 import { resolveLegacyBehaviorByTileId } from "./runtimeTileBehavior.js";
+import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 
 // Recharged level loader v1.
 // This module validates and normalizes the new level document shape without
@@ -249,14 +250,30 @@ function convertEditorBackground(editorLevel) {
 
 function convertEditorDecor(editorLevel) {
   const decor = Array.isArray(editorLevel?.decor) ? editorLevel.decor : [];
-  return decor.map((entry, index) => ({
-    decorId: typeof entry?.id === "string" ? entry.id : `decor-${index + 1}`,
-    decorType: typeof entry?.type === "string" ? entry.type : "decor",
-    x: Number.isFinite(entry?.x) ? Math.round(entry.x) : 0,
-    y: Number.isFinite(entry?.y) ? Math.round(entry.y) : 0,
-    order: Number.isFinite(entry?.order) ? entry.order : index,
-    params: isPlainObject(entry?.params) ? { ...entry.params } : {},
-  }));
+  return decor.map((entry, index) => {
+    const decorType = typeof entry?.type === "string" ? entry.type : "decor";
+    const visual = getDecorVisual(decorType);
+
+    // Keep editor-authored decor metadata intact for runtime-facing visual layering.
+    return {
+      decorId: typeof entry?.id === "string" ? entry.id : `decor-${index + 1}`,
+      decorType,
+      x: Number.isFinite(entry?.x) ? Math.round(entry.x) : 0,
+      y: Number.isFinite(entry?.y) ? Math.round(entry.y) : 0,
+      order: Number.isFinite(entry?.order) ? entry.order : index,
+      flipX: entry?.flipX === true,
+      variant: Number.isFinite(entry?.variant)
+        ? Math.round(entry.variant)
+        : (typeof entry?.variant === "string" && entry.variant.trim() ? entry.variant.trim() : null),
+      img: typeof visual?.img === "string" ? visual.img : null,
+      drawW: Number.isFinite(visual?.drawW) ? Math.max(1, Math.round(visual.drawW)) : 24,
+      drawH: Number.isFinite(visual?.drawH) ? Math.max(1, Math.round(visual.drawH)) : 24,
+      drawOffX: Number.isFinite(visual?.drawOffX) ? Math.round(visual.drawOffX) : 0,
+      drawOffY: Number.isFinite(visual?.drawOffY) ? Math.round(visual.drawOffY) : 0,
+      drawAnchor: String(visual?.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL",
+      params: isPlainObject(entry?.params) ? { ...entry.params } : {},
+    };
+  });
 }
 
 function resolveEditorEntityPosition(entry, width, height, tileSize, size = DEFAULT_TILE_SIZE, drawAnchor = "BL") {
