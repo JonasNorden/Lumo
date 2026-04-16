@@ -619,6 +619,15 @@
 
     // Reads decor from world snapshots while keeping decor flow separate from runtime entities.
     function readRechargedDecorSnapshots(payload) {
+      const normalizeDecorAnchorLayer = (value) => {
+        const normalized = String(value || "").trim().toLowerCase();
+        if (normalized === "background" || normalized === "world" || normalized === "entities" || normalized === "player" || normalized === "hud") {
+          return normalized;
+        }
+        // Keep default decor lane in world-space (between tiles and entities) for safe parity.
+        return "world";
+      };
+
       try {
         const adapter = payload?.adapter && typeof payload.adapter === "object" ? payload.adapter : null;
         const adapterWorldSnapshot = adapter?.getWorldSnapshot?.();
@@ -630,10 +639,12 @@
         return sourceDecor
           .map((decor, index) => ({
             decorId: typeof decor?.decorId === "string" ? decor.decorId : `decor-${index + 1}`,
+            sourceIndex: index,
             decorType: typeof decor?.decorType === "string" ? decor.decorType : "decor",
             x: Number.isFinite(decor?.x) ? decor.x : null,
             y: Number.isFinite(decor?.y) ? decor.y : null,
             order: Number.isFinite(decor?.order) ? decor.order : index,
+            anchorLayer: normalizeDecorAnchorLayer(decor?.anchorLayer),
             flipX: decor?.flipX === true,
             variant: Number.isFinite(decor?.variant) || typeof decor?.variant === "string" ? decor.variant : null,
             img: typeof decor?.img === "string" ? decor.img : null,
@@ -644,7 +655,12 @@
             drawAnchor: typeof decor?.drawAnchor === "string" ? decor.drawAnchor : "BL",
           }))
           .filter((decor) => decor.x !== null && decor.y !== null)
-          .sort((left, right) => (left.order - right.order) || left.decorId.localeCompare(right.decorId));
+          // Stable decor sorting: explicit order first, then stable source index/id fallback.
+          .sort((left, right) => (
+            (left.order - right.order)
+            || (left.sourceIndex - right.sourceIndex)
+            || left.decorId.localeCompare(right.decorId)
+          ));
       } catch (_error) {
         return [];
       }
@@ -961,13 +977,19 @@
           ctx.fillRect(supportCanvasRect.x, supportCanvasRect.y, supportCanvasRect.w, Math.min(1, supportCanvasRect.h));
         }
 
-        // Decor is rendered as its own visual lane between tiles and active gameplay actors.
+        // Render lanes are explicit: tiles -> decor(world) -> entities -> player -> HUD.
+        // Background decor lane is parsed for future support but intentionally not drawn yet.
+        const decorWorldLane = [];
         for (const decor of decorSnapshots) {
-          drawRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw);
+          if (decor?.anchorLayer === "background") {
+            continue;
+          }
+          decorWorldLane.push(decor);
         }
 
-        if (player.hidden !== true) {
-          drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, currentSnapshot);
+        // Decor stays above tiles and below gameplay actors to avoid blocking entities/player.
+        for (const decor of decorWorldLane) {
+          drawRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw);
         }
 
         for (const entity of entitySnapshots) {
@@ -1011,6 +1033,11 @@
             Math.max(1, entityRect.w - 4),
             Math.max(1, entityRect.h - 4),
           );
+        }
+
+        // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
+        if (player.hidden !== true) {
+          drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, currentSnapshot);
         }
 
         if (
