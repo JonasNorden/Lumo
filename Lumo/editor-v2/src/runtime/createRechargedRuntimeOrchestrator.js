@@ -51,12 +51,18 @@ function buildWorldSnapshot(snapshot) {
       .sort((left, right) => (left.order - right.order) || left.decorId.localeCompare(right.decorId))
     : [];
 
+  // Carry runtime background payload through unchanged.
+  const background = Array.isArray(source.background)
+    ? source.background.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry))
+    : [];
+
   return {
     worldId: typeof source.worldId === "string" ? source.worldId : "",
     themeId: typeof source.themeId === "string" ? source.themeId : "",
     width: Number.isFinite(source.width) ? source.width : 0,
     height: Number.isFinite(source.height) ? source.height : 0,
     tileSize: Number.isFinite(source.tileSize) ? source.tileSize : 0,
+    background,
     supportTiles,
     decorItems,
   };
@@ -548,6 +554,7 @@ export function createRechargedRuntimeOrchestrator(options = {}) {
         loadMode: state.loadMode,
         worldId: world.worldId,
         themeId: world.themeId,
+        background: world.background,
         decorItems: world.decorItems,
         playerStatus: player.locomotion,
         playerX: player.x,
@@ -667,7 +674,8 @@ export function createRechargedRuntimeOrchestrator(options = {}) {
           loadMode: "unknown",
           worldId: world.worldId,
           themeId: world.themeId,
-          decorItems: world.decorItems,
+          background: world.background,
+        decorItems: world.decorItems,
           playerStatus: player.locomotion,
           playerX: player.x,
           playerY: player.y,
