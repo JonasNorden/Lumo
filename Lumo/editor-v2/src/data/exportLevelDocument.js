@@ -15,7 +15,61 @@ export function getLevelExportFileName(doc) {
 }
 
 export function serializeLevelDocument(doc) {
-  return JSON.stringify(doc, null, 2);
+  const exportDoc = { ...doc };
+  if (!exportDoc.layers) exportDoc.layers = {};
+
+  const runtimeBackground = [];
+
+  const pushBackgroundId = (backgroundId) => {
+    if (typeof backgroundId !== "string") return;
+    const normalizedId = backgroundId.trim();
+    if (!normalizedId) return;
+
+    runtimeBackground.push({
+      backgroundId: normalizedId,
+      order: runtimeBackground.length,
+    });
+  };
+
+  const editorBackgroundLayer = exportDoc.layers?.background;
+  if (Array.isArray(editorBackgroundLayer)) {
+    editorBackgroundLayer.forEach((entry) => {
+      if (entry && typeof entry === "object") {
+        pushBackgroundId(entry.backgroundId ?? entry.id ?? entry.layerId ?? entry.themeId ?? entry.name);
+      } else {
+        pushBackgroundId(entry);
+      }
+    });
+  } else {
+    const backgroundCandidates = [
+      exportDoc.background,
+      exportDoc.editor?.background,
+      exportDoc.editor?.bg,
+    ];
+
+    backgroundCandidates.forEach((candidate) => {
+      if (Array.isArray(candidate)) {
+        candidate.forEach((entry) => {
+          if (entry && typeof entry === "object") {
+            pushBackgroundId(entry.backgroundId ?? entry.id ?? entry.layerId ?? entry.themeId ?? entry.name);
+          } else {
+            pushBackgroundId(entry);
+          }
+        });
+        return;
+      }
+
+      if (candidate && typeof candidate === "object") {
+        pushBackgroundId(candidate.backgroundId ?? candidate.id ?? candidate.layerId ?? candidate.themeId ?? candidate.name ?? candidate.active);
+        return;
+      }
+
+      pushBackgroundId(candidate);
+    });
+  }
+
+  exportDoc.layers.background = runtimeBackground;
+  return JSON.stringify(exportDoc, null, 2);
 }
 
 export function triggerLevelDocumentDownload(doc) {
