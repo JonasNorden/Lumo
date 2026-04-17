@@ -61,9 +61,15 @@ function buildWorldSnapshot(snapshot) {
   const background = Array.isArray(source.background)
     ? source.background.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry))
     : [];
+  // Preserve bg in array or object-with-data form for downstream adapter snapshots.
   const bg = Array.isArray(source.bg)
     ? source.bg.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry))
-    : [];
+    : (source.bg && typeof source.bg === "object" && Array.isArray(source.bg.data)
+      ? {
+          ...source.bg,
+          data: source.bg.data.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry)),
+        }
+      : []);
 
   return {
     worldId: typeof source.worldId === "string" ? source.worldId : "",

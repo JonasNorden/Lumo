@@ -5,7 +5,7 @@ import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 // This module validates and normalizes the new level document shape without
 // mutating caller-provided input.
 
-const REQUIRED_LAYER_KEYS = ["tiles", "background", "decor", "entities", "audio"];
+const REQUIRED_LAYER_KEYS = ["tiles", "background", "bg", "decor", "entities", "audio"];
 const DEFAULT_TILE_SIZE = 24;
 
 /**
@@ -434,6 +434,17 @@ export function normalizeLayers(layersInput, errors, warnings) {
       continue;
     }
 
+    if (key === "bg") {
+      if (!Array.isArray(value) && !isBgLayerObject(value)) {
+        pushError(errors, "layers.bg must be an array or an object with a data array.");
+        levelLayers[key] = [];
+        continue;
+      }
+
+      levelLayers[key] = value;
+      continue;
+    }
+
     if (!Array.isArray(value)) {
       pushError(errors, `layers.${key} must be an array.`);
       levelLayers[key] = [];
@@ -446,10 +457,32 @@ export function normalizeLayers(layersInput, errors, warnings) {
   return {
     tiles: normalizeTiles(levelLayers.tiles, errors),
     background: normalizeBackground(levelLayers.background, errors),
+    // Preserve bg payload shape so runtime can pass through bg arrays or bg.data object form.
+    bg: normalizeBg(levelLayers.bg, errors),
     decor: normalizeDecor(levelLayers.decor, errors, warnings),
     entities: normalizeEntities(levelLayers.entities, errors),
     audio: normalizeAudio(levelLayers.audio, errors),
   };
+}
+
+function normalizeBg(bgInput, errors) {
+  if (Array.isArray(bgInput)) {
+    return bgInput.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry));
+  }
+
+  if (isBgLayerObject(bgInput)) {
+    return {
+      ...bgInput,
+      data: bgInput.data.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry)),
+    };
+  }
+
+  pushError(errors, "layers.bg must be an array or an object with a data array.");
+  return [];
+}
+
+function isBgLayerObject(value) {
+  return isPlainObject(value) && Array.isArray(value.data);
 }
 
 // Normalizes tile entries and applies size defaults.
@@ -621,6 +654,7 @@ function createEmptyLayers() {
   return {
     tiles: [],
     background: [],
+    bg: [],
     decor: [],
     entities: [],
     audio: [],
@@ -639,6 +673,9 @@ function buildResult({ level, errors, warnings }) {
       summary: {
         tiles: summarySource.tiles.length,
         backgroundLayers: summarySource.background.length,
+        bg: Array.isArray(summarySource.bg)
+          ? summarySource.bg.length
+          : (Array.isArray(summarySource?.bg?.data) ? summarySource.bg.data.length : 0),
         decor: summarySource.decor.length,
         entities: summarySource.entities.length,
         audio: summarySource.audio.length,
