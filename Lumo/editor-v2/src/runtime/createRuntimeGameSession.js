@@ -137,6 +137,11 @@ function buildWorldSnapshot(worldState) {
       .sort((left, right) => (left.order - right.order) || left.decorId.localeCompare(right.decorId))
     : [];
 
+  // Carry runtime background payload through unchanged.
+  const background = Array.isArray(worldState?.layers?.background)
+    ? worldState.layers.background.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry))
+    : [];
+
   return {
     ok: worldState && typeof worldState === "object",
     worldId: typeof worldState?.identity?.id === "string" ? worldState.identity.id : "",
@@ -144,6 +149,7 @@ function buildWorldSnapshot(worldState) {
     width: Number.isFinite(worldState?.world?.width) ? worldState.world.width : 0,
     height: Number.isFinite(worldState?.world?.height) ? worldState.world.height : 0,
     tileSize: Number.isFinite(worldState?.world?.tileSize) ? worldState.world.tileSize : 0,
+    background,
     supportTiles,
     decorItems,
   };
