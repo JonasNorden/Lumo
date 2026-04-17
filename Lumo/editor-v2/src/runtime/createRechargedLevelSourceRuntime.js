@@ -121,6 +121,8 @@ function buildPlayerSnapshot(snapshot) {
         }
       : null,
     flares: Array.isArray(source.flares) ? source.flares.map((flare) => ({ ...flare })) : [],
+    // Keep active dark projectile runtime payload intact through source-runtime snapshots.
+    darkProjectiles: Array.isArray(source.darkProjectiles) ? source.darkProjectiles.map((projectile) => ({ ...projectile })) : [],
     entities: Array.isArray(source.entities) ? source.entities.map((entity) => ({ ...entity })) : [],
   };
 }

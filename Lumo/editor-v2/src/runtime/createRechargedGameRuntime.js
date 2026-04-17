@@ -53,6 +53,8 @@ function buildPlayerSnapshot(player) {
         }
       : null,
     flares: Array.isArray(source.flares) ? source.flares.map((flare) => ({ ...flare })) : [],
+    // Keep active dark projectile runtime payload intact through runtime wrappers.
+    darkProjectiles: Array.isArray(source.darkProjectiles) ? source.darkProjectiles.map((projectile) => ({ ...projectile })) : [],
     entities: Array.isArray(source.entities) ? source.entities.map((entity) => ({ ...entity })) : [],
   };
 }

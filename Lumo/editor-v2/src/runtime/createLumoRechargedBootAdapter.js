@@ -48,6 +48,17 @@ function cloneSnapshotEntity(entity) {
     isDarkActive: entity?.isDarkActive === true,
     dying: entity?.dying === true,
     dissolveT: Number.isFinite(entity?.dissolveT) ? entity.dissolveT : 0,
+    // Preserve raw dark creature cast runtime fields through the live adapter chain.
+    _castCd: Number.isFinite(entity?._castCd) ? entity._castCd : null,
+    _castChargeT: Number.isFinite(entity?._castChargeT) ? entity._castChargeT : null,
+    _castTargetX: Number.isFinite(entity?._castTargetX) ? entity._castTargetX : null,
+    _castTargetY: Number.isFinite(entity?._castTargetY) ? entity._castTargetY : null,
+    // Preserve raw hover-void runtime state fields without synthetic defaults.
+    awake: typeof entity?.awake === "boolean" ? entity.awake : null,
+    sleepBlend: Number.isFinite(entity?.sleepBlend) ? entity.sleepBlend : null,
+    eyeBlend: Number.isFinite(entity?.eyeBlend) ? entity.eyeBlend : null,
+    _wakeHold: Number.isFinite(entity?._wakeHold) ? entity._wakeHold : null,
+    _isFollowing: typeof entity?._isFollowing === "boolean" ? entity._isFollowing : null,
     castChargeT: Number.isFinite(entity?._castChargeT) ? entity._castChargeT : 0,
     castCooldownT: Number.isFinite(entity?._castCd) ? entity._castCd : 0,
     amount: Number.isFinite(entity?.amount) ? entity.amount : 1,
