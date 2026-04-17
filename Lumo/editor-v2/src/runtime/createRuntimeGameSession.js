@@ -27,33 +27,6 @@ function normalizeStatus(status, fallback = DEFAULT_STATUS) {
   return fallback;
 }
 
-function buildDarkProjectilesFromEntities(entities) {
-  if (!Array.isArray(entities)) {
-    return [];
-  }
-
-  return entities
-    // Recover live dark projectile presence when runtime emits projectile entities.
-    .map((entity, index) => {
-      const type = typeof entity?.type === "string" ? entity.type : "";
-      if (type !== "darkSpellProjectile" && type !== "dark_spell_projectile") {
-        return null;
-      }
-
-      const fallbackId = index + 1;
-      return {
-        id: Number.isFinite(entity?.id) ? entity.id : fallbackId,
-        x: Number.isFinite(entity?.x) ? entity.x : null,
-        y: Number.isFinite(entity?.y) ? entity.y : null,
-        vx: Number.isFinite(entity?.vx) ? entity.vx : 0,
-        vy: Number.isFinite(entity?.vy) ? entity.vy : 0,
-        age: Number.isFinite(entity?.age) ? entity.age : 0,
-        maxAge: Number.isFinite(entity?.maxAge) ? entity.maxAge : null,
-      };
-    })
-    .filter((projectile) => projectile && projectile.x !== null && projectile.y !== null);
-}
-
 // Builds a stable player snapshot shape from any runtime state input.
 function buildPlayerSnapshot(playerState) {
   const velocityX = Number.isFinite(playerState?.velocity?.x) ? playerState.velocity.x : null;
@@ -69,9 +42,8 @@ function buildPlayerSnapshot(playerState) {
         age: Number.isFinite(projectile?.age) ? projectile.age : 0,
         maxAge: Number.isFinite(projectile?.maxAge) ? projectile.maxAge : null,
       }))
-      .filter((projectile) => projectile.id !== null && projectile.x !== null && projectile.y !== null)
+      .filter((projectile) => projectile.x !== null && projectile.y !== null)
     : [];
-  const fallbackDarkProjectiles = buildDarkProjectilesFromEntities(playerState?.entities);
 
   return {
     ok: playerState && typeof playerState === "object",
@@ -163,7 +135,7 @@ function buildPlayerSnapshot(playerState) {
         }))
         .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null)
       : [],
-    darkProjectiles: normalizedDarkProjectiles.length > 0 ? normalizedDarkProjectiles : fallbackDarkProjectiles,
+    darkProjectiles: normalizedDarkProjectiles,
   };
 }
 
