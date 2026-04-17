@@ -627,12 +627,17 @@
         );
         const entities = Array.isArray(playerSnapshot?.entities) ? playerSnapshot.entities : [];
         return entities
-          .map((entity) => ({
-            id: typeof entity?.id === "string" ? entity.id : null,
+          // Preserve transient runtime entities (projectiles/hazards) even when they have no stable id.
+          .map((entity, index) => ({
+            id: typeof entity?.id === "string" ? entity.id : `runtime-${String(entity?.type || "entity")}-${index}`,
             type: typeof entity?.type === "string" ? entity.type : "dummy",
             x: Number.isFinite(entity?.x) ? entity.x : null,
             y: Number.isFinite(entity?.y) ? entity.y : null,
             size: Number.isFinite(entity?.size) && entity.size > 0 ? entity.size : 24,
+            w: Number.isFinite(entity?.w) ? entity.w : null,
+            h: Number.isFinite(entity?.h) ? entity.h : null,
+            rot: Number.isFinite(entity?.rot) ? entity.rot : 0,
+            alpha: Number.isFinite(entity?.alpha) ? entity.alpha : 1,
             alive: entity?.alive === true,
             active: entity?.active === true,
             state: typeof entity?.state === "string" ? entity.state : "idle",
@@ -642,8 +647,9 @@
             consumesFlare: entity?.consumesFlare === true,
             // Preserve runtime entity params for future Recharged behavior restoration.
             params: entity?.params && typeof entity.params === "object" ? cloneParams(entity.params) : {},
+            projectileSpritePath: typeof entity?._projectileSpritePath === "string" ? entity._projectileSpritePath : "",
           }))
-          .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null && entity.active === true);
+          .filter((entity) => entity.x !== null && entity.y !== null && entity.active === true);
       } catch (_error) {
         return [];
       }
@@ -1168,11 +1174,13 @@
           if (entity?.active !== true) {
             continue;
           }
+          const entityDrawW = Number.isFinite(entity.w) && entity.w > 0 ? entity.w : entity.size;
+          const entityDrawH = Number.isFinite(entity.h) && entity.h > 0 ? entity.h : entity.size;
           const entityRect = mapper.worldToCanvasRect(
             entity.x,
             entity.y,
-            entity.size,
-            entity.size,
+            entityDrawW,
+            entityDrawH,
           );
           const flareExposure = Math.max(0, Math.min(1, entity.flareExposure || 0));
           if (entity.illuminated === true) {
@@ -1281,6 +1289,43 @@
               ctx.beginPath();
               ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
               ctx.fill();
+              renderedKnownEntityVisual = true;
+            } else if (entity.type === "darkSpellProjectile" || entity.type === "dark_spell_projectile") {
+              // Match V1 fallback visibility: render projectile even when sprite assets are unavailable.
+              const centerX = entityRect.x + entityRect.w * 0.5;
+              const centerY = entityRect.y + entityRect.h * 0.5;
+              const drawSize = Math.max(entityRect.w, entityRect.h) * 1.8;
+              ctx.save();
+              ctx.translate(centerX, centerY);
+              ctx.rotate(Number.isFinite(entity.rot) ? entity.rot : 0);
+              const glow = ctx.createRadialGradient(0, 0, drawSize * 0.05, 0, 0, drawSize * 0.7);
+              glow.addColorStop(0, "rgba(214, 186, 255, 0.95)");
+              glow.addColorStop(0.5, "rgba(168, 120, 255, 0.86)");
+              glow.addColorStop(1, "rgba(115, 72, 205, 0.15)");
+              ctx.fillStyle = glow;
+              ctx.beginPath();
+              ctx.arc(0, 0, drawSize * 0.6, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.fillStyle = "rgba(160,120,255,0.92)";
+              ctx.fillRect(-drawSize * 0.32, -drawSize * 0.32, drawSize * 0.64, drawSize * 0.64);
+              ctx.restore();
+              renderedKnownEntityVisual = true;
+            } else if (entity.type === "darkSpellHazard" || entity.type === "dark_spell_hazard") {
+              // Keep hazard visible as a compact impact plate (visual-only parity with V1 fallback).
+              ctx.save();
+              ctx.globalAlpha = Math.max(0, Math.min(1, Number.isFinite(entity.alpha) ? entity.alpha : 1));
+              const centerX = entityRect.x + entityRect.w * 0.5;
+              const centerY = entityRect.y + entityRect.h * 0.5;
+              const radius = Math.max(entityRect.w, entityRect.h) * 0.48;
+              const ring = ctx.createRadialGradient(centerX, centerY, radius * 0.2, centerX, centerY, radius);
+              ring.addColorStop(0, "rgba(210,180,255,0.65)");
+              ring.addColorStop(0.6, "rgba(145,110,210,0.85)");
+              ring.addColorStop(1, "rgba(145,110,210,0.12)");
+              ctx.fillStyle = ring;
+              ctx.beginPath();
+              ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
               renderedKnownEntityVisual = true;
             } else if (entity.type === "firefly_01") {
               // V1-like firefly: tiny body sprite with warm light halo when lit.
