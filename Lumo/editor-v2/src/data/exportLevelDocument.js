@@ -15,6 +15,13 @@ export function getLevelExportFileName(doc) {
 }
 
 export function serializeLevelDocument(doc) {
+  console.log("[EXPORT INPUT BACKGROUND]", {
+    background: doc?.background,
+    backgroundBase: doc?.background?.base,
+    backgrounds: doc?.backgrounds,
+    backgroundLayers: doc?.backgrounds?.layers,
+  });
+
   const exportDoc = { ...doc };
   if (!exportDoc.layers) exportDoc.layers = {};
 
@@ -51,7 +58,7 @@ export function serializeLevelDocument(doc) {
   runtimeBackground.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   exportDoc.layers.background = runtimeBackground;
 
-  if (doc?.background?.base && Array.isArray(doc.background.base)) {
+  if (doc?.background?.base) {
     if (!exportDoc.layers) exportDoc.layers = {};
 
     exportDoc.layers.bg = {
@@ -62,6 +69,22 @@ export function serializeLevelDocument(doc) {
       tileSize: doc.dimensions?.tileSize,
     };
   }
+
+  if (Array.isArray(doc?.backgrounds?.layers)) {
+    if (!exportDoc.layers) exportDoc.layers = {};
+
+    exportDoc.layers.background = doc.backgrounds.layers.map((layer, i) => ({
+      backgroundId: layer?.id || `bg_${i}`,
+      order: layer?.depth ?? i,
+      type: layer?.type || "color",
+      ...(layer?.color ? { color: layer.color } : {}),
+    }));
+  }
+
+  console.log("[EXPORT BACKGROUND CHECK]", {
+    hasBg: !!exportDoc.layers?.bg,
+    hasBackgroundLayers: !!exportDoc.layers?.background,
+  });
 
   return JSON.stringify(exportDoc, null, 2);
 }
