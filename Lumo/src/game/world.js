@@ -289,7 +289,9 @@
       // --- BG layer: exported from LumoEditor -> levelObj.editor.bg ---
       const needBG = this.w * this.h;
       let bg = null;
+      // Compatibility: accept legacy array format and tilemap object format ({ data: [...] }).
       if (layers && Array.isArray(layers.bg)) bg = layers.bg; // optional alt format
+      else if (layers && layers.bg && Array.isArray(layers.bg.data)) bg = layers.bg.data;
       else if (levelObj && levelObj.editor && Array.isArray(levelObj.editor.bg)) bg = levelObj.editor.bg;
 
       if (!Array.isArray(bg)) bg = new Array(needBG).fill(null);
