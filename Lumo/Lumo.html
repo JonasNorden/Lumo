@@ -64,6 +64,14 @@
     const RECHARGED_PLAYER_SPRITE_JUMP = "data/assets/sprites/lumo/lumo_jump_up.png";
     const RECHARGED_PLAYER_SPRITE_FALL = "data/assets/sprites/lumo/lumo_jump_down.png";
     const RECHARGED_PLAYER_SPRITE_BRAKE = "data/assets/sprites/lumo/lumo_brake_1.png";
+    const RECHARGED_ENTITY_SPRITE_FLARE_PICKUP = "data/assets/sprites/pickups/flare_pickup_01.png";
+    const RECHARGED_ENTITY_SPRITE_POWERCELLS = [
+      "data/assets/sprites/pickups/pc_01.png",
+      "data/assets/sprites/pickups/pc_02.png",
+      "data/assets/sprites/pickups/pc_03.png",
+      "data/assets/sprites/pickups/pc_04.png",
+    ];
+    const RECHARGED_ENTITY_SPRITE_LANTERN = "data/assets/sprites/lights/lantern_01.png";
     const RECHARGED_PLAYER_HORIZONTAL_SPEED_EPSILON = 0.05;
     const RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON = 0.05;
     const RECHARGED_PLAYER_IDLE_FPS = 7;
@@ -732,6 +740,22 @@
       return state.rechargedDecorVisualState;
     }
 
+    function ensureRechargedEntityVisualState(state) {
+      if (!state || typeof state !== "object") {
+        return null;
+      }
+
+      if (!state.rechargedEntityVisualState || typeof state.rechargedEntityVisualState !== "object") {
+        state.rechargedEntityVisualState = {
+          flarePickup: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_FLARE_PICKUP),
+          powerCells: RECHARGED_ENTITY_SPRITE_POWERCELLS.map((src) => createRechargedSpriteImage(src)),
+          lantern: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_LANTERN),
+        };
+      }
+
+      return state.rechargedEntityVisualState;
+    }
+
     function ensureRechargedBgVisualState(state) {
       if (!state || typeof state !== "object") {
         return null;
@@ -1145,6 +1169,62 @@
               entityRect.h + glowRadius * 2,
             );
           }
+
+          const entityVisualState = ensureRechargedEntityVisualState(state);
+          let renderedKnownEntityVisual = false;
+          if (entityVisualState) {
+            if (entity.type === "powercell_01") {
+              // Match V1: power cell uses one 24x24 pickup sprite anchored to entity rect.
+              const variants = Array.isArray(entityVisualState.powerCells) ? entityVisualState.powerCells : [];
+              const idKey = typeof entity.id === "string" ? entity.id : "";
+              let variantIndex = 0;
+              for (let index = 0; index < idKey.length; index += 1) {
+                variantIndex = (variantIndex + idKey.charCodeAt(index)) % Math.max(1, variants.length);
+              }
+              const sprite = variants[variantIndex] || variants[0] || null;
+              if (sprite && sprite.complete) {
+                ctx.drawImage(sprite, entityRect.x, entityRect.y, entityRect.w, entityRect.h);
+                renderedKnownEntityVisual = true;
+              }
+            } else if (entity.type === "flare_pickup_01") {
+              // Match V1 readability scale: flare pickup renders larger, centered on the entity anchor.
+              const sprite = entityVisualState.flarePickup;
+              if (sprite && sprite.complete) {
+                const drawSize = Math.max(entityRect.w, entityRect.h) * 2;
+                const drawX = entityRect.x + (entityRect.w * 0.5) - (drawSize * 0.5);
+                const drawY = entityRect.y + (entityRect.h * 0.5) - (drawSize * 0.5);
+                ctx.drawImage(sprite, drawX, drawY, drawSize, drawSize);
+                renderedKnownEntityVisual = true;
+              }
+            } else if (entity.type === "lantern_01") {
+              // Match V1 lantern glow + BL-anchored sprite so feet anchoring stays consistent.
+              const centerX = entityRect.x + entityRect.w * 0.5;
+              const centerY = entityRect.y + entityRect.h * 0.5;
+              const glowRadius = Math.max(entityRect.w, entityRect.h) * 2.1;
+              const glow = ctx.createRadialGradient(centerX, centerY, 6, centerX, centerY, glowRadius);
+              glow.addColorStop(0, "rgba(255,220,140,0.55)");
+              glow.addColorStop(0.45, "rgba(255,200,110,0.22)");
+              glow.addColorStop(1, "rgba(255,200,110,0)");
+              ctx.fillStyle = glow;
+              ctx.beginPath();
+              ctx.arc(centerX, centerY, glowRadius, 0, Math.PI * 2);
+              ctx.fill();
+
+              const sprite = entityVisualState.lantern;
+              if (sprite && sprite.complete) {
+                const drawW = Math.max(1, Math.round(entityRect.w));
+                const drawH = Math.max(1, Math.round(entityRect.h * (32 / 24)));
+                const drawX = centerX - drawW * 0.5;
+                const drawY = (entityRect.y + entityRect.h) - drawH;
+                ctx.drawImage(sprite, drawX, drawY, drawW, drawH);
+                renderedKnownEntityVisual = true;
+              }
+            }
+          }
+          if (renderedKnownEntityVisual) {
+            continue;
+          }
+
           const hitAlpha = entity.hitFlashTicks > 0 ? 0.9 : 0.45;
           ctx.fillStyle = entity.hitFlashTicks > 0 ? `rgba(250, 204, 21, ${hitAlpha})` : "rgba(239, 68, 68, 0.72)";
           ctx.fillRect(entityRect.x, entityRect.y, entityRect.w, entityRect.h);
