@@ -61,11 +61,39 @@ export function serializeLevelDocument(doc) {
   if (doc?.background?.base) {
     if (!exportDoc.layers) exportDoc.layers = {};
 
+    const width = doc.dimensions?.width;
+    const height = doc.dimensions?.height;
+    const baseData = Array.isArray(doc.background.base) ? [...doc.background.base] : [];
+    const placements = Array.isArray(doc?.background?.placements) ? doc.background.placements : [];
+
+    // Flatten authored sized placements into the runtime tilemap.
+    // Placement `y` is the bottom anchor row (same semantics as backgroundLayer.js).
+    const canFlattenPlacements = Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0;
+    for (const placement of placements) {
+      if (!canFlattenPlacements) break;
+      if (!placement?.materialId) continue;
+      if (!Number.isInteger(placement?.x) || !Number.isInteger(placement?.y)) continue;
+
+      const size = Number.isInteger(placement?.size) ? Math.max(1, placement.size) : 1;
+      const startX = placement.x;
+      const endX = placement.x + size - 1;
+      const startY = placement.y - (size - 1);
+      const endY = placement.y;
+
+      for (let y = startY; y <= endY; y += 1) {
+        if (y < 0 || y >= height) continue;
+        for (let x = startX; x <= endX; x += 1) {
+          if (x < 0 || x >= width) continue;
+          baseData[y * width + x] = placement.materialId;
+        }
+      }
+    }
+
     exportDoc.layers.bg = {
       type: "tilemap",
-      data: doc.background.base,
-      width: doc.dimensions?.width,
-      height: doc.dimensions?.height,
+      data: baseData,
+      width,
+      height,
       tileSize: doc.dimensions?.tileSize,
     };
   }
