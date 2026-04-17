@@ -115,6 +115,11 @@ const ENTITY_HOVER_VOID_PULSE_SCALE = 0.6;
 const ENTITY_DARK_CREATURE_FLARE_CONSUME_BURN_MUL = 7.5;
 const PULSE_TARGET_TYPES = new Set(["dark_creature", "hover_void"]);
 const DEFAULT_DARK_PROJECTILE_MAX_AGE_SECONDS = 4;
+const DEFAULT_DARK_CREATURE_AGGRO_TILES = 6;
+const DEFAULT_DARK_CREATURE_CAST_CHARGE_TIME_SECONDS = 0.5;
+const DEFAULT_DARK_CREATURE_SPELL_SPEED_X_PX_PER_SECOND = 190;
+const DEFAULT_DARK_CREATURE_SPELL_GRAVITY_PX_PER_SECOND = 760;
+const DEFAULT_DARK_CREATURE_TARGET_JITTER_PX = 3;
 
 function resolvePulseTargetType(entityType) {
   if (typeof entityType !== "string") {
@@ -135,6 +140,18 @@ function resolvePulseTargetType(entityType) {
 
 function isDarkCreatureEntityType(entityType) {
   return resolvePulseTargetType(entityType) === "dark_creature";
+}
+
+function resolveDarkCreatureAggroDefaults(sourceAggroTiles, sourceAggroRadiusPx, tileSize = 24) {
+  const hasAggroRadiusPx = Number.isFinite(sourceAggroRadiusPx) && sourceAggroRadiusPx > 0;
+  const hasUsableAggroTiles = Number.isFinite(sourceAggroTiles) && sourceAggroTiles > 0;
+  const normalizedAggroTiles = hasUsableAggroTiles
+    ? sourceAggroTiles
+    : (hasAggroRadiusPx ? sourceAggroRadiusPx / tileSize : DEFAULT_DARK_CREATURE_AGGRO_TILES);
+  return {
+    aggroTiles: normalizedAggroTiles,
+    aggroRadiusPx: hasAggroRadiusPx ? sourceAggroRadiusPx : null,
+  };
 }
 
 function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, worldHeight) {
@@ -210,10 +227,11 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
         reactsToFlares: parseBool(source?.reactsToFlares ?? params?.reactsToFlares, true),
         hitCooldown: parseNumber(source?.hitCooldown ?? params?.hitCooldown, 0.6),
         safeDelay: parseNumber(source?.safeDelay ?? params?.safeDelay, 0.6),
-        aggroTiles: parseNumber(source?.aggroTiles ?? params?.aggroTiles, 6),
-        aggroRadiusPx: Number.isFinite(Number(source?.aggroRadiusPx ?? params?.aggroRadius))
-          ? Number(source?.aggroRadiusPx ?? params?.aggroRadius)
-          : null,
+        ...resolveDarkCreatureAggroDefaults(
+          parseNumber(source?.aggroTiles ?? params?.aggroTiles, null),
+          parseNumber(source?.aggroRadiusPx ?? params?.aggroRadius, null),
+          tileSize,
+        ),
         energyLoss: parseNumber(source?.energyLoss ?? params?.energyLoss, 40),
         knockbackX: parseNumber(source?.knockbackX ?? params?.knockbackX, 260),
         knockbackY: parseNumber(source?.knockbackY ?? params?.knockbackY, -220),
@@ -221,10 +239,10 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
         bodyKnockbackX: parseNumber(source?.bodyKnockbackX ?? params?.bodyKnockbackX, 160),
         bodyKnockbackY: parseNumber(source?.bodyKnockbackY ?? params?.bodyKnockbackY, -140),
         castCooldown: parseNumber(source?.castCooldown ?? params?.castCooldown, 5.5),
-        castChargeTime: parseNumber(source?.castChargeTime ?? params?.castChargeTime, 0.5),
-        spellSpeedX: parseNumber(source?.spellSpeedX ?? params?.spellSpeedX, 190),
-        spellGravity: parseNumber(source?.spellGravity ?? params?.spellGravity, 760),
-        targetJitterPx: parseNumber(source?.targetJitterPx ?? params?.targetJitterPx, 3),
+        castChargeTime: parseNumber(source?.castChargeTime ?? params?.castChargeTime, DEFAULT_DARK_CREATURE_CAST_CHARGE_TIME_SECONDS),
+        spellSpeedX: parseNumber(source?.spellSpeedX ?? params?.spellSpeedX, DEFAULT_DARK_CREATURE_SPELL_SPEED_X_PX_PER_SECOND),
+        spellGravity: parseNumber(source?.spellGravity ?? params?.spellGravity, DEFAULT_DARK_CREATURE_SPELL_GRAVITY_PX_PER_SECOND),
+        targetJitterPx: parseNumber(source?.targetJitterPx ?? params?.targetJitterPx, DEFAULT_DARK_CREATURE_TARGET_JITTER_PX),
         dying: parseBool(source?.dying, false),
         dissolveT: parseNumber(source?.dissolveT, 0),
         dissolveDur: parseNumber(source?.dissolveDur ?? params?.dissolveDur, 1.35),
@@ -673,9 +691,18 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
       continue;
     }
     const center = getEntityCenter(entity);
+    // Keep cast gating usable when authored params carry placeholder zero aggro data.
+    const aggroDefaults = resolveDarkCreatureAggroDefaults(entity?.aggroTiles, entity?.aggroRadiusPx, tileSize);
+    entity.aggroTiles = aggroDefaults.aggroTiles;
+    entity.aggroRadiusPx = aggroDefaults.aggroRadiusPx;
+    // Backfill missing cast fields to V1-safe defaults before charge/fire logic.
+    entity.castChargeTime = Number.isFinite(entity?.castChargeTime) ? entity.castChargeTime : DEFAULT_DARK_CREATURE_CAST_CHARGE_TIME_SECONDS;
+    entity.targetJitterPx = Number.isFinite(entity?.targetJitterPx) ? entity.targetJitterPx : DEFAULT_DARK_CREATURE_TARGET_JITTER_PX;
+    entity.spellSpeedX = Number.isFinite(entity?.spellSpeedX) ? entity.spellSpeedX : DEFAULT_DARK_CREATURE_SPELL_SPEED_X_PX_PER_SECOND;
+    entity.spellGravity = Number.isFinite(entity?.spellGravity) ? entity.spellGravity : DEFAULT_DARK_CREATURE_SPELL_GRAVITY_PX_PER_SECOND;
     const aggroRadiusPx = Number.isFinite(entity?.aggroRadiusPx) && entity.aggroRadiusPx > 0
       ? entity.aggroRadiusPx
-      : Math.max(0, (Number.isFinite(entity?.aggroTiles) ? entity.aggroTiles : 6) * tileSize);
+      : Math.max(0, (Number.isFinite(entity?.aggroTiles) ? entity.aggroTiles : DEFAULT_DARK_CREATURE_AGGRO_TILES) * tileSize);
 
     if (entity.dying === true) {
       entity.dissolveT = (Number.isFinite(entity?.dissolveT) ? entity.dissolveT : 0) + dt;
@@ -718,10 +745,10 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
           const targetY = Number.isFinite(entity?._castTargetY) ? entity._castTargetY : playerCenter.y;
           const dx = targetX - center.x;
           const dy = targetY - center.y;
-          const projectileSpeedX = Math.max(120, Math.abs(Number.isFinite(entity?.spellSpeedX) ? entity.spellSpeedX : 190));
+          const projectileSpeedX = Math.max(120, Math.abs(Number.isFinite(entity?.spellSpeedX) ? entity.spellSpeedX : DEFAULT_DARK_CREATURE_SPELL_SPEED_X_PX_PER_SECOND));
           const tFlight = Math.max(0.35, Math.min(1.2, distanceToPlayer / projectileSpeedX));
           const vx = dx / Math.max(0.001, tFlight);
-          const gravity = Number.isFinite(entity?.spellGravity) ? entity.spellGravity : 760;
+          const gravity = Number.isFinite(entity?.spellGravity) ? entity.spellGravity : DEFAULT_DARK_CREATURE_SPELL_GRAVITY_PX_PER_SECOND;
           const vyRaw = (dy - (0.5 * gravity * tFlight * tFlight)) / Math.max(0.001, tFlight);
           spawnedProjectiles.push({
             id: nextProjectileId,
@@ -744,10 +771,10 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
         }
       }
     } else if (canCast && entity._castCd <= 0) {
-      const jitter = Math.max(0, Number.isFinite(entity?.targetJitterPx) ? entity.targetJitterPx : 0);
+      const jitter = Math.max(0, Number.isFinite(entity?.targetJitterPx) ? entity.targetJitterPx : DEFAULT_DARK_CREATURE_TARGET_JITTER_PX);
       entity._castTargetX = playerCenter.x + (Math.random() * 2 - 1) * jitter;
       entity._castTargetY = playerCenter.y + (Math.random() * 2 - 1) * jitter;
-      entity._castChargeT = Math.max(0.05, Number.isFinite(entity?.castChargeTime) ? entity.castChargeTime : 0.5);
+      entity._castChargeT = Math.max(0.05, Number.isFinite(entity?.castChargeTime) ? entity.castChargeTime : DEFAULT_DARK_CREATURE_CAST_CHARGE_TIME_SECONDS);
       entity.state = "casting-charge";
     }
 
