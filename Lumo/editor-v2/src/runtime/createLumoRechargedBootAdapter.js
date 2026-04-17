@@ -9,6 +9,48 @@ function normalizeStatus(status, fallback = "invalid") {
   return fallback;
 }
 
+// Clones plain JSON-like values so adapter snapshots never share mutable params references.
+function clonePlainData(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => clonePlainData(entry));
+  }
+
+  if (value && typeof value === "object") {
+    const cloned = {};
+    for (const [key, entry] of Object.entries(value)) {
+      cloned[key] = clonePlainData(entry);
+    }
+    return cloned;
+  }
+
+  return value;
+}
+
+// Keeps runtime entity snapshot shape explicit for Lumo.html-facing reads.
+function cloneSnapshotEntity(entity) {
+  return {
+    id: typeof entity?.id === "string" ? entity.id : null,
+    type: typeof entity?.type === "string" ? entity.type : "dummy",
+    x: Number.isFinite(entity?.x) ? entity.x : null,
+    y: Number.isFinite(entity?.y) ? entity.y : null,
+    size: Number.isFinite(entity?.size) ? entity.size : 24,
+    hp: Number.isFinite(entity?.hp) ? entity.hp : 0,
+    maxHp: Number.isFinite(entity?.maxHp) ? entity.maxHp : 0,
+    alive: entity?.alive === true,
+    active: entity?.active === true,
+    state: typeof entity?.state === "string" ? entity.state : "idle",
+    hitFlashTicks: Number.isFinite(entity?.hitFlashTicks) ? entity.hitFlashTicks : 0,
+    lastPulseIdHit: Number.isFinite(entity?.lastPulseIdHit) ? entity.lastPulseIdHit : -1,
+    illuminated: entity?.illuminated === true,
+    flareExposure: Number.isFinite(entity?.flareExposure) ? entity.flareExposure : 0,
+    consumesFlare: entity?.consumesFlare === true,
+    lastFlareIdHit: Number.isFinite(entity?.lastFlareIdHit) ? entity.lastFlareIdHit : -1,
+    amount: Number.isFinite(entity?.amount) ? entity.amount : 1,
+    // Keep full params object instead of flattening/dropping entity metadata.
+    params: entity?.params && typeof entity.params === "object" ? clonePlainData(entity.params) : {},
+  };
+}
+
 // Returns a compact player snapshot with stable primitive defaults.
 function buildPlayerSnapshot(snapshot) {
   const source = snapshot && typeof snapshot === "object" ? snapshot : {};
@@ -45,7 +87,7 @@ function buildPlayerSnapshot(snapshot) {
         }
       : null,
     flares: Array.isArray(source.flares) ? source.flares.map((flare) => ({ ...flare })) : [],
-    entities: Array.isArray(source.entities) ? source.entities.map((entity) => ({ ...entity })) : [],
+    entities: Array.isArray(source.entities) ? source.entities.map((entity) => cloneSnapshotEntity(entity)) : [],
   };
 }
 

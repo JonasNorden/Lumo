@@ -2,6 +2,23 @@ import { createRuntimeRunner } from "./createRuntimeRunner.js";
 
 const DEFAULT_STATUS = "idle";
 
+// Clones plain JSON-like values so snapshots never share mutable params references.
+function clonePlainData(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => clonePlainData(entry));
+  }
+
+  if (value && typeof value === "object") {
+    const cloned = {};
+    for (const [key, entry] of Object.entries(value)) {
+      cloned[key] = clonePlainData(entry);
+    }
+    return cloned;
+  }
+
+  return value;
+}
+
 // Normalizes session status so external callers always receive known values.
 function normalizeStatus(status, fallback = DEFAULT_STATUS) {
   if (status === "idle" || status === "running" || status === "stopped" || status === "invalid") {
@@ -83,6 +100,8 @@ function buildPlayerSnapshot(playerState) {
           flareExposure: Number.isFinite(entity?.flareExposure) ? entity.flareExposure : 0,
           consumesFlare: entity?.consumesFlare === true,
           lastFlareIdHit: Number.isFinite(entity?.lastFlareIdHit) ? entity.lastFlareIdHit : -1,
+          // Keep authored params intact through runtime session snapshots.
+          params: entity?.params && typeof entity.params === "object" ? clonePlainData(entity.params) : {},
         }))
         .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null)
       : [],

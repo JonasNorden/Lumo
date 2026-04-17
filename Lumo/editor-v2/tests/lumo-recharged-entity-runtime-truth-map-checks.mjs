@@ -129,8 +129,10 @@ async function runEntityRuntimeTruthMapChecks() {
   assert.ok(richEntityWithParams, "Expected at least one runtime layer entity with params.");
 
   const matchingSessionEntity = sessionEntities.find((entity) => entity.id === richEntityWithParams.id);
-  assert.ok(matchingSessionEntity, "Expected matching session entity for params-loss check.");
-  assert.equal(Object.prototype.hasOwnProperty.call(matchingSessionEntity, "params"), false, "Expected params to be dropped from runtime session entity snapshots.");
+  assert.ok(matchingSessionEntity, "Expected matching session entity for runtime params check.");
+  assert.equal(Object.prototype.hasOwnProperty.call(matchingSessionEntity, "params"), true, "Expected params to be preserved in runtime session entity snapshots.");
+  assert.deepEqual(matchingSessionEntity.params, richEntityWithParams.params, "Expected runtime session snapshot params to match converted runtime layer params.");
+  assert.notEqual(matchingSessionEntity.params, richEntityWithParams.params, "Expected runtime session snapshot params to be cloned.");
 
   const adapter = createLumoRechargedBootAdapter({
     sourceDescriptor: { levelDocument: richFixture.loaded.level },
@@ -149,14 +151,17 @@ async function runEntityRuntimeTruthMapChecks() {
 
   const adapterEntity = adapterPlayerSnapshot.entities.find((entity) => entity.id === richEntityWithParams.id);
   assert.ok(adapterEntity, "Expected matching adapter entity.");
-  assert.equal(Object.prototype.hasOwnProperty.call(adapterEntity, "params"), false, "Expected params to be dropped from adapter player snapshot entities.");
+  assert.equal(Object.prototype.hasOwnProperty.call(adapterEntity, "params"), true, "Expected params to be preserved in adapter player snapshot entities.");
+  assert.deepEqual(adapterEntity.params, richEntityWithParams.params, "Expected adapter snapshot params to match converted runtime layer params.");
+  assert.notEqual(adapterEntity.params, matchingSessionEntity.params, "Expected adapter snapshot params to be cloned and detached from session snapshots.");
 
   const { html, normalized: lumoEntityReadKeys } = extractLumoHtmlEntityReadKeys();
   assert.deepEqual(
     lumoEntityReadKeys,
-    ["active", "alive", "consumesFlare", "flareExposure", "hitFlashTicks", "id", "illuminated", "size", "state", "type", "x", "y"],
+    ["active", "alive", "consumesFlare", "flareExposure", "hitFlashTicks", "id", "illuminated", "params", "size", "state", "type", "x", "y"],
     "Expected Lumo.html entity reader to flatten to the fixed live render shape.",
   );
+  assert.equal(html.includes("const drawSize = Math.min(16, Math.max(1, baseSize));"), true, "Expected firefly visual cap to clamp draw size at 16x16.");
 
   assert.equal(html.includes("ctx.fillStyle = entity.hitFlashTicks > 0 ? `rgba(250, 204, 21, ${hitAlpha})` : \"rgba(239, 68, 68, 0.72)\";"), true, "Expected red-box debug fill path in renderer.");
 
@@ -177,8 +182,8 @@ async function runEntityRuntimeTruthMapChecks() {
       editorTypesAll,
       runtimeLayerTypesAll,
       introducedRuntimeOnlyTypes,
-      paramsDroppedInSessionSnapshot: true,
-      paramsDroppedInAdapterSnapshot: true,
+      paramsPreservedInSessionSnapshot: true,
+      paramsPreservedInAdapterSnapshot: true,
       liveLumoEntityReadKeys: lumoEntityReadKeys,
     },
     v1Truth: {

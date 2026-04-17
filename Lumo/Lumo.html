@@ -606,6 +606,19 @@
 
     function readRechargedEntitySnapshots(payload, state) {
       try {
+        const cloneParams = (value) => {
+          if (Array.isArray(value)) {
+            return value.map((entry) => cloneParams(entry));
+          }
+          if (value && typeof value === "object") {
+            const cloned = {};
+            for (const [key, entry] of Object.entries(value)) {
+              cloned[key] = cloneParams(entry);
+            }
+            return cloned;
+          }
+          return value;
+        };
         const adapter = payload?.adapter && typeof payload.adapter === "object" ? payload.adapter : null;
         const adapterPlayerSnapshot = adapter?.getPlayerSnapshot?.();
         const playerSnapshot = (
@@ -627,6 +640,8 @@
             illuminated: entity?.illuminated === true,
             flareExposure: Number.isFinite(entity?.flareExposure) ? entity.flareExposure : 0,
             consumesFlare: entity?.consumesFlare === true,
+            // Preserve runtime entity params for future Recharged behavior restoration.
+            params: entity?.params && typeof entity.params === "object" ? cloneParams(entity.params) : {},
           }))
           .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null && entity.active === true);
       } catch (_error) {
@@ -1290,9 +1305,9 @@
                 ctx.fill();
               }
               if (sprite && sprite.complete) {
-                // Render at true 1x1 footprint, centered on anchor, with hard 24x24 cap.
+                // Render at true 1x1 footprint, centered on anchor, with hard 16x16 cap.
                 const baseSize = Math.min(entityRect.w, entityRect.h);
-                const drawSize = Math.min(24, Math.max(1, baseSize));
+                const drawSize = Math.min(16, Math.max(1, baseSize));
                 const drawX = entityRect.x + (entityRect.w * 0.5) - (drawSize * 0.5);
                 const drawY = entityRect.y + (entityRect.h * 0.5) - (drawSize * 0.5);
                 ctx.drawImage(sprite, drawX, drawY, drawSize, drawSize);
