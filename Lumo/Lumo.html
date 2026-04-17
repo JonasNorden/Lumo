@@ -1187,10 +1187,11 @@
                 renderedKnownEntityVisual = true;
               }
             } else if (entity.type === "flare_pickup_01") {
-              // Match V1 readability scale: flare pickup renders larger, centered on the entity anchor.
+              // Render flare pickup at true 1x1 footprint, centered on the entity anchor.
               const sprite = entityVisualState.flarePickup;
               if (sprite && sprite.complete) {
-                const drawSize = Math.max(entityRect.w, entityRect.h) * 2;
+                const baseSize = Math.min(entityRect.w, entityRect.h);
+                const drawSize = Math.min(24, Math.max(1, baseSize));
                 const drawX = entityRect.x + (entityRect.w * 0.5) - (drawSize * 0.5);
                 const drawY = entityRect.y + (entityRect.h * 0.5) - (drawSize * 0.5);
                 ctx.drawImage(sprite, drawX, drawY, drawSize, drawSize);
