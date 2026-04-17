@@ -12,6 +12,7 @@
 
       this.layers = { main: [] };
       this.tileVisualOverrides = {};
+      this._bgTilemapLogOnce = false;
 
       // Background layer (grid of ids)
       this.bg = [];
@@ -279,9 +280,11 @@
         else data = data.slice(0);
       }
       this.layers.main = data;
+      this.layers.bg = layers ? layers.bg : null;
       this.tileVisualOverrides = (layers && layers.tileVisualOverrides && typeof layers.tileVisualOverrides === "object")
         ? Object.assign({}, layers.tileVisualOverrides)
         : {};
+      this._bgTilemapLogOnce = false;
 
       // --- BG layer: exported from LumoEditor -> levelObj.editor.bg ---
       const needBG = this.w * this.h;
@@ -742,6 +745,70 @@
       return true;
     }
 
+    _drawBGTilemapLayer(ctx, cam, x0, y0, x1, y1){
+      const bg = this.layers && this.layers.bg;
+      if (!bg || typeof bg !== "object") return;
+      if (bg.type !== "tilemap") return;
+      if (!Array.isArray(bg.data)) return;
+
+      const width = this.w | 0;
+      const height = this.h | 0;
+      const ts = this.tileSize | 0;
+      if (!width || !height || !ts) return;
+
+      const expected = width * height;
+      if (bg.data.length !== expected) return;
+
+      if (!this._bgTilemapLogOnce){
+        console.log("[RECHARGED BG TILEMAP]", { count: bg.data.length });
+        this._bgTilemapLogOnce = true;
+      }
+
+      this._ensureTileCatalog();
+
+      for (let ty = y0; ty <= y1; ty++){
+        for (let tx = x0; tx <= x1; tx++){
+          const index = ty * width + tx;
+          const rawId = bg.data[index];
+          if (rawId == null || rawId === "") continue;
+
+          let drew = false;
+          const tileKey = String(rawId);
+          const tileDef = this._tileDefByCatalogId
+            ? (this._tileDefByCatalogId.get(tileKey) || this._tileDefByCatalogId.get(tileKey.toLowerCase()))
+            : null;
+
+          if (tileDef && tileDef.img){
+            let img = this._tileImg.get(tileDef.img);
+            if (!img){
+              img = this._tryLoadImage(tileDef.img);
+              if (img) this._tileImg.set(tileDef.img, img);
+            }
+            if (img && img._ok){
+              ctx.drawImage(
+                img,
+                Math.round(tx * ts - cam.x),
+                Math.round(ty * ts - cam.y),
+                ts,
+                ts
+              );
+              drew = true;
+            }
+          }
+
+          if (!drew){
+            ctx.fillStyle = "rgba(22, 28, 36, 0.42)";
+            ctx.fillRect(
+              Math.round(tx * ts - cam.x),
+              Math.round(ty * ts - cam.y),
+              ts,
+              ts
+            );
+          }
+        }
+      }
+    }
+
     _isLikelyVisualAnchor(tx, ty, id, fp){
       const fw = Math.max(1, (fp && fp.w) ? (fp.w|0) : 1);
       const fh = Math.max(1, (fp && fp.h) ? (fp.h|0) : 1);
@@ -768,6 +835,9 @@
 
       // Legacy authored per-cell background tiles remain supported behind main tiles.
       this._drawBG(ctx, cam, x0, y0, x1, y1);
+
+      // Editor V2 tilemap background pass (separate from solid/collision tile pipeline).
+      this._drawBGTilemapLayer(ctx, cam, x0, y0, x1, y1);
 
       for (let ty = y0; ty <= y1; ty++){
         for (let tx = x0; tx <= x1; tx++){
