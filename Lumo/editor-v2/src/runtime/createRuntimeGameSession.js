@@ -100,10 +100,28 @@ function buildPlayerSnapshot(playerState) {
           flareExposure: Number.isFinite(entity?.flareExposure) ? entity.flareExposure : 0,
           consumesFlare: entity?.consumesFlare === true,
           lastFlareIdHit: Number.isFinite(entity?.lastFlareIdHit) ? entity.lastFlareIdHit : -1,
+          isDarkActive: entity?.isDarkActive === true,
+          dying: entity?.dying === true,
+          dissolveT: Number.isFinite(entity?.dissolveT) ? entity.dissolveT : 0,
+          castChargeT: Number.isFinite(entity?._castChargeT) ? entity._castChargeT : 0,
+          castCooldownT: Number.isFinite(entity?._castCd) ? entity._castCd : 0,
           // Keep authored params intact through runtime session snapshots.
           params: entity?.params && typeof entity.params === "object" ? clonePlainData(entity.params) : {},
         }))
         .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null)
+      : [],
+    darkProjectiles: Array.isArray(playerState?.darkProjectiles)
+      ? playerState.darkProjectiles
+        .map((projectile) => ({
+          id: Number.isFinite(projectile?.id) ? projectile.id : null,
+          x: Number.isFinite(projectile?.x) ? projectile.x : null,
+          y: Number.isFinite(projectile?.y) ? projectile.y : null,
+          vx: Number.isFinite(projectile?.vx) ? projectile.vx : 0,
+          vy: Number.isFinite(projectile?.vy) ? projectile.vy : 0,
+          age: Number.isFinite(projectile?.age) ? projectile.age : 0,
+          maxAge: Number.isFinite(projectile?.maxAge) ? projectile.maxAge : null,
+        }))
+        .filter((projectile) => projectile.id !== null && projectile.x !== null && projectile.y !== null)
       : [],
   };
 }
