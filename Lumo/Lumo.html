@@ -72,6 +72,15 @@
       "data/assets/sprites/pickups/pc_04.png",
     ];
     const RECHARGED_ENTITY_SPRITE_LANTERN = "data/assets/sprites/lights/lantern_01.png";
+    const RECHARGED_ENTITY_SPRITE_DARK_CREATURE_IDLE = [
+      "data/assets/sprites/creatures/dc_idle_3.png",
+      "data/assets/sprites/creatures/dc_idle_4.png",
+    ];
+    const RECHARGED_ENTITY_SPRITE_FIREFLIES = [
+      "data/assets/sprites/lights/firefly_01.png",
+      "data/assets/sprites/lights/firefly_02.png",
+      "data/assets/sprites/lights/firefly_03.png",
+    ];
     const RECHARGED_PLAYER_HORIZONTAL_SPEED_EPSILON = 0.05;
     const RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON = 0.05;
     const RECHARGED_PLAYER_IDLE_FPS = 7;
@@ -750,6 +759,8 @@
           flarePickup: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_FLARE_PICKUP),
           powerCells: RECHARGED_ENTITY_SPRITE_POWERCELLS.map((src) => createRechargedSpriteImage(src)),
           lantern: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_LANTERN),
+          darkCreatureIdle: RECHARGED_ENTITY_SPRITE_DARK_CREATURE_IDLE.map((src) => createRechargedSpriteImage(src)),
+          fireflies: RECHARGED_ENTITY_SPRITE_FIREFLIES.map((src) => createRechargedSpriteImage(src)),
         };
       }
 
@@ -1218,6 +1229,68 @@
                 const drawX = centerX - drawW * 0.5;
                 const drawY = (entityRect.y + entityRect.h) - drawH;
                 ctx.drawImage(sprite, drawX, drawY, drawW, drawH);
+                renderedKnownEntityVisual = true;
+              }
+            } else if (entity.type === "dark_creature_01") {
+              // V1-like dark creature: bottom-aligned 2-frame idle loop.
+              const frames = Array.isArray(entityVisualState.darkCreatureIdle) ? entityVisualState.darkCreatureIdle : [];
+              const frameStepMs = 400;
+              const frameIndex = Math.floor((performance.now() % (frameStepMs * 2)) / frameStepMs);
+              const sprite = frames[frameIndex] || frames[0] || null;
+              if (sprite && sprite.complete) {
+                const drawW = entityRect.w;
+                const drawH = entityRect.h;
+                const drawX = entityRect.x + (entityRect.w - drawW) * 0.5;
+                const drawY = entityRect.y + entityRect.h - drawH;
+                ctx.drawImage(sprite, drawX, drawY, drawW, drawH);
+                renderedKnownEntityVisual = true;
+              }
+            } else if (entity.type === "hover_void_01") {
+              // V1-like hover void fallback body: soft orb with center core.
+              const centerX = entityRect.x + entityRect.w * 0.5;
+              const centerY = entityRect.y + entityRect.h * 0.5;
+              const radius = Math.max(entityRect.w, entityRect.h) * 0.55;
+              const outer = ctx.createRadialGradient(centerX, centerY, radius * 0.2, centerX, centerY, radius * 1.35);
+              outer.addColorStop(0, "rgba(104, 58, 170, 0.58)");
+              outer.addColorStop(0.55, "rgba(60, 30, 98, 0.78)");
+              outer.addColorStop(1, "rgba(16, 8, 34, 0)");
+              ctx.fillStyle = outer;
+              ctx.beginPath();
+              ctx.arc(centerX, centerY, radius * 1.35, 0, Math.PI * 2);
+              ctx.fill();
+              const core = ctx.createRadialGradient(centerX - radius * 0.25, centerY - radius * 0.25, radius * 0.12, centerX, centerY, radius);
+              core.addColorStop(0, "rgba(180, 130, 255, 0.56)");
+              core.addColorStop(0.42, "rgba(94, 52, 154, 0.86)");
+              core.addColorStop(1, "rgba(28, 14, 56, 0.95)");
+              ctx.fillStyle = core;
+              ctx.beginPath();
+              ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+              ctx.fill();
+              renderedKnownEntityVisual = true;
+            } else if (entity.type === "firefly_01") {
+              // V1-like firefly: tiny body sprite with warm light halo when lit.
+              const variants = Array.isArray(entityVisualState.fireflies) ? entityVisualState.fireflies : [];
+              const idKey = typeof entity.id === "string" ? entity.id : "";
+              let variantIndex = 0;
+              for (let index = 0; index < idKey.length; index += 1) {
+                variantIndex = (variantIndex + idKey.charCodeAt(index)) % Math.max(1, variants.length);
+              }
+              const sprite = variants[variantIndex] || variants[0] || null;
+              if (entity.illuminated === true) {
+                const centerX = entityRect.x + entityRect.w * 0.5;
+                const centerY = entityRect.y + entityRect.h * 0.5;
+                const glowRadius = Math.max(entityRect.w, entityRect.h) * 1.3;
+                const glow = ctx.createRadialGradient(centerX, centerY, 1, centerX, centerY, glowRadius);
+                glow.addColorStop(0, "rgba(255, 220, 140, 0.52)");
+                glow.addColorStop(0.45, "rgba(255, 195, 95, 0.26)");
+                glow.addColorStop(1, "rgba(255, 195, 95, 0)");
+                ctx.fillStyle = glow;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, glowRadius, 0, Math.PI * 2);
+                ctx.fill();
+              }
+              if (sprite && sprite.complete) {
+                ctx.drawImage(sprite, entityRect.x, entityRect.y, entityRect.w, entityRect.h);
                 renderedKnownEntityVisual = true;
               }
             }
