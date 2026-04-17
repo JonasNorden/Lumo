@@ -58,40 +58,41 @@ export function serializeLevelDocument(doc) {
   runtimeBackground.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   exportDoc.layers.background = runtimeBackground;
 
-  if (doc?.background?.base) {
+  const width = doc.dimensions?.width;
+  const height = doc.dimensions?.height;
+  const canExportBgTilemap = Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0;
+
+  if (canExportBgTilemap) {
     if (!exportDoc.layers) exportDoc.layers = {};
 
-    const width = doc.dimensions?.width;
-    const height = doc.dimensions?.height;
-    const baseData = Array.isArray(doc.background.base) ? [...doc.background.base] : [];
-    const placements = Array.isArray(doc?.background?.placements) ? doc.background.placements : [];
+    // `background.base` is lossy (sized placements collapse to anchor cells); placements are source of truth.
+    const bgData = new Array(width * height).fill(null);
 
-    // Flatten authored sized placements into the runtime tilemap.
-    // Placement `y` is the bottom anchor row (same semantics as backgroundLayer.js).
-    const canFlattenPlacements = Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0;
+    const baseData = Array.isArray(doc?.background?.base) ? doc.background.base : [];
+    const maxCells = Math.min(baseData.length, bgData.length);
+    for (let i = 0; i < maxCells; i += 1) {
+      bgData[i] = baseData[i];
+    }
+
+    const placements = Array.isArray(doc?.background?.placements) ? doc.background.placements : [];
     for (const placement of placements) {
-      if (!canFlattenPlacements) break;
       if (!placement?.materialId) continue;
       if (!Number.isInteger(placement?.x) || !Number.isInteger(placement?.y)) continue;
 
       const size = Number.isInteger(placement?.size) ? Math.max(1, placement.size) : 1;
-      const startX = placement.x;
-      const endX = placement.x + size - 1;
-      const startY = placement.y - (size - 1);
-      const endY = placement.y;
-
-      for (let y = startY; y <= endY; y += 1) {
-        if (y < 0 || y >= height) continue;
-        for (let x = startX; x <= endX; x += 1) {
-          if (x < 0 || x >= width) continue;
-          baseData[y * width + x] = placement.materialId;
+      for (let dx = 0; dx < size; dx += 1) {
+        for (let dy = 0; dy < size; dy += 1) {
+          const gridX = placement.x + dx;
+          const gridY = placement.y - dy;
+          if (gridX < 0 || gridX >= width || gridY < 0 || gridY >= height) continue;
+          bgData[gridY * width + gridX] = placement.materialId;
         }
       }
     }
 
     exportDoc.layers.bg = {
       type: "tilemap",
-      data: baseData,
+      data: bgData,
       width,
       height,
       tileSize: doc.dimensions?.tileSize,
