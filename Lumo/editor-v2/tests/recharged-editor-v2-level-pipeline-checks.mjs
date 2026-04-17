@@ -248,6 +248,62 @@ function runPulseTargetFilteringChecks() {
   console.log("editor v2 pulse target filtering ok");
 }
 
+function runDarkCreatureCastFallbackChecks() {
+  const source = loadEditorFixture();
+  source.entities = [
+    {
+      id: "enemy-dark-cast-fallback",
+      name: "Dark Creature",
+      type: "dark_creature_01",
+      x: 2,
+      y: 1,
+      visible: true,
+      params: {
+        hp: 3,
+        hitCooldown: 0.6,
+        safeDelay: 0.6,
+        patrolTiles: 0,
+        aggroTiles: 0,
+        castCooldown: 0.01,
+        energyLoss: 40,
+        knockbackX: 260,
+        knockbackY: -220,
+        reactsToFlares: true,
+      },
+    },
+  ];
+
+  const loaded = loadLevelDocument(source);
+  assert.equal(loaded.ok, true, "expected fixture to load successfully");
+
+  const session = createRuntimeGameSession({ levelDocument: loaded.level });
+  assert.equal(session.start().ok, true, "expected session start");
+
+  let snapshot = session.getPlayerSnapshot();
+  let castSource = snapshot.entities.find((entity) => entity.id === "enemy-dark-cast-fallback");
+  assert.ok(castSource, "expected dark creature in runtime snapshot");
+
+  const initialProjectileCount = Array.isArray(snapshot.darkProjectiles) ? snapshot.darkProjectiles.length : 0;
+  let observedCastActivity = false;
+  for (let tick = 0; tick < 60; tick += 1) {
+    session.tick({});
+    const tickSnapshot = session.getPlayerSnapshot();
+    const tickEntity = tickSnapshot.entities.find((entity) => entity.id === "enemy-dark-cast-fallback");
+    const tickProjectileCount = Array.isArray(tickSnapshot.darkProjectiles) ? tickSnapshot.darkProjectiles.length : 0;
+    if ((tickEntity?.castCooldownT ?? 0) > 0.1 || tickProjectileCount > initialProjectileCount) {
+      observedCastActivity = true;
+      break;
+    }
+  }
+
+  snapshot = session.getPlayerSnapshot();
+  castSource = snapshot.entities.find((entity) => entity.id === "enemy-dark-cast-fallback");
+  assert.ok(castSource, "expected dark creature to remain active");
+  assert.equal(observedCastActivity, true, "expected cast fallback config to trigger cast activity");
+
+  console.log("editor v2 dark creature cast fallback ok");
+}
+
 async function runRuntimeStartChecks() {
   await withPatchedFetch(async () => {
     const result = await startRuntimeFromLevelUrl(fixtureUrlPath, { steps: 0 });
@@ -352,6 +408,7 @@ runEditorFixtureConversionChecks();
 runEditorDecorConversionChecks();
 runEditorEntityRuntimePipelineChecks();
 runPulseTargetFilteringChecks();
+runDarkCreatureCastFallbackChecks();
 runMissingSpawnWarningChecks();
 await runRuntimeStartChecks();
 await runNoRespawnLoopOnValidSpawnChecks();
