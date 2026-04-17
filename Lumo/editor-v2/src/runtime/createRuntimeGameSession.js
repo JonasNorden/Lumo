@@ -95,10 +95,17 @@ function buildWorldSnapshot(worldState) {
     if (Array.isArray(bgPayload)) {
       return bgPayload.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry));
     }
-    if (bgPayload && typeof bgPayload === "object" && Array.isArray(bgPayload.data)) {
+    if (bgPayload && typeof bgPayload === "object") {
       return {
         ...bgPayload,
-        data: bgPayload.data.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry)),
+        data: Array.isArray(bgPayload.data)
+          ? bgPayload.data.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry))
+          : [],
+        placements: Array.isArray(bgPayload.placements)
+          ? bgPayload.placements
+            .map((placement) => (placement && typeof placement === "object" ? { ...placement } : placement))
+            .filter((placement) => placement && typeof placement === "object")
+          : [],
       };
     }
     return [];

@@ -18,6 +18,8 @@ function createBaseResult(overrides = {}) {
     worldId: "",
     themeId: "",
     decorItems: [],
+    background: [],
+    bg: [],
     playerStatus: "unknown",
     playerX: null,
     playerY: null,
@@ -241,6 +243,18 @@ export async function bootLumoRechargedFromQuery(options = {}) {
       themeId: typeof payload.themeId === "string" ? payload.themeId : "",
       supportTiles: Array.isArray(payload.supportTiles) ? payload.supportTiles : [],
       decorItems: Array.isArray(payload.decorItems) ? payload.decorItems : [],
+      background: Array.isArray(payload.background) ? payload.background : [],
+      bg: payload?.bg && typeof payload.bg === "object"
+        ? {
+            ...payload.bg,
+            data: Array.isArray(payload.bg.data) ? payload.bg.data.slice() : [],
+            placements: Array.isArray(payload.bg.placements)
+              ? payload.bg.placements
+                .map((placement) => (placement && typeof placement === "object" ? { ...placement } : placement))
+                .filter((placement) => placement && typeof placement === "object")
+              : [],
+          }
+        : [],
       playerStatus: typeof payload.playerStatus === "string" ? payload.playerStatus : "unknown",
       playerX: Number.isFinite(payload.playerX) ? payload.playerX : null,
       playerY: Number.isFinite(payload.playerY) ? payload.playerY : null,

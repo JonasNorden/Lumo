@@ -75,11 +75,19 @@ export function serializeLevelDocument(doc) {
     }
 
     const placements = Array.isArray(doc?.background?.placements) ? doc.background.placements : [];
+    const normalizedBgPlacements = [];
     for (const placement of placements) {
       if (!placement?.materialId) continue;
       if (!Number.isInteger(placement?.x) || !Number.isInteger(placement?.y)) continue;
 
       const size = Number.isInteger(placement?.size) ? Math.max(1, placement.size) : 1;
+      normalizedBgPlacements.push({
+        x: placement.x,
+        y: placement.y,
+        size,
+        materialId: placement.materialId,
+      });
+
       for (let dx = 0; dx < size; dx += 1) {
         for (let dy = 0; dy < size; dy += 1) {
           const gridX = placement.x + dx;
@@ -90,12 +98,14 @@ export function serializeLevelDocument(doc) {
       }
     }
 
+    // Preserve dense tilemap plus authored bottom-anchored sized placements.
     exportDoc.layers.bg = {
       type: "tilemap",
       data: bgData,
       width,
       height,
       tileSize: doc.dimensions?.tileSize,
+      ...(normalizedBgPlacements.length > 0 ? { placements: normalizedBgPlacements } : {}),
     };
   }
 
