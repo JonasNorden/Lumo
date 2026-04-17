@@ -19,6 +19,8 @@
       this.bgVisualOverrides = {};
       this._bgDefMap = null;
       this._bgImg = new Map();
+      this._backgroundMaterialDefMap = null;
+      this._authoredBackgroundMaterials = [];
       this._pfhBackgroundDiag = {
         loadLogged: false,
         drawLogged: false,
@@ -305,6 +307,12 @@
           ? Object.assign({}, levelObj.editor.bgVisualOverrides)
           : {};
       this._bgDefMap = null;
+      this._backgroundMaterialDefMap = null;
+      this._authoredBackgroundMaterials = (levelObj && levelObj.background && Array.isArray(levelObj.background.materials))
+        ? levelObj.background.materials.slice(0)
+        : (levelObj && levelObj.editor && levelObj.editor.background && Array.isArray(levelObj.editor.background.materials))
+          ? levelObj.editor.background.materials.slice(0)
+          : [];
       this._pfhBackgroundDiag = {
         loadLogged: false,
         drawLogged: false,
@@ -747,6 +755,54 @@
       return true;
     }
 
+    _ensureBackgroundMaterialCatalog(){
+      if (this._backgroundMaterialDefMap) return;
+
+      this._backgroundMaterialDefMap = new Map();
+      const authored = Array.isArray(this._authoredBackgroundMaterials)
+        ? this._authoredBackgroundMaterials
+        : [];
+      const runtimeCatalog = Array.isArray(window.LUMO_CATALOG_BG) ? window.LUMO_CATALOG_BG : [];
+
+      // Match editor semantics: authored materials should win over built-ins when ids collide.
+      const combined = runtimeCatalog.concat(authored);
+      for (const entry of combined){
+        const id = String(entry?.id || "").trim();
+        if (!id) continue;
+        this._backgroundMaterialDefMap.set(id, entry);
+        this._backgroundMaterialDefMap.set(id.toLowerCase(), entry);
+      }
+    }
+
+    _drawBackgroundMaterialFallback(ctx, materialDef, screenX, screenY, tileSize){
+      const drawW = Number.isFinite(Number(materialDef?.drawW))
+        ? Number(materialDef.drawW)
+        : Number.isFinite(Number(materialDef?.w))
+          ? Number(materialDef.w)
+          : tileSize;
+      const drawH = Number.isFinite(Number(materialDef?.drawH))
+        ? Number(materialDef.drawH)
+        : Number.isFinite(Number(materialDef?.h))
+          ? Number(materialDef.h)
+          : tileSize;
+      const drawOffX = Number.isFinite(Number(materialDef?.drawOffX)) ? Number(materialDef.drawOffX) : 0;
+      const drawOffY = Number.isFinite(Number(materialDef?.drawOffY)) ? Number(materialDef.drawOffY) : 0;
+      const drawAnchor = String(materialDef?.drawAnchor || materialDef?.anchor || "BL").toUpperCase();
+
+      const drawX = Math.floor(screenX + drawOffX);
+      const drawY = (drawAnchor === "TL")
+        ? Math.floor(screenY + drawOffY)
+        : Math.floor(screenY + tileSize - drawH + drawOffY);
+      const safeFill = (typeof materialDef?.fallbackColor === "string" && materialDef.fallbackColor.trim())
+        ? materialDef.fallbackColor.trim()
+        : "#5f6c82";
+
+      ctx.fillStyle = safeFill;
+      ctx.fillRect(drawX, drawY, Math.max(1, Math.round(drawW)), Math.max(1, Math.round(drawH)));
+      ctx.strokeStyle = "rgba(8, 12, 18, 0.45)";
+      ctx.strokeRect(drawX + 0.5, drawY + 0.5, Math.max(1, Math.round(drawW) - 1), Math.max(1, Math.round(drawH) - 1));
+    }
+
     _drawBGTilemapLayer(ctx, cam, x0, y0, x1, y1){
       const bg = this.layers && this.layers.bg;
       if (!bg || typeof bg !== "object") return;
@@ -766,7 +822,9 @@
         this._bgTilemapLogOnce = true;
       }
 
-      this._ensureTileCatalog();
+      // bg tilemap cells are background-material ids, not tile catalog ids.
+      // Resolve using background material metadata/image/fallback semantics.
+      this._ensureBackgroundMaterialCatalog();
 
       for (let ty = y0; ty <= y1; ty++){
         for (let tx = x0; tx <= x1; tx++){
@@ -774,38 +832,45 @@
           const rawId = bg.data[index];
           if (rawId == null || rawId === "") continue;
 
-          let drew = false;
-          const tileKey = String(rawId);
-          const tileDef = this._tileDefByCatalogId
-            ? (this._tileDefByCatalogId.get(tileKey) || this._tileDefByCatalogId.get(tileKey.toLowerCase()))
+          const materialKey = String(rawId);
+          const materialDef = this._backgroundMaterialDefMap
+            ? (this._backgroundMaterialDefMap.get(materialKey) || this._backgroundMaterialDefMap.get(materialKey.toLowerCase()))
             : null;
+          const fallbackMaterial = materialDef || { id: materialKey, label: materialKey, drawAnchor: "BL", fallbackColor: "#5f6c82" };
 
-          if (tileDef && tileDef.img){
-            let img = this._tileImg.get(tileDef.img);
+          const screenX = Math.round(tx * ts - cam.x);
+          const screenY = Math.round(ty * ts - cam.y);
+          const drawW = Number.isFinite(Number(fallbackMaterial?.drawW))
+            ? Number(fallbackMaterial.drawW)
+            : Number.isFinite(Number(fallbackMaterial?.w))
+              ? Number(fallbackMaterial.w)
+              : ts;
+          const drawH = Number.isFinite(Number(fallbackMaterial?.drawH))
+            ? Number(fallbackMaterial.drawH)
+            : Number.isFinite(Number(fallbackMaterial?.h))
+              ? Number(fallbackMaterial.h)
+              : ts;
+          const drawOffX = Number.isFinite(Number(fallbackMaterial?.drawOffX)) ? Number(fallbackMaterial.drawOffX) : 0;
+          const drawOffY = Number.isFinite(Number(fallbackMaterial?.drawOffY)) ? Number(fallbackMaterial.drawOffY) : 0;
+          const drawAnchor = String(fallbackMaterial?.drawAnchor || fallbackMaterial?.anchor || "BL").toUpperCase();
+          const drawX = Math.floor(screenX + drawOffX);
+          const drawY = (drawAnchor === "TL")
+            ? Math.floor(screenY + drawOffY)
+            : Math.floor(screenY + ts - drawH + drawOffY);
+
+          let img = null;
+          if (fallbackMaterial.img){
+            img = this._bgImg.get(fallbackMaterial.img);
             if (!img){
-              img = this._tryLoadImage(tileDef.img);
-              if (img) this._tileImg.set(tileDef.img, img);
-            }
-            if (img && img._ok){
-              ctx.drawImage(
-                img,
-                Math.round(tx * ts - cam.x),
-                Math.round(ty * ts - cam.y),
-                ts,
-                ts
-              );
-              drew = true;
+              img = this._tryLoadImage(fallbackMaterial.img);
+              if (img) this._bgImg.set(fallbackMaterial.img, img);
             }
           }
 
-          if (!drew){
-            ctx.fillStyle = "rgba(22, 28, 36, 0.42)";
-            ctx.fillRect(
-              Math.round(tx * ts - cam.x),
-              Math.round(ty * ts - cam.y),
-              ts,
-              ts
-            );
+          if (img && img._ok){
+            ctx.drawImage(img, drawX, drawY, Math.max(1, Math.round(drawW)), Math.max(1, Math.round(drawH)));
+          } else {
+            this._drawBackgroundMaterialFallback(ctx, fallbackMaterial, screenX, screenY, ts);
           }
         }
       }
