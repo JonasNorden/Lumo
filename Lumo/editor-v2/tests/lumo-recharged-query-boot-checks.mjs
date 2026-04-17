@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { bootLumoRechargedFromQuery } from "../src/runtime/bootLumoRechargedFromQuery.js";
+import { createLumoRechargedBootAdapter } from "../src/runtime/createLumoRechargedBootAdapter.js";
 
 function createStubAdapter(payloadOverrides = {}) {
   const payload = {
@@ -129,9 +130,66 @@ async function runInvalidSourceCheck() {
   console.log("query boot invalid handled");
 }
 
+async function runLiveValueQueryBootPathChecks() {
+  const liveValueFixture = {
+    identity: { id: "query-boot-live-values", formatVersion: "1.0.0", themeId: "test", name: "Live values" },
+    world: { width: 80, height: 20, tileSize: 24, spawn: { x: 120, y: 120 } },
+    layers: {
+      tiles: [],
+      background: [],
+      decor: [],
+      audio: [],
+      entities: [
+        { id: "dark-caster", type: "dark_creature_01", x: 280, y: 120, visible: true, params: { aggroTiles: 12 } },
+        { id: "hover-watch", type: "hover_void_01", x: 132, y: 120, visible: true, params: { aggroTiles: 6 } },
+      ],
+    },
+  };
+
+  let adapter = null;
+  const result = await bootLumoRechargedFromQuery({
+    search: "?recharged=1&autoplay=1&level=memory://query-boot-live-values",
+    loadLevelDocument() {
+      return Promise.resolve({ levelDocument: liveValueFixture });
+    },
+    createAdapter(options = {}) {
+      adapter = createLumoRechargedBootAdapter(options);
+      return adapter;
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.booted, true);
+  assert.ok(adapter && typeof adapter.getPlayerSnapshot === "function", "Expected live adapter from query boot path.");
+
+  let sawProjectile = false;
+  for (let index = 0; index < 180; index += 1) {
+    const tick = adapter.tick();
+    assert.equal(tick.ok, true, "Expected query-boot adapter tick to remain healthy.");
+    const snapshot = adapter.getPlayerSnapshot();
+    if (Array.isArray(snapshot?.darkProjectiles) && snapshot.darkProjectiles.length > 0) {
+      sawProjectile = true;
+      break;
+    }
+  }
+  assert.equal(sawProjectile, true, "Expected active dark casts to surface in adapter.getPlayerSnapshot().darkProjectiles.");
+
+  const snapshot = adapter.getPlayerSnapshot();
+  const hover = Array.isArray(snapshot?.entities) ? snapshot.entities.find((entity) => entity?.id === "hover-watch") : null;
+  assert.ok(hover, "Expected hover entity in query-boot live snapshot.");
+  assert.equal(typeof hover.awake, "boolean");
+  assert.equal(typeof hover.sleepBlend, "number");
+  assert.equal(typeof hover.eyeBlend, "number");
+  assert.equal(typeof hover._wakeHold, "number");
+  assert.equal(typeof hover._isFollowing, "boolean");
+
+  console.log("query boot live values ok");
+}
+
 await runLegacyModeCheck();
 await runDirectInjectedAdapterCheck();
 await runInjectedLoaderCheck();
 await runInvalidSourceCheck();
+await runLiveValueQueryBootPathChecks();
 
 console.log("lumo-recharged-query-boot-checks: ok");
