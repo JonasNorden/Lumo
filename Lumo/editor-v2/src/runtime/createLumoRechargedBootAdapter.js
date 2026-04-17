@@ -98,10 +98,17 @@ function buildWorldSnapshot(snapshot) {
   // Preserve bg in array or object-with-data form for downstream adapter snapshots.
   const bg = Array.isArray(source.bg)
     ? source.bg.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry))
-    : (source.bg && typeof source.bg === "object" && Array.isArray(source.bg.data)
+    : (source.bg && typeof source.bg === "object"
       ? {
           ...source.bg,
-          data: source.bg.data.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry)),
+          data: Array.isArray(source.bg.data)
+            ? source.bg.data.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry))
+            : [],
+          placements: Array.isArray(source.bg.placements)
+            ? source.bg.placements
+              .map((placement) => (placement && typeof placement === "object" ? { ...placement } : placement))
+              .filter((placement) => placement && typeof placement === "object")
+            : [],
         }
       : []);
 

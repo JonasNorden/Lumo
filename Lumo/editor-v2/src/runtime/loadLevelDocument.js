@@ -98,14 +98,8 @@ function convertEditorV2ToRecharged(editorLevel, warnings) {
     layers: {
       tiles: convertEditorTiles(editorLevel, width, height, warnings),
       background: convertEditorBackground(editorLevel),
-      // Preserve the painted Editor V2 background tilemap for runtime/world snapshot consumers.
-      bg: {
-        type: "tilemap",
-        data: Array.isArray(editorLevel?.background?.base) ? editorLevel.background.base : [],
-        width,
-        height,
-        tileSize,
-      },
+      // Preserve the painted Editor V2 background tilemap and authored sized placements.
+      bg: convertEditorBackgroundTilemap(editorLevel, width, height, tileSize),
       decor: convertEditorDecor(editorLevel),
       entities: convertEditorEntities(editorLevel),
       audio: convertEditorAudio(editorLevel),
@@ -116,6 +110,37 @@ function convertEditorV2ToRecharged(editorLevel, warnings) {
   };
 }
 
+
+function convertEditorBackgroundTilemap(editorLevel, width, height, tileSize) {
+  const layersBg = editorLevel?.layers?.bg;
+  const data = Array.isArray(layersBg?.data)
+    ? layersBg.data
+    : (Array.isArray(editorLevel?.background?.base) ? editorLevel.background.base : []);
+  const placementsSource = Array.isArray(layersBg?.placements)
+    ? layersBg.placements
+    : (Array.isArray(editorLevel?.background?.placements) ? editorLevel.background.placements : []);
+  const placements = placementsSource
+    .map((placement) => {
+      const x = Number.isFinite(placement?.x) ? Math.round(placement.x) : null;
+      const y = Number.isFinite(placement?.y) ? Math.round(placement.y) : null;
+      const materialId = typeof placement?.materialId === "string" ? placement.materialId : "";
+      const size = Number.isFinite(placement?.size) ? Math.max(1, Math.round(placement.size)) : 1;
+      if (!Number.isInteger(x) || !Number.isInteger(y) || !materialId) {
+        return null;
+      }
+      return { x, y, size, materialId };
+    })
+    .filter(Boolean);
+
+  return {
+    type: "tilemap",
+    data,
+    width,
+    height,
+    tileSize,
+    ...(placements.length > 0 ? { placements } : {}),
+  };
+}
 function resolveEditorSpawn(editorLevel, tileSize, warnings) {
   const safeTileSize = Number.isFinite(tileSize) && tileSize > 0 ? Math.round(tileSize) : DEFAULT_TILE_SIZE;
   const worldSpawnGrid = toEditorGridPosition(editorLevel?.world?.spawn);

@@ -971,23 +971,39 @@
         ctx.fillRect(playfieldRect.x, playfieldRect.y, playfieldRect.w, playfieldRect.h);
 
         // Recharged canvas lane order: backdrop -> bg tilemap -> support tiles -> decor -> entities -> player -> HUD.
-        // payload.bg is a dense world grid where each cell stores one background material id.
         const bg = payload?.bg;
         const bgData = Array.isArray(bg?.data) ? bg.data : null;
         const hasDenseBgTilemap = bg?.type === "tilemap"
           && Array.isArray(bgData)
           && bgData.length === (worldWidthRaw * worldHeightRaw);
-        if (hasDenseBgTilemap) {
+        const authoredBgPlacements = Array.isArray(bg?.placements)
+          ? bg.placements
+            .map((placement) => {
+              const x = Number.isFinite(placement?.x) ? Math.round(placement.x) : null;
+              const y = Number.isFinite(placement?.y) ? Math.round(placement.y) : null;
+              const size = Number.isFinite(placement?.size) ? Math.max(1, Math.round(placement.size)) : 1;
+              const materialId = typeof placement?.materialId === "string" ? placement.materialId : null;
+              if (!Number.isInteger(x) || !Number.isInteger(y) || !materialId) {
+                return null;
+              }
+              return { x, y, size, materialId };
+            })
+            .filter(Boolean)
+          : [];
+        if (state.rechargedBgPlacementSummaryLogged !== true) {
+          console.info("[Lumo Recharged] bg.placements", { has: authoredBgPlacements.length > 0, count: authoredBgPlacements.length });
+          state.rechargedBgPlacementSummaryLogged = true;
+        }
+
+        if (hasDenseBgTilemap || authoredBgPlacements.length > 0) {
           const bgVisualState = ensureRechargedBgVisualState(state);
           if (bgVisualState) {
-            if (state.rechargedBgPassLogged !== true) {
-              console.log("[RECHARGED BG CANVAS PASS]", { count: bgData.length });
-              state.rechargedBgPassLogged = true;
-            }
             const fallbackNeutralColor = "#64748b";
-            const handledBgCells = new Uint8Array(bgData.length);
-            let sizedBgPlacementCount = 0;
+            const handledBgCells = new Uint8Array(worldWidthRaw * worldHeightRaw);
             const drawBgMaterialRect = (materialId, leftX, topY, span) => {
+              if (leftX < 0 || topY < 0 || span <= 0 || leftX + span > worldWidthRaw || topY + span > worldHeightRaw) {
+                return;
+              }
               const material = bgVisualState.catalogById.get(materialId) || null;
               const worldRectX = leftX * worldUnitsToPx;
               const worldRectY = topY * worldUnitsToPx;
@@ -1019,88 +1035,36 @@
                 ctx.fillRect(drawRect.x, drawRect.y, drawRect.w, drawRect.h);
               }
             };
-            const isSquareRegionMaterialMatch = (materialId, leftX, bottomY, size) => {
-              const topY = bottomY - (size - 1);
-              if (leftX < 0 || topY < 0 || leftX + size > worldWidthRaw || bottomY >= worldHeightRaw) {
-                return false;
-              }
-              for (let dy = 0; dy < size; dy += 1) {
+            const markBgCellsHandled = (leftX, topY, span) => {
+              for (let dy = 0; dy < span; dy += 1) {
                 const row = topY + dy;
-                for (let dx = 0; dx < size; dx += 1) {
+                if (row < 0 || row >= worldHeightRaw) continue;
+                for (let dx = 0; dx < span; dx += 1) {
                   const col = leftX + dx;
-                  const index = row * worldWidthRaw + col;
-                  if (handledBgCells[index] === 1) return false;
-                  if (bgData[index] !== materialId) return false;
+                  if (col < 0 || col >= worldWidthRaw) continue;
+                  handledBgCells[(row * worldWidthRaw) + col] = 1;
                 }
               }
-              return true;
             };
-            const isSquareRegionIsolated = (materialId, leftX, bottomY, size) => {
-              const topY = bottomY - (size - 1);
-              for (let dy = 0; dy < size; dy += 1) {
-                const row = topY + dy;
-                const leftNeighborX = leftX - 1;
-                const rightNeighborX = leftX + size;
-                if (leftNeighborX >= 0) {
-                  const leftIndex = row * worldWidthRaw + leftNeighborX;
-                  if (bgData[leftIndex] === materialId) return false;
-                }
-                if (rightNeighborX < worldWidthRaw) {
-                  const rightIndex = row * worldWidthRaw + rightNeighborX;
-                  if (bgData[rightIndex] === materialId) return false;
-                }
-              }
-              const topNeighborY = topY - 1;
-              const bottomNeighborY = bottomY + 1;
-              for (let dx = 0; dx < size; dx += 1) {
-                const col = leftX + dx;
-                if (topNeighborY >= 0) {
-                  const topIndex = topNeighborY * worldWidthRaw + col;
-                  if (bgData[topIndex] === materialId) return false;
-                }
-                if (bottomNeighborY < worldHeightRaw) {
-                  const bottomIndex = bottomNeighborY * worldWidthRaw + col;
-                  if (bgData[bottomIndex] === materialId) return false;
-                }
-              }
-              return true;
-            };
-            for (let tileY = worldHeightRaw - 1; tileY >= 0; tileY -= 1) {
-              for (let tileX = 0; tileX < worldWidthRaw; tileX += 1) {
-                const index = tileY * worldWidthRaw + tileX;
-                if (handledBgCells[index] === 1) continue;
-                const materialId = typeof bgData[index] === "string" ? bgData[index] : null;
-                if (!materialId) continue;
-                let resolvedSize = 1;
-                // Collapse repeated bg cell regions into a single sized visual draw (1x1, 2x2, 3x3).
-                for (const candidateSize of [3, 2]) {
-                  if (!isSquareRegionMaterialMatch(materialId, tileX, tileY, candidateSize)) {
-                    continue;
-                  }
-                  if (!isSquareRegionIsolated(materialId, tileX, tileY, candidateSize)) {
-                    continue;
-                  }
-                  resolvedSize = candidateSize;
-                  break;
-                }
-                const topY = tileY - (resolvedSize - 1);
-                drawBgMaterialRect(materialId, tileX, topY, resolvedSize);
-                for (let dy = 0; dy < resolvedSize; dy += 1) {
-                  const row = topY + dy;
-                  for (let dx = 0; dx < resolvedSize; dx += 1) {
-                    const col = tileX + dx;
-                    const coveredIndex = row * worldWidthRaw + col;
-                    handledBgCells[coveredIndex] = 1;
-                  }
-                }
-                if (resolvedSize > 1) {
-                  sizedBgPlacementCount += 1;
-                }
-              }
+
+            // Author placements are source-of-truth for sized visuals; y remains bottom-anchored.
+            for (const placement of authoredBgPlacements) {
+              const topY = placement.y - (placement.size - 1);
+              drawBgMaterialRect(placement.materialId, placement.x, topY, placement.size);
+              markBgCellsHandled(placement.x, topY, placement.size);
             }
-            if (state.rechargedBgSizedPlacementLogDone !== true) {
-              console.log("[RECHARGED BG SIZED PLACEMENTS]", { detected: sizedBgPlacementCount });
-              state.rechargedBgSizedPlacementLogDone = true;
+
+            // Fallback draw for dense 1x1 cells not covered by authored placements.
+            if (hasDenseBgTilemap) {
+              for (let tileY = 0; tileY < worldHeightRaw; tileY += 1) {
+                for (let tileX = 0; tileX < worldWidthRaw; tileX += 1) {
+                  const index = tileY * worldWidthRaw + tileX;
+                  if (handledBgCells[index] === 1) continue;
+                  const materialId = typeof bgData[index] === "string" ? bgData[index] : null;
+                  if (!materialId) continue;
+                  drawBgMaterialRect(materialId, tileX, tileY, 1);
+                }
+              }
             }
           }
         }
