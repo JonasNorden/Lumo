@@ -84,6 +84,13 @@ function cloneState(state) {
           flares: Array.isArray(state?.playerState?.flares)
             ? state.playerState.flares.map((flare) => ({ ...flare }))
             : [],
+          // Preserve active dark projectile runtime values in cloned runner state.
+          darkProjectiles: Array.isArray(state?.playerState?.darkProjectiles)
+            ? state.playerState.darkProjectiles.map((projectile) => ({ ...projectile }))
+            : [],
+          nextDarkProjectileId: Number.isFinite(state?.playerState?.nextDarkProjectileId)
+            ? state.playerState.nextDarkProjectileId
+            : 1,
           flareStash: Number.isFinite(state?.playerState?.flareStash) ? state.playerState.flareStash : 1,
           entities: Array.isArray(state?.playerState?.entities)
             ? state.playerState.entities.map((entity) => ({ ...entity }))
