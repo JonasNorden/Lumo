@@ -985,17 +985,15 @@
               state.rechargedBgPassLogged = true;
             }
             const fallbackNeutralColor = "#64748b";
-            for (let index = 0; index < bgData.length; index += 1) {
-              const materialId = typeof bgData[index] === "string" ? bgData[index] : null;
-              if (!materialId) {
-                continue;
-              }
+            const handledBgCells = new Uint8Array(bgData.length);
+            let sizedBgPlacementCount = 0;
+            const drawBgMaterialRect = (materialId, leftX, topY, span) => {
               const material = bgVisualState.catalogById.get(materialId) || null;
-              const tileX = index % worldWidthRaw;
-              const tileY = Math.floor(index / worldWidthRaw);
-              const worldRectX = tileX * worldUnitsToPx;
-              const worldRectY = tileY * worldUnitsToPx;
-              const tileRect = mapper.worldToCanvasRect(worldRectX, worldRectY, worldUnitsToPx, worldUnitsToPx);
+              const worldRectX = leftX * worldUnitsToPx;
+              const worldRectY = topY * worldUnitsToPx;
+              const worldRectW = span * worldUnitsToPx;
+              const worldRectH = span * worldUnitsToPx;
+              const drawRect = mapper.worldToCanvasRect(worldRectX, worldRectY, worldRectW, worldRectH);
               const imageSrc = typeof material?.img === "string" ? material.img : null;
               let drewTileImage = false;
               if (imageSrc) {
@@ -1009,7 +1007,7 @@
                   bgVisualState.imageByKey.set(imageSrc, img);
                 }
                 if (img._ok === true) {
-                  ctx.drawImage(img, tileRect.x, tileRect.y, tileRect.w, tileRect.h);
+                  ctx.drawImage(img, drawRect.x, drawRect.y, drawRect.w, drawRect.h);
                   drewTileImage = true;
                 }
               }
@@ -1018,8 +1016,91 @@
                   ? material.fallbackColor
                   : fallbackNeutralColor;
                 ctx.fillStyle = fallbackColor;
-                ctx.fillRect(tileRect.x, tileRect.y, tileRect.w, tileRect.h);
+                ctx.fillRect(drawRect.x, drawRect.y, drawRect.w, drawRect.h);
               }
+            };
+            const isSquareRegionMaterialMatch = (materialId, leftX, bottomY, size) => {
+              const topY = bottomY - (size - 1);
+              if (leftX < 0 || topY < 0 || leftX + size > worldWidthRaw || bottomY >= worldHeightRaw) {
+                return false;
+              }
+              for (let dy = 0; dy < size; dy += 1) {
+                const row = topY + dy;
+                for (let dx = 0; dx < size; dx += 1) {
+                  const col = leftX + dx;
+                  const index = row * worldWidthRaw + col;
+                  if (handledBgCells[index] === 1) return false;
+                  if (bgData[index] !== materialId) return false;
+                }
+              }
+              return true;
+            };
+            const isSquareRegionIsolated = (materialId, leftX, bottomY, size) => {
+              const topY = bottomY - (size - 1);
+              for (let dy = 0; dy < size; dy += 1) {
+                const row = topY + dy;
+                const leftNeighborX = leftX - 1;
+                const rightNeighborX = leftX + size;
+                if (leftNeighborX >= 0) {
+                  const leftIndex = row * worldWidthRaw + leftNeighborX;
+                  if (bgData[leftIndex] === materialId) return false;
+                }
+                if (rightNeighborX < worldWidthRaw) {
+                  const rightIndex = row * worldWidthRaw + rightNeighborX;
+                  if (bgData[rightIndex] === materialId) return false;
+                }
+              }
+              const topNeighborY = topY - 1;
+              const bottomNeighborY = bottomY + 1;
+              for (let dx = 0; dx < size; dx += 1) {
+                const col = leftX + dx;
+                if (topNeighborY >= 0) {
+                  const topIndex = topNeighborY * worldWidthRaw + col;
+                  if (bgData[topIndex] === materialId) return false;
+                }
+                if (bottomNeighborY < worldHeightRaw) {
+                  const bottomIndex = bottomNeighborY * worldWidthRaw + col;
+                  if (bgData[bottomIndex] === materialId) return false;
+                }
+              }
+              return true;
+            };
+            for (let tileY = worldHeightRaw - 1; tileY >= 0; tileY -= 1) {
+              for (let tileX = 0; tileX < worldWidthRaw; tileX += 1) {
+                const index = tileY * worldWidthRaw + tileX;
+                if (handledBgCells[index] === 1) continue;
+                const materialId = typeof bgData[index] === "string" ? bgData[index] : null;
+                if (!materialId) continue;
+                let resolvedSize = 1;
+                // Collapse repeated bg cell regions into a single sized visual draw (1x1, 2x2, 3x3).
+                for (const candidateSize of [3, 2]) {
+                  if (!isSquareRegionMaterialMatch(materialId, tileX, tileY, candidateSize)) {
+                    continue;
+                  }
+                  if (!isSquareRegionIsolated(materialId, tileX, tileY, candidateSize)) {
+                    continue;
+                  }
+                  resolvedSize = candidateSize;
+                  break;
+                }
+                const topY = tileY - (resolvedSize - 1);
+                drawBgMaterialRect(materialId, tileX, topY, resolvedSize);
+                for (let dy = 0; dy < resolvedSize; dy += 1) {
+                  const row = topY + dy;
+                  for (let dx = 0; dx < resolvedSize; dx += 1) {
+                    const col = tileX + dx;
+                    const coveredIndex = row * worldWidthRaw + col;
+                    handledBgCells[coveredIndex] = 1;
+                  }
+                }
+                if (resolvedSize > 1) {
+                  sizedBgPlacementCount += 1;
+                }
+              }
+            }
+            if (state.rechargedBgSizedPlacementLogDone !== true) {
+              console.log("[RECHARGED BG SIZED PLACEMENTS]", { detected: sizedBgPlacementCount });
+              state.rechargedBgSizedPlacementLogDone = true;
             }
           }
         }
