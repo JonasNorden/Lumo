@@ -213,6 +213,7 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     }
     return value === true;
   };
+  const hasOwn = (key) => Object.prototype.hasOwnProperty.call(source || {}, key);
 
   const darkCreatureRuntimeState = isDarkCreature
     ? {
@@ -250,6 +251,15 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
       }
     : {};
 
+  // Preserve authored/runtime hover state fields when provided by source snapshots.
+  const hoverRuntimeState = {
+    ...(hasOwn("awake") && typeof source?.awake === "boolean" ? { awake: source.awake } : {}),
+    ...(hasOwn("sleepBlend") && Number.isFinite(Number(source?.sleepBlend)) ? { sleepBlend: Number(source.sleepBlend) } : {}),
+    ...(hasOwn("eyeBlend") && Number.isFinite(Number(source?.eyeBlend)) ? { eyeBlend: Number(source.eyeBlend) } : {}),
+    ...(hasOwn("_wakeHold") && Number.isFinite(Number(source?._wakeHold)) ? { _wakeHold: Number(source._wakeHold) } : {}),
+    ...(hasOwn("_isFollowing") && typeof source?._isFollowing === "boolean" ? { _isFollowing: source._isFollowing } : {}),
+  };
+
   return {
     id: typeof source.id === "string" && source.id.length > 0 ? source.id : `runtime-entity-${index + 1}`,
     type,
@@ -273,6 +283,7 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     amount: Number.isFinite(source?.amount) ? Math.max(1, Math.floor(source.amount)) : 1,
     params: params && typeof params === "object" ? { ...params } : {},
     ...darkCreatureRuntimeState,
+    ...hoverRuntimeState,
   };
 }
 
