@@ -50,6 +50,19 @@ export function serializeLevelDocument(doc) {
 
   runtimeBackground.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   exportDoc.layers.background = runtimeBackground;
+
+  if (doc?.background?.base && Array.isArray(doc.background.base)) {
+    if (!exportDoc.layers) exportDoc.layers = {};
+
+    exportDoc.layers.bg = {
+      type: "tilemap",
+      data: doc.background.base,
+      width: doc.dimensions?.width,
+      height: doc.dimensions?.height,
+      tileSize: doc.dimensions?.tileSize,
+    };
+  }
+
   return JSON.stringify(exportDoc, null, 2);
 }
 
