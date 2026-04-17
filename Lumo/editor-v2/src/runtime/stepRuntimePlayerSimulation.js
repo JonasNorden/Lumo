@@ -114,6 +114,7 @@ const ENTITY_DARK_CREATURE_PULSE_SCALE = 0.55;
 const ENTITY_HOVER_VOID_PULSE_SCALE = 0.6;
 const ENTITY_DARK_CREATURE_FLARE_CONSUME_BURN_MUL = 7.5;
 const PULSE_TARGET_TYPES = new Set(["dark_creature", "hover_void"]);
+const DEFAULT_DARK_PROJECTILE_MAX_AGE_SECONDS = 4;
 
 function resolvePulseTargetType(entityType) {
   if (typeof entityType !== "string") {
@@ -130,6 +131,10 @@ function resolvePulseTargetType(entityType) {
     return "hover_void";
   }
   return "";
+}
+
+function isDarkCreatureEntityType(entityType) {
+  return resolvePulseTargetType(entityType) === "dark_creature";
 }
 
 function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, worldHeight) {
@@ -173,6 +178,59 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
         ? (Number.isFinite(params?.maxHp) && params.maxHp > 0 ? Math.floor(params.maxHp) : 3)
         : (Number.isFinite(params?.hp) && params.hp > 0 ? Math.floor(params.hp) : 1);
   const hp = Number.isFinite(source?.hp) && source.hp >= 0 ? Math.floor(source.hp) : maxHp;
+  const normalizedType = String(type || "").trim().toLowerCase();
+  const isDarkCreature = normalizedType === "dark_creature_01";
+  const parseNumber = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+  const parseBool = (value, fallback = false) => {
+    if (value == null) {
+      return fallback;
+    }
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === "false" || normalized === "0" || normalized === "no") {
+        return false;
+      }
+      if (normalized === "true" || normalized === "1" || normalized === "yes") {
+        return true;
+      }
+    }
+    return value === true;
+  };
+
+  const darkCreatureRuntimeState = isDarkCreature
+    ? {
+        isDarkActive: parseBool(source?.isDarkActive, false),
+        _dangerT: parseNumber(source?._dangerT, 0),
+        _hitCd: parseNumber(source?._hitCd, 0),
+        _castCd: parseNumber(source?._castCd, 0),
+        _castChargeT: parseNumber(source?._castChargeT, 0),
+        _castTargetX: parseNumber(source?._castTargetX, 0),
+        _castTargetY: parseNumber(source?._castTargetY, 0),
+        _pulseHitId: Number.isFinite(source?._pulseHitId) ? Math.floor(source._pulseHitId) : -1,
+        reactsToFlares: parseBool(source?.reactsToFlares ?? params?.reactsToFlares, true),
+        hitCooldown: parseNumber(source?.hitCooldown ?? params?.hitCooldown, 0.6),
+        safeDelay: parseNumber(source?.safeDelay ?? params?.safeDelay, 0.6),
+        aggroTiles: parseNumber(source?.aggroTiles ?? params?.aggroTiles, 6),
+        aggroRadiusPx: Number.isFinite(Number(source?.aggroRadiusPx ?? params?.aggroRadius))
+          ? Number(source?.aggroRadiusPx ?? params?.aggroRadius)
+          : null,
+        energyLoss: parseNumber(source?.energyLoss ?? params?.energyLoss, 40),
+        knockbackX: parseNumber(source?.knockbackX ?? params?.knockbackX, 260),
+        knockbackY: parseNumber(source?.knockbackY ?? params?.knockbackY, -220),
+        bodyEnergyLoss: parseNumber(source?.bodyEnergyLoss ?? params?.bodyEnergyLoss ?? params?.energyLoss, 40),
+        bodyKnockbackX: parseNumber(source?.bodyKnockbackX ?? params?.bodyKnockbackX, 160),
+        bodyKnockbackY: parseNumber(source?.bodyKnockbackY ?? params?.bodyKnockbackY, -140),
+        castCooldown: parseNumber(source?.castCooldown ?? params?.castCooldown, 5.5),
+        castChargeTime: parseNumber(source?.castChargeTime ?? params?.castChargeTime, 0.5),
+        spellSpeedX: parseNumber(source?.spellSpeedX ?? params?.spellSpeedX, 190),
+        spellGravity: parseNumber(source?.spellGravity ?? params?.spellGravity, 760),
+        targetJitterPx: parseNumber(source?.targetJitterPx ?? params?.targetJitterPx, 3),
+        dying: parseBool(source?.dying, false),
+        dissolveT: parseNumber(source?.dissolveT, 0),
+        dissolveDur: parseNumber(source?.dissolveDur ?? params?.dissolveDur, 1.35),
+        _dissolveSpawnT: parseNumber(source?._dissolveSpawnT, 0),
+      }
+    : {};
 
   return {
     id: typeof source.id === "string" && source.id.length > 0 ? source.id : `runtime-entity-${index + 1}`,
@@ -196,6 +254,7 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     consumesFlare: source?.consumesFlare === true,
     amount: Number.isFinite(source?.amount) ? Math.max(1, Math.floor(source.amount)) : 1,
     params: params && typeof params === "object" ? { ...params } : {},
+    ...darkCreatureRuntimeState,
   };
 }
 
@@ -533,14 +592,228 @@ function stepPulseEntityInteractions(worldPacket, playerState, pulse, sourceEnti
     next.hitFlashTicks = ENTITY_HIT_FLASH_TICKS;
     next.state = next.hp <= 0 ? "defeated" : "hit";
     if (next.hp <= 0) {
-      next.alive = false;
-      next.active = false;
+      if (isDarkCreatureEntityType(next.type)) {
+        next.dying = true;
+        next.alive = true;
+        next.active = true;
+        next.dissolveT = 0;
+        next._dissolveSpawnT = 0;
+        next._hitCd = 999;
+        next._castCd = 999;
+        next._castChargeT = 0;
+        next.state = "dissolving";
+      } else {
+        next.alive = false;
+        next.active = false;
+      }
     }
     hits.push({ id: next.id, type: next.type, pulseId });
     return next;
   });
 
   return { entities: nextEntities, hits };
+}
+
+function normalizeDarkProjectiles(playerState = {}) {
+  if (!Array.isArray(playerState?.darkProjectiles)) {
+    return [];
+  }
+  return playerState.darkProjectiles
+    .map((projectile, index) => ({
+      id: Number.isFinite(projectile?.id) ? Math.floor(projectile.id) : index + 1,
+      x: Number.isFinite(projectile?.x) ? projectile.x : null,
+      y: Number.isFinite(projectile?.y) ? projectile.y : null,
+      vx: Number.isFinite(projectile?.vx) ? projectile.vx : 0,
+      vy: Number.isFinite(projectile?.vy) ? projectile.vy : 0,
+      gravity: Number.isFinite(projectile?.gravity) ? projectile.gravity : 760,
+      age: Number.isFinite(projectile?.age) ? projectile.age : 0,
+      maxAge: Number.isFinite(projectile?.maxAge) ? projectile.maxAge : DEFAULT_DARK_PROJECTILE_MAX_AGE_SECONDS,
+      energyLoss: Number.isFinite(projectile?.energyLoss) ? projectile.energyLoss : 40,
+      knockbackX: Number.isFinite(projectile?.knockbackX) ? projectile.knockbackX : 260,
+      knockbackY: Number.isFinite(projectile?.knockbackY) ? projectile.knockbackY : -220,
+    }))
+    .filter((projectile) => projectile.x != null && projectile.y != null && projectile.maxAge > 0);
+}
+
+function applyDarkCreatureDamageToPlayer(playerState, sourceCenterX, knockbackX, knockbackY, energyLoss) {
+  const sourceX = Number.isFinite(sourceCenterX) ? sourceCenterX : (Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0);
+  const playerCenterX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0;
+  const dir = Math.sign(playerCenterX - sourceX) || 1;
+  const resolvedKnockbackX = dir * (Number.isFinite(knockbackX) ? Math.abs(knockbackX) : 0);
+  const resolvedKnockbackY = Number.isFinite(knockbackY) ? knockbackY : 0;
+  const energyLossNormalized = Math.max(0, Number.isFinite(energyLoss) ? energyLoss : 0) / 100;
+
+  return {
+    ...playerState,
+    velocity: {
+      x: resolvedKnockbackX,
+      y: resolvedKnockbackY,
+    },
+    energy: Math.max(0, Math.min(1, (Number.isFinite(playerState?.energy) ? playerState.energy : 1) - energyLossNormalized)),
+  };
+}
+
+function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, options = {}) {
+  const dt = resolveRuntimeDeltaSeconds(options);
+  const entities = Array.isArray(sourceEntities) ? sourceEntities.map((entity) => ({ ...entity })) : [];
+  const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0 ? worldPacket.world.tileSize : 24;
+  const playerPosX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0;
+  const playerPosY = Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0;
+  const playerFootprint = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24;
+  const playerBounds = { x: playerPosX - playerFootprint * 0.5, y: playerPosY - playerFootprint, w: playerFootprint, h: playerFootprint };
+  const playerCenter = { x: playerBounds.x + playerBounds.w * 0.5, y: playerBounds.y + playerBounds.h * 0.5 };
+  let nextPlayer = { ...playerState };
+  const darkProjectiles = normalizeDarkProjectiles(playerState);
+  const spawnedProjectiles = [];
+  const steppedProjectiles = [];
+  let nextProjectileId = Number.isFinite(playerState?.nextDarkProjectileId) ? Math.max(1, Math.floor(playerState.nextDarkProjectileId)) : 1;
+
+  for (const entity of entities) {
+    if (!isDarkCreatureEntityType(entity?.type) || entity?.active !== true) {
+      continue;
+    }
+    const center = getEntityCenter(entity);
+    const aggroRadiusPx = Number.isFinite(entity?.aggroRadiusPx) && entity.aggroRadiusPx > 0
+      ? entity.aggroRadiusPx
+      : Math.max(0, (Number.isFinite(entity?.aggroTiles) ? entity.aggroTiles : 6) * tileSize);
+
+    if (entity.dying === true) {
+      entity.dissolveT = (Number.isFinite(entity?.dissolveT) ? entity.dissolveT : 0) + dt;
+      if (entity.dissolveT >= Math.max(0.001, Number.isFinite(entity?.dissolveDur) ? entity.dissolveDur : 1.35)) {
+        entity.alive = false;
+        entity.active = false;
+        entity.state = "defeated";
+      } else {
+        entity.state = "dissolving";
+      }
+      continue;
+    }
+
+    entity._hitCd = Math.max(0, Number.isFinite(entity?._hitCd) ? entity._hitCd - dt : 0);
+    entity._castCd = Math.max(0, Number.isFinite(entity?._castCd) ? entity._castCd - dt : 0);
+
+    // V1 lit/safe behavior: lit disables dark-active, then safeDelay grace when light ends.
+    const lit = entity?.reactsToFlares === false ? false : entity?.illuminated === true;
+    if (lit) {
+      entity.isDarkActive = false;
+      entity._dangerT = Number.isFinite(entity?.safeDelay) ? entity.safeDelay : 0.6;
+    } else if ((Number.isFinite(entity?._dangerT) ? entity._dangerT : 0) > 0) {
+      entity._dangerT = Math.max(0, entity._dangerT - dt);
+      entity.isDarkActive = false;
+    } else {
+      entity.isDarkActive = true;
+    }
+
+    // Keep stand-ground behavior: no chase/patrol movement.
+    const distanceToPlayer = Math.hypot(playerCenter.x - center.x, playerCenter.y - center.y);
+    const canCast = aggroRadiusPx > 0 && distanceToPlayer <= aggroRadiusPx;
+    if ((Number.isFinite(entity?._castChargeT) ? entity._castChargeT : 0) > 0) {
+      if (!canCast) {
+        entity._castChargeT = 0;
+      } else {
+        entity._castChargeT = Math.max(0, entity._castChargeT - dt);
+        entity.state = "casting-charge";
+        if (entity._castChargeT <= 0) {
+          const targetX = Number.isFinite(entity?._castTargetX) ? entity._castTargetX : playerCenter.x;
+          const targetY = Number.isFinite(entity?._castTargetY) ? entity._castTargetY : playerCenter.y;
+          const dx = targetX - center.x;
+          const dy = targetY - center.y;
+          const projectileSpeedX = Math.max(120, Math.abs(Number.isFinite(entity?.spellSpeedX) ? entity.spellSpeedX : 190));
+          const tFlight = Math.max(0.35, Math.min(1.2, distanceToPlayer / projectileSpeedX));
+          const vx = dx / Math.max(0.001, tFlight);
+          const gravity = Number.isFinite(entity?.spellGravity) ? entity.spellGravity : 760;
+          const vyRaw = (dy - (0.5 * gravity * tFlight * tFlight)) / Math.max(0.001, tFlight);
+          spawnedProjectiles.push({
+            id: nextProjectileId,
+            x: center.x - 6,
+            y: center.y - 10,
+            vx,
+            vy: Number.isFinite(vyRaw) ? vyRaw : -220,
+            gravity,
+            age: 0,
+            maxAge: DEFAULT_DARK_PROJECTILE_MAX_AGE_SECONDS,
+            energyLoss: Number.isFinite(entity?.energyLoss) ? entity.energyLoss : 40,
+            knockbackX: Number.isFinite(entity?.knockbackX) ? entity.knockbackX : 260,
+            knockbackY: Number.isFinite(entity?.knockbackY) ? entity.knockbackY : -220,
+            ownerId: entity.id,
+          });
+          nextProjectileId += 1;
+          entity._castCd = Math.max(0.1, Number.isFinite(entity?.castCooldown) ? entity.castCooldown : 5.5);
+          entity._castChargeT = 0;
+          entity.state = "casting";
+        }
+      }
+    } else if (canCast && entity._castCd <= 0) {
+      const jitter = Math.max(0, Number.isFinite(entity?.targetJitterPx) ? entity.targetJitterPx : 0);
+      entity._castTargetX = playerCenter.x + (Math.random() * 2 - 1) * jitter;
+      entity._castTargetY = playerCenter.y + (Math.random() * 2 - 1) * jitter;
+      entity._castChargeT = Math.max(0.05, Number.isFinite(entity?.castChargeTime) ? entity.castChargeTime : 0.5);
+      entity.state = "casting-charge";
+    }
+
+    // Body-contact damage always works independently of dark-active/casting state.
+    if (entity.active === true && entity.dying !== true && entity._hitCd <= 0) {
+      const creatureBounds = {
+        x: Number.isFinite(entity?.x) ? entity.x : 0,
+        y: Number.isFinite(entity?.y) ? entity.y : 0,
+        w: Number.isFinite(entity?.footprintW) ? entity.footprintW : (Number.isFinite(entity?.size) ? entity.size : 24),
+        h: Number.isFinite(entity?.footprintH) ? entity.footprintH : (Number.isFinite(entity?.size) ? entity.size : 24),
+      };
+      if (isAabbOverlap(playerBounds, creatureBounds)) {
+        entity._hitCd = Math.max(0.05, Number.isFinite(entity?.hitCooldown) ? entity.hitCooldown : 0.6);
+        nextPlayer = applyDarkCreatureDamageToPlayer(
+          nextPlayer,
+          center.x,
+          Number.isFinite(entity?.bodyKnockbackX) ? entity.bodyKnockbackX : 160,
+          Number.isFinite(entity?.bodyKnockbackY) ? entity.bodyKnockbackY : -140,
+          Number.isFinite(entity?.bodyEnergyLoss) ? entity.bodyEnergyLoss : 40,
+        );
+      }
+    }
+  }
+
+  // Step dark spell projectiles and apply direct-hit damage.
+  const worldWidthPx = resolveWorldDimensionPx(worldPacket?.world?.width, tileSize);
+  const worldHeightPx = resolveWorldDimensionPx(worldPacket?.world?.height, tileSize);
+  for (const projectile of [...darkProjectiles, ...spawnedProjectiles]) {
+    const nextProjectile = { ...projectile };
+    nextProjectile.vy += nextProjectile.gravity * dt;
+    nextProjectile.x += nextProjectile.vx * dt;
+    nextProjectile.y += nextProjectile.vy * dt;
+    nextProjectile.age += dt;
+    const projectileSize = 12;
+    const projectileBounds = {
+      x: nextProjectile.x,
+      y: nextProjectile.y,
+      w: projectileSize,
+      h: projectileSize,
+    };
+    const outsideWorld = Number.isFinite(worldWidthPx) && Number.isFinite(worldHeightPx)
+      ? (nextProjectile.x < -tileSize || nextProjectile.x > worldWidthPx + tileSize || nextProjectile.y < -tileSize || nextProjectile.y > worldHeightPx + tileSize)
+      : false;
+    const expired = nextProjectile.age >= Math.max(0.001, nextProjectile.maxAge);
+    if (outsideWorld || expired) {
+      continue;
+    }
+    if (isAabbOverlap(projectileBounds, playerBounds)) {
+      nextPlayer = applyDarkCreatureDamageToPlayer(
+        nextPlayer,
+        nextProjectile.x + projectileSize * 0.5,
+        nextProjectile.knockbackX,
+        nextProjectile.knockbackY,
+        nextProjectile.energyLoss,
+      );
+      continue;
+    }
+    steppedProjectiles.push(nextProjectile);
+  }
+
+  return {
+    entities,
+    player: nextPlayer,
+    darkProjectiles: steppedProjectiles,
+    nextDarkProjectileId: nextProjectileId,
+  };
 }
 
 function buildFlareLightSnapshot(flare) {
@@ -1161,6 +1434,24 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     options,
   );
   nextEnergy = powerCellRecharge.energy;
+  const darkCreatureStep = stepDarkCreatureRuntime(
+    worldPacket,
+    {
+      ...playerState,
+      position: resolvedPlayerStep.position,
+      velocity: resolvedPlayerStep.velocity,
+      pulse: pulseStep.pulse,
+      energy: nextEnergy,
+      darkProjectiles: playerState?.darkProjectiles,
+      nextDarkProjectileId: playerState?.nextDarkProjectileId,
+    },
+    entityStep.entities,
+    options,
+  );
+  const finalVelocity = darkCreatureStep?.player?.velocity && typeof darkCreatureStep.player.velocity === "object"
+    ? darkCreatureStep.player.velocity
+    : resolvedPlayerStep.velocity;
+  nextEnergy = Number.isFinite(darkCreatureStep?.player?.energy) ? darkCreatureStep.player.energy : nextEnergy;
   const status = resolvedPlayerStep.status;
   const finalPlayerState = {
     grounded: resolvedPlayerStep.grounded === true,
@@ -1178,7 +1469,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     ok: true,
     player: {
       position: resolvedPlayerStep.position,
-      velocity: resolvedPlayerStep.velocity,
+      velocity: finalVelocity,
       coyoteTimer: Number.isFinite(verticalInputState?.coyoteTimer) ? verticalInputState.coyoteTimer : 0,
       jumpBufferTimer: Number.isFinite(verticalInputState?.jumpBufferTimer) ? verticalInputState.jumpBufferTimer : 0,
       jumpHeldLastTick: verticalInputState?.jumpHeldLastTick === true,
@@ -1210,7 +1501,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       powerCellFill: powerCellRecharge.powerCellFill,
       facingX: flareStep.facingX,
       nextFlareId: flareStep.nextFlareId,
-      entities: entityStep.entities,
+      entities: darkCreatureStep.entities,
+      darkProjectiles: darkCreatureStep.darkProjectiles,
+      nextDarkProjectileId: darkCreatureStep.nextDarkProjectileId,
       status,
       brakeState,
     },
@@ -1218,7 +1511,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       moveX: intent.moveX,
       jump: intent.jump === true,
       locomotion: finalLocomotion,
-      velocityX: resolvedPlayerStep.velocity?.x ?? 0,
+      velocityX: finalVelocity?.x ?? 0,
       blockedLeft: horizontalStep.blockedLeft === true,
       blockedRight: horizontalStep.blockedRight === true,
       grounded: finalPlayerState.grounded,
@@ -1279,6 +1572,6 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         flareEntityAffects: flareEntityStep.flareAffects.length,
       },
     },
-    entities: entityStep.entities,
+    entities: darkCreatureStep.entities,
   };
 }

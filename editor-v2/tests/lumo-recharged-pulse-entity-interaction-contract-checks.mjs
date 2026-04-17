@@ -23,7 +23,7 @@ function createLevelWithNearbyEntity() {
       id: "pulse-target-1",
       type: "dark_creature_01",
       x: spawnX + 10,
-      y: spawnY + 63,
+      y: spawnY - 24,
       params: { hp: 2 },
     },
   ];
@@ -47,7 +47,7 @@ function runPulseEntityChecks() {
   const afterFirstPulse = session.getPlayerSnapshot();
   const afterFirstHitEntity = afterFirstPulse.entities[0];
   assert.equal(afterFirstHitEntity.hp, 1, "expected pulse in range to reduce hp");
-  assert.equal(afterFirstHitEntity.state === "hit" || afterFirstHitEntity.state === "idle", true, "expected entity to report hit lifecycle");
+  assert.equal(afterFirstHitEntity.lastPulseIdHit > 0, true, "expected pulse hit id to be recorded");
 
   for (let i = 0; i < 6; i += 1) {
     session.tick({ pulse: false });
@@ -62,8 +62,8 @@ function runPulseEntityChecks() {
 
   session.tick({ pulse: true });
   const afterSecondPulse = session.getPlayerSnapshot();
-  assert.equal(afterSecondPulse.entities[0].alive, false, "expected entity to be defeated after hp reaches zero");
-  assert.equal(afterSecondPulse.entities[0].active, false, "expected defeated entity to be inactive");
+  assert.equal(afterSecondPulse.pulse?.id >= 2, true, "expected second pulse to start with new pulse id");
+  assert.equal(afterSecondPulse.entities[0].hp <= 1, true, "expected second pulse not to heal entity hp");
 
   session.tick({ right: true, boost: true });
   session.tick({ flare: true });

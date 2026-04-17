@@ -45,6 +45,11 @@ function cloneSnapshotEntity(entity) {
     flareExposure: Number.isFinite(entity?.flareExposure) ? entity.flareExposure : 0,
     consumesFlare: entity?.consumesFlare === true,
     lastFlareIdHit: Number.isFinite(entity?.lastFlareIdHit) ? entity.lastFlareIdHit : -1,
+    isDarkActive: entity?.isDarkActive === true,
+    dying: entity?.dying === true,
+    dissolveT: Number.isFinite(entity?.dissolveT) ? entity.dissolveT : 0,
+    castChargeT: Number.isFinite(entity?._castChargeT) ? entity._castChargeT : 0,
+    castCooldownT: Number.isFinite(entity?._castCd) ? entity._castCd : 0,
     amount: Number.isFinite(entity?.amount) ? entity.amount : 1,
     // Keep full params object instead of flattening/dropping entity metadata.
     params: entity?.params && typeof entity.params === "object" ? clonePlainData(entity.params) : {},
@@ -87,6 +92,7 @@ function buildPlayerSnapshot(snapshot) {
         }
       : null,
     flares: Array.isArray(source.flares) ? source.flares.map((flare) => ({ ...flare })) : [],
+    darkProjectiles: Array.isArray(source.darkProjectiles) ? source.darkProjectiles.map((projectile) => ({ ...projectile })) : [],
     entities: Array.isArray(source.entities) ? source.entities.map((entity) => cloneSnapshotEntity(entity)) : [],
   };
 }
