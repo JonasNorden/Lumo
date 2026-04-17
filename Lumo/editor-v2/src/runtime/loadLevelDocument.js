@@ -98,6 +98,14 @@ function convertEditorV2ToRecharged(editorLevel, warnings) {
     layers: {
       tiles: convertEditorTiles(editorLevel, width, height, warnings),
       background: convertEditorBackground(editorLevel),
+      // Preserve the painted Editor V2 background tilemap for runtime/world snapshot consumers.
+      bg: {
+        type: "tilemap",
+        data: Array.isArray(editorLevel?.background?.base) ? editorLevel.background.base : [],
+        width,
+        height,
+        tileSize,
+      },
       decor: convertEditorDecor(editorLevel),
       entities: convertEditorEntities(editorLevel),
       audio: convertEditorAudio(editorLevel),
