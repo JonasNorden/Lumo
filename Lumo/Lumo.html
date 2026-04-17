@@ -732,6 +732,29 @@
       return state.rechargedDecorVisualState;
     }
 
+    function ensureRechargedBgVisualState(state) {
+      if (!state || typeof state !== "object") {
+        return null;
+      }
+
+      if (!state.rechargedBgVisualState || typeof state.rechargedBgVisualState !== "object") {
+        const catalogById = new Map();
+        const catalog = Array.isArray(window.LUMO_CATALOG_BG) ? window.LUMO_CATALOG_BG : [];
+        for (const entry of catalog) {
+          if (!entry || typeof entry !== "object") continue;
+          if (typeof entry.id === "string" && entry.id.length > 0) {
+            catalogById.set(entry.id, entry);
+          }
+        }
+        state.rechargedBgVisualState = {
+          catalogById,
+          imageByKey: new Map(),
+        };
+      }
+
+      return state.rechargedBgVisualState;
+    }
+
     // Mirrors V1 tile visual selection: tile id -> catalog entry image + draw metadata (no neighbor autotile pass).
     function drawRechargedTileV1Visual(ctx, mapper, state, supportTile, worldUnitsToPx, tileSize) {
       const visualState = ensureRechargedTileVisualState(state);
@@ -946,6 +969,60 @@
         const playfieldRect = mapper.worldToCanvasRect(0, 0, worldWidthPx, worldHeightPx);
         ctx.fillStyle = "rgba(15, 23, 42, 0.52)";
         ctx.fillRect(playfieldRect.x, playfieldRect.y, playfieldRect.w, playfieldRect.h);
+
+        // Recharged canvas lane order: backdrop -> bg tilemap -> support tiles -> decor -> entities -> player -> HUD.
+        // payload.bg is a dense world grid where each cell stores one background material id.
+        const bg = payload?.bg;
+        const bgData = Array.isArray(bg?.data) ? bg.data : null;
+        const hasDenseBgTilemap = bg?.type === "tilemap"
+          && Array.isArray(bgData)
+          && bgData.length === (worldWidthRaw * worldHeightRaw);
+        if (hasDenseBgTilemap) {
+          const bgVisualState = ensureRechargedBgVisualState(state);
+          if (bgVisualState) {
+            if (state.rechargedBgPassLogged !== true) {
+              console.log("[RECHARGED BG CANVAS PASS]", { count: bgData.length });
+              state.rechargedBgPassLogged = true;
+            }
+            const fallbackNeutralColor = "#64748b";
+            for (let index = 0; index < bgData.length; index += 1) {
+              const materialId = typeof bgData[index] === "string" ? bgData[index] : null;
+              if (!materialId) {
+                continue;
+              }
+              const material = bgVisualState.catalogById.get(materialId) || null;
+              const tileX = index % worldWidthRaw;
+              const tileY = Math.floor(index / worldWidthRaw);
+              const worldRectX = tileX * worldUnitsToPx;
+              const worldRectY = tileY * worldUnitsToPx;
+              const tileRect = mapper.worldToCanvasRect(worldRectX, worldRectY, worldUnitsToPx, worldUnitsToPx);
+              const imageSrc = typeof material?.img === "string" ? material.img : null;
+              let drewTileImage = false;
+              if (imageSrc) {
+                let img = bgVisualState.imageByKey.get(imageSrc);
+                if (!img) {
+                  img = new Image();
+                  img.src = imageSrc;
+                  img._ok = false;
+                  img.onload = () => { img._ok = true; };
+                  img.onerror = () => { img._ok = false; };
+                  bgVisualState.imageByKey.set(imageSrc, img);
+                }
+                if (img._ok === true) {
+                  ctx.drawImage(img, tileRect.x, tileRect.y, tileRect.w, tileRect.h);
+                  drewTileImage = true;
+                }
+              }
+              if (!drewTileImage) {
+                const fallbackColor = typeof material?.fallbackColor === "string" && material.fallbackColor.length > 0
+                  ? material.fallbackColor
+                  : fallbackNeutralColor;
+                ctx.fillStyle = fallbackColor;
+                ctx.fillRect(tileRect.x, tileRect.y, tileRect.w, tileRect.h);
+              }
+            }
+          }
+        }
 
         // Draw support tiles with V1 tile assets/placement rules first.
         for (const supportTile of supportTiles) {
