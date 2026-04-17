@@ -105,6 +105,9 @@ const DEFAULT_BOOST_ENERGY_DRAIN_PER_SECOND = 0.18;
 const DEFAULT_LANTERN_CHARGE_RATE_PER_SECOND = 0.12;
 const DEFAULT_LANTERN_RADIUS_PX = 170;
 const DEFAULT_LANTERN_STRENGTH = 0.85;
+const DEFAULT_LANTERN_FOOTPRINT_PX = 14;
+const DEFAULT_FLARE_PICKUP_FOOTPRINT_PX = 12;
+const DEFAULT_POWERCELL_FOOTPRINT_PX = 24;
 const DEFAULT_POWERCELL_FILL_DURATION_SECONDS = 1.6;
 const ENTITY_HIT_FLASH_TICKS = 6;
 const ENTITY_DARK_CREATURE_PULSE_SCALE = 0.55;
@@ -159,6 +162,8 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     : Number.isFinite(params?.drawW) && params.drawW > 0
       ? params.drawW
       : 24;
+  // Keep V1 gameplay footprint truth separate from visual draw size.
+  const footprint = resolveEntityFootprint(type, params, tileSize, size);
   const drawAnchor = String(source?.drawAnchor || params?.drawAnchor || "BL").trim().toUpperCase() === "TL" ? "TL" : "BL";
   const maxHp = Number.isFinite(source?.maxHp) && source.maxHp > 0
     ? Math.floor(source.maxHp)
@@ -173,8 +178,10 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     id: typeof source.id === "string" && source.id.length > 0 ? source.id : `runtime-entity-${index + 1}`,
     type,
     x,
-    y: looksTileBased && drawAnchor === "BL" ? y + (tileSize - size) : y,
+    y: looksTileBased && drawAnchor === "BL" ? y + (tileSize - footprint.h) : y,
     size,
+    footprintW: footprint.w,
+    footprintH: footprint.h,
     drawAnchor,
     hp,
     maxHp,
@@ -190,6 +197,29 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     amount: Number.isFinite(source?.amount) ? Math.max(1, Math.floor(source.amount)) : 1,
     params: params && typeof params === "object" ? { ...params } : {},
   };
+}
+
+function resolveEntityFootprint(entityType, params, tileSize, fallbackSize = 24) {
+  const paramsObj = params && typeof params === "object" ? params : {};
+  const authoredW = Number(paramsObj.footprintW);
+  const authoredH = Number(paramsObj.footprintH);
+  if (Number.isFinite(authoredW) && authoredW > 0 && Number.isFinite(authoredH) && authoredH > 0) {
+    return { w: authoredW, h: authoredH };
+  }
+
+  const normalizedType = String(entityType || "").trim().toLowerCase();
+  if (isLanternEntityType(normalizedType)) {
+    return { w: DEFAULT_LANTERN_FOOTPRINT_PX, h: DEFAULT_LANTERN_FOOTPRINT_PX };
+  }
+  if (isFlarePickupEntityType(normalizedType)) {
+    return { w: DEFAULT_FLARE_PICKUP_FOOTPRINT_PX, h: DEFAULT_FLARE_PICKUP_FOOTPRINT_PX };
+  }
+  if (isPowerCellEntityType(normalizedType)) {
+    const tileBasedFootprint = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : DEFAULT_POWERCELL_FOOTPRINT_PX;
+    return { w: tileBasedFootprint, h: tileBasedFootprint };
+  }
+  const fallback = Number.isFinite(fallbackSize) && fallbackSize > 0 ? fallbackSize : 24;
+  return { w: fallback, h: fallback };
 }
 
 function isFlarePickupEntityType(entityType) {
@@ -269,12 +299,17 @@ function stepPickupCollection(worldPacket, playerState, sourceEntities) {
       return next;
     }
 
-    const size = Number.isFinite(next?.size) && next.size > 0 ? next.size : Math.max(12, tileSize * 0.5);
+    const width = Number.isFinite(next?.footprintW) && next.footprintW > 0
+      ? next.footprintW
+      : Number.isFinite(next?.size) && next.size > 0 ? next.size : Math.max(12, tileSize * 0.5);
+    const height = Number.isFinite(next?.footprintH) && next.footprintH > 0
+      ? next.footprintH
+      : Number.isFinite(next?.size) && next.size > 0 ? next.size : Math.max(12, tileSize * 0.5);
     const entityBounds = {
       x: Number.isFinite(next?.x) ? next.x : 0,
       y: Number.isFinite(next?.y) ? next.y : 0,
-      w: size,
-      h: size,
+      w: width,
+      h: height,
     };
     if (!isAabbOverlap(playerBounds, entityBounds)) {
       return next;
@@ -373,12 +408,17 @@ function stepLanternAuraRecharge(playerState, sourceEntities, currentEnergy, opt
 }
 
 function getEntityCenter(entity) {
-  const size = Number.isFinite(entity?.size) && entity.size > 0 ? entity.size : 24;
+  const width = Number.isFinite(entity?.footprintW) && entity.footprintW > 0
+    ? entity.footprintW
+    : Number.isFinite(entity?.size) && entity.size > 0 ? entity.size : 24;
+  const height = Number.isFinite(entity?.footprintH) && entity.footprintH > 0
+    ? entity.footprintH
+    : Number.isFinite(entity?.size) && entity.size > 0 ? entity.size : 24;
   const x = Number.isFinite(entity?.x) ? entity.x : 0;
   const y = Number.isFinite(entity?.y) ? entity.y : 0;
   return {
-    x: x + size * 0.5,
-    y: y + size * 0.5,
+    x: x + width * 0.5,
+    y: y + height * 0.5,
   };
 }
 
