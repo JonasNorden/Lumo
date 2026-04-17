@@ -19,55 +19,36 @@ export function serializeLevelDocument(doc) {
   if (!exportDoc.layers) exportDoc.layers = {};
 
   const runtimeBackground = [];
-
-  const pushBackgroundId = (backgroundId) => {
-    if (typeof backgroundId !== "string") return;
-    const normalizedId = backgroundId.trim();
-    if (!normalizedId) return;
-
+  const tilemapBackgroundData = doc?.background?.base;
+  if (tilemapBackgroundData != null) {
     runtimeBackground.push({
-      backgroundId: normalizedId,
-      order: runtimeBackground.length,
-    });
-  };
-
-  const editorBackgroundLayer = exportDoc.layers?.background;
-  if (Array.isArray(editorBackgroundLayer)) {
-    editorBackgroundLayer.forEach((entry) => {
-      if (entry && typeof entry === "object") {
-        pushBackgroundId(entry.backgroundId ?? entry.id ?? entry.layerId ?? entry.themeId ?? entry.name);
-      } else {
-        pushBackgroundId(entry);
-      }
-    });
-  } else {
-    const backgroundCandidates = [
-      exportDoc.background,
-      exportDoc.editor?.background,
-      exportDoc.editor?.bg,
-    ];
-
-    backgroundCandidates.forEach((candidate) => {
-      if (Array.isArray(candidate)) {
-        candidate.forEach((entry) => {
-          if (entry && typeof entry === "object") {
-            pushBackgroundId(entry.backgroundId ?? entry.id ?? entry.layerId ?? entry.themeId ?? entry.name);
-          } else {
-            pushBackgroundId(entry);
-          }
-        });
-        return;
-      }
-
-      if (candidate && typeof candidate === "object") {
-        pushBackgroundId(candidate.backgroundId ?? candidate.id ?? candidate.layerId ?? candidate.themeId ?? candidate.name ?? candidate.active);
-        return;
-      }
-
-      pushBackgroundId(candidate);
+      backgroundId: "tilemap_background",
+      order: 0,
+      type: "tilemap",
+      data: tilemapBackgroundData,
     });
   }
 
+  const backgroundLayers = doc?.backgrounds?.layers;
+  if (Array.isArray(backgroundLayers)) {
+    backgroundLayers.forEach((layer, index) => {
+      if (!layer || typeof layer !== "object") return;
+
+      const nextEntry = {
+        backgroundId: layer.id,
+        order: Number.isFinite(layer.depth) ? layer.depth : index,
+        type: layer.type,
+      };
+
+      if (layer.color !== undefined) {
+        nextEntry.color = layer.color;
+      }
+
+      runtimeBackground.push(nextEntry);
+    });
+  }
+
+  runtimeBackground.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   exportDoc.layers.background = runtimeBackground;
   return JSON.stringify(exportDoc, null, 2);
 }
