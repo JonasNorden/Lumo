@@ -3,9 +3,24 @@ const DEFAULT_IDENTITY = { id: "", name: "", formatVersion: "", themeId: "" };
 const DEFAULT_META = { title: "", author: "", difficulty: "", tags: [] };
 const DEFAULT_WORLD = { width: 0, height: 0, tileSize: 0 };
 const DEFAULT_SPAWN = { x: 0, y: 0 };
-const DEFAULT_LAYERS = { tiles: [], background: [], decor: [], entities: [], audio: [] };
+const DEFAULT_LAYERS = { tiles: [], background: [], bg: [], decor: [], entities: [], audio: [] };
 const DEFAULT_TILE_BOUNDS = { count: 0, minX: 0, minY: 0, maxX: 0, maxY: 0 };
 const DEFAULT_TILE_MAP = { count: 0, keys: [], byKey: {} };
+
+function cloneBgLayer(bg) {
+  if (Array.isArray(bg)) {
+    return [...bg];
+  }
+
+  if (bg && typeof bg === "object" && Array.isArray(bg.data)) {
+    return {
+      ...bg,
+      data: [...bg.data],
+    };
+  }
+
+  return [...DEFAULT_LAYERS.bg];
+}
 
 // Builds a single runtime world packet from already computed runtime pieces.
 export function buildRuntimeWorldPacket(parts) {
@@ -40,6 +55,8 @@ export function buildRuntimeWorldPacket(parts) {
     background: Array.isArray(skeleton?.layers?.background)
       ? [...skeleton.layers.background]
       : [...DEFAULT_LAYERS.background],
+    // Preserve bg object/array payload through packetization without collapsing object form.
+    bg: cloneBgLayer(skeleton?.layers?.bg),
     decor: Array.isArray(skeleton?.layers?.decor)
       ? [...skeleton.layers.decor]
       : [...DEFAULT_LAYERS.decor],

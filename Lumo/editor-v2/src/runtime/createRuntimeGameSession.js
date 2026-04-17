@@ -91,6 +91,19 @@ function buildPlayerSnapshot(playerState) {
 
 // Builds a stable world snapshot shape from any runtime state input.
 function buildWorldSnapshot(worldState) {
+  function cloneBgPayload(bgPayload) {
+    if (Array.isArray(bgPayload)) {
+      return bgPayload.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry));
+    }
+    if (bgPayload && typeof bgPayload === "object" && Array.isArray(bgPayload.data)) {
+      return {
+        ...bgPayload,
+        data: bgPayload.data.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry)),
+      };
+    }
+    return [];
+  }
+
   const supportTiles = Array.isArray(worldState?.layers?.tiles)
     ? worldState.layers.tiles
       .map((tile) => ({
@@ -141,9 +154,8 @@ function buildWorldSnapshot(worldState) {
   const background = Array.isArray(worldState?.layers?.background)
     ? worldState.layers.background.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry))
     : [];
-  const bg = Array.isArray(worldState?.layers?.bg)
-    ? worldState.layers.bg.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry))
-    : [];
+  // Preserve bg in array or object-with-data form for downstream adapter snapshots.
+  const bg = cloneBgPayload(worldState?.layers?.bg);
 
   return {
     ok: worldState && typeof worldState === "object",

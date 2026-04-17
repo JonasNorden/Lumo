@@ -1,3 +1,18 @@
+function cloneBgLayer(bg) {
+  if (Array.isArray(bg)) {
+    return [...bg];
+  }
+
+  if (bg && typeof bg === "object" && Array.isArray(bg.data)) {
+    return {
+      ...bg,
+      data: [...bg.data],
+    };
+  }
+
+  return [];
+}
+
 // Builds a minimal runtime world shape from an already validated level.
 export function buildRuntimeWorldSkeleton(level) {
   // Keep identity explicit so the next pipeline step can track level ownership/version quickly.
@@ -30,6 +45,8 @@ export function buildRuntimeWorldSkeleton(level) {
   const layers = {
     tiles: Array.isArray(level?.layers?.tiles) ? level.layers.tiles : [],
     background: Array.isArray(level?.layers?.background) ? level.layers.background : [],
+    // Preserve bg object/array payload so runtime snapshots receive authored background grid data.
+    bg: cloneBgLayer(level?.layers?.bg),
     decor: Array.isArray(level?.layers?.decor) ? level.layers.decor : [],
     entities: Array.isArray(level?.layers?.entities) ? level.layers.entities : [],
     audio: Array.isArray(level?.layers?.audio) ? level.layers.audio : [],
