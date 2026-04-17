@@ -1290,7 +1290,12 @@
                 ctx.fill();
               }
               if (sprite && sprite.complete) {
-                ctx.drawImage(sprite, entityRect.x, entityRect.y, entityRect.w, entityRect.h);
+                // Render at true 1x1 footprint, centered on anchor, with hard 24x24 cap.
+                const baseSize = Math.min(entityRect.w, entityRect.h);
+                const drawSize = Math.min(24, Math.max(1, baseSize));
+                const drawX = entityRect.x + (entityRect.w * 0.5) - (drawSize * 0.5);
+                const drawY = entityRect.y + (entityRect.h * 0.5) - (drawSize * 0.5);
+                ctx.drawImage(sprite, drawX, drawY, drawSize, drawSize);
                 renderedKnownEntityVisual = true;
               }
             }
