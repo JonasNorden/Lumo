@@ -57,9 +57,12 @@ function buildWorldSnapshot(snapshot) {
       .sort((left, right) => (left.order - right.order) || left.decorId.localeCompare(right.decorId))
     : [];
 
-  // Carry runtime background payload through unchanged.
+  // Carry runtime background payloads through unchanged.
   const background = Array.isArray(source.background)
     ? source.background.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry))
+    : [];
+  const bg = Array.isArray(source.bg)
+    ? source.bg.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry))
     : [];
 
   return {
@@ -69,6 +72,7 @@ function buildWorldSnapshot(snapshot) {
     height: Number.isFinite(source.height) ? source.height : 0,
     tileSize: Number.isFinite(source.tileSize) ? source.tileSize : 0,
     background,
+    bg,
     supportTiles,
     decorItems,
   };
@@ -326,6 +330,7 @@ export function createRechargedLevelSourceRuntime(options = {}) {
         worldId: world.worldId,
         themeId: world.themeId,
         background: world.background,
+        bg: world.bg,
         decorItems: world.decorItems,
         playerStatus: player.locomotion,
         playerX: player.x,
@@ -438,6 +443,7 @@ export function createRechargedLevelSourceRuntime(options = {}) {
         worldId: world.worldId,
         themeId: world.themeId,
         background: world.background,
+        bg: world.bg,
         decorItems: world.decorItems,
         playerStatus: player.locomotion,
         playerX: player.x,

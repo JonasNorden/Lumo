@@ -137,9 +137,12 @@ function buildWorldSnapshot(worldState) {
       .sort((left, right) => (left.order - right.order) || left.decorId.localeCompare(right.decorId))
     : [];
 
-  // Carry runtime background payload through unchanged.
+  // Carry runtime background payloads through unchanged.
   const background = Array.isArray(worldState?.layers?.background)
     ? worldState.layers.background.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry))
+    : [];
+  const bg = Array.isArray(worldState?.layers?.bg)
+    ? worldState.layers.bg.map((entry) => (entry && typeof entry === "object" ? { ...entry } : entry))
     : [];
 
   return {
@@ -150,6 +153,7 @@ function buildWorldSnapshot(worldState) {
     height: Number.isFinite(worldState?.world?.height) ? worldState.world.height : 0,
     tileSize: Number.isFinite(worldState?.world?.tileSize) ? worldState.world.tileSize : 0,
     background,
+    bg,
     supportTiles,
     decorItems,
   };
