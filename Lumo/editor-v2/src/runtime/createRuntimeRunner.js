@@ -224,6 +224,12 @@ export function createRuntimeRunner(options = {}) {
         const playerResult = result.player && typeof result.player === "object" ? result.player : {};
         const hasDarkProjectiles = Object.prototype.hasOwnProperty.call(playerResult, "darkProjectiles");
         const hasNextDarkProjectileId = Object.prototype.hasOwnProperty.call(playerResult, "nextDarkProjectileId");
+        const previousDarkProjectiles = Array.isArray(runtimeState?.playerState?.darkProjectiles)
+          ? runtimeState.playerState.darkProjectiles.map((projectile) => ({ ...projectile }))
+          : [];
+        const previousNextDarkProjectileId = Number.isFinite(runtimeState?.playerState?.nextDarkProjectileId)
+          ? Math.max(1, Math.floor(runtimeState.playerState.nextDarkProjectileId))
+          : 1;
         runtimeState.playerState = {
           ...runtimeState.playerState,
           ...playerResult,
@@ -233,14 +239,14 @@ export function createRuntimeRunner(options = {}) {
                   ? playerResult.darkProjectiles.map((projectile) => ({ ...projectile }))
                   : []
               )
-            : runtimeState.playerState.darkProjectiles,
+            : previousDarkProjectiles,
           nextDarkProjectileId: hasNextDarkProjectileId
             ? (
                 Number.isFinite(playerResult.nextDarkProjectileId)
                   ? Math.max(1, Math.floor(playerResult.nextDarkProjectileId))
-                  : runtimeState.playerState.nextDarkProjectileId
+                  : previousNextDarkProjectileId
               )
-            : runtimeState.playerState.nextDarkProjectileId,
+            : previousNextDarkProjectileId,
         };
         runtimeState.entities = Array.isArray(result?.entities)
           ? result.entities.map((entity) => ({ ...entity }))

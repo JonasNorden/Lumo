@@ -820,6 +820,12 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
     nextProjectile.x += nextProjectile.vx * dt;
     nextProjectile.y += nextProjectile.vy * dt;
     nextProjectile.age += dt;
+    const spawnedThisTick = (Number.isFinite(projectile?.age) ? projectile.age : 0) <= 0;
+    if (spawnedThisTick) {
+      // Keep newly spawned projectiles alive for at least one returned tick.
+      steppedProjectiles.push(nextProjectile);
+      continue;
+    }
     const projectileSize = 12;
     const projectileBounds = {
       x: nextProjectile.x,
