@@ -46,6 +46,7 @@
     import { bootLumoRechargedFromQuery } from "./editor-v2/src/runtime/bootLumoRechargedFromQuery.js";
     import { createLumoRechargedBootAdapter } from "./editor-v2/src/runtime/createLumoRechargedBootAdapter.js";
     import { buildRechargedHudSnapshot } from "./editor-v2/src/runtime/buildRechargedHudSnapshot.js";
+    import { FIREFLY_AUDIO_PATH, syncFireflyAudioFrame } from "./editor-v2/src/runtime/fireflyAudioRuntime.js";
 
     const RECHARGED_FIXED_STEP_MS = 1000 / 60;
     const RECHARGED_MAX_CATCH_UP_STEPS = 6;
@@ -388,6 +389,106 @@
       if (state && typeof state === "object") {
         state.lastHudUpdateAtMs = nowMs;
       }
+    }
+
+    function createRechargedFireflyAudioState() {
+      return {
+        keyByEntityId: new Map(),
+        handlesByKey: new Map(),
+        nextFireflyAudioId: 1,
+        bridge: null,
+      };
+    }
+
+    function ensureRechargedFireflyAudioState(state) {
+      if (!state || typeof state !== "object") {
+        return createRechargedFireflyAudioState();
+      }
+      if (!state.rechargedFireflyAudio || typeof state.rechargedFireflyAudio !== "object") {
+        state.rechargedFireflyAudio = createRechargedFireflyAudioState();
+      }
+      return state.rechargedFireflyAudio;
+    }
+
+    function createRechargedFireflyAudioBridge() {
+      const entitiesProto = window?.Lumo?.Entities?.prototype;
+      if (!entitiesProto) return null;
+      if (
+        typeof entitiesProto._getSoundHandle !== "function"
+        || typeof entitiesProto._setHandleVolume !== "function"
+        || typeof entitiesProto._setHandlePan !== "function"
+        || typeof entitiesProto._ensureSpatialHandle !== "function"
+        || typeof entitiesProto._getSfxVolume !== "function"
+      ) {
+        return null;
+      }
+      return {
+        _soundHandles: new Map(),
+        _sfxSpatialCtx: null,
+        _getSfxVolume(...args) {
+          return entitiesProto._getSfxVolume.apply(this, args);
+        },
+        getHandle(path, loop, key) {
+          return entitiesProto._getSoundHandle.call(this, path, loop, key);
+        },
+        setVolume(handle, volume) {
+          entitiesProto._setHandleVolume.call(this, handle, volume);
+        },
+        setPan(handle, pan) {
+          entitiesProto._setHandlePan.call(this, handle, pan);
+        },
+        ensureSpatial(handle) {
+          entitiesProto._ensureSpatialHandle.call(this, handle);
+        },
+      };
+    }
+
+    function syncRechargedFireflyAudio(payload, state) {
+      if (!payload || !state) return;
+      const entities = readRechargedEntitySnapshots(payload, state);
+      const fireflyAudioState = ensureRechargedFireflyAudioState(state);
+      if (!fireflyAudioState.bridge) {
+        fireflyAudioState.bridge = createRechargedFireflyAudioBridge();
+      }
+      const bridge = fireflyAudioState.bridge;
+      if (!bridge) return;
+      const playerSnapshot = state.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object"
+        ? state.currentPlayerSnapshot
+        : (payload?.player && typeof payload.player === "object" ? payload.player : null);
+      const tileSize = Number.isFinite(payload?.tileSize) ? payload.tileSize : 24;
+      syncFireflyAudioFrame({
+        entities,
+        playerSnapshot,
+        tileSize,
+        ensureAudioKey(entity) {
+          const entityId = typeof entity?.id === "string" ? entity.id : "";
+          if (!entityId) return "";
+          const known = fireflyAudioState.keyByEntityId.get(entityId);
+          if (known) return known;
+          const next = `firefly-${fireflyAudioState.nextFireflyAudioId++}`;
+          fireflyAudioState.keyByEntityId.set(entityId, next);
+          return next;
+        },
+        ensureHandle(key) {
+          const existing = fireflyAudioState.handlesByKey.get(key);
+          if (existing) return existing;
+          const handle = bridge.getHandle(FIREFLY_AUDIO_PATH, true, key);
+          bridge.ensureSpatial(handle);
+          fireflyAudioState.handlesByKey.set(key, handle);
+          return handle;
+        },
+        setPan(handle, pan) {
+          bridge.setPan(handle, pan);
+        },
+        setVolume(handle, targetVolume) {
+          bridge.setVolume(handle, targetVolume);
+        },
+        visitKnownHandles(visitor) {
+          for (const [key, handle] of fireflyAudioState.handlesByKey.entries()) {
+            visitor(key, handle);
+          }
+        },
+      });
     }
 
     function tickLiveRechargedAdapter(state) {
@@ -1847,6 +1948,7 @@
           state.frameCount = Number.isFinite(state.frameCount) ? state.frameCount + 1 : 1;
           tickLiveRechargedAdapter(state);
           const payload = readLatestRechargedBootPayload() || {};
+          syncRechargedFireflyAudio(payload, state);
           updateRechargedHudOverlay(state?.hud, payload, state);
           renderRechargedCanvasFrame(canvas, state);
         } catch (_error) {
