@@ -89,6 +89,51 @@ function runCastChargeProjectileChecks() {
   assert.equal(spawnedProjectile, true, "expected charged cast to spawn a dark spell projectile");
 }
 
+function runSameTickProjectileSurvivalChecks() {
+  const level = loadFixtureLevelDocument();
+  const spawnX = Number.isFinite(level?.world?.spawn?.x) ? level.world.spawn.x : 64;
+  const spawnY = Number.isFinite(level?.world?.spawn?.y) ? level.world.spawn.y : 256;
+  const { session } = createSessionWithEntities([
+    {
+      id: "dark-same-tick",
+      type: "dark_creature_01",
+      x: spawnX + 40,
+      y: spawnY - 24,
+      params: {
+        hp: 3,
+        aggroTiles: 12,
+        castCooldown: 0,
+        castChargeTime: 0.05,
+        targetJitterPx: 0,
+        spellSpeedX: 180,
+        spellGravity: 760,
+      },
+    },
+  ]);
+
+  session.tick({});
+
+  let firstSpawnedProjectile = null;
+  for (let i = 0; i < 40 && !firstSpawnedProjectile; i += 1) {
+    session.tick({});
+    const snapshot = session.getPlayerSnapshot();
+    if (Array.isArray(snapshot.darkProjectiles) && snapshot.darkProjectiles.length > 0) {
+      firstSpawnedProjectile = snapshot.darkProjectiles[0];
+    }
+  }
+
+  assert.ok(firstSpawnedProjectile, "expected dark creature to spawn at least one projectile");
+  assert.equal(firstSpawnedProjectile.age, 0, "expected freshly spawned projectile age to be 0 on spawn tick");
+
+  const spawnedProjectileId = firstSpawnedProjectile.id;
+  session.tick({});
+  const oneTickLaterSnapshot = session.getPlayerSnapshot();
+  const oneTickLaterProjectile = oneTickLaterSnapshot.darkProjectiles.find((projectile) => projectile.id === spawnedProjectileId);
+
+  assert.ok(oneTickLaterProjectile, "expected spawned projectile to survive into next tick");
+  assert.equal(oneTickLaterProjectile.age > 0, true, "expected spawned projectile to start aging after surviving spawn tick");
+}
+
 function runBodyContactDamageChecks() {
   const level = loadFixtureLevelDocument();
   const spawnX = Number.isFinite(level?.world?.spawn?.x) ? level.world.spawn.x : 64;
@@ -149,6 +194,7 @@ function runSafeDelayStateChecks() {
 
 runPulseDissolveChecks();
 runCastChargeProjectileChecks();
+runSameTickProjectileSurvivalChecks();
 runBodyContactDamageChecks();
 runSafeDelayStateChecks();
 console.log("recharged dark creature runtime checks ok");
