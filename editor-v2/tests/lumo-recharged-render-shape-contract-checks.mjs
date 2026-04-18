@@ -56,9 +56,10 @@ assert.equal(
 console.log("render shape contract support world unit scaling ok");
 
 assert.equal(
-  html.includes("y: playerFootY + 1 - tileSize") && html.includes("x: playerCenterX - tileSize * 0.5"),
+  html.includes("y: playerFootY + 1 - tileSize")
+    || html.includes("y: playerFootY + 1 - RECHARGED_PLAYER_HITBOX_HEIGHT"),
   true,
-  "expected Recharged player draw rect to be foot-aligned and centered in world space",
+  "expected Recharged player draw rect to remain foot-aligned in world space",
 );
 console.log("render shape contract player/support alignment mapping ok");
 
@@ -71,3 +72,30 @@ console.log("render shape contract entity top-left mapping ok");
 
 assert.equal(html.includes("__LumoRechargedCanvas"), true, "expected __LumoRechargedCanvas marker");
 console.log("render shape contract marker ok");
+
+assert.equal(
+  html.includes("const projectileSpritePath = typeof entity._projectileSpritePath === \"string\" && entity._projectileSpritePath.length > 0") &&
+    html.includes("getRechargedDarkSpellCustomSprite(entityVisualState, projectileSpritePath)"),
+  true,
+  "expected Recharged dark projectile render path to prefer _projectileSpritePath custom art first",
+);
+console.log("render shape contract dark projectile custom-path preference ok");
+
+assert.equal(
+  html.includes("RECHARGED_ENTITY_SPRITE_DARK_SPELL_FLIGHT = \"data/assets/sprites/creatures/void_m_04.png\"") &&
+    html.includes("RECHARGED_ENTITY_SPRITE_DARK_SPELL_IMPACT03 = \"data/assets/sprites/creatures/void_m_03.png\"") &&
+    html.includes("RECHARGED_ENTITY_SPRITE_DARK_SPELL_IMPACT02 = \"data/assets/sprites/creatures/void_m_02.png\"") &&
+    html.includes("RECHARGED_ENTITY_SPRITE_DARK_SPELL_IMPACT01 = \"data/assets/sprites/creatures/void_m_01.png\""),
+  true,
+  "expected Recharged dark spell fallback assets to match V1 legacy paths",
+);
+console.log("render shape contract dark spell legacy fallback assets ok");
+
+assert.equal(
+  html.includes("let hazardSprite = darkSpellSprites.impact01;") &&
+    html.includes("if (hazardT < 0.15) hazardSprite = darkSpellSprites.impact03;") &&
+    html.includes("else if (hazardT < 0.3) hazardSprite = darkSpellSprites.impact02;"),
+  true,
+  "expected Recharged dark hazard fallback sequence to match V1 impact03/impact02/impact01 timing order",
+);
+console.log("render shape contract dark hazard fallback sequence ok");

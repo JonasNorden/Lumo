@@ -742,6 +742,9 @@ function normalizeDarkProjectiles(playerState = {}) {
       energyLoss: Number.isFinite(projectile?.energyLoss) ? projectile.energyLoss : 40,
       knockbackX: Number.isFinite(projectile?.knockbackX) ? projectile.knockbackX : 260,
       knockbackY: Number.isFinite(projectile?.knockbackY) ? projectile.knockbackY : -220,
+      _projectileSpritePath: typeof projectile?._projectileSpritePath === "string"
+        ? projectile._projectileSpritePath
+        : (typeof projectile?.projectileSpritePath === "string" ? projectile.projectileSpritePath : ""),
       impacted: projectile?.impacted === true,
     }))
     .filter((projectile) => projectile.x != null && projectile.y != null && projectile.maxAge > 0);
@@ -1134,6 +1137,11 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
             energyLoss: Number.isFinite(entity?.energyLoss) ? entity.energyLoss : 40,
             knockbackX: Number.isFinite(entity?.knockbackX) ? entity.knockbackX : 260,
             knockbackY: Number.isFinite(entity?.knockbackY) ? entity.knockbackY : -220,
+            _projectileSpritePath: typeof entity?._darkCreatureProjectileSpritePath === "string"
+              ? entity._darkCreatureProjectileSpritePath
+              : (typeof entity?.projectileSpritePath === "string"
+                ? entity.projectileSpritePath
+                : (typeof entity?.params?.projectileSpritePath === "string" ? entity.params.projectileSpritePath : "")),
             ownerId: entity.id,
           });
           nextProjectileId += 1;

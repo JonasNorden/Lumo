@@ -82,6 +82,10 @@
       "data/assets/sprites/lights/firefly_02.png",
       "data/assets/sprites/lights/firefly_03.png",
     ];
+    const RECHARGED_ENTITY_SPRITE_DARK_SPELL_FLIGHT = "data/assets/sprites/creatures/void_m_04.png";
+    const RECHARGED_ENTITY_SPRITE_DARK_SPELL_IMPACT03 = "data/assets/sprites/creatures/void_m_03.png";
+    const RECHARGED_ENTITY_SPRITE_DARK_SPELL_IMPACT02 = "data/assets/sprites/creatures/void_m_02.png";
+    const RECHARGED_ENTITY_SPRITE_DARK_SPELL_IMPACT01 = "data/assets/sprites/creatures/void_m_01.png";
     const RECHARGED_PLAYER_HORIZONTAL_SPEED_EPSILON = 0.05;
     const RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON = 0.05;
     const RECHARGED_PLAYER_IDLE_FPS = 7;
@@ -766,8 +770,10 @@
                 t: Number.isFinite(point?.t) ? point.t : 0,
               }))
               : [],
+            t: Number.isFinite(entity?.t) ? entity.t : 0,
             // Preserve runtime entity params for future Recharged behavior restoration.
             params: entity?.params && typeof entity.params === "object" ? cloneParams(entity.params) : {},
+            _projectileSpritePath: typeof entity?._projectileSpritePath === "string" ? entity._projectileSpritePath : "",
             projectileSpritePath: typeof entity?._projectileSpritePath === "string" ? entity._projectileSpritePath : "",
           }))
           .filter((entity) => entity.x !== null && entity.y !== null && entity.active === true);
@@ -890,9 +896,9 @@
       const sEye = hoverVoidEyeBaselineBody / 16;
       const largeR = 2.8 * sEye * 0.75;
       const smallR = 1.9 * sEye * 0.75;
-      const largeX = centerX - (7 * sEye) * facingX + (3 * facingX);
+      const largeX = centerX - (7 * sEye) * facingX + (1.5 * facingX);
       const largeY = centerY - (6 * sEye);
-      const smallX = centerX + (6 * sEye) * facingX - (3 * facingX);
+      const smallX = centerX + (6 * sEye) * facingX - (1.5 * facingX);
       const smallY = centerY - (4 * sEye);
       const eyeAlpha = Math.max(0, Math.min(1, eyeBlend * Math.max(0, Math.min(1, alphaMul))));
       if (eyeAlpha <= 0.001) {
@@ -1007,10 +1013,29 @@
           lantern: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_LANTERN),
           darkCreatureIdle: RECHARGED_ENTITY_SPRITE_DARK_CREATURE_IDLE.map((src) => createRechargedSpriteImage(src)),
           fireflies: RECHARGED_ENTITY_SPRITE_FIREFLIES.map((src) => createRechargedSpriteImage(src)),
+          darkSpell: {
+            flight: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_DARK_SPELL_FLIGHT),
+            impact03: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_DARK_SPELL_IMPACT03),
+            impact02: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_DARK_SPELL_IMPACT02),
+            impact01: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_DARK_SPELL_IMPACT01),
+          },
+          darkSpellByPath: new Map(),
         };
       }
 
       return state.rechargedEntityVisualState;
+    }
+
+    function getRechargedDarkSpellCustomSprite(entityVisualState, projectileSpritePath) {
+      if (!entityVisualState || typeof projectileSpritePath !== "string" || projectileSpritePath.length <= 0) {
+        return null;
+      }
+      let image = entityVisualState.darkSpellByPath.get(projectileSpritePath);
+      if (!image) {
+        image = createRechargedSpriteImage(projectileSpritePath);
+        entityVisualState.darkSpellByPath.set(projectileSpritePath, image);
+      }
+      return image.complete ? image : null;
     }
 
     function ensureRechargedBgVisualState(state) {
@@ -1520,40 +1545,65 @@
               }
               renderedKnownEntityVisual = true;
             } else if (entity.type === "darkSpellProjectile" || entity.type === "dark_spell_projectile") {
-              // Match V1 fallback visibility: render projectile even when sprite assets are unavailable.
+              // Match V1 dark spell contract: custom sprite-path first, then legacy flight fallback.
               const centerX = entityRect.x + entityRect.w * 0.5;
               const centerY = entityRect.y + entityRect.h * 0.5;
               const drawSize = Math.max(entityRect.w, entityRect.h) * 1.8;
+              const projectileSpritePath = typeof entity._projectileSpritePath === "string" && entity._projectileSpritePath.length > 0
+                ? entity._projectileSpritePath
+                : (typeof entity.projectileSpritePath === "string" ? entity.projectileSpritePath : "");
+              const customProjectileSprite = getRechargedDarkSpellCustomSprite(entityVisualState, projectileSpritePath);
+              const legacyFlightSprite = entityVisualState.darkSpell?.flight;
+              const projectileSprite = customProjectileSprite || (legacyFlightSprite && legacyFlightSprite.complete ? legacyFlightSprite : null);
               ctx.save();
               ctx.translate(centerX, centerY);
               ctx.rotate(Number.isFinite(entity.rot) ? entity.rot : 0);
-              const glow = ctx.createRadialGradient(0, 0, drawSize * 0.05, 0, 0, drawSize * 0.7);
-              glow.addColorStop(0, "rgba(214, 186, 255, 0.95)");
-              glow.addColorStop(0.5, "rgba(168, 120, 255, 0.86)");
-              glow.addColorStop(1, "rgba(115, 72, 205, 0.15)");
-              ctx.fillStyle = glow;
-              ctx.beginPath();
-              ctx.arc(0, 0, drawSize * 0.6, 0, Math.PI * 2);
-              ctx.fill();
-              ctx.fillStyle = "rgba(160,120,255,0.92)";
-              ctx.fillRect(-drawSize * 0.32, -drawSize * 0.32, drawSize * 0.64, drawSize * 0.64);
+              if (projectileSprite) {
+                ctx.drawImage(projectileSprite, -drawSize * 0.5, -drawSize * 0.5, drawSize, drawSize);
+              } else {
+                const glow = ctx.createRadialGradient(0, 0, drawSize * 0.05, 0, 0, drawSize * 0.7);
+                glow.addColorStop(0, "rgba(214, 186, 255, 0.95)");
+                glow.addColorStop(0.5, "rgba(168, 120, 255, 0.86)");
+                glow.addColorStop(1, "rgba(115, 72, 205, 0.15)");
+                ctx.fillStyle = glow;
+                ctx.beginPath();
+                ctx.arc(0, 0, drawSize * 0.6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = "rgba(160,120,255,0.92)";
+                ctx.fillRect(-drawSize * 0.32, -drawSize * 0.32, drawSize * 0.64, drawSize * 0.64);
+              }
               ctx.restore();
               renderedKnownEntityVisual = true;
             } else if (entity.type === "darkSpellHazard" || entity.type === "dark_spell_hazard") {
-              // Keep hazard visible as a compact impact plate (visual-only parity with V1 fallback).
+              // Match V1 dark spell contract: custom sprite-path first, then impact03/02/01 sequence fallback.
+              const projectileSpritePath = typeof entity._projectileSpritePath === "string" && entity._projectileSpritePath.length > 0
+                ? entity._projectileSpritePath
+                : (typeof entity.projectileSpritePath === "string" ? entity.projectileSpritePath : "");
+              const customHazardSprite = getRechargedDarkSpellCustomSprite(entityVisualState, projectileSpritePath);
+              const darkSpellSprites = entityVisualState.darkSpell || {};
+              const hazardT = Number.isFinite(entity.t) ? entity.t : 0;
+              let hazardSprite = darkSpellSprites.impact01;
+              if (hazardT < 0.15) hazardSprite = darkSpellSprites.impact03;
+              else if (hazardT < 0.3) hazardSprite = darkSpellSprites.impact02;
               ctx.save();
               ctx.globalAlpha = Math.max(0, Math.min(1, Number.isFinite(entity.alpha) ? entity.alpha : 1));
-              const centerX = entityRect.x + entityRect.w * 0.5;
-              const centerY = entityRect.y + entityRect.h * 0.5;
-              const radius = Math.max(entityRect.w, entityRect.h) * 0.48;
-              const ring = ctx.createRadialGradient(centerX, centerY, radius * 0.2, centerX, centerY, radius);
-              ring.addColorStop(0, "rgba(210,180,255,0.65)");
-              ring.addColorStop(0.6, "rgba(145,110,210,0.85)");
-              ring.addColorStop(1, "rgba(145,110,210,0.12)");
-              ctx.fillStyle = ring;
-              ctx.beginPath();
-              ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-              ctx.fill();
+              if (customHazardSprite) {
+                ctx.drawImage(customHazardSprite, entityRect.x, entityRect.y, entityRect.w, entityRect.h);
+              } else if (hazardSprite && hazardSprite.complete) {
+                ctx.drawImage(hazardSprite, entityRect.x, entityRect.y, entityRect.w, entityRect.h);
+              } else {
+                const centerX = entityRect.x + entityRect.w * 0.5;
+                const centerY = entityRect.y + entityRect.h * 0.5;
+                const radius = Math.max(entityRect.w, entityRect.h) * 0.48;
+                const ring = ctx.createRadialGradient(centerX, centerY, radius * 0.2, centerX, centerY, radius);
+                ring.addColorStop(0, "rgba(210,180,255,0.65)");
+                ring.addColorStop(0.6, "rgba(145,110,210,0.85)");
+                ring.addColorStop(1, "rgba(145,110,210,0.12)");
+                ctx.fillStyle = ring;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                ctx.fill();
+              }
               ctx.restore();
               renderedKnownEntityVisual = true;
             } else if (entity.type === "firefly_01") {

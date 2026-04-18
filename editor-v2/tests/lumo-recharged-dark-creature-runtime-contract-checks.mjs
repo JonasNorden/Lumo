@@ -192,9 +192,76 @@ function runSafeDelayStateChecks() {
   assert.equal(activeSnapshot.entities[0].isDarkActive, true, "expected dark-active to return after safeDelay expires");
 }
 
+function runProjectileSpritePathCarryChecks() {
+  const level = loadFixtureLevelDocument();
+  const spawnX = Number.isFinite(level?.world?.spawn?.x) ? level.world.spawn.x : 64;
+  const spawnY = Number.isFinite(level?.world?.spawn?.y) ? level.world.spawn.y : 256;
+  const customProjectileSpritePath = "data/assets/sprites/creatures/void_m_02.png";
+  const { session } = createSessionWithEntities([
+    {
+      id: "dark-path-caster",
+      type: "dark_creature_01",
+      x: spawnX + 32,
+      y: spawnY - 24,
+      params: {
+        hp: 3,
+        aggroTiles: 10,
+        castCooldown: 0,
+        castChargeTime: 0.05,
+        targetJitterPx: 0,
+        projectileSpritePath: customProjectileSpritePath,
+      },
+    },
+  ]);
+
+  session.tick({});
+
+  let spawnedProjectile = null;
+  for (let i = 0; i < 80 && !spawnedProjectile; i += 1) {
+    session.tick({});
+    const snapshot = session.getPlayerSnapshot();
+    spawnedProjectile = Array.isArray(snapshot?.darkProjectiles) && snapshot.darkProjectiles.length > 0
+      ? snapshot.darkProjectiles[0]
+      : null;
+  }
+  assert.ok(spawnedProjectile, "expected dark spell projectile spawn for sprite-path carry checks");
+  assert.equal(
+    spawnedProjectile._projectileSpritePath,
+    customProjectileSpritePath,
+    "expected dark spell projectile to preserve _projectileSpritePath on runtime shape",
+  );
+
+  const hazardPath = "data/assets/sprites/creatures/void_m_03.png";
+  const { session: hazardSession } = createSessionWithEntities([
+    {
+      id: "dark-hazard-shape",
+      type: "darkSpellHazard",
+      x: spawnX + 48,
+      y: spawnY - 30,
+      w: 20,
+      h: 20,
+      t: 0.2,
+      alpha: 1,
+      active: true,
+      _projectileSpritePath: hazardPath,
+    },
+  ]);
+  const hazardSnapshot = hazardSession.getPlayerSnapshot();
+  const spawnedHazard = Array.isArray(hazardSnapshot?.entities)
+    ? hazardSnapshot.entities.find((entity) => entity?.id === "dark-hazard-shape")
+    : null;
+  assert.ok(spawnedHazard, "expected dark spell hazard entity in runtime snapshot shape checks");
+  assert.equal(
+    spawnedHazard._projectileSpritePath,
+    hazardPath,
+    "expected dark spell hazard to preserve _projectileSpritePath on runtime shape",
+  );
+}
+
 runPulseDissolveChecks();
 runCastChargeProjectileChecks();
 runSameTickProjectileSurvivalChecks();
 runBodyContactDamageChecks();
 runSafeDelayStateChecks();
+runProjectileSpritePathCarryChecks();
 console.log("recharged dark creature runtime checks ok");
