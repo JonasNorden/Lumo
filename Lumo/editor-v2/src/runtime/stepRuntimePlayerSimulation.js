@@ -684,6 +684,96 @@ function applyDarkCreatureDamageToPlayer(playerState, sourceCenterX, knockbackX,
   };
 }
 
+function stepHoverVoidRuntime(worldPacket, playerState, sourceEntities, options = {}) {
+  const dt = resolveRuntimeDeltaSeconds(options);
+  const entities = Array.isArray(sourceEntities) ? sourceEntities.map((entity) => ({ ...entity })) : [];
+  const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0 ? worldPacket.world.tileSize : 24;
+  const playerCenterX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : null;
+  const playerCenterY = Number.isFinite(playerState?.position?.y) ? playerState.position.y - tileSize * 0.5 : null;
+  const hasPlayer = Number.isFinite(playerCenterX) && Number.isFinite(playerCenterY);
+
+  for (const entity of entities) {
+    if (String(entity?.type || "").trim().toLowerCase() !== "hover_void_01" || entity?.active !== true || entity?.alive !== true) {
+      continue;
+    }
+
+    const center = getEntityCenter(entity);
+    entity._t = (Number.isFinite(entity?._t) ? entity._t : 0) + dt;
+    entity._targetVX = 0;
+    entity._targetVY = Math.sin(entity._t * 1.3 + center.x * 0.01) * 12;
+    entity.awake = entity.awake === true;
+    entity._wakeHold = Number.isFinite(entity?._wakeHold) ? Math.max(0, entity._wakeHold) : 0;
+    entity._isFollowing = entity._isFollowing === true;
+    entity.eyeBlend = Number.isFinite(entity?.eyeBlend) ? entity.eyeBlend : 0;
+    entity.sleepBlend = Number.isFinite(entity?.sleepBlend) ? entity.sleepBlend : 1;
+    entity.vx = Number.isFinite(entity?.vx) ? entity.vx : 0;
+    entity.vy = Number.isFinite(entity?.vy) ? entity.vy : 0;
+
+    const aggroTiles = Number.isFinite(entity?.aggroTiles) ? entity.aggroTiles : Number(entity?.params?.aggroTiles);
+    const followTiles = Number.isFinite(entity?.followTiles) ? entity.followTiles : Number(entity?.params?.followTiles);
+    const loseSightTiles = Number.isFinite(entity?.loseSightTiles) ? entity.loseSightTiles : Number(entity?.params?.loseSightTiles);
+    const wakeR = Math.max(0, (Number.isFinite(aggroTiles) ? aggroTiles : 6) * tileSize);
+    const followR = Math.max(0, (Number.isFinite(followTiles) ? followTiles : 7) * tileSize);
+    const loseR = Math.max(0, (Number.isFinite(loseSightTiles) ? loseSightTiles : 11) * tileSize);
+    const dxToPlayer = hasPlayer ? playerCenterX - center.x : 0;
+    const dyToPlayer = hasPlayer ? playerCenterY - center.y : 0;
+    const dPlayer = hasPlayer ? Math.hypot(dxToPlayer, dyToPlayer) : Number.POSITIVE_INFINITY;
+
+    if (!entity.awake && hasPlayer && dPlayer <= wakeR) {
+      entity.awake = true;
+    }
+    if (entity.awake) {
+      if (hasPlayer && dPlayer <= loseR) {
+        entity._wakeHold = 1.4;
+      } else {
+        entity._wakeHold = Math.max(0, entity._wakeHold - dt);
+      }
+      if (entity._wakeHold <= 0) {
+        entity.awake = false;
+      }
+    }
+
+    entity.eyeBlend = Math.max(0, Math.min(1, entity.eyeBlend + (entity.awake ? 1 : -1) * dt * 2.5));
+    entity.sleepBlend = Math.max(0, Math.min(1, entity.sleepBlend + (entity.awake ? -1 : 1) * dt * 0.8));
+
+    if (entity.awake) {
+      if (!hasPlayer) {
+        entity._isFollowing = false;
+      } else if (!entity._isFollowing) {
+        if (dPlayer <= followR) {
+          entity._isFollowing = true;
+        }
+      } else if (dPlayer > loseR) {
+        entity._isFollowing = false;
+      }
+
+      if (entity._isFollowing && hasPlayer) {
+        const dNorm = Math.max(0.001, dPlayer);
+        const targetDist = 3 * tileSize;
+        if (dPlayer > targetDist) {
+          entity._targetVX += (dxToPlayer / dNorm) * 52;
+          entity._targetVY += (dyToPlayer / dNorm) * 52;
+        } else {
+          entity._targetVX -= (dxToPlayer / dNorm) * 22;
+          entity._targetVY -= (dyToPlayer / dNorm) * 22;
+        }
+      }
+    } else {
+      entity._isFollowing = false;
+      entity._targetVX += Math.sin(entity._t * 0.7 + center.y * 0.02) * 16;
+      entity._targetVY += Math.cos(entity._t * 0.6 + center.x * 0.02) * 12;
+    }
+
+    const steer = Math.max(0, Math.min(1, dt * 4));
+    entity.vx += (entity._targetVX - entity.vx) * steer;
+    entity.vy += (entity._targetVY - entity.vy) * steer;
+    entity.x += entity.vx * dt;
+    entity.y += entity.vy * dt;
+  }
+
+  return { entities };
+}
+
 function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, options = {}) {
   const dt = resolveRuntimeDeltaSeconds(options);
   const entities = Array.isArray(sourceEntities) ? sourceEntities.map((entity) => ({ ...entity })) : [];
@@ -1533,6 +1623,16 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const darkProjectiles = Array.isArray(darkCreatureStep?.darkProjectiles)
     ? normalizeDarkProjectiles({ darkProjectiles: darkCreatureStep.darkProjectiles })
     : normalizeDarkProjectiles({ darkProjectiles: playerState?.darkProjectiles });
+  const hoverVoidStep = stepHoverVoidRuntime(
+    worldPacket,
+    darkCreatureStep?.player ?? {
+      ...playerState,
+      position: resolvedPlayerStep.position,
+      velocity: resolvedPlayerStep.velocity,
+    },
+    darkCreatureStep.entities,
+    options,
+  );
   const nextDarkProjectileId = Number.isFinite(darkCreatureStep?.nextDarkProjectileId)
     ? Math.max(1, Math.floor(darkCreatureStep.nextDarkProjectileId))
     : (Number.isFinite(playerState?.nextDarkProjectileId) ? Math.max(1, Math.floor(playerState.nextDarkProjectileId)) : 1);
@@ -1592,7 +1692,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       powerCellFill: powerCellRecharge.powerCellFill,
       facingX: flareStep.facingX,
       nextFlareId: flareStep.nextFlareId,
-      entities: darkCreatureStep.entities,
+      entities: hoverVoidStep.entities,
       darkProjectiles,
       nextDarkProjectileId,
       status,
@@ -1663,6 +1763,6 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         flareEntityAffects: flareEntityStep.flareAffects.length,
       },
     },
-    entities: darkCreatureStep.entities,
+    entities: hoverVoidStep.entities,
   };
 }
