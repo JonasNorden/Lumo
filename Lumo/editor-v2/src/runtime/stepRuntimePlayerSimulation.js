@@ -1523,6 +1523,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
 
   return {
     ok: true,
+    // FIX: propagate dark projectiles from darkCreatureRuntime to runner
+    darkProjectiles: darkCreatureStep.darkProjectiles,
+    nextDarkProjectileId: darkCreatureStep.nextDarkProjectileId,
     player: {
       position: resolvedPlayerStep.position,
       velocity: finalVelocity,
