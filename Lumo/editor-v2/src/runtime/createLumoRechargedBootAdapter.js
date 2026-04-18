@@ -73,6 +73,32 @@ function buildPlayerSnapshot(snapshot) {
   const pulse = source?.pulse && typeof source.pulse === "object" ? source.pulse : null;
   const velocityX = Number.isFinite(source?.velocity?.x) ? source.velocity.x : null;
   const velocityY = Number.isFinite(source?.velocity?.y) ? source.velocity.y : null;
+  const darkProjectiles = Array.isArray(source.darkProjectiles) ? source.darkProjectiles.map((projectile) => ({ ...projectile })) : [];
+  const entities = Array.isArray(source.entities) ? source.entities.map((entity) => cloneSnapshotEntity(entity)) : [];
+  const hasRenderableDarkProjectileEntity = entities.some((entity) => (
+    entity.type === "darkSpellProjectile" || entity.type === "dark_spell_projectile"
+  ));
+  const transientDarkProjectileEntities = hasRenderableDarkProjectileEntity
+    ? []
+    : darkProjectiles
+      .filter((projectile) => Number.isFinite(projectile?.x) && Number.isFinite(projectile?.y))
+      .map((projectile, index) => ({
+        id: `runtime-dark-projectile-${index}`,
+        type: "darkSpellProjectile",
+        x: projectile.x,
+        y: projectile.y,
+        size: 12,
+        rot: Math.atan2(
+          Number.isFinite(projectile?.vy) ? projectile.vy : 0,
+          Number.isFinite(projectile?.vx) ? projectile.vx : 0,
+        ),
+        alpha: Number.isFinite(projectile?.maxAge) && projectile.maxAge > 0
+          ? Math.max(0, Math.min(1, 1 - ((Number.isFinite(projectile?.age) ? projectile.age : 0) / projectile.maxAge)))
+          : 1,
+        active: true,
+        alive: true,
+        state: "active",
+      }));
 
   return {
     x: Number.isFinite(source.x) ? source.x : null,
@@ -103,8 +129,8 @@ function buildPlayerSnapshot(snapshot) {
         }
       : null,
     flares: Array.isArray(source.flares) ? source.flares.map((flare) => ({ ...flare })) : [],
-    darkProjectiles: Array.isArray(source.darkProjectiles) ? source.darkProjectiles.map((projectile) => ({ ...projectile })) : [],
-    entities: Array.isArray(source.entities) ? source.entities.map((entity) => cloneSnapshotEntity(entity)) : [],
+    darkProjectiles,
+    entities: entities.concat(transientDarkProjectileEntities),
   };
 }
 
