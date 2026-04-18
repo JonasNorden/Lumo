@@ -164,6 +164,7 @@ async function runEntityRuntimeTruthMapChecks() {
       "_blinkT",
       "_facingX",
       "_lungeState",
+      "_projectileSpritePath",
       "_tail",
       "active",
       "alive",

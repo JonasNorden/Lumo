@@ -126,6 +126,14 @@ function runRenderPathSelectionChecks() {
   assert.equal(html.includes("function drawHoverVoidEyesV1(ctx, centerX, centerY, entity, alphaMul = 1)"), true);
   assert.equal(html.includes("const angry = (Number.isFinite(entity?._angryT) && entity._angryT > 0) || (typeof entity?._lungeState === \"string\" && entity._lungeState !== \"idle\");"), true);
   assert.equal(html.includes("const blink = Number.isFinite(entity?._blinkDur) && entity._blinkDur > 0 ? 0.15 : 1;"), true);
+  assert.equal(
+    html.includes("const largeX = centerX - (7 * sEye) * facingX + (1.5 * facingX);") &&
+      html.includes("const smallX = centerX + (6 * sEye) * facingX - (1.5 * facingX);") &&
+      !html.includes("const largeX = centerX - (7 * sEye) * facingX + (3 * facingX);") &&
+      !html.includes("const smallX = centerX + (6 * sEye) * facingX - (3 * facingX);"),
+    true,
+    "expected hover-void eye spacing to tighten by exactly 3px total (1.5px per side) without other layout rewrites",
+  );
   assert.equal(html.includes("if (isHoverEyeRenderableFromRuntime(entity, mapper)) {"), true);
   assert.equal(html.includes("drawHoverVoidEyesV1(ctx, eyeDraw.x, eyeDraw.y, eyeDraw.entity, 1);"), true);
 }

@@ -37,10 +37,14 @@ function buildPlayerSnapshot(playerState) {
         id: Number.isFinite(projectile?.id) ? projectile.id : null,
         x: Number.isFinite(projectile?.x) ? projectile.x : null,
         y: Number.isFinite(projectile?.y) ? projectile.y : null,
+        w: Number.isFinite(projectile?.w) ? projectile.w : null,
+        h: Number.isFinite(projectile?.h) ? projectile.h : null,
         vx: Number.isFinite(projectile?.vx) ? projectile.vx : 0,
         vy: Number.isFinite(projectile?.vy) ? projectile.vy : 0,
+        rot: Number.isFinite(projectile?.rot) ? projectile.rot : 0,
         age: Number.isFinite(projectile?.age) ? projectile.age : 0,
         maxAge: Number.isFinite(projectile?.maxAge) ? projectile.maxAge : null,
+        _projectileSpritePath: typeof projectile?._projectileSpritePath === "string" ? projectile._projectileSpritePath : "",
       }))
       .filter((projectile) => projectile.x !== null && projectile.y !== null)
     : [];
@@ -52,6 +56,11 @@ function buildPlayerSnapshot(playerState) {
           x: Number.isFinite(entity?.x) ? entity.x : null,
           y: Number.isFinite(entity?.y) ? entity.y : null,
           size: Number.isFinite(entity?.size) ? entity.size : 24,
+          w: Number.isFinite(entity?.w) ? entity.w : null,
+          h: Number.isFinite(entity?.h) ? entity.h : null,
+          rot: Number.isFinite(entity?.rot) ? entity.rot : 0,
+          alpha: Number.isFinite(entity?.alpha) ? entity.alpha : 1,
+          t: Number.isFinite(entity?.t) ? entity.t : 0,
           hp: Number.isFinite(entity?.hp) ? entity.hp : 0,
           maxHp: Number.isFinite(entity?.maxHp) ? entity.maxHp : 0,
           alive: entity?.alive === true,
@@ -108,6 +117,7 @@ function buildPlayerSnapshot(playerState) {
             : [],
           // Keep authored params intact through runtime session snapshots.
           params: entity?.params && typeof entity.params === "object" ? clonePlainData(entity.params) : {},
+          _projectileSpritePath: typeof entity?._projectileSpritePath === "string" ? entity._projectileSpritePath : "",
         }))
       .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null)
     : [];
