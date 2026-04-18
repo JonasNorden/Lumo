@@ -645,6 +645,14 @@
             illuminated: entity?.illuminated === true,
             flareExposure: Number.isFinite(entity?.flareExposure) ? entity.flareExposure : 0,
             consumesFlare: entity?.consumesFlare === true,
+            awake: entity?.awake === true,
+            eyeBlend: Number.isFinite(entity?.eyeBlend) ? entity.eyeBlend : 0,
+            sleepBlend: Number.isFinite(entity?.sleepBlend) ? entity.sleepBlend : 0,
+            _blinkT: Number.isFinite(entity?._blinkT) ? entity._blinkT : 0,
+            _blinkDur: Number.isFinite(entity?._blinkDur) ? entity._blinkDur : 0,
+            _angryT: Number.isFinite(entity?._angryT) ? entity._angryT : 0,
+            _lungeState: typeof entity?._lungeState === "string" ? entity._lungeState : "idle",
+            _facingX: Number.isFinite(entity?._facingX) ? entity._facingX : 1,
             // Preserve runtime entity params for future Recharged behavior restoration.
             params: entity?.params && typeof entity.params === "object" ? cloneParams(entity.params) : {},
             projectileSpritePath: typeof entity?._projectileSpritePath === "string" ? entity._projectileSpritePath : "",
@@ -715,6 +723,8 @@
       const offsetY = Math.floor((canvas.height - viewportWorldHeight) * 0.5);
 
       return {
+        cameraX,
+        cameraY,
         viewportWorldWidth,
         viewportWorldHeight,
         worldToCanvasRect(rectX, rectY, rectW, rectH) {
@@ -726,6 +736,108 @@
           };
         },
       };
+    }
+
+    function isHoverEyeRenderableFromRuntime(entity, mapper) {
+      if (!entity || entity.type !== "hover_void_01" || entity.active !== true || entity.awake !== true) {
+        return false;
+      }
+      const eyeBlend = Number.isFinite(entity.eyeBlend) ? entity.eyeBlend : 0;
+      if (eyeBlend <= 0.01) {
+        return false;
+      }
+      if (!mapper || typeof mapper !== "object") {
+        return true;
+      }
+      const x = Number.isFinite(entity.x) ? entity.x : 0;
+      const y = Number.isFinite(entity.y) ? entity.y : 0;
+      const w = Number.isFinite(entity.w) && entity.w > 0 ? entity.w : (Number.isFinite(entity.size) && entity.size > 0 ? entity.size : 24);
+      const h = Number.isFinite(entity.h) && entity.h > 0 ? entity.h : (Number.isFinite(entity.size) && entity.size > 0 ? entity.size : 24);
+      const margin = 96;
+      const left = x - margin;
+      const top = y - margin;
+      const right = x + w + margin;
+      const bottom = y + h + margin;
+      const viewLeft = Number.isFinite(mapper.cameraX) ? mapper.cameraX : 0;
+      const viewTop = Number.isFinite(mapper.cameraY) ? mapper.cameraY : 0;
+      const viewRight = viewLeft + (Number.isFinite(mapper.viewportWorldWidth) ? mapper.viewportWorldWidth : 0);
+      const viewBottom = viewTop + (Number.isFinite(mapper.viewportWorldHeight) ? mapper.viewportWorldHeight : 0);
+      return left < viewRight && right > viewLeft && top < viewBottom && bottom > viewTop;
+    }
+
+    function drawHoverVoidEyesV1(ctx, centerX, centerY, entity, alphaMul = 1) {
+      const eyeBlend = Math.max(0, Math.min(1, Number.isFinite(entity?.eyeBlend) ? entity.eyeBlend : 0));
+      if (eyeBlend <= 0.01) {
+        return;
+      }
+      const angry = (Number.isFinite(entity?._angryT) && entity._angryT > 0) || (typeof entity?._lungeState === "string" && entity._lungeState !== "idle");
+      const blink = Number.isFinite(entity?._blinkDur) && entity._blinkDur > 0 ? 0.15 : 1;
+      const facingX = Number.isFinite(entity?._facingX) && entity._facingX < 0 ? -1 : 1;
+      const hoverVoidEyeBaselineBody = 24;
+      const sEye = hoverVoidEyeBaselineBody / 16;
+      const largeR = 2.8 * sEye * 0.75;
+      const smallR = 1.9 * sEye * 0.75;
+      const largeX = centerX - (7 * sEye) * facingX + (3 * facingX);
+      const largeY = centerY - (6 * sEye);
+      const smallX = centerX + (6 * sEye) * facingX - (3 * facingX);
+      const smallY = centerY - (4 * sEye);
+      const eyeAlpha = Math.max(0, Math.min(1, eyeBlend * Math.max(0, Math.min(1, alphaMul))));
+      if (eyeAlpha <= 0.001) {
+        return;
+      }
+
+      ctx.save();
+      ctx.fillStyle = `rgba(246,250,255,${eyeAlpha.toFixed(3)})`;
+      ctx.shadowColor = `rgba(205,240,255,${(0.95 * eyeBlend * alphaMul).toFixed(3)})`;
+      ctx.shadowBlur = 11;
+
+      if (!angry) {
+        ctx.beginPath();
+        ctx.ellipse(largeX, largeY, largeR, largeR * blink, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(smallX, smallY, smallR, smallR * blink, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        const drawFilledAngryEye = (x, y, r, tilt) => {
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.beginPath();
+          if (tilt < 0) {
+            ctx.moveTo(-r * 1.6, -r * 0.95);
+            ctx.lineTo(r * 1.6, -r * 0.20);
+            ctx.lineTo(r * 1.6, r * 1.6);
+            ctx.lineTo(-r * 1.6, r * 1.6);
+          } else {
+            ctx.moveTo(-r * 1.6, -r * 0.20);
+            ctx.lineTo(r * 1.6, -r * 0.95);
+            ctx.lineTo(r * 1.6, r * 1.6);
+            ctx.lineTo(-r * 1.6, r * 1.6);
+          }
+          ctx.closePath();
+          ctx.clip();
+          ctx.fillStyle = `rgba(243,240,255,${eyeAlpha.toFixed(3)})`;
+          ctx.beginPath();
+          ctx.arc(0, 0, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        };
+        if ((Number.isFinite(entity?._blinkDur) ? entity._blinkDur : 0) <= 0) {
+          drawFilledAngryEye(largeX, largeY, largeR, -1 * facingX);
+          drawFilledAngryEye(smallX, smallY, smallR, 1 * facingX);
+        } else {
+          ctx.strokeStyle = `rgba(243,240,255,${eyeAlpha.toFixed(3)})`;
+          ctx.lineWidth = 1.8;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(largeX - 3.2 * sEye * facingX, largeY - 2.0 * sEye);
+          ctx.lineTo(largeX + 2.8 * sEye * facingX, largeY + 0.2 * sEye);
+          ctx.moveTo(smallX - 2.0 * sEye * facingX, smallY + 0.2 * sEye);
+          ctx.lineTo(smallX + 2.2 * sEye * facingX, smallY - 2.0 * sEye);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
     }
 
     function ensureRechargedTileVisualState(state) {
@@ -1170,6 +1282,7 @@
           drawRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw);
         }
 
+        const hoverEyesAfterDarkness = [];
         for (const entity of entitySnapshots) {
           if (entity?.active !== true) {
             continue;
@@ -1289,6 +1402,9 @@
               ctx.beginPath();
               ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
               ctx.fill();
+              if (isHoverEyeRenderableFromRuntime(entity, mapper)) {
+                hoverEyesAfterDarkness.push({ x: centerX, y: centerY, entity });
+              }
               renderedKnownEntityVisual = true;
             } else if (entity.type === "darkSpellProjectile" || entity.type === "dark_spell_projectile") {
               // Match V1 fallback visibility: render projectile even when sprite assets are unavailable.
@@ -1379,6 +1495,11 @@
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
         if (player.hidden !== true) {
           drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, currentSnapshot);
+        }
+
+        // V1 parity: eyes are a dedicated post-darkness style pass (kept procedural and never sprite-based).
+        for (const eyeDraw of hoverEyesAfterDarkness) {
+          drawHoverVoidEyesV1(ctx, eyeDraw.x, eyeDraw.y, eyeDraw.entity, 1);
         }
 
         if (
