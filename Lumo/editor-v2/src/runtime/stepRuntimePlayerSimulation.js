@@ -256,11 +256,39 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
         awake: typeof source?.awake === "boolean" ? source.awake : false,
         sleepBlend: Number.isFinite(Number(source?.sleepBlend)) ? Number(source.sleepBlend) : 1,
         eyeBlend: Number.isFinite(Number(source?.eyeBlend)) ? Number(source.eyeBlend) : 0,
+        braveGroupSize: Math.max(1, Math.floor(parseNumber(source?.braveGroupSize ?? params?.braveGroupSize, 3))),
+        swarmGroupSize: Math.max(
+          Math.max(1, Math.floor(parseNumber(source?.braveGroupSize ?? params?.braveGroupSize, 3))),
+          Math.floor(parseNumber(source?.swarmGroupSize ?? params?.swarmGroupSize, 6)),
+        ),
+        attackCooldownMin: Math.max(0.2, parseNumber(source?.attackCooldownMin ?? params?.attackCooldownMin, 1)),
+        attackCooldownMax: Math.max(
+          Math.max(0.2, parseNumber(source?.attackCooldownMin ?? params?.attackCooldownMin, 1)),
+          parseNumber(source?.attackCooldownMax ?? params?.attackCooldownMax, 3),
+        ),
+        attackDamage: Math.max(0, parseNumber(source?.attackDamage ?? params?.attackDamage, 12)),
+        attackPushback: Math.max(0, parseNumber(source?.attackPushback ?? params?.attackPushback, 180)),
         _wakeHold: Number.isFinite(Number(source?._wakeHold)) ? Number(source._wakeHold) : 0,
         _isFollowing: typeof source?._isFollowing === "boolean" ? source._isFollowing : false,
         _t: Number.isFinite(Number(source?._t)) ? Number(source._t) : 0,
+        _blinkT: Number.isFinite(Number(source?._blinkT)) ? Number(source._blinkT) : 2,
+        _blinkDur: Number.isFinite(Number(source?._blinkDur)) ? Number(source._blinkDur) : 0,
+        _angryT: Number.isFinite(Number(source?._angryT)) ? Number(source._angryT) : 0,
+        _angryCd: Number.isFinite(Number(source?._angryCd)) ? Number(source._angryCd) : 5,
+        _bickerCd: Number.isFinite(Number(source?._bickerCd)) ? Number(source._bickerCd) : 0.4,
         _targetVX: Number.isFinite(Number(source?._targetVX)) ? Number(source._targetVX) : 0,
         _targetVY: Number.isFinite(Number(source?._targetVY)) ? Number(source._targetVY) : 0,
+        _recoilT: Number.isFinite(Number(source?._recoilT)) ? Number(source._recoilT) : 0,
+        _lungeState: typeof source?._lungeState === "string" ? source._lungeState : "idle",
+        _lungeActor: source?._lungeActor === true,
+        _lungeT: Number.isFinite(Number(source?._lungeT)) ? Number(source._lungeT) : 0,
+        _lungeDirX: Number.isFinite(Number(source?._lungeDirX)) ? Number(source._lungeDirX) : 0,
+        _lungeDirY: Number.isFinite(Number(source?._lungeDirY)) ? Number(source._lungeDirY) : 0,
+        _facingX: Number.isFinite(Number(source?._facingX)) ? Number(source._facingX) : 1,
+        _lungeHitDone: source?._lungeHitDone === true,
+        _attackCd: Number.isFinite(Number(source?._attackCd))
+          ? Number(source._attackCd)
+          : Math.max(0.2, parseNumber(source?.attackCooldownMin ?? params?.attackCooldownMin, 1)),
         vx: Number.isFinite(Number(source?.vx)) ? Number(source.vx) : 0,
         vy: Number.isFinite(Number(source?.vy)) ? Number(source.vy) : 0,
       }
@@ -693,10 +721,17 @@ function stepHoverVoidRuntime(worldPacket, playerState, sourceEntities, options 
   const dt = resolveRuntimeDeltaSeconds(options);
   const entities = Array.isArray(sourceEntities) ? sourceEntities.map((entity) => ({ ...entity })) : [];
   const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0 ? worldPacket.world.tileSize : 24;
-  const playerCenterX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : null;
-  const playerCenterY = Number.isFinite(playerState?.position?.y) ? playerState.position.y - tileSize * 0.5 : null;
+  const playerBounds = buildPlayerPickupBounds(playerState, tileSize);
+  const playerCenterX = playerBounds.x + playerBounds.w * 0.5;
+  const playerCenterY = playerBounds.y + playerBounds.h * 0.5;
   const hasPlayer = Number.isFinite(playerCenterX) && Number.isFinite(playerCenterY);
+  let nextPlayer = { ...playerState };
+  let hoverVoidAttackGlobalCd = Math.max(0, Number.isFinite(playerState?._hoverVoidAttackGlobalCd) ? playerState._hoverVoidAttackGlobalCd : 0);
+  if (hoverVoidAttackGlobalCd > 0) {
+    hoverVoidAttackGlobalCd = Math.max(0, hoverVoidAttackGlobalCd - dt);
+  }
 
+  // V1 hover-void behavior block: wake/follow, social spacing, lunge FSM and eye/blink runtime fields.
   for (const entity of entities) {
     if (String(entity?.type || "").trim().toLowerCase() !== "hover_void_01" || entity?.active !== true || entity?.alive !== true) {
       continue;
@@ -711,8 +746,34 @@ function stepHoverVoidRuntime(worldPacket, playerState, sourceEntities, options 
     entity._isFollowing = entity._isFollowing === true;
     entity.eyeBlend = Number.isFinite(entity?.eyeBlend) ? entity.eyeBlend : 0;
     entity.sleepBlend = Number.isFinite(entity?.sleepBlend) ? entity.sleepBlend : 1;
+    entity.braveGroupSize = Math.max(1, Number.isFinite(entity?.braveGroupSize) ? Math.floor(entity.braveGroupSize) : 3);
+    entity.swarmGroupSize = Math.max(entity.braveGroupSize, Number.isFinite(entity?.swarmGroupSize) ? Math.floor(entity.swarmGroupSize) : 6);
+    entity.attackCooldownMin = Math.max(0.2, Number.isFinite(entity?.attackCooldownMin) ? entity.attackCooldownMin : 1);
+    entity.attackCooldownMax = Math.max(entity.attackCooldownMin, Number.isFinite(entity?.attackCooldownMax) ? entity.attackCooldownMax : 3);
+    entity.attackDamage = Math.max(0, Number.isFinite(entity?.attackDamage) ? entity.attackDamage : 12);
+    entity.attackPushback = Math.max(0, Number.isFinite(entity?.attackPushback) ? entity.attackPushback : 180);
+    entity._blinkT = Number.isFinite(entity?._blinkT) ? entity._blinkT : 2;
+    entity._blinkDur = Number.isFinite(entity?._blinkDur) ? entity._blinkDur : 0;
+    entity._angryT = Number.isFinite(entity?._angryT) ? entity._angryT : 0;
+    entity._angryCd = Number.isFinite(entity?._angryCd) ? entity._angryCd : 5;
+    entity._bickerCd = Number.isFinite(entity?._bickerCd) ? entity._bickerCd : 0.4;
+    entity._recoilT = Number.isFinite(entity?._recoilT) ? entity._recoilT : 0;
+    entity._lungeState = typeof entity?._lungeState === "string" ? entity._lungeState : "idle";
+    entity._lungeActor = entity?._lungeActor === true;
+    entity._lungeT = Number.isFinite(entity?._lungeT) ? entity._lungeT : 0;
+    entity._lungeDirX = Number.isFinite(entity?._lungeDirX) ? entity._lungeDirX : 0;
+    entity._lungeDirY = Number.isFinite(entity?._lungeDirY) ? entity._lungeDirY : 0;
+    entity._facingX = Number.isFinite(entity?._facingX) ? entity._facingX : 1;
+    entity._lungeHitDone = entity?._lungeHitDone === true;
+    entity._attackCd = Math.max(0, Number.isFinite(entity?._attackCd) ? entity._attackCd : entity.attackCooldownMin);
     entity.vx = Number.isFinite(entity?.vx) ? entity.vx : 0;
     entity.vy = Number.isFinite(entity?.vy) ? entity.vy : 0;
+    if (entity._attackCd > 0) {
+      entity._attackCd = Math.max(0, entity._attackCd - dt);
+    }
+    if (entity._recoilT > 0) {
+      entity._recoilT = Math.max(0, entity._recoilT - dt);
+    }
 
     const aggroTiles = Number.isFinite(entity?.aggroTiles) ? entity.aggroTiles : Number(entity?.params?.aggroTiles);
     const followTiles = Number.isFinite(entity?.followTiles) ? entity.followTiles : Number(entity?.params?.followTiles);
@@ -763,20 +824,158 @@ function stepHoverVoidRuntime(worldPacket, playerState, sourceEntities, options 
           entity._targetVY -= (dyToPlayer / dNorm) * 22;
         }
       }
+      entity._blinkT -= dt;
+      if (entity._blinkT <= 0) {
+        entity._blinkDur = 0.12 + Math.random() * 0.07;
+        entity._blinkT = 6 + Math.random() * 9;
+      }
+      if (entity._blinkDur > 0) {
+        entity._blinkDur = Math.max(0, entity._blinkDur - dt);
+      }
+
+      if (entity._lungeState === "idle") {
+        const awakeList = entities.filter((other) => (
+          String(other?.type || "").trim().toLowerCase() === "hover_void_01"
+          && other?.active === true
+          && other?.alive === true
+          && other?.awake === true
+        ));
+        const groupSize = awakeList.length;
+        const brave = groupSize >= entity.braveGroupSize;
+        const targetDist = 3 * tileSize;
+        const shouldFollow = entity._isFollowing === true;
+        let neighborCount = 0;
+        for (const other of awakeList) {
+          if (other === entity) continue;
+          const otherCenter = getEntityCenter(other);
+          const dx = otherCenter.x - center.x;
+          const dy = otherCenter.y - center.y;
+          const d = Math.hypot(dx, dy);
+          const sameFollowState = (other?._isFollowing === true) === shouldFollow;
+          if (d < tileSize * 6) {
+            neighborCount += 1;
+            if (sameFollowState) {
+              const socialPull = Math.max(0, 1 - d / (tileSize * 6));
+              entity._targetVX += (dx / Math.max(0.001, d)) * 24 * socialPull;
+              entity._targetVY += (dy / Math.max(0.001, d)) * 24 * socialPull;
+            }
+          }
+          const sepR = tileSize * 1.25;
+          if (d > 0.001 && d < sepR) {
+            const push = (1 - d / sepR) * 85;
+            entity._targetVX -= (dx / d) * push;
+            entity._targetVY -= (dy / d) * push;
+          }
+          if (d > 0.001 && d < tileSize * 0.95 && entity._bickerCd <= 0) {
+            const recoil = 80;
+            entity.vx -= (dx / d) * recoil;
+            entity.vy -= (dy / d) * recoil;
+            entity._bickerCd = 0.55 + Math.random() * 0.65;
+            entity._angryT = Math.max(entity._angryT, 0.22 + Math.random() * 0.3);
+          }
+        }
+        if (entity._bickerCd > 0) {
+          entity._bickerCd = Math.max(0, entity._bickerCd - dt);
+        }
+        entity._angryCd -= dt;
+        if (neighborCount >= 1 && entity._angryCd <= 0 && Math.random() < dt * 0.1) {
+          entity._angryT = 3 + Math.random() * 2;
+          entity._angryCd = 15;
+        }
+        const swarmBonus = groupSize >= entity.swarmGroupSize ? 0.6 : 0;
+        const canAttack = brave && shouldFollow && dPlayer <= Math.max(tileSize * 1.0, targetDist + tileSize * 0.5);
+        if (canAttack && entity._attackCd <= 0 && hoverVoidAttackGlobalCd <= 0) {
+          const dNorm = Math.max(0.001, dPlayer);
+          entity._lungeState = "out";
+          entity._lungeActor = true;
+          entity._lungeT = 0;
+          entity._lungeDirX = dxToPlayer / dNorm;
+          entity._lungeDirY = dyToPlayer / dNorm;
+          entity._lungeHitDone = false;
+          entity._angryT = Math.max(entity._angryT, 0.55);
+          const gap = entity.attackCooldownMin + Math.random() * Math.max(0.01, entity.attackCooldownMax - entity.attackCooldownMin);
+          entity._attackCd = gap;
+          hoverVoidAttackGlobalCd = gap + swarmBonus;
+        }
+      }
     } else {
       entity._isFollowing = false;
       entity._targetVX += Math.sin(entity._t * 0.7 + center.y * 0.02) * 16;
       entity._targetVY += Math.cos(entity._t * 0.6 + center.x * 0.02) * 12;
     }
 
+    if (!entity._isFollowing && entity._lungeState !== "idle") {
+      entity._lungeState = "idle";
+      entity._lungeActor = false;
+      entity._lungeT = 0;
+      entity._lungeHitDone = false;
+    }
+    if (entity._lungeState !== "idle") {
+      entity._angryT = Math.max(entity._angryT, 0.08);
+      entity._lungeT += dt;
+      const speedOut = 210 + (entities.filter((other) => other?.awake === true).length >= entity.swarmGroupSize ? 80 : 0);
+      if (entity._lungeState === "out") {
+        entity._targetVX = entity._lungeDirX * speedOut;
+        entity._targetVY = entity._lungeDirY * speedOut;
+        if (!entity._lungeHitDone && hasPlayer) {
+          const paddedPlayerBounds = {
+            x: playerBounds.x - 4,
+            y: playerBounds.y - 4,
+            w: playerBounds.w + 8,
+            h: playerBounds.h + 8,
+          };
+          const entityBounds = {
+            x: Number.isFinite(entity?.x) ? entity.x : 0,
+            y: Number.isFinite(entity?.y) ? entity.y : 0,
+            w: Number.isFinite(entity?.footprintW) ? entity.footprintW : (Number.isFinite(entity?.size) ? entity.size : 24),
+            h: Number.isFinite(entity?.footprintH) ? entity.footprintH : (Number.isFinite(entity?.size) ? entity.size : 24),
+          };
+          if (isAabbOverlap(paddedPlayerBounds, entityBounds)) {
+            entity._lungeHitDone = true;
+            nextPlayer = applyDarkCreatureDamageToPlayer(nextPlayer, center.x, entity.attackPushback, -95, entity.attackDamage);
+            entity.vx -= entity._lungeDirX * 80;
+            entity.vy -= entity._lungeDirY * 80;
+            entity._recoilT = 0.2;
+            entity._lungeState = "back";
+            entity._lungeT = 0;
+          }
+        }
+        if (entity._lungeT >= 0.32) {
+          entity._lungeState = "back";
+          entity._lungeT = 0;
+        }
+      } else if (entity._lungeState === "back") {
+        entity._targetVX = -entity._lungeDirX * 165;
+        entity._targetVY = -entity._lungeDirY * 165;
+        if (entity._lungeT >= 0.28) {
+          entity._lungeState = "idle";
+          entity._lungeActor = false;
+          entity._lungeT = 0;
+        }
+      }
+    }
+    if (entity._angryT > 0) {
+      entity._angryT = Math.max(0, entity._angryT - dt);
+    }
+
     const steer = Math.max(0, Math.min(1, dt * 4));
     entity.vx += (entity._targetVX - entity.vx) * steer;
     entity.vy += (entity._targetVY - entity.vy) * steer;
+    if (entity._recoilT > 0) {
+      entity.vx *= 0.92;
+      entity.vy *= 0.92;
+    }
     entity.x += entity.vx * dt;
     entity.y += entity.vy * dt;
   }
 
-  return { entities };
+  return {
+    entities,
+    player: {
+      ...nextPlayer,
+      _hoverVoidAttackGlobalCd: hoverVoidAttackGlobalCd,
+    },
+  };
 }
 
 function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, options = {}) {
@@ -1641,10 +1840,14 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const nextDarkProjectileId = Number.isFinite(darkCreatureStep?.nextDarkProjectileId)
     ? Math.max(1, Math.floor(darkCreatureStep.nextDarkProjectileId))
     : (Number.isFinite(playerState?.nextDarkProjectileId) ? Math.max(1, Math.floor(playerState.nextDarkProjectileId)) : 1);
-  const finalVelocity = darkCreatureStep?.player?.velocity && typeof darkCreatureStep.player.velocity === "object"
-    ? darkCreatureStep.player.velocity
+  const finalVelocity = hoverVoidStep?.player?.velocity && typeof hoverVoidStep.player.velocity === "object"
+    ? hoverVoidStep.player.velocity
+    : darkCreatureStep?.player?.velocity && typeof darkCreatureStep.player.velocity === "object"
+      ? darkCreatureStep.player.velocity
     : resolvedPlayerStep.velocity;
-  nextEnergy = Number.isFinite(darkCreatureStep?.player?.energy) ? darkCreatureStep.player.energy : nextEnergy;
+  nextEnergy = Number.isFinite(hoverVoidStep?.player?.energy)
+    ? hoverVoidStep.player.energy
+    : (Number.isFinite(darkCreatureStep?.player?.energy) ? darkCreatureStep.player.energy : nextEnergy);
   const status = resolvedPlayerStep.status;
   const finalPlayerState = {
     grounded: resolvedPlayerStep.grounded === true,
@@ -1700,6 +1903,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       entities: hoverVoidStep.entities,
       darkProjectiles,
       nextDarkProjectileId,
+      _hoverVoidAttackGlobalCd: Number.isFinite(hoverVoidStep?.player?._hoverVoidAttackGlobalCd)
+        ? hoverVoidStep.player._hoverVoidAttackGlobalCd
+        : Math.max(0, Number.isFinite(playerState?._hoverVoidAttackGlobalCd) ? playerState._hoverVoidAttackGlobalCd : 0),
       status,
       brakeState,
     },
