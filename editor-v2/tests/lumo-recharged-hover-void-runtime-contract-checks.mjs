@@ -37,6 +37,27 @@ function getHover(entities, id = "hover-void") {
   return hover;
 }
 
+function countTinyAlternatingDeltas(samples, axis = "x", epsilon = 0.06) {
+  const deltas = [];
+  for (let i = 1; i < samples.length; i += 1) {
+    const prev = Number.isFinite(samples[i - 1]?.[axis]) ? samples[i - 1][axis] : 0;
+    const next = Number.isFinite(samples[i]?.[axis]) ? samples[i][axis] : 0;
+    deltas.push(next - prev);
+  }
+
+  let alternatingTinyDeltas = 0;
+  for (let i = 1; i < deltas.length; i += 1) {
+    const previousDelta = deltas[i - 1];
+    const nextDelta = deltas[i];
+    const oppositeDirections = Math.sign(previousDelta) !== 0 && Math.sign(nextDelta) !== 0 && Math.sign(previousDelta) !== Math.sign(nextDelta);
+    const bothTiny = Math.abs(previousDelta) <= epsilon && Math.abs(nextDelta) <= epsilon;
+    if (oppositeDirections && bothTiny) {
+      alternatingTinyDeltas += 1;
+    }
+  }
+  return alternatingTinyDeltas;
+}
+
 function runHoverVoidFocusedRuntimeChecks() {
   const worldPacket = buildFlatWorldPacket();
   const tileSize = worldPacket.world.tileSize;
@@ -139,6 +160,86 @@ function runHoverVoidFocusedRuntimeChecks() {
   assert.equal(typeof hover._wakeHold, "number", "_wakeHold should be present in returned runtime entity");
   assert.equal(typeof hover._isFollowing, "boolean", "_isFollowing should be present in returned runtime entity");
   assert.equal(hover.eyeBlend > eyeAfterWake || hover.sleepBlend !== sleepAfterWake, true, "hover blends should continue updating tick-to-tick");
+
+  // Movement-quality focused checks: verify the tuning pass keeps meaningful momentum.
+  player = {
+    ...player,
+    position: { ...player.position, x: hover.x + tileSize * 4.8, y: hover.y - tileSize * 0.2 },
+    velocity: { x: 0, y: 0 },
+  };
+  step = stepWith(worldPacket, player, entities);
+  player = step.player;
+  entities = step.player.entities.map((entity) => (entity.id === "hover-void"
+    ? {
+        ...entity,
+        vx: 0,
+        vy: 0,
+        _targetVX: 0,
+        _targetVY: 0,
+      }
+    : entity));
+  hover = getHover(entities);
+  assert.equal(hover.awake, true, "hover should remain awake when player is still inside lose-sight range");
+  assert.equal(hover._isFollowing, true, "hover should still follow when player is in follow radius");
+
+  const preChasePosition = { x: hover.x, y: hover.y };
+  const chaseSamples = [];
+  for (let index = 0; index < 24; index += 1) {
+    step = stepWith(worldPacket, player, entities);
+    player = step.player;
+    entities = step.player.entities;
+    hover = getHover(entities);
+    chaseSamples.push({
+      x: hover.x,
+      y: hover.y,
+      vx: hover.vx,
+      vy: hover.vy,
+    });
+  }
+
+  const chaseEnd = chaseSamples[chaseSamples.length - 1];
+  const tunedChaseDistance = Math.hypot(chaseEnd.x - preChasePosition.x, chaseEnd.y - preChasePosition.y);
+  // Regression guard: this path used to crawl around ~1-2px/24 ticks when motion state was not persisted.
+  assert.equal(
+    tunedChaseDistance > 8,
+    true,
+    `expected materially faster tuned movement over 24 ticks (distance=${tunedChaseDistance.toFixed(3)}px)`,
+  );
+
+  const firstSpeed = Math.hypot(chaseSamples[0].vx, chaseSamples[0].vy);
+  const finalSpeed = Math.hypot(chaseEnd.vx, chaseEnd.vy);
+  assert.equal(
+    finalSpeed > firstSpeed + 15,
+    true,
+    `expected smooth velocity ramp-up across chase ticks (first=${firstSpeed.toFixed(3)}, final=${finalSpeed.toFixed(3)})`,
+  );
+
+  // Hold-radius jitter check: tiny alternating deltas should not dominate when hovering near target distance.
+  player = {
+    ...player,
+    position: {
+      x: hover.x + tileSize * 3.05,
+      y: hover.y - tileSize * 0.45,
+    },
+    velocity: { x: 0, y: 0 },
+  };
+  step = stepWith(worldPacket, player, entities);
+  player = step.player;
+  entities = step.player.entities;
+  const holdSamples = [];
+  for (let index = 0; index < 48; index += 1) {
+    step = stepWith(worldPacket, player, entities);
+    player = step.player;
+    entities = step.player.entities;
+    hover = getHover(entities);
+    holdSamples.push({ x: hover.x, y: hover.y, vx: hover.vx, vy: hover.vy });
+  }
+  const tinyAlternatingX = countTinyAlternatingDeltas(holdSamples, "x", 0.06);
+  assert.equal(
+    tinyAlternatingX <= 1,
+    true,
+    `expected hold-radius tuning to suppress tiny alternating crawl jitter (tinyAlternatingX=${tinyAlternatingX})`,
+  );
 }
 
 async function runHoverVoidLiveSnapshotChainChecks() {
