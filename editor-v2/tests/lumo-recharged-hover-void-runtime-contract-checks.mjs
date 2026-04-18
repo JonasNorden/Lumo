@@ -240,6 +240,120 @@ function runHoverVoidFocusedRuntimeChecks() {
     true,
     `expected hold-radius tuning to suppress tiny alternating crawl jitter (tinyAlternatingX=${tinyAlternatingX})`,
   );
+
+  // V1 lunge/bravery/global-cooldown slice: one hover with braveGroupSize=2 should never start lunge.
+  player = {
+    ...player,
+    energy: 1,
+    position: { x: hover.x + tileSize * 1.2, y: hover.y + tileSize * 0.6 },
+    velocity: { x: 0, y: 0 },
+  };
+  entities = [
+    {
+      id: "hover-brave-gated",
+      type: "hover_void_01",
+      x: player.position.x - tileSize * 0.45,
+      y: player.position.y - tileSize * 0.95,
+      awake: true,
+      _isFollowing: true,
+      sleepBlend: 0,
+      eyeBlend: 1,
+      braveGroupSize: 2,
+      swarmGroupSize: 3,
+      attackCooldownMin: 0.3,
+      attackCooldownMax: 0.3,
+      _attackCd: 0,
+      _hoverVoidAttackGlobalCd: 0,
+      params: { aggroTiles: 6, followTiles: 7, loseSightTiles: 11 },
+    },
+  ];
+  for (let i = 0; i < 12; i += 1) {
+    step = stepWith(worldPacket, player, entities);
+    player = step.player;
+    entities = step.player.entities;
+  }
+  hover = getHover(entities, "hover-brave-gated");
+  assert.equal(hover._lungeState ?? "idle", "idle", "braveGroupSize gate should block solo hover lunge starts");
+
+  // Two brave hovers: one can lunge, global cooldown blocks immediate simultaneous second lunge.
+  player = {
+    ...player,
+    energy: 1,
+    velocity: { x: 0, y: 0 },
+    position: { x: spawnX + tileSize * 8, y: spawnY },
+  };
+  entities = [
+    {
+      id: "hover-attacker-a",
+      type: "hover_void_01",
+      x: player.position.x - tileSize * 0.55,
+      y: player.position.y - tileSize * 1.0,
+      awake: true,
+      _isFollowing: true,
+      sleepBlend: 0,
+      eyeBlend: 1,
+      braveGroupSize: 2,
+      swarmGroupSize: 2,
+      attackCooldownMin: 0.35,
+      attackCooldownMax: 0.35,
+      attackDamage: 12,
+      attackPushback: 180,
+      _attackCd: 0,
+      params: { aggroTiles: 6, followTiles: 7, loseSightTiles: 11 },
+    },
+    {
+      id: "hover-attacker-b",
+      type: "hover_void_01",
+      x: player.position.x + tileSize * 0.2,
+      y: player.position.y - tileSize * 1.0,
+      awake: true,
+      _isFollowing: true,
+      sleepBlend: 0,
+      eyeBlend: 1,
+      braveGroupSize: 2,
+      swarmGroupSize: 2,
+      attackCooldownMin: 0.35,
+      attackCooldownMax: 0.35,
+      attackDamage: 12,
+      attackPushback: 180,
+      _attackCd: 0,
+      params: { aggroTiles: 6, followTiles: 7, loseSightTiles: 11 },
+    },
+  ];
+  const energyBeforeLunge = player.energy;
+  step = stepWith(worldPacket, player, entities);
+  player = step.player;
+  entities = step.player.entities;
+  const attackerA = getHover(entities, "hover-attacker-a");
+  const attackerB = getHover(entities, "hover-attacker-b");
+  const activeLungeActors = [attackerA, attackerB].filter((entityState) => entityState._lungeState === "out" || entityState._lungeState === "back");
+  assert.equal(activeLungeActors.length, 1, "global hover attack cooldown should allow only one immediate lunge actor");
+  assert.equal(
+    Number.isFinite(player._hoverVoidAttackGlobalCd) && player._hoverVoidAttackGlobalCd > 0,
+    true,
+    "hover lunge start should set runtime global attack cooldown",
+  );
+
+  let sawBackState = false;
+  let sawReturnIdle = false;
+  let sawLungeHit = false;
+  for (let i = 0; i < 80; i += 1) {
+    step = stepWith(worldPacket, player, entities);
+    player = step.player;
+    entities = step.player.entities;
+    const a = getHover(entities, "hover-attacker-a");
+    const b = getHover(entities, "hover-attacker-b");
+    sawBackState = sawBackState || a._lungeState === "back" || b._lungeState === "back";
+    sawReturnIdle = sawReturnIdle || (a._lungeState === "idle" && b._lungeState === "idle");
+    sawLungeHit = sawLungeHit || a._lungeHitDone === true || b._lungeHitDone === true;
+    if (sawBackState && sawReturnIdle && sawLungeHit) {
+      break;
+    }
+  }
+  assert.equal(sawBackState, true, "lunge FSM should transition through back state");
+  assert.equal(sawReturnIdle, true, "lunge FSM should return to idle after back phase");
+  assert.equal(sawLungeHit, true, "at least one lunge should register player collision hit");
+  assert.equal(player.energy < energyBeforeLunge, true, "lunge contact should reduce player energy");
 }
 
 async function runHoverVoidLiveSnapshotChainChecks() {
@@ -279,6 +393,11 @@ async function runHoverVoidLiveSnapshotChainChecks() {
   assert.equal(typeof hover.eyeBlend, "number");
   assert.equal(typeof hover._wakeHold, "number");
   assert.equal(typeof hover._isFollowing, "boolean");
+  assert.equal(typeof hover._blinkT, "number");
+  assert.equal(typeof hover._blinkDur, "number");
+  assert.equal(typeof hover._lungeState, "string");
+  assert.equal(typeof hover._attackCd, "number");
+  assert.equal(typeof snapshot._hoverVoidAttackGlobalCd, "number");
 
   let sawWake = hover.awake === true;
   let sawFollow = hover._isFollowing === true;
@@ -303,6 +422,9 @@ async function runHoverVoidLiveSnapshotChainChecks() {
   assert.equal(sawFollow, true, "expected hover _isFollowing field to survive/advance through adapter player snapshot chain");
   assert.equal(sawWakeHoldPositive, true, "expected hover _wakeHold field to survive/advance through adapter player snapshot chain");
   assert.equal(sawBlendMotion, true, "expected hover blend fields to survive/advance through adapter player snapshot chain");
+  assert.equal(typeof hover._blinkT, "number", "expected hover blink timer field to survive adapter snapshot chain");
+  assert.equal(typeof hover._lungeState, "string", "expected hover lunge state field to survive adapter snapshot chain");
+  assert.equal(typeof snapshot._hoverVoidAttackGlobalCd, "number", "expected player global hover attack cooldown field in adapter snapshot");
 }
 
 runHoverVoidFocusedRuntimeChecks();
