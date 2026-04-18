@@ -76,14 +76,26 @@ async function runLiveDarkSnapshotChainChecks() {
   assert.equal(hover._wakeHold, 1.25, "expected raw hover _wakeHold field in adapter snapshot");
   assert.equal(hover._isFollowing, true, "expected raw hover _isFollowing field in adapter snapshot");
 
-  let sawProjectile = Array.isArray(snapshot.darkProjectiles) && snapshot.darkProjectiles.length > 0;
-  for (let i = 0; i < 80 && sawProjectile !== true; i += 1) {
+  let firstSpawnedProjectile = Array.isArray(snapshot.darkProjectiles) && snapshot.darkProjectiles.length > 0
+    ? snapshot.darkProjectiles[0]
+    : null;
+  for (let i = 0; i < 80 && !firstSpawnedProjectile; i += 1) {
     adapter.tick({});
     snapshot = adapter.getPlayerSnapshot();
-    sawProjectile = Array.isArray(snapshot.darkProjectiles) && snapshot.darkProjectiles.length > 0;
+    if (Array.isArray(snapshot.darkProjectiles) && snapshot.darkProjectiles.length > 0) {
+      firstSpawnedProjectile = snapshot.darkProjectiles[0];
+    }
   }
 
-  assert.equal(sawProjectile, true, "expected darkProjectiles list to survive through live adapter snapshot chain");
+  assert.ok(firstSpawnedProjectile, "expected darkProjectiles list to survive through live adapter snapshot chain");
+  assert.equal(firstSpawnedProjectile.age, 0, "expected adapter snapshot to expose spawned projectile without same-tick stepping");
+
+  const spawnedProjectileId = firstSpawnedProjectile.id;
+  adapter.tick({});
+  const oneTickLaterSnapshot = adapter.getPlayerSnapshot();
+  const oneTickLaterProjectile = oneTickLaterSnapshot.darkProjectiles.find((projectile) => projectile.id === spawnedProjectileId);
+  assert.ok(oneTickLaterProjectile, "expected spawned projectile to survive long enough for next adapter snapshot");
+  assert.equal(oneTickLaterProjectile.age > 0, true, "expected spawned projectile to keep aging after surviving spawn tick");
 
   console.log("live dark snapshot chain adapter checks ok");
 }

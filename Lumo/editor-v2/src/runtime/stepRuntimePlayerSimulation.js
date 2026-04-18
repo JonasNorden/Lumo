@@ -814,7 +814,7 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
   // Step dark spell projectiles and apply direct-hit damage.
   const worldWidthPx = resolveWorldDimensionPx(worldPacket?.world?.width, tileSize);
   const worldHeightPx = resolveWorldDimensionPx(worldPacket?.world?.height, tileSize);
-  for (const projectile of [...darkProjectiles, ...spawnedProjectiles]) {
+  for (const projectile of darkProjectiles) {
     const nextProjectile = { ...projectile };
     nextProjectile.vy += nextProjectile.gravity * dt;
     nextProjectile.x += nextProjectile.vx * dt;
@@ -845,6 +845,10 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
       continue;
     }
     steppedProjectiles.push(nextProjectile);
+  }
+
+  for (const spawnedProjectile of spawnedProjectiles) {
+    steppedProjectiles.push({ ...spawnedProjectile });
   }
 
   return {
