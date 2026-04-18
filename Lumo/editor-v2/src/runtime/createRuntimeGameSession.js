@@ -44,6 +44,64 @@ function buildPlayerSnapshot(playerState) {
       }))
       .filter((projectile) => projectile.x !== null && projectile.y !== null)
     : [];
+  const normalizedEntities = Array.isArray(playerState?.entities)
+    ? playerState.entities
+      .map((entity) => ({
+          id: typeof entity?.id === "string" ? entity.id : null,
+          type: typeof entity?.type === "string" ? entity.type : "dummy",
+          x: Number.isFinite(entity?.x) ? entity.x : null,
+          y: Number.isFinite(entity?.y) ? entity.y : null,
+          size: Number.isFinite(entity?.size) ? entity.size : 24,
+          hp: Number.isFinite(entity?.hp) ? entity.hp : 0,
+          maxHp: Number.isFinite(entity?.maxHp) ? entity.maxHp : 0,
+          alive: entity?.alive === true,
+          active: entity?.active === true,
+          state: typeof entity?.state === "string" ? entity.state : "idle",
+          hitFlashTicks: Number.isFinite(entity?.hitFlashTicks) ? entity.hitFlashTicks : 0,
+          lastPulseIdHit: Number.isFinite(entity?.lastPulseIdHit) ? entity.lastPulseIdHit : -1,
+          illuminated: entity?.illuminated === true,
+          flareExposure: Number.isFinite(entity?.flareExposure) ? entity.flareExposure : 0,
+          consumesFlare: entity?.consumesFlare === true,
+          lastFlareIdHit: Number.isFinite(entity?.lastFlareIdHit) ? entity.lastFlareIdHit : -1,
+          isDarkActive: entity?.isDarkActive === true,
+          dying: entity?.dying === true,
+          dissolveT: Number.isFinite(entity?.dissolveT) ? entity.dissolveT : 0,
+          // Preserve raw dark creature cast runtime fields for live snapshot consumers.
+          _castCd: Number.isFinite(entity?._castCd) ? entity._castCd : null,
+          _castChargeT: Number.isFinite(entity?._castChargeT) ? entity._castChargeT : null,
+          _castTargetX: Number.isFinite(entity?._castTargetX) ? entity._castTargetX : null,
+          _castTargetY: Number.isFinite(entity?._castTargetY) ? entity._castTargetY : null,
+          // Preserve raw hover-void runtime state fields without fabricating defaults.
+          awake: typeof entity?.awake === "boolean" ? entity.awake : null,
+          sleepBlend: Number.isFinite(entity?.sleepBlend) ? entity.sleepBlend : null,
+          eyeBlend: Number.isFinite(entity?.eyeBlend) ? entity.eyeBlend : null,
+          _wakeHold: Number.isFinite(entity?._wakeHold) ? entity._wakeHold : null,
+          _isFollowing: typeof entity?._isFollowing === "boolean" ? entity._isFollowing : null,
+          castChargeT: Number.isFinite(entity?._castChargeT) ? entity._castChargeT : 0,
+          castCooldownT: Number.isFinite(entity?._castCd) ? entity._castCd : 0,
+          // Keep authored params intact through runtime session snapshots.
+          params: entity?.params && typeof entity.params === "object" ? clonePlainData(entity.params) : {},
+        }))
+      .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null)
+    : [];
+  const hasRenderableDarkProjectileEntity = normalizedEntities.some((entity) => (
+    entity.type === "darkSpellProjectile" || entity.type === "dark_spell_projectile"
+  ));
+  const transientDarkProjectileEntities = hasRenderableDarkProjectileEntity
+    ? []
+    : normalizedDarkProjectiles.map((projectile, index) => ({
+        id: `runtime-dark-projectile-${index}`,
+        type: "darkSpellProjectile",
+        x: projectile.x,
+        y: projectile.y,
+        size: 12,
+        rot: Math.atan2(projectile.vy, projectile.vx),
+        alpha: projectile.maxAge && projectile.maxAge > 0
+          ? Math.max(0, Math.min(1, 1 - (projectile.age / projectile.maxAge)))
+          : 1,
+        active: true,
+        alive: true,
+      }));
 
   return {
     ok: playerState && typeof playerState === "object",
@@ -95,46 +153,7 @@ function buildPlayerSnapshot(playerState) {
         }))
         .filter((flare) => flare.id !== null && flare.x !== null && flare.y !== null && flare.radius !== null)
       : [],
-    entities: Array.isArray(playerState?.entities)
-      ? playerState.entities
-        .map((entity) => ({
-          id: typeof entity?.id === "string" ? entity.id : null,
-          type: typeof entity?.type === "string" ? entity.type : "dummy",
-          x: Number.isFinite(entity?.x) ? entity.x : null,
-          y: Number.isFinite(entity?.y) ? entity.y : null,
-          size: Number.isFinite(entity?.size) ? entity.size : 24,
-          hp: Number.isFinite(entity?.hp) ? entity.hp : 0,
-          maxHp: Number.isFinite(entity?.maxHp) ? entity.maxHp : 0,
-          alive: entity?.alive === true,
-          active: entity?.active === true,
-          state: typeof entity?.state === "string" ? entity.state : "idle",
-          hitFlashTicks: Number.isFinite(entity?.hitFlashTicks) ? entity.hitFlashTicks : 0,
-          lastPulseIdHit: Number.isFinite(entity?.lastPulseIdHit) ? entity.lastPulseIdHit : -1,
-          illuminated: entity?.illuminated === true,
-          flareExposure: Number.isFinite(entity?.flareExposure) ? entity.flareExposure : 0,
-          consumesFlare: entity?.consumesFlare === true,
-          lastFlareIdHit: Number.isFinite(entity?.lastFlareIdHit) ? entity.lastFlareIdHit : -1,
-          isDarkActive: entity?.isDarkActive === true,
-          dying: entity?.dying === true,
-          dissolveT: Number.isFinite(entity?.dissolveT) ? entity.dissolveT : 0,
-          // Preserve raw dark creature cast runtime fields for live snapshot consumers.
-          _castCd: Number.isFinite(entity?._castCd) ? entity._castCd : null,
-          _castChargeT: Number.isFinite(entity?._castChargeT) ? entity._castChargeT : null,
-          _castTargetX: Number.isFinite(entity?._castTargetX) ? entity._castTargetX : null,
-          _castTargetY: Number.isFinite(entity?._castTargetY) ? entity._castTargetY : null,
-          // Preserve raw hover-void runtime state fields without fabricating defaults.
-          awake: typeof entity?.awake === "boolean" ? entity.awake : null,
-          sleepBlend: Number.isFinite(entity?.sleepBlend) ? entity.sleepBlend : null,
-          eyeBlend: Number.isFinite(entity?.eyeBlend) ? entity.eyeBlend : null,
-          _wakeHold: Number.isFinite(entity?._wakeHold) ? entity._wakeHold : null,
-          _isFollowing: typeof entity?._isFollowing === "boolean" ? entity._isFollowing : null,
-          castChargeT: Number.isFinite(entity?._castChargeT) ? entity._castChargeT : 0,
-          castCooldownT: Number.isFinite(entity?._castCd) ? entity._castCd : 0,
-          // Keep authored params intact through runtime session snapshots.
-          params: entity?.params && typeof entity.params === "object" ? clonePlainData(entity.params) : {},
-        }))
-        .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null)
-      : [],
+    entities: normalizedEntities.concat(transientDarkProjectileEntities),
     darkProjectiles: normalizedDarkProjectiles,
   };
 }
