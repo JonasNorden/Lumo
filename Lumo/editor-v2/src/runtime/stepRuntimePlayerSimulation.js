@@ -258,6 +258,11 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
         eyeBlend: Number.isFinite(Number(source?.eyeBlend)) ? Number(source.eyeBlend) : 0,
         _wakeHold: Number.isFinite(Number(source?._wakeHold)) ? Number(source._wakeHold) : 0,
         _isFollowing: typeof source?._isFollowing === "boolean" ? source._isFollowing : false,
+        _t: Number.isFinite(Number(source?._t)) ? Number(source._t) : 0,
+        _targetVX: Number.isFinite(Number(source?._targetVX)) ? Number(source._targetVX) : 0,
+        _targetVY: Number.isFinite(Number(source?._targetVY)) ? Number(source._targetVY) : 0,
+        vx: Number.isFinite(Number(source?.vx)) ? Number(source.vx) : 0,
+        vy: Number.isFinite(Number(source?.vy)) ? Number(source.vy) : 0,
       }
     : {};
 
