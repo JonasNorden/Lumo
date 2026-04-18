@@ -53,7 +53,7 @@ function extractLumoHtmlEntityReadKeys() {
   const section = sectionMatch[1];
 
   const keys = [];
-  for (const match of section.matchAll(/\n\s+([a-zA-Z][a-zA-Z0-9]*): /g)) {
+  for (const match of section.matchAll(/\n\s+([_a-zA-Z][_a-zA-Z0-9]*): /g)) {
     keys.push(match[1]);
   }
 
@@ -158,10 +158,54 @@ async function runEntityRuntimeTruthMapChecks() {
   const { html, normalized: lumoEntityReadKeys } = extractLumoHtmlEntityReadKeys();
   assert.deepEqual(
     lumoEntityReadKeys,
-    ["active", "alive", "consumesFlare", "flareExposure", "hitFlashTicks", "id", "illuminated", "params", "size", "state", "type", "x", "y"],
-    "Expected Lumo.html entity reader to flatten to the fixed live render shape.",
+    [
+      "_angryT",
+      "_blinkDur",
+      "_blinkT",
+      "_facingX",
+      "_lungeState",
+      "active",
+      "alive",
+      "alpha",
+      "awake",
+      "consumesFlare",
+      "eyeBlend",
+      "flareExposure",
+      "h",
+      "hitFlashTicks",
+      "id",
+      "illuminated",
+      "params",
+      "projectileSpritePath",
+      "rot",
+      "size",
+      "sleepBlend",
+      "state",
+      "type",
+      "w",
+      "x",
+      "y",
+    ],
+    "Expected Lumo.html entity reader to preserve hover eye runtime fields used by live render path.",
   );
   assert.equal(html.includes("const drawSize = Math.min(16, Math.max(1, baseSize));"), true, "Expected firefly visual cap to clamp draw size at 16x16.");
+  assert.equal(html.includes("const hoverEyesAfterDarkness = [];"), true, "Expected dedicated hover eye post-pass collection in live render loop.");
+  assert.equal(html.includes("drawHoverVoidEyesV1(ctx, eyeDraw.x, eyeDraw.y, eyeDraw.entity, 1);"), true, "Expected live render loop to draw hover eyes via V1 procedural helper.");
+  assert.equal(
+    html.includes("const angry = (Number.isFinite(entity?._angryT) && entity._angryT > 0) || (typeof entity?._lungeState === \"string\" && entity._lungeState !== \"idle\");"),
+    true,
+    "Expected hover eye renderer to select angry-eye path from _angryT or non-idle lunge state.",
+  );
+  assert.equal(
+    html.includes("const blink = Number.isFinite(entity?._blinkDur) && entity._blinkDur > 0 ? 0.15 : 1;"),
+    true,
+    "Expected hover eye renderer to select blink squash/line path from _blinkDur.",
+  );
+  assert.equal(
+    html.includes("if (isHoverEyeRenderableFromRuntime(entity, mapper)) {"),
+    true,
+    "Expected live renderer to guard hover eye draw input by awake + eyeBlend + near-camera visibility.",
+  );
 
   assert.equal(html.includes("ctx.fillStyle = entity.hitFlashTicks > 0 ? `rgba(250, 204, 21, ${hitAlpha})` : \"rgba(239, 68, 68, 0.72)\";"), true, "Expected red-box debug fill path in renderer.");
 
