@@ -28,12 +28,28 @@ function clonePlainData(value) {
 
 // Keeps runtime entity snapshot shape explicit for Lumo.html-facing reads.
 function cloneSnapshotEntity(entity) {
+  const resolvedWidth = Number.isFinite(entity?.w) && entity.w > 0
+    ? entity.w
+    : Number.isFinite(entity?.footprintW) && entity.footprintW > 0
+      ? entity.footprintW
+      : Number.isFinite(entity?.size) && entity.size > 0
+        ? entity.size
+        : null;
+  const resolvedHeight = Number.isFinite(entity?.h) && entity.h > 0
+    ? entity.h
+    : Number.isFinite(entity?.footprintH) && entity.footprintH > 0
+      ? entity.footprintH
+      : Number.isFinite(entity?.size) && entity.size > 0
+        ? entity.size
+        : null;
   return {
     id: typeof entity?.id === "string" ? entity.id : null,
     type: typeof entity?.type === "string" ? entity.type : "dummy",
     x: Number.isFinite(entity?.x) ? entity.x : null,
     y: Number.isFinite(entity?.y) ? entity.y : null,
     size: Number.isFinite(entity?.size) ? entity.size : 24,
+    w: resolvedWidth,
+    h: resolvedHeight,
     hp: Number.isFinite(entity?.hp) ? entity.hp : 0,
     maxHp: Number.isFinite(entity?.maxHp) ? entity.maxHp : 0,
     alive: entity?.alive === true,

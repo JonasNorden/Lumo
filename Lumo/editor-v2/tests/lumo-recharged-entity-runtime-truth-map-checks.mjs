@@ -155,6 +155,30 @@ async function runEntityRuntimeTruthMapChecks() {
   assert.deepEqual(adapterEntity.params, richEntityWithParams.params, "Expected adapter snapshot params to match converted runtime layer params.");
   assert.notEqual(adapterEntity.params, matchingSessionEntity.params, "Expected adapter snapshot params to be cloned and detached from session snapshots.");
 
+  const runtimeCheckpoint = richRuntimeEntities.find((entity) => entity?.type === "checkpoint" || entity?.type === "checkpoint_01");
+  if (runtimeCheckpoint) {
+    const adapterCheckpoint = adapterPlayerSnapshot.entities.find((entity) => entity?.id === runtimeCheckpoint.id);
+    assert.ok(adapterCheckpoint, "Expected checkpoint entity in adapter snapshot truth map.");
+    const expectedCheckpointW = Number.isFinite(runtimeCheckpoint?.w) && runtimeCheckpoint.w > 0
+      ? runtimeCheckpoint.w
+      : Number.isFinite(runtimeCheckpoint?.footprintW) && runtimeCheckpoint.footprintW > 0
+        ? runtimeCheckpoint.footprintW
+        : Number.isFinite(runtimeCheckpoint?.size) && runtimeCheckpoint.size > 0
+          ? runtimeCheckpoint.size
+          : null;
+    const expectedCheckpointH = Number.isFinite(runtimeCheckpoint?.h) && runtimeCheckpoint.h > 0
+      ? runtimeCheckpoint.h
+      : Number.isFinite(runtimeCheckpoint?.footprintH) && runtimeCheckpoint.footprintH > 0
+        ? runtimeCheckpoint.footprintH
+        : Number.isFinite(runtimeCheckpoint?.size) && runtimeCheckpoint.size > 0
+          ? runtimeCheckpoint.size
+          : null;
+    assert.equal(adapterCheckpoint.x, runtimeCheckpoint.x, "Expected checkpoint x to survive adapter snapshot.");
+    assert.equal(adapterCheckpoint.y, runtimeCheckpoint.y, "Expected checkpoint y to survive adapter snapshot.");
+    assert.equal(adapterCheckpoint.w, expectedCheckpointW, "Expected checkpoint width to survive adapter snapshot with runtime fallback dimensions.");
+    assert.equal(adapterCheckpoint.h, expectedCheckpointH, "Expected checkpoint height to survive adapter snapshot with runtime fallback dimensions.");
+  }
+
   const { html, normalized: lumoEntityReadKeys } = extractLumoHtmlEntityReadKeys();
   assert.deepEqual(
     lumoEntityReadKeys,
