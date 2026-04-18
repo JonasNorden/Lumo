@@ -50,14 +50,29 @@ function buildPlayerSnapshot(playerState) {
     : [];
   const normalizedEntities = Array.isArray(playerState?.entities)
     ? playerState.entities
-      .map((entity) => ({
+      .map((entity) => {
+        const resolvedW = Number.isFinite(entity?.w) && entity.w > 0
+          ? entity.w
+          : Number.isFinite(entity?.footprintW) && entity.footprintW > 0
+            ? entity.footprintW
+            : Number.isFinite(entity?.size) && entity.size > 0
+              ? entity.size
+              : null;
+        const resolvedH = Number.isFinite(entity?.h) && entity.h > 0
+          ? entity.h
+          : Number.isFinite(entity?.footprintH) && entity.footprintH > 0
+            ? entity.footprintH
+            : Number.isFinite(entity?.size) && entity.size > 0
+              ? entity.size
+              : null;
+        return {
           id: typeof entity?.id === "string" ? entity.id : null,
           type: typeof entity?.type === "string" ? entity.type : "dummy",
           x: Number.isFinite(entity?.x) ? entity.x : null,
           y: Number.isFinite(entity?.y) ? entity.y : null,
           size: Number.isFinite(entity?.size) ? entity.size : 24,
-          w: Number.isFinite(entity?.w) ? entity.w : null,
-          h: Number.isFinite(entity?.h) ? entity.h : null,
+          w: Number.isFinite(resolvedW) ? resolvedW : null,
+          h: Number.isFinite(resolvedH) ? resolvedH : null,
           rot: Number.isFinite(entity?.rot) ? entity.rot : 0,
           alpha: Number.isFinite(entity?.alpha) ? entity.alpha : 1,
           t: Number.isFinite(entity?.t) ? entity.t : 0,
@@ -118,7 +133,8 @@ function buildPlayerSnapshot(playerState) {
           // Keep authored params intact through runtime session snapshots.
           params: entity?.params && typeof entity.params === "object" ? clonePlainData(entity.params) : {},
           _projectileSpritePath: typeof entity?._projectileSpritePath === "string" ? entity._projectileSpritePath : "",
-        }))
+        };
+      })
       .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null)
     : [];
   const hasRenderableDarkProjectileEntity = normalizedEntities.some((entity) => (

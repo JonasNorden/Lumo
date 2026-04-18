@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { loadLevelDocument } from "../src/runtime/loadLevelDocument.js";
 import { createRuntimeGameSession } from "../src/runtime/createRuntimeGameSession.js";
+import { createLumoRechargedBootAdapter } from "../src/runtime/createLumoRechargedBootAdapter.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
@@ -39,6 +40,8 @@ assert.equal(before?.checkpoint, null, "Expected no checkpoint state before over
 const checkpointEntityBefore = before.entities.find((entity) => entity?.type === "checkpoint");
 assert.ok(checkpointEntityBefore, "Expected checkpoint entity in Recharged runtime entity snapshots.");
 assert.equal(checkpointEntityBefore?.active, true, "Expected checkpoint entity to start active.");
+assert.equal(checkpointEntityBefore?.w, 24, "Expected runtime checkpoint width to be tile-sized.");
+assert.equal(checkpointEntityBefore?.h, 24, "Expected runtime checkpoint height to be tile-sized.");
 assert.equal(
   checkpointEntityBefore?.params?.customSpritePath,
   "data/assets/sprites/lights/lantern_2.png",
@@ -57,6 +60,28 @@ const checkpointEntityAfter = after.entities.find((entity) => entity?.id === che
 assert.ok(checkpointEntityAfter, "Expected checkpoint entity to remain present after overlap.");
 assert.equal(checkpointEntityAfter.active, true, "Expected checkpoint to remain active after overlap.");
 assert.notEqual(checkpointEntityAfter.state, "collected", "Expected checkpoint to never enter pickup collected state.");
+assert.equal(checkpointEntityAfter?.consumesFlare, false, "Expected checkpoint to never be treated as a flare-collectible.");
+
+const adapter = createLumoRechargedBootAdapter({
+  sourceDescriptor: { levelDocument: loaded.level },
+});
+const prepared = await adapter.prepare();
+assert.equal(prepared.ok, true, "Expected adapter prepare to succeed.");
+const booted = await adapter.boot();
+assert.equal(booted.ok, true, "Expected adapter boot to succeed.");
+
+const adapterSnapshotBefore = adapter.getPlayerSnapshot();
+const adapterCheckpointBefore = adapterSnapshotBefore?.entities?.find((entity) => entity?.id === "checkpoint-a");
+assert.ok(adapterCheckpointBefore, "Expected checkpoint entity in active adapter snapshot path.");
+assert.equal(adapterCheckpointBefore?.x, 48, "Expected adapter snapshot checkpoint x in world pixels.");
+assert.equal(adapterCheckpointBefore?.y, 72, "Expected adapter snapshot checkpoint y in world pixels.");
+assert.equal(adapterCheckpointBefore?.w, 24, "Expected adapter snapshot checkpoint width in active path.");
+assert.equal(adapterCheckpointBefore?.h, 24, "Expected adapter snapshot checkpoint height in active path.");
+
+const adapterCheckpointAfter = adapterSnapshotBefore?.entities?.find((entity) => entity?.id === "checkpoint-a");
+assert.ok(adapterCheckpointAfter, "Expected adapter checkpoint entity to remain present in active snapshot path.");
+assert.equal(adapterCheckpointAfter?.active, true, "Expected adapter checkpoint to remain active in active snapshot path.");
+assert.notEqual(adapterCheckpointAfter?.state, "collected", "Expected adapter checkpoint to never be marked as collectible.");
 
 const lumoHtmlPath = path.resolve(repoRoot, "Lumo.html");
 const lumoHtml = fs.readFileSync(lumoHtmlPath, "utf8");
