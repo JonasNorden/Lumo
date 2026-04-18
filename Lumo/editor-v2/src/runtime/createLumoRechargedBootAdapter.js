@@ -76,6 +76,18 @@ function cloneSnapshotEntity(entity) {
     swarmGroupSize: Number.isFinite(entity?.swarmGroupSize) ? entity.swarmGroupSize : null,
     castChargeT: Number.isFinite(entity?._castChargeT) ? entity._castChargeT : 0,
     castCooldownT: Number.isFinite(entity?._castCd) ? entity._castCd : 0,
+    mode: typeof entity?.mode === "string" ? entity.mode : null,
+    lightK: Number.isFinite(entity?.lightK) ? entity.lightK : null,
+    lightRadius: Number.isFinite(entity?.lightRadius) ? entity.lightRadius : null,
+    lightStrength: Number.isFinite(entity?.lightStrength) ? entity.lightStrength : null,
+    dir: Number.isFinite(entity?.dir) ? entity.dir : null,
+    _tail: Array.isArray(entity?._tail)
+      ? entity._tail.map((point) => ({
+        x: Number.isFinite(point?.x) ? point.x : null,
+        y: Number.isFinite(point?.y) ? point.y : null,
+        t: Number.isFinite(point?.t) ? point.t : null,
+      }))
+      : [],
     amount: Number.isFinite(entity?.amount) ? entity.amount : 1,
     // Keep full params object instead of flattening/dropping entity metadata.
     params: entity?.params && typeof entity.params === "object" ? clonePlainData(entity.params) : {},
@@ -146,6 +158,18 @@ function buildPlayerSnapshot(snapshot) {
       : null,
     flares: Array.isArray(source.flares) ? source.flares.map((flare) => ({ ...flare })) : [],
     darkProjectiles,
+    runtimeLights: Array.isArray(source.runtimeLights)
+      ? source.runtimeLights
+        .map((light) => ({
+          entityId: typeof light?.entityId === "string" ? light.entityId : null,
+          type: typeof light?.type === "string" ? light.type : null,
+          x: Number.isFinite(light?.x) ? light.x : null,
+          y: Number.isFinite(light?.y) ? light.y : null,
+          radius: Number.isFinite(light?.radius) ? light.radius : null,
+          strength: Number.isFinite(light?.strength) ? light.strength : null,
+        }))
+        .filter((light) => light.x !== null && light.y !== null && light.radius !== null && light.strength !== null)
+      : [],
     entities: entities.concat(transientDarkProjectileEntities),
   };
 }

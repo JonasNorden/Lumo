@@ -653,6 +653,18 @@
             _angryT: Number.isFinite(entity?._angryT) ? entity._angryT : 0,
             _lungeState: typeof entity?._lungeState === "string" ? entity._lungeState : "idle",
             _facingX: Number.isFinite(entity?._facingX) ? entity._facingX : 1,
+            mode: typeof entity?.mode === "string" ? entity.mode : "rest",
+            lightK: Number.isFinite(entity?.lightK) ? entity.lightK : 0,
+            lightRadius: Number.isFinite(entity?.lightRadius) ? entity.lightRadius : 0,
+            lightStrength: Number.isFinite(entity?.lightStrength) ? entity.lightStrength : 0,
+            dir: Number.isFinite(entity?.dir) ? entity.dir : 1,
+            _tail: Array.isArray(entity?._tail)
+              ? entity._tail.map((point) => ({
+                x: Number.isFinite(point?.x) ? point.x : 0,
+                y: Number.isFinite(point?.y) ? point.y : 0,
+                t: Number.isFinite(point?.t) ? point.t : 0,
+              }))
+              : [],
             // Preserve runtime entity params for future Recharged behavior restoration.
             params: entity?.params && typeof entity.params === "object" ? cloneParams(entity.params) : {},
             projectileSpritePath: typeof entity?._projectileSpritePath === "string" ? entity._projectileSpritePath : "",
@@ -1444,7 +1456,7 @@
               ctx.restore();
               renderedKnownEntityVisual = true;
             } else if (entity.type === "firefly_01") {
-              // V1-like firefly: tiny body sprite with warm light halo when lit.
+              // V1-like firefly: sprite facing + runtime tail + rump halo while lit.
               const variants = Array.isArray(entityVisualState.fireflies) ? entityVisualState.fireflies : [];
               const idKey = typeof entity.id === "string" ? entity.id : "";
               let variantIndex = 0;
@@ -1452,18 +1464,61 @@
                 variantIndex = (variantIndex + idKey.charCodeAt(index)) % Math.max(1, variants.length);
               }
               const sprite = variants[variantIndex] || variants[0] || null;
-              if (entity.illuminated === true) {
+              const kGlow = Number.isFinite(entity?.lightK) ? Math.max(0, Math.min(1, entity.lightK)) : 0;
+              const tail = Array.isArray(entity?._tail) ? entity._tail : [];
+              for (let tailIndex = 0; tailIndex < tail.length; tailIndex += 1) {
+                const point = tail[tailIndex];
+                const age = Number.isFinite(point?.t) ? point.t : 0;
+                const alpha = Math.max(0, 1 - (age / 0.35));
+                if (alpha <= 0) continue;
+                const tailRect = mapper.worldToCanvasRect(
+                  Number.isFinite(point?.x) ? point.x : entity.x,
+                  Number.isFinite(point?.y) ? point.y : entity.y,
+                  1,
+                  1,
+                );
+                const px = tailRect.x;
+                const py = tailRect.y;
+                if (tailIndex === tail.length - 1) {
+                  ctx.fillStyle = `rgba(255,230,120,${(0.85 * alpha).toFixed(3)})`;
+                  ctx.beginPath();
+                  ctx.arc(px, py, 2, 0, Math.PI * 2);
+                  ctx.fill();
+                } else {
+                  ctx.fillStyle = `rgba(255,255,255,${(0.45 * alpha).toFixed(3)})`;
+                  ctx.beginPath();
+                  ctx.arc(px, py, 1.2, 0, Math.PI * 2);
+                  ctx.fill();
+                }
+              }
+              if (kGlow > 0.01) {
                 const centerX = entityRect.x + entityRect.w * 0.5;
                 const centerY = entityRect.y + entityRect.h * 0.5;
                 const glowRadius = Math.max(entityRect.w, entityRect.h) * 1.3;
                 const glow = ctx.createRadialGradient(centerX, centerY, 1, centerX, centerY, glowRadius);
-                glow.addColorStop(0, "rgba(255, 220, 140, 0.52)");
-                glow.addColorStop(0.45, "rgba(255, 195, 95, 0.26)");
+                glow.addColorStop(0, `rgba(255, 220, 140, ${(0.52 * kGlow).toFixed(3)})`);
+                glow.addColorStop(0.45, `rgba(255, 195, 95, ${(0.26 * kGlow).toFixed(3)})`);
                 glow.addColorStop(1, "rgba(255, 195, 95, 0)");
                 ctx.fillStyle = glow;
                 ctx.beginPath();
                 ctx.arc(centerX, centerY, glowRadius, 0, Math.PI * 2);
                 ctx.fill();
+
+                const dir = Number.isFinite(entity?.dir) && entity.dir < 0 ? -1 : 1;
+                const rumpX = dir === 1 ? (entityRect.x + 2) : (entityRect.x + entityRect.w - 2);
+                const rumpY = entityRect.y + entityRect.h * 0.92;
+                const rumpOuter = 14;
+                const rumpGrad = ctx.createRadialGradient(rumpX, rumpY, 2.5, rumpX, rumpY, rumpOuter);
+                rumpGrad.addColorStop(0, `rgba(255,220,140,${(0.85 * kGlow).toFixed(3)})`);
+                rumpGrad.addColorStop(0.35, `rgba(255,195,95,${(0.55 * kGlow).toFixed(3)})`);
+                rumpGrad.addColorStop(1, "rgba(255,195,95,0)");
+                ctx.save();
+                ctx.globalCompositeOperation = "lighter";
+                ctx.fillStyle = rumpGrad;
+                ctx.beginPath();
+                ctx.arc(rumpX, rumpY, rumpOuter, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
               }
               if (sprite && sprite.complete) {
                 // Render at true 1x1 footprint, centered on anchor, with hard 16x16 cap.
@@ -1471,7 +1526,16 @@
                 const drawSize = Math.min(16, Math.max(1, baseSize));
                 const drawX = entityRect.x + (entityRect.w * 0.5) - (drawSize * 0.5);
                 const drawY = entityRect.y + (entityRect.h * 0.5) - (drawSize * 0.5);
-                ctx.drawImage(sprite, drawX, drawY, drawSize, drawSize);
+                const dir = Number.isFinite(entity?.dir) && entity.dir < 0 ? -1 : 1;
+                if (dir < 0) {
+                  ctx.save();
+                  ctx.translate(drawX + drawSize, drawY);
+                  ctx.scale(-1, 1);
+                  ctx.drawImage(sprite, 0, 0, drawSize, drawSize);
+                  ctx.restore();
+                } else {
+                  ctx.drawImage(sprite, drawX, drawY, drawSize, drawSize);
+                }
                 renderedKnownEntityVisual = true;
               }
             }
