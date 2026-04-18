@@ -840,6 +840,9 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
     if (outsideWorld || expired) {
       continue;
     }
+    if (doesAabbOverlapSolidTile(worldPacket, tileSize, projectileBounds)) {
+      continue;
+    }
     if (isAabbOverlap(projectileBounds, playerBounds)) {
       nextPlayer = applyDarkCreatureDamageToPlayer(
         nextPlayer,
@@ -1094,6 +1097,24 @@ function resolveWorldDimensionPx(value, tileSize) {
     return value;
   }
   return value * tileSize;
+}
+
+function doesAabbOverlapSolidTile(worldPacket, tileSize, bounds) {
+  if (!Number.isFinite(tileSize) || tileSize <= 0 || !bounds || !Number.isFinite(bounds.x) || !Number.isFinite(bounds.y) || !Number.isFinite(bounds.w) || !Number.isFinite(bounds.h)) {
+    return false;
+  }
+  const minGridX = Math.floor(bounds.x / tileSize);
+  const maxGridX = Math.floor((bounds.x + bounds.w - 0.001) / tileSize);
+  const minGridY = Math.floor(bounds.y / tileSize);
+  const maxGridY = Math.floor((bounds.y + bounds.h - 0.001) / tileSize);
+  for (let gridY = minGridY; gridY <= maxGridY; gridY += 1) {
+    for (let gridX = minGridX; gridX <= maxGridX; gridX += 1) {
+      if (isRuntimeGridSolid(worldPacket, gridX, gridY)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function stepFlares(worldPacket, playerState, intent, options = {}) {
