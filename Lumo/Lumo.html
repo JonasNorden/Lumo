@@ -72,6 +72,7 @@
       "data/assets/sprites/pickups/pc_03.png",
       "data/assets/sprites/pickups/pc_04.png",
     ];
+    const RECHARGED_ENTITY_SPRITE_CHECKPOINT = "data/assets/sprites/lights/lantern_2.png";
     const RECHARGED_ENTITY_SPRITE_LANTERN = "data/assets/sprites/lights/lantern_01.png";
     const RECHARGED_ENTITY_SPRITE_DARK_CREATURE_IDLE = [
       "data/assets/sprites/creatures/dc_idle_3.png",
@@ -775,6 +776,8 @@
             params: entity?.params && typeof entity.params === "object" ? cloneParams(entity.params) : {},
             _projectileSpritePath: typeof entity?._projectileSpritePath === "string" ? entity._projectileSpritePath : "",
             projectileSpritePath: typeof entity?._projectileSpritePath === "string" ? entity._projectileSpritePath : "",
+            _checkpointSpritePath: typeof entity?._checkpointSpritePath === "string" ? entity._checkpointSpritePath : "",
+            checkpointSpritePath: typeof entity?._checkpointSpritePath === "string" ? entity._checkpointSpritePath : "",
           }))
           .filter((entity) => entity.x !== null && entity.y !== null && entity.active === true);
       } catch (_error) {
@@ -1010,6 +1013,7 @@
         state.rechargedEntityVisualState = {
           flarePickup: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_FLARE_PICKUP),
           powerCells: RECHARGED_ENTITY_SPRITE_POWERCELLS.map((src) => createRechargedSpriteImage(src)),
+          checkpoints: [createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_CHECKPOINT)],
           lantern: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_LANTERN),
           darkCreatureIdle: RECHARGED_ENTITY_SPRITE_DARK_CREATURE_IDLE.map((src) => createRechargedSpriteImage(src)),
           fireflies: RECHARGED_ENTITY_SPRITE_FIREFLIES.map((src) => createRechargedSpriteImage(src)),
@@ -1020,6 +1024,7 @@
             impact01: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_DARK_SPELL_IMPACT01),
           },
           darkSpellByPath: new Map(),
+          checkpointByPath: new Map(),
         };
       }
 
@@ -1036,6 +1041,30 @@
         entityVisualState.darkSpellByPath.set(projectileSpritePath, image);
       }
       return image.complete ? image : null;
+    }
+
+    function getRechargedCheckpointSprite(entityVisualState, entity) {
+      if (!entityVisualState || !entity || typeof entity !== "object") {
+        return null;
+      }
+      const customSpritePath = (
+        typeof entity?._checkpointSpritePath === "string" && entity._checkpointSpritePath.trim().length > 0
+          ? entity._checkpointSpritePath.trim()
+          : typeof entity?.params?.customSpritePath === "string" && entity.params.customSpritePath.trim().length > 0
+            ? entity.params.customSpritePath.trim()
+            : ""
+      );
+      if (customSpritePath.length > 0) {
+        let image = entityVisualState.checkpointByPath.get(customSpritePath);
+        if (!image) {
+          image = createRechargedSpriteImage(customSpritePath);
+          entityVisualState.checkpointByPath.set(customSpritePath, image);
+        }
+        return image.complete ? image : null;
+      }
+      const defaults = Array.isArray(entityVisualState.checkpoints) ? entityVisualState.checkpoints : [];
+      const fallback = defaults[0] || null;
+      return fallback && fallback.complete ? fallback : null;
     }
 
     function ensureRechargedBgVisualState(state) {
@@ -1480,6 +1509,12 @@
                 const drawX = entityRect.x + (entityRect.w * 0.5) - (drawSize * 0.5);
                 const drawY = entityRect.y + (entityRect.h * 0.5) - (drawSize * 0.5);
                 ctx.drawImage(sprite, drawX, drawY, drawSize, drawSize);
+                renderedKnownEntityVisual = true;
+              }
+            } else if (entity.type === "checkpoint_01" || entity.type === "checkpoint") {
+              const sprite = getRechargedCheckpointSprite(entityVisualState, entity);
+              if (sprite) {
+                ctx.drawImage(sprite, entityRect.x, entityRect.y, 24, 24);
                 renderedKnownEntityVisual = true;
               }
             } else if (entity.type === "lantern_01") {

@@ -157,6 +157,14 @@ function buildPlayerSnapshot(playerState) {
     _hoverVoidAttackGlobalCd: Number.isFinite(playerState?._hoverVoidAttackGlobalCd) ? playerState._hoverVoidAttackGlobalCd : 0,
     boostActive: playerState?.boostActive === true,
     flareStash: Number.isFinite(playerState?.flareStash) ? playerState.flareStash : 1,
+    checkpoint: playerState?.checkpoint && typeof playerState.checkpoint === "object"
+      ? {
+          tx: Number.isFinite(playerState?.checkpoint?.tx) ? playerState.checkpoint.tx : null,
+          ty: Number.isFinite(playerState?.checkpoint?.ty) ? playerState.checkpoint.ty : null,
+          px: Number.isFinite(playerState?.checkpoint?.px) ? playerState.checkpoint.px : null,
+          py: Number.isFinite(playerState?.checkpoint?.py) ? playerState.checkpoint.py : null,
+        }
+      : null,
     pulse: playerState?.pulse && typeof playerState.pulse === "object"
       ? {
           active: playerState.pulse.active === true,

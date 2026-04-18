@@ -416,6 +416,14 @@ function isLanternEntityType(entityType) {
   return normalizedType === "lantern_01" || normalizedType === "lantern";
 }
 
+function isCheckpointEntityType(entityType) {
+  if (typeof entityType !== "string") {
+    return false;
+  }
+  const normalizedType = entityType.trim().toLowerCase();
+  return normalizedType === "checkpoint_01" || normalizedType === "checkpoint";
+}
+
 function buildPlayerPickupBounds(playerState, tileSize) {
   const width = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24;
   const height = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24;
@@ -441,6 +449,71 @@ function isAabbOverlap(a, b) {
     return false;
   }
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function resolvePlayerCheckpointState(playerState, checkpointEntity, tileSize) {
+  if (!checkpointEntity || typeof checkpointEntity !== "object") {
+    return playerState?.checkpoint && typeof playerState.checkpoint === "object"
+      ? { ...playerState.checkpoint }
+      : null;
+  }
+
+  const ts = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24;
+  const px = Number.isFinite(checkpointEntity?.x) ? checkpointEntity.x : 0;
+  const py = Number.isFinite(checkpointEntity?.y) ? checkpointEntity.y : 0;
+  const tx = Math.floor(px / ts);
+  const ty = Math.floor(py / ts);
+  return { tx, ty, px: tx * ts, py: ty * ts };
+}
+
+function stepCheckpointOverlap(worldPacket, playerState, sourceEntities) {
+  const checkpointState = playerState?.checkpoint && typeof playerState.checkpoint === "object"
+    ? { ...playerState.checkpoint }
+    : null;
+  if (!Array.isArray(sourceEntities) || sourceEntities.length === 0) {
+    return { checkpoint: checkpointState, touched: false };
+  }
+
+  const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0 ? worldPacket.world.tileSize : 24;
+  const playerBounds = buildPlayerPickupBounds(playerState, tileSize);
+  let nextCheckpoint = checkpointState;
+  let touched = false;
+
+  for (const entity of sourceEntities) {
+    if (entity?.active !== true || !isCheckpointEntityType(entity?.type)) {
+      continue;
+    }
+    const width = Number.isFinite(entity?.footprintW) && entity.footprintW > 0
+      ? entity.footprintW
+      : Number.isFinite(entity?.w) && entity.w > 0
+        ? entity.w
+        : Number.isFinite(entity?.size) && entity.size > 0
+          ? entity.size
+          : tileSize;
+    const height = Number.isFinite(entity?.footprintH) && entity.footprintH > 0
+      ? entity.footprintH
+      : Number.isFinite(entity?.h) && entity.h > 0
+        ? entity.h
+        : Number.isFinite(entity?.size) && entity.size > 0
+          ? entity.size
+          : tileSize;
+    const entityBounds = {
+      x: Number.isFinite(entity?.x) ? entity.x : 0,
+      y: Number.isFinite(entity?.y) ? entity.y : 0,
+      w: width,
+      h: height,
+    };
+    if (!isAabbOverlap(playerBounds, entityBounds)) {
+      continue;
+    }
+    nextCheckpoint = resolvePlayerCheckpointState(playerState, entity, tileSize);
+    touched = true;
+  }
+
+  return {
+    checkpoint: nextCheckpoint,
+    touched,
+  };
 }
 
 function stepPickupCollection(worldPacket, playerState, sourceEntities) {
@@ -2132,6 +2205,10 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const bottomRespawn = maybeResolveBottomRespawn(worldPacket, verticalStep, options);
   const resolvedPlayerStep = bottomRespawn?.player ?? verticalStep;
   const normalizedEntities = normalizeRuntimeEntities(options?.entities, worldPacket, playerState);
+  const checkpointStep = stepCheckpointOverlap(worldPacket, {
+    ...playerState,
+    position: resolvedPlayerStep.position,
+  }, normalizedEntities);
   const pickupStep = stepPickupCollection(worldPacket, {
     ...playerState,
     position: resolvedPlayerStep.position,
@@ -2265,6 +2342,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       facingX: flareStep.facingX,
       nextFlareId: flareStep.nextFlareId,
       entities: hoverVoidStep.entities,
+      checkpoint: checkpointStep.checkpoint,
       runtimeLights: fireflyStep.lights,
       darkProjectiles,
       nextDarkProjectileId,
@@ -2332,6 +2410,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         flarePickupCollected: pickupStep.flareCollectedCount,
         flarePickupCollectedIds: pickupStep.flareCollectedIds,
         powerCellPickupCollected: pickupStep.powerCellCollectedCount,
+        checkpointTouched: checkpointStep.touched,
         flareThrowSuppressedByEmptyStash: flareStep.flareThrowSuppressedByEmptyStash,
         flareThrowSuppressedByEnergy: flareStep.flareThrowSuppressedByEnergy,
         flareCleanup: flareStep.cleanup,
