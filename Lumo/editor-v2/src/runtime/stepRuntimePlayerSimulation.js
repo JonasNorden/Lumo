@@ -847,14 +847,15 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
     steppedProjectiles.push(nextProjectile);
   }
 
-  for (const spawnedProjectile of spawnedProjectiles) {
-    steppedProjectiles.push({ ...spawnedProjectile });
-  }
+  const persistedProjectiles = [
+    ...steppedProjectiles,
+    ...spawnedProjectiles.map((spawnedProjectile) => ({ ...spawnedProjectile })),
+  ];
 
   return {
     entities,
     player: nextPlayer,
-    darkProjectiles: steppedProjectiles,
+    darkProjectiles: persistedProjectiles,
     nextDarkProjectileId: nextProjectileId,
   };
 }

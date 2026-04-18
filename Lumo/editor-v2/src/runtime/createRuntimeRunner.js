@@ -221,16 +221,25 @@ export function createRuntimeRunner(options = {}) {
           return { ok: false, stepped: false, state: cloneState(runtimeState) };
         }
 
-        const hasDarkProjectiles = Array.isArray(result?.player?.darkProjectiles);
-        const hasNextDarkProjectileId = Number.isFinite(result?.player?.nextDarkProjectileId);
+        const playerResult = result.player && typeof result.player === "object" ? result.player : {};
+        const hasDarkProjectiles = Object.prototype.hasOwnProperty.call(playerResult, "darkProjectiles");
+        const hasNextDarkProjectileId = Object.prototype.hasOwnProperty.call(playerResult, "nextDarkProjectileId");
         runtimeState.playerState = {
           ...runtimeState.playerState,
-          ...result.player,
+          ...playerResult,
           darkProjectiles: hasDarkProjectiles
-            ? result.player.darkProjectiles.map((projectile) => ({ ...projectile }))
+            ? (
+                Array.isArray(playerResult.darkProjectiles)
+                  ? playerResult.darkProjectiles.map((projectile) => ({ ...projectile }))
+                  : []
+              )
             : runtimeState.playerState.darkProjectiles,
           nextDarkProjectileId: hasNextDarkProjectileId
-            ? Math.max(1, Math.floor(result.player.nextDarkProjectileId))
+            ? (
+                Number.isFinite(playerResult.nextDarkProjectileId)
+                  ? Math.max(1, Math.floor(playerResult.nextDarkProjectileId))
+                  : runtimeState.playerState.nextDarkProjectileId
+              )
             : runtimeState.playerState.nextDarkProjectileId,
         };
         runtimeState.entities = Array.isArray(result?.entities)
