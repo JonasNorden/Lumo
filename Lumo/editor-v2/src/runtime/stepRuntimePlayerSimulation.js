@@ -661,6 +661,7 @@ function normalizeDarkProjectiles(playerState = {}) {
       energyLoss: Number.isFinite(projectile?.energyLoss) ? projectile.energyLoss : 40,
       knockbackX: Number.isFinite(projectile?.knockbackX) ? projectile.knockbackX : 260,
       knockbackY: Number.isFinite(projectile?.knockbackY) ? projectile.knockbackY : -220,
+      impacted: projectile?.impacted === true,
     }))
     .filter((projectile) => projectile.x != null && projectile.y != null && projectile.maxAge > 0);
 }
@@ -816,9 +817,16 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
   const worldHeightPx = resolveWorldDimensionPx(worldPacket?.world?.height, tileSize);
   for (const projectile of darkProjectiles) {
     const nextProjectile = { ...projectile };
-    nextProjectile.vy += nextProjectile.gravity * dt;
-    nextProjectile.x += nextProjectile.vx * dt;
-    nextProjectile.y += nextProjectile.vy * dt;
+    const impacted = nextProjectile.impacted === true;
+    if (!impacted) {
+      nextProjectile.vy += nextProjectile.gravity * dt;
+      nextProjectile.x += nextProjectile.vx * dt;
+      nextProjectile.y += nextProjectile.vy * dt;
+    } else {
+      nextProjectile.vx = 0;
+      nextProjectile.vy = 0;
+      nextProjectile.gravity = 0;
+    }
     nextProjectile.age += dt;
     const spawnedThisTick = (Number.isFinite(projectile?.age) ? projectile.age : 0) <= 0;
     if (spawnedThisTick) {
@@ -840,8 +848,11 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
     if (outsideWorld || expired) {
       continue;
     }
-    if (doesAabbOverlapSolidTile(worldPacket, tileSize, projectileBounds)) {
-      continue;
+    if (!impacted && doesAabbOverlapSolidTile(worldPacket, tileSize, projectileBounds)) {
+      nextProjectile.impacted = true;
+      nextProjectile.vx = 0;
+      nextProjectile.vy = 0;
+      nextProjectile.gravity = 0;
     }
     if (isAabbOverlap(projectileBounds, playerBounds)) {
       nextPlayer = applyDarkCreatureDamageToPlayer(
