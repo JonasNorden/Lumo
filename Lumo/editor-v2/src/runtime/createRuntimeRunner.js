@@ -95,6 +95,9 @@ function cloneState(state) {
           entities: Array.isArray(state?.playerState?.entities)
             ? state.playerState.entities.map((entity) => ({ ...entity }))
             : [],
+          checkpoint: state?.playerState?.checkpoint && typeof state.playerState.checkpoint === "object"
+            ? { ...state.playerState.checkpoint }
+            : null,
         }
       : null,
     world: state.world ? { ...state.world } : null,
@@ -166,6 +169,7 @@ export function createRuntimeRunner(options = {}) {
       darkProjectiles: [],
       nextDarkProjectileId: 1,
       entities: runtimeState.entities.map((entity) => ({ ...entity })),
+      checkpoint: null,
     };
     runtimeState.errors = [];
     runtimeState.warnings = uniqueMessages(lastBuild.warnings);

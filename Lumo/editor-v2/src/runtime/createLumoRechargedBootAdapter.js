@@ -145,6 +145,14 @@ function buildPlayerSnapshot(snapshot) {
     score: Number.isFinite(source.score) ? source.score : null,
     boostActive: source.boostActive === true,
     flareStash: Number.isFinite(source.flareStash) ? source.flareStash : 1,
+    checkpoint: source?.checkpoint && typeof source.checkpoint === "object"
+      ? {
+          tx: Number.isFinite(source?.checkpoint?.tx) ? source.checkpoint.tx : null,
+          ty: Number.isFinite(source?.checkpoint?.ty) ? source.checkpoint.ty : null,
+          px: Number.isFinite(source?.checkpoint?.px) ? source.checkpoint.px : null,
+          py: Number.isFinite(source?.checkpoint?.py) ? source.checkpoint.py : null,
+        }
+      : null,
     pulse: pulse
       ? {
           active: pulse.active === true,
