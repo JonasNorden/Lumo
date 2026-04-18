@@ -163,6 +163,8 @@ export function createRuntimeRunner(options = {}) {
       energy: 1,
       facingX: 1,
       nextFlareId: 1,
+      darkProjectiles: [],
+      nextDarkProjectileId: 1,
       entities: runtimeState.entities.map((entity) => ({ ...entity })),
     };
     runtimeState.errors = [];
@@ -219,9 +221,17 @@ export function createRuntimeRunner(options = {}) {
           return { ok: false, stepped: false, state: cloneState(runtimeState) };
         }
 
+        const hasDarkProjectiles = Array.isArray(result?.player?.darkProjectiles);
+        const hasNextDarkProjectileId = Number.isFinite(result?.player?.nextDarkProjectileId);
         runtimeState.playerState = {
           ...runtimeState.playerState,
           ...result.player,
+          darkProjectiles: hasDarkProjectiles
+            ? result.player.darkProjectiles.map((projectile) => ({ ...projectile }))
+            : runtimeState.playerState.darkProjectiles,
+          nextDarkProjectileId: hasNextDarkProjectileId
+            ? Math.max(1, Math.floor(result.player.nextDarkProjectileId))
+            : runtimeState.playerState.nextDarkProjectileId,
         };
         runtimeState.entities = Array.isArray(result?.entities)
           ? result.entities.map((entity) => ({ ...entity }))
@@ -310,6 +320,8 @@ export function createRuntimeRunner(options = {}) {
           energy: 1,
           facingX: 1,
           nextFlareId: 1,
+          darkProjectiles: [],
+          nextDarkProjectileId: 1,
           entities: next.entities.map((entity) => ({ ...entity })),
         };
         next.warnings = uniqueMessages(lastBuild.warnings);
