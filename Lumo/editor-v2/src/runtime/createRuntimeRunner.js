@@ -222,32 +222,16 @@ export function createRuntimeRunner(options = {}) {
         }
 
         const playerResult = result.player && typeof result.player === "object" ? result.player : {};
-        const hasDarkProjectiles = Object.prototype.hasOwnProperty.call(playerResult, "darkProjectiles");
-        const hasNextDarkProjectileId = Object.prototype.hasOwnProperty.call(playerResult, "nextDarkProjectileId");
-        const previousDarkProjectiles = Array.isArray(runtimeState?.playerState?.darkProjectiles)
-          ? runtimeState.playerState.darkProjectiles.map((projectile) => ({ ...projectile }))
-          : [];
-        const previousNextDarkProjectileId = Number.isFinite(runtimeState?.playerState?.nextDarkProjectileId)
-          ? Math.max(1, Math.floor(runtimeState.playerState.nextDarkProjectileId))
-          : 1;
         runtimeState.playerState = {
           ...runtimeState.playerState,
           ...playerResult,
-          darkProjectiles: hasDarkProjectiles
-            ? (
-                Array.isArray(playerResult.darkProjectiles)
-                  ? playerResult.darkProjectiles.map((projectile) => ({ ...projectile }))
-                  : []
-              )
-            : previousDarkProjectiles,
-          nextDarkProjectileId: hasNextDarkProjectileId
-            ? (
-                Number.isFinite(playerResult.nextDarkProjectileId)
-                  ? Math.max(1, Math.floor(playerResult.nextDarkProjectileId))
-                  : previousNextDarkProjectileId
-              )
-            : previousNextDarkProjectileId,
         };
+        runtimeState.playerState.darkProjectiles = Array.isArray(result.darkProjectiles)
+          ? result.darkProjectiles.map((projectile) => ({ ...projectile }))
+          : runtimeState.playerState.darkProjectiles;
+        runtimeState.playerState.nextDarkProjectileId = Number.isFinite(result.nextDarkProjectileId)
+          ? Math.max(1, Math.floor(result.nextDarkProjectileId))
+          : runtimeState.playerState.nextDarkProjectileId;
         runtimeState.entities = Array.isArray(result?.entities)
           ? result.entities.map((entity) => ({ ...entity }))
           : runtimeState.entities;
