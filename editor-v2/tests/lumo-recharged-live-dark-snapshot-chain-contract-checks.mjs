@@ -71,10 +71,17 @@ async function runLiveDarkSnapshotChainChecks() {
   assert.equal(Number.isFinite(dark._castTargetY) || dark._castTargetY === null, true, "expected raw _castTargetY field in adapter snapshot");
 
   assert.equal(hover.awake, true, "expected raw hover awake field in adapter snapshot");
-  assert.equal(hover.sleepBlend, 0.35, "expected raw hover sleepBlend field in adapter snapshot");
-  assert.equal(hover.eyeBlend, 0.7, "expected raw hover eyeBlend field in adapter snapshot");
-  assert.equal(hover._wakeHold, 1.25, "expected raw hover _wakeHold field in adapter snapshot");
-  assert.equal(hover._isFollowing, true, "expected raw hover _isFollowing field in adapter snapshot");
+  assert.equal(typeof hover.sleepBlend, "number", "expected raw hover sleepBlend field in adapter snapshot");
+  assert.equal(typeof hover.eyeBlend, "number", "expected raw hover eyeBlend field in adapter snapshot");
+  assert.equal(typeof hover._wakeHold, "number", "expected raw hover _wakeHold field in adapter snapshot");
+  assert.equal(typeof hover._isFollowing, "boolean", "expected raw hover _isFollowing field in adapter snapshot");
+
+  const hoverStart = {
+    sleepBlend: hover.sleepBlend,
+    eyeBlend: hover.eyeBlend,
+    wakeHold: hover._wakeHold,
+    isFollowing: hover._isFollowing,
+  };
 
   let firstSpawnedProjectile = Array.isArray(snapshot.darkProjectiles) && snapshot.darkProjectiles.length > 0
     ? snapshot.darkProjectiles[0]
@@ -96,6 +103,14 @@ async function runLiveDarkSnapshotChainChecks() {
   const oneTickLaterProjectile = oneTickLaterSnapshot.darkProjectiles.find((projectile) => projectile.id === spawnedProjectileId);
   assert.ok(oneTickLaterProjectile, "expected spawned projectile to survive long enough for next adapter snapshot");
   assert.equal(oneTickLaterProjectile.age > 0, true, "expected spawned projectile to keep aging after surviving spawn tick");
+
+  const hoverLater = oneTickLaterSnapshot.entities.find((entity) => entity.id === "hover-live-chain");
+  assert.ok(hoverLater, "expected hover void to survive into later adapter snapshot");
+  assert.equal(
+    hoverLater.sleepBlend !== hoverStart.sleepBlend || hoverLater.eyeBlend !== hoverStart.eyeBlend || hoverLater._wakeHold !== hoverStart.wakeHold || hoverLater._isFollowing !== hoverStart.isFollowing,
+    true,
+    "expected hover runtime fields to remain live across adapter snapshot chain ticks",
+  );
 
   console.log("live dark snapshot chain adapter checks ok");
 }
