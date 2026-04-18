@@ -1487,6 +1487,12 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     entityStep.entities,
     options,
   );
+  const darkProjectiles = Array.isArray(darkCreatureStep?.darkProjectiles)
+    ? normalizeDarkProjectiles({ darkProjectiles: darkCreatureStep.darkProjectiles })
+    : normalizeDarkProjectiles({ darkProjectiles: playerState?.darkProjectiles });
+  const nextDarkProjectileId = Number.isFinite(darkCreatureStep?.nextDarkProjectileId)
+    ? Math.max(1, Math.floor(darkCreatureStep.nextDarkProjectileId))
+    : (Number.isFinite(playerState?.nextDarkProjectileId) ? Math.max(1, Math.floor(playerState.nextDarkProjectileId)) : 1);
   const finalVelocity = darkCreatureStep?.player?.velocity && typeof darkCreatureStep.player.velocity === "object"
     ? darkCreatureStep.player.velocity
     : resolvedPlayerStep.velocity;
@@ -1541,8 +1547,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       facingX: flareStep.facingX,
       nextFlareId: flareStep.nextFlareId,
       entities: darkCreatureStep.entities,
-      darkProjectiles: darkCreatureStep.darkProjectiles,
-      nextDarkProjectileId: darkCreatureStep.nextDarkProjectileId,
+      darkProjectiles,
+      nextDarkProjectileId,
       status,
       brakeState,
     },
