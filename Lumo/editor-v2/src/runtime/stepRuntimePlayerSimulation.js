@@ -105,6 +105,7 @@ const DEFAULT_BOOST_ENERGY_DRAIN_PER_SECOND = 0.18;
 const DEFAULT_LANTERN_CHARGE_RATE_PER_SECOND = 0.12;
 const DEFAULT_LANTERN_RADIUS_PX = 170;
 const DEFAULT_LANTERN_STRENGTH = 0.85;
+const DEFAULT_PLAYER_LIGHT_RADIUS_PX = 170;
 const DEFAULT_LANTERN_FOOTPRINT_PX = 14;
 const DEFAULT_FLARE_PICKUP_FOOTPRINT_PX = 12;
 const DEFAULT_POWERCELL_FOOTPRINT_PX = 24;
@@ -120,6 +121,8 @@ const DEFAULT_DARK_CREATURE_CAST_CHARGE_TIME_SECONDS = 0.5;
 const DEFAULT_DARK_CREATURE_SPELL_SPEED_X_PX_PER_SECOND = 190;
 const DEFAULT_DARK_CREATURE_SPELL_GRAVITY_PX_PER_SECOND = 760;
 const DEFAULT_DARK_CREATURE_TARGET_JITTER_PX = 3;
+const FIREFLY_TAIL_MAX_POINTS = 14;
+const FIREFLY_TAIL_MAX_AGE_SECONDS = 0.35;
 
 function resolvePulseTargetType(entityType) {
   if (typeof entityType !== "string") {
@@ -198,6 +201,7 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
   const normalizedType = String(type || "").trim().toLowerCase();
   const isDarkCreature = normalizedType === "dark_creature_01";
   const parseNumber = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
+  const parseFireflyNumber = (value, fallback) => ((value == null || value === "") ? fallback : parseNumber(value, fallback));
   const parseBool = (value, fallback = false) => {
     if (value == null) {
       return fallback;
@@ -293,6 +297,49 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
         vy: Number.isFinite(Number(source?.vy)) ? Number(source.vy) : 0,
       }
     : {};
+  const isFirefly = normalizedType === "firefly_01" || normalizedType === "firefly";
+  const fireflyRuntimeState = isFirefly
+    ? {
+        mode: typeof source?.mode === "string" ? source.mode : "rest",
+        lightRadius: parseFireflyNumber(source?.lightRadius ?? params?.lightRadius ?? (Number.isFinite(params?.lightDiameter) ? (params.lightDiameter * 0.5) : undefined), 120),
+        lightStrength: parseFireflyNumber(source?.lightStrength ?? params?.lightStrength, 0.8),
+        lightK: Math.max(0, Math.min(1, parseNumber(source?.lightK, 0))),
+        aggroR: parseFireflyNumber(source?.aggroR ?? (Number.isFinite(params?.aggroTiles) ? (params.aggroTiles * tileSize) : undefined), 6 * tileSize),
+        flyRX: parseFireflyNumber(source?.flyRX ?? (Number.isFinite(params?.flyRangeX) ? (params.flyRangeX * tileSize) : undefined), 5 * tileSize),
+        flyRY: parseFireflyNumber(source?.flyRY ?? (Number.isFinite(params?.flyRangeYUp) ? (params.flyRangeYUp * tileSize) : undefined), 5 * tileSize),
+        flySpeed: parseFireflyNumber(source?.flySpeed ?? params?.flySpeed, 45),
+        smooth: parseFireflyNumber(source?.smooth ?? params?.smooth, 7),
+        flyTime: parseFireflyNumber(source?.flyTime ?? params?.flyTime, 2.5),
+        perchR: parseFireflyNumber(source?.perchR ?? (Number.isFinite(params?.perchSearchRadius) ? (params.perchSearchRadius * tileSize) : undefined), 6 * tileSize),
+        cooldown: parseFireflyNumber(source?.cooldown ?? params?.cooldown, 2),
+        fadeIn: Math.max(0.01, parseFireflyNumber(source?.fadeIn ?? params?.fadeIn, 0.35)),
+        fadeOut: Math.max(0.01, parseFireflyNumber(source?.fadeOut ?? params?.fadeOut, 0.45)),
+        tFly: Math.max(0, parseNumber(source?.tFly, 0)),
+        tWander: Math.max(0, parseNumber(source?.tWander, 0)),
+        cdT: Math.max(0, parseNumber(source?.cdT, 0)),
+        destX: parseNumber(source?.destX, x),
+        destY: parseNumber(source?.destY, y),
+        landX: parseNumber(source?.landX, x),
+        landY: parseNumber(source?.landY, y),
+        homeX: parseNumber(source?.homeX, x),
+        homeY: parseNumber(source?.homeY, y),
+        vx: parseNumber(source?.vx, 0),
+        vy: parseNumber(source?.vy, 0),
+        dir: parseNumber(source?.dir, 1) < 0 ? -1 : 1,
+        _tail: Array.isArray(source?._tail)
+          ? source._tail
+            .map((point) => ({
+              x: parseNumber(point?.x, x),
+              y: parseNumber(point?.y, y),
+              t: Math.max(0, parseNumber(point?.t, 0)),
+            }))
+            .slice(-FIREFLY_TAIL_MAX_POINTS)
+          : [],
+        _tailSpawnT: parseNumber(source?._tailSpawnT, 0),
+        _landingT: Math.max(0, parseNumber(source?._landingT, 0)),
+        _landedT: Math.max(0, parseNumber(source?._landedT, 0)),
+      }
+    : {};
 
   return {
     id: typeof source.id === "string" && source.id.length > 0 ? source.id : `runtime-entity-${index + 1}`,
@@ -318,6 +365,7 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     params: params && typeof params === "object" ? { ...params } : {},
     ...darkCreatureRuntimeState,
     ...hoverRuntimeState,
+    ...fireflyRuntimeState,
   };
 }
 
@@ -1271,6 +1319,290 @@ function stepFlareEntityInteractions(sourceEntities, flares) {
   return { entities, flareAffects };
 }
 
+function buildRuntimeFlareLights(flares) {
+  return Array.isArray(flares)
+    ? flares.map((flare) => buildFlareLightSnapshot(flare)).filter((flare) => flare && flare.lightRadius > 0)
+    : [];
+}
+
+function isFireflyTriggeredByAnyLightRuntime(entity, entities, playerLight, flareLights) {
+  const aggroR = Number.isFinite(entity?.aggroR) && entity.aggroR > 0 ? entity.aggroR : 0;
+  if (aggroR <= 0) {
+    return false;
+  }
+  const fireflyCx = entity.x + (Number.isFinite(entity?.footprintW) ? entity.footprintW : entity.size || 24) * 0.5;
+  const fireflyCy = entity.y + (Number.isFinite(entity?.footprintH) ? entity.footprintH : entity.size || 24) * 0.5;
+
+  if (playerLight && playerLight.radius > 0) {
+    const d = Math.hypot(fireflyCx - playerLight.x, fireflyCy - playerLight.y);
+    if (d <= aggroR && d <= playerLight.radius) {
+      return true;
+    }
+  }
+
+  for (const other of entities) {
+    if (!other || other.active !== true || other.id === entity.id) {
+      continue;
+    }
+    if (!isLanternEntityType(other.type)) {
+      continue;
+    }
+    const radius = Number.isFinite(other?.params?.radius) && other.params.radius > 0
+      ? other.params.radius
+      : DEFAULT_LANTERN_RADIUS_PX;
+    const strength = Number.isFinite(other?.params?.strength) && other.params.strength > 0
+      ? other.params.strength
+      : DEFAULT_LANTERN_STRENGTH;
+    if (strength <= 0.01) {
+      continue;
+    }
+    const center = getEntityCenter(other);
+    const d = Math.hypot(fireflyCx - center.x, fireflyCy - center.y);
+    if (d <= aggroR && d <= radius) {
+      return true;
+    }
+  }
+
+  for (const flare of flareLights) {
+    const d = Math.hypot(fireflyCx - flare.x, fireflyCy - flare.y);
+    if (d <= aggroR && d <= flare.lightRadius) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function findFireflyPerch(worldPacket, firefly, fromX, fromY, tileSize, worldWidth, worldHeight) {
+  const decor = Array.isArray(worldPacket?.layers?.decor) ? worldPacket.layers.decor : [];
+  if (decor.length === 0) {
+    return null;
+  }
+  const rx = Number.isFinite(firefly?.flyRX) ? firefly.flyRX : 5 * tileSize;
+  const ry = Number.isFinite(firefly?.flyRY) ? firefly.flyRY : 5 * tileSize;
+  const perchR = Number.isFinite(firefly?.perchR) ? firefly.perchR : 6 * tileSize;
+  const worldWidthPx = Number.isFinite(worldWidth) ? worldWidth * tileSize : null;
+  const worldHeightPx = Number.isFinite(worldHeight) ? worldHeight * tileSize : null;
+  let best = null;
+  let bestD = Infinity;
+  for (const item of decor) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const rawX = Number.isFinite(item?.x) ? item.x : null;
+    const rawY = Number.isFinite(item?.y) ? item.y : null;
+    if (rawX == null || rawY == null) {
+      continue;
+    }
+    const looksTileBased = Number.isFinite(worldWidthPx)
+      && Number.isFinite(worldHeightPx)
+      && rawX >= 0 && rawY >= 0
+      && rawX <= worldWidth + 1
+      && rawY <= worldHeight + 1;
+    const px = looksTileBased ? rawX * tileSize : rawX;
+    const py = looksTileBased ? rawY * tileSize : rawY;
+    const inRect = (
+      px >= firefly.homeX - rx
+      && px <= firefly.homeX + rx
+      && py >= firefly.homeY - ry
+      && py <= firefly.homeY
+    );
+    if (!inRect) {
+      continue;
+    }
+    const d = Math.hypot(px - fromX, py - fromY);
+    if (d <= perchR && d < bestD) {
+      best = { x: px, y: py };
+      bestD = d;
+    }
+  }
+  return best;
+}
+
+function stepFireflyRuntime(worldPacket, playerState, sourceEntities, flares, options = {}) {
+  const entities = Array.isArray(sourceEntities) ? sourceEntities.map((entity) => ({ ...entity })) : [];
+  if (entities.length === 0) {
+    return { entities, lights: [] };
+  }
+  const dt = resolveRuntimeDeltaSeconds(options);
+  const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0 ? worldPacket.world.tileSize : 24;
+  const worldWidth = Number.isFinite(worldPacket?.world?.width) ? worldPacket.world.width : null;
+  const worldHeight = Number.isFinite(worldPacket?.world?.height) ? worldPacket.world.height : null;
+  const playerLight = {
+    x: Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0,
+    y: Number.isFinite(playerState?.position?.y) ? playerState.position.y - (tileSize * 0.5) : 0,
+    radius: Number.isFinite(playerState?.lightRadius) && playerState.lightRadius > 0
+      ? playerState.lightRadius
+      : DEFAULT_PLAYER_LIGHT_RADIUS_PX,
+  };
+  const flareLights = buildRuntimeFlareLights(flares);
+  const lights = [];
+
+  const pickWanderTarget = (firefly) => {
+    const rx = Number.isFinite(firefly?.flyRX) ? firefly.flyRX : 5 * tileSize;
+    const ry = Number.isFinite(firefly?.flyRY) ? firefly.flyRY : 5 * tileSize;
+    firefly.destX = firefly.homeX + ((Math.random() * 2 - 1) * rx);
+    firefly.destY = firefly.homeY - (Math.random() * ry);
+    firefly.tWander = 0.9 + (Math.random() * 0.9);
+  };
+  const moveToward = (firefly, targetX, targetY, speedMul) => {
+    const speed = Number.isFinite(firefly?.flySpeed) ? firefly.flySpeed : 45;
+    const smooth = Number.isFinite(firefly?.smooth) ? firefly.smooth : 7;
+    const dx = targetX - firefly.x;
+    const dy = targetY - firefly.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const desiredVx = (dx / dist) * speed * speedMul;
+    const desiredVy = (dy / dist) * speed * speedMul;
+    firefly.vx += (desiredVx - firefly.vx) * smooth * dt;
+    firefly.vy += (desiredVy - firefly.vy) * smooth * dt;
+    firefly.x += firefly.vx * dt;
+    firefly.y += firefly.vy * dt;
+    if (firefly.y > firefly.homeY) {
+      firefly.y = firefly.homeY;
+    }
+    if (Math.abs(firefly.vx) > 1) {
+      firefly.dir = firefly.vx >= 0 ? 1 : -1;
+    }
+    return dist;
+  };
+
+  for (const entity of entities) {
+    const normalizedType = String(entity?.type || "").trim().toLowerCase();
+    if (normalizedType !== "firefly_01" && normalizedType !== "firefly") {
+      continue;
+    }
+    entity.mode = typeof entity.mode === "string" ? entity.mode : "rest";
+    entity.homeX = Number.isFinite(entity?.homeX) ? entity.homeX : entity.x;
+    entity.homeY = Number.isFinite(entity?.homeY) ? entity.homeY : entity.y;
+    entity._tail = Array.isArray(entity?._tail) ? entity._tail.slice(-FIREFLY_TAIL_MAX_POINTS) : [];
+    entity._tailSpawnT = Number.isFinite(entity?._tailSpawnT) ? entity._tailSpawnT : 0;
+    entity.cdT = Number.isFinite(entity?.cdT) ? entity.cdT : 0;
+    entity.lightK = Number.isFinite(entity?.lightK) ? Math.max(0, Math.min(1, entity.lightK)) : 0;
+    const fadeIn = Number.isFinite(entity?.fadeIn) && entity.fadeIn > 0 ? entity.fadeIn : 0.35;
+    const fadeOut = Number.isFinite(entity?.fadeOut) && entity.fadeOut > 0 ? entity.fadeOut : 0.45;
+    const fireflyW = Number.isFinite(entity?.footprintW) ? entity.footprintW : entity.size || 24;
+    const fireflyH = Number.isFinite(entity?.footprintH) ? entity.footprintH : entity.size || 24;
+    const cx = entity.x + fireflyW * 0.5;
+    const cy = entity.y + fireflyH * 0.5;
+
+    if (entity.cdT > 0) {
+      entity.cdT = Math.max(0, entity.cdT - dt);
+    }
+    for (let i = entity._tail.length - 1; i >= 0; i -= 1) {
+      const point = entity._tail[i];
+      point.t += dt;
+      if (point.t > FIREFLY_TAIL_MAX_AGE_SECONDS) {
+        entity._tail.splice(i, 1);
+      }
+    }
+
+    if (entity.mode === "rest") {
+      entity.vx = 0;
+      entity.vy = 0;
+      entity.lightK = 0;
+      entity.illuminated = false;
+      if (entity.cdT <= 0 && isFireflyTriggeredByAnyLightRuntime(entity, entities, playerLight, flareLights)) {
+        entity.mode = "takeoff";
+        entity.tFly = Number.isFinite(entity?.flyTime) ? entity.flyTime : 2.5;
+        pickWanderTarget(entity);
+      }
+    } else if (entity.mode === "takeoff") {
+      entity.lightK = Math.min(1, entity.lightK + (dt / fadeIn));
+      moveToward(entity, entity.destX, entity.destY, 0.65);
+      entity.illuminated = entity.lightK > 0.01;
+      if (entity.lightK >= 0.999) {
+        entity.mode = "fly";
+      }
+    } else if (entity.mode === "fly") {
+      entity.lightK = 1;
+      entity.illuminated = true;
+      entity.tFly = Math.max(0, (Number.isFinite(entity?.tFly) ? entity.tFly : 0) - dt);
+      entity.tWander = Math.max(-1, (Number.isFinite(entity?.tWander) ? entity.tWander : 0) - dt);
+      const dist = moveToward(entity, entity.destX, entity.destY, 1);
+      entity._tailSpawnT -= dt;
+      if (entity._tailSpawnT <= 0) {
+        entity._tailSpawnT = 0.04;
+        const tailX = entity.dir === 1 ? (entity.x + 2) : (entity.x + fireflyW - 2);
+        const tailY = entity.y + fireflyH * 0.65;
+        entity._tail.push({ x: tailX + ((Math.random() * 2) - 1), y: tailY + ((Math.random() * 2) - 1), t: 0 });
+        if (entity._tail.length > FIREFLY_TAIL_MAX_POINTS) {
+          entity._tail.shift();
+        }
+      }
+      if (entity.tWander <= 0 || dist < 8) {
+        pickWanderTarget(entity);
+      }
+      if (entity.tFly <= 0) {
+        const perch = findFireflyPerch(worldPacket, entity, cx, cy, tileSize, worldWidth, worldHeight);
+        if (perch) {
+          entity.landX = perch.x - fireflyW * 0.5;
+          entity.landY = perch.y - fireflyH;
+        } else {
+          entity.landX = entity.homeX;
+          entity.landY = entity.homeY;
+        }
+        entity.mode = "landing";
+      }
+    } else if (entity.mode === "landing") {
+      entity._landingT = (Number.isFinite(entity?._landingT) ? entity._landingT : 0) + dt;
+      const dx = entity.landX - entity.x;
+      const dy = entity.landY - entity.y;
+      const dist = Math.hypot(dx, dy);
+      const d0 = 80;
+      const speedMul = dist < d0 ? (0.25 + 0.30 * (dist / d0)) : 0.55;
+      moveToward(entity, entity.landX, entity.landY, speedMul);
+      entity.lightK = 1;
+      entity.illuminated = true;
+      const nextDx = entity.landX - entity.x;
+      const nextDy = entity.landY - entity.y;
+      const nextDist = Math.hypot(nextDx, nextDy);
+      if (nextDist < 6 || (Math.abs(nextDx) < 2 && Math.abs(nextDy) < 2) || (entity._landingT > 3 && nextDist < 2)) {
+        entity.x = entity.landX;
+        entity.y = Math.min(entity.landY, entity.homeY);
+        entity.vx = 0;
+        entity.vy = 0;
+        entity.mode = "landed";
+        entity._landedT = 0;
+        entity._landingT = 0;
+      }
+    } else if (entity.mode === "landed") {
+      entity.vx = 0;
+      entity.vy = 0;
+      entity._landedT = (Number.isFinite(entity?._landedT) ? entity._landedT : 0) + dt;
+      const hold = Math.max(0.05, 0.6 - fadeOut);
+      if (entity._landedT <= hold) {
+        entity.lightK = 1;
+      } else {
+        const p = Math.max(0, Math.min(1, (entity._landedT - hold) / fadeOut));
+        entity.lightK = 1 - p;
+      }
+      entity.illuminated = entity.lightK > 0.01;
+      if (entity._landedT >= hold + fadeOut) {
+        entity.lightK = 0;
+        entity.illuminated = false;
+        entity.mode = "rest";
+        entity.cdT = Number.isFinite(entity?.cooldown) ? entity.cooldown : 2;
+      }
+    } else {
+      entity.mode = "rest";
+      entity.lightK = 0;
+      entity.illuminated = false;
+    }
+
+    if (entity.lightK > 0.01) {
+      lights.push({
+        entityId: entity.id,
+        type: "firefly",
+        x: entity.x + fireflyW * 0.5,
+        y: entity.y + fireflyH * 0.5,
+        radius: (Number.isFinite(entity?.lightRadius) ? entity.lightRadius : 120) * entity.lightK,
+        strength: (Number.isFinite(entity?.lightStrength) ? entity.lightStrength : 0.8) * entity.lightK,
+      });
+    }
+  }
+  return { entities, lights };
+}
+
 function resolvePlayerFacingX(playerState, intentMoveX = 0) {
   if (intentMoveX > 0) {
     return 1;
@@ -1805,7 +2137,14 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     pickupStep.entities,
     flareStep.flares,
   );
-  const entityStep = stepPulseEntityInteractions(worldPacket, playerState, pulseStep.pulse, flareEntityStep.entities, options);
+  const fireflyStep = stepFireflyRuntime(
+    worldPacket,
+    { ...playerState, position: resolvedPlayerStep.position },
+    flareEntityStep.entities,
+    flareStep.flares,
+    options,
+  );
+  const entityStep = stepPulseEntityInteractions(worldPacket, playerState, pulseStep.pulse, fireflyStep.entities, options);
   const dt = resolveRuntimeDeltaSeconds(options);
   const moving = intent?.moveX !== 0;
   let nextEnergy = flareStep.energy;
@@ -1918,6 +2257,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       facingX: flareStep.facingX,
       nextFlareId: flareStep.nextFlareId,
       entities: hoverVoidStep.entities,
+      runtimeLights: fireflyStep.lights,
       darkProjectiles,
       nextDarkProjectileId,
       _hoverVoidAttackGlobalCd: Number.isFinite(hoverVoidStep?.player?._hoverVoidAttackGlobalCd)
@@ -1989,6 +2329,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         flareCleanup: flareStep.cleanup,
         pulseEntityHits: entityStep.hits.length,
         flareEntityAffects: flareEntityStep.flareAffects.length,
+        fireflyRuntimeLights: fireflyStep.lights.length,
       },
     },
     entities: hoverVoidStep.entities,
