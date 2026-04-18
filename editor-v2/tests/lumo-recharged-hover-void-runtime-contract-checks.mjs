@@ -58,6 +58,27 @@ function countTinyAlternatingDeltas(samples, axis = "x", epsilon = 0.06) {
   return alternatingTinyDeltas;
 }
 
+function minPairDistance(entities, ids) {
+  const selected = ids.map((id) => getHover(entities, id));
+  let min = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < selected.length; i += 1) {
+    for (let j = i + 1; j < selected.length; j += 1) {
+      const a = selected[i];
+      const b = selected[j];
+      const aw = Number.isFinite(a.w) ? a.w : (Number.isFinite(a.footprintW) ? a.footprintW : (Number.isFinite(a.size) ? a.size : 24));
+      const ah = Number.isFinite(a.h) ? a.h : (Number.isFinite(a.footprintH) ? a.footprintH : (Number.isFinite(a.size) ? a.size : 24));
+      const bw = Number.isFinite(b.w) ? b.w : (Number.isFinite(b.footprintW) ? b.footprintW : (Number.isFinite(b.size) ? b.size : 24));
+      const bh = Number.isFinite(b.h) ? b.h : (Number.isFinite(b.footprintH) ? b.footprintH : (Number.isFinite(b.size) ? b.size : 24));
+      const acx = a.x + aw * 0.5;
+      const acy = a.y + ah * 0.5;
+      const bcx = b.x + bw * 0.5;
+      const bcy = b.y + bh * 0.5;
+      min = Math.min(min, Math.hypot(bcx - acx, bcy - acy));
+    }
+  }
+  return min;
+}
+
 function runHoverVoidFocusedRuntimeChecks() {
   const worldPacket = buildFlatWorldPacket();
   const tileSize = worldPacket.world.tileSize;
@@ -354,6 +375,53 @@ function runHoverVoidFocusedRuntimeChecks() {
   assert.equal(sawReturnIdle, true, "lunge FSM should return to idle after back phase");
   assert.equal(sawLungeHit, true, "at least one lunge should register player collision hit");
   assert.equal(player.energy < energyBeforeLunge, true, "lunge contact should reduce player energy");
+
+  // Runtime lunge-start check at realistic hold fringe: attack gate must allow starts beyond strict 3.5-tile clamp.
+  player = {
+    ...player,
+    energy: 1,
+    _hoverVoidAttackGlobalCd: 0,
+    velocity: { x: 0, y: 0 },
+    position: { x: spawnX + tileSize * 10, y: spawnY },
+  };
+  entities = [
+    { id: "hover-lunge-a", type: "hover_void_01", x: player.position.x - tileSize * 3.8, y: player.position.y - tileSize * 0.2, awake: true, _isFollowing: true, sleepBlend: 0, eyeBlend: 1, _attackCd: 0, params: { aggroTiles: 6, followTiles: 7, loseSightTiles: 11, braveGroupSize: 2, attackCooldownMin: 0.2, attackCooldownMax: 0.2 } },
+    { id: "hover-lunge-b", type: "hover_void_01", x: player.position.x - tileSize * 3.75, y: player.position.y - tileSize * 0.95, awake: true, _isFollowing: true, sleepBlend: 0, eyeBlend: 1, _attackCd: 0, params: { aggroTiles: 6, followTiles: 7, loseSightTiles: 11, braveGroupSize: 2, attackCooldownMin: 0.2, attackCooldownMax: 0.2 } },
+    { id: "hover-lunge-c", type: "hover_void_01", x: player.position.x - tileSize * 3.9, y: player.position.y - tileSize * 1.4, awake: true, _isFollowing: true, sleepBlend: 0, eyeBlend: 1, _attackCd: 0, params: { aggroTiles: 6, followTiles: 7, loseSightTiles: 11, braveGroupSize: 2, attackCooldownMin: 0.2, attackCooldownMax: 0.2 } },
+  ];
+  let sawFringeLungeStart = false;
+  for (let i = 0; i < 30; i += 1) {
+    step = stepWith(worldPacket, player, entities);
+    player = step.player;
+    entities = step.player.entities;
+    for (const id of ["hover-lunge-a", "hover-lunge-b", "hover-lunge-c"]) {
+      const attacker = getHover(entities, id);
+      if (attacker._lungeState === "out" || attacker._lungeState === "back") sawFringeLungeStart = true;
+    }
+    if (sawFringeLungeStart) break;
+  }
+  assert.equal(sawFringeLungeStart, true, "hover should be able to start lunge from realistic hold-fringe spacing");
+
+  // Anti-overlap check: exact same-tile spawn should separate into readable spacing.
+  player = {
+    ...player,
+    energy: 1,
+    _hoverVoidAttackGlobalCd: 0,
+    velocity: { x: 0, y: 0 },
+    position: { x: spawnX + tileSize * 14, y: spawnY },
+  };
+  entities = [
+    { id: "hover-stack-a", type: "hover_void_01", x: player.position.x - tileSize * 1.6, y: player.position.y - tileSize * 0.8, awake: true, _isFollowing: true, sleepBlend: 0, eyeBlend: 1, _attackCd: 999, params: { aggroTiles: 6, followTiles: 7, loseSightTiles: 11 } },
+    { id: "hover-stack-b", type: "hover_void_01", x: player.position.x - tileSize * 1.6, y: player.position.y - tileSize * 0.8, awake: true, _isFollowing: true, sleepBlend: 0, eyeBlend: 1, _attackCd: 999, params: { aggroTiles: 6, followTiles: 7, loseSightTiles: 11 } },
+    { id: "hover-stack-c", type: "hover_void_01", x: player.position.x - tileSize * 1.6, y: player.position.y - tileSize * 0.8, awake: true, _isFollowing: true, sleepBlend: 0, eyeBlend: 1, _attackCd: 999, params: { aggroTiles: 6, followTiles: 7, loseSightTiles: 11 } },
+  ];
+  for (let i = 0; i < 40; i += 1) {
+    step = stepWith(worldPacket, player, entities);
+    player = step.player;
+    entities = step.player.entities;
+  }
+  const postSeparationMinDist = minPairDistance(entities, ["hover-stack-a", "hover-stack-b", "hover-stack-c"]);
+  assert.equal(postSeparationMinDist >= tileSize * 0.42, true, `hover stack separation should prevent same-tile collapse (minDist=${postSeparationMinDist.toFixed(2)})`);
 }
 
 async function runHoverVoidLiveSnapshotChainChecks() {

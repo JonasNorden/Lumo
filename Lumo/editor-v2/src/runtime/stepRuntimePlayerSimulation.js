@@ -844,6 +844,7 @@ function stepHoverVoidRuntime(worldPacket, playerState, sourceEntities, options 
         const brave = groupSize >= entity.braveGroupSize;
         const targetDist = 3 * tileSize;
         const shouldFollow = entity._isFollowing === true;
+        // Hover-only flock spacing and cohesion.
         let neighborCount = 0;
         for (const other of awakeList) {
           if (other === entity) continue;
@@ -860,11 +861,26 @@ function stepHoverVoidRuntime(worldPacket, playerState, sourceEntities, options 
               entity._targetVY += (dy / Math.max(0.001, d)) * 24 * socialPull;
             }
           }
-          const sepR = tileSize * 1.25;
+          const sepR = tileSize * 1.55;
           if (d > 0.001 && d < sepR) {
-            const push = (1 - d / sepR) * 85;
+            const push = (1 - d / sepR) * 150;
             entity._targetVX -= (dx / d) * push;
             entity._targetVY -= (dy / d) * push;
+          }
+          // Deterministic overlap-break: exact same center gets no normal separation vector.
+          if (d <= 0.001) {
+            const keyA = String(entity?.id ?? "");
+            const keyB = String(other?.id ?? "");
+            let seed = 0;
+            const key = keyA < keyB ? `${keyA}|${keyB}` : `${keyB}|${keyA}`;
+            for (let i = 0; i < key.length; i += 1) seed = ((seed * 33) + key.charCodeAt(i)) >>> 0;
+            const angle = (seed % 360) * (Math.PI / 180);
+            const ox = Math.cos(angle);
+            const oy = Math.sin(angle);
+            const push = 130;
+            const dir = keyA < keyB ? -1 : 1;
+            entity._targetVX += ox * push * dir;
+            entity._targetVY += oy * push * dir;
           }
           if (d > 0.001 && d < tileSize * 0.95 && entity._bickerCd <= 0) {
             const recoil = 80;
@@ -883,7 +899,8 @@ function stepHoverVoidRuntime(worldPacket, playerState, sourceEntities, options 
           entity._angryCd = 15;
         }
         const swarmBonus = groupSize >= entity.swarmGroupSize ? 0.6 : 0;
-        const canAttack = brave && shouldFollow && dPlayer <= Math.max(tileSize * 1.0, targetDist + tileSize * 0.5);
+        // Hover-only lunge gate: allow starts slightly outside hold radius so chase+hold can still convert to visible attacks.
+        const canAttack = brave && shouldFollow && dPlayer <= Math.max(tileSize * 1.0, targetDist + tileSize * 1.0);
         if (canAttack && entity._attackCd <= 0 && hoverVoidAttackGlobalCd <= 0) {
           const dNorm = Math.max(0.001, dPlayer);
           entity._lungeState = "out";

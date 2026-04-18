@@ -1974,6 +1974,7 @@ if (e.type === "lantern"){
                 e._targetVY -= (toPlayerY / d) * 22;
               }
 
+              // Hover-only flock spacing and cohesion.
               let neighborCount = 0;
               for (const other of awakeList){
                 if (other === e) continue;
@@ -1991,11 +1992,26 @@ if (e.type === "lantern"){
                     e._targetVY += (dy / Math.max(0.001, d)) * 24 * socialPull;
                   }
                 }
-                const sepR = ts * 1.25;
+                const sepR = ts * 1.55;
                 if (d > 0.001 && d < sepR){
-                  const push = (1 - d / sepR) * 85;
+                  const push = (1 - d / sepR) * 150;
                   e._targetVX -= (dx / d) * push;
                   e._targetVY -= (dy / d) * push;
+                }
+                // Deterministic overlap-break: exact same center gets no normal separation vector.
+                if (d <= 0.001){
+                  const keyA = String(e.id ?? "");
+                  const keyB = String(other.id ?? "");
+                  let seed = 0;
+                  const key = keyA < keyB ? `${keyA}|${keyB}` : `${keyB}|${keyA}`;
+                  for (let i = 0; i < key.length; i += 1) seed = ((seed * 33) + key.charCodeAt(i)) >>> 0;
+                  const angle = (seed % 360) * (Math.PI / 180);
+                  const ox = Math.cos(angle);
+                  const oy = Math.sin(angle);
+                  const push = 130;
+                  const dir = keyA < keyB ? -1 : 1;
+                  e._targetVX += ox * push * dir;
+                  e._targetVY += oy * push * dir;
                 }
                 if (d > 0.001 && d < ts * 0.95 && e._bickerCd <= 0){
                   const recoil = 80;
@@ -2014,7 +2030,8 @@ if (e.type === "lantern"){
               }
 
               const swarmBonus = (groupSize >= e.swarmGroupSize) ? 0.6 : 0;
-              const canAttack = brave && shouldFollow && dPlayer <= Math.max(ts * 1.0, targetDist + ts * 0.5);
+              // Hover-only lunge gate: allow starts slightly outside hold radius so chase+hold can still convert to visible attacks.
+              const canAttack = brave && shouldFollow && dPlayer <= Math.max(ts * 1.0, targetDist + ts * 1.0);
               if (canAttack && e._attackCd <= 0 && this._hoverVoidAttackGlobalCd <= 0){
                 e._lungeState = "out";
                 e._lungeActor = true;
@@ -2088,7 +2105,9 @@ if (e.type === "lantern"){
             e.vx *= 0.92;
             e.vy *= 0.92;
           }
-          const maxSpd = 125 + (hoverVoids.filter((h)=>h.awake).length >= e.swarmGroupSize ? 35 : 0);
+          // Hover-only speed cap: keep cruise cap, but don't clip lunge burst back down to cruise speed.
+          const cruiseMaxSpd = 125 + (hoverVoids.filter((h)=>h.awake).length >= e.swarmGroupSize ? 35 : 0);
+          const maxSpd = (e._lungeState !== "idle") ? Math.max(cruiseMaxSpd, 320) : cruiseMaxSpd;
           const sp = Math.hypot(e.vx, e.vy);
           if (sp > maxSpd){
             e.vx = (e.vx / sp) * maxSpd;
