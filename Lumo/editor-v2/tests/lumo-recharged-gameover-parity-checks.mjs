@@ -33,8 +33,20 @@ function runOutOfBoundsLifeGateChecks() {
   assert.equal(oneLifeResult.player.lives, 0, "last life must be consumed on death");
   assert.equal(oneLifeResult.player.gameState, "gameover", "lives reaching zero should immediately set gameState=gameover");
   assert.equal(oneLifeResult.player.status, "game-over", "lives reaching zero should enter stable game-over status");
+  assert.equal(oneLifeResult.player.falling, false, "last-life death should immediately stop falling");
+  assert.equal(oneLifeResult.player.locomotion, "game-over", "last-life death should force game-over locomotion");
   assert.equal(oneLifeResult.player.respawnCountdown.active, false, "no respawn countdown should start when lives reach zero");
   assert.equal(oneLifeResult.status, "game-over", "step result status should surface game-over");
+
+  const frozenNextTick = stepRuntimePlayerSimulation(worldPacket, oneLifeResult.player, {
+    entities: runnerState.entities,
+    input: { moveX: 1, jump: true },
+  });
+  assert.equal(frozenNextTick.ok, true, "gameover tick should stay valid");
+  assert.equal(frozenNextTick.player.gameState, "gameover", "future ticks must preserve gameover state");
+  assert.equal(frozenNextTick.player.falling, false, "future gameover ticks must keep falling disabled");
+  assert.equal(frozenNextTick.player.velocity.y, 0, "future gameover ticks must keep vertical velocity frozen");
+  assert.equal(frozenNextTick.player.position.y, oneLifeResult.player.position.y, "future gameover ticks must keep y position frozen");
 
   const twoLifeResult = stepRuntimePlayerSimulation(worldPacket, {
     ...runnerState.playerState,
@@ -79,6 +91,9 @@ async function runAdapterGameOverPayloadAndFreezeChecks() {
   assert.equal(sawGameOver, true, "adapter runtime should eventually reach gameover on final life loss");
 
   const payloadAtGameOver = adapter.getBootPayload();
+  const playerAtGameOver = adapter.getPlayerSnapshot();
+  assert.equal(playerAtGameOver.gameState, "gameover", "player snapshot should expose gameover state");
+  assert.equal(playerAtGameOver.falling, false, "player snapshot should stop falling in gameover");
   assert.equal(payloadAtGameOver.gameState, "gameover", "boot payload should expose gameover state");
   assert.equal(payloadAtGameOver.respawnPending, false, "boot payload should clear respawn pending at gameover");
   assert.equal(payloadAtGameOver.statusText, "Game Over", "boot payload should expose game-over status text");
