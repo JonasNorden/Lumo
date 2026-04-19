@@ -562,14 +562,8 @@
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
 
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.font = '24px "Trebuchet MS",Arial,sans-serif';
-      ctx.lineWidth = 7;
-      ctx.strokeStyle = "rgba(0,0,0,0.7)";
-      ctx.strokeText("Press any key to return to main menu", canvas.width * 0.5, canvas.height * 0.9);
-      ctx.fillStyle = "#F4E8C7";
-      ctx.fillText("Press any key to return to main menu", canvas.width * 0.5, canvas.height * 0.9);
+      // Keep runtime game-over rendering limited to the authored texture/pass only.
+      // Temporary debug marker/menu-copy text is intentionally removed.
       ctx.restore();
       return true;
     }
