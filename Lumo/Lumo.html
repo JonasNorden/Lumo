@@ -105,6 +105,7 @@
     const RECHARGED_PLAYER_SPRITE_HEIGHT = 38;
     const RECHARGED_PLAYER_BRAKE_SPRITE_HEIGHT = 48;
     const RECHARGED_PLAYER_BRAKE_SPRITE_MAX_WIDTH = 28;
+    const RECHARGED_UI_GAME_OVER_IMAGE = "data/assets/ui/gameover.png";
 
     function createRechargedSpriteImage(src) {
       const image = new Image();
@@ -531,6 +532,44 @@
       ctx.strokeStyle = "rgba(255,210,120,0.95)";
       ctx.strokeText(String(n), cx + gap * 0.5, cy);
       ctx.fillText(String(n), cx + gap * 0.5, cy);
+      ctx.restore();
+      return true;
+    }
+
+    function drawRechargedGameOverOverlay(canvas, ctx, payload, state) {
+      const hudSnapshot = buildRechargedHudSnapshot(payload, state);
+      if (hudSnapshot?.gameState !== "gameover") {
+        return false;
+      }
+
+      if (!state.rechargedGameOverImage) {
+        state.rechargedGameOverImage = createRechargedSpriteImage(RECHARGED_UI_GAME_OVER_IMAGE);
+      }
+      const image = state.rechargedGameOverImage;
+      const imageReady = image && image.complete && image.naturalWidth > 0;
+
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      if (imageReady) {
+        const scale = Math.min(canvas.width / image.naturalWidth, canvas.height / image.naturalHeight);
+        const drawW = image.naturalWidth * scale;
+        const drawH = image.naturalHeight * scale;
+        const drawX = (canvas.width - drawW) * 0.5;
+        const drawY = (canvas.height - drawH) * 0.5;
+        ctx.drawImage(image, drawX, drawY, drawW, drawH);
+      } else {
+        ctx.fillStyle = "#080A13";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = '24px "Trebuchet MS",Arial,sans-serif';
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = "rgba(0,0,0,0.7)";
+      ctx.strokeText("Press any key to return to main menu", canvas.width * 0.5, canvas.height * 0.9);
+      ctx.fillStyle = "#F4E8C7";
+      ctx.fillText("Press any key to return to main menu", canvas.width * 0.5, canvas.height * 0.9);
       ctx.restore();
       return true;
     }
@@ -2065,7 +2104,10 @@
 
         let overlayDrawn = false;
         try {
-          overlayDrawn = drawRechargedIntermissionOverlay(canvas, ctx, payload, state);
+          overlayDrawn = drawRechargedGameOverOverlay(canvas, ctx, payload, state);
+          if (overlayDrawn !== true) {
+            overlayDrawn = drawRechargedIntermissionOverlay(canvas, ctx, payload, state);
+          }
           if (overlayDrawn !== true) {
             overlayDrawn = drawRechargedRespawnOverlay(canvas, ctx, payload, state);
           }
