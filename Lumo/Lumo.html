@@ -285,6 +285,7 @@
         flare: false,
         pulse: false,
         boost: false,
+        continuePressed: false,
       };
     }
 
@@ -306,6 +307,11 @@
           state.pulse = pressed;
         } else if (code === "Space") {
           state.boost = pressed;
+        } else if (code === "Enter") {
+          if (pressed === true && state._enterDown !== true) {
+            state.continuePressed = true;
+          }
+          state._enterDown = pressed;
         }
       };
 
@@ -392,7 +398,7 @@
       hud.flares = flareStash;
       const hudDebug = document.getElementById("hudDebug");
       if (hudDebug) {
-        hudDebug.textContent = snapshot.levelComplete === true ? "Level complete" : "";
+        hudDebug.textContent = state?.intermissionAcknowledgedMessage || "";
       }
 
       if (state && typeof state === "object") {
@@ -580,6 +586,18 @@
         const nextPayload = adapter.getBootPayload?.();
         const nextPlayerSnapshot = currentPlayerSnapshot || readSnapshot();
         if (nextPayload && typeof nextPayload === "object") {
+          const intermissionReady = (
+            nextPayload?.gameState === "intermission"
+            || nextPayload?.intermissionReadyForInput === true
+            || nextPayload?.levelComplete === true
+          );
+          if (state?.input?.continuePressed === true && intermissionReady) {
+            state.intermissionAcknowledged = true;
+            state.intermissionAcknowledgedMessage = "Next flow not connected yet";
+          }
+          if (state?.input) {
+            state.input.continuePressed = false;
+          }
           window.__LumoRechargedBoot = {
             ...(payload && typeof payload === "object" ? payload : {}),
             ...nextPayload,
@@ -1859,7 +1877,14 @@
 
         drawRechargedHudReplica(canvas, state);
 
-        if (statusText.length > 0) {
+        let overlayDrawn = false;
+        try {
+          overlayDrawn = drawRechargedIntermissionOverlay(canvas, ctx, payload, state);
+        } catch (_error) {
+          overlayDrawn = false;
+        }
+
+        if (overlayDrawn !== true && statusText.length > 0) {
           const centerX = canvas.width * 0.5;
           const centerY = canvas.height * 0.36;
           const fontSize = Math.max(28, Math.round(canvas.height * 0.06));
@@ -1894,6 +1919,87 @@
         }
         return false;
       }
+    }
+
+    // Builds one safe intermission model from live payload + adapter snapshot values.
+    function buildRechargedIntermissionModel(payload, state) {
+      const hudSnapshot = buildRechargedHudSnapshot(payload, state);
+      const isIntermission = (
+        hudSnapshot?.gameState === "intermission"
+        || hudSnapshot?.intermissionReadyForInput === true
+        || hudSnapshot?.levelComplete === true
+      );
+      const toWhole = (value, fallback = 0) => Number.isFinite(value) ? Math.max(0, Math.floor(value)) : fallback;
+      const energyRatio = Number.isFinite(hudSnapshot?.energy) ? Math.max(0, Math.min(1, hudSnapshot.energy)) : 0;
+      return {
+        active: isIntermission,
+        title: "Level complete",
+        score: toWhole(hudSnapshot?.score, 0),
+        lives: toWhole(hudSnapshot?.lives, 0),
+        flares: toWhole(hudSnapshot?.flareStash, 0),
+        energy: Math.round(energyRatio * 100),
+        prompt: "Press Enter to continue",
+        acknowledgedMessage: typeof state?.intermissionAcknowledgedMessage === "string" ? state.intermissionAcknowledgedMessage : "",
+      };
+    }
+
+    function drawRechargedIntermissionOverlay(canvas, ctx, payload, state) {
+      const model = buildRechargedIntermissionModel(payload, state);
+      if (model.active !== true) {
+        return false;
+      }
+
+      const panelWidth = Math.max(300, Math.min(canvas.width * 0.72, 620));
+      const panelHeight = Math.max(230, Math.min(canvas.height * 0.62, 390));
+      const panelX = (canvas.width - panelWidth) * 0.5;
+      const panelY = (canvas.height - panelHeight) * 0.5;
+      const titleSize = Math.max(24, Math.round(canvas.height * 0.052));
+      const valueSize = Math.max(18, Math.round(canvas.height * 0.032));
+      const promptSize = Math.max(16, Math.round(canvas.height * 0.026));
+
+      ctx.save();
+      ctx.fillStyle = "rgba(2, 6, 23, 0.65)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = "rgba(15, 23, 42, 0.88)";
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.55)";
+      ctx.lineWidth = 2;
+      ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
+      ctx.strokeRect(panelX + 1, panelY + 1, panelWidth - 2, panelHeight - 2);
+
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `700 ${titleSize}px system-ui, -apple-system, Segoe UI, sans-serif`;
+      ctx.fillText(model.title, canvas.width * 0.5, panelY + titleSize * 1.3);
+
+      ctx.textAlign = "left";
+      ctx.font = `600 ${valueSize}px system-ui, -apple-system, Segoe UI, sans-serif`;
+      const statsX = panelX + Math.max(24, panelWidth * 0.18);
+      const statsY = panelY + Math.max(72, panelHeight * 0.34);
+      const rowGap = Math.max(26, valueSize * 1.5);
+      const rows = [
+        `Score: ${model.score}`,
+        `Lives: ${model.lives}`,
+        `Flares: ${model.flares}`,
+        `Energy: ${model.energy}%`,
+      ];
+      for (let index = 0; index < rows.length; index += 1) {
+        ctx.fillText(rows[index], statsX, statsY + rowGap * index);
+      }
+
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#bfdbfe";
+      ctx.font = `600 ${promptSize}px system-ui, -apple-system, Segoe UI, sans-serif`;
+      ctx.fillText(model.prompt, canvas.width * 0.5, panelY + panelHeight - Math.max(32, promptSize * 1.8));
+
+      if (model.acknowledgedMessage.length > 0) {
+        ctx.fillStyle = "#fcd34d";
+        ctx.font = `600 ${Math.max(14, promptSize - 1)}px system-ui, -apple-system, Segoe UI, sans-serif`;
+        ctx.fillText(model.acknowledgedMessage, canvas.width * 0.5, panelY + panelHeight - Math.max(14, promptSize));
+      }
+      ctx.restore();
+      return true;
     }
 
     function resolveAutoplayTickStatus(queryBootResult) {
