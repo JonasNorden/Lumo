@@ -287,6 +287,7 @@ function buildWorldSnapshot(worldState) {
     ? worldState.layers.decor
       .map((decor, index) => ({
         decorId: typeof decor?.decorId === "string" ? decor.decorId : `decor-${index + 1}`,
+        sourceIndex: index,
         decorType: typeof decor?.decorType === "string" ? decor.decorType : "decor",
         x: Number.isFinite(decor?.x) ? decor.x : null,
         y: Number.isFinite(decor?.y) ? decor.y : null,
@@ -301,7 +302,8 @@ function buildWorldSnapshot(worldState) {
         drawAnchor: typeof decor?.drawAnchor === "string" ? decor.drawAnchor : "BL",
       }))
       .filter((decor) => decor.x !== null && decor.y !== null)
-      .sort((left, right) => (left.order - right.order) || left.decorId.localeCompare(right.decorId))
+      .sort((left, right) => (left.order - right.order) || (left.sourceIndex - right.sourceIndex) || left.decorId.localeCompare(right.decorId))
+      .map(({ sourceIndex, ...decor }) => decor)
     : [];
 
   // Carry runtime background payloads through unchanged.

@@ -1081,6 +1081,39 @@
       return state.rechargedDecorVisualState;
     }
 
+    // Resolves authored decor image paths into runtime-safe candidates for live Lumo.html loading.
+    function buildRechargedDecorImageCandidates(imageSrc) {
+      if (typeof imageSrc !== "string") {
+        return [];
+      }
+      const trimmed = imageSrc.trim();
+      if (!trimmed) {
+        return [];
+      }
+
+      const candidates = [];
+      const pushCandidate = (value) => {
+        if (typeof value !== "string" || value.length === 0) return;
+        if (!candidates.includes(value)) {
+          candidates.push(value);
+        }
+      };
+
+      pushCandidate(trimmed);
+      if (/^(https?:|data:|blob:)/i.test(trimmed)) {
+        return candidates;
+      }
+
+      const withoutDotPrefix = trimmed.replace(/^\.?\//, "");
+      pushCandidate(withoutDotPrefix);
+
+      // Editor-authored decor commonly persists "../data/..." paths; remap to runtime "data/...".
+      const withoutParentPrefix = trimmed.replace(/^(\.\.\/)+/, "");
+      pushCandidate(withoutParentPrefix);
+
+      return candidates;
+    }
+
     function ensureRechargedEntityVisualState(state) {
       if (!state || typeof state !== "object") {
         return null;
@@ -1264,43 +1297,39 @@
         : worldY + drawOffY;
       const drawRect = mapper.worldToCanvasRect(worldDrawX, worldDrawY, Math.max(1, drawW), Math.max(1, drawH));
       const visualState = ensureRechargedDecorVisualState(state);
-      const imageSrc = typeof decor?.img === "string" && decor.img.trim().length > 0 ? decor.img : null;
-
-      if (imageSrc && visualState) {
-        let img = visualState.imageByKey.get(imageSrc);
-        if (!img) {
-          img = new Image();
-          img.src = imageSrc;
-          img._ok = false;
-          img.onload = () => { img._ok = true; };
-          img.onerror = () => { img._ok = false; };
-          visualState.imageByKey.set(imageSrc, img);
-        }
-        if (img._ok === true) {
-          if (decor?.flipX === true) {
-            ctx.save();
-            ctx.translate(drawRect.x + drawRect.w, drawRect.y);
-            ctx.scale(-1, 1);
-            ctx.drawImage(img, 0, 0, drawRect.w, drawRect.h);
-            ctx.restore();
-          } else {
-            ctx.drawImage(img, drawRect.x, drawRect.y, drawRect.w, drawRect.h);
+      const imageCandidates = buildRechargedDecorImageCandidates(decor?.img);
+      let resolvedImage = null;
+      if (visualState) {
+        for (const imageSrc of imageCandidates) {
+          let img = visualState.imageByKey.get(imageSrc);
+          if (!img) {
+            img = new Image();
+            img.src = imageSrc;
+            img._ok = false;
+            img.onload = () => { img._ok = true; };
+            img.onerror = () => { img._ok = false; };
+            visualState.imageByKey.set(imageSrc, img);
           }
-          return;
+          if (img._ok === true) {
+            resolvedImage = img;
+            break;
+          }
         }
       }
+      // Missing/invalid art is skipped safely in the live lane to avoid noisy fake placeholders.
+      if (!resolvedImage) {
+        return;
+      }
 
-      // Lightweight fallback while art coverage grows: tinted visual marker, still in decor layer only.
-      const variantTag = decor?.variant;
-      const variantHash = typeof variantTag === "string"
-        ? variantTag.length
-        : Number.isFinite(variantTag) ? (Math.abs(variantTag) | 0) : 0;
-      const tintHue = 95 + (variantHash % 4) * 18;
-      ctx.fillStyle = `hsla(${tintHue}, 68%, 52%, 0.70)`;
-      ctx.fillRect(drawRect.x, drawRect.y, drawRect.w, drawRect.h);
-      ctx.strokeStyle = "rgba(15, 23, 42, 0.45)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(drawRect.x + 0.5, drawRect.y + 0.5, Math.max(1, drawRect.w - 1), Math.max(1, drawRect.h - 1));
+      if (decor?.flipX === true) {
+        ctx.save();
+        ctx.translate(drawRect.x + drawRect.w, drawRect.y);
+        ctx.scale(-1, 1);
+        ctx.drawImage(resolvedImage, 0, 0, drawRect.w, drawRect.h);
+        ctx.restore();
+      } else {
+        ctx.drawImage(resolvedImage, drawRect.x, drawRect.y, drawRect.w, drawRect.h);
+      }
     }
 
     function renderRechargedCanvasFrame(canvas, state) {
