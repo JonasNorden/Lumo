@@ -488,7 +488,6 @@
     function createRechargedFireflyAudioBridge() {
       return createFireflyAudioBridge({
         runtimeGlobal: window,
-        preferStandalone: true,
         getSfxVolume() {
           try {
             if (window?.Lumo && typeof window.Lumo.getAudioSettings === "function") {
@@ -531,7 +530,7 @@
       }
       payload.rechargedFireflyAudio = {
         updateFrame: Number.isFinite(state?.frameCount) ? state.frameCount : 0,
-        bridgeReady: !!(fireflyAudioState?.bridge),
+        bridgeReady: fireflyAudioState?.bridge?.ready === true,
         trackedEntityCount: fireflyAudioState?.keyByEntityId instanceof Map ? fireflyAudioState.keyByEntityId.size : 0,
         trackedHandleCount: handlesByKey ? handlesByKey.size : 0,
         activeFireflyCount: Number.isFinite(details.activeFireflyCount) ? details.activeFireflyCount : 0,
@@ -539,7 +538,7 @@
         playingCount,
         samplePaused,
         sampleVolume,
-        source: typeof fireflyAudioState?.bridge?.source === "string" ? fireflyAudioState.bridge.source : "tickLiveRechargedAdapter",
+        source: typeof fireflyAudioState?.bridge?.source === "string" ? fireflyAudioState.bridge.source : "none",
       };
     }
 
@@ -576,6 +575,7 @@
           const existing = fireflyAudioState.handlesByKey.get(key);
           if (existing) return existing;
           const handle = bridge.getHandle(FIREFLY_AUDIO_PATH, true, key);
+          if (!handle) return null;
           bridge.ensureSpatial(handle);
           fireflyAudioState.handlesByKey.set(key, handle);
           return handle;

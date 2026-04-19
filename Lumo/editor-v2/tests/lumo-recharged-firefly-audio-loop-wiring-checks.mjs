@@ -34,6 +34,12 @@ assert.equal(
 );
 
 assert.equal(
+  html.includes("bridgeReady: fireflyAudioState?.bridge?.ready === true"),
+  true,
+  "Runtime payload must report bridgeReady from actual bridge readiness.",
+);
+
+assert.equal(
   html.includes("realAudioCount"),
   true,
   "Runtime payload must report realAudioCount so browser inspection can prove real playback objects exist.",

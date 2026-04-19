@@ -66,6 +66,8 @@ function createLegacyEntitiesFireflyAudioBridge(runtimeWindow = globalThis) {
     return null;
   }
   return {
+    source: "legacy-entities-audio",
+    ready: true,
     _soundHandles: new Map(),
     _sfxSpatialCtx: null,
     _getSfxVolume(...args) {
@@ -102,6 +104,10 @@ function createStandaloneFireflyAudioBridge(options = {}) {
   const soundHandles = new Map();
   let spatialCtx = null;
 
+  if (typeof AudioCtor !== "function") {
+    return null;
+  }
+
   function getSafeSfxVolume() {
     return clamp01(Number(sfxVolume()));
   }
@@ -134,6 +140,7 @@ function createStandaloneFireflyAudioBridge(options = {}) {
 
   return {
     source: "standalone-html-audio",
+    ready: true,
     getHandle(path, loop, keySuffix = "") {
       const suffix = keySuffix == null || keySuffix === "" ? "" : `::${keySuffix}`;
       const key = `${path}::${loop ? "L" : "O"}${suffix}`;
@@ -210,12 +217,8 @@ function createStandaloneFireflyAudioBridge(options = {}) {
 }
 
 function createFireflyAudioBridge(options = {}) {
-  if (options?.preferStandalone === true) {
-    return createStandaloneFireflyAudioBridge(options);
-  }
   const legacyBridge = createLegacyEntitiesFireflyAudioBridge(options.runtimeGlobal);
   if (legacyBridge) {
-    legacyBridge.source = "legacy-entities-audio";
     return legacyBridge;
   }
   return createStandaloneFireflyAudioBridge(options);
