@@ -105,36 +105,62 @@ const fallRespawnWithCheckpoint = stepRuntimePlayerSimulation(
 assert.equal(fallRespawnWithCheckpoint?.ok, true, "Expected out-of-bounds respawn step to succeed with checkpoint.");
 assert.equal(
   fallRespawnWithCheckpoint?.status,
-  "respawned-out-of-bounds",
-  "Expected checkpoint out-of-bounds fall to return respawned status.",
+  "respawn-pending",
+  "Expected checkpoint out-of-bounds fall to enter pending respawn status.",
 );
 assert.equal(
-  fallRespawnWithCheckpoint?.player?.position?.x,
+  fallRespawnWithCheckpoint?.player?.lives,
+  3,
+  "Expected pending respawn state to consume exactly one life immediately.",
+);
+assert.equal(
+  fallRespawnWithCheckpoint?.player?.respawnCountdown?.countdown,
+  3,
+  "Expected pending respawn state to expose visible three-second countdown.",
+);
+let resolvedCheckpointRespawn = fallRespawnWithCheckpoint;
+for (let tick = 0; tick < 190; tick += 1) {
+  resolvedCheckpointRespawn = stepRuntimePlayerSimulation(
+    runnerStateBefore.world,
+    resolvedCheckpointRespawn.player,
+    { moveX: 0, jump: false, entities: runnerStateBefore.entities },
+  );
+  if (resolvedCheckpointRespawn?.status === "respawned-out-of-bounds") {
+    break;
+  }
+}
+assert.equal(
+  resolvedCheckpointRespawn?.status,
+  "respawned-out-of-bounds",
+  "Expected pending checkpoint respawn to resolve after countdown duration.",
+);
+assert.equal(
+  resolvedCheckpointRespawn?.player?.position?.x,
   120,
   "Expected checkpoint-driven respawn X to be exactly 15 tiles before checkpoint.",
 );
 assert.equal(
-  fallRespawnWithCheckpoint?.player?.position?.y,
+  resolvedCheckpointRespawn?.player?.position?.y,
   168,
   "Expected checkpoint-driven respawn Y to match checkpoint tile Y exactly.",
 );
 assert.equal(
-  fallRespawnWithCheckpoint?.debug?.vertical?.respawnSource,
+  resolvedCheckpointRespawn?.debug?.vertical?.respawnSource,
   "checkpoint-minus-15",
   "Expected respawn debug source to indicate checkpoint-based placement.",
 );
 assert.equal(
-  fallRespawnWithCheckpoint?.player?.lockMinX,
+  resolvedCheckpointRespawn?.player?.lockMinX,
   120,
   "Expected lockMinX to align with checkpoint-driven respawn position.",
 );
 assert.equal(
-  fallRespawnWithCheckpoint?.player?.invuln,
+  resolvedCheckpointRespawn?.player?.invuln,
   1.6,
   "Expected temporary respawn invulnerability to be restored on active path.",
 );
 assert.equal(
-  fallRespawnWithCheckpoint?.player?._justRespawned,
+  resolvedCheckpointRespawn?.player?._justRespawned,
   true,
   "Expected just-respawned marker to be set after checkpoint-driven respawn.",
 );
@@ -150,17 +176,33 @@ const fallRespawnWithoutCheckpoint = stepRuntimePlayerSimulation(
 );
 assert.equal(fallRespawnWithoutCheckpoint?.ok, true, "Expected out-of-bounds respawn step to succeed without checkpoint.");
 assert.equal(
-  fallRespawnWithoutCheckpoint?.player?.position?.x,
+  fallRespawnWithoutCheckpoint?.status,
+  "respawn-pending",
+  "Expected no-checkpoint out-of-bounds fall to use pending respawn countdown state.",
+);
+let resolvedSpawnRespawn = fallRespawnWithoutCheckpoint;
+for (let tick = 0; tick < 190; tick += 1) {
+  resolvedSpawnRespawn = stepRuntimePlayerSimulation(
+    runnerStateBefore.world,
+    resolvedSpawnRespawn.player,
+    { moveX: 0, jump: false, entities: runnerStateBefore.entities },
+  );
+  if (resolvedSpawnRespawn?.status === "respawned-out-of-bounds") {
+    break;
+  }
+}
+assert.equal(
+  resolvedSpawnRespawn?.player?.position?.x,
   runnerStateBefore.world.spawn.x,
   "Expected no-checkpoint fallback to keep authored spawn X behavior.",
 );
 assert.equal(
-  fallRespawnWithoutCheckpoint?.player?.position?.y,
+  resolvedSpawnRespawn?.player?.position?.y,
   runnerStateBefore.world.spawn.y,
   "Expected no-checkpoint fallback to keep authored spawn Y behavior.",
 );
 assert.equal(
-  fallRespawnWithoutCheckpoint?.debug?.vertical?.respawnSource,
+  resolvedSpawnRespawn?.debug?.vertical?.respawnSource,
   "authored-spawn",
   "Expected debug source to remain authored-spawn when checkpoint is absent.",
 );

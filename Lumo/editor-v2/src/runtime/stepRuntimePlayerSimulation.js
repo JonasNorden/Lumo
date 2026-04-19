@@ -110,6 +110,8 @@ const DEFAULT_LANTERN_FOOTPRINT_PX = 14;
 const DEFAULT_FLARE_PICKUP_FOOTPRINT_PX = 12;
 const DEFAULT_POWERCELL_FOOTPRINT_PX = 24;
 const DEFAULT_POWERCELL_FILL_DURATION_SECONDS = 1.6;
+const DEFAULT_PLAYER_LIVES = 4;
+const RESPAWN_COUNTDOWN_SECONDS = 3;
 const ENTITY_HIT_FLASH_TICKS = 6;
 const ENTITY_DARK_CREATURE_PULSE_SCALE = 0.55;
 const ENTITY_HOVER_VOID_PULSE_SCALE = 0.6;
@@ -2152,6 +2154,62 @@ function resolveCheckpointRespawnPlacement(worldPacket, playerState) {
   };
 }
 
+function resolveRemainingLives(playerState) {
+  return Number.isFinite(playerState?.lives)
+    ? Math.max(0, Math.floor(playerState.lives))
+    : DEFAULT_PLAYER_LIVES;
+}
+
+function resolveRespawnCountdownState(playerState) {
+  const source = playerState?.respawnCountdown && typeof playerState.respawnCountdown === "object"
+    ? playerState.respawnCountdown
+    : {};
+  const active = source.active === true;
+  const total = Number.isFinite(source.total) && source.total > 0 ? source.total : RESPAWN_COUNTDOWN_SECONDS;
+  const remaining = Number.isFinite(source.remaining) && source.remaining >= 0 ? source.remaining : 0;
+  const countdown = Number.isFinite(source.countdown) && source.countdown >= 0 ? source.countdown : Math.ceil(remaining);
+  return {
+    active,
+    total,
+    remaining,
+    countdown: Math.max(0, Math.floor(countdown)),
+    spawnX: Number.isFinite(source.spawnX) ? source.spawnX : null,
+    spawnY: Number.isFinite(source.spawnY) ? source.spawnY : null,
+    source: typeof source.source === "string" ? source.source : null,
+    triggerY: Number.isFinite(source.triggerY) ? source.triggerY : null,
+    respawnY: Number.isFinite(source.respawnY) ? source.respawnY : null,
+  };
+}
+
+function buildRespawnPendingPlayerState(playerState, countdownState, options = {}) {
+  const dt = resolveRuntimeDeltaSeconds(options);
+  const nextRemaining = Math.max(0, countdownState.remaining - dt);
+  const nextCountdown = Math.max(0, Math.ceil(nextRemaining));
+  const finalRespawnState = {
+    ...countdownState,
+    active: nextRemaining > 0,
+    remaining: nextRemaining,
+    countdown: nextCountdown,
+  };
+  const waiting = nextRemaining > 0;
+  return {
+    waiting,
+    countdown: finalRespawnState,
+    player: {
+      position: {
+        x: Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0,
+        y: Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0,
+      },
+      velocity: { x: 0, y: 0 },
+      grounded: false,
+      falling: false,
+      rising: false,
+      landed: false,
+      status: waiting ? "respawn-pending" : "respawn-ready",
+    },
+  };
+}
+
 // Respawns to authored spawn after leaving the valid playable region downward.
 function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, options = {}) {
   const respawnY = resolveBottomBoundRespawnY(worldPacket, options);
@@ -2174,26 +2232,69 @@ function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, optio
   const falling = Number.isFinite(checkpointRespawn?.x)
     ? false
     : spawnState?.falling === true;
+  const lives = resolveRemainingLives(playerState);
   const invulnDuration = Number.isFinite(playerState?.invulnDuration) && playerState.invulnDuration > 0
     ? playerState.invulnDuration
     : 1.6;
+  const activeRespawnCountdown = resolveRespawnCountdownState(playerState);
+
+  if (activeRespawnCountdown.active) {
+    return null;
+  }
+
+  const livesAfterDeath = Math.max(0, lives - 1);
+  if (livesAfterDeath <= 0) {
+    return {
+      player: {
+        position: verticalStep.position,
+        velocity: { x: 0, y: 0 },
+        grounded: false,
+        falling: true,
+        rising: false,
+        landed: false,
+        status: "dead-out-of-bounds",
+        lives: 0,
+      },
+      debug: {
+        respawned: false,
+        triggerY: currentY,
+        respawnY,
+        spawnX,
+        spawnY,
+        source: checkpointRespawn ? "checkpoint-minus-15" : "authored-spawn",
+      },
+      warning: "Player fell below playable world bounds with no remaining lives.",
+    };
+  }
 
   return {
     player: {
-      position: { x: spawnX, y: spawnY },
+      position: verticalStep.position,
       velocity: { x: 0, y: 0 },
-      grounded,
-      falling,
+      grounded: false,
+      falling: false,
       rising: false,
       landed: false,
-      status: "respawned-out-of-bounds",
-      // V1-adjacent respawn semantics retained in active Recharged state shape.
-      lockMinX: spawnX,
-      invuln: invulnDuration,
-      _justRespawned: true,
+      status: "respawn-pending",
+      lives: livesAfterDeath,
+      invuln: Number.isFinite(playerState?.invuln) ? playerState.invuln : 0,
+      respawnCountdown: {
+        active: true,
+        total: RESPAWN_COUNTDOWN_SECONDS,
+        remaining: RESPAWN_COUNTDOWN_SECONDS,
+        countdown: RESPAWN_COUNTDOWN_SECONDS,
+        spawnX,
+        spawnY,
+        source: checkpointRespawn ? "checkpoint-minus-15" : "authored-spawn",
+        triggerY: currentY,
+        respawnY,
+      },
+      _justRespawned: false,
+      lockMinX: Number.isFinite(playerState?.lockMinX) ? playerState.lockMinX : 0,
+      invulnDuration,
     },
     debug: {
-      respawned: true,
+      respawned: false,
       triggerY: currentY,
       respawnY,
       spawnX,
@@ -2201,13 +2302,116 @@ function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, optio
       source: checkpointRespawn ? "checkpoint-minus-15" : "authored-spawn",
     },
     warning: checkpointRespawn
-      ? "Player fell below playable world bounds and was respawned from checkpoint (15 tiles back)."
-      : "Player fell below playable world bounds and was respawned at authored spawn.",
+      ? "Player fell below playable world bounds; respawn countdown started from checkpoint (15 tiles back)."
+      : "Player fell below playable world bounds; respawn countdown started at authored spawn.",
   };
 }
 
 // Executes one deterministic tick: intent -> locomotion -> velocityX -> horizontal -> jump -> vertical.
 export function stepRuntimePlayerSimulation(worldPacket, playerState, options = {}) {
+  const lives = resolveRemainingLives(playerState);
+  const respawnCountdown = resolveRespawnCountdownState(playerState);
+  if (respawnCountdown.active) {
+    const pending = buildRespawnPendingPlayerState(playerState, respawnCountdown, options);
+    if (pending.waiting) {
+      return {
+        ok: true,
+        darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
+        nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
+        player: {
+          ...playerState,
+          ...pending.player,
+          lives,
+          respawnCountdown: pending.countdown,
+          locomotion: "respawning-out-of-bounds",
+          gameState: "playing",
+        },
+        collisions: {
+          moveX: 0,
+          jump: false,
+          locomotion: "respawning-out-of-bounds",
+          velocityX: 0,
+          blockedLeft: false,
+          blockedRight: false,
+          grounded: false,
+          falling: false,
+          rising: false,
+          landed: false,
+          collidedBelow: false,
+        },
+        status: "respawn-pending",
+        errors: [],
+        warnings: [],
+        debug: {
+          finalized: {
+            respawnCountdown: pending.countdown.countdown,
+          },
+        },
+        entities: Array.isArray(playerState?.entities) ? playerState.entities.map((entity) => ({ ...entity })) : [],
+      };
+    }
+
+    const spawnX = Number.isFinite(respawnCountdown.spawnX) ? respawnCountdown.spawnX : 0;
+    const spawnY = Number.isFinite(respawnCountdown.spawnY) ? respawnCountdown.spawnY : 0;
+    const invulnDuration = Number.isFinite(playerState?.invulnDuration) && playerState.invulnDuration > 0
+      ? playerState.invulnDuration
+      : 1.6;
+    return {
+      ok: true,
+      darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
+      nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
+      player: {
+        ...playerState,
+        position: { x: spawnX, y: spawnY },
+        velocity: { x: 0, y: 0 },
+        grounded: Number.isFinite(respawnCountdown.spawnX),
+        falling: false,
+        rising: false,
+        landed: false,
+        status: "respawned-out-of-bounds",
+        locomotion: "respawning-out-of-bounds",
+        lockMinX: spawnX,
+        invuln: invulnDuration,
+        _justRespawned: true,
+        lives,
+        respawnCountdown: {
+          ...pending.countdown,
+          active: false,
+          remaining: 0,
+          countdown: 0,
+        },
+      },
+      collisions: {
+        moveX: 0,
+        jump: false,
+        locomotion: "respawning-out-of-bounds",
+        velocityX: 0,
+        blockedLeft: false,
+        blockedRight: false,
+        grounded: true,
+        falling: false,
+        rising: false,
+        landed: false,
+        collidedBelow: false,
+      },
+      status: "respawned-out-of-bounds",
+      errors: [],
+      warnings: [],
+      debug: {
+        vertical: {
+          status: "respawned-out-of-bounds",
+          respawned: true,
+          triggerY: respawnCountdown.triggerY,
+          respawnY: respawnCountdown.respawnY,
+          respawnSpawnX: spawnX,
+          respawnSpawnY: spawnY,
+          respawnSource: respawnCountdown.source,
+        },
+      },
+      entities: Array.isArray(playerState?.entities) ? playerState.entities.map((entity) => ({ ...entity })) : [],
+    };
+  }
+
   const priorCompletion = playerState?.levelComplete === true || playerState?.gameState === "intermission";
   if (priorCompletion) {
     return {
@@ -2531,6 +2735,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       invulnDuration: Number.isFinite(playerState?.invulnDuration) ? playerState.invulnDuration : 1.6,
       _justRespawned: resolvedPlayerStep?._justRespawned === true,
       status,
+      lives: Number.isFinite(bottomRespawn?.player?.lives) ? bottomRespawn.player.lives : lives,
+      respawnCountdown: bottomRespawn?.player?.respawnCountdown ?? respawnCountdown,
       brakeState,
     },
     collisions: {

@@ -28,6 +28,11 @@ function readAdapterPlayerSnapshot(payload, state) {
 export function buildRechargedHudSnapshot(payload = {}, state = null) {
   const playerSnapshot = readAdapterPlayerSnapshot(payload, state);
   const levelComplete = playerSnapshot?.levelComplete === true;
+  const respawnCountdown = playerSnapshot?.respawnCountdown && typeof playerSnapshot.respawnCountdown === "object"
+    ? playerSnapshot.respawnCountdown
+    : null;
+  const respawnPending = respawnCountdown?.active === true || playerSnapshot?.status === "respawn-pending";
+  const respawnCount = Number.isFinite(respawnCountdown?.countdown) ? Math.max(0, Math.ceil(respawnCountdown.countdown)) : 0;
 
   return {
     flareStash: toWholeNumber(playerSnapshot?.flareStash),
@@ -37,6 +42,8 @@ export function buildRechargedHudSnapshot(payload = {}, state = null) {
     levelComplete,
     intermissionReadyForInput: playerSnapshot?.intermissionReadyForInput === true,
     gameState: typeof playerSnapshot?.gameState === "string" ? playerSnapshot.gameState : "playing",
+    respawnPending,
+    respawnCount: respawnPending ? respawnCount : 0,
     ...(levelComplete ? { statusText: "Level complete" } : {}),
   };
 }
