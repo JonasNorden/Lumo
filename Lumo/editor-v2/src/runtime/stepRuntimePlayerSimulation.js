@@ -2623,6 +2623,57 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   }
 
   const bottomRespawn = maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, options);
+  const bottomRespawnIsGameOver = (
+    bottomRespawn?.player?.gameState === "gameover"
+    || bottomRespawn?.player?.status === "game-over"
+    || resolveRemainingLives(bottomRespawn?.player) <= 0
+  );
+  if (bottomRespawnIsGameOver) {
+    const gameOverPlayer = buildGameOverPlayerState({
+      ...playerState,
+      ...(bottomRespawn?.player && typeof bottomRespawn.player === "object" ? bottomRespawn.player : {}),
+      position: bottomRespawn?.player?.position ?? verticalStep?.position ?? playerState?.position,
+    });
+    return {
+      ok: true,
+      darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
+      nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
+      player: gameOverPlayer,
+      collisions: {
+        moveX: 0,
+        jump: false,
+        locomotion: "game-over",
+        velocityX: 0,
+        blockedLeft: false,
+        blockedRight: false,
+        grounded: false,
+        falling: false,
+        rising: false,
+        landed: false,
+        collidedBelow: false,
+      },
+      status: "game-over",
+      errors: [],
+      warnings: uniqueMessages([bottomRespawn?.warning]),
+      debug: {
+        finalized: {
+          gameState: "gameover",
+          lives: 0,
+          source: "bottom-respawn-last-life",
+        },
+        vertical: {
+          status: "game-over",
+          respawned: false,
+          triggerY: bottomRespawn?.debug?.triggerY ?? null,
+          respawnY: bottomRespawn?.debug?.respawnY ?? null,
+          respawnSpawnX: bottomRespawn?.debug?.spawnX ?? null,
+          respawnSpawnY: bottomRespawn?.debug?.spawnY ?? null,
+          respawnSource: bottomRespawn?.debug?.source ?? null,
+        },
+      },
+      entities: Array.isArray(playerState?.entities) ? playerState.entities.map((entity) => ({ ...entity })) : [],
+    };
+  }
   const resolvedPlayerStep = bottomRespawn?.player ?? verticalStep;
   const normalizedEntities = normalizeRuntimeEntities(options?.entities, worldPacket, playerState);
   const checkpointStep = stepCheckpointOverlap(worldPacket, {
