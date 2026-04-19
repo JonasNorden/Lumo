@@ -109,6 +109,10 @@ function buildPlayerSnapshot(snapshot) {
     score: Number.isFinite(source.score) ? source.score : null,
     boostActive: source.boostActive === true,
     flareStash: Number.isFinite(source.flareStash) ? source.flareStash : 1,
+    levelComplete: source.levelComplete === true,
+    intermissionReadyForInput: source.intermissionReadyForInput === true,
+    gameState: typeof source.gameState === "string" ? source.gameState : "playing",
+    lastExitId: typeof source.lastExitId === "string" ? source.lastExitId : null,
     pulse: pulse
       ? {
           active: pulse.active === true,
