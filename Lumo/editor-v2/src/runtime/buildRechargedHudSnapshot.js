@@ -40,6 +40,8 @@ export function buildRechargedHudSnapshot(payload = {}, state = null) {
   const respawnCountFromPayload = Number.isFinite(payload?.respawnCount) ? Math.max(0, Math.ceil(payload.respawnCount)) : null;
   const respawnCount = respawnCountFromCountdown ?? respawnCountFromSnapshot ?? respawnCountFromPayload ?? 0;
 
+  const gameState = typeof playerSnapshot?.gameState === "string" ? playerSnapshot.gameState : "playing";
+
   return {
     flareStash: toWholeNumber(playerSnapshot?.flareStash),
     energy: toFiniteNumber(playerSnapshot?.energy),
@@ -47,9 +49,10 @@ export function buildRechargedHudSnapshot(payload = {}, state = null) {
     score: toWholeNumber(playerSnapshot?.score),
     levelComplete,
     intermissionReadyForInput: playerSnapshot?.intermissionReadyForInput === true,
-    gameState: typeof playerSnapshot?.gameState === "string" ? playerSnapshot.gameState : "playing",
+    gameState,
     respawnPending,
     respawnCount: respawnPending ? respawnCount : 0,
+    ...((gameState === "gameover") ? { statusText: "Game Over" } : {}),
     ...(levelComplete ? { statusText: "Level complete" } : {}),
   };
 }

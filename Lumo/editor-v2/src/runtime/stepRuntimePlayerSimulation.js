@@ -2210,6 +2210,32 @@ function buildRespawnPendingPlayerState(playerState, countdownState, options = {
   };
 }
 
+function buildGameOverPlayerState(playerState) {
+  const lives = resolveRemainingLives(playerState);
+  const gameOverLives = lives <= 0 ? 0 : lives;
+  return {
+    ...playerState,
+    velocity: { x: 0, y: 0 },
+    grounded: false,
+    falling: false,
+    rising: false,
+    landed: false,
+    status: "game-over",
+    locomotion: "game-over",
+    lives: gameOverLives,
+    respawnCountdown: {
+      active: false,
+      total: RESPAWN_COUNTDOWN_SECONDS,
+      remaining: 0,
+      countdown: 0,
+    },
+    respawnPending: false,
+    gameState: "gameover",
+    levelComplete: false,
+    intermissionReadyForInput: false,
+  };
+}
+
 // Respawns to authored spawn after leaving the valid playable region downward.
 function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, options = {}) {
   const respawnY = resolveBottomBoundRespawnY(worldPacket, options);
@@ -2245,16 +2271,11 @@ function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, optio
   const livesAfterDeath = Math.max(0, lives - 1);
   if (livesAfterDeath <= 0) {
     return {
-      player: {
+      player: buildGameOverPlayerState({
+        ...playerState,
         position: verticalStep.position,
-        velocity: { x: 0, y: 0 },
-        grounded: false,
-        falling: true,
-        rising: false,
-        landed: false,
-        status: "dead-out-of-bounds",
         lives: 0,
-      },
+      }),
       debug: {
         respawned: false,
         triggerY: currentY,
@@ -2309,8 +2330,80 @@ function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, optio
 
 // Executes one deterministic tick: intent -> locomotion -> velocityX -> horizontal -> jump -> vertical.
 export function stepRuntimePlayerSimulation(worldPacket, playerState, options = {}) {
+  if (playerState?.gameState === "gameover" || resolveRemainingLives(playerState) <= 0) {
+    return {
+      ok: true,
+      darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
+      nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
+      player: buildGameOverPlayerState(playerState),
+      collisions: {
+        moveX: 0,
+        jump: false,
+        locomotion: "game-over",
+        velocityX: 0,
+        blockedLeft: false,
+        blockedRight: false,
+        grounded: false,
+        falling: false,
+        rising: false,
+        landed: false,
+        collidedBelow: false,
+      },
+      status: "game-over",
+      errors: [],
+      warnings: [],
+      debug: {
+        finalized: {
+          gameState: "gameover",
+          lives: 0,
+        },
+      },
+      entities: Array.isArray(playerState?.entities) ? playerState.entities.map((entity) => ({ ...entity })) : [],
+    };
+  }
+
   const lives = resolveRemainingLives(playerState);
   const respawnCountdown = resolveRespawnCountdownState(playerState);
+  const priorCompletion = playerState?.levelComplete === true || playerState?.gameState === "intermission";
+  if (priorCompletion) {
+    return {
+      ok: true,
+      darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
+      nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
+      player: {
+        ...playerState,
+        levelComplete: true,
+        intermissionReadyForInput: true,
+        gameState: "intermission",
+        status: "level-complete",
+      },
+      collisions: {
+        moveX: 0,
+        jump: false,
+        locomotion: "level-complete",
+        velocityX: 0,
+        blockedLeft: false,
+        blockedRight: false,
+        grounded: playerState?.grounded === true,
+        falling: false,
+        rising: false,
+        landed: false,
+        collidedBelow: false,
+      },
+      status: "level-complete",
+      errors: [],
+      warnings: [],
+      debug: {
+        finalized: {
+          levelComplete: true,
+          intermissionReadyForInput: true,
+          touchedExitId: typeof playerState?.lastExitId === "string" ? playerState.lastExitId : null,
+        },
+      },
+      entities: Array.isArray(playerState?.entities) ? playerState.entities.map((entity) => ({ ...entity })) : [],
+    };
+  }
+
   if (respawnCountdown.active) {
     const pending = buildRespawnPendingPlayerState(playerState, respawnCountdown, options);
     if (pending.waiting) {
@@ -2406,46 +2499,6 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
           respawnSpawnX: spawnX,
           respawnSpawnY: spawnY,
           respawnSource: respawnCountdown.source,
-        },
-      },
-      entities: Array.isArray(playerState?.entities) ? playerState.entities.map((entity) => ({ ...entity })) : [],
-    };
-  }
-
-  const priorCompletion = playerState?.levelComplete === true || playerState?.gameState === "intermission";
-  if (priorCompletion) {
-    return {
-      ok: true,
-      darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
-      nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
-      player: {
-        ...playerState,
-        levelComplete: true,
-        intermissionReadyForInput: true,
-        gameState: "intermission",
-        status: "level-complete",
-      },
-      collisions: {
-        moveX: 0,
-        jump: false,
-        locomotion: "level-complete",
-        velocityX: 0,
-        blockedLeft: false,
-        blockedRight: false,
-        grounded: playerState?.grounded === true,
-        falling: false,
-        rising: false,
-        landed: false,
-        collidedBelow: false,
-      },
-      status: "level-complete",
-      errors: [],
-      warnings: [],
-      debug: {
-        finalized: {
-          levelComplete: true,
-          intermissionReadyForInput: true,
-          touchedExitId: typeof playerState?.lastExitId === "string" ? playerState.lastExitId : null,
         },
       },
       entities: Array.isArray(playerState?.entities) ? playerState.entities.map((entity) => ({ ...entity })) : [],
@@ -2667,7 +2720,10 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     rising: resolvedPlayerStep.rising === true,
     landed: resolvedPlayerStep.landed === true,
   };
-  const finalLocomotion = status === "respawned-out-of-bounds"
+  const finalGameOver = resolvedPlayerStep?.gameState === "gameover" || resolvedPlayerStep?.status === "game-over";
+  const finalLocomotion = finalGameOver
+    ? "game-over"
+    : status === "respawned-out-of-bounds"
     ? "respawning-out-of-bounds"
     : exitStep.completed
       ? "level-complete"
@@ -2718,7 +2774,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       checkpoint: checkpointStep.checkpoint,
       levelComplete: exitStep.completed === true,
       intermissionReadyForInput: exitStep.completed === true,
-      gameState: exitStep.completed === true ? "intermission" : "playing",
+      gameState: finalGameOver ? "gameover" : (exitStep.completed === true ? "intermission" : "playing"),
       lastExitId: exitStep.touchedExitId,
       runtimeLights: fireflyStep.lights,
       darkProjectiles,
@@ -2788,7 +2844,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         locomotion: finalLocomotion,
         levelComplete: exitStep.completed === true,
         intermissionReadyForInput: exitStep.completed === true,
-        gameState: exitStep.completed === true ? "intermission" : "playing",
+        gameState: finalGameOver ? "gameover" : (exitStep.completed === true ? "intermission" : "playing"),
         touchedExitId: exitStep.touchedExitId,
         pulseStarted: pulseStep.pulseStarted,
         pulseSuppressedByEnergy: pulseStep.pulseSuppressedByEnergy,
