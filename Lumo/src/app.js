@@ -80,6 +80,7 @@
   let bootActive = false;
   let intermissionReadyForInput = false;
   let gameOverReadyForInput = false;
+  let renderPipelineLogged = false;
   let gameState = GameState.BOOTING;
   const BOOT_MS = 5000;
 // HUD-state för canvasoverlay
@@ -1562,6 +1563,7 @@
     }
 
     ents.loadFromLevel(levelObj);
+    renderPipelineLogged = false;
     world._ents = ents;
     levelManager.remember(levelObj);
 
@@ -2190,6 +2192,9 @@
     ctx.rect(0, worldTop, r.w, worldHpx);
     ctx.clip();
     world.draw(ctx, cam);
+    if (ents && typeof ents.drawLiquidVolumes === "function"){
+      ents.drawLiquidVolumes(ctx, cam);
+    }
     ents.draw(ctx, cam);
     player.draw(ctx, cam);
     ctx.restore();
@@ -2231,18 +2236,28 @@
 
 
     // Fog/volumes: in front of world/entities, but BEHIND darkness (revealed by punch-out)
-
-
-
     if (ents && typeof ents.drawOverDarkness === "function") ents.drawOverDarkness(ctx, cam);
-
-
-
 
     r.drawDarkness(lights);
 
     // Render elements that must remain visible over darkness.
     if (ents && typeof ents.drawAfterDarkness === "function") ents.drawAfterDarkness(ctx, cam);
+    if (!renderPipelineLogged){
+      const liquidVolumeCount = (ents && typeof ents.getLiquidVolumeCount === "function")
+        ? ents.getLiquidVolumeCount()
+        : 0;
+      console.info("[PFH render pipeline] draw order", {
+        order: [
+          "tiles/background",
+          "liquidVolumes(pre-darkness)",
+          "entities",
+          "darkness",
+          "liquidVolumes(after-darkness)",
+        ],
+        liquidVolumeCount,
+      });
+      renderPipelineLogged = true;
+    }
 
     if (gameState === GameState.GAME_OVER){
       const img = gameOverImage;

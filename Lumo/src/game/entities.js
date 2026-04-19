@@ -4,11 +4,14 @@
   class Entities {
     constructor(){
       this.items = [];
+      this.runtime = {
+        liquidVolumes: [],
+      };
 
       // Fog volumes (Smooke-style) — isolated, visual-only
       this._fogVolumes = [];
       this._fogFrame = 0;
-      this._liquidVolumes = [];
+      this._liquidVolumes = this.runtime.liquidVolumes;
       this._liquidAnimT = 0;
       this._registeredRuntimeEntityIds = new Set([
         "water_volume",
@@ -234,7 +237,14 @@
       this.items.length = 0;
       this._fogVolumes.length = 0;
       this._fogFrame = 0;
-      this._liquidVolumes.length = 0;
+      if (!this.runtime || typeof this.runtime !== "object"){
+        this.runtime = { liquidVolumes: [] };
+      }
+      if (!Array.isArray(this.runtime.liquidVolumes)){
+        this.runtime.liquidVolumes = [];
+      }
+      this.runtime.liquidVolumes.length = 0;
+      this._liquidVolumes = this.runtime.liquidVolumes;
       this._autoSpawnedTestDarkCreature = false;
       this._hoverVoidAttackGlobalCd = 0;
       this._musicZones.length = 0;
@@ -2881,7 +2891,6 @@ if (e.type === "lantern"){
     }
 
     draw(ctx, cam){
-      this._drawLiquidVolumes(ctx, cam);
       for (const e of this.items){
         if (!e.active) continue;
         if (!this._isNearCamera(e, cam, 64)) continue;
@@ -3279,6 +3288,14 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           }
         }
       }
+    }
+
+    drawLiquidVolumes(ctx, cam){
+      this._drawLiquidVolumes(ctx, cam);
+    }
+
+    getLiquidVolumeCount(){
+      return this._liquidVolumes.length;
     }
 
     _buildBubblingSurfaceSamples(v, sx, sy, w){
@@ -3919,7 +3936,7 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
 
     // Pass drawn AFTER darkness, for elements that should remain visible through darkness.
     drawAfterDarkness(ctx, cam){
-      this._drawLiquidVolumesAfterDarkness(ctx, cam);
+      this.drawLiquidVolumesAfterDarkness(ctx, cam);
       for (const e of this.items){
         if (!e.active || e.type !== "hoverVoid") continue;
         if (!e.awake) continue;
@@ -3931,6 +3948,10 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
         const cy = sy + e.h * 0.5;
         this._drawHoverVoidEyes(ctx, e, cx, cy, 1);
       }
+    }
+
+    drawLiquidVolumesAfterDarkness(ctx, cam){
+      this._drawLiquidVolumesAfterDarkness(ctx, cam);
     }
 
     // Fog overlay pass (intended to be called AFTER renderer.drawDarkness()).
