@@ -4,6 +4,11 @@ import {
   computeFireflyAudioFrame,
   syncFireflyAudioFrame,
   buildFireflyPlayerCenter,
+  createFireflyAudioBridge,
+  createLegacyEntitiesFireflyAudioBridge,
+  createStandaloneFireflyAudioBridge,
+  FIREFLY_AUDIO_PATH,
+  FIREFLY_AUDIO_RETRY_COOLDOWN_MS,
   FIREFLY_PAN_LIMIT,
   FIREFLY_RANGE_TILES,
 } from "../src/runtime/fireflyAudioRuntime.js";
@@ -188,11 +193,113 @@ function runTriggerSourceIsolationCheck() {
   assert.equal(restingLastVolume, 0, "resting firefly remains silent even with lit neighbor present.");
 }
 
+function runStandaloneBridgePlaybackSafetyCheck() {
+  let now = 100;
+  class FakeAudio {
+    constructor(path) {
+      this.path = path;
+      this.preload = "";
+      this.loop = false;
+      this.volume = 0;
+      this.paused = true;
+      this._error = null;
+      this.playCalls = 0;
+    }
+    addEventListener(type, cb) {
+      if (type === "error") this._error = cb;
+    }
+    play() {
+      this.playCalls += 1;
+      this.paused = false;
+      return Promise.resolve();
+    }
+  }
+  const bridge = createStandaloneFireflyAudioBridge({
+    audioCtor: FakeAudio,
+    audioContextCtor: null,
+    nowMs: () => now,
+    getSfxVolume: () => 0.5,
+  });
+  const handle = bridge.getHandle(FIREFLY_AUDIO_PATH, true, "ff-1");
+  assert.ok(handle, "standalone bridge should create audio handles when Audio ctor exists.");
+  bridge.setPan(handle, 0.8);
+  bridge.setVolume(handle, 0.6);
+  assert.equal(handle.lastPan, 0.8, "standalone bridge should store pan updates.");
+  assert.equal(handle.audio.playCalls, 1, "standalone bridge should start playback for audible volume.");
+  assert.equal(handle.audio.volume, 0.3, "standalone bridge should respect sfx volume scaling.");
+
+  handle.audio.paused = true;
+  handle.playFailed = true;
+  handle.nextRetryAtMs = now + FIREFLY_AUDIO_RETRY_COOLDOWN_MS;
+  bridge.setVolume(handle, 0.7);
+  assert.equal(handle.audio.playCalls, 1, "failed handle should not spam replay while retry cooldown is active.");
+}
+
+function runMissingAssetFailureSafetyCheck() {
+  let now = 40;
+  class RejectingAudio {
+    constructor(_path) {
+      this.volume = 0;
+      this.loop = true;
+      this.paused = true;
+      this._error = null;
+      this.playCalls = 0;
+    }
+    addEventListener(type, cb) {
+      if (type === "error") this._error = cb;
+    }
+    play() {
+      this.playCalls += 1;
+      return Promise.reject(new Error("asset missing"));
+    }
+  }
+  const bridge = createStandaloneFireflyAudioBridge({
+    audioCtor: RejectingAudio,
+    audioContextCtor: null,
+    nowMs: () => now,
+  });
+  const handle = bridge.getHandle("missing.ogg", true, "missing");
+  bridge.setVolume(handle, 0.5);
+  return Promise.resolve()
+    .then(() => Promise.resolve())
+    .then(() => {
+      assert.equal(handle.playFailed, true, "missing asset playback failures should be tracked as non-fatal.");
+      const firstCooldown = handle.nextRetryAtMs;
+      bridge.setVolume(handle, 0.5);
+      assert.equal(handle.audio.playCalls, 1, "missing asset should not retry every tick during cooldown.");
+      now = firstCooldown + 1;
+      bridge.setVolume(handle, 0.5);
+      assert.equal(handle.audio.playCalls, 2, "missing asset may retry after cooldown without crashing.");
+    });
+}
+
+function runLegacyBridgeDetectionCheck() {
+  const runtimeWindow = {
+    Lumo: {
+      Entities: function Entities() {},
+    },
+  };
+  runtimeWindow.Lumo.Entities.prototype = {
+    _getSoundHandle() {},
+    _setHandleVolume() {},
+    _setHandlePan() {},
+    _ensureSpatialHandle() {},
+    _getSfxVolume() {},
+  };
+  const bridge = createLegacyEntitiesFireflyAudioBridge(runtimeWindow);
+  assert.ok(bridge, "legacy bridge should resolve when Entities audio helpers exist.");
+  const unifiedBridge = createFireflyAudioBridge({ runtimeGlobal: runtimeWindow });
+  assert.ok(unifiedBridge, "unified bridge should prefer legacy entities helper path when present.");
+}
+
 runRestModeSilenceCheck();
 runAudibleModeChecks();
 runDistanceGainCheck();
 runPanCheck();
 runPerEntityIdentityAndCleanupCheck();
 runTriggerSourceIsolationCheck();
+runStandaloneBridgePlaybackSafetyCheck();
+runLegacyBridgeDetectionCheck();
+await runMissingAssetFailureSafetyCheck();
 
 console.log("lumo-recharged-firefly-audio-runtime-checks: ok");

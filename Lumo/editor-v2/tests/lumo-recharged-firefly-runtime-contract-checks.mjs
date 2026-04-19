@@ -229,6 +229,9 @@ function runLivePathReaderAndRenderInputsCheck() {
   assert.equal(html.includes("_tail: Array.isArray(entity?._tail)"), true, "Lumo.html must read firefly runtime tail from snapshots.");
   assert.equal(html.includes("const kGlow = Number.isFinite(entity?.lightK)"), true, "Lumo.html firefly visual should be driven by runtime lightK.");
   assert.equal(html.includes("const dir = Number.isFinite(entity?.dir) && entity.dir < 0 ? -1 : 1;"), true, "Lumo.html firefly visual should face from runtime dir.");
+  assert.equal(html.includes("createFireflyAudioBridge"), true, "Lumo.html should construct the active Recharged firefly audio bridge.");
+  assert.equal(html.includes("syncRechargedFireflyAudio(payload, state);"), true, "Lumo.html should tick firefly audio from live Recharged payloads each frame.");
+  assert.equal(html.includes("FIREFLY_AUDIO_PATH"), true, "Lumo.html should use the canonical firefly asset path binding.");
 }
 
 function run() {
