@@ -1,4 +1,5 @@
 import { createRechargedRuntimeOrchestrator } from "./createRechargedRuntimeOrchestrator.js";
+import { buildRechargedHudSnapshot } from "./buildRechargedHudSnapshot.js";
 
 // Keeps adapter status values deterministic for Lumo.html-facing integration.
 function normalizeStatus(status, fallback = "invalid") {
@@ -659,6 +660,7 @@ export function createLumoRechargedBootAdapter(options = {}) {
       syncFromOrchestrator();
       const player = getPlayerSnapshot();
       const world = getWorldSnapshot();
+      const hud = buildRechargedHudSnapshot({ player });
 
       return {
         ok: state.ok === true,
@@ -684,6 +686,7 @@ export function createLumoRechargedBootAdapter(options = {}) {
         intermissionReadyForInput: player.intermissionReadyForInput === true,
         gameState: typeof player.gameState === "string" ? player.gameState : "playing",
         lastExitId: typeof player.lastExitId === "string" ? player.lastExitId : null,
+        ...(typeof hud?.statusText === "string" ? { statusText: hud.statusText } : {}),
       };
     }
 
@@ -783,6 +786,7 @@ export function createLumoRechargedBootAdapter(options = {}) {
       getBootPayload() {
         const world = getWorldSnapshot();
         const player = getPlayerSnapshot();
+        const hud = buildRechargedHudSnapshot({ player });
 
         return {
           ...invalidState,
@@ -794,10 +798,11 @@ export function createLumoRechargedBootAdapter(options = {}) {
           supportTiles: world.supportTiles,
           background: world.background,
           bg: world.bg,
-        decorItems: world.decorItems,
+          decorItems: world.decorItems,
           playerStatus: player.locomotion,
           playerX: player.x,
           playerY: player.y,
+          ...(typeof hud?.statusText === "string" ? { statusText: hud.statusText } : {}),
         };
       },
       getPlayerSnapshot,

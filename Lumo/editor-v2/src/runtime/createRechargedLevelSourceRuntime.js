@@ -1,4 +1,5 @@
 import { createRechargedBootIntegration } from "./createRechargedBootIntegration.js";
+import { buildRechargedHudSnapshot } from "./buildRechargedHudSnapshot.js";
 
 // Restricts status output to known deterministic runtime states.
 function normalizeStatus(status, fallback = "invalid") {
@@ -338,6 +339,7 @@ export function createRechargedLevelSourceRuntime(options = {}) {
       syncFromIntegration();
       const world = getWorldSnapshot();
       const player = getPlayerSnapshot();
+      const hud = buildRechargedHudSnapshot({ player });
 
       return {
         ok: state.ok === true,
@@ -354,6 +356,7 @@ export function createRechargedLevelSourceRuntime(options = {}) {
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,
+        ...(typeof hud?.statusText === "string" ? { statusText: hud.statusText } : {}),
       };
     }
 
@@ -451,6 +454,7 @@ export function createRechargedLevelSourceRuntime(options = {}) {
     function getBootPayload() {
       const world = getWorldSnapshot();
       const player = getPlayerSnapshot();
+      const hud = buildRechargedHudSnapshot({ player });
 
       return {
         ok: false,
@@ -467,6 +471,7 @@ export function createRechargedLevelSourceRuntime(options = {}) {
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,
+        ...(typeof hud?.statusText === "string" ? { statusText: hud.statusText } : {}),
       };
     }
 

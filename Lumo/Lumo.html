@@ -1242,6 +1242,7 @@
         }
 
         const payload = readLatestRechargedBootPayload() || {};
+        const statusText = typeof payload?.statusText === "string" ? payload.statusText : "";
         const player = readRechargedPlayerSnapshot(payload);
         const flareSnapshots = readRechargedFlareSnapshots(payload, state);
         const pulseSnapshot = readRechargedPulseSnapshot(payload, state);
@@ -1522,15 +1523,17 @@
                 renderedKnownEntityVisual = true;
               }
             } else if (entity.type === "exit_01" || entity.type === "exit" || entity.type === "player-exit") {
-              // V1 parity: exit is a simple blue outline marker.
-              ctx.strokeStyle = "rgba(120,180,255,0.95)";
-              ctx.lineWidth = 2;
-              ctx.strokeRect(
-                entityRect.x + 2,
-                entityRect.y + 2,
-                Math.max(1, entityRect.w - 4),
-                Math.max(1, entityRect.h - 4),
-              );
+              if (entity.active === true) {
+                // V1 parity: exit is a simple blue outline marker.
+                ctx.strokeStyle = "rgba(120,180,255,0.95)";
+                ctx.lineWidth = 2;
+                ctx.strokeRect(
+                  entityRect.x + 2,
+                  entityRect.y + 2,
+                  Math.max(1, entityRect.w - 4),
+                  Math.max(1, entityRect.h - 4),
+                );
+              }
               renderedKnownEntityVisual = true;
             } else if (entity.type === "lantern_01") {
               // Match V1 lantern glow + BL-anchored sprite so feet anchoring stays consistent.
@@ -1855,6 +1858,23 @@
         }
 
         drawRechargedHudReplica(canvas, state);
+
+        if (statusText.length > 0) {
+          const centerX = canvas.width * 0.5;
+          const centerY = canvas.height * 0.36;
+          const fontSize = Math.max(28, Math.round(canvas.height * 0.06));
+          ctx.save();
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.font = `700 ${fontSize}px system-ui, -apple-system, Segoe UI, sans-serif`;
+          ctx.fillStyle = "#ffffff";
+          ctx.shadowColor = "rgba(0,0,0,0.82)";
+          ctx.shadowBlur = Math.max(4, Math.round(fontSize * 0.2));
+          ctx.shadowOffsetX = 0;
+          ctx.shadowOffsetY = 2;
+          ctx.fillText(statusText, centerX, centerY);
+          ctx.restore();
+        }
 
         if (state && typeof state === "object") {
           state.lastPlayerX = Number.isFinite(playerCenterX) ? playerCenterX : null;
