@@ -170,6 +170,7 @@ function buildPlayerSnapshot(playerState) {
     facingX: Number.isFinite(playerState?.facingX) ? playerState.facingX : null,
     locomotion: typeof playerState?.locomotion === "string" ? playerState.locomotion : "unknown",
     energy: Number.isFinite(playerState?.energy) ? playerState.energy : null,
+    lives: Number.isFinite(playerState?.lives) ? playerState.lives : null,
     _hoverVoidAttackGlobalCd: Number.isFinite(playerState?._hoverVoidAttackGlobalCd) ? playerState._hoverVoidAttackGlobalCd : 0,
     boostActive: playerState?.boostActive === true,
     flareStash: Number.isFinite(playerState?.flareStash) ? playerState.flareStash : 1,
@@ -233,6 +234,14 @@ function buildPlayerSnapshot(playerState) {
         }))
         .filter((light) => light.x !== null && light.y !== null && light.radius !== null && light.strength !== null)
       : [],
+    respawnCountdown: playerState?.respawnCountdown && typeof playerState.respawnCountdown === "object"
+      ? {
+          active: playerState.respawnCountdown.active === true,
+          total: Number.isFinite(playerState?.respawnCountdown?.total) ? playerState.respawnCountdown.total : null,
+          remaining: Number.isFinite(playerState?.respawnCountdown?.remaining) ? playerState.respawnCountdown.remaining : null,
+          countdown: Number.isFinite(playerState?.respawnCountdown?.countdown) ? playerState.respawnCountdown.countdown : null,
+        }
+      : null,
   };
 }
 

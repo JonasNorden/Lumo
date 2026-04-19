@@ -454,6 +454,7 @@
       }
 
       hud._prevFlares = flareStash;
+      hud.lives = Number.isFinite(snapshot.lives) ? Math.max(0, Math.floor(snapshot.lives)) : hud.lives;
       hud.energyPct = Math.round(energyRatio * 100);
       hud.flares = flareStash;
       const hudDebug = document.getElementById("hudDebug");
@@ -473,6 +474,62 @@
         nextFireflyAudioId: 1,
         bridge: null,
       };
+    }
+
+    // Renders V1-style respawn countdown overlay in active Recharged canvas.
+    function drawRechargedRespawnOverlay(canvas, ctx, payload, state) {
+      const hudSnapshot = buildRechargedHudSnapshot(payload, state);
+      if (hudSnapshot?.respawnPending !== true) {
+        return false;
+      }
+
+      const n = Number.isFinite(hudSnapshot?.respawnCount) ? Math.max(0, Math.floor(hudSnapshot.respawnCount)) : 0;
+      const cx = canvas.width * 0.5;
+      const cy = canvas.height * 0.45;
+      const gap = Math.max(54, Math.round(canvas.width * 0.055));
+      const wordFontSize = Math.max(52, Math.round(canvas.height * 0.11));
+      const numberFontSize = Math.max(58, Math.round(canvas.height * 0.12));
+
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalCompositeOperation = "source-over";
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      ctx.font = `700 ${wordFontSize}px "Cooper Black","Arial Black",Impact,sans-serif`;
+      const wordGradient = ctx.createLinearGradient(0, cy - wordFontSize, 0, cy + wordFontSize);
+      wordGradient.addColorStop(0.00, "#FFF3B0");
+      wordGradient.addColorStop(0.45, "#FFD44D");
+      wordGradient.addColorStop(1.00, "#FF8A00");
+      ctx.fillStyle = wordGradient;
+      ctx.lineJoin = "round";
+      ctx.miterLimit = 2;
+      ctx.lineWidth = Math.max(10, Math.round(wordFontSize * 0.3));
+      ctx.strokeStyle = "rgba(0,0,0,0.55)";
+      ctx.strokeText("RESPAWN", cx - gap * 0.5, cy);
+      ctx.lineWidth = Math.max(6, Math.round(wordFontSize * 0.18));
+      ctx.strokeStyle = "rgba(40,90,170,0.95)";
+      ctx.strokeText("RESPAWN", cx - gap * 0.5, cy);
+      ctx.fillText("RESPAWN", cx - gap * 0.5, cy);
+
+      ctx.textAlign = "left";
+      ctx.font = `700 ${numberFontSize}px "Cooper Black","Arial Black",Impact,sans-serif`;
+      const numberGradient = ctx.createLinearGradient(0, cy - numberFontSize, 0, cy + numberFontSize);
+      numberGradient.addColorStop(0.00, "#111");
+      numberGradient.addColorStop(0.55, "#B10014");
+      numberGradient.addColorStop(1.00, "#FF2B2B");
+      ctx.fillStyle = numberGradient;
+      ctx.lineWidth = Math.max(8, Math.round(numberFontSize * 0.2));
+      ctx.strokeStyle = "rgba(0,0,0,0.70)";
+      ctx.strokeText(String(n), cx + gap * 0.5, cy);
+      ctx.lineWidth = Math.max(4, Math.round(numberFontSize * 0.1));
+      ctx.strokeStyle = "rgba(255,210,120,0.95)";
+      ctx.strokeText(String(n), cx + gap * 0.5, cy);
+      ctx.fillText(String(n), cx + gap * 0.5, cy);
+      ctx.restore();
+      return true;
     }
 
     function ensureRechargedFireflyAudioState(state) {
@@ -740,7 +797,7 @@
           facingX: Number.isFinite(nestedPlayer?.facingX) ? nestedPlayer.facingX : null,
           locomotion: typeof nestedPlayer?.locomotion === "string" ? nestedPlayer.locomotion : "",
           status,
-          hidden: status === "respawning-out-of-bounds",
+          hidden: status === "respawning-out-of-bounds" || status === "respawn-pending",
         };
       } catch (_error) {
         return {
@@ -2006,6 +2063,9 @@
         let overlayDrawn = false;
         try {
           overlayDrawn = drawRechargedIntermissionOverlay(canvas, ctx, payload, state);
+          if (overlayDrawn !== true) {
+            overlayDrawn = drawRechargedRespawnOverlay(canvas, ctx, payload, state);
+          }
         } catch (_error) {
           overlayDrawn = false;
         }
