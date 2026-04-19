@@ -156,6 +156,17 @@ function buildPlayerSnapshot(playerState) {
         alive: true,
       }));
 
+  const respawnCountdown = playerState?.respawnCountdown && typeof playerState.respawnCountdown === "object"
+    ? {
+        active: playerState.respawnCountdown.active === true,
+        total: Number.isFinite(playerState?.respawnCountdown?.total) ? playerState.respawnCountdown.total : null,
+        remaining: Number.isFinite(playerState?.respawnCountdown?.remaining) ? playerState.respawnCountdown.remaining : null,
+        countdown: Number.isFinite(playerState?.respawnCountdown?.countdown) ? playerState.respawnCountdown.countdown : null,
+      }
+    : null;
+  const respawnPending = respawnCountdown?.active === true || playerState?.status === "respawn-pending";
+  const respawnCount = Number.isFinite(respawnCountdown?.countdown) ? Math.max(0, Math.ceil(respawnCountdown.countdown)) : 0;
+
   return {
     ok: playerState && typeof playerState === "object",
     x: Number.isFinite(playerState?.position?.x) ? playerState.position.x : null,
@@ -234,14 +245,9 @@ function buildPlayerSnapshot(playerState) {
         }))
         .filter((light) => light.x !== null && light.y !== null && light.radius !== null && light.strength !== null)
       : [],
-    respawnCountdown: playerState?.respawnCountdown && typeof playerState.respawnCountdown === "object"
-      ? {
-          active: playerState.respawnCountdown.active === true,
-          total: Number.isFinite(playerState?.respawnCountdown?.total) ? playerState.respawnCountdown.total : null,
-          remaining: Number.isFinite(playerState?.respawnCountdown?.remaining) ? playerState.respawnCountdown.remaining : null,
-          countdown: Number.isFinite(playerState?.respawnCountdown?.countdown) ? playerState.respawnCountdown.countdown : null,
-        }
-      : null,
+    respawnCountdown,
+    respawnPending,
+    respawnCount: respawnPending ? respawnCount : 0,
   };
 }
 

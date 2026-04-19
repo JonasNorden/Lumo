@@ -117,6 +117,18 @@ function buildPlayerSnapshot(snapshot) {
   const pulse = source?.pulse && typeof source.pulse === "object" ? source.pulse : null;
   const velocityX = Number.isFinite(source?.velocity?.x) ? source.velocity.x : null;
   const velocityY = Number.isFinite(source?.velocity?.y) ? source.velocity.y : null;
+  const respawnCountdown = source?.respawnCountdown && typeof source.respawnCountdown === "object"
+    ? {
+        active: source.respawnCountdown.active === true,
+        total: Number.isFinite(source?.respawnCountdown?.total) ? source.respawnCountdown.total : null,
+        remaining: Number.isFinite(source?.respawnCountdown?.remaining) ? source.respawnCountdown.remaining : null,
+        countdown: Number.isFinite(source?.respawnCountdown?.countdown) ? source.respawnCountdown.countdown : null,
+      }
+    : null;
+  const respawnPending = respawnCountdown?.active === true || source?.respawnPending === true || source?.status === "respawn-pending";
+  const respawnCount = Number.isFinite(source?.respawnCount)
+    ? Math.max(0, Math.ceil(source.respawnCount))
+    : (Number.isFinite(respawnCountdown?.countdown) ? Math.max(0, Math.ceil(respawnCountdown.countdown)) : 0);
   const darkProjectiles = Array.isArray(source.darkProjectiles) ? source.darkProjectiles.map((projectile) => ({ ...projectile })) : [];
   const entities = Array.isArray(source.entities) ? source.entities.map((entity) => cloneSnapshotEntity(entity)) : [];
   const hasRenderableDarkProjectileEntity = entities.some((entity) => (
@@ -200,6 +212,9 @@ function buildPlayerSnapshot(snapshot) {
         .filter((light) => light.x !== null && light.y !== null && light.radius !== null && light.strength !== null)
       : [],
     entities: entities.concat(transientDarkProjectileEntities),
+    respawnCountdown,
+    respawnPending,
+    respawnCount: respawnPending ? respawnCount : 0,
   };
 }
 
@@ -689,6 +704,8 @@ export function createLumoRechargedBootAdapter(options = {}) {
         lives: Number.isFinite(hud?.lives) ? hud.lives : 0,
         flareStash: Number.isFinite(hud?.flareStash) ? hud.flareStash : 0,
         energy: Number.isFinite(hud?.energy) ? hud.energy : 0,
+        respawnPending: player.respawnPending === true,
+        respawnCount: player.respawnPending === true && Number.isFinite(player.respawnCount) ? player.respawnCount : 0,
         levelComplete: player.levelComplete === true,
         intermissionReadyForInput: player.intermissionReadyForInput === true,
         gameState: typeof player.gameState === "string" ? player.gameState : "playing",
