@@ -297,12 +297,25 @@ function runLegacyBridgeDetectionCheck() {
   assert.ok(bridge, "legacy bridge should resolve when Entities audio helpers exist.");
   const unifiedBridge = createFireflyAudioBridge({ runtimeGlobal: runtimeWindow });
   assert.ok(unifiedBridge, "unified bridge should prefer legacy entities helper path when present.");
-  const preferredStandalone = createFireflyAudioBridge({
-    runtimeGlobal: globalThis,
+  const stillLegacyWhenStandalonePreferred = createFireflyAudioBridge({
+    runtimeGlobal: runtimeWindow,
     preferStandalone: true,
     audioCtor: class AudioStub {},
   });
-  assert.equal(preferredStandalone?.source, "standalone-html-audio", "unified bridge should support standalone override for real HTML audio playback.");
+  assert.equal(stillLegacyWhenStandalonePreferred?.source, "legacy-entities-audio", "legacy entities bridge must remain preferred when available.");
+}
+
+function runBridgeFallbackSafetyCheck() {
+  const noBridge = createFireflyAudioBridge({
+    runtimeGlobal: {},
+    audioCtor: null,
+  });
+  assert.equal(noBridge, null, "bridge creation should fail safely when neither legacy nor standalone audio is usable.");
+  const standaloneFallback = createFireflyAudioBridge({
+    runtimeGlobal: {},
+    audioCtor: class AudioStub {},
+  });
+  assert.equal(standaloneFallback?.source, "standalone-html-audio", "standalone bridge should be used only as fallback when legacy helpers are unavailable.");
 }
 
 runRestModeSilenceCheck();
@@ -313,6 +326,7 @@ runPerEntityIdentityAndCleanupCheck();
 runTriggerSourceIsolationCheck();
 runStandaloneBridgePlaybackSafetyCheck();
 runLegacyBridgeDetectionCheck();
+runBridgeFallbackSafetyCheck();
 await runMissingAssetFailureSafetyCheck();
 
 console.log("lumo-recharged-firefly-audio-runtime-checks: ok");

@@ -230,8 +230,10 @@ function runLivePathReaderAndRenderInputsCheck() {
   assert.equal(html.includes("const kGlow = Number.isFinite(entity?.lightK)"), true, "Lumo.html firefly visual should be driven by runtime lightK.");
   assert.equal(html.includes("const dir = Number.isFinite(entity?.dir) && entity.dir < 0 ? -1 : 1;"), true, "Lumo.html firefly visual should face from runtime dir.");
   assert.equal(html.includes("createFireflyAudioBridge"), true, "Lumo.html should construct the active Recharged firefly audio bridge.");
-  assert.equal(html.includes("syncRechargedFireflyAudio(payload, state);"), true, "Lumo.html should tick firefly audio from live Recharged payloads each frame.");
+  assert.equal(html.includes("preferStandalone: true"), false, "Lumo.html must not force standalone audio bridge over legacy Entities path.");
+  assert.equal(html.includes("syncRechargedFireflyAudio(livePayload, state);"), true, "Lumo.html should tick firefly audio from live Recharged payloads each frame.");
   assert.equal(html.includes("FIREFLY_AUDIO_PATH"), true, "Lumo.html should use the canonical firefly asset path binding.");
+  assert.equal(html.includes("source: typeof fireflyAudioState?.bridge?.source === \"string\" ? fireflyAudioState.bridge.source : \"none\""), true, "Lumo.html debug source should reflect active bridge source or report none.");
 }
 
 function run() {
