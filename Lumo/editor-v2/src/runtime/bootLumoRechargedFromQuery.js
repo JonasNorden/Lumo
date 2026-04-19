@@ -15,6 +15,7 @@ function createBaseResult(overrides = {}) {
     status: "legacy-default",
     tick: 0,
     levelSourceType: "none",
+    levelPath: "",
     worldId: "",
     themeId: "",
     decorItems: [],
@@ -205,6 +206,7 @@ export async function bootLumoRechargedFromQuery(options = {}) {
         mode: "recharged",
         status: "invalid",
         levelSourceType: sourceInfo.levelSourceType,
+        levelPath: typeof sourceInfo?.descriptor?.url === "string" ? sourceInfo.descriptor.url : "",
         errors,
         warnings,
       });
@@ -239,6 +241,7 @@ export async function bootLumoRechargedFromQuery(options = {}) {
       status: typeof payload.status === "string" ? payload.status : (booted ? "booted" : "invalid"),
       tick: Number.isFinite(payload.tick) ? payload.tick : 0,
       levelSourceType: sourceInfo.levelSourceType,
+      levelPath: typeof sourceInfo?.descriptor?.url === "string" ? sourceInfo.descriptor.url : "",
       worldId: typeof payload.worldId === "string" ? payload.worldId : "",
       themeId: typeof payload.themeId === "string" ? payload.themeId : "",
       supportTiles: Array.isArray(payload.supportTiles) ? payload.supportTiles : [],
@@ -270,6 +273,7 @@ export async function bootLumoRechargedFromQuery(options = {}) {
       autoplay,
       status: "invalid",
       levelSourceType: sourceInfo.levelSourceType,
+      levelPath: typeof sourceInfo?.descriptor?.url === "string" ? sourceInfo.descriptor.url : "",
       errors,
       warnings,
     });

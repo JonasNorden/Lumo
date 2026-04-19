@@ -45,6 +45,7 @@
   <script type="module" defer>
     import { bootLumoRechargedFromQuery } from "./editor-v2/src/runtime/bootLumoRechargedFromQuery.js";
     import { createLumoRechargedBootAdapter } from "./editor-v2/src/runtime/createLumoRechargedBootAdapter.js";
+    import { loadNextRechargedLevelFromIntermission } from "./editor-v2/src/runtime/rechargedIntermissionNextLevelFlow.js";
     import { buildRechargedHudSnapshot } from "./editor-v2/src/runtime/buildRechargedHudSnapshot.js";
     import { FIREFLY_AUDIO_PATH, syncFireflyAudioFrame } from "./editor-v2/src/runtime/fireflyAudioRuntime.js";
 
@@ -245,7 +246,62 @@
         width: null,
         height: null,
         hud: null,
+        currentLevelPath: "",
+        nextLevelLoadPending: false,
       };
+    }
+
+    // Runs one safe intermission Enter transition to the next local Recharged level.
+    async function tryLoadNextRechargedLevel(state) {
+      if (!state || typeof state !== "object" || state.nextLevelLoadPending === true) {
+        return false;
+      }
+
+      state.nextLevelLoadPending = true;
+      try {
+        const transition = await loadNextRechargedLevelFromIntermission({
+          currentLevelPath: state.currentLevelPath,
+          bootFromQuery(options = {}) {
+            let liveAdapter = null;
+            return bootLumoRechargedFromQuery({
+              search: options?.search,
+              createAdapter(adapterOptions = {}) {
+                const adapter = createLumoRechargedBootAdapter(adapterOptions);
+                liveAdapter = adapter;
+                return adapter;
+              },
+            }).then((result) => (
+              liveAdapter && typeof liveAdapter === "object"
+                ? { ...(result && typeof result === "object" ? result : {}), adapter: liveAdapter }
+                : result
+            ));
+          },
+        });
+
+        if (transition?.ok === true && transition?.bootResult && typeof transition.bootResult === "object") {
+          window.__LumoRechargedBoot = transition.bootResult;
+          state.currentLevelPath = transition.nextLevelPath;
+          state.intermissionAcknowledged = false;
+          state.intermissionAcknowledgedMessage = "";
+          const payload = readLatestRechargedBootPayload();
+          const playerSnapshot = payload?.player && typeof payload.player === "object" ? payload.player : null;
+          state.previousPlayerSnapshot = playerSnapshot;
+          state.currentPlayerSnapshot = playerSnapshot;
+          state.lastPlayerX = Number.isFinite(payload?.playerX) ? payload.playerX : null;
+          state.lastPlayerY = Number.isFinite(payload?.playerY) ? payload.playerY : null;
+          return true;
+        }
+
+        state.intermissionAcknowledged = true;
+        state.intermissionAcknowledgedMessage = "Next level not available";
+        return false;
+      } catch (_error) {
+        state.intermissionAcknowledged = true;
+        state.intermissionAcknowledgedMessage = "Next level not available";
+        return false;
+      } finally {
+        state.nextLevelLoadPending = false;
+      }
     }
 
     function ensureLumoRechargedCanvasVerificationState() {
@@ -592,8 +648,7 @@
             || nextPayload?.levelComplete === true
           );
           if (state?.input?.continuePressed === true && intermissionReady) {
-            state.intermissionAcknowledged = true;
-            state.intermissionAcknowledgedMessage = "Next flow not connected yet";
+            void tryLoadNextRechargedLevel(state);
           }
           if (state?.input) {
             state.input.continuePressed = false;
@@ -2250,6 +2305,7 @@
         rechargedCanvasVerification.currentPlayerSnapshot = initialPlayerSnapshot;
         rechargedCanvasVerification.lastPlayerX = Number.isFinite(payload?.playerX) ? payload.playerX : null;
         rechargedCanvasVerification.lastPlayerY = Number.isFinite(payload?.playerY) ? payload.playerY : null;
+        rechargedCanvasVerification.currentLevelPath = typeof queryBootResult?.levelPath === "string" ? queryBootResult.levelPath : "";
 
         if (rechargedCanvasVerification.active === true) {
           rechargedCanvasVerification.hud = createRechargedHudOverlay();
