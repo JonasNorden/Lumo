@@ -2062,8 +2062,34 @@ function resolveBottomBoundRespawnY(worldPacket, options = {}) {
   return null;
 }
 
+function resolveCheckpointRespawnPlacement(worldPacket, playerState) {
+  const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0
+    ? worldPacket.world.tileSize
+    : 24;
+  const checkpoint = playerState?.checkpoint && typeof playerState.checkpoint === "object"
+    ? playerState.checkpoint
+    : null;
+  if (!checkpoint) {
+    return null;
+  }
+
+  const cptx = Number.isFinite(checkpoint?.tx) ? Math.floor(checkpoint.tx) : null;
+  const cpty = Number.isFinite(checkpoint?.ty) ? Math.floor(checkpoint.ty) : null;
+  if (!Number.isFinite(cptx) || !Number.isFinite(cpty)) {
+    return null;
+  }
+
+  // V1 canonical: respawn 15 tiles before checkpoint in X, same tile Y.
+  const rtx = Math.max(0, cptx - 15);
+  const rty = cpty;
+  return {
+    x: rtx * tileSize,
+    y: rty * tileSize,
+  };
+}
+
 // Respawns to authored spawn after leaving the valid playable region downward.
-function maybeResolveBottomRespawn(worldPacket, verticalStep, options = {}) {
+function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, options = {}) {
   const respawnY = resolveBottomBoundRespawnY(worldPacket, options);
   const currentY = verticalStep?.position?.y;
   const shouldRespawn = Number.isFinite(respawnY) && Number.isFinite(currentY) && currentY > respawnY;
@@ -2072,11 +2098,21 @@ function maybeResolveBottomRespawn(worldPacket, verticalStep, options = {}) {
     return null;
   }
 
+  const checkpointRespawn = resolveCheckpointRespawnPlacement(worldPacket, playerState);
   const spawnState = buildRuntimePlayerStartState(worldPacket);
-  const spawnX = Number.isFinite(spawnState?.position?.x) ? spawnState.position.x : worldPacket?.spawn?.x;
-  const spawnY = Number.isFinite(spawnState?.position?.y) ? spawnState.position.y : worldPacket?.spawn?.y;
-  const grounded = spawnState?.grounded === true;
-  const falling = spawnState?.falling === true;
+  const fallbackSpawnX = Number.isFinite(spawnState?.position?.x) ? spawnState.position.x : worldPacket?.spawn?.x;
+  const fallbackSpawnY = Number.isFinite(spawnState?.position?.y) ? spawnState.position.y : worldPacket?.spawn?.y;
+  const spawnX = Number.isFinite(checkpointRespawn?.x) ? checkpointRespawn.x : fallbackSpawnX;
+  const spawnY = Number.isFinite(checkpointRespawn?.y) ? checkpointRespawn.y : fallbackSpawnY;
+  const grounded = Number.isFinite(checkpointRespawn?.x)
+    ? true
+    : spawnState?.grounded === true;
+  const falling = Number.isFinite(checkpointRespawn?.x)
+    ? false
+    : spawnState?.falling === true;
+  const invulnDuration = Number.isFinite(playerState?.invulnDuration) && playerState.invulnDuration > 0
+    ? playerState.invulnDuration
+    : 1.6;
 
   return {
     player: {
@@ -2087,6 +2123,10 @@ function maybeResolveBottomRespawn(worldPacket, verticalStep, options = {}) {
       rising: false,
       landed: false,
       status: "respawned-out-of-bounds",
+      // V1-adjacent respawn semantics retained in active Recharged state shape.
+      lockMinX: spawnX,
+      invuln: invulnDuration,
+      _justRespawned: true,
     },
     debug: {
       respawned: true,
@@ -2094,8 +2134,11 @@ function maybeResolveBottomRespawn(worldPacket, verticalStep, options = {}) {
       respawnY,
       spawnX,
       spawnY,
+      source: checkpointRespawn ? "checkpoint-minus-15" : "authored-spawn",
     },
-    warning: "Player fell below playable world bounds and was respawned at authored spawn.",
+    warning: checkpointRespawn
+      ? "Player fell below playable world bounds and was respawned from checkpoint (15 tiles back)."
+      : "Player fell below playable world bounds and was respawned at authored spawn.",
   };
 }
 
@@ -2218,7 +2261,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     };
   }
 
-  const bottomRespawn = maybeResolveBottomRespawn(worldPacket, verticalStep, options);
+  const bottomRespawn = maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, options);
   const resolvedPlayerStep = bottomRespawn?.player ?? verticalStep;
   const normalizedEntities = normalizeRuntimeEntities(options?.entities, worldPacket, playerState);
   const checkpointStep = stepCheckpointOverlap(worldPacket, {
@@ -2365,6 +2408,14 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       _hoverVoidAttackGlobalCd: Number.isFinite(hoverVoidStep?.player?._hoverVoidAttackGlobalCd)
         ? hoverVoidStep.player._hoverVoidAttackGlobalCd
         : Math.max(0, Number.isFinite(playerState?._hoverVoidAttackGlobalCd) ? playerState._hoverVoidAttackGlobalCd : 0),
+      lockMinX: Number.isFinite(resolvedPlayerStep?.lockMinX)
+        ? resolvedPlayerStep.lockMinX
+        : (Number.isFinite(playerState?.lockMinX) ? playerState.lockMinX : 0),
+      invuln: Number.isFinite(resolvedPlayerStep?.invuln)
+        ? resolvedPlayerStep.invuln
+        : (Number.isFinite(playerState?.invuln) ? playerState.invuln : 0),
+      invulnDuration: Number.isFinite(playerState?.invulnDuration) ? playerState.invulnDuration : 1.6,
+      _justRespawned: resolvedPlayerStep?._justRespawned === true,
       status,
       brakeState,
     },
@@ -2409,6 +2460,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         respawned: bottomRespawn?.debug?.respawned === true,
         triggerY: bottomRespawn?.debug?.triggerY ?? null,
         respawnY: bottomRespawn?.debug?.respawnY ?? null,
+        respawnSpawnX: bottomRespawn?.debug?.spawnX ?? null,
+        respawnSpawnY: bottomRespawn?.debug?.spawnY ?? null,
+        respawnSource: bottomRespawn?.debug?.source ?? null,
       },
       finalized: {
         locomotion: finalLocomotion,
