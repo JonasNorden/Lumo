@@ -433,6 +433,21 @@
       renderer.w = canvas.width;
       renderer.h = canvas.height;
       renderer.drawHUD(hud);
+
+      // Recharged live view: suppress legacy persistent "MENU" text from V1 HUD replica.
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        const padX = Math.max(12, Math.round(canvas.width * 0.02));
+        const padY = Math.max(10, Math.round(canvas.height * 0.02));
+        const wipeW = Math.max(88, Math.round(canvas.width * 0.12));
+        const wipeH = 30;
+        const wipeX = canvas.width - padX - wipeW;
+        const wipeY = canvas.height - padY - wipeH;
+        ctx.save();
+        ctx.fillStyle = "rgba(0,0,0,0.55)";
+        ctx.fillRect(wipeX, wipeY, wipeW, wipeH);
+        ctx.restore();
+      }
     }
 
     // Updates Recharged HUD model from live adapter snapshots with safe fallbacks.
@@ -997,6 +1012,155 @@
       }
     }
 
+    function readRechargedLiquidVolumes(entitySnapshots) {
+      const liquidTypes = new Set(["water_volume", "lava_volume", "bubbling_liquid_volume"]);
+      const asFinite = (value) => (Number.isFinite(value) ? value : null);
+      const toPositive = (value, fallback) => {
+        const n = Number(value);
+        return Number.isFinite(n) && n > 0 ? n : fallback;
+      };
+      const readColor = (value, fallback) => (typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback);
+      const liquids = [];
+      for (const entity of (Array.isArray(entitySnapshots) ? entitySnapshots : [])) {
+        const type = typeof entity?.type === "string" ? entity.type : "";
+        if (!liquidTypes.has(type)) {
+          continue;
+        }
+        const area = entity?.params?.area && typeof entity.params.area === "object" ? entity.params.area : null;
+        const x0 = asFinite(area?.x0);
+        const x1 = asFinite(area?.x1);
+        const y0 = asFinite(area?.y0);
+        const depth = asFinite(area?.depth);
+        if (x0 === null || x1 === null || y0 === null || depth === null || depth <= 0) {
+          continue;
+        }
+        const left = Math.min(x0, x1);
+        const right = Math.max(x0, x1);
+        const bottom = y0;
+        const top = y0 - depth;
+        const width = right - left;
+        const height = bottom - top;
+        if (!(width > 0 && height > 0)) {
+          continue;
+        }
+
+        const motion = entity?.params?.motion && typeof entity.params.motion === "object" ? entity.params.motion : {};
+        const flow = entity?.params?.flow && typeof entity.params.flow === "object" ? entity.params.flow : {};
+        const look = entity?.params?.look && typeof entity.params.look === "object" ? entity.params.look : {};
+        const behavior = entity?.params?.behavior && typeof entity.params.behavior === "object" ? entity.params.behavior : {};
+        liquids.push({
+          id: entity.id,
+          type,
+          left,
+          right,
+          top,
+          bottom,
+          width,
+          height,
+          waveAmount: toPositive(motion.waveAmount, 2.5),
+          waveSpeed: toPositive(motion.waveSpeed, 1.25),
+          flowSpeed: toPositive(flow.speed, 0.9),
+          temperature: Math.max(0, Math.min(1, Number.isFinite(look.temperature) ? look.temperature : 0.75)),
+          crustAmount: Math.max(0, Math.min(1, Number.isFinite(look.crustAmount) ? look.crustAmount : 0.35)),
+          surfaceActivity: Math.max(0, Math.min(1, Number.isFinite(behavior.surfaceActivity) ? behavior.surfaceActivity : 0.45)),
+          bubbleAmount: Math.max(0, Math.min(1, Number.isFinite(behavior.bubbleAmount) ? behavior.bubbleAmount : 0.5)),
+          fumeAmount: Math.max(0, Math.min(1, Number.isFinite(behavior.fumeAmount) ? behavior.fumeAmount : 0.35)),
+          topColor: readColor(look.topColor, ""),
+          bottomColor: readColor(look.bottomColor, ""),
+        });
+      }
+      return liquids;
+    }
+
+    function drawRechargedLiquidVolumes(ctx, mapper, liquidVolumes) {
+      if (!ctx || !mapper || !Array.isArray(liquidVolumes) || liquidVolumes.length === 0) {
+        return;
+      }
+      const nowSeconds = (typeof performance?.now === "function" ? performance.now() : Date.now()) * 0.001;
+      for (const volume of liquidVolumes) {
+        const rect = mapper.worldToCanvasRect(volume.left, volume.top, volume.width, volume.height);
+        if (rect.w <= 0 || rect.h <= 0) {
+          continue;
+        }
+        const surfaceY = rect.y;
+        const bodyBottomY = rect.y + rect.h;
+        const surfaceBand = Math.max(2, Math.round(rect.h * 0.14));
+
+        if (volume.type === "water_volume") {
+          const bodyColor = volume.bottomColor || "#0f3c76";
+          const topColor = volume.topColor || "#4d9de0";
+          const bodyGradient = ctx.createLinearGradient(0, rect.y, 0, bodyBottomY);
+          bodyGradient.addColorStop(0, topColor);
+          bodyGradient.addColorStop(1, bodyColor);
+          ctx.fillStyle = bodyGradient;
+          ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+
+          const amp = Math.max(1, Math.min(14, volume.waveAmount));
+          const speed = Math.max(0.2, volume.waveSpeed);
+          const waveStep = Math.max(6, Math.round(rect.w / 18));
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(rect.x, rect.y, rect.w, Math.max(surfaceBand + amp + 1, 4));
+          ctx.clip();
+          ctx.beginPath();
+          ctx.moveTo(rect.x, surfaceY);
+          for (let x = rect.x; x <= rect.x + rect.w; x += waveStep) {
+            const t = (x * 0.045) + (nowSeconds * speed * 2.4);
+            const y = surfaceY + Math.sin(t) * amp;
+            ctx.lineTo(x, y);
+          }
+          ctx.lineTo(rect.x + rect.w, surfaceY + surfaceBand + amp);
+          ctx.lineTo(rect.x, surfaceY + surfaceBand + amp);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(173, 226, 255, 0.6)";
+          ctx.fill();
+          ctx.restore();
+        } else if (volume.type === "lava_volume") {
+          const hotness = volume.temperature;
+          const crust = volume.crustAmount;
+          const bodyGradient = ctx.createLinearGradient(0, rect.y, 0, bodyBottomY);
+          bodyGradient.addColorStop(0, `rgba(255,${Math.round(112 + hotness * 55)},34,0.98)`);
+          bodyGradient.addColorStop(1, `rgba(${Math.round(85 + crust * 40)},26,8,0.98)`);
+          ctx.fillStyle = bodyGradient;
+          ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+
+          const streakAlpha = Math.max(0.16, Math.min(0.5, 0.2 + volume.flowSpeed * 0.17));
+          ctx.fillStyle = `rgba(255,210,120,${streakAlpha.toFixed(3)})`;
+          const streakW = Math.max(2, Math.round(rect.w / 14));
+          for (let sx = rect.x; sx < rect.x + rect.w; sx += streakW * 3) {
+            const offset = Math.sin((sx * 0.03) + (nowSeconds * volume.flowSpeed * 3.2)) * 3;
+            ctx.fillRect(sx, rect.y + 2 + offset, streakW, Math.max(2, rect.h - 6));
+          }
+          ctx.fillStyle = `rgba(255,236,173,${(0.62 + hotness * 0.25).toFixed(3)})`;
+          ctx.fillRect(rect.x, rect.y, rect.w, surfaceBand);
+        } else if (volume.type === "bubbling_liquid_volume") {
+          const bodyColor = volume.bottomColor || "#356b28";
+          const topColor = volume.topColor || "#8ef767";
+          const bodyGradient = ctx.createLinearGradient(0, rect.y, 0, bodyBottomY);
+          bodyGradient.addColorStop(0, topColor);
+          bodyGradient.addColorStop(1, bodyColor);
+          ctx.fillStyle = bodyGradient;
+          ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+
+          const toxicity = Math.max(volume.surfaceActivity, volume.bubbleAmount);
+          ctx.fillStyle = `rgba(214,255,175,${(0.3 + toxicity * 0.35).toFixed(3)})`;
+          ctx.fillRect(rect.x, rect.y, rect.w, surfaceBand);
+          const bubbleCount = Math.max(2, Math.round((rect.w / 28) * (1 + volume.bubbleAmount)));
+          for (let i = 0; i < bubbleCount; i += 1) {
+            const seed = (i * 31.7) + nowSeconds * (1.3 + volume.surfaceActivity * 1.8);
+            const bx = rect.x + ((Math.sin(seed * 0.57) * 0.5 + 0.5) * rect.w);
+            const rise = (Math.cos(seed) * 0.5 + 0.5) * (rect.h * 0.65);
+            const by = bodyBottomY - 2 - rise;
+            const radius = 1 + ((Math.sin(seed * 1.9) * 0.5 + 0.5) * (2.8 + volume.bubbleAmount * 2));
+            ctx.fillStyle = `rgba(230,255,198,${(0.12 + volume.fumeAmount * 0.22).toFixed(3)})`;
+            ctx.beginPath();
+            ctx.arc(bx, by, radius, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+    }
+
     // Reads decor from world snapshots while keeping decor flow separate from runtime entities.
     function readRechargedDecorSnapshots(payload) {
       const normalizeDecorAnchorLayer = (value) => {
@@ -1485,6 +1649,7 @@
         const pulseSnapshot = readRechargedPulseSnapshot(payload, state);
         const boostSnapshot = readRechargedBoostSnapshot(payload, state);
         const entitySnapshots = readRechargedEntitySnapshots(payload, state);
+        const liquidVolumes = readRechargedLiquidVolumes(entitySnapshots);
         const decorSnapshots = readRechargedDecorSnapshots(payload);
         const previousSnapshot = readRechargedPlayerSnapshot({
           player: state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
@@ -1547,7 +1712,7 @@
         ctx.fillStyle = "rgba(15, 23, 42, 0.52)";
         ctx.fillRect(playfieldRect.x, playfieldRect.y, playfieldRect.w, playfieldRect.h);
 
-        // Recharged canvas lane order: backdrop -> bg tilemap -> support tiles -> decor -> entities -> player -> HUD.
+        // Recharged canvas lane order: backdrop -> bg tilemap -> support tiles -> liquids -> decor -> entities -> player -> HUD.
         const bg = payload?.bg;
         const bgData = Array.isArray(bg?.data) ? bg.data : null;
         const hasDenseBgTilemap = bg?.type === "tilemap"
@@ -1674,6 +1839,12 @@
           ctx.fillRect(supportCanvasRect.x, supportCanvasRect.y, supportCanvasRect.w, supportCanvasRect.h);
           ctx.fillStyle = "rgba(255,255,255,0.03)";
           ctx.fillRect(supportCanvasRect.x, supportCanvasRect.y, supportCanvasRect.w, Math.min(1, supportCanvasRect.h));
+        }
+
+        drawRechargedLiquidVolumes(ctx, mapper, liquidVolumes);
+        if (state && state.rechargedLiquidSummaryLogged !== true) {
+          console.info("[Lumo Recharged] liquid volumes", { count: liquidVolumes.length });
+          state.rechargedLiquidSummaryLogged = true;
         }
 
         // Render lanes are explicit: tiles -> decor(world) -> entities -> player -> HUD.
