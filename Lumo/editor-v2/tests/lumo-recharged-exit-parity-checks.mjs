@@ -101,14 +101,14 @@ assert.equal(
   "Expected live Lumo.html path to expose intermission continue prompt.",
 );
 assert.equal(
-  lumoHtml.includes("Next flow not connected yet"),
+  lumoHtml.includes("Next level not available"),
   true,
-  "Expected live Lumo.html path to include safe temporary intermission acknowledgement text.",
+  "Expected live Lumo.html path to include safe next-level-unavailable intermission message.",
 );
 assert.equal(
-  lumoHtml.includes("continuePressed"),
+  lumoHtml.includes("loadNextRechargedLevelFromIntermission"),
   true,
-  "Expected live Lumo.html input path to carry Enter acknowledgement wiring without boot flow changes.",
+  "Expected live Lumo.html Enter path to call the Recharged next-level flow helper.",
 );
 
 console.log("lumo-recharged-exit-parity-checks: ok");
