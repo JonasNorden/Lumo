@@ -3,6 +3,7 @@ const FIREFLY_VOLUME_BOOST = 1.35;
 const FIREFLY_PAN_LIMIT = 0.65;
 const FIREFLY_RANGE_TILES = 20;
 const FIREFLY_AUDIBLE_MODES = new Set(["takeoff", "fly", "landing", "landed"]);
+const FIREFLY_AUDIO_RETRY_COOLDOWN_MS = 2500;
 
 function clamp01(value) {
   if (!Number.isFinite(value)) return 0;
@@ -52,6 +53,160 @@ function buildFireflyPlayerCenter(playerSnapshot = {}) {
   return { x: x + w * 0.5, y: y + h * 0.5 };
 }
 
+function createLegacyEntitiesFireflyAudioBridge(runtimeWindow = globalThis) {
+  const entitiesProto = runtimeWindow?.Lumo?.Entities?.prototype;
+  if (!entitiesProto) return null;
+  if (
+    typeof entitiesProto._getSoundHandle !== "function"
+    || typeof entitiesProto._setHandleVolume !== "function"
+    || typeof entitiesProto._setHandlePan !== "function"
+    || typeof entitiesProto._ensureSpatialHandle !== "function"
+    || typeof entitiesProto._getSfxVolume !== "function"
+  ) {
+    return null;
+  }
+  return {
+    _soundHandles: new Map(),
+    _sfxSpatialCtx: null,
+    _getSfxVolume(...args) {
+      return entitiesProto._getSfxVolume.apply(this, args);
+    },
+    getHandle(path, loop, key) {
+      return entitiesProto._getSoundHandle.call(this, path, loop, key);
+    },
+    setVolume(handle, volume) {
+      entitiesProto._setHandleVolume.call(this, handle, volume);
+    },
+    setPan(handle, pan) {
+      entitiesProto._setHandlePan.call(this, handle, pan);
+    },
+    ensureSpatial(handle) {
+      entitiesProto._ensureSpatialHandle.call(this, handle);
+    },
+  };
+}
+
+function createStandaloneFireflyAudioBridge(options = {}) {
+  const runtimeGlobal = options.runtimeGlobal || globalThis;
+  const AudioCtor = options.audioCtor || runtimeGlobal?.Audio || null;
+  const AudioContextCtor = options.audioContextCtor
+    || runtimeGlobal?.AudioContext
+    || runtimeGlobal?.webkitAudioContext
+    || null;
+  const nowMs = typeof options.nowMs === "function"
+    ? options.nowMs
+    : () => (typeof performance?.now === "function" ? performance.now() : Date.now());
+  const sfxVolume = typeof options.getSfxVolume === "function"
+    ? options.getSfxVolume
+    : () => 1;
+  const soundHandles = new Map();
+  let spatialCtx = null;
+
+  function getSafeSfxVolume() {
+    return clamp01(Number(sfxVolume()));
+  }
+
+  function buildHandle(path, loop, keySuffix) {
+    if (typeof AudioCtor !== "function") return null;
+    const audio = new AudioCtor(path);
+    audio.preload = "auto";
+    audio.loop = !!loop;
+    audio.volume = 0;
+    const handle = {
+      audio,
+      path,
+      loop: !!loop,
+      keySuffix: String(keySuffix || ""),
+      lastTarget: 0,
+      lastPan: 0,
+      playFailed: false,
+      nextRetryAtMs: 0,
+    };
+    if (typeof audio.addEventListener === "function") {
+      audio.addEventListener("error", () => {
+        handle.playFailed = true;
+        handle.nextRetryAtMs = nowMs() + FIREFLY_AUDIO_RETRY_COOLDOWN_MS;
+        handle.lastTarget = 0;
+      });
+    }
+    return handle;
+  }
+
+  return {
+    getHandle(path, loop, keySuffix = "") {
+      const suffix = keySuffix == null || keySuffix === "" ? "" : `::${keySuffix}`;
+      const key = `${path}::${loop ? "L" : "O"}${suffix}`;
+      if (soundHandles.has(key)) return soundHandles.get(key);
+      const handle = buildHandle(path, loop, keySuffix);
+      if (!handle) return null;
+      soundHandles.set(key, handle);
+      return handle;
+    },
+    ensureSpatial(handle) {
+      if (!handle || !handle.audio || handle.spatialReady) return;
+      handle.spatialReady = true;
+      if (typeof AudioContextCtor !== "function") return;
+      try {
+        if (!spatialCtx) spatialCtx = new AudioContextCtor();
+        if (!spatialCtx) return;
+        const source = spatialCtx.createMediaElementSource(handle.audio);
+        const gain = spatialCtx.createGain();
+        gain.gain.value = clamp01(handle.lastTarget || 0) * getSafeSfxVolume();
+        if (typeof spatialCtx.createStereoPanner === "function") {
+          const panner = spatialCtx.createStereoPanner();
+          panner.pan.value = 0;
+          source.connect(gain);
+          gain.connect(panner);
+          panner.connect(spatialCtx.destination);
+          handle.panNode = panner;
+        } else {
+          source.connect(gain);
+          gain.connect(spatialCtx.destination);
+        }
+        handle.gainNode = gain;
+        handle.audio.volume = 1;
+      } catch (_error) {
+        // Safe fallback keeps standard audio-element path when graph setup fails.
+      }
+    },
+    setVolume(handle, volume) {
+      if (!handle?.audio) return;
+      const target = clamp01(volume) * getSafeSfxVolume();
+      handle.lastTarget = target;
+      if (handle.gainNode) {
+        handle.gainNode.gain.value = target;
+      } else if (Math.abs((handle.audio.volume || 0) - target) > 0.0001) {
+        handle.audio.volume = target;
+      }
+      if (target <= 0.001) return;
+      if (handle.playFailed && nowMs() < handle.nextRetryAtMs) return;
+      if (!handle.audio.paused) return;
+      const maybePromise = handle.audio.play();
+      if (maybePromise && typeof maybePromise.catch === "function") {
+        maybePromise.catch(() => {
+          handle.playFailed = true;
+          handle.nextRetryAtMs = nowMs() + FIREFLY_AUDIO_RETRY_COOLDOWN_MS;
+          handle.lastTarget = 0;
+        });
+      } else {
+        handle.playFailed = false;
+      }
+    },
+    setPan(handle, pan) {
+      if (!handle?.audio) return;
+      const nextPan = Math.max(-1, Math.min(1, Number.isFinite(pan) ? pan : 0));
+      handle.lastPan = nextPan;
+      if (handle.panNode) {
+        handle.panNode.pan.value = nextPan;
+      }
+    },
+  };
+}
+
+function createFireflyAudioBridge(options = {}) {
+  return createLegacyEntitiesFireflyAudioBridge(options.runtimeGlobal) || createStandaloneFireflyAudioBridge(options);
+}
+
 function syncFireflyAudioFrame({
   entities = [],
   playerSnapshot = null,
@@ -95,8 +250,12 @@ export {
   FIREFLY_PAN_LIMIT,
   FIREFLY_RANGE_TILES,
   FIREFLY_AUDIBLE_MODES,
+  FIREFLY_AUDIO_RETRY_COOLDOWN_MS,
   clamp01,
   computeFireflyAudioFrame,
   buildFireflyPlayerCenter,
+  createLegacyEntitiesFireflyAudioBridge,
+  createStandaloneFireflyAudioBridge,
+  createFireflyAudioBridge,
   syncFireflyAudioFrame,
 };

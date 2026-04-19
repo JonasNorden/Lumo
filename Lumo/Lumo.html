@@ -47,7 +47,11 @@
     import { createLumoRechargedBootAdapter } from "./editor-v2/src/runtime/createLumoRechargedBootAdapter.js";
     import { loadNextRechargedLevelFromIntermission } from "./editor-v2/src/runtime/rechargedIntermissionNextLevelFlow.js";
     import { buildRechargedHudSnapshot } from "./editor-v2/src/runtime/buildRechargedHudSnapshot.js";
-    import { FIREFLY_AUDIO_PATH, syncFireflyAudioFrame } from "./editor-v2/src/runtime/fireflyAudioRuntime.js";
+    import {
+      FIREFLY_AUDIO_PATH,
+      createFireflyAudioBridge,
+      syncFireflyAudioFrame,
+    } from "./editor-v2/src/runtime/fireflyAudioRuntime.js";
 
     const RECHARGED_FIXED_STEP_MS = 1000 / 60;
     const RECHARGED_MAX_CATCH_UP_STEPS = 6;
@@ -482,36 +486,22 @@
     }
 
     function createRechargedFireflyAudioBridge() {
-      const entitiesProto = window?.Lumo?.Entities?.prototype;
-      if (!entitiesProto) return null;
-      if (
-        typeof entitiesProto._getSoundHandle !== "function"
-        || typeof entitiesProto._setHandleVolume !== "function"
-        || typeof entitiesProto._setHandlePan !== "function"
-        || typeof entitiesProto._ensureSpatialHandle !== "function"
-        || typeof entitiesProto._getSfxVolume !== "function"
-      ) {
-        return null;
-      }
-      return {
-        _soundHandles: new Map(),
-        _sfxSpatialCtx: null,
-        _getSfxVolume(...args) {
-          return entitiesProto._getSfxVolume.apply(this, args);
+      return createFireflyAudioBridge({
+        runtimeGlobal: window,
+        getSfxVolume() {
+          try {
+            if (window?.Lumo && typeof window.Lumo.getAudioSettings === "function") {
+              const settings = window.Lumo.getAudioSettings();
+              if (Number.isFinite(settings?.sfxVolume)) {
+                return settings.sfxVolume;
+              }
+            }
+          } catch (_error) {
+            // Safe default keeps SFX audible even when settings lookup fails.
+          }
+          return 1;
         },
-        getHandle(path, loop, key) {
-          return entitiesProto._getSoundHandle.call(this, path, loop, key);
-        },
-        setVolume(handle, volume) {
-          entitiesProto._setHandleVolume.call(this, handle, volume);
-        },
-        setPan(handle, pan) {
-          entitiesProto._setHandlePan.call(this, handle, pan);
-        },
-        ensureSpatial(handle) {
-          entitiesProto._ensureSpatialHandle.call(this, handle);
-        },
-      };
+      });
     }
 
     function syncRechargedFireflyAudio(payload, state) {
