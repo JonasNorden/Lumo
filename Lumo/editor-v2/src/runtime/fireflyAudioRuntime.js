@@ -133,6 +133,7 @@ function createStandaloneFireflyAudioBridge(options = {}) {
   }
 
   return {
+    source: "standalone-html-audio",
     getHandle(path, loop, keySuffix = "") {
       const suffix = keySuffix == null || keySuffix === "" ? "" : `::${keySuffix}`;
       const key = `${path}::${loop ? "L" : "O"}${suffix}`;
@@ -178,7 +179,12 @@ function createStandaloneFireflyAudioBridge(options = {}) {
       } else if (Math.abs((handle.audio.volume || 0) - target) > 0.0001) {
         handle.audio.volume = target;
       }
-      if (target <= 0.001) return;
+      if (target <= 0.001) {
+        if (!handle.audio.paused && typeof handle.audio.pause === "function") {
+          handle.audio.pause();
+        }
+        return;
+      }
       if (handle.playFailed && nowMs() < handle.nextRetryAtMs) return;
       if (!handle.audio.paused) return;
       const maybePromise = handle.audio.play();
@@ -204,7 +210,15 @@ function createStandaloneFireflyAudioBridge(options = {}) {
 }
 
 function createFireflyAudioBridge(options = {}) {
-  return createLegacyEntitiesFireflyAudioBridge(options.runtimeGlobal) || createStandaloneFireflyAudioBridge(options);
+  if (options?.preferStandalone === true) {
+    return createStandaloneFireflyAudioBridge(options);
+  }
+  const legacyBridge = createLegacyEntitiesFireflyAudioBridge(options.runtimeGlobal);
+  if (legacyBridge) {
+    legacyBridge.source = "legacy-entities-audio";
+    return legacyBridge;
+  }
+  return createStandaloneFireflyAudioBridge(options);
 }
 
 function syncFireflyAudioFrame({
