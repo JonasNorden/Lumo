@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url";
 import { loadLevelDocument } from "../src/runtime/loadLevelDocument.js";
 import { createRuntimeGameSession } from "../src/runtime/createRuntimeGameSession.js";
 import { createLumoRechargedBootAdapter } from "../src/runtime/createLumoRechargedBootAdapter.js";
+import { stepRuntimePlayerSimulation } from "../src/runtime/stepRuntimePlayerSimulation.js";
+import { createRuntimeRunner } from "../src/runtime/createRuntimeRunner.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
@@ -61,6 +63,34 @@ assert.ok(checkpointEntityAfter, "Expected checkpoint entity to remain present a
 assert.equal(checkpointEntityAfter.active, true, "Expected checkpoint to remain active after overlap.");
 assert.notEqual(checkpointEntityAfter.state, "collected", "Expected checkpoint to never enter pickup collected state.");
 assert.equal(checkpointEntityAfter?.consumesFlare, false, "Expected checkpoint to never be treated as a flare-collectible.");
+
+const runner = createRuntimeRunner({ levelDocument: loaded.level });
+const runnerStarted = runner.start();
+assert.equal(runnerStarted.ok, true, "Expected runtime runner to start.");
+const runnerStateBefore = runner.getState();
+const simulationResult = stepRuntimePlayerSimulation(runnerStateBefore.world, {
+  ...runnerStateBefore.playerState,
+  position: { x: 48, y: 95 },
+  checkpoint: null,
+}, {
+  moveX: 0,
+  jump: false,
+  entities: runnerStateBefore.entities,
+});
+assert.equal(simulationResult?.ok, true, "Expected direct runtime simulation step to succeed.");
+assert.ok(
+  simulationResult?.player?.checkpoint && typeof simulationResult.player.checkpoint === "object",
+  "Expected direct simulation result.player to carry non-null checkpoint state on overlap.",
+);
+assert.equal(simulationResult.player.checkpoint.tx, 2, "Expected direct simulation checkpoint tx to match entity tile.");
+assert.equal(simulationResult.player.checkpoint.ty, 3, "Expected direct simulation checkpoint ty to match entity tile.");
+
+const runnerStep = runner.step({ moveX: 0, jump: false });
+assert.equal(runnerStep?.ok, true, "Expected runtime runner single step to succeed.");
+const runnerCheckpoint = runner.getState()?.playerState?.checkpoint;
+assert.ok(runnerCheckpoint && typeof runnerCheckpoint === "object", "Expected runner state update to preserve checkpoint state.");
+assert.equal(runnerCheckpoint.tx, 2, "Expected runner checkpoint tx to survive live-style tick chain.");
+assert.equal(runnerCheckpoint.ty, 3, "Expected runner checkpoint ty to survive live-style tick chain.");
 
 const adapter = createLumoRechargedBootAdapter({
   sourceDescriptor: { levelDocument: loaded.level },

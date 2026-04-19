@@ -123,6 +123,8 @@ const DEFAULT_DARK_CREATURE_SPELL_GRAVITY_PX_PER_SECOND = 760;
 const DEFAULT_DARK_CREATURE_TARGET_JITTER_PX = 3;
 const FIREFLY_TAIL_MAX_POINTS = 14;
 const FIREFLY_TAIL_MAX_AGE_SECONDS = 0.35;
+const V1_PLAYER_HITBOX_WIDTH_PX = 22;
+const V1_PLAYER_HITBOX_HEIGHT_PX = 28;
 
 function resolvePulseTargetType(entityType) {
   if (typeof entityType !== "string") {
@@ -437,6 +439,17 @@ function buildPlayerPickupBounds(playerState, tileSize) {
   };
 }
 
+function buildPlayerCheckpointBounds(playerState) {
+  const footX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0;
+  const footY = Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0;
+  return {
+    x: footX - V1_PLAYER_HITBOX_WIDTH_PX * 0.5,
+    y: footY + 1 - V1_PLAYER_HITBOX_HEIGHT_PX,
+    w: V1_PLAYER_HITBOX_WIDTH_PX,
+    h: V1_PLAYER_HITBOX_HEIGHT_PX,
+  };
+}
+
 function resolvePlayerFlareStash(playerState) {
   if (Number.isFinite(playerState?.flareStash)) {
     return Math.max(0, Math.floor(playerState.flareStash));
@@ -475,7 +488,10 @@ function stepCheckpointOverlap(worldPacket, playerState, sourceEntities) {
   }
 
   const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0 ? worldPacket.world.tileSize : 24;
-  const playerBounds = buildPlayerPickupBounds(playerState, tileSize);
+  // Checkpoints are persistent world triggers (not pickups), so overlap must
+  // use the live gameplay hitbox convention (foot-anchored 22x28) instead of
+  // the pickup helper footprint.
+  const playerBounds = buildPlayerCheckpointBounds(playerState);
   let nextCheckpoint = checkpointState;
   let touched = false;
 
