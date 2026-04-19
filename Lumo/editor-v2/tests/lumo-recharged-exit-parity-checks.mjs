@@ -65,6 +65,13 @@ assert.equal(payload.levelComplete, true, "Expected active adapter boot payload 
 assert.equal(payload.intermissionReadyForInput, true, "Expected active adapter boot payload to expose intermission-ready signal.");
 assert.equal(payload.gameState, "intermission", "Expected active adapter boot payload to expose intermission state.");
 
+assert.equal(payload.statusText, "Level complete", "Expected active adapter boot payload to expose level-complete HUD status text.");
+
+adapter.tick({ moveX: 1, jump: true });
+const payloadAfterHold = adapter.getBootPayload();
+assert.equal(payloadAfterHold.statusText, "Level complete", "Expected status text to persist across post-exit ticks.");
+assert.equal(payloadAfterHold.gameState, "intermission", "Expected intermission state to persist across post-exit ticks.");
+
 const lumoHtmlPath = path.resolve(repoRoot, "Lumo.html");
 const lumoHtml = fs.readFileSync(lumoHtmlPath, "utf8");
 assert.equal(

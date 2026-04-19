@@ -27,14 +27,16 @@ function readAdapterPlayerSnapshot(payload, state) {
 // Builds one compact Recharged HUD snapshot from live adapter-facing player state.
 export function buildRechargedHudSnapshot(payload = {}, state = null) {
   const playerSnapshot = readAdapterPlayerSnapshot(payload, state);
+  const levelComplete = playerSnapshot?.levelComplete === true;
 
   return {
     flareStash: toWholeNumber(playerSnapshot?.flareStash),
     energy: toFiniteNumber(playerSnapshot?.energy),
     lives: toWholeNumber(playerSnapshot?.lives),
     score: toWholeNumber(playerSnapshot?.score),
-    levelComplete: playerSnapshot?.levelComplete === true,
+    levelComplete,
     intermissionReadyForInput: playerSnapshot?.intermissionReadyForInput === true,
     gameState: typeof playerSnapshot?.gameState === "string" ? playerSnapshot.gameState : "playing",
+    ...(levelComplete ? { statusText: "Level complete" } : {}),
   };
 }
