@@ -40,6 +40,17 @@ function runFallbackSnapshotReadChecks() {
   console.log("recharged hud snapshot fallback read ok");
 }
 
+function runPayloadRespawnReadChecks() {
+  const snapshot = buildRechargedHudSnapshot({
+    respawnPending: true,
+    respawnCount: 2.2,
+  });
+
+  assert.equal(snapshot.respawnPending, true);
+  assert.equal(snapshot.respawnCount, 3);
+  console.log("recharged hud snapshot payload respawn read ok");
+}
+
 runAdapterSnapshotReadChecks();
 runFallbackSnapshotReadChecks();
-
+runPayloadRespawnReadChecks();

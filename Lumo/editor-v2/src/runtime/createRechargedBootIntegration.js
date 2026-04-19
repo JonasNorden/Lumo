@@ -24,6 +24,18 @@ function normalizeAction(action) {
 function buildPlayerSnapshot(snapshot) {
   const source = snapshot && typeof snapshot === "object" ? snapshot : {};
   const pulse = source?.pulse && typeof source.pulse === "object" ? source.pulse : null;
+  const respawnCountdown = source?.respawnCountdown && typeof source.respawnCountdown === "object"
+    ? {
+        active: source.respawnCountdown.active === true,
+        total: Number.isFinite(source?.respawnCountdown?.total) ? source.respawnCountdown.total : null,
+        remaining: Number.isFinite(source?.respawnCountdown?.remaining) ? source.respawnCountdown.remaining : null,
+        countdown: Number.isFinite(source?.respawnCountdown?.countdown) ? source.respawnCountdown.countdown : null,
+      }
+    : null;
+  const respawnPending = respawnCountdown?.active === true || source?.respawnPending === true || source?.status === "respawn-pending";
+  const respawnCount = Number.isFinite(source?.respawnCount)
+    ? Math.max(0, Math.ceil(source.respawnCount))
+    : (Number.isFinite(respawnCountdown?.countdown) ? Math.max(0, Math.ceil(respawnCountdown.countdown)) : 0);
 
   return {
     x: Number.isFinite(source.x) ? source.x : null,
@@ -55,6 +67,9 @@ function buildPlayerSnapshot(snapshot) {
     // Keep active dark projectile runtime payload intact through integration snapshots.
     darkProjectiles: Array.isArray(source.darkProjectiles) ? source.darkProjectiles.map((projectile) => ({ ...projectile })) : [],
     entities: Array.isArray(source.entities) ? source.entities.map((entity) => ({ ...entity })) : [],
+    respawnCountdown,
+    respawnPending,
+    respawnCount: respawnPending ? respawnCount : 0,
   };
 }
 
@@ -287,6 +302,8 @@ export function createRechargedBootIntegration(options = {}) {
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,
+        respawnPending: player.respawnPending === true,
+        respawnCount: player.respawnPending === true && Number.isFinite(player.respawnCount) ? player.respawnCount : 0,
       };
     }
 
@@ -549,6 +566,8 @@ export function createRechargedBootIntegration(options = {}) {
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,
+        respawnPending: player.respawnPending === true,
+        respawnCount: player.respawnPending === true && Number.isFinite(player.respawnCount) ? player.respawnCount : 0,
       };
     }
 

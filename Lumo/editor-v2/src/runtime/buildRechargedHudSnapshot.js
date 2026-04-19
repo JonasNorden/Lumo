@@ -31,8 +31,14 @@ export function buildRechargedHudSnapshot(payload = {}, state = null) {
   const respawnCountdown = playerSnapshot?.respawnCountdown && typeof playerSnapshot.respawnCountdown === "object"
     ? playerSnapshot.respawnCountdown
     : null;
-  const respawnPending = respawnCountdown?.active === true || playerSnapshot?.status === "respawn-pending";
-  const respawnCount = Number.isFinite(respawnCountdown?.countdown) ? Math.max(0, Math.ceil(respawnCountdown.countdown)) : 0;
+  const respawnPending = playerSnapshot?.respawnPending === true
+    || payload?.respawnPending === true
+    || respawnCountdown?.active === true
+    || playerSnapshot?.status === "respawn-pending";
+  const respawnCountFromCountdown = Number.isFinite(respawnCountdown?.countdown) ? Math.max(0, Math.ceil(respawnCountdown.countdown)) : null;
+  const respawnCountFromSnapshot = Number.isFinite(playerSnapshot?.respawnCount) ? Math.max(0, Math.ceil(playerSnapshot.respawnCount)) : null;
+  const respawnCountFromPayload = Number.isFinite(payload?.respawnCount) ? Math.max(0, Math.ceil(payload.respawnCount)) : null;
+  const respawnCount = respawnCountFromCountdown ?? respawnCountFromSnapshot ?? respawnCountFromPayload ?? 0;
 
   return {
     flareStash: toWholeNumber(playerSnapshot?.flareStash),

@@ -479,11 +479,14 @@
     // Renders V1-style respawn countdown overlay in active Recharged canvas.
     function drawRechargedRespawnOverlay(canvas, ctx, payload, state) {
       const hudSnapshot = buildRechargedHudSnapshot(payload, state);
-      if (hudSnapshot?.respawnPending !== true) {
+      const payloadRespawnPending = payload?.respawnPending === true;
+      const payloadRespawnCount = Number.isFinite(payload?.respawnCount) ? Math.max(0, Math.ceil(payload.respawnCount)) : null;
+      if (payloadRespawnPending !== true) {
         return false;
       }
 
-      const n = Number.isFinite(hudSnapshot?.respawnCount) ? Math.max(0, Math.floor(hudSnapshot.respawnCount)) : 0;
+      const fallbackCount = Number.isFinite(hudSnapshot?.respawnCount) ? Math.max(0, Math.ceil(hudSnapshot.respawnCount)) : 0;
+      const n = Number.isFinite(payloadRespawnCount) ? Math.max(0, Math.floor(payloadRespawnCount)) : Math.max(0, Math.floor(fallbackCount));
       const cx = canvas.width * 0.5;
       const cy = canvas.height * 0.45;
       const gap = Math.max(54, Math.round(canvas.width * 0.055));
