@@ -64,6 +64,10 @@ const payload = adapter.getBootPayload();
 assert.equal(payload.levelComplete, true, "Expected active adapter boot payload to expose completion signal.");
 assert.equal(payload.intermissionReadyForInput, true, "Expected active adapter boot payload to expose intermission-ready signal.");
 assert.equal(payload.gameState, "intermission", "Expected active adapter boot payload to expose intermission state.");
+assert.equal(Number.isFinite(payload.score), true, "Expected active adapter boot payload to expose finite score for intermission view.");
+assert.equal(Number.isFinite(payload.lives), true, "Expected active adapter boot payload to expose finite lives for intermission view.");
+assert.equal(Number.isFinite(payload.flareStash), true, "Expected active adapter boot payload to expose finite flare stash for intermission view.");
+assert.equal(Number.isFinite(payload.energy), true, "Expected active adapter boot payload to expose finite energy for intermission view.");
 
 assert.equal(payload.statusText, "Level complete", "Expected active adapter boot payload to expose level-complete HUD status text.");
 
@@ -71,6 +75,13 @@ adapter.tick({ moveX: 1, jump: true });
 const payloadAfterHold = adapter.getBootPayload();
 assert.equal(payloadAfterHold.statusText, "Level complete", "Expected status text to persist across post-exit ticks.");
 assert.equal(payloadAfterHold.gameState, "intermission", "Expected intermission state to persist across post-exit ticks.");
+for (let index = 0; index < 3; index += 1) {
+  adapter.tick({ moveX: 0, jump: false, continuePressed: true });
+}
+const payloadAfterEnterAcks = adapter.getBootPayload();
+assert.equal(payloadAfterEnterAcks.levelComplete, true, "Expected temporary Enter acknowledgements to keep completion state stable.");
+assert.equal(payloadAfterEnterAcks.gameState, "intermission", "Expected temporary Enter acknowledgements to avoid unintended progression.");
+assert.equal(payloadAfterEnterAcks.statusText, "Level complete", "Expected temporary Enter acknowledgements to keep intermission status text stable.");
 
 const lumoHtmlPath = path.resolve(repoRoot, "Lumo.html");
 const lumoHtml = fs.readFileSync(lumoHtmlPath, "utf8");
@@ -83,6 +94,21 @@ assert.equal(
   lumoHtml.includes('"Level complete"'),
   true,
   "Expected live Lumo.html path to expose V1-equivalent level-complete text signal.",
+);
+assert.equal(
+  lumoHtml.includes("Press Enter to continue"),
+  true,
+  "Expected live Lumo.html path to expose intermission continue prompt.",
+);
+assert.equal(
+  lumoHtml.includes("Next flow not connected yet"),
+  true,
+  "Expected live Lumo.html path to include safe temporary intermission acknowledgement text.",
+);
+assert.equal(
+  lumoHtml.includes("continuePressed"),
+  true,
+  "Expected live Lumo.html input path to carry Enter acknowledgement wiring without boot flow changes.",
 );
 
 console.log("lumo-recharged-exit-parity-checks: ok");
