@@ -89,6 +89,17 @@ export function paintSizedPlacement(doc, layer, anchor, size, value) {
     ? { x: anchor.x, y: anchor.y, size, materialId: value }
     : { x: anchor.x, y: anchor.y, size, value };
 
+  // Background authoring allows true stacking at the same coordinate.
+  // Keep append order as authored render order and never drop overlapping background placements.
+  if (isBackgroundLayer) {
+    const appendOnlyPlacements = clonePlacements(currentPlacements);
+    appendOnlyPlacements.push(nextPlacement);
+    doc.background.placements = appendOnlyPlacements;
+    resetLayerBaseFromPlacements(doc, layer);
+    return true;
+  }
+
+  // Solid tile placements remain replace-on-overlap to preserve collision truth and legacy editing behavior.
   const serializedBefore = JSON.stringify(currentPlacements);
   const filtered = currentPlacements.filter((placement) => {
     const bounds = getPlacementFootprintBounds(placement, placement.size);
@@ -98,11 +109,7 @@ export function paintSizedPlacement(doc, layer, anchor, size, value) {
   const serializedAfter = JSON.stringify(filtered);
   if (serializedBefore === serializedAfter) return false;
 
-  if (isBackgroundLayer) {
-    doc.background.placements = filtered;
-  } else {
-    doc.tiles.placements = filtered;
-  }
+  doc.tiles.placements = filtered;
   resetLayerBaseFromPlacements(doc, layer);
   return true;
 }

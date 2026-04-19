@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { serializeLevelDocument } from "../src/data/exportLevelDocument.js";
+import { paintSizedPlacement } from "../src/domain/tiles/sizedPlacements.js";
 import { createLumoRechargedBootAdapter } from "../src/runtime/createLumoRechargedBootAdapter.js";
 import { bootLumoRechargedFromQuery } from "../src/runtime/bootLumoRechargedFromQuery.js";
 
@@ -69,6 +70,31 @@ function createRuntimeLevelWithBgPlacements() {
   };
 }
 
+
+function runBackgroundPlacementStackingAuthoringCheck() {
+  const level = {
+    dimensions: { width: 6, height: 5, tileSize: 24 },
+    tiles: { base: new Array(30).fill(0), placements: [] },
+    background: { base: new Array(30).fill(null), placements: [] },
+  };
+
+  const firstChanged = paintSizedPlacement(level, "background", { x: 2, y: 3 }, 1, "bg_stone_wall");
+  const secondChanged = paintSizedPlacement(level, "background", { x: 2, y: 3 }, 1, "bg_rock");
+  const thirdChanged = paintSizedPlacement(level, "background", { x: 2, y: 3 }, 3, "bg_arch");
+
+  assert.equal(firstChanged, true);
+  assert.equal(secondChanged, true);
+  assert.equal(thirdChanged, true);
+  assert.equal(level.background.placements.length, 3, "background paint should append, not replace, overlapping placements");
+  assert.deepEqual(level.background.placements.map((entry) => entry.materialId), ["bg_stone_wall", "bg_rock", "bg_arch"]);
+
+  // `background.base` stays compatibility data (single material per cell), while placements preserve stacked truth.
+  const anchorCellIndex = (3 * 6) + 2;
+  assert.equal(level.background.base[anchorCellIndex], "bg_arch", "anchor cell tracks topmost authored write for compatibility");
+
+  console.log("background stacking authoring check ok");
+}
+
 function runExportIncludesBgPlacementsCheck() {
   const editorLevel = createEditorLevelWithBgPlacements();
   const exported = JSON.parse(serializeLevelDocument(editorLevel));
@@ -81,6 +107,27 @@ function runExportIncludesBgPlacementsCheck() {
 
   console.log("bg placements export ok");
 }
+
+
+
+function runExportPreservesStackedPlacementOrderCheck() {
+  const editorLevel = createEditorLevelWithBgPlacements();
+  editorLevel.background.placements = [
+    { x: 2, y: 4, size: 1, materialId: "bg_stone_wall" },
+    { x: 2, y: 4, size: 1, materialId: "bg_rock" },
+    { x: 2, y: 4, size: 3, materialId: "bg_arch" },
+  ];
+
+  const exported = JSON.parse(serializeLevelDocument(editorLevel));
+  assert.deepEqual(exported?.layers?.bg?.placements, editorLevel.background.placements);
+  assert.equal(exported.layers.bg.placements.length, 3);
+  assert.equal(exported.layers.bg.placements[0].materialId, "bg_stone_wall");
+  assert.equal(exported.layers.bg.placements[1].materialId, "bg_rock");
+  assert.equal(exported.layers.bg.placements[2].materialId, "bg_arch");
+
+  console.log("bg placement stacked order export ok");
+}
+
 
 async function runAdapterPayloadKeepsBgPlacementsCheck() {
   const levelDocument = createRuntimeLevelWithBgPlacements();
@@ -119,7 +166,9 @@ async function runQueryBootPayloadIncludesBgPlacementsCheck() {
   console.log("bg placements query boot payload ok");
 }
 
+runBackgroundPlacementStackingAuthoringCheck();
 runExportIncludesBgPlacementsCheck();
+runExportPreservesStackedPlacementOrderCheck();
 await runAdapterPayloadKeepsBgPlacementsCheck();
 await runQueryBootPayloadIncludesBgPlacementsCheck();
 
