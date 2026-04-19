@@ -92,6 +92,79 @@ assert.ok(runnerCheckpoint && typeof runnerCheckpoint === "object", "Expected ru
 assert.equal(runnerCheckpoint.tx, 2, "Expected runner checkpoint tx to survive live-style tick chain.");
 assert.equal(runnerCheckpoint.ty, 3, "Expected runner checkpoint ty to survive live-style tick chain.");
 
+const fallRespawnWithCheckpoint = stepRuntimePlayerSimulation(
+  runnerStateBefore.world,
+  {
+    ...runnerStateBefore.playerState,
+    position: { x: 200, y: 5000 },
+    checkpoint: { tx: 20, ty: 7, px: 20 * 24, py: 7 * 24 },
+    invulnDuration: 1.6,
+  },
+  { moveX: 0, jump: false, entities: runnerStateBefore.entities },
+);
+assert.equal(fallRespawnWithCheckpoint?.ok, true, "Expected out-of-bounds respawn step to succeed with checkpoint.");
+assert.equal(
+  fallRespawnWithCheckpoint?.status,
+  "respawned-out-of-bounds",
+  "Expected checkpoint out-of-bounds fall to return respawned status.",
+);
+assert.equal(
+  fallRespawnWithCheckpoint?.player?.position?.x,
+  120,
+  "Expected checkpoint-driven respawn X to be exactly 15 tiles before checkpoint.",
+);
+assert.equal(
+  fallRespawnWithCheckpoint?.player?.position?.y,
+  168,
+  "Expected checkpoint-driven respawn Y to match checkpoint tile Y exactly.",
+);
+assert.equal(
+  fallRespawnWithCheckpoint?.debug?.vertical?.respawnSource,
+  "checkpoint-minus-15",
+  "Expected respawn debug source to indicate checkpoint-based placement.",
+);
+assert.equal(
+  fallRespawnWithCheckpoint?.player?.lockMinX,
+  120,
+  "Expected lockMinX to align with checkpoint-driven respawn position.",
+);
+assert.equal(
+  fallRespawnWithCheckpoint?.player?.invuln,
+  1.6,
+  "Expected temporary respawn invulnerability to be restored on active path.",
+);
+assert.equal(
+  fallRespawnWithCheckpoint?.player?._justRespawned,
+  true,
+  "Expected just-respawned marker to be set after checkpoint-driven respawn.",
+);
+
+const fallRespawnWithoutCheckpoint = stepRuntimePlayerSimulation(
+  runnerStateBefore.world,
+  {
+    ...runnerStateBefore.playerState,
+    position: { x: 200, y: 5000 },
+    checkpoint: null,
+  },
+  { moveX: 0, jump: false, entities: runnerStateBefore.entities },
+);
+assert.equal(fallRespawnWithoutCheckpoint?.ok, true, "Expected out-of-bounds respawn step to succeed without checkpoint.");
+assert.equal(
+  fallRespawnWithoutCheckpoint?.player?.position?.x,
+  runnerStateBefore.world.spawn.x,
+  "Expected no-checkpoint fallback to keep authored spawn X behavior.",
+);
+assert.equal(
+  fallRespawnWithoutCheckpoint?.player?.position?.y,
+  runnerStateBefore.world.spawn.y,
+  "Expected no-checkpoint fallback to keep authored spawn Y behavior.",
+);
+assert.equal(
+  fallRespawnWithoutCheckpoint?.debug?.vertical?.respawnSource,
+  "authored-spawn",
+  "Expected debug source to remain authored-spawn when checkpoint is absent.",
+);
+
 const adapter = createLumoRechargedBootAdapter({
   sourceDescriptor: { levelDocument: loaded.level },
 });
