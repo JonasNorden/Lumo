@@ -504,20 +504,38 @@
       });
     }
 
+    function publishRechargedFireflyAudioState(payload, state, details = {}) {
+      if (!payload || typeof payload !== "object") return;
+      const fireflyAudioState = state?.rechargedFireflyAudio && typeof state.rechargedFireflyAudio === "object"
+        ? state.rechargedFireflyAudio
+        : null;
+      payload.rechargedFireflyAudio = {
+        updateFrame: Number.isFinite(state?.frameCount) ? state.frameCount : 0,
+        bridgeReady: !!(fireflyAudioState?.bridge),
+        trackedEntityCount: fireflyAudioState?.keyByEntityId instanceof Map ? fireflyAudioState.keyByEntityId.size : 0,
+        trackedHandleCount: fireflyAudioState?.handlesByKey instanceof Map ? fireflyAudioState.handlesByKey.size : 0,
+        activeFireflyCount: Number.isFinite(details.activeFireflyCount) ? details.activeFireflyCount : 0,
+        source: "tickLiveRechargedAdapter",
+      };
+    }
+
     function syncRechargedFireflyAudio(payload, state) {
-      if (!payload || !state) return;
+      if (!payload || !state) return null;
       const entities = readRechargedEntitySnapshots(payload, state);
       const fireflyAudioState = ensureRechargedFireflyAudioState(state);
       if (!fireflyAudioState.bridge) {
         fireflyAudioState.bridge = createRechargedFireflyAudioBridge();
       }
       const bridge = fireflyAudioState.bridge;
-      if (!bridge) return;
+      if (!bridge) {
+        publishRechargedFireflyAudioState(payload, state, { activeFireflyCount: 0 });
+        return null;
+      }
       const playerSnapshot = state.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object"
         ? state.currentPlayerSnapshot
         : (payload?.player && typeof payload.player === "object" ? payload.player : null);
       const tileSize = Number.isFinite(payload?.tileSize) ? payload.tileSize : 24;
-      syncFireflyAudioFrame({
+      const activeFireflyKeys = syncFireflyAudioFrame({
         entities,
         playerSnapshot,
         tileSize,
@@ -550,6 +568,11 @@
           }
         },
       });
+
+      publishRechargedFireflyAudioState(payload, state, {
+        activeFireflyCount: activeFireflyKeys?.size || 0,
+      });
+      return activeFireflyKeys;
     }
 
     function tickLiveRechargedAdapter(state) {
@@ -651,6 +674,11 @@
               : (payload?.player && typeof payload.player === "object" ? payload.player : null),
             adapter,
           };
+        }
+
+        const livePayload = readLatestRechargedBootPayload();
+        if (livePayload && typeof livePayload === "object") {
+          syncRechargedFireflyAudio(livePayload, state);
         }
       } catch (_error) {
         if (state && typeof state === "object") {
@@ -2248,7 +2276,6 @@
           state.frameCount = Number.isFinite(state.frameCount) ? state.frameCount + 1 : 1;
           tickLiveRechargedAdapter(state);
           const payload = readLatestRechargedBootPayload() || {};
-          syncRechargedFireflyAudio(payload, state);
           updateRechargedHudOverlay(state?.hud, payload, state);
           renderRechargedCanvasFrame(canvas, state);
         } catch (_error) {
