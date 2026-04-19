@@ -173,6 +173,10 @@ function buildPlayerSnapshot(playerState) {
     _hoverVoidAttackGlobalCd: Number.isFinite(playerState?._hoverVoidAttackGlobalCd) ? playerState._hoverVoidAttackGlobalCd : 0,
     boostActive: playerState?.boostActive === true,
     flareStash: Number.isFinite(playerState?.flareStash) ? playerState.flareStash : 1,
+    levelComplete: playerState?.levelComplete === true,
+    intermissionReadyForInput: playerState?.intermissionReadyForInput === true,
+    gameState: typeof playerState?.gameState === "string" ? playerState.gameState : "playing",
+    lastExitId: typeof playerState?.lastExitId === "string" ? playerState.lastExitId : null,
     checkpoint: playerState?.checkpoint && typeof playerState.checkpoint === "object"
       ? {
           tx: Number.isFinite(playerState?.checkpoint?.tx) ? playerState.checkpoint.tx : null,

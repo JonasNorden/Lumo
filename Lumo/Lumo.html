@@ -390,6 +390,10 @@
       hud._prevFlares = flareStash;
       hud.energyPct = Math.round(energyRatio * 100);
       hud.flares = flareStash;
+      const hudDebug = document.getElementById("hudDebug");
+      if (hudDebug) {
+        hudDebug.textContent = snapshot.levelComplete === true ? "Level complete" : "";
+      }
 
       if (state && typeof state === "object") {
         state.lastHudUpdateAtMs = nowMs;
@@ -1517,6 +1521,17 @@
                 ctx.drawImage(sprite, entityRect.x, entityRect.y, 24, 24);
                 renderedKnownEntityVisual = true;
               }
+            } else if (entity.type === "exit_01" || entity.type === "exit" || entity.type === "player-exit") {
+              // V1 parity: exit is a simple blue outline marker.
+              ctx.strokeStyle = "rgba(120,180,255,0.95)";
+              ctx.lineWidth = 2;
+              ctx.strokeRect(
+                entityRect.x + 2,
+                entityRect.y + 2,
+                Math.max(1, entityRect.w - 4),
+                Math.max(1, entityRect.h - 4),
+              );
+              renderedKnownEntityVisual = true;
             } else if (entity.type === "lantern_01") {
               // Match V1 lantern glow + BL-anchored sprite so feet anchoring stays consistent.
               const centerX = entityRect.x + entityRect.w * 0.5;

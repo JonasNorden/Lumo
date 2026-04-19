@@ -33,6 +33,8 @@ export function buildRechargedHudSnapshot(payload = {}, state = null) {
     energy: toFiniteNumber(playerSnapshot?.energy),
     lives: toWholeNumber(playerSnapshot?.lives),
     score: toWholeNumber(playerSnapshot?.score),
+    levelComplete: playerSnapshot?.levelComplete === true,
+    intermissionReadyForInput: playerSnapshot?.intermissionReadyForInput === true,
+    gameState: typeof playerSnapshot?.gameState === "string" ? playerSnapshot.gameState : "playing",
   };
 }
-

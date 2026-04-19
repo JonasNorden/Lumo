@@ -161,6 +161,10 @@ function buildPlayerSnapshot(snapshot) {
     score: Number.isFinite(source.score) ? source.score : null,
     boostActive: source.boostActive === true,
     flareStash: Number.isFinite(source.flareStash) ? source.flareStash : 1,
+    levelComplete: source.levelComplete === true,
+    intermissionReadyForInput: source.intermissionReadyForInput === true,
+    gameState: typeof source.gameState === "string" ? source.gameState : "playing",
+    lastExitId: typeof source.lastExitId === "string" ? source.lastExitId : null,
     checkpoint: source?.checkpoint && typeof source.checkpoint === "object"
       ? {
           tx: Number.isFinite(source?.checkpoint?.tx) ? source.checkpoint.tx : null,
@@ -676,6 +680,10 @@ export function createLumoRechargedBootAdapter(options = {}) {
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,
+        levelComplete: player.levelComplete === true,
+        intermissionReadyForInput: player.intermissionReadyForInput === true,
+        gameState: typeof player.gameState === "string" ? player.gameState : "playing",
+        lastExitId: typeof player.lastExitId === "string" ? player.lastExitId : null,
       };
     }
 

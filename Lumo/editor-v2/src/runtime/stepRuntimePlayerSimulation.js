@@ -426,6 +426,14 @@ function isCheckpointEntityType(entityType) {
   return normalizedType === "checkpoint_01" || normalizedType === "checkpoint";
 }
 
+function isExitEntityType(entityType) {
+  if (typeof entityType !== "string") {
+    return false;
+  }
+  const normalizedType = entityType.trim().toLowerCase();
+  return normalizedType === "exit_01" || normalizedType === "exit" || normalizedType === "player-exit";
+}
+
 function buildPlayerPickupBounds(playerState, tileSize) {
   const width = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24;
   const height = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24;
@@ -529,6 +537,62 @@ function stepCheckpointOverlap(worldPacket, playerState, sourceEntities) {
   return {
     checkpoint: nextCheckpoint,
     touched,
+  };
+}
+
+function stepExitOverlap(worldPacket, playerState, sourceEntities) {
+  if (!Array.isArray(sourceEntities) || sourceEntities.length === 0) {
+    return {
+      entities: [],
+      completed: false,
+      touchedExitId: null,
+    };
+  }
+
+  const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0 ? worldPacket.world.tileSize : 24;
+  const playerBounds = buildPlayerCheckpointBounds(playerState);
+  let completed = false;
+  let touchedExitId = null;
+
+  const entities = sourceEntities.map((entity) => {
+    const next = { ...entity };
+    if (next?.active !== true || !isExitEntityType(next?.type)) {
+      return next;
+    }
+    const width = Number.isFinite(next?.footprintW) && next.footprintW > 0
+      ? next.footprintW
+      : Number.isFinite(next?.w) && next.w > 0
+        ? next.w
+        : Number.isFinite(next?.size) && next.size > 0
+          ? next.size
+          : tileSize;
+    const height = Number.isFinite(next?.footprintH) && next.footprintH > 0
+      ? next.footprintH
+      : Number.isFinite(next?.h) && next.h > 0
+        ? next.h
+        : Number.isFinite(next?.size) && next.size > 0
+          ? next.size
+          : tileSize;
+    const entityBounds = {
+      x: Number.isFinite(next?.x) ? next.x : 0,
+      y: Number.isFinite(next?.y) ? next.y : 0,
+      w: width,
+      h: height,
+    };
+    if (!isAabbOverlap(playerBounds, entityBounds)) {
+      return next;
+    }
+
+    next.active = false;
+    completed = true;
+    touchedExitId = typeof next?.id === "string" ? next.id : touchedExitId;
+    return next;
+  });
+
+  return {
+    entities,
+    completed,
+    touchedExitId,
   };
 }
 
@@ -2144,6 +2208,46 @@ function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, optio
 
 // Executes one deterministic tick: intent -> locomotion -> velocityX -> horizontal -> jump -> vertical.
 export function stepRuntimePlayerSimulation(worldPacket, playerState, options = {}) {
+  const priorCompletion = playerState?.levelComplete === true || playerState?.gameState === "intermission";
+  if (priorCompletion) {
+    return {
+      ok: true,
+      darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
+      nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
+      player: {
+        ...playerState,
+        levelComplete: true,
+        intermissionReadyForInput: true,
+        gameState: "intermission",
+        status: "level-complete",
+      },
+      collisions: {
+        moveX: 0,
+        jump: false,
+        locomotion: "level-complete",
+        velocityX: 0,
+        blockedLeft: false,
+        blockedRight: false,
+        grounded: playerState?.grounded === true,
+        falling: false,
+        rising: false,
+        landed: false,
+        collidedBelow: false,
+      },
+      status: "level-complete",
+      errors: [],
+      warnings: [],
+      debug: {
+        finalized: {
+          levelComplete: true,
+          intermissionReadyForInput: true,
+          touchedExitId: typeof playerState?.lastExitId === "string" ? playerState.lastExitId : null,
+        },
+      },
+      entities: Array.isArray(playerState?.entities) ? playerState.entities.map((entity) => ({ ...entity })) : [],
+    };
+  }
+
   const intent = buildRuntimePlayerIntent(options?.input ?? options?.intent ?? options);
   const pulseStep = stepPulse(playerState, intent, options);
   const boostActive = intent?.boost === true && pulseStep.energy > DEFAULT_BOOST_MIN_ENERGY;
@@ -2272,13 +2376,17 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     ...playerState,
     position: resolvedPlayerStep.position,
   }, normalizedEntities);
+  const exitStep = stepExitOverlap(worldPacket, {
+    ...playerState,
+    position: resolvedPlayerStep.position,
+  }, pickupStep.entities);
   const flareStep = stepFlares(worldPacket, playerState, intent, {
     ...options,
     flareStash: pickupStep.flareStash,
     availableEnergy: pulseStep.energy,
   });
   const flareEntityStep = stepFlareEntityInteractions(
-    pickupStep.entities,
+    exitStep.entities,
     flareStep.flares,
   );
   const fireflyStep = stepFireflyRuntime(
@@ -2357,9 +2465,11 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   };
   const finalLocomotion = status === "respawned-out-of-bounds"
     ? "respawning-out-of-bounds"
+    : exitStep.completed
+      ? "level-complete"
     : finalPlayerState.grounded && brakeState.active
       ? "braking-grounded"
-    : resolveFinalLocomotion(finalPlayerState, intent.moveX);
+      : resolveFinalLocomotion(finalPlayerState, intent.moveX);
 
   return {
     ok: true,
@@ -2402,6 +2512,10 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       nextFlareId: flareStep.nextFlareId,
       entities: hoverVoidStep.entities,
       checkpoint: checkpointStep.checkpoint,
+      levelComplete: exitStep.completed === true,
+      intermissionReadyForInput: exitStep.completed === true,
+      gameState: exitStep.completed === true ? "intermission" : "playing",
+      lastExitId: exitStep.touchedExitId,
       runtimeLights: fireflyStep.lights,
       darkProjectiles,
       nextDarkProjectileId,
@@ -2466,6 +2580,10 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       },
       finalized: {
         locomotion: finalLocomotion,
+        levelComplete: exitStep.completed === true,
+        intermissionReadyForInput: exitStep.completed === true,
+        gameState: exitStep.completed === true ? "intermission" : "playing",
+        touchedExitId: exitStep.touchedExitId,
         pulseStarted: pulseStep.pulseStarted,
         pulseSuppressedByEnergy: pulseStep.pulseSuppressedByEnergy,
         pulseActive: pulseStep.pulse.active,
