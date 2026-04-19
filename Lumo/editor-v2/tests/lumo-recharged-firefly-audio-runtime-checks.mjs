@@ -204,6 +204,7 @@ function runStandaloneBridgePlaybackSafetyCheck() {
       this.paused = true;
       this._error = null;
       this.playCalls = 0;
+      this.pauseCalls = 0;
     }
     addEventListener(type, cb) {
       if (type === "error") this._error = cb;
@@ -212,6 +213,10 @@ function runStandaloneBridgePlaybackSafetyCheck() {
       this.playCalls += 1;
       this.paused = false;
       return Promise.resolve();
+    }
+    pause() {
+      this.pauseCalls += 1;
+      this.paused = true;
     }
   }
   const bridge = createStandaloneFireflyAudioBridge({
@@ -227,6 +232,8 @@ function runStandaloneBridgePlaybackSafetyCheck() {
   assert.equal(handle.lastPan, 0.8, "standalone bridge should store pan updates.");
   assert.equal(handle.audio.playCalls, 1, "standalone bridge should start playback for audible volume.");
   assert.equal(handle.audio.volume, 0.3, "standalone bridge should respect sfx volume scaling.");
+  bridge.setVolume(handle, 0);
+  assert.equal(handle.audio.pauseCalls, 1, "standalone bridge should pause active playback when target volume reaches silence.");
 
   handle.audio.paused = true;
   handle.playFailed = true;
@@ -290,6 +297,12 @@ function runLegacyBridgeDetectionCheck() {
   assert.ok(bridge, "legacy bridge should resolve when Entities audio helpers exist.");
   const unifiedBridge = createFireflyAudioBridge({ runtimeGlobal: runtimeWindow });
   assert.ok(unifiedBridge, "unified bridge should prefer legacy entities helper path when present.");
+  const preferredStandalone = createFireflyAudioBridge({
+    runtimeGlobal: globalThis,
+    preferStandalone: true,
+    audioCtor: class AudioStub {},
+  });
+  assert.equal(preferredStandalone?.source, "standalone-html-audio", "unified bridge should support standalone override for real HTML audio playback.");
 }
 
 runRestModeSilenceCheck();

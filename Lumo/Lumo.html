@@ -488,6 +488,7 @@
     function createRechargedFireflyAudioBridge() {
       return createFireflyAudioBridge({
         runtimeGlobal: window,
+        preferStandalone: true,
         getSfxVolume() {
           try {
             if (window?.Lumo && typeof window.Lumo.getAudioSettings === "function") {
@@ -509,13 +510,36 @@
       const fireflyAudioState = state?.rechargedFireflyAudio && typeof state.rechargedFireflyAudio === "object"
         ? state.rechargedFireflyAudio
         : null;
+      const handlesByKey = fireflyAudioState?.handlesByKey instanceof Map ? fireflyAudioState.handlesByKey : null;
+      let realAudioCount = 0;
+      let playingCount = 0;
+      let samplePaused = null;
+      let sampleVolume = null;
+      if (handlesByKey) {
+        for (const handle of handlesByKey.values()) {
+          const audio = handle?.audio;
+          if (!audio || typeof audio !== "object") continue;
+          realAudioCount += 1;
+          if (audio.paused === false) playingCount += 1;
+          if (samplePaused === null) {
+            samplePaused = audio.paused === true;
+          }
+          if (sampleVolume === null) {
+            sampleVolume = Number.isFinite(audio.volume) ? audio.volume : null;
+          }
+        }
+      }
       payload.rechargedFireflyAudio = {
         updateFrame: Number.isFinite(state?.frameCount) ? state.frameCount : 0,
         bridgeReady: !!(fireflyAudioState?.bridge),
         trackedEntityCount: fireflyAudioState?.keyByEntityId instanceof Map ? fireflyAudioState.keyByEntityId.size : 0,
-        trackedHandleCount: fireflyAudioState?.handlesByKey instanceof Map ? fireflyAudioState.handlesByKey.size : 0,
+        trackedHandleCount: handlesByKey ? handlesByKey.size : 0,
         activeFireflyCount: Number.isFinite(details.activeFireflyCount) ? details.activeFireflyCount : 0,
-        source: "tickLiveRechargedAdapter",
+        realAudioCount,
+        playingCount,
+        samplePaused,
+        sampleVolume,
+        source: typeof fireflyAudioState?.bridge?.source === "string" ? fireflyAudioState.bridge.source : "tickLiveRechargedAdapter",
       };
     }
 

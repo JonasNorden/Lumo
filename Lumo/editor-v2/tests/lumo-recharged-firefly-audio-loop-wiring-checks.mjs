@@ -33,4 +33,28 @@ assert.equal(
   "Runtime payload must publish live firefly audio state for execution visibility.",
 );
 
+assert.equal(
+  html.includes("realAudioCount"),
+  true,
+  "Runtime payload must report realAudioCount so browser inspection can prove real playback objects exist.",
+);
+
+assert.equal(
+  html.includes("playingCount"),
+  true,
+  "Runtime payload must report playingCount so browser inspection can confirm active playback state.",
+);
+
+assert.equal(
+  html.includes("samplePaused"),
+  true,
+  "Runtime payload must report samplePaused for quick paused-state inspection.",
+);
+
+assert.equal(
+  html.includes("sampleVolume"),
+  true,
+  "Runtime payload must report sampleVolume for quick gain inspection.",
+);
+
 console.log("lumo-recharged-firefly-audio-loop-wiring-checks: ok");
