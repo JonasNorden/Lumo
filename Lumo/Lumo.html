@@ -1095,6 +1095,35 @@
         return;
       }
       const nowSeconds = (typeof performance?.now === "function" ? performance.now() : Date.now()) * 0.001;
+      const hash01 = (seed) => {
+        const x = Math.sin(seed * 127.1) * 43758.5453123;
+        return x - Math.floor(x);
+      };
+      const buildSurfacePoints = (rect, amp, freq, speed, phase, stepMin = 7) => {
+        const points = [];
+        const step = Math.max(stepMin, Math.round(rect.w / 30));
+        for (let x = rect.x; x <= rect.x + rect.w + step; x += step) {
+          const nx = (x - rect.x) / Math.max(1, rect.w);
+          const waveA = Math.sin((nx * freq) + (phase * speed));
+          const waveB = Math.sin((nx * (freq * 0.63)) - (phase * speed * 1.33));
+          const y = rect.y + ((waveA * 0.65 + waveB * 0.35) * amp);
+          points.push({ x, y });
+        }
+        return points;
+      };
+      const fillLiquidBodyFromSurface = (surfacePoints, rect, fillStyle) => {
+        if (!Array.isArray(surfacePoints) || surfacePoints.length < 2) return;
+        ctx.beginPath();
+        ctx.moveTo(surfacePoints[0].x, surfacePoints[0].y);
+        for (let index = 1; index < surfacePoints.length; index += 1) {
+          ctx.lineTo(surfacePoints[index].x, surfacePoints[index].y);
+        }
+        ctx.lineTo(rect.x + rect.w, rect.y + rect.h);
+        ctx.lineTo(rect.x, rect.y + rect.h);
+        ctx.closePath();
+        ctx.fillStyle = fillStyle;
+        ctx.fill();
+      };
       for (const volume of liquidVolumes) {
         const rect = mapper.worldToCanvasRect(volume.left, volume.top, volume.width, volume.height);
         if (rect.w <= 0 || rect.h <= 0) {
@@ -1107,72 +1136,200 @@
         if (volume.type === "water_volume") {
           const bodyColor = volume.bottomColor || "#0f3c76";
           const topColor = volume.topColor || "#4d9de0";
-          const bodyGradient = ctx.createLinearGradient(0, rect.y, 0, bodyBottomY);
+          const bodyGradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, bodyBottomY);
           bodyGradient.addColorStop(0, topColor);
           bodyGradient.addColorStop(1, bodyColor);
-          ctx.fillStyle = bodyGradient;
-          ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-
           const amp = Math.max(1, Math.min(14, volume.waveAmount));
           const speed = Math.max(0.2, volume.waveSpeed);
-          const waveStep = Math.max(6, Math.round(rect.w / 18));
+          const surfacePoints = buildSurfacePoints(
+            rect,
+            amp,
+            10.8 + (volume.waveAmount * 0.28),
+            1.4 + (speed * 1.6),
+            nowSeconds,
+            6,
+          );
           ctx.save();
           ctx.beginPath();
-          ctx.rect(rect.x, rect.y, rect.w, Math.max(surfaceBand + amp + 1, 4));
+          ctx.rect(rect.x, rect.y, rect.w, rect.h);
           ctx.clip();
-          ctx.beginPath();
-          ctx.moveTo(rect.x, surfaceY);
-          for (let x = rect.x; x <= rect.x + rect.w; x += waveStep) {
-            const t = (x * 0.045) + (nowSeconds * speed * 2.4);
-            const y = surfaceY + Math.sin(t) * amp;
-            ctx.lineTo(x, y);
+          fillLiquidBodyFromSurface(surfacePoints, rect, bodyGradient);
+
+          const bandCount = Math.max(3, Math.min(8, 3 + Math.round(volume.waveAmount * 0.7)));
+          for (let band = 0; band < bandCount; band += 1) {
+            const depthMix = (band + 1) / (bandCount + 1);
+            const bandY = rect.y + depthMix * rect.h;
+            const bandAmp = Math.max(0.75, amp * (1 - depthMix) * 0.7);
+            ctx.beginPath();
+            for (let i = 0; i < surfacePoints.length; i += 1) {
+              const point = surfacePoints[i];
+              const nx = (point.x - rect.x) / Math.max(1, rect.w);
+              const offset = Math.sin((nx * 8.1) + (nowSeconds * (1.25 + speed * 1.2)) + band) * bandAmp;
+              const x = point.x;
+              const y = bandY + offset;
+              if (i === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = `rgba(196,234,255,${(0.04 + (1 - depthMix) * 0.08).toFixed(3)})`;
+            ctx.lineWidth = 1;
+            ctx.stroke();
           }
-          ctx.lineTo(rect.x + rect.w, surfaceY + surfaceBand + amp);
-          ctx.lineTo(rect.x, surfaceY + surfaceBand + amp);
-          ctx.closePath();
-          ctx.fillStyle = "rgba(173, 226, 255, 0.6)";
-          ctx.fill();
           ctx.restore();
+          ctx.beginPath();
+          for (let i = 0; i < surfacePoints.length; i += 1) {
+            const p = surfacePoints[i];
+            if (i === 0) ctx.moveTo(p.x, p.y);
+            else ctx.lineTo(p.x, p.y);
+          }
+          ctx.strokeStyle = "rgba(220,246,255,0.9)";
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+          const sheenGradient = ctx.createLinearGradient(rect.x, surfaceY - surfaceBand * 0.2, rect.x, surfaceY + surfaceBand * 1.2);
+          sheenGradient.addColorStop(0, "rgba(232,252,255,0.42)");
+          sheenGradient.addColorStop(1, "rgba(232,252,255,0)");
+          ctx.fillStyle = sheenGradient;
+          ctx.fillRect(rect.x, rect.y, rect.w, Math.max(2, surfaceBand));
         } else if (volume.type === "lava_volume") {
           const hotness = volume.temperature;
           const crust = volume.crustAmount;
-          const bodyGradient = ctx.createLinearGradient(0, rect.y, 0, bodyBottomY);
+          const flowSpeed = Math.max(0.15, volume.flowSpeed);
+          const surfaceAmp = Math.max(1.2, Math.min(14, (1.9 + hotness * 4.2) * (0.7 + flowSpeed * 0.36)));
+          const surfacePoints = buildSurfacePoints(
+            rect,
+            surfaceAmp,
+            9.4 + flowSpeed * 1.8,
+            1.2 + flowSpeed * 2.8,
+            nowSeconds,
+            6,
+          );
+          const bodyGradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, bodyBottomY);
           bodyGradient.addColorStop(0, `rgba(255,${Math.round(112 + hotness * 55)},34,0.98)`);
           bodyGradient.addColorStop(1, `rgba(${Math.round(85 + crust * 40)},26,8,0.98)`);
-          ctx.fillStyle = bodyGradient;
-          ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(rect.x, rect.y, rect.w, rect.h);
+          ctx.clip();
+          fillLiquidBodyFromSurface(surfacePoints, rect, bodyGradient);
 
-          const streakAlpha = Math.max(0.16, Math.min(0.5, 0.2 + volume.flowSpeed * 0.17));
+          const streakAlpha = Math.max(0.16, Math.min(0.5, 0.2 + flowSpeed * 0.17));
           ctx.fillStyle = `rgba(255,210,120,${streakAlpha.toFixed(3)})`;
           const streakW = Math.max(2, Math.round(rect.w / 14));
           for (let sx = rect.x; sx < rect.x + rect.w; sx += streakW * 3) {
-            const offset = Math.sin((sx * 0.03) + (nowSeconds * volume.flowSpeed * 3.2)) * 3;
+            const offset = Math.sin((sx * 0.03) + (nowSeconds * flowSpeed * 3.2)) * 3;
             ctx.fillRect(sx, rect.y + 2 + offset, streakW, Math.max(2, rect.h - 6));
           }
-          ctx.fillStyle = `rgba(255,236,173,${(0.62 + hotness * 0.25).toFixed(3)})`;
-          ctx.fillRect(rect.x, rect.y, rect.w, surfaceBand);
+          const crustPieces = Math.max(4, Math.round((rect.w / 26) * (0.5 + crust * 2.2)));
+          for (let idx = 0; idx < crustPieces; idx += 1) {
+            const seed = idx + (volume.id ? volume.id.length * 0.31 : 0);
+            const nx = hash01(seed * 1.91);
+            const drift = Math.sin((nowSeconds * flowSpeed * (0.9 + hash01(seed * 2.7))) + seed) * (6 + crust * 10);
+            const x = rect.x + (nx * rect.w) + drift;
+            const w = Math.max(4, (rect.w * (0.06 + hash01(seed * 4.2) * 0.08)) * (0.5 + crust));
+            const h = Math.max(2, surfaceBand * (0.28 + hash01(seed * 6.8) * 0.8));
+            const y = rect.y + Math.max(1, hash01(seed * 7.4) * (surfaceBand * 1.8));
+            ctx.fillStyle = `rgba(${Math.round(38 + crust * 52)},${Math.round(22 + crust * 18)},${Math.round(16 + crust * 14)},${(0.5 + crust * 0.32).toFixed(3)})`;
+            ctx.beginPath();
+            ctx.ellipse(x, y, w * 0.5, h * 0.5, hash01(seed * 3.1) * Math.PI, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+          ctx.beginPath();
+          for (let i = 0; i < surfacePoints.length; i += 1) {
+            const p = surfacePoints[i];
+            if (i === 0) ctx.moveTo(p.x, p.y);
+            else ctx.lineTo(p.x, p.y);
+          }
+          ctx.strokeStyle = `rgba(255,236,173,${(0.65 + hotness * 0.26).toFixed(3)})`;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+
+          const shimmerHeight = Math.max(6, Math.round((6 + hotness * 11 + flowSpeed * 2.2) * (rect.h / 20)));
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(rect.x, rect.y - shimmerHeight, rect.w, shimmerHeight + surfaceBand);
+          ctx.clip();
+          for (let i = 0; i < 8; i += 1) {
+            const sy = rect.y - ((i + 1) / 8) * shimmerHeight;
+            const wobble = Math.sin((nowSeconds * (2.3 + flowSpeed)) + i * 0.75) * (1.2 + hotness * 2.4);
+            const alpha = 0.03 + (hotness * 0.06) * (1 - i / 8);
+            ctx.fillStyle = `rgba(255,190,100,${alpha.toFixed(3)})`;
+            ctx.fillRect(rect.x + wobble, sy, rect.w, 2);
+          }
+          ctx.restore();
         } else if (volume.type === "bubbling_liquid_volume") {
           const bodyColor = volume.bottomColor || "#356b28";
           const topColor = volume.topColor || "#8ef767";
-          const bodyGradient = ctx.createLinearGradient(0, rect.y, 0, bodyBottomY);
+          const activity = Math.max(0.05, volume.surfaceActivity);
+          const bubbleDensity = Math.max(0.08, volume.bubbleAmount);
+          const fumeDensity = Math.max(0, volume.fumeAmount);
+          const surfaceAmp = Math.max(1.1, Math.min(12, 1.2 + activity * 5.6));
+          const surfacePoints = buildSurfacePoints(
+            rect,
+            surfaceAmp,
+            11.2 + activity * 3.5,
+            1.05 + activity * 2.25,
+            nowSeconds,
+            6,
+          );
+          const bodyGradient = ctx.createLinearGradient(rect.x, rect.y, rect.x, bodyBottomY);
           bodyGradient.addColorStop(0, topColor);
           bodyGradient.addColorStop(1, bodyColor);
-          ctx.fillStyle = bodyGradient;
-          ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(rect.x, rect.y, rect.w, rect.h);
+          ctx.clip();
+          fillLiquidBodyFromSurface(surfacePoints, rect, bodyGradient);
 
-          const toxicity = Math.max(volume.surfaceActivity, volume.bubbleAmount);
+          const toxicity = Math.max(activity, bubbleDensity);
           ctx.fillStyle = `rgba(214,255,175,${(0.3 + toxicity * 0.35).toFixed(3)})`;
-          ctx.fillRect(rect.x, rect.y, rect.w, surfaceBand);
-          const bubbleCount = Math.max(2, Math.round((rect.w / 28) * (1 + volume.bubbleAmount)));
+          ctx.fillRect(rect.x, rect.y, rect.w, Math.max(surfaceBand, Math.round(surfaceAmp * 1.7)));
+          const bubbleCount = Math.max(2, Math.round((rect.w / 24) * (1 + bubbleDensity * 2.1)));
           for (let i = 0; i < bubbleCount; i += 1) {
-            const seed = (i * 31.7) + nowSeconds * (1.3 + volume.surfaceActivity * 1.8);
-            const bx = rect.x + ((Math.sin(seed * 0.57) * 0.5 + 0.5) * rect.w);
-            const rise = (Math.cos(seed) * 0.5 + 0.5) * (rect.h * 0.65);
+            const seed = i * 31.7;
+            const loop = 2.4 + hash01(seed * 0.39) * (3.2 - bubbleDensity * 0.9);
+            const phase = ((nowSeconds * (0.5 + activity * 1.8 + hash01(seed * 0.73))) + hash01(seed * 1.3) * loop) % loop;
+            const t = phase / loop;
+            const bx = rect.x + ((hash01(seed * 0.57) * 0.9 + 0.05) * rect.w) + Math.sin((nowSeconds * 1.7) + seed) * (0.8 + bubbleDensity * 2.4);
+            const rise = t * (rect.h * 0.9);
             const by = bodyBottomY - 2 - rise;
-            const radius = 1 + ((Math.sin(seed * 1.9) * 0.5 + 0.5) * (2.8 + volume.bubbleAmount * 2));
-            ctx.fillStyle = `rgba(230,255,198,${(0.12 + volume.fumeAmount * 0.22).toFixed(3)})`;
+            const radius = 0.9 + (hash01(seed * 1.9) * (2.2 + bubbleDensity * 3.2));
+            ctx.fillStyle = `rgba(230,255,198,${(0.13 + fumeDensity * 0.16).toFixed(3)})`;
             ctx.beginPath();
             ctx.arc(bx, by, radius, 0, Math.PI * 2);
+            ctx.fill();
+            if (t > 0.86) {
+              const popRadius = radius + ((t - 0.86) / 0.14) * (2 + activity * 4);
+              ctx.strokeStyle = `rgba(218,255,178,${(0.28 * (1 - ((t - 0.86) / 0.14))).toFixed(3)})`;
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.arc(bx, rect.y + 1 + Math.sin(seed) * surfaceAmp * 0.25, popRadius, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+          }
+          ctx.restore();
+          ctx.beginPath();
+          for (let i = 0; i < surfacePoints.length; i += 1) {
+            const p = surfacePoints[i];
+            if (i === 0) ctx.moveTo(p.x, p.y);
+            else ctx.lineTo(p.x, p.y);
+          }
+          ctx.strokeStyle = `rgba(229,255,194,${(0.62 + activity * 0.22).toFixed(3)})`;
+          ctx.lineWidth = 1.4;
+          ctx.stroke();
+
+          const fumePlumes = Math.max(1, Math.round((rect.w / 48) * (1 + fumeDensity * 5)));
+          for (let i = 0; i < fumePlumes; i += 1) {
+            const seed = i * 17.3 + (volume.id ? volume.id.length : 0);
+            const drift = Math.sin(nowSeconds * (0.7 + hash01(seed * 2.1)) + seed) * (2 + fumeDensity * 6);
+            const px = rect.x + (hash01(seed * 3.2) * rect.w) + drift;
+            const py = rect.y - (4 + hash01(seed * 4.1) * (9 + fumeDensity * 18));
+            const pr = 2 + hash01(seed * 5.3) * (3 + fumeDensity * 9);
+            const plume = ctx.createRadialGradient(px, py, 0, px, py, pr);
+            plume.addColorStop(0, `rgba(194,255,154,${(0.18 + fumeDensity * 0.25).toFixed(3)})`);
+            plume.addColorStop(1, "rgba(194,255,154,0)");
+            ctx.fillStyle = plume;
+            ctx.beginPath();
+            ctx.arc(px, py, pr, 0, Math.PI * 2);
             ctx.fill();
           }
         }
@@ -1885,9 +2042,13 @@
           drawRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw);
         }
 
+        const liquidEntityTypes = new Set(["water_volume", "lava_volume", "bubbling_liquid_volume"]);
         const hoverEyesAfterDarkness = [];
         for (const entity of entitySnapshots) {
           if (entity?.active !== true) {
+            continue;
+          }
+          if (liquidEntityTypes.has(entity?.type)) {
             continue;
           }
           const entityDrawW = Number.isFinite(entity.w) && entity.w > 0 ? entity.w : entity.size;
