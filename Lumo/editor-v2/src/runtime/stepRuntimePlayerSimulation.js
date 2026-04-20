@@ -16,6 +16,14 @@ function uniqueMessages(messages) {
   return [...new Set(messages.filter((message) => typeof message === "string" && message.length > 0))];
 }
 
+function lerp(from, to, amount) {
+  if (!Number.isFinite(from) || !Number.isFinite(to)) {
+    return Number.isFinite(to) ? to : 0;
+  }
+  const t = Number.isFinite(amount) ? Math.max(0, Math.min(1, amount)) : 0;
+  return from + ((to - from) * t);
+}
+
 function resolveFinalLocomotion(finalPlayerState, moveX = 0) {
   const normalizedMoveX = Number.isFinite(moveX) ? Math.max(-1, Math.min(1, Math.trunc(moveX))) : 0;
 
@@ -113,9 +121,9 @@ const DEFAULT_POWERCELL_FILL_DURATION_SECONDS = 1.6;
 const DEFAULT_PLAYER_LIVES = 4;
 const RESPAWN_COUNTDOWN_SECONDS = 3;
 const LIQUID_DEATH_DURATION_SECONDS = 0.82;
-const LIQUID_DEATH_SINK_SPEED_PX_PER_SECOND = 128;
-const LIQUID_DEATH_HORIZONTAL_DAMPING = 0.14;
-const LIQUID_DEATH_VERTICAL_DAMPING = 0.22;
+const LIQUID_DEATH_SINK_SPEED_PX_PER_SECOND = 56;
+const LIQUID_DEATH_HORIZONTAL_DAMPING = 0.82;
+const LIQUID_DEATH_VERTICAL_LERP_FACTOR = 0.15;
 const ENTITY_HIT_FLASH_TICKS = 6;
 const ENTITY_DARK_CREATURE_PULSE_SCALE = 0.55;
 const ENTITY_HOVER_VOID_PULSE_SCALE = 0.6;
@@ -2411,14 +2419,11 @@ function maybeResolveLiquidDeath(worldPacket, playerState, verticalStep, sourceE
   const elapsed = Math.max(0, (1 - fade) * duration);
   const baseX = Number.isFinite(verticalStep?.position?.x) ? verticalStep.position.x : 0;
   const baseY = Number.isFinite(verticalStep?.position?.y) ? verticalStep.position.y : 0;
-  const velocityX = Number.isFinite(verticalStep?.velocity?.x)
-    ? verticalStep.velocity.x * LIQUID_DEATH_HORIZONTAL_DAMPING
-    : 0;
-  const velocityYBase = Number.isFinite(verticalStep?.velocity?.y)
-    ? Math.max(0, verticalStep.velocity.y * LIQUID_DEATH_VERTICAL_DAMPING)
-    : 0;
-  const velocityY = velocityYBase + sinkSpeed;
-  const sinkDistance = sinkSpeed * dt;
+  const velocityXBase = Number.isFinite(verticalStep?.velocity?.x) ? verticalStep.velocity.x : 0;
+  const velocityYBase = Number.isFinite(verticalStep?.velocity?.y) ? verticalStep.velocity.y : 0;
+  const velocityX = velocityXBase * LIQUID_DEATH_HORIZONTAL_DAMPING;
+  const velocityY = lerp(velocityYBase, sinkSpeed, LIQUID_DEATH_VERTICAL_LERP_FACTOR);
+  const sinkDistance = velocityY * dt;
 
   if (elapsed < duration) {
     return {
@@ -2650,7 +2655,17 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     };
   }
 
-  const intent = buildRuntimePlayerIntent(options?.input ?? options?.intent ?? options);
+  const normalizedEntities = normalizeRuntimeEntities(options?.entities, worldPacket, playerState);
+  const liquidDeathActive = playerState?.liquidDeath?.active === true;
+  const baseIntent = buildRuntimePlayerIntent(options?.input ?? options?.intent ?? options);
+  const intent = liquidDeathActive
+    ? {
+        ...baseIntent,
+        moveX: 0,
+        jump: false,
+        boost: false,
+      }
+    : baseIntent;
   const pulseStep = stepPulse(playerState, intent, options);
   const boostActive = intent?.boost === true && pulseStep.energy > DEFAULT_BOOST_MIN_ENERGY;
   const locomotionStateBase = buildRuntimePlayerLocomotionState(playerState, intent, { ...options, worldPacket });
@@ -2662,14 +2677,34 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         maxSpeedX: locomotionStateBase.maxSpeedX * DEFAULT_BOOST_MULTIPLIER,
       }
     : locomotionStateBase;
-  const velocityXStep = stepRuntimePlayerVelocityX(playerState, locomotionState);
+  const velocityXStep = liquidDeathActive
+    ? { velocityX: Number.isFinite(playerState?.velocity?.x) ? playerState.velocity.x : 0, errors: [], warnings: [] }
+    : stepRuntimePlayerVelocityX(playerState, locomotionState);
 
-  const horizontalStep = stepRuntimePlayerHorizontalState(worldPacket, playerState, {
-    velocityX: velocityXStep.velocityX,
-    options,
-    errors: uniqueMessages([...(locomotionState.errors ?? []), ...(velocityXStep.errors ?? [])]),
-    warnings: uniqueMessages([...(locomotionState.warnings ?? []), ...(velocityXStep.warnings ?? [])]),
-  });
+  const horizontalStep = liquidDeathActive
+    ? {
+        ok: true,
+        status: "liquid-death",
+        moved: false,
+        position: {
+          x: Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0,
+          y: Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0,
+        },
+        velocity: {
+          x: Number.isFinite(playerState?.velocity?.x) ? playerState.velocity.x : 0,
+          y: Number.isFinite(playerState?.velocity?.y) ? playerState.velocity.y : 0,
+        },
+        blockedLeft: false,
+        blockedRight: false,
+        errors: [],
+        warnings: [],
+      }
+    : stepRuntimePlayerHorizontalState(worldPacket, playerState, {
+      velocityX: velocityXStep.velocityX,
+      options,
+      errors: uniqueMessages([...(locomotionState.errors ?? []), ...(velocityXStep.errors ?? [])]),
+      warnings: uniqueMessages([...(locomotionState.warnings ?? []), ...(velocityXStep.warnings ?? [])]),
+    });
 
   if (horizontalStep.ok !== true) {
     return {
@@ -2722,7 +2757,20 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     ]),
   };
 
-  const jumpState = buildRuntimePlayerJumpState(worldPacket, preVerticalState, intent, options);
+  const jumpState = liquidDeathActive
+    ? {
+        status: "liquid-death",
+        canJump: false,
+        startedJump: false,
+        grounded: false,
+        velocity: preVerticalState.velocity,
+        coyoteTimer: Number.isFinite(preVerticalState?.coyoteTimer) ? preVerticalState.coyoteTimer : 0,
+        jumpBufferTimer: 0,
+        jumpHeldLastTick: false,
+        errors: [],
+        warnings: [],
+      }
+    : buildRuntimePlayerJumpState(worldPacket, preVerticalState, intent, options);
   const verticalInputState = {
     ...preVerticalState,
     grounded: jumpState.grounded === true,
@@ -2734,7 +2782,18 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     warnings: uniqueMessages([...(preVerticalState?.warnings ?? []), ...(jumpState.warnings ?? [])]),
   };
 
-  const verticalStep = stepRuntimePlayerVerticalState(worldPacket, verticalInputState, options);
+  const verticalStep = liquidDeathActive
+    ? {
+        ...verticalInputState,
+        ok: true,
+        status: "liquid-death",
+        grounded: false,
+        falling: true,
+        rising: false,
+        landed: false,
+        collidedBelow: false,
+      }
+    : stepRuntimePlayerVerticalState(worldPacket, verticalInputState, options);
 
   if (verticalStep.ok !== true) {
     return {
@@ -2767,7 +2826,6 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     };
   }
 
-  const normalizedEntities = normalizeRuntimeEntities(options?.entities, worldPacket, playerState);
   const liquidDeathStep = maybeResolveLiquidDeath(worldPacket, playerState, verticalStep, normalizedEntities, options);
   const bottomRespawn = liquidDeathStep ? null : maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, options);
   const bottomRespawnIsGameOver = (
