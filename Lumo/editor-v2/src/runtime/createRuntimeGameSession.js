@@ -166,6 +166,16 @@ function buildPlayerSnapshot(playerState) {
     : null;
   const respawnPending = respawnCountdown?.active === true || playerState?.status === "respawn-pending";
   const respawnCount = Number.isFinite(respawnCountdown?.countdown) ? Math.max(0, Math.ceil(respawnCountdown.countdown)) : 0;
+  const liquidDeath = playerState?.liquidDeath && typeof playerState.liquidDeath === "object"
+    ? {
+        active: playerState.liquidDeath.active === true,
+        type: typeof playerState?.liquidDeath?.type === "string" ? playerState.liquidDeath.type : null,
+        elapsed: Number.isFinite(playerState?.liquidDeath?.elapsed) ? playerState.liquidDeath.elapsed : null,
+        duration: Number.isFinite(playerState?.liquidDeath?.duration) ? playerState.liquidDeath.duration : null,
+        sinkSpeed: Number.isFinite(playerState?.liquidDeath?.sinkSpeed) ? playerState.liquidDeath.sinkSpeed : null,
+        fade: Number.isFinite(playerState?.liquidDeath?.fade) ? playerState.liquidDeath.fade : null,
+      }
+    : null;
 
   return {
     ok: playerState && typeof playerState === "object",
@@ -178,6 +188,7 @@ function buildPlayerSnapshot(playerState) {
     grounded: playerState?.grounded === true,
     falling: playerState?.falling === true,
     rising: playerState?.rising === true,
+    status: typeof playerState?.status === "string" ? playerState.status : null,
     facingX: Number.isFinite(playerState?.facingX) ? playerState.facingX : null,
     locomotion: typeof playerState?.locomotion === "string" ? playerState.locomotion : "unknown",
     energy: Number.isFinite(playerState?.energy) ? playerState.energy : null,
@@ -248,6 +259,8 @@ function buildPlayerSnapshot(playerState) {
     respawnCountdown,
     respawnPending,
     respawnCount: respawnPending ? respawnCount : 0,
+    liquidDeath,
+    renderAlpha: Number.isFinite(playerState?.renderAlpha) ? Math.max(0, Math.min(1, playerState.renderAlpha)) : 1,
   };
 }
 

@@ -36,12 +36,24 @@ function buildPlayerSnapshot(snapshot) {
   const respawnCount = Number.isFinite(source?.respawnCount)
     ? Math.max(0, Math.ceil(source.respawnCount))
     : (Number.isFinite(respawnCountdown?.countdown) ? Math.max(0, Math.ceil(respawnCountdown.countdown)) : 0);
+  const liquidDeath = source?.liquidDeath && typeof source.liquidDeath === "object"
+    ? {
+        active: source.liquidDeath.active === true,
+        type: typeof source?.liquidDeath?.type === "string" ? source.liquidDeath.type : null,
+        elapsed: Number.isFinite(source?.liquidDeath?.elapsed) ? source.liquidDeath.elapsed : null,
+        duration: Number.isFinite(source?.liquidDeath?.duration) ? source.liquidDeath.duration : null,
+        sinkSpeed: Number.isFinite(source?.liquidDeath?.sinkSpeed) ? source.liquidDeath.sinkSpeed : null,
+        fade: Number.isFinite(source?.liquidDeath?.fade) ? source.liquidDeath.fade : null,
+      }
+    : null;
 
   return {
     x: Number.isFinite(source.x) ? source.x : null,
     y: Number.isFinite(source.y) ? source.y : null,
     grounded: source.grounded === true,
     falling: source.falling === true,
+    rising: source.rising === true,
+    status: typeof source?.status === "string" ? source.status : null,
     locomotion: typeof source.locomotion === "string" ? source.locomotion : "unknown",
     energy: Number.isFinite(source.energy) ? source.energy : null,
     lives: Number.isFinite(source.lives) ? source.lives : null,
@@ -70,6 +82,8 @@ function buildPlayerSnapshot(snapshot) {
     respawnCountdown,
     respawnPending,
     respawnCount: respawnPending ? respawnCount : 0,
+    liquidDeath,
+    renderAlpha: Number.isFinite(source?.renderAlpha) ? Math.max(0, Math.min(1, source.renderAlpha)) : 1,
   };
 }
 

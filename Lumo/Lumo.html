@@ -852,6 +852,12 @@
           facingX: Number.isFinite(nestedPlayer?.facingX) ? nestedPlayer.facingX : null,
           locomotion: typeof nestedPlayer?.locomotion === "string" ? nestedPlayer.locomotion : "",
           status,
+          liquidDeath: nestedPlayer?.liquidDeath && typeof nestedPlayer.liquidDeath === "object"
+            ? { ...nestedPlayer.liquidDeath }
+            : null,
+          renderAlpha: Number.isFinite(payload?.playerRenderAlpha)
+            ? payload.playerRenderAlpha
+            : (Number.isFinite(nestedPlayer?.renderAlpha) ? nestedPlayer.renderAlpha : 1),
           hidden: status === "respawning-out-of-bounds" || status === "respawn-pending",
         };
       } catch (_error) {
@@ -865,6 +871,8 @@
           facingX: null,
           locomotion: "",
           status: "",
+          liquidDeath: null,
+          renderAlpha: 1,
           hidden: false,
         };
       }
@@ -2793,6 +2801,9 @@
 
       // Keep feet anchored to collision truth while flipping sprite by movement direction.
       ctx.save();
+      ctx.globalAlpha = Number.isFinite(playerSnapshot?.renderAlpha)
+        ? Math.max(0, Math.min(1, playerSnapshot.renderAlpha))
+        : 1;
       if ((state.playerFacing || 1) < 0) {
         const centerX = drawX + spriteWidth * 0.5;
         ctx.translate(centerX, 0);
