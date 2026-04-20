@@ -432,22 +432,26 @@
 
       renderer.w = canvas.width;
       renderer.h = canvas.height;
-      renderer.drawHUD(hud);
-
-      // Recharged live view: suppress legacy persistent "MENU" text from V1 HUD replica.
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        const padX = Math.max(12, Math.round(canvas.width * 0.02));
-        const padY = Math.max(10, Math.round(canvas.height * 0.02));
-        const wipeW = Math.max(88, Math.round(canvas.width * 0.12));
-        const wipeH = 30;
-        const wipeX = canvas.width - padX - wipeW;
-        const wipeY = canvas.height - padY - wipeH;
-        ctx.save();
-        ctx.fillStyle = "rgba(0,0,0,0.55)";
-        ctx.fillRect(wipeX, wipeY, wipeW, wipeH);
-        ctx.restore();
+      const hudCtx = renderer.ctx;
+      const originalFillText = hudCtx && typeof hudCtx.fillText === "function"
+        ? hudCtx.fillText.bind(hudCtx)
+        : null;
+      if (hudCtx && originalFillText) {
+        hudCtx.fillText = (text, ...args) => {
+          if (typeof text === "string" && text.trim().toUpperCase() === "MENU") {
+            return;
+          }
+          return originalFillText(text, ...args);
+        };
       }
+      try {
+        renderer.drawHUD(hud);
+      } finally {
+        if (hudCtx && originalFillText) {
+          hudCtx.fillText = originalFillText;
+        }
+      }
+      hud._pauseBtn = null;
     }
 
     // Updates Recharged HUD model from live adapter snapshots with safe fallbacks.
@@ -937,6 +941,26 @@
       }
     }
 
+    function readRechargedLiveEntitySnapshots(payload, state) {
+      try {
+        const adapter = payload?.adapter && typeof payload.adapter === "object" ? payload.adapter : null;
+        const adapterPlayerSnapshot = adapter?.getPlayerSnapshot?.();
+        const bootPlayerSnapshot = window?.__LumoRechargedBoot?.player
+          && typeof window.__LumoRechargedBoot.player === "object"
+          ? window.__LumoRechargedBoot.player
+          : null;
+        const playerSnapshot = (
+          (adapterPlayerSnapshot && typeof adapterPlayerSnapshot === "object" ? adapterPlayerSnapshot : null)
+          || (state?.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object" ? state.currentPlayerSnapshot : null)
+          || (payload?.player && typeof payload.player === "object" ? payload.player : null)
+          || bootPlayerSnapshot
+        );
+        return Array.isArray(playerSnapshot?.entities) ? playerSnapshot.entities : [];
+      } catch (_error) {
+        return [];
+      }
+    }
+
     function readRechargedEntitySnapshots(payload, state) {
       try {
         const cloneParams = (value) => {
@@ -952,13 +976,7 @@
           }
           return value;
         };
-        const adapter = payload?.adapter && typeof payload.adapter === "object" ? payload.adapter : null;
-        const adapterPlayerSnapshot = adapter?.getPlayerSnapshot?.();
-        const playerSnapshot = (
-          (adapterPlayerSnapshot && typeof adapterPlayerSnapshot === "object" ? adapterPlayerSnapshot : null)
-          || (state?.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object" ? state.currentPlayerSnapshot : null)
-        );
-        const entities = Array.isArray(playerSnapshot?.entities) ? playerSnapshot.entities : [];
+        const entities = readRechargedLiveEntitySnapshots(payload, state);
         return entities
           // Preserve transient runtime entities (projectiles/hazards) even when they have no stable id.
           .map((entity, index) => ({
@@ -1012,7 +1030,7 @@
       }
     }
 
-    function readRechargedLiquidVolumes(entitySnapshots) {
+    function readRechargedLiquidSnapshots(payload, state) {
       const liquidTypes = new Set(["water_volume", "lava_volume", "bubbling_liquid_volume"]);
       const asFinite = (value) => (Number.isFinite(value) ? value : null);
       const toPositive = (value, fallback) => {
@@ -1021,7 +1039,7 @@
       };
       const readColor = (value, fallback) => (typeof value === "string" && value.trim().length > 0 ? value.trim() : fallback);
       const liquids = [];
-      for (const entity of (Array.isArray(entitySnapshots) ? entitySnapshots : [])) {
+      for (const entity of readRechargedLiveEntitySnapshots(payload, state)) {
         const type = typeof entity?.type === "string" ? entity.type : "";
         if (!liquidTypes.has(type)) {
           continue;
@@ -1649,7 +1667,7 @@
         const pulseSnapshot = readRechargedPulseSnapshot(payload, state);
         const boostSnapshot = readRechargedBoostSnapshot(payload, state);
         const entitySnapshots = readRechargedEntitySnapshots(payload, state);
-        const liquidVolumes = readRechargedLiquidVolumes(entitySnapshots);
+        const liquidVolumes = readRechargedLiquidSnapshots(payload, state);
         const decorSnapshots = readRechargedDecorSnapshots(payload);
         const previousSnapshot = readRechargedPlayerSnapshot({
           player: state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
@@ -1843,7 +1861,12 @@
 
         drawRechargedLiquidVolumes(ctx, mapper, liquidVolumes);
         if (state && state.rechargedLiquidSummaryLogged !== true) {
-          console.info("[Lumo Recharged] liquid volumes", { count: liquidVolumes.length });
+          const byType = liquidVolumes.reduce((acc, liquid) => {
+            const key = typeof liquid?.type === "string" ? liquid.type : "unknown";
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+          }, {});
+          console.info("[Lumo Recharged] liquid volumes", { count: liquidVolumes.length, byType });
           state.rechargedLiquidSummaryLogged = true;
         }
 
