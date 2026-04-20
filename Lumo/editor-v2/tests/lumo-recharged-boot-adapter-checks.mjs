@@ -289,6 +289,86 @@ async function runOutOfBoundsRespawnChecks() {
   console.log("boot adapter out-of-bounds respawn ok");
 }
 
+async function runLiquidDeathRuntimeChecks() {
+  const liquidTypes = ["water_volume", "lava_volume", "bubbling_liquid_volume"];
+  for (const liquidType of liquidTypes) {
+    const liquidLevel = {
+      identity: { id: `liquid-death-${liquidType}`, formatVersion: "1.0.0", themeId: "test", name: `Liquid ${liquidType}` },
+      world: {
+        width: 12,
+        height: 18,
+        tileSize: 24,
+        spawn: { x: 4, y: 1 },
+      },
+      layers: {
+        tiles: [],
+        background: [],
+        decor: [],
+        entities: [
+          {
+            id: `${liquidType}-pit`,
+            type: liquidType,
+            x: 0,
+            y: 18,
+            active: true,
+            params: { footprintW: 2000, footprintH: 2000 },
+          },
+        ],
+        audio: [],
+      },
+    };
+
+    const adapter = createLumoRechargedBootAdapter({ sourceDescriptor: liquidLevel });
+    await adapter.prepare();
+    await adapter.boot();
+
+    let sawLiquidDeath = false;
+    let sawRespawnPending = false;
+    let sawLiquidFade = false;
+    let sawLiquidYIncrease = false;
+    let previousLiquidY = null;
+    let previousLiquidAlpha = null;
+    let sawRespawned = false;
+    let sawBottomRespawnBypass = false;
+
+    for (let index = 0; index < 360; index += 1) {
+      const tickResult = adapter.tick({ left: false, right: false, jump: false });
+      const player = adapter.getPlayerSnapshot();
+      assert.equal(tickResult.ok, true);
+      assert.equal(tickResult.stepped, true);
+      if (player?.status === "liquid-death") {
+        sawLiquidDeath = true;
+        sawBottomRespawnBypass = sawBottomRespawnBypass || player?.respawnPending !== true;
+        if (Number.isFinite(previousLiquidY) && Number.isFinite(player?.y) && player.y > previousLiquidY) {
+          sawLiquidYIncrease = true;
+        }
+        if (Number.isFinite(previousLiquidAlpha) && Number.isFinite(player?.renderAlpha) && player.renderAlpha < previousLiquidAlpha) {
+          sawLiquidFade = true;
+        }
+        previousLiquidY = Number.isFinite(player?.y) ? player.y : previousLiquidY;
+        previousLiquidAlpha = Number.isFinite(player?.renderAlpha) ? player.renderAlpha : previousLiquidAlpha;
+      }
+      if (player?.status === "respawn-pending") {
+        sawRespawnPending = true;
+      }
+      if (player?.status === "respawned-out-of-bounds") {
+        sawRespawned = true;
+        break;
+      }
+    }
+
+    assert.equal(sawLiquidDeath, true, `player should enter liquid death state for ${liquidType}`);
+    assert.equal(sawLiquidYIncrease, true, `liquid death should force sinking movement for ${liquidType}`);
+    assert.equal(sawLiquidFade, true, `liquid death should fade player render alpha for ${liquidType}`);
+    assert.equal(sawBottomRespawnBypass, true, `liquid death should occur before generic bottom respawn for ${liquidType}`);
+    assert.equal(sawRespawnPending, true, `liquid death should transition into respawn countdown for ${liquidType}`);
+    assert.equal(sawRespawned, true, `liquid death should complete through respawn resolution flow for ${liquidType}`);
+    assert.equal(adapter.getPlayerSnapshot()?.status !== "game-over", true, "liquid death in positive-life flow must not force game over");
+  }
+
+  console.log("boot adapter liquid death runtime ok");
+}
+
 await runValidDirectSourceChecks();
 await runTickIntentUpdatesLivePlayerChecks();
 await runLoaderDescriptorChecks();
@@ -296,5 +376,6 @@ await runPartialSourceChecks();
 await runInvalidSourceChecks();
 await runBottomBoundaryOutOfBoundsRespawnChecks();
 await runOutOfBoundsRespawnChecks();
+await runLiquidDeathRuntimeChecks();
 
 console.log("lumo-recharged-boot-adapter-checks: ok");
