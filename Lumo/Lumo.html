@@ -1535,39 +1535,69 @@
 
           const fumeDensity = Math.max(1, volume.fumeAmount || 0);
           const seed = volume.bubblingSeed || 1;
-          const t = performance.now() * 0.00016;
+          const t = performance.now() * 0.001;
           const densityFactor = Math.min(1, fumeDensity / 120);
-          const plumeCount = Math.max(2, Math.min(4, Math.round((rect.w / 180) + densityFactor * 1.4)));
-          const laneSpan = rect.w * (0.46 + densityFactor * 0.14);
-          const laneStart = rect.x + (rect.w - laneSpan) * 0.5;
+          const activityFactor = Math.max(0, Math.min(1, volume.surfaceActivity || 0));
+          const zoneCount = Math.max(2, Math.min(4, 2 + Math.round(densityFactor * 2)));
+          const coverage = rect.w * (0.5 + densityFactor * 0.2);
+          const coverageStart = rect.x + (rect.w - coverage) * 0.5;
+          const hazeTop = rect.y - (20 + densityFactor * 34);
+          const hazeHeight = (rect.y + 1.5) - hazeTop;
+          const layerCountBase = 8 + Math.round(densityFactor * 4);
 
-          for (let i = 0; i < plumeCount; i++) {
-            const u = plumeCount === 1 ? 0.5 : i / (plumeCount - 1);
-            const jitter = (hash01(seed + i * 17.9) - 0.5) * 10;
-            const baseX = laneStart + (u * laneSpan) + jitter;
-            const drift = Math.sin(t + i * 1.43 + seed * 0.31) * 2.8;
-            const originX = baseX + drift;
-            const originY = rect.y + 1.5;
-            const puffCount = 6 + Math.round(densityFactor * 2);
+          for (let zone = 0; zone < zoneCount; zone += 1) {
+            const zoneU = zoneCount <= 1 ? 0.5 : zone / (zoneCount - 1);
+            const zoneSeed = seed + zone * 13.37;
+            const driftPhase = (t * (0.055 + hash01(zoneSeed * 1.1) * 0.02)) + zoneSeed * 0.73;
+            const zoneBaseX = coverageStart + (zoneU * coverage);
+            const zoneDrift = (
+              Math.sin(driftPhase) * (1.8 + densityFactor * 2.4)
+              + Math.sin((driftPhase * 0.47) + 1.7) * 1.4
+            );
+            const originX = zoneBaseX + zoneDrift;
+            const zoneWeight = 0.6 + hash01(zoneSeed * 2.3) * 0.4;
+            const pulse = 0.84 + (((Math.sin((t * (0.42 + hash01(zoneSeed * 1.8) * 0.2)) + zoneSeed) * 0.5) + 0.5) * 0.28);
+            const layerCount = Math.max(8, Math.min(12, layerCountBase));
 
-            for (let p = 0; p < puffCount; p++) {
-              const pr = puffCount <= 1 ? 0 : p / (puffCount - 1);
-              const rise = pr * (50 + densityFactor * 10);
-              const sway = Math.sin(t * 0.72 + pr * 3.1 + i * 0.77 + seed * 0.19) * (2.5 + pr * 2.8);
-              const px = originX + sway;
-              const py = originY - rise;
-              const rx = 3.9 + (1 - pr) * 4.5 + hash01(seed + i * 11 + p * 3.7) * 1.4;
-              const ry = Math.max(2.2, rx * (0.58 + hash01(seed + i * 5.3 + p * 1.9) * 0.24));
-              const alpha = (0.036 + (1 - pr) * 0.046) * (0.95 + densityFactor * 0.3);
-              const rot = (hash01(seed + i * 23.1 + p * 2.2) - 0.5) * 0.7;
+            for (let layer = 0; layer < layerCount; layer += 1) {
+              const layerSeed = zoneSeed + layer * 7.91;
+              const layerRatio = layerCount <= 1 ? 0 : layer / (layerCount - 1);
+              const riseLoop = 1 + hash01(layerSeed * 1.3) * 0.55;
+              const risePhase = (((t * (0.05 + activityFactor * 0.018 + hash01(layerSeed * 0.9) * 0.015)) + layerSeed * 0.11) / riseLoop) % 1;
+              const yRatio = Math.max(layerRatio * 0.35, risePhase);
+              const heightFade = 1 - Math.min(1, yRatio * yRatio * 1.42);
+              if (heightFade <= 0.01) continue;
+
+              const baseSwayPhase = (t * (0.34 + hash01(layerSeed * 2.1) * 0.2)) + layerSeed * 0.41;
+              const lateralFlow = (
+                Math.sin(baseSwayPhase) * (0.9 + yRatio * 2.1)
+                + Math.sin(baseSwayPhase * 0.53 + 1.2) * (0.6 + yRatio * 1.6)
+                + Math.sin(baseSwayPhase * 0.27 + 2.4) * (0.4 + yRatio * 1.1)
+              ) * (0.88 + activityFactor * 0.24);
+              const localOffset = (hash01(layerSeed * 4.4) - 0.5) * (5.5 + densityFactor * 4.2);
+              const px = originX + localOffset + lateralFlow;
+              const py = (rect.y + 1.5) - (yRatio * hazeHeight);
+              const rx = 6 + ((1 - yRatio) * (6.5 + densityFactor * 5.5)) + hash01(layerSeed * 5.9) * 2.4;
+              const ry = rx * (1.16 + hash01(layerSeed * 6.7) * 0.4);
+              const alpha = (
+                (0.015 + (1 - yRatio) * 0.03 + densityFactor * 0.011)
+                * zoneWeight
+                * pulse
+                * heightFade
+              );
+              if (alpha <= 0.003) continue;
 
               ctx.save();
               ctx.translate(px, py);
-              ctx.rotate(rot);
               ctx.scale(1, ry / rx);
               const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
-              gradient.addColorStop(0, `rgba(178,248,132,${alpha.toFixed(3)})`);
-              gradient.addColorStop(1, "rgba(178,248,132,0)");
+              const baseG = 136 + Math.round((1 - yRatio) * 14);
+              const baseB = 92 + Math.round((1 - yRatio) * 11);
+              const edgeG = 152 + Math.round(yRatio * 16);
+              const edgeB = 104 + Math.round(yRatio * 12);
+              gradient.addColorStop(0, `rgba(118,${baseG},${baseB},${Math.min(0.06, alpha).toFixed(3)})`);
+              gradient.addColorStop(0.62, `rgba(132,${edgeG},${edgeB},${Math.min(0.04, alpha * 0.66).toFixed(3)})`);
+              gradient.addColorStop(1, "rgba(132,154,110,0)");
               ctx.beginPath();
               ctx.arc(0, 0, rx, 0, Math.PI * 2);
               ctx.fillStyle = gradient;
