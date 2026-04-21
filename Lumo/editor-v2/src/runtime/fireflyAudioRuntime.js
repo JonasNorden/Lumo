@@ -77,6 +77,7 @@ function createLegacyEntitiesFireflyAudioBridge(runtimeWindow = globalThis) {
       return entitiesProto._getSoundHandle.call(this, path, loop, key);
     },
     setVolume(handle, volume) {
+      this.ensureContextRunning(handle);
       entitiesProto._setHandleVolume.call(this, handle, volume);
     },
     setPan(handle, pan) {
@@ -84,6 +85,23 @@ function createLegacyEntitiesFireflyAudioBridge(runtimeWindow = globalThis) {
     },
     ensureSpatial(handle) {
       entitiesProto._ensureSpatialHandle.call(this, handle);
+      // Track the shared legacy spatial context on each handle so runtime status can verify true audibility.
+      if (handle && handle.gainNode && this?._sfxSpatialCtx) {
+        handle._spatialCtx = this._sfxSpatialCtx;
+      }
+    },
+    ensureContextRunning(handle) {
+      // Firefly loops can start after world boot without fresh gestures; keep spatial context resumed when possible.
+      const ctx = handle?._spatialCtx || this?._sfxSpatialCtx;
+      if (!ctx || typeof ctx.resume !== "function" || ctx.state !== "suspended") return;
+      ctx.resume().catch(() => {});
+    },
+    isHandleActuallyAudible(handle) {
+      const audio = handle?.audio;
+      if (!audio || typeof audio !== "object" || audio.paused) return false;
+      const ctx = handle?._spatialCtx || this?._sfxSpatialCtx;
+      if (handle?.gainNode && ctx && ctx.state === "suspended") return false;
+      return true;
     },
   };
 }
@@ -179,6 +197,10 @@ function createStandaloneFireflyAudioBridge(options = {}) {
     },
     setVolume(handle, volume) {
       if (!handle?.audio) return;
+      // Resume standalone spatial context before trusting element play-state as audible.
+      if (handle.gainNode && spatialCtx && typeof spatialCtx.resume === "function" && spatialCtx.state === "suspended") {
+        spatialCtx.resume().catch(() => {});
+      }
       const target = clamp01(volume) * getSafeSfxVolume();
       handle.lastTarget = target;
       if (handle.gainNode) {
@@ -212,6 +234,12 @@ function createStandaloneFireflyAudioBridge(options = {}) {
       if (handle.panNode) {
         handle.panNode.pan.value = nextPan;
       }
+    },
+    isHandleActuallyAudible(handle) {
+      const audio = handle?.audio;
+      if (!audio || typeof audio !== "object" || audio.paused) return false;
+      if (handle?.gainNode && spatialCtx && spatialCtx.state === "suspended") return false;
+      return true;
     },
   };
 }
