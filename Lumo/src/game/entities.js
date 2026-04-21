@@ -565,6 +565,7 @@
         if (id === "water_volume" || id === "lava_volume" || id === "bubbling_liquid_volume"){
           const P = (params.params && typeof params.params === "object") ? params.params : params;
           const area = (P.area && typeof P.area === "object") ? P.area : {};
+          const hazard = (P.hazard && typeof P.hazard === "object") ? P.hazard : {};
           const ts = (levelObj && levelObj.meta && levelObj.meta.tileSize) ? levelObj.meta.tileSize : (Lumo.TILE || 24);
 
           const hasRect = (typeof e.w === "number" && e.w > ts * 2) || (typeof e.h === "number" && e.h > ts * 2);
@@ -604,6 +605,9 @@
           let bubblingSurfaceActivity = 0.45;
           let bubblingBubbleAmount = 58;
           let bubblingFumeAmount = 40;
+          // Respect authored liquid hazard toggles (default true) so JSON-exported
+          // params can opt out per-volume without affecting existing levels.
+          const instantDeath = hazard.instantDeath !== false;
           if (id === "lava_volume"){
             const flow = (P.flow && typeof P.flow === "object") ? P.flow : {};
             const look = (P.look && typeof P.look === "object") ? P.look : {};
@@ -694,6 +698,7 @@
             bubblingSurfaceActivity,
             bubblingBubbleAmount,
             bubblingFumeAmount,
+            instantDeath,
             bubblingSeed: ((left * 0.019) + (top * 0.031) + (right * 0.013)) % 1000,
           });
           if (!this._pfhLiquidDiag.spawnedByType.has(id)){
@@ -2607,6 +2612,9 @@ if (e.type === "lantern"){
       const feetY = py1;
 
       for (const v of this._liquidVolumes){
+        // Honor per-volume hazard param: non-lethal liquids still render and overlap,
+        // but should not trigger the sink/death pipeline.
+        if (v.instantDeath === false) continue;
         if (px1 <= v.x0 || px0 >= v.x1) continue;
         if (py1 <= v.yTop || py0 >= v.yBottom) continue;
 
