@@ -1276,8 +1276,28 @@
           ctx.clip();
           fillLiquidBodyFromSurface(surfacePoints, rect, bodyGradient);
 
-          // Keep top surface geometry untouched; amplify interior swirl so motion is clearly readable in the body.
+          // Keep top surface geometry untouched; interior motion uses slow multi-core vortex fields only below the surface.
           const lavaSwirlPhase = nowSeconds * (0.12 + flowSpeed * 0.09);
+          const vortexCores = [
+            {
+              x: rect.x + (rect.w * (0.22 + (Math.sin(lavaSwirlPhase * 0.37) * 0.04))),
+              y: rect.y + (rect.h * (0.36 + (Math.cos(lavaSwirlPhase * 0.21) * 0.06))),
+              spin: 1,
+              radius: rect.w * 0.23,
+            },
+            {
+              x: rect.x + (rect.w * (0.56 + (Math.sin((lavaSwirlPhase * 0.29) + 1.9) * 0.05))),
+              y: rect.y + (rect.h * (0.58 + (Math.cos((lavaSwirlPhase * 0.24) + 0.8) * 0.05))),
+              spin: -1,
+              radius: rect.w * 0.27,
+            },
+            {
+              x: rect.x + (rect.w * (0.82 + (Math.sin((lavaSwirlPhase * 0.33) + 3.1) * 0.04))),
+              y: rect.y + (rect.h * (0.44 + (Math.cos((lavaSwirlPhase * 0.27) + 2.2) * 0.06))),
+              spin: 1,
+              radius: rect.w * 0.2,
+            },
+          ];
           // V1-like: exactly 3 internal glow bands.
           for (let band = 0; band < 3; band += 1) {
             const yRatio = (band + 1) / 4;
@@ -1286,13 +1306,27 @@
             for (let x = rect.x; x <= rect.x + rect.w; x += 3) {
               const nx = (x - rect.x) / Math.max(1, rect.w);
               const wobble = Math.sin((nx * (7.2 + band * 0.8)) + lavaPhaseA * (1.1 + band * 0.2) + band * 1.7);
-              // Two counter-rotating phase fields create a visible soft-serve roll (instead of a near-flat shimmer).
+              // Multi-core curl field gives each band true turning motion (twist + slow relaxation), not just vertical shimmer.
+              let curlX = 0;
+              let curlY = 0;
+              for (let coreIdx = 0; coreIdx < vortexCores.length; coreIdx += 1) {
+                const core = vortexCores[coreIdx];
+                const dx = x - core.x;
+                const dy = yBase - core.y;
+                const dist = Math.hypot(dx, dy);
+                const falloff = Math.max(0, 1 - (dist / Math.max(1, core.radius)));
+                if (falloff <= 0) continue;
+                const twist = Math.pow(falloff, 1.6) * core.spin;
+                curlX += (-dy / Math.max(12, core.radius)) * twist * (5.8 + (1 - yRatio) * 4.1);
+                curlY += (dx / Math.max(12, core.radius)) * twist * (3.4 + (1 - yRatio) * 2.7);
+              }
               const swirlA = Math.sin((nx * (6.1 + band * 0.55)) - lavaSwirlPhase + (yRatio * 10.2));
               const swirlB = Math.sin((nx * (11.3 + band * 0.9)) + (lavaSwirlPhase * 1.38) - (yRatio * 13.4));
-              const swirl = (swirlA * (1.3 + (1 - yRatio) * 2.3)) + (swirlB * (0.75 + (1 - yRatio) * 1.55));
-              const y = yBase + (wobble * (0.95 + (1 - yRatio) * 1.95)) + swirl;
-              if (x === rect.x) ctx.moveTo(x, y);
-              else ctx.lineTo(x, y);
+              const swirl = (swirlA * (0.95 + (1 - yRatio) * 1.75)) + (swirlB * (0.62 + (1 - yRatio) * 1.2));
+              const xCurl = x + curlX;
+              const y = yBase + (wobble * (0.95 + (1 - yRatio) * 1.95)) + swirl + curlY;
+              if (x === rect.x) ctx.moveTo(xCurl, y);
+              else ctx.lineTo(xCurl, y);
             }
             const alpha = 0.09 + ((1 - yRatio) * 0.12 * (0.7 + hotness * 0.55));
             ctx.strokeStyle = `rgba(255,${Math.round(152 + hotness * 58)},${Math.round(32 + hotness * 18)},${alpha.toFixed(3)})`;
@@ -1312,9 +1346,15 @@
             const pxRatio = (Math.sin(seed * 93.17) * 0.5) + 0.5;
             const x = rect.x + (pxRatio * rect.w) + (Math.sin((lavaPhaseA * 0.18) + (seed * 7.1)) * (2.2 + crust01 * 3.8));
             const surfaceYAtX = sampleSurfaceY(surfacePoints, x, rect.y);
-            const y = surfaceYAtX
-              + (rect.h * (0.06 + (Math.abs(Math.sin(seed * 57.3)) * 0.24)))
-              + (Math.cos((lavaPhaseA * 0.24) + (seed * 4.3)) * 0.8);
+            // Distribute crust deeper through the lava body (not just top half) while keeping fragments embedded below surface.
+            const depthHash = hash01((seed * 2.31) + 17.9);
+            const depthRatio = 0.08 + (Math.pow(depthHash, 0.82) * (0.56 + crust01 * 0.26));
+            const y = Math.min(
+              rect.y + rect.h - 1.2,
+              surfaceYAtX
+                + (rect.h * depthRatio)
+                + (Math.cos((lavaPhaseA * 0.24) + (seed * 4.3)) * (0.45 + (1 - depthRatio) * 0.55)),
+            );
             const fragW = 1.8 + (Math.abs(Math.sin(seed * 41.5)) * 4.8) + (crust01 * 1.1);
             const fragH = 0.9 + (Math.abs(Math.cos(seed * 29.1)) * 2.2) + (crust01 * 0.6);
             const alpha = (0.14 + (crust01 * 0.24) + (Math.sin((lavaPhaseA * 0.29) + (seed * 6.2)) * 0.03)) * (0.45 + (blendInOut * 0.75));
@@ -1494,84 +1534,66 @@
           ctx.stroke();
           ctx.restore();
 
-          // Smoke-like fumes: distributed lane clusters so activity spans the swamp instead of collapsing into one hotspot.
-          const fumePlumes = Math.max(0, Math.round((rect.w * 0.011) + (Math.pow(fumeDensity, 1.03) * 44)));
+          // Build fumes as overlapping slow puff masses (not explicit strands) so the result reads as swamp smoke volume.
+          const fumePlumes = Math.max(0, Math.round((rect.w * 0.009) + (Math.pow(fumeDensity, 1.02) * 34)));
           const fumeBaseY = rect.y;
-          const fumeLaneCount = Math.max(4, Math.min(11, Math.round((rect.w / 120) + 3 + (fumeDensity * 4.8))));
+          const fumeLaneCount = Math.max(4, Math.min(9, Math.round((rect.w / 150) + 3 + (fumeDensity * 3.1))));
           for (let i = 0; i < fumePlumes; i += 1) {
             const seed = (Number(volume.bubblingSeed) || 0) + 91.2 + (i * 7.4);
             const laneIndex = i % fumeLaneCount;
             const laneSeed = (Number(volume.bubblingSeed) || 0) + 137.4 + (laneIndex * 23.1);
             const laneBaseU = (laneIndex + 0.5) / fumeLaneCount;
-            const laneDrift = Math.sin((laneSeed * 0.63) + (nowSeconds * (0.08 + (activity * 0.08)))) * (0.035 + (fumeDensity * 0.05));
+            const laneDrift = Math.sin((laneSeed * 0.63) + (nowSeconds * (0.07 + (activity * 0.06)))) * (0.018 + (fumeDensity * 0.026));
             const lanePulse = (Math.sin((laneSeed * 1.37) - (nowSeconds * (0.22 + (activity * 0.2)))) * 0.5) + 0.5;
-            const laneSpan = 0.07 + (fumeDensity * 0.09) + (lanePulse * 0.04);
+            const laneSpan = 0.052 + (fumeDensity * 0.045) + (lanePulse * 0.018);
             const u = Math.max(
               0,
               Math.min(
                 1,
                 laneBaseU
                   + laneDrift
-                  + (Math.sin((seed * 5.1) + (nowSeconds * (0.19 + activity * 0.11))) * (0.018 + fumeDensity * 0.03)),
+                  + (Math.sin((seed * 5.1) + (nowSeconds * (0.15 + activity * 0.08))) * (0.011 + fumeDensity * 0.016)),
               ),
             );
             const distToLane = Math.abs(u - (laneBaseU + laneDrift));
             const laneWeight = Math.max(0, 1 - (distToLane / Math.max(0.03, laneSpan)));
-            const zoneWeight = Math.pow(laneWeight, 1.4) * (0.35 + lanePulse * 1.25);
-            if (zoneWeight <= 0.1) continue;
+            const zoneWeight = Math.pow(laneWeight, 1.25) * (0.35 + lanePulse * 0.9);
+            if (zoneWeight <= 0.12) continue;
             const px = rect.x + (u * rect.w);
-            const puffHeight = (14 + (fumeDensity * 44) + (((Math.sin(seed * 3.3) * 0.5) + 0.5) * (16 + (fumeDensity * 24)))) * (0.75 + (zoneWeight * 0.65));
-            const swayA = Math.sin((seed * 1.7) + (nowSeconds * (0.26 + (activity * 0.18))));
-            const swayB = Math.sin((seed * 2.9) - (nowSeconds * (0.21 + (activity * 0.15))));
-            const swayC = Math.sin((seed * 4.3) + (nowSeconds * (0.33 + (activity * 0.24))));
-            // Strong serpentine swing: aggressive lateral bends with a partial turn-back near the top.
-            const swingAmp = (7.5 + (fumeDensity * 17.5)) * (0.7 + (zoneWeight * 0.95));
-            const driftMid = (swayA * swingAmp * 0.85) + (swayB * swingAmp * 0.55);
-            const driftUpper = (swayB * swingAmp * 1.25) - (swayA * swingAmp * 0.75) + (swayC * swingAmp * 0.48);
-            const driftTop = (-driftUpper * 0.88) + (swayC * swingAmp * 0.62);
-            const alpha = (0.02 + (((Math.sin(seed * 7.9) * 0.5) + 0.5) * (0.06 + (fumeDensity * 0.13)))) * (0.55 + (zoneWeight * 0.8));
-            const topY = fumeBaseY - puffHeight;
-            const plume = ctx.createLinearGradient(0, topY, 0, fumeBaseY + 4);
-            plume.addColorStop(0, "rgba(209,232,188,0)");
-            plume.addColorStop(1, `rgba(209,232,188,${Math.max(0.01, alpha).toFixed(3)})`);
-            const baseLineWidth = (0.9 + (((Math.sin(seed * 11.1) * 0.5) + 0.5) * 1.5)) * (0.85 + (zoneWeight * 0.55));
-            // Multi-pass curled strand + soft puffs to avoid thin vertical streak reads.
-            for (let layer = 0; layer < 3; layer += 1) {
-              const layerOffset = (layer - 1) * (0.7 + fumeDensity * 1.1);
-              const layerAlphaMul = layer === 1 ? 1 : 0.7;
-              ctx.strokeStyle = plume;
-              ctx.lineWidth = baseLineWidth * (layer === 1 ? 1.05 : 0.82);
+            const puffHeight = (13 + (fumeDensity * 33) + (((Math.sin(seed * 3.3) * 0.5) + 0.5) * (12 + (fumeDensity * 16)))) * (0.78 + (zoneWeight * 0.48));
+            const swayA = Math.sin((seed * 1.7) + (nowSeconds * (0.18 + (activity * 0.12))));
+            const swayB = Math.sin((seed * 2.9) - (nowSeconds * (0.15 + (activity * 0.09))));
+            const spreadAmp = (2.4 + (fumeDensity * 5.9)) * (0.8 + (zoneWeight * 0.45));
+            const alpha = (0.016 + (((Math.sin(seed * 7.9) * 0.5) + 0.5) * (0.04 + (fumeDensity * 0.08)))) * (0.55 + (zoneWeight * 0.62));
+            const puffCount = 4 + Math.round(zoneWeight * 2);
+            for (let puff = 0; puff < puffCount; puff += 1) {
+              const puffT = (puff + 1) / (puffCount + 1);
+              const waveX = (swayA * spreadAmp * (0.35 + puffT * 0.65)) + (swayB * spreadAmp * 0.45 * (1 - puffT * 0.5));
+              const jitterX = (hash01((seed * 4.9) + puff * 13.1) - 0.5) * (1.4 + fumeDensity * 2.2);
+              const puffX = px + waveX + jitterX;
+              const puffY = fumeBaseY - (puffHeight * (0.18 + puffT * 0.72));
+              const puffRadiusX = (1.9 + (fumeDensity * 3.2) + puffT * 3.1) * (0.85 + zoneWeight * 0.24);
+              const puffRadiusY = puffRadiusX * (0.72 + hash01(seed * 8.3 + puff * 1.7) * 0.34);
+              const puffAlpha = Math.max(0.005, alpha * (0.6 + (1 - puffT) * 0.5));
+              const puffGrad = ctx.createRadialGradient(
+                puffX,
+                puffY,
+                puffRadiusX * 0.15,
+                puffX,
+                puffY,
+                puffRadiusX,
+              );
+              puffGrad.addColorStop(0, `rgba(213,236,194,${(puffAlpha * 1.35).toFixed(3)})`);
+              puffGrad.addColorStop(1, "rgba(213,236,194,0)");
+              ctx.save();
+              ctx.translate(puffX, puffY);
+              ctx.rotate((hash01(seed * 9.7 + puff * 2.3) - 0.5) * 0.55);
+              ctx.scale(1, Math.max(0.55, puffRadiusY / Math.max(0.01, puffRadiusX)));
+              ctx.fillStyle = puffGrad;
               ctx.beginPath();
-              ctx.moveTo(px + layerOffset * 0.2, fumeBaseY + 2);
-              ctx.bezierCurveTo(
-                px + (driftMid * 0.45) + layerOffset,
-                fumeBaseY - (puffHeight * 0.22),
-                px + driftMid - (layerOffset * 0.35),
-                fumeBaseY - (puffHeight * 0.5),
-                px + (driftUpper * 0.7) + layerOffset,
-                fumeBaseY - (puffHeight * 0.78),
-              );
-              ctx.bezierCurveTo(
-                px + driftUpper + layerOffset,
-                fumeBaseY - (puffHeight * 0.86),
-                px + driftTop - (layerOffset * 0.25),
-                fumeBaseY - (puffHeight * 0.9),
-                px + (driftTop * 0.72),
-                topY,
-              );
-              ctx.stroke();
-
-              const puffCount = 2 + (layer === 1 ? 1 : 0);
-              for (let puff = 0; puff < puffCount; puff += 1) {
-                const puffT = (puff + 1) / (puffCount + 1);
-                const puffY = fumeBaseY - (puffHeight * (0.2 + puffT * 0.68));
-                const puffX = px + (driftMid * (0.35 + puffT * 0.5)) + layerOffset * 0.7;
-                const puffRadius = (1.2 + (fumeDensity * 2.1) + puffT * 1.7) * (0.9 + zoneWeight * 0.25);
-                ctx.fillStyle = `rgba(209,232,188,${Math.max(0.008, alpha * 0.28 * layerAlphaMul).toFixed(3)})`;
-                ctx.beginPath();
-                ctx.arc(puffX, puffY, puffRadius, 0, Math.PI * 2);
-                ctx.fill();
-              }
+              ctx.arc(0, 0, puffRadiusX, 0, Math.PI * 2);
+              ctx.fill();
+              ctx.restore();
             }
           }
         }
