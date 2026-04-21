@@ -1580,7 +1580,7 @@
               const rx = 6 + ((1 - yRatio) * (6.5 + densityFactor * 5.5)) + hash01(layerSeed * 5.9) * 2.4;
               const ry = rx * (1.16 + hash01(layerSeed * 6.7) * 0.4);
               const alpha = (
-                (0.018 + (1 - yRatio) * 0.035 + densityFactor * 0.013)
+                (0.020 + (1 - yRatio) * 0.038 + densityFactor * 0.014)
                 * zoneWeight
                 * pulse
                 * heightFade
@@ -1595,8 +1595,8 @@
               const baseB = 92 + Math.round((1 - yRatio) * 11);
               const edgeG = 152 + Math.round(yRatio * 16);
               const edgeB = 104 + Math.round(yRatio * 12);
-              gradient.addColorStop(0, `rgba(118,${baseG},${baseB},${Math.min(0.072, alpha).toFixed(3)})`);
-              gradient.addColorStop(0.62, `rgba(132,${edgeG},${edgeB},${Math.min(0.048, alpha * 0.68).toFixed(3)})`);
+              gradient.addColorStop(0, `rgba(118,${baseG},${baseB},${Math.min(0.078, alpha).toFixed(3)})`);
+              gradient.addColorStop(0.62, `rgba(132,${edgeG},${edgeB},${Math.min(0.052, alpha * 0.68).toFixed(3)})`);
               gradient.addColorStop(1, "rgba(132,154,110,0)");
               ctx.beginPath();
               ctx.arc(0, 0, rx, 0, Math.PI * 2);
