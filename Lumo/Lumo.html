@@ -1374,7 +1374,8 @@
           bodyGradient.addColorStop(1, bodyColor);
           ctx.save();
           ctx.beginPath();
-          ctx.rect(rect.x, rect.y, rect.w, rect.h);
+          // Match V1 clip headroom so near-surface bubbles can sit above the liquid line.
+          ctx.rect(rect.x, rect.y - 16, rect.w, rect.h + 20);
           ctx.clip();
           fillLiquidBodyFromSurface(surfacePoints, rect, bodyGradient);
 
@@ -1404,10 +1405,10 @@
             const u = (Math.sin(seed * 12.71) * 0.5) + 0.5;
             const bx = rect.x + (u * rect.w) + (Math.sin((nowSeconds * (0.34 + (activity * 0.22))) + (seed * 1.7)) * (0.8 + (bubbleDensity * 2.2)));
             const startDepthRatio = 0.3 + (((Math.sin(seed * 8.23) * 0.5) + 0.5) * 0.64);
-            const speed = 0.05 + (((Math.sin(seed * 4.37) * 0.5) + 0.5) * 0.05) + (activity * 0.055) + (bubbleDensity * 0.04);
+            const speed = (0.038 + (((Math.sin(seed * 4.37) * 0.5) + 0.5) * 0.036) + (activity * 0.04) + (bubbleDensity * 0.028)) * 0.78;
             const cycle = ((nowSeconds * speed) + ((Math.sin(seed * 2.81) * 0.5) + 0.5)) % 1;
-            const risePhase = 0.76;
-            const interactPhase = 0.15;
+            const risePhase = 0.82;
+            const interactPhase = 0.12;
             const popPhase = 1 - risePhase - interactPhase;
             const baseRadius = 0.8 + (((Math.sin(seed * 6.11) * 0.5) + 0.5) * (1.6 + (bubbleDensity * 1.9)));
             const surfaceYAtBubble = sampleSurfaceY(surfacePoints, bx, rect.y);
@@ -1441,6 +1442,14 @@
               });
             }
             if (radius <= 0.35 || bubbleAlpha <= 0.01) continue;
+            const surfacePhaseBubble = cycle > risePhase;
+            if (surfacePhaseBubble) {
+              // Surface bubbles should read as resting on the liquid: clip below the surface so the flat/open side is on the bottom.
+              ctx.save();
+              ctx.beginPath();
+              ctx.rect(rect.x - 2, rect.y - 18, rect.w + 4, Math.max(2, surfaceYAtBubble - (rect.y - 18)));
+              ctx.clip();
+            }
             ctx.beginPath();
             ctx.arc(bx, by, radius, 0, Math.PI * 2);
             ctx.fillStyle = `rgba(230,255,198,${Math.max(0, Math.min(1, bubbleAlpha)).toFixed(3)})`;
@@ -1448,6 +1457,7 @@
             ctx.strokeStyle = `rgba(232,255,205,${Math.max(0, Math.min(1, rimAlpha)).toFixed(3)})`;
             ctx.lineWidth = by <= surfaceYAtBubble + 1 ? 1 : 0.75;
             ctx.stroke();
+            if (surfacePhaseBubble) ctx.restore();
           }
           for (let i = 0; i < bubbleEvents.length; i += 1) {
             const pop = bubbleEvents[i];
@@ -1469,24 +1479,47 @@
           ctx.stroke();
           ctx.restore();
 
-          // V1 fume cadence/shape: sparse seeded plumes with gentle lateral drift and tall fade.
-          const fumePlumes = Math.max(0, Math.round((rect.w * 0.009) + (Math.pow(fumeDensity, 1.07) * 34)));
+          // Smoke-like fumes: slow local zones with taller sinuous plumes and gentle multi-direction sway.
+          const fumePlumes = Math.max(0, Math.round((rect.w * 0.008) + (Math.pow(fumeDensity, 1.04) * 30)));
           const fumeBaseY = rect.y;
+          const fumeZoneCount = Math.max(1, Math.round(1 + (fumeDensity * 2.2)));
           for (let i = 0; i < fumePlumes; i += 1) {
             const seed = (Number(volume.bubblingSeed) || 0) + 91.2 + (i * 7.4);
-            const px = rect.x + ((((Math.sin(seed * 5.1) * 0.5) + 0.5) * rect.w));
-            const puffHeight = 8 + (fumeDensity * 30) + (((Math.sin(seed * 3.3) * 0.5) + 0.5) * (13 + (fumeDensity * 18)));
-            const drift = ((Math.sin((seed * 2.4) + (nowSeconds * 0.32)) * 0.5) + 0.5 - 0.5) * (4 + (fumeDensity * 15));
-            const alpha = 0.03 + (((Math.sin(seed * 7.9) * 0.5) + 0.5) * (0.09 + (fumeDensity * 0.18)));
+            const u = ((Math.sin(seed * 5.1) * 0.5) + 0.5);
+            const px = rect.x + (u * rect.w);
+            let zoneWeight = 0;
+            for (let zone = 0; zone < fumeZoneCount; zone += 1) {
+              const zoneSeed = seed + (zone * 29.7);
+              const zoneCenterU = (Math.sin((zoneSeed * 0.71) + (nowSeconds * (0.07 + (activity * 0.05)))) * 0.5) + 0.5;
+              const zoneSpan = 0.13 + (fumeDensity * 0.14) + (((Math.sin(zoneSeed * 1.9) * 0.5) + 0.5) * 0.08);
+              const dist = Math.abs(u - zoneCenterU);
+              const zoneCurve = Math.max(0, 1 - (dist / Math.max(0.05, zoneSpan)));
+              zoneWeight = Math.max(zoneWeight, zoneCurve * zoneCurve);
+            }
+            if (zoneWeight <= 0.16) continue;
+            const puffHeight = (14 + (fumeDensity * 44) + (((Math.sin(seed * 3.3) * 0.5) + 0.5) * (16 + (fumeDensity * 24)))) * (0.75 + (zoneWeight * 0.65));
+            const swayA = Math.sin((seed * 1.7) + (nowSeconds * (0.2 + (activity * 0.1))));
+            const swayB = Math.sin((seed * 2.9) - (nowSeconds * (0.15 + (activity * 0.08))));
+            const driftMid = (swayA * (2.6 + (fumeDensity * 7.5)) + swayB * (1.8 + (fumeDensity * 4.8))) * (0.45 + (zoneWeight * 0.85));
+            const driftTop = (swayB * (4.8 + (fumeDensity * 12)) - swayA * (1.6 + (fumeDensity * 3.5))) * (0.35 + (zoneWeight * 0.9));
+            const alpha = (0.02 + (((Math.sin(seed * 7.9) * 0.5) + 0.5) * (0.06 + (fumeDensity * 0.13)))) * (0.55 + (zoneWeight * 0.8));
             const topY = fumeBaseY - puffHeight;
             const plume = ctx.createLinearGradient(0, topY, 0, fumeBaseY + 4);
             plume.addColorStop(0, "rgba(209,232,188,0)");
             plume.addColorStop(1, `rgba(209,232,188,${Math.max(0.01, alpha).toFixed(3)})`);
             ctx.strokeStyle = plume;
-            ctx.lineWidth = 1 + (((Math.sin(seed * 11.1) * 0.5) + 0.5) * 1.9);
+            ctx.lineWidth = (0.9 + (((Math.sin(seed * 11.1) * 0.5) + 0.5) * 1.5)) * (0.85 + (zoneWeight * 0.55));
             ctx.beginPath();
             ctx.moveTo(px, fumeBaseY + 2);
-            ctx.quadraticCurveTo(px + drift, fumeBaseY - (puffHeight * 0.45), px + (drift * 0.62), topY);
+            ctx.bezierCurveTo(
+              px + (driftMid * 0.62),
+              fumeBaseY - (puffHeight * 0.28),
+              px + driftMid,
+              fumeBaseY - (puffHeight * 0.58),
+              px + (driftTop * 0.68),
+              fumeBaseY - (puffHeight * 0.8),
+            );
+            ctx.quadraticCurveTo(px + driftTop, fumeBaseY - (puffHeight * 0.93), px + (driftTop * 0.78), topY);
             ctx.stroke();
           }
         }
