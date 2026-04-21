@@ -631,7 +631,11 @@
           const audio = handle?.audio;
           if (!audio || typeof audio !== "object") continue;
           realAudioCount += 1;
-          if (audio.paused === false) playingCount += 1;
+          // Count only truly audible handles (not just HTMLMediaElements reporting paused=false while context is suspended).
+          const isActuallyAudible = fireflyAudioState?.bridge && typeof fireflyAudioState.bridge.isHandleActuallyAudible === "function"
+            ? fireflyAudioState.bridge.isHandleActuallyAudible(handle)
+            : (audio.paused === false);
+          if (isActuallyAudible) playingCount += 1;
           if (samplePaused === null) {
             samplePaused = audio.paused === true;
           }
