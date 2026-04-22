@@ -567,18 +567,22 @@
           const area = (P.area && typeof P.area === "object") ? P.area : {};
           const hazard = (P.hazard && typeof P.hazard === "object") ? P.hazard : {};
           const ts = (levelObj && levelObj.meta && levelObj.meta.tileSize) ? levelObj.meta.tileSize : (Lumo.TILE || 24);
-
-          const hasRect = (typeof e.w === "number" && e.w > ts * 2) || (typeof e.h === "number" && e.h > ts * 2);
-          const rectX0 = hasRect ? (+e.x) : (tx * ts);
-          const rectW = hasRect ? (+e.w || 0) : (ts * 8);
-          const rectX1 = hasRect ? (rectX0 + rectW) : (rectX0 + rectW);
-          const rectY0 = hasRect ? (+e.y + (+e.h || ts)) : ((ty + 1) * ts);
-          const rectDepth = hasRect ? Math.max(ts, (+e.h || ts)) : (ts * 4);
-
-          const x0 = Number.isFinite(Number(area.x0)) ? Number(area.x0) : rectX0;
-          const x1 = Number.isFinite(Number(area.x1)) ? Number(area.x1) : rectX1;
-          const y0 = Number.isFinite(Number(area.y0)) ? Number(area.y0) : rectY0;
-          const depth = Math.max(ts * 0.5, Number.isFinite(Number(area.depth)) ? Number(area.depth) : rectDepth);
+          const hasAreaX0 = Number.isFinite(Number(area.x0));
+          const hasAreaX1 = Number.isFinite(Number(area.x1));
+          const hasAreaY0 = Number.isFinite(Number(area.y0));
+          const hasAreaDepth = Number.isFinite(Number(area.depth));
+          if (!hasAreaX0 || !hasAreaX1 || !hasAreaY0 || !hasAreaDepth){
+            console.warn("[PFH liquid] spawn skipped: missing/invalid area for liquid volume", {
+              id,
+              area,
+              sourceEntity: { x: e.x, y: e.y, w: e.w, h: e.h },
+            });
+            return;
+          }
+          const x0 = Number(area.x0);
+          const x1 = Number(area.x1);
+          const y0 = Number(area.y0);
+          const depth = Math.max(ts * 0.5, Number(area.depth));
 
           const left = Math.min(x0, x1);
           const right = Math.max(x0, x1);
@@ -681,6 +685,7 @@
 
           this._liquidVolumes.push({
             id,
+            area: { x0, x1, y0, depth },
             x0: left,
             x1: right,
             yTop: top,
@@ -2612,25 +2617,73 @@ if (e.type === "lantern"){
       const feetY = py1;
 
       for (const v of this._liquidVolumes){
+        const bounds = this._resolveLiquidBounds(v, "lethal-contact");
+        if (!bounds) continue;
         // Honor per-volume hazard param: non-lethal liquids still render and overlap,
         // but should not trigger the sink/death pipeline.
         if (v.instantDeath === false) continue;
-        if (px1 <= v.x0 || px0 >= v.x1) continue;
-        if (py1 <= v.yTop || py0 >= v.yBottom) continue;
+        if (px1 <= bounds.x0 || px0 >= bounds.x1) continue;
+        if (py1 <= bounds.yTop || py0 >= bounds.yBottom) continue;
 
-        const submergePx = Math.max(0, Math.min(v.yBottom, feetY) - v.yTop);
+        const submergePx = Math.max(0, Math.min(bounds.yBottom, feetY) - bounds.yTop);
         return {
           type: v.id,
-          x0: v.x0,
-          x1: v.x1,
-          yTop: v.yTop,
-          yBottom: v.yBottom,
-          depth: v.depth,
+          x0: bounds.x0,
+          x1: bounds.x1,
+          yTop: bounds.yTop,
+          yBottom: bounds.yBottom,
+          depth: bounds.depth,
           submergePx,
-          submerge01: Math.max(0, Math.min(1, submergePx / Math.max(1, v.depth))),
+          submerge01: Math.max(0, Math.min(1, submergePx / Math.max(1, bounds.depth))),
         };
       }
       return null;
+    }
+
+    _resolveLiquidBounds(v, context = "unknown"){
+      if (!v || !v.area || typeof v.area !== "object"){
+        if (!v || !v._warnedMissingArea){
+          console.warn("[PFH liquid] volume missing canonical area; skipping volume", {
+            context,
+            id: v?.id,
+            area: v?.area,
+          });
+          if (v) v._warnedMissingArea = true;
+        }
+        return null;
+      }
+      const areaX0 = Number(v.area.x0);
+      const areaX1 = Number(v.area.x1);
+      const areaY0 = Number(v.area.y0);
+      const areaDepth = Number(v.area.depth);
+      if (!Number.isFinite(areaX0) || !Number.isFinite(areaX1) || !Number.isFinite(areaY0) || !Number.isFinite(areaDepth)){
+        if (!v._warnedMissingArea){
+          console.warn("[PFH liquid] volume has invalid canonical area; skipping volume", {
+            context,
+            id: v.id,
+            area: v.area,
+          });
+          v._warnedMissingArea = true;
+        }
+        return null;
+      }
+      const x0 = Math.min(areaX0, areaX1);
+      const x1 = Math.max(areaX0, areaX1);
+      const depth = Math.max(0, areaDepth);
+      const yBottom = areaY0;
+      const yTop = yBottom - depth;
+      if (!(x1 > x0) || !(yBottom > yTop)){
+        if (!v._warnedMissingArea){
+          console.warn("[PFH liquid] volume area is non-positive; skipping volume", {
+            context,
+            id: v.id,
+            area: v.area,
+          });
+          v._warnedMissingArea = true;
+        }
+        return null;
+      }
+      return { x0, x1, yTop, yBottom, depth };
     }
 
     _hoverVoidPalette(){
@@ -3581,10 +3634,12 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
         this._pfhLiquidDiag.drawLogged = true;
       }
       for (const v of this._liquidVolumes){
-        const sx = Math.floor(v.x0 - cam.x);
-        const sy = Math.floor(v.yTop - cam.y);
-        const w = Math.max(1, Math.floor(v.x1 - v.x0));
-        const h = Math.max(1, Math.floor(v.yBottom - v.yTop));
+        const bounds = this._resolveLiquidBounds(v, "draw-pre-darkness");
+        if (!bounds) continue;
+        const sx = Math.floor(bounds.x0 - cam.x);
+        const sy = Math.floor(bounds.yTop - cam.y);
+        const w = Math.max(1, Math.floor(bounds.x1 - bounds.x0));
+        const h = Math.max(1, Math.floor(bounds.yBottom - bounds.yTop));
         if (v.id === "lava_volume"){
           const flowSpeed = Math.max(0.1, Number(v.lavaFlowSpeed) || 0.55);
           const temperature = Math.max(0.2, Math.min(1, Number(v.lavaTemperature) || 0.72));
@@ -3692,8 +3747,8 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           ctx.strokeStyle = v.surfaceColor;
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.moveTo(sx, Math.floor(v.yTop - cam.y) + 0.5);
-          ctx.lineTo(sx + w, Math.floor(v.yTop - cam.y) + 0.5);
+          ctx.moveTo(sx, Math.floor(bounds.yTop - cam.y) + 0.5);
+          ctx.lineTo(sx + w, Math.floor(bounds.yTop - cam.y) + 0.5);
           ctx.stroke();
           continue;
         }
@@ -3779,10 +3834,12 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
       ctx.save();
       ctx.globalCompositeOperation = "screen";
       for (const v of this._liquidVolumes){
-        const sx = Math.floor(v.x0 - cam.x);
-        const sy = Math.floor(v.yTop - cam.y);
-        const w = Math.max(1, Math.floor(v.x1 - v.x0));
-        const h = Math.max(1, Math.floor(v.yBottom - v.yTop));
+        const bounds = this._resolveLiquidBounds(v, "draw-after-darkness");
+        if (!bounds) continue;
+        const sx = Math.floor(bounds.x0 - cam.x);
+        const sy = Math.floor(bounds.yTop - cam.y);
+        const w = Math.max(1, Math.floor(bounds.x1 - bounds.x0));
+        const h = Math.max(1, Math.floor(bounds.yBottom - bounds.yTop));
 
         // Runtime visibility pass: keep liquids legible after darkness without
         // changing gameplay collision/death behavior.
