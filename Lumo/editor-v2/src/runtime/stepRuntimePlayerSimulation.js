@@ -508,8 +508,19 @@ function resolveOverlappingLiquidType(worldPacket, playerState, sourceEntities) 
   if (!Array.isArray(liquidVolumes) || liquidVolumes.length === 0) {
     return null;
   }
-  const playerX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0;
-  const playerY = Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0;
+  const playerPositionX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0;
+  const playerWorldX = Number.isFinite(playerState?.worldPosition?.x)
+    ? playerState.worldPosition.x
+    : Number.isFinite(playerState?.worldX)
+      ? playerState.worldX
+      : (Number.isFinite(playerState?.lockMinX) && playerPositionX < playerState.lockMinX
+        ? playerState.lockMinX + playerPositionX
+        : playerPositionX);
+  const playerWorldY = Number.isFinite(playerState?.worldPosition?.y)
+    ? playerState.worldPosition.y
+    : Number.isFinite(playerState?.worldY)
+      ? playerState.worldY
+      : (Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0);
   for (const volume of liquidVolumes) {
     if (volume?.active === false) {
       continue;
@@ -521,7 +532,12 @@ function resolveOverlappingLiquidType(worldPacket, playerState, sourceEntities) 
     if (!areaBounds) {
       continue;
     }
-    if (playerX >= areaBounds.x0 && playerX <= areaBounds.x1 && playerY >= areaBounds.y0 && playerY <= areaBounds.y1) {
+    if (
+      playerWorldX >= areaBounds.x0
+      && playerWorldX <= areaBounds.x1
+      && playerWorldY >= areaBounds.y0
+      && playerWorldY <= areaBounds.y1
+    ) {
       return volume.type;
     }
   }
