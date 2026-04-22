@@ -507,17 +507,44 @@ function resolveOverlappingLiquidType(worldPacket, playerState, sourceEntities) 
   if (!Array.isArray(sourceEntities) || sourceEntities.length === 0) {
     return null;
   }
-  const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0 ? worldPacket.world.tileSize : 24;
-  const playerBounds = buildPlayerCheckpointBounds(playerState);
+  const playerX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0;
+  const playerY = Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0;
   for (const entity of sourceEntities) {
     if (entity?.active !== true || !isLiquidVolumeEntityType(entity?.type)) {
       continue;
     }
-    if (isAabbOverlap(playerBounds, buildEntityBounds(entity, tileSize))) {
+    if (entity?.params?.hazard?.instantDeath === false) {
+      continue;
+    }
+    const areaBounds = resolveLiquidAreaBounds(entity);
+    if (!areaBounds) {
+      continue;
+    }
+    if (playerX >= areaBounds.x0 && playerX <= areaBounds.x1 && playerY >= areaBounds.y0 && playerY <= areaBounds.y1) {
       return entity.type;
     }
   }
   return null;
+}
+
+function resolveLiquidAreaBounds(entity) {
+  const area = entity?.params?.area && typeof entity.params.area === "object" ? entity.params.area : null;
+  const areaX0 = Number(area?.x0);
+  const areaX1 = Number(area?.x1);
+  const areaY0 = Number(area?.y0);
+  const areaDepth = Number(area?.depth);
+  if (!Number.isFinite(areaX0) || !Number.isFinite(areaX1) || !Number.isFinite(areaY0) || !Number.isFinite(areaDepth)) {
+    return null;
+  }
+  const x0 = Math.min(areaX0, areaX1);
+  const x1 = Math.max(areaX0, areaX1);
+  const y1 = areaY0 + areaDepth;
+  return {
+    x0,
+    x1,
+    y0: Math.min(areaY0, y1),
+    y1: Math.max(areaY0, y1),
+  };
 }
 
 function resolvePlayerFlareStash(playerState) {
