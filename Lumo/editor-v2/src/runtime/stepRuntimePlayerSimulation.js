@@ -504,24 +504,25 @@ function buildEntityBounds(entity, tileSize = 24) {
 }
 
 function resolveOverlappingLiquidType(worldPacket, playerState, sourceEntities) {
-  if (!Array.isArray(sourceEntities) || sourceEntities.length === 0) {
+  const liquidVolumes = resolveRuntimeLiquidVolumes(worldPacket, playerState, sourceEntities);
+  if (!Array.isArray(liquidVolumes) || liquidVolumes.length === 0) {
     return null;
   }
   const playerX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0;
   const playerY = Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0;
-  for (const entity of sourceEntities) {
-    if (entity?.active !== true || !isLiquidVolumeEntityType(entity?.type)) {
+  for (const volume of liquidVolumes) {
+    if (volume?.active === false) {
       continue;
     }
-    if (entity?.params?.hazard?.instantDeath === false) {
+    if (volume?.params?.hazard?.instantDeath === false) {
       continue;
     }
-    const areaBounds = resolveLiquidAreaBounds(entity);
+    const areaBounds = resolveLiquidAreaBounds(volume);
     if (!areaBounds) {
       continue;
     }
     if (playerX >= areaBounds.x0 && playerX <= areaBounds.x1 && playerY >= areaBounds.y0 && playerY <= areaBounds.y1) {
-      return entity.type;
+      return volume.type;
     }
   }
   return null;
@@ -534,7 +535,21 @@ function resolveLiquidAreaBounds(entity) {
   const areaY0 = Number(area?.y0);
   const areaDepth = Number(area?.depth);
   if (!Number.isFinite(areaX0) || !Number.isFinite(areaX1) || !Number.isFinite(areaY0) || !Number.isFinite(areaDepth)) {
-    return null;
+    const rectX = Number(entity?.x);
+    const rectY = Number(entity?.y);
+    const rectW = Number(entity?.params?.footprintW ?? entity?.w ?? entity?.size);
+    const rectH = Number(entity?.params?.footprintH ?? entity?.h ?? entity?.size);
+    if (!Number.isFinite(rectX) || !Number.isFinite(rectY) || !Number.isFinite(rectW) || !Number.isFinite(rectH)) {
+      return null;
+    }
+    const x0 = Math.min(rectX, rectX + rectW);
+    const x1 = Math.max(rectX, rectX + rectW);
+    const y0 = Math.min(rectY, rectY + rectH);
+    const y1 = Math.max(rectY, rectY + rectH);
+    if (!(x1 > x0 && y1 > y0)) {
+      return null;
+    }
+    return { x0, x1, y0, y1 };
   }
   const x0 = Math.min(areaX0, areaX1);
   const x1 = Math.max(areaX0, areaX1);
@@ -851,6 +866,27 @@ function normalizeRuntimeEntities(sourceEntities, worldPacket, playerState) {
   }
 
   return [];
+}
+
+let lastSimulationLiquidVolumeCount = null;
+
+function logSimulationLiquidVolumeUsage(count) {
+  if (lastSimulationLiquidVolumeCount === count) {
+    return;
+  }
+  lastSimulationLiquidVolumeCount = count;
+  console.log("[Recharged] Simulation using liquid volumes:", count);
+}
+
+function resolveRuntimeLiquidVolumes(worldPacket, playerState, sourceEntities) {
+  const runtimeEntities = Array.isArray(sourceEntities) && sourceEntities.length > 0
+    ? sourceEntities
+    : Array.isArray(playerState?.entities) && playerState.entities.length > 0
+      ? playerState.entities
+      : Array.isArray(worldPacket?.layers?.entities) ? worldPacket.layers.entities : [];
+  const liquidVolumes = runtimeEntities.filter((entity) => isLiquidVolumeEntityType(entity?.type));
+  logSimulationLiquidVolumeUsage(liquidVolumes.length);
+  return liquidVolumes;
 }
 
 function isDebugEntityFallbackEnabled(options = {}) {
