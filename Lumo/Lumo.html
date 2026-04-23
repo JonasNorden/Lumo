@@ -1185,6 +1185,7 @@
         sampleCount,
         field: new Float32Array(sampleCount),
         vel: new Float32Array(sampleCount),
+        lastDir: 0,
       };
     }
 
@@ -1306,31 +1307,35 @@
         const pxPerCell = widthWorld / Math.max(1, (N - 1));
         const radCells = Math.max(3, Math.floor(fog.radius / Math.max(0.001, pxPerCell)));
         const dir = Math.sign(playerVelocityX) || 1;
-        const amp = Math.min(2.2, speed / 210);
-        const aheadOffset = Math.max(2, Math.floor(radCells * 0.35));
+        const reversed = runtime.lastDir !== 0 && runtime.lastDir !== dir;
+        runtime.lastDir = dir;
+        // Favor quicker onset/reversal feel without adding jitter at low speeds.
+        const amp = Math.min(2.2, speed / 195) * (reversed ? 1.12 : 1);
+        const aheadOffset = Math.max(1, Math.floor(radCells * 0.26));
         const bulgeCenter = center + (dir * aheadOffset);
-        const behindOffset = Math.max(1, Math.floor(radCells * 0.15));
+        const behindOffset = Math.max(1, Math.floor(radCells * 0.24));
         const clearCenter = center - (dir * behindOffset);
         for (let k = -radCells; k <= radCells; k += 1) {
           const i = bulgeCenter + k;
           if (i < 0 || i >= N) continue;
           const normalized = (k / radCells) * dir;
-          const frontMask = smooth01(normalized + 0.05);
+          const frontMask = smooth01(normalized - 0.06);
           const q = 1 - (Math.abs(k) / radCells);
-          const w = q * q;
-          const ridge = fog.bulge * amp * w * (0.18 + (0.82 * frontMask));
-          field[i] += ridge * 0.32;
+          const w = q * q * (0.84 + (0.16 * q));
+          const ridge = fog.bulge * amp * w * (0.15 + (0.85 * frontMask));
+          field[i] += ridge * 0.24;
+          vel[i] += ridge * 0.0024;
         }
         for (let k = -radCells; k <= radCells; k += 1) {
           const i = clearCenter + k;
           if (i < 0 || i >= N) continue;
           const normalized = (k / radCells) * dir;
-          const backMask = smooth01((-normalized) + 0.10);
+          const backMask = smooth01((-normalized) - 0.04);
           const q = 1 - (Math.abs(k) / radCells);
-          const w = q * q;
-          const wake = (fog.push * fog.behind) * amp * w * (0.25 + (0.75 * backMask));
-          field[i] -= wake * 0.46;
-          vel[i] += dir * wake * 0.0022;
+          const w = q * q * q;
+          const wake = (fog.push * fog.behind) * amp * w * (0.18 + (0.82 * backMask));
+          field[i] -= wake * 0.33;
+          vel[i] += dir * wake * 0.0031;
         }
       }
     }
