@@ -2604,8 +2604,6 @@ if (e.type === "lantern"){
             const speed = Math.abs(vx);
             if (speed > f.gate){
               const centerX = (player.x + player.w*0.5);
-          // Only react when Lumo is actually inside the fog volume (prevents early reaction).
-          if (centerX < f.x0 || centerX > f.x1) continue;
               const u = (centerX - f.x0) / Math.max(1, (f.x1 - f.x0));
               const c = Math.max(0, Math.min(N-1, Math.floor(u * (N-1))));
 
