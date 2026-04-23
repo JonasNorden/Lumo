@@ -98,6 +98,39 @@
 
     }
 
+    _fogHash(n){
+      const x = (n << 13) ^ n;
+      return 1.0 - ((((x * ((x * x * 15731) + 789221)) + 1376312589) & 0x7fffffff) / 1073741824.0);
+    }
+
+    _fogNoise1(x){
+      const xi = Math.floor(x);
+      const xf = x - xi;
+      const a = this._fogHash(xi);
+      const b = this._fogHash(xi + 1);
+      const u = xf * xf * (3 - (2 * xf));
+      return (a * (1 - u)) + (b * u);
+    }
+
+    _fogSmooth01(x){
+      const clamped = Math.max(0, Math.min(1, x));
+      return clamped * clamped * (3 - (2 * clamped));
+    }
+
+    _fogOrganicMaskAtX(f, x, time){
+      const strength = Number(f.orgStrength) || 0;
+      if (strength <= 0.0001) return 1;
+      const scale = Number(f.orgScale) || 1;
+      const speed = Number(f.orgSpeed) || 1;
+      const u = (x * 0.004 * scale) + (time * (0.10 * speed));
+      const n1 = this._fogNoise1(u);
+      const n2 = this._fogNoise1((u * 1.7) + 12.3);
+      const n3 = this._fogNoise1((u * 0.65) - 7.1);
+      const mix = (((n1 * 0.55) + (n2 * 0.30) + (n3 * 0.15)) * 0.5) + 0.5;
+      const m = 0.75 + (mix * 0.55);
+      return 1 + ((m - 1) * strength);
+    }
+
     _getSfxVolume(){
       try{
         if (window.Lumo && typeof window.Lumo.getAudioSettings === "function"){
@@ -512,6 +545,8 @@
           const density   = (typeof look.density   === "number") ? look.density   : 0.14;
           const lift      = (typeof look.lift      === "number") ? look.lift      : 8;
           const thickness = (typeof look.thickness === "number") ? look.thickness : 44;
+          const noise     = (typeof look.noise     === "number") ? look.noise     : 0.14;
+          const drift     = (typeof look.drift     === "number") ? look.drift     : 0;
           let layers      = (typeof look.layers    === "number") ? (look.layers|0) : 28;
           if (layers < 8) layers = 8;
           if (layers > 36) layers = 36;
@@ -531,6 +566,7 @@
           // Interaction
           const radius = (typeof interaction.radius === "number") ? interaction.radius : 92;
           const push   = (typeof interaction.push   === "number") ? interaction.push   : 2.4;
+          const behind = (typeof interaction.behind === "number") ? interaction.behind : 1;
           const bulge  = (typeof interaction.bulge  === "number") ? interaction.bulge  : 2.2;
           const gate   = (typeof interaction.gate   === "number") ? interaction.gate   : 70;
 
@@ -540,21 +576,19 @@
           const orgSpeed    = (organic && typeof organic.speed    === "number") ? organic.speed    : 1.0;
 
 
-          // 1D field resolution (hard budget: never too large)
+          // Match Smooke/V1 sample density so draw and interaction shapes align.
           const widthPx = Math.max(32, x1 - x0);
-          let N = Math.floor(widthPx / 10); // ~10px per cell
-          if (N < 64) N = 64;
-          if (N > 220) N = 220;
+          const N = Math.max(260, Math.floor(widthPx / 1.4));
 
           const field = new Float32Array(N);
           const vel   = new Float32Array(N);
 
           this._fogVolumes.push({
             x0, x1, y0, falloff,
-            density, lift, thickness, layers,
+            density, lift, thickness, noise, drift, layers,
             color, exposure, blend,
             diffuse, relax, visc,
-            radius, push, bulge, gate,
+            radius, push, behind, bulge, gate,
             orgStrength, orgScale, orgSpeed,
             N, field, vel,
             t: 0,
@@ -2511,12 +2545,11 @@ if (e.type === "lantern"){
         }
       }
 
-      // --- FogVolume update (Smooke-style, hard budget) ---
-      // Runs only every 3rd update() call to protect frame time and input.
-      this._fogFrame++;
-      if ((this._fogFrame % 3) === 0 && this._fogVolumes.length){
+      // --- FogVolume update (strict Smooke/V1 parity) ---
+      if (this._fogVolumes.length){
         const playerCenterX = player ? (player.x + player.w * 0.5) : null;
         for (const f of this._fogVolumes){
+          f.t = (f.t || 0) + dt;
           if (playerCenterX != null){
             // Conservative first-pass relevance gate: keep sim active around player/camera space,
             // skip far-off fog volumes with generous horizontal padding to avoid visible pop-in.
@@ -2548,21 +2581,22 @@ if (e.type === "lantern"){
             else if (field[i] < -2.2) field[i] = -2.2;
           }
 
-
-          // Organic idle waves (premium) — visible even without player interaction.
-          if (f.orgStrength && f.orgStrength > 0){
-            f.t = (f.t || 0) + dt * (f.orgSpeed || 1);
-            const s = f.orgStrength;
-            const sc = Math.max(0.2, f.orgScale || 1);
-            for (let i=0;i<N;i++){
-              const u = i / (N-1);
-              const w =
-                Math.sin((u * 6.283) * (1.2/sc) + f.t * 0.9) * 0.55 +
-                Math.sin((u * 6.283) * (2.3/sc) - f.t * 1.3) * 0.30 +
-                Math.sin((u * 6.283) * (3.7/sc) + f.t * 1.8) * 0.15;
-              vel[i] += w * s * 0.22 * dt * 60;
+          if ((f.drift || 0) > 0.001){
+            const shift = f.drift * 0.85 * dt;
+            if (Math.abs(shift) > 0.00001){
+              const shifted = new Float32Array(N);
+              for (let i=0;i<N;i++){
+                const src = i - shift;
+                const i0 = Math.floor(src);
+                const fract = src - i0;
+                const a = field[Math.max(0, Math.min(N - 1, i0))];
+                const b = field[Math.max(0, Math.min(N - 1, i0 + 1))];
+                shifted[i] = (a * (1 - fract)) + (b * fract);
+              }
+              field.set(shifted);
             }
           }
+
 
           // Player interaction (gated by speed)
           if (player){
@@ -2575,7 +2609,8 @@ if (e.type === "lantern"){
               const u = (centerX - f.x0) / Math.max(1, (f.x1 - f.x0));
               const c = Math.max(0, Math.min(N-1, Math.floor(u * (N-1))));
 
-              const radCells = Math.max(3, Math.floor((f.radius / Math.max(1,(f.x1 - f.x0))) * N));
+              const pxPerCell = Math.max(1, (f.x1 - f.x0) / Math.max(1, N - 1));
+              const radCells = Math.max(3, Math.floor(f.radius / pxPerCell));
               const dir = (vx >= 0) ? 1 : -1;
               const amp = Math.min(2.2, speed / 210);
 
@@ -2586,16 +2621,23 @@ if (e.type === "lantern"){
               for (let k=-radCells;k<=radCells;k++){
                 const i = c + (dir * ahead) + k;
                 if (i<0||i>=N) continue;
+                const u = (k / radCells) * dir;
+                const frontMask = this._fogSmooth01(u + 0.05);
                 const q = 1 - Math.abs(k)/radCells;
-                field[i] += f.bulge * amp * q*q * 0.18;
+                const ridge = f.bulge * amp * q*q * (0.18 + (0.82 * frontMask));
+                field[i] += ridge * 0.32;
               }
 
-              // Push down behind
+              // Push down behind with authored wake strength and velocity feed-through.
               for (let k=-radCells;k<=radCells;k++){
                 const i = c - (dir * back) + k;
                 if (i<0||i>=N) continue;
+                const u = (k / radCells) * dir;
+                const backMask = this._fogSmooth01((-u) + 0.10);
                 const q = 1 - Math.abs(k)/radCells;
-                field[i] -= f.push * amp * q*q * 0.22;
+                const wake = f.push * f.behind * amp * q*q * (0.25 + (0.75 * backMask));
+                field[i] -= wake * 0.46;
+                vel[i] += dir * wake * 0.0022;
               }
             }
           }
@@ -4075,42 +4117,51 @@ const img = e._ffSprite || (this.sprites && this.sprites.fireflies && this.sprit
           octx.clearRect(0,0,width,height);
         }
 
-        const layers = Math.max(6, Math.min(32, f.layers|0));
+        const layers = Math.max(2, f.layers | 0);
         const baseY = height; // bottom edge for fill
-        const fallPx = Math.max(0, f.falloff || 0);
+        const fallPx = Math.max(10, f.falloff || 0);
+        const fogWidth = Math.max(1, f.x1 - f.x0);
 
-        // --- draw fog into offscreen ---
+        // --- draw fog into offscreen with the same layer profile as Smooke ---
         octx.save();
-        octx.globalCompositeOperation = "source-over";
+        octx.globalCompositeOperation = "screen";
 
         for (let li=0; li<layers; li++){
           const a = (layers <= 1) ? 0 : (li / (layers - 1));
-          // Much lighter by default so Lumo remains visible
-          const alpha = f.density * (0.14 + (1 - a) * 0.62);
-          if (alpha <= 0.001) continue;
-
-          const lift = f.lift + a * f.thickness;
+          const yBase = baseY - (a * f.thickness);
+          const sliceAlpha = (1 - a);
+          const alpha = (f.density * 0.18) * (0.22 + (sliceAlpha * 0.98));
+          if (alpha < 0.001) continue;
 
           octx.beginPath();
           for (let i=0;i<N;i++){
             const x = i * step;
-
-            // Height falloff near the ends (uses the same falloff length the editor sets).
-            // This makes the fog "drop in height" toward the ends, not just fade in opacity.
-            let edgeMask = 1;
-            if (fallPx > 0){
-              const d = Math.min(x, width - x);          // distance to nearest end (px)
-              edgeMask = Math.max(0, Math.min(1, d / fallPx));
-              // smoothstep
-              edgeMask = edgeMask * edgeMask * (3 - 2 * edgeMask);
+            let maskEdge = 0;
+            if (x >= 0 && x <= fogWidth){
+              const dOpen = fogWidth - x;
+              const raw = Math.max(0, Math.min(1, dOpen / fallPx));
+              maskEdge = this._fogSmooth01(raw);
             }
+            if (maskEdge <= 0.0005){
+              if (i === 0) octx.moveTo(x, baseY);
+              else octx.lineTo(x, baseY);
+              continue;
+            }
+            const topWeight = this._fogSmooth01(Math.max(0, Math.min(1, (0.55 - a) / 0.55)));
+            const org = this._fogOrganicMaskAtX(f, f.x0 + x, f.t) * (0.70 + (0.30 * topWeight));
+            const bulge = Math.max(0, field[i]);
+            const n = this._fogNoise1((i * 0.22) + (f.t * (0.95 + (a * 0.85))));
+            const m = (n * 0.5) + 0.5;
+            const wave = (Number(f.noise) || 0) * (m - 0.5) * (10 + ((1 - a) * 18));
+            const yyBaseRaw = yBase + wave - (bulge * (10 + ((1 - a) * 30)));
+            const yyOrg = baseY - ((baseY - yyBaseRaw) * org);
+            const yyBase = Math.min(yyOrg, baseY - 1);
+            const y = baseY - ((baseY - yyBase) * maskEdge);
 
-            const h = Math.max(0, field[i]) * (9 + (1 - a) * 18);
-            const y = (baseY - lift) - (h * edgeMask);
-if (i === 0) octx.moveTo(x, y);
+            if (i === 0) octx.moveTo(x, y);
             else octx.lineTo(x, y);
           }
-          octx.lineTo(width, baseY);
+          octx.lineTo(fogWidth, baseY);
           octx.lineTo(0, baseY);
           octx.closePath();
 
@@ -4118,23 +4169,38 @@ if (i === 0) octx.moveTo(x, y);
           octx.fill();
         }
 
-        // --- apply true end-falloff mask (fades ALL pixels, not just height) ---
-        if (fallPx > 0){
-          // Allow falloff length up to the full volume length.
-          // If fallPx > width/2 we smoothly taper from both ends all the way to the center (no plateau).
-          const t = Math.min(0.5, fallPx / Math.max(1, width));
-          const fpL = t * width;
-          const fpR = width - fpL;
-octx.globalCompositeOperation = "destination-in";
-
-          const g = octx.createLinearGradient(0,0,width,0);
-          g.addColorStop(0.0, "rgba(255,255,255,0)");
-          g.addColorStop(fpL / width, "rgba(255,255,255,1)");
-          g.addColorStop(fpR / width, "rgba(255,255,255,1)");
-          g.addColorStop(1.0, "rgba(255,255,255,0)");
-octx.fillStyle = g;
-          octx.fillRect(0,0,width,height);
+        // Smooke top contour stroke layer.
+        octx.globalAlpha *= 0.55;
+        octx.strokeStyle = `rgba(210,228,255,${Math.min(0.30, f.density * 0.35)})`;
+        octx.lineWidth = 18;
+        octx.lineJoin = "round";
+        octx.beginPath();
+        for (let i=0;i<N;i++){
+          const x = i * step;
+          let maskEdge = 0;
+          if (x >= 0 && x <= fogWidth){
+            const dOpen = fogWidth - x;
+            const raw = Math.max(0, Math.min(1, dOpen / fallPx));
+            maskEdge = this._fogSmooth01(raw);
+          }
+          if (maskEdge <= 0.0005){
+            if (i === 0) octx.moveTo(x, baseY);
+            else octx.lineTo(x, baseY);
+            continue;
+          }
+          const org = this._fogOrganicMaskAtX(f, f.x0 + x, f.t);
+          const bulge = Math.max(0, field[i]);
+          const n = this._fogNoise1((i * 0.22) + (f.t * 1.05));
+          const m = (n * 0.5) + 0.5;
+          const wave = (Number(f.noise) || 0) * (m - 0.5) * 10;
+          const yyBaseRaw = (baseY - f.lift) + wave - (bulge * 22);
+          const yyOrg = baseY - ((baseY - yyBaseRaw) * org);
+          const yyBase = Math.min(yyOrg, baseY - 1);
+          const y = baseY - ((baseY - yyBase) * maskEdge);
+          if (i === 0) octx.moveTo(x, y);
+          else octx.lineTo(x, y);
         }
+        octx.stroke();
 
         octx.restore();
 
