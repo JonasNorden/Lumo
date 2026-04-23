@@ -2462,9 +2462,29 @@
         const playerFootY = Number.isFinite(previousSnapshot.y) && Number.isFinite(currentSnapshot.y)
           ? lerp(previousSnapshot.y, currentSnapshot.y, alpha)
           : (Number.isFinite(player.y) ? player.y : null);
-        const playerVelocityX = Number.isFinite(previousSnapshot?.velocity?.x) && Number.isFinite(currentSnapshot?.velocity?.x)
+        const fogVisualState = ensureRechargedFogVisualState(state);
+        const nowMs = (typeof performance !== "undefined" && typeof performance.now === "function")
+          ? performance.now()
+          : Date.now();
+        const fogStepDt = fogVisualState && Number.isFinite(fogVisualState.lastStepAtMs)
+          ? Math.max(1 / 180, Math.min(0.05, (nowMs - fogVisualState.lastStepAtMs) / 1000))
+          : (1 / 60);
+        let playerVelocityX = Number.isFinite(previousSnapshot?.velocity?.x) && Number.isFinite(currentSnapshot?.velocity?.x)
           ? lerp(previousSnapshot.velocity.x, currentSnapshot.velocity.x, alpha)
-          : (Number.isFinite(currentSnapshot?.velocity?.x) ? currentSnapshot.velocity.x : (Number.isFinite(player?.vx) ? player.vx : 0));
+          : (Number.isFinite(currentSnapshot?.velocity?.x)
+              ? currentSnapshot.velocity.x
+              : (Number.isFinite(player?.vx) ? player.vx : null));
+
+        // Fallback: derive velocity from position delta if runtime did not provide it.
+        if (!Number.isFinite(playerVelocityX)) {
+          const prevX = Number.isFinite(previousSnapshot?.x) ? previousSnapshot.x : null;
+          const currX = Number.isFinite(currentSnapshot?.x) ? currentSnapshot.x : null;
+          if (prevX !== null && currX !== null && Number.isFinite(fogStepDt) && fogStepDt > 0) {
+            playerVelocityX = (currX - prevX) / fogStepDt;
+          } else {
+            playerVelocityX = 0;
+          }
+        }
         const tileSize = Number.isFinite(payload?.tileSize) && payload.tileSize > 0 ? payload.tileSize : 24;
         const worldWidthRaw = Number.isFinite(payload?.worldWidth)
           ? payload.worldWidth
@@ -2493,13 +2513,6 @@
           targetX: Number.isFinite(playerCenterX) ? playerCenterX : worldWidthPx * 0.5,
           targetY: Number.isFinite(playerFootY) ? playerFootY : worldHeightPx - 1,
         });
-        const fogVisualState = ensureRechargedFogVisualState(state);
-        const nowMs = (typeof performance !== "undefined" && typeof performance.now === "function")
-          ? performance.now()
-          : Date.now();
-        const fogStepDt = fogVisualState && Number.isFinite(fogVisualState.lastStepAtMs)
-          ? Math.max(1 / 180, Math.min(0.05, (nowMs - fogVisualState.lastStepAtMs) / 1000))
-          : (1 / 60);
         stepRechargedFogVolumes(fogVolumes, {
           dt: fogStepDt,
           playerCenterX,
