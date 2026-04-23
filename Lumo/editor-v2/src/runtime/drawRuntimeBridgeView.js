@@ -241,16 +241,6 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
     ctx.fill();
   }
 
-  const spawnX = toFiniteOrNull(viewModel?.spawn?.x);
-  const spawnY = toFiniteOrNull(viewModel?.spawn?.y);
-  if (spawnX !== null && spawnY !== null) {
-    ctx.strokeStyle = "#facc15";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(worldToScreen(cameraState, spawnX), spawnY - cameraState.cameraY, Math.max(6, tileSize * 0.32), 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
   const playerX = toFiniteOrNull(viewModel?.player?.x);
   const playerY = toFiniteOrNull(viewModel?.player?.y);
   if (playerX !== null && playerY !== null) {
@@ -291,7 +281,7 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
   );
   drawOverlayText(
     ctx,
-    `bounds 0..${worldWidthPx} x 0..${worldHeightPx} | spawn=yellow ring | player=${viewModel?.player?.grounded === true ? "green" : "blue"} | input ${overlay?.input?.moveX ?? 0}/${overlay?.input?.jump === true ? "J" : "-"}${overlay?.input?.run === true ? "/R" : ""}`,
+    `bounds 0..${worldWidthPx} x 0..${worldHeightPx} | player=${viewModel?.player?.grounded === true ? "green" : "blue"} | input ${overlay?.input?.moveX ?? 0}/${overlay?.input?.jump === true ? "J" : "-"}${overlay?.input?.run === true ? "/R" : ""}`,
     12,
     canvas.height - 10,
     "#93c5fd",
