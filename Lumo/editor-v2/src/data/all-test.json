@@ -49489,6 +49489,41 @@
         "radius": 4,
         "spatial": true
       }
+    },
+    {
+      "id": "sound-3",
+      "name": "Ambient Zone",
+      "type": "ambientZone",
+      "x": 151,
+      "y": 16,
+      "visible": true,
+      "params": {
+        "volume": 0.5,
+        "pitch": 1,
+        "loop": true,
+        "spatial": false,
+        "width": 50,
+        "height": 2
+      },
+      "source": "data/assets/audio/ambient/space/synthetic_space.ogg"
+    },
+    {
+      "id": "sound-4",
+      "name": "Music Zone",
+      "type": "musicZone",
+      "x": 363,
+      "y": 15,
+      "visible": true,
+      "params": {
+        "volume": 0.4,
+        "pitch": 1,
+        "loop": false,
+        "spatial": true,
+        "width": 100,
+        "height": 3,
+        "fadeDistance": 12,
+        "sustainWidth": 80
+      }
     }
   ],
   "extra": {},
