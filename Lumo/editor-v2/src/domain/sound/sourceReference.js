@@ -12,7 +12,9 @@ export function getAuthoredSoundSource(sound) {
   const candidates = [
     sound?.source,
     sound?.asset,
+    sound?.soundFile,
     sound?.params?.source,
+    sound?.params?.soundFile,
     sound?.params?.src,
     sound?.params?.url,
     sound?.params?.path,

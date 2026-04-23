@@ -524,6 +524,7 @@
       if (!payload || !state) return;
       const authoredAudioItems = readRechargedAuthoredAudioItems(payload);
       const authoredAudioState = ensureRechargedAuthoredAudioState(state);
+      // Authored audio reuses the same live bridge backend as runtime entities, but keeps its own persistent authored handle maps.
       if (!authoredAudioState.bridge) {
         authoredAudioState.bridge = createFireflyAudioBridge({
           runtimeGlobal: window,
@@ -542,6 +543,7 @@
           },
         });
       }
+      // Per-frame authored audio sync consumes payload audioItems and drives trigger/spot/zone handle activation directly in live runtime.
       syncRechargedAuthoredAudioFrame({
         audioItems: authoredAudioItems,
         playerSnapshot: state.currentPlayerSnapshot,
