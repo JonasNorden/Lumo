@@ -49523,7 +49523,8 @@
         "height": 3,
         "fadeDistance": 12,
         "sustainWidth": 80
-      }
+      },
+      "source": "data/assets/audio/music/space_loop_short.ogg"
     }
   ],
   "extra": {},
