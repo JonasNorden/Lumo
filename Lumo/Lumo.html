@@ -1140,6 +1140,7 @@
         const p = (params.params && typeof params.params === "object") ? params.params : params;
         const area = (p.area && typeof p.area === "object") ? p.area : {};
         const look = (p.look && typeof p.look === "object") ? p.look : {};
+        const interaction = (p.interaction && typeof p.interaction === "object") ? p.interaction : {};
         const render = (p.render && typeof p.render === "object") ? p.render : {};
         const x0 = Number.isFinite(area?.x0) ? area.x0 : null;
         const x1 = Number.isFinite(area?.x1) ? area.x1 : null;
@@ -1159,18 +1160,35 @@
           layers: Number.isFinite(look?.layers) ? Math.max(6, Math.min(36, look.layers | 0)) : 28,
           color: typeof look?.color === "string" && look.color.length > 0 ? look.color : "#E1EEFF",
           exposure: Number.isFinite(look?.exposure) ? Math.max(0, look.exposure) : 1,
+          radius: Number.isFinite(interaction?.radius) ? Math.max(10, interaction.radius) : 92,
+          // V1-backed authored wake scalar: interaction.behind influences trailing clear/feel.
+          behindWake: Number.isFinite(interaction?.behind) ? Math.max(0, interaction.behind) : 1,
           blend: typeof render?.blend === "string" ? render.blend : "screen",
+          // V1-backed authored layering truth from smooke export.
+          lumoBehindFog: render?.lumoBehindFog !== false,
         });
       }
       return fogVolumes;
     }
 
-    // First-pass fog overlay: keeps legacy drawOverDarkness layering so fog never falls into generic entity fallback.
-    function drawRechargedFogOverDarkness(ctx, mapper, fogVolumes) {
+    // Fog overlay pass with V1-backed layering control:
+    // - render.lumoBehindFog controls whether rear fog is before or after Lumo.
+    // - front fog veil always draws after Lumo (smooke-style two-pass feel).
+    function drawRechargedFogOverDarkness(ctx, mapper, fogVolumes, options = {}) {
       if (!Array.isArray(fogVolumes) || fogVolumes.length <= 0) {
         return;
       }
+      const pass = typeof options.pass === "string" ? options.pass : "rear-before-player";
+      const playerCenterX = Number.isFinite(options.playerCenterX) ? options.playerCenterX : null;
+      const playerFacingSign = Number.isFinite(options.playerFacingSign) && options.playerFacingSign < 0 ? -1 : 1;
+      const frontPass = pass === "front-after-player";
+      const rearAfterPlayer = pass === "rear-after-player";
       for (const fog of fogVolumes) {
+        const authoredLumoBehindFog = fog?.lumoBehindFog !== false;
+        if (frontPass !== true) {
+          if (rearAfterPlayer && !authoredLumoBehindFog) continue;
+          if (!rearAfterPlayer && authoredLumoBehindFog) continue;
+        }
         const widthWorld = Math.max(1, fog.x1 - fog.x0);
         const heightWorld = Math.max(16, Math.round(fog.lift + fog.thickness + 140));
         const fogRect = mapper.worldToCanvasRect(fog.x0, fog.y0 - heightWorld, widthWorld, heightWorld);
@@ -1205,9 +1223,11 @@
 
         const layers = Math.max(6, Math.min(36, fog.layers | 0));
         const t = performance.now() * 0.001;
+        const isPlayerInsideFog = playerCenterX !== null && playerCenterX >= fog.x0 && playerCenterX <= fog.x1;
         for (let li = 0; li < layers; li += 1) {
           const a = layers <= 1 ? 0 : (li / (layers - 1));
-          const alpha = Math.max(0, Math.min(1, fog.density * (0.14 + (1 - a) * 0.62) * fog.exposure));
+          const passAlpha = frontPass ? 0.33 : 0.82;
+          const alpha = Math.max(0, Math.min(1, fog.density * (0.14 + (1 - a) * 0.62) * fog.exposure * passAlpha));
           if (alpha <= 0.001) continue;
           const lift = fog.lift + a * fog.thickness;
           octx.beginPath();
@@ -1220,7 +1240,15 @@
               const k = Math.max(0, Math.min(1, d / falloffPx));
               edgeMask = k * k * (3 - 2 * k);
             }
-            const y = (height - lift) - (wave * edgeMask);
+            let wakeClear = 0;
+            if (isPlayerInsideFog && fog.behindWake > 0) {
+              const worldX = fog.x0 + ((ix / Math.max(1, width)) * widthWorld);
+              const signedDx = (worldX - playerCenterX) * playerFacingSign;
+              // V1-backed wake: strengthen trailing clear behind Lumo using interaction.behind.
+              const trailing = Math.max(0, Math.min(1, (-signedDx) / Math.max(1, fog.radius * 0.9)));
+              wakeClear = (trailing * trailing) * Math.max(0, Math.min(3, fog.behindWake));
+            }
+            const y = ((height - lift) - (wave * edgeMask)) + (wakeClear * (2 + (1 - a) * 10));
             if (ix === 0) octx.moveTo(ix, y);
             else octx.lineTo(ix, y);
           }
@@ -2747,13 +2775,29 @@
           );
         }
 
+        // V1 layering parity: rear fog may be before Lumo when render.lumoBehindFog is false.
+        drawRechargedFogOverDarkness(ctx, mapper, fogVolumes, {
+          pass: "rear-before-player",
+          playerCenterX,
+          playerFacingSign: Number.isFinite(player?.vx) && player.vx < 0 ? -1 : 1,
+        });
+
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
         if (player.hidden !== true) {
           drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, currentSnapshot);
         }
 
-        // Match legacy intent: fog is an explicit post-darkness-style overlay pass.
-        drawRechargedFogOverDarkness(ctx, mapper, fogVolumes);
+        // V1 layering parity: rear fog for render.lumoBehindFog=true + front veil always after Lumo.
+        drawRechargedFogOverDarkness(ctx, mapper, fogVolumes, {
+          pass: "rear-after-player",
+          playerCenterX,
+          playerFacingSign: Number.isFinite(player?.vx) && player.vx < 0 ? -1 : 1,
+        });
+        drawRechargedFogOverDarkness(ctx, mapper, fogVolumes, {
+          pass: "front-after-player",
+          playerCenterX,
+          playerFacingSign: Number.isFinite(player?.vx) && player.vx < 0 ? -1 : 1,
+        });
 
         // V1 parity: eyes are a dedicated post-darkness style pass (kept procedural and never sprite-based).
         for (const eyeDraw of hoverEyesAfterDarkness) {

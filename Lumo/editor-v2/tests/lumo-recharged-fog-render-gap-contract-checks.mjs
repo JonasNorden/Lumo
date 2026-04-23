@@ -21,9 +21,34 @@ function runFogRenderGapChecks() {
     "Expected fog_volume to be treated as known and skipped by generic entity fallback lane.",
   );
   assert.equal(
-    html.includes("drawRechargedFogOverDarkness(ctx, mapper, fogVolumes);"),
+    html.includes("lumoBehindFog: render?.lumoBehindFog !== false"),
     true,
-    "Expected fog overlay pass to be called in live Recharged render flow.",
+    "Expected live fog snapshots to consume authored render.lumoBehindFog truth.",
+  );
+  assert.equal(
+    html.includes("behindWake: Number.isFinite(interaction?.behind) ? Math.max(0, interaction.behind) : 1"),
+    true,
+    "Expected live fog snapshots to consume authored interaction.behind wake scalar.",
+  );
+  assert.equal(
+    html.includes("pass: \"rear-before-player\""),
+    true,
+    "Expected live Recharged flow to draw rear fog before Lumo for front-layer authored fog volumes.",
+  );
+  assert.equal(
+    html.includes("pass: \"rear-after-player\""),
+    true,
+    "Expected live Recharged flow to draw rear fog after Lumo for authored lumoBehindFog volumes.",
+  );
+  assert.equal(
+    html.includes("pass: \"front-after-player\""),
+    true,
+    "Expected live Recharged flow to keep a front fog veil after Lumo.",
+  );
+  assert.equal(
+    html.includes("const trailing = Math.max(0, Math.min(1, (-signedDx) / Math.max(1, fog.radius * 0.9)));"),
+    true,
+    "Expected live fog draw path to apply interaction.behind as a trailing wake clear factor.",
   );
 }
 
