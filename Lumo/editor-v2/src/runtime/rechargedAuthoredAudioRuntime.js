@@ -30,6 +30,13 @@ function readAudioItemSource(audioItem) {
   );
 }
 
+function normalizeRuntimeAudioType(audioType) {
+  const normalized = String(audioType || "").trim().toLowerCase();
+  if (normalized === "ambientzone") return "ambientZone";
+  if (normalized === "musiczone") return "musicZone";
+  return normalized;
+}
+
 function buildPlayerCenter(playerSnapshot = null) {
   const x = Number.isFinite(playerSnapshot?.x) ? playerSnapshot.x : null;
   const y = Number.isFinite(playerSnapshot?.y) ? playerSnapshot.y : null;
@@ -200,6 +207,56 @@ function playTriggerOneShot(handle, bridge, volume) {
   bridge.setVolume(handle, volume);
 }
 
+function readZoneDimensionsPx(audioItem, tileSize = 24) {
+  const params = audioItem?.params && typeof audioItem.params === "object" ? audioItem.params : {};
+  const safeTileSize = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24;
+  const widthTiles = Math.max(1, readNumber(params.width, 1));
+  const heightTiles = Math.max(1, readNumber(params.height, 1));
+  return {
+    widthPx: widthTiles * safeTileSize,
+    heightPx: heightTiles * safeTileSize,
+  };
+}
+
+function computeZoneFrame(audioItem, playerCenter, tileSize, fallbackVolume) {
+  const baseVolume = readBaseVolume(audioItem, fallbackVolume);
+  const loop = readLoop(audioItem, true);
+  const pitch = readPitch(audioItem, 1);
+  const spatial = readSpatial(audioItem, false);
+  if (!playerCenter) {
+    return { active: false, targetVolume: 0, pan: 0, pitch, spatial, loop };
+  }
+
+  const left = readNumber(audioItem?.x, 0);
+  const top = readNumber(audioItem?.y, 0);
+  const { widthPx, heightPx } = readZoneDimensionsPx(audioItem, tileSize);
+  const right = left + widthPx;
+  const bottom = top + heightPx;
+  const inX = playerCenter.x >= left && playerCenter.x <= right;
+  const inY = playerCenter.y >= top && playerCenter.y <= bottom;
+  const active = inX && inY;
+  if (!active) {
+    return { active: false, targetVolume: 0, pan: 0, pitch, spatial, loop };
+  }
+
+  const params = audioItem?.params && typeof audioItem.params === "object" ? audioItem.params : {};
+  const fadeTiles = Math.max(0, readNumber(params.fadeDistance, 0));
+  const fadePx = fadeTiles * (Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24);
+  let edgeGain = 1;
+  if (fadePx > 0) {
+    const distanceToEdge = Math.min(
+      playerCenter.x - left,
+      right - playerCenter.x,
+      playerCenter.y - top,
+      bottom - playerCenter.y,
+    );
+    edgeGain = clamp01(distanceToEdge / fadePx);
+  }
+  const centerX = left + widthPx * 0.5;
+  const pan = spatial && widthPx > 0 ? clampPan((playerCenter.x - centerX) / (widthPx * 0.5)) : 0;
+  return { active: true, targetVolume: baseVolume * edgeGain, pan, pitch, spatial, loop };
+}
+
 function syncRechargedAuthoredAudioFrame({
   audioItems = [],
   playerSnapshot = null,
@@ -213,9 +270,10 @@ function syncRechargedAuthoredAudioFrame({
   const previousPlayerCenter = buildPlayerCenter(previousPlayerSnapshot);
   const activeSpotKeys = new Set();
   const seenTriggerKeys = new Set();
+  const activeZoneKeys = new Set();
 
   for (const audioItem of audioItems) {
-    const audioType = String(audioItem?.audioType || "").trim().toLowerCase();
+    const audioType = normalizeRuntimeAudioType(audioItem?.audioType);
     const audioId = typeof audioItem?.audioId === "string" ? audioItem.audioId : "audio";
     const source = readAudioItemSource(audioItem);
     if (!source) continue;
@@ -254,6 +312,22 @@ function syncRechargedAuthoredAudioFrame({
         playTriggerOneShot(handle, bridge, frame.targetVolume);
       }
       runtimeState.triggerHandlesByKey.set(key, handle);
+      continue;
+    }
+
+    if (audioType === "ambientZone" || audioType === "musicZone") {
+      const key = `${audioType}::${audioId}`;
+      activeZoneKeys.add(key);
+      const frame = computeZoneFrame(audioItem, playerCenter, tileSize, audioType === "musicZone" ? 0.78 : 0.45);
+      const handle = bridge.getHandle(source, frame.loop, key);
+      if (!handle) continue;
+      applyHandlePitch(handle, frame.pitch);
+      if (frame.spatial) {
+        bridge.ensureSpatial(handle);
+        bridge.setPan(handle, frame.pan);
+      }
+      bridge.setVolume(handle, frame.targetVolume);
+      runtimeState.zoneHandlesByKey.set(key, handle);
     }
   }
 
@@ -268,6 +342,12 @@ function syncRechargedAuthoredAudioFrame({
     bridge.setPan(handle, 0);
     bridge.setVolume(handle, 0);
   }
+
+  for (const [key, handle] of runtimeState.zoneHandlesByKey.entries()) {
+    if (activeZoneKeys.has(key)) continue;
+    bridge.setPan(handle, 0);
+    bridge.setVolume(handle, 0);
+  }
 }
 
 function createRechargedAuthoredAudioState() {
@@ -275,11 +355,13 @@ function createRechargedAuthoredAudioState() {
     bridge: null,
     spotHandlesByKey: new Map(),
     triggerHandlesByKey: new Map(),
+    zoneHandlesByKey: new Map(),
   };
 }
 
 export {
   buildPlayerCenter,
+  computeZoneFrame,
   computeSpotFrame,
   computeTriggerFrame,
   createRechargedAuthoredAudioState,
