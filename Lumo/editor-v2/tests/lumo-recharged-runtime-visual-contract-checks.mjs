@@ -25,6 +25,7 @@ function runSupportGeometryPresentationChecks() {
   assert.equal(html.includes("function drawRechargedTileV1Visual("), true, "expected Recharged tile visuals to use a V1-style tile image draw helper");
   assert.equal(html.includes("const drewV1Visual = drawRechargedTileV1Visual"), true, "expected support tile loop to attempt V1 tile visual draw before fallback");
   assert.equal(html.includes("window?.Lumo?.Tileset"), true, "expected fallback colors to mirror V1 tile behavior palette when tile art is unavailable");
+  assert.equal(html.includes("normalizedEntityType === \"player-spawn\" || normalizedEntityType === \"start_01\" || normalizedEntityType === \"start\""), true, "expected Recharged entity render loop to keep spawn/start markers invisible so they cannot hit unknown fallback visuals");
 }
 
 runRealRechargedRenderPathChecks();
