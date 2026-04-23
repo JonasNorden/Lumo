@@ -2324,6 +2324,11 @@
           if (liquidEntityTypes.has(entity?.type)) {
             continue;
           }
+          const normalizedEntityType = typeof entity?.type === "string" ? entity.type.trim().toLowerCase() : "";
+          // Spawn/start markers define player placement only and should never render as world visuals.
+          if (normalizedEntityType === "player-spawn" || normalizedEntityType === "start_01" || normalizedEntityType === "start") {
+            continue;
+          }
           const entityDrawW = Number.isFinite(entity.w) && entity.w > 0 ? entity.w : entity.size;
           const entityDrawH = Number.isFinite(entity.h) && entity.h > 0 ? entity.h : entity.size;
           const entityRect = mapper.worldToCanvasRect(
