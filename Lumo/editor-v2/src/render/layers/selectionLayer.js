@@ -1,3 +1,5 @@
+import { isSpecialVolumeEntityType } from "../../domain/entities/specialVolumeTypes.js";
+
 function drawCellOverlay(ctx, viewport, tileSize, cell, style) {
   if (!cell) return;
 
@@ -37,18 +39,25 @@ function drawCanvasRectOverlay(ctx, rect, style) {
 
 export function renderSelectionOverlay(ctx, doc, viewport, interaction) {
   const tileSize = doc.dimensions.tileSize;
+  const volumeDragActive = Boolean(interaction?.volumePlacementDrag?.active);
+  const draggedVolumeType = interaction?.volumePlacementDrag?.type || null;
+  const suppressCellMarkersForVolumeDrag = volumeDragActive && isSpecialVolumeEntityType(draggedVolumeType);
 
-  drawCellOverlay(ctx, viewport, tileSize, interaction.hoverCell, {
-    fill: "rgba(120, 173, 255, 0.10)",
-    stroke: "rgba(120, 173, 255, 0.55)",
-    lineWidth: 1,
-  });
+  // Special-volume drag previews own the authored rectangle visualization.
+  // Suppress generic 1x1 hover/selection markers to avoid offset footprint ghosts.
+  if (!suppressCellMarkersForVolumeDrag) {
+    drawCellOverlay(ctx, viewport, tileSize, interaction.hoverCell, {
+      fill: "rgba(120, 173, 255, 0.10)",
+      stroke: "rgba(120, 173, 255, 0.55)",
+      lineWidth: 1,
+    });
 
-  drawCellOverlay(ctx, viewport, tileSize, interaction.selectedCell, {
-    fill: "rgba(255, 211, 107, 0.18)",
-    stroke: "rgba(255, 211, 107, 0.95)",
-    lineWidth: 2,
-  });
+    drawCellOverlay(ctx, viewport, tileSize, interaction.selectedCell, {
+      fill: "rgba(255, 211, 107, 0.18)",
+      stroke: "rgba(255, 211, 107, 0.95)",
+      lineWidth: 2,
+    });
+  }
 
   // CANONICAL ENTITY RUNTIME: legacy entity drag overlays are intentionally bypassed.
   if (false && interaction.entityDrag?.active) {

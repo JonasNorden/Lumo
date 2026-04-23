@@ -8,6 +8,7 @@ import {
   isBubblingLiquidVolumeEntityType,
   isFogVolumeEntityType,
   isLavaVolumeEntityType,
+  isSpecialVolumeEntityType,
   isWaterVolumeEntityType,
 } from "../../domain/entities/specialVolumeTypes.js";
 import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
@@ -481,6 +482,12 @@ export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, ac
   const presetId = typeof activePreset?.id === "string" && activePreset.id.trim()
     ? activePreset.id.trim()
     : null;
+  // Special-volume placement uses the dedicated drag preview overlay path.
+  // Skip generic entity hover previews while the drag is active to avoid
+  // duplicate ghost rectangles (volume preview + entity preview).
+  if (isSpecialVolumeEntityType(presetType) && interaction?.volumePlacementDrag?.active) {
+    return;
+  }
   const previewEntity = {
     type: presetType,
     params: presetId ? { presetId } : undefined,
