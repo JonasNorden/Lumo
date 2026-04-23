@@ -1265,7 +1265,11 @@
       if (!Array.isArray(fogVolumes) || fogVolumes.length <= 0) return;
       const dt = Math.max(0.0001, Math.min(0.05, Number.isFinite(options?.dt) ? options.dt : (1 / 60)));
       const playerCenterX = Number.isFinite(options?.playerCenterX) ? options.playerCenterX : null;
+      const playerFootY = Number.isFinite(options?.playerFootY) ? options.playerFootY : null;
       const playerVelocityX = Number.isFinite(options?.playerVelocityX) ? options.playerVelocityX : 0;
+      const playerHalfWidth = RECHARGED_PLAYER_HITBOX_WIDTH * 0.5;
+      const playerTopY = playerFootY === null ? null : (playerFootY + 1 - RECHARGED_PLAYER_HITBOX_HEIGHT);
+      const playerBottomY = playerFootY === null ? null : (playerFootY + 1);
       const speed = Math.abs(playerVelocityX);
       for (const fog of fogVolumes) {
         const runtime = fog?.runtime;
@@ -1300,7 +1304,25 @@
             field.set(tmp);
           }
         }
-        if (playerCenterX === null || speed <= fog.gate) continue;
+        // Strict per-volume gate: prevents distant/global fog bulges from generic movement.
+        // Also blocks airborne-above-fog influence unless Lumo vertically overlaps the fog body.
+        if (playerCenterX === null || playerTopY === null || playerBottomY === null || speed <= fog.gate) continue;
+        const horizontalContactSlack = 2;
+        const playerLeft = playerCenterX - playerHalfWidth;
+        const playerRight = playerCenterX + playerHalfWidth;
+        const fogLeft = Math.min(fog.x0, fog.x1);
+        const fogRight = Math.max(fog.x0, fog.x1);
+        const overlapsHorizontally = (playerRight >= (fogLeft - horizontalContactSlack))
+          && (playerLeft <= (fogRight + horizontalContactSlack));
+        if (!overlapsHorizontally) continue;
+
+        const verticalContactSlack = 2;
+        const fogTopY = fog.y0 - Math.max(1, fog.lift + fog.thickness);
+        const fogBottomY = fog.y0;
+        const overlapsVertically = (playerBottomY >= (fogTopY - verticalContactSlack))
+          && (playerTopY <= (fogBottomY + verticalContactSlack));
+        if (!overlapsVertically) continue;
+
         const widthWorld = Math.max(1, fog.x1 - fog.x0);
         const u = (playerCenterX - fog.x0) / widthWorld;
         const center = Math.max(0, Math.min(N - 1, Math.floor(u * (N - 1))));
@@ -2520,6 +2542,7 @@
         stepRechargedFogVolumes(fogVolumes, {
           dt: fogStepDt,
           playerCenterX,
+          playerFootY,
           playerVelocityX,
         });
         if (fogVisualState) {
