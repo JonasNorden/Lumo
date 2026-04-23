@@ -503,6 +503,15 @@ function buildEntityBounds(entity, tileSize = 24) {
   };
 }
 
+function resolvePlayerWorldFootProbeY(playerState) {
+  const playerWorldY = Number.isFinite(playerState?.worldPosition?.y)
+    ? playerState.worldPosition.y
+    : Number.isFinite(playerState?.worldY)
+      ? playerState.worldY
+      : (Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0);
+  return playerWorldY + 1;
+}
+
 function resolveOverlappingLiquidType(worldPacket, playerState, sourceEntities) {
   const liquidVolumes = resolveRuntimeLiquidVolumes(worldPacket, playerState, sourceEntities);
   if (!Array.isArray(liquidVolumes) || liquidVolumes.length === 0) {
@@ -516,11 +525,8 @@ function resolveOverlappingLiquidType(worldPacket, playerState, sourceEntities) 
       : (Number.isFinite(playerState?.lockMinX) && playerPositionX < playerState.lockMinX
         ? playerState.lockMinX + playerPositionX
         : playerPositionX);
-  const playerWorldY = Number.isFinite(playerState?.worldPosition?.y)
-    ? playerState.worldPosition.y
-    : Number.isFinite(playerState?.worldY)
-      ? playerState.worldY
-      : (Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0);
+  // Liquid contact matches the live gameplay foot probe convention (y + 1).
+  const playerWorldFootProbeY = resolvePlayerWorldFootProbeY(playerState);
   for (const volume of liquidVolumes) {
     if (volume?.active === false) {
       continue;
@@ -535,8 +541,8 @@ function resolveOverlappingLiquidType(worldPacket, playerState, sourceEntities) 
     if (
       playerWorldX >= areaBounds.x0
       && playerWorldX <= areaBounds.x1
-      && playerWorldY >= areaBounds.y0
-      && playerWorldY <= areaBounds.y1
+      && playerWorldFootProbeY >= areaBounds.y0
+      && playerWorldFootProbeY <= areaBounds.y1
     ) {
       return volume.type;
     }
