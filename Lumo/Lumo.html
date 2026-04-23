@@ -1128,9 +1128,71 @@
       return liquids;
     }
 
-    // Mirrors legacy fog-volume param normalization so live Recharged can use the same fog truth.
+    // Maintains per-fog runtime simulation state used by the live V1 fog chain.
+    function ensureRechargedFogVisualState(state) {
+      if (!state || typeof state !== "object") return null;
+      if (!state.rechargedFogVisualState || typeof state.rechargedFogVisualState !== "object") {
+        state.rechargedFogVisualState = {
+          byKey: new Map(),
+          lastStepAtMs: null,
+        };
+      }
+      return state.rechargedFogVisualState;
+    }
+
+    function smooth01(x) {
+      const clamped = Math.max(0, Math.min(1, Number.isFinite(x) ? x : 0));
+      return clamped * clamped * (3 - (2 * clamped));
+    }
+
+    function hash(n) {
+      let k = n | 0;
+      k = (k << 13) ^ k;
+      return 1.0 - ((((k * ((k * k * 15731) + 789221)) + 1376312589) & 0x7fffffff) / 1073741824.0);
+    }
+
+    function noise1(x) {
+      const safeX = Number.isFinite(x) ? x : 0;
+      const xi = Math.floor(safeX);
+      const xf = safeX - xi;
+      const a = hash(xi);
+      const b = hash(xi + 1);
+      const u = smooth01(xf);
+      return a * (1 - u) + b * u;
+    }
+
+    function organicMaskAtX(x, time, fog) {
+      const strength = Math.max(0, Math.min(1, Number.isFinite(fog?.noise) ? fog.noise : 0));
+      if (strength <= 0.0001) return 1;
+      const scale = 0.8 + (strength * 3.2);
+      const speed = 0.75 + (strength * 1.8);
+      const seed = Number.isFinite(fog?.seed) ? fog.seed : 0;
+      const u = (x * 0.004 * scale) + ((Number.isFinite(time) ? time : 0) * (0.10 * speed)) + (seed * 0.01);
+      const n1 = noise1(u);
+      const n2 = noise1((u * 1.7) + 12.3);
+      const n3 = noise1((u * 0.65) - 7.1);
+      const mix = ((n1 * 0.55 + n2 * 0.30 + n3 * 0.15) * 0.5) + 0.5;
+      const m = 0.75 + (mix * 0.55);
+      return 1 + ((m - 1) * strength);
+    }
+
+    function buildRechargedFogRuntime(key, fog) {
+      const widthWorld = Math.max(1, fog.x1 - fog.x0);
+      const sampleCount = Math.max(260, Math.floor(widthWorld / 1.4));
+      return {
+        key,
+        widthWorld,
+        sampleCount,
+        field: new Float32Array(sampleCount),
+        vel: new Float32Array(sampleCount),
+      };
+    }
+
+    // Mirrors smooke V1 fog-volume param normalization + runtime allocation for live Recharged.
     function readRechargedFogSnapshots(payload, state) {
       const fogVolumes = [];
+      const fogVisualState = ensureRechargedFogVisualState(state);
+      const activeKeys = new Set();
       for (const entity of readRechargedLiveEntitySnapshots(payload, state)) {
         const type = typeof entity?.type === "string" ? entity.type.trim().toLowerCase() : "";
         if (type !== "fog_volume") {
@@ -1140,6 +1202,7 @@
         const p = (params.params && typeof params.params === "object") ? params.params : params;
         const area = (p.area && typeof p.area === "object") ? p.area : {};
         const look = (p.look && typeof p.look === "object") ? p.look : {};
+        const smoothing = (p.smoothing && typeof p.smoothing === "object") ? p.smoothing : {};
         const interaction = (p.interaction && typeof p.interaction === "object") ? p.interaction : {};
         const render = (p.render && typeof p.render === "object") ? p.render : {};
         const x0 = Number.isFinite(area?.x0) ? area.x0 : null;
@@ -1148,7 +1211,7 @@
         if (!Number.isFinite(x0) || !Number.isFinite(x1) || !Number.isFinite(y0)) {
           continue;
         }
-        fogVolumes.push({
+        const fog = {
           id: typeof entity?.id === "string" ? entity.id : "",
           x0: Math.min(x0, x1),
           x1: Math.max(x0, x1),
@@ -1158,17 +1221,118 @@
           lift: Number.isFinite(look?.lift) ? look.lift : 8,
           thickness: Number.isFinite(look?.thickness) ? Math.max(1, look.thickness) : 44,
           layers: Number.isFinite(look?.layers) ? Math.max(6, Math.min(36, look.layers | 0)) : 28,
+          noise: Number.isFinite(look?.noise) ? Math.max(0, look.noise) : 0.14,
+          drift: Number.isFinite(look?.drift) ? look.drift : 0,
           color: typeof look?.color === "string" && look.color.length > 0 ? look.color : "#E1EEFF",
           exposure: Number.isFinite(look?.exposure) ? Math.max(0, look.exposure) : 1,
+          diffuse: Number.isFinite(smoothing?.diffuse) ? Math.max(0, smoothing.diffuse) : 0.12,
+          relax: Number.isFinite(smoothing?.relax) ? Math.max(0, smoothing.relax) : 0.07,
+          visc: Number.isFinite(smoothing?.visc) ? Math.max(0, Math.min(1, smoothing.visc)) : 0.96,
           radius: Number.isFinite(interaction?.radius) ? Math.max(10, interaction.radius) : 92,
-          // V1-backed authored wake scalar: interaction.behind influences trailing clear/feel.
-          behindWake: Number.isFinite(interaction?.behind) ? Math.max(0, interaction.behind) : 1,
+          push: Number.isFinite(interaction?.push) ? Math.max(0, interaction.push) : 0.9,
+          bulge: Number.isFinite(interaction?.bulge) ? Math.max(0, interaction.bulge) : 0.85,
+          gate: Number.isFinite(interaction?.gate) ? Math.max(0, interaction.gate) : 16,
+          behind: Number.isFinite(interaction?.behind) ? Math.max(0, interaction.behind) : 1,
           blend: typeof render?.blend === "string" ? render.blend : "screen",
-          // V1-backed authored layering truth from smooke export.
           lumoBehindFog: render?.lumoBehindFog !== false,
-        });
+          seed: (((Math.min(x0, x1) * 0.019) + (y0 * 0.031) + (Math.max(x0, x1) * 0.013)) % 1000),
+        };
+        if (fogVisualState) {
+          const fogKey = `${fog.id || "fog"}:${fog.x0}:${fog.x1}:${fog.y0}`;
+          activeKeys.add(fogKey);
+          let runtime = fogVisualState.byKey.get(fogKey) || null;
+          if (!runtime || runtime.widthWorld !== Math.max(1, fog.x1 - fog.x0)) {
+            runtime = buildRechargedFogRuntime(fogKey, fog);
+            fogVisualState.byKey.set(fogKey, runtime);
+          }
+          fog.runtime = runtime;
+        }
+        fogVolumes.push(fog);
+      }
+      if (fogVisualState) {
+        for (const key of fogVisualState.byKey.keys()) {
+          if (!activeKeys.has(key)) {
+            fogVisualState.byKey.delete(key);
+          }
+        }
       }
       return fogVolumes;
+    }
+
+    // Steps the live V1 fog simulation for each authored fog volume (field + vel chain).
+    function stepRechargedFogVolumes(fogVolumes, options = {}) {
+      if (!Array.isArray(fogVolumes) || fogVolumes.length <= 0) return;
+      const dt = Math.max(0.0001, Math.min(0.05, Number.isFinite(options?.dt) ? options.dt : (1 / 60)));
+      const playerCenterX = Number.isFinite(options?.playerCenterX) ? options.playerCenterX : null;
+      const playerVelocityX = Number.isFinite(options?.playerVelocityX) ? options.playerVelocityX : 0;
+      const speed = Math.abs(playerVelocityX);
+      for (const fog of fogVolumes) {
+        const runtime = fog?.runtime;
+        if (!runtime || !(runtime.field instanceof Float32Array) || !(runtime.vel instanceof Float32Array)) continue;
+        const field = runtime.field;
+        const vel = runtime.vel;
+        const N = runtime.sampleCount;
+        if (!Number.isFinite(N) || N < 3) continue;
+        for (let i = 1; i < N - 1; i += 1) {
+          const lap = field[i - 1] - (2 * field[i]) + field[i + 1];
+          vel[i] += lap * fog.diffuse * 120 * dt;
+        }
+        for (let i = 0; i < N; i += 1) {
+          vel[i] += (0 - field[i]) * fog.relax * 120 * dt;
+          vel[i] *= fog.visc;
+          field[i] += vel[i] * dt;
+          if (field[i] > 2.2) field[i] = 2.2;
+          if (field[i] < -2.2) field[i] = -2.2;
+        }
+        if (Math.abs(fog.drift) > 0.001) {
+          const shift = fog.drift * 0.85 * dt;
+          if (Math.abs(shift) > 0.00001) {
+            const tmp = new Float32Array(N);
+            for (let i = 0; i < N; i += 1) {
+              const src = i - shift;
+              const i0 = Math.floor(src);
+              const f = src - i0;
+              const a = field[Math.max(0, Math.min(N - 1, i0))];
+              const b = field[Math.max(0, Math.min(N - 1, i0 + 1))];
+              tmp[i] = (a * (1 - f)) + (b * f);
+            }
+            field.set(tmp);
+          }
+        }
+        if (playerCenterX === null || speed <= fog.gate) continue;
+        const widthWorld = Math.max(1, fog.x1 - fog.x0);
+        const u = (playerCenterX - fog.x0) / widthWorld;
+        const center = Math.max(0, Math.min(N - 1, Math.floor(u * (N - 1))));
+        const pxPerCell = widthWorld / Math.max(1, (N - 1));
+        const radCells = Math.max(3, Math.floor(fog.radius / Math.max(0.001, pxPerCell)));
+        const dir = Math.sign(playerVelocityX) || 1;
+        const amp = Math.min(2.2, speed / 210);
+        const aheadOffset = Math.max(2, Math.floor(radCells * 0.35));
+        const bulgeCenter = center + (dir * aheadOffset);
+        const behindOffset = Math.max(1, Math.floor(radCells * 0.15));
+        const clearCenter = center - (dir * behindOffset);
+        for (let k = -radCells; k <= radCells; k += 1) {
+          const i = bulgeCenter + k;
+          if (i < 0 || i >= N) continue;
+          const normalized = (k / radCells) * dir;
+          const frontMask = smooth01(normalized + 0.05);
+          const q = 1 - (Math.abs(k) / radCells);
+          const w = q * q;
+          const ridge = fog.bulge * amp * w * (0.18 + (0.82 * frontMask));
+          field[i] += ridge * 0.32;
+        }
+        for (let k = -radCells; k <= radCells; k += 1) {
+          const i = clearCenter + k;
+          if (i < 0 || i >= N) continue;
+          const normalized = (k / radCells) * dir;
+          const backMask = smooth01((-normalized) + 0.10);
+          const q = 1 - (Math.abs(k) / radCells);
+          const w = q * q;
+          const wake = (fog.push * fog.behind) * amp * w * (0.25 + (0.75 * backMask));
+          field[i] -= wake * 0.46;
+          vel[i] += dir * wake * 0.0022;
+        }
+      }
     }
 
     // Fog overlay pass with V1-backed layering control:
@@ -1179,8 +1343,6 @@
         return;
       }
       const pass = typeof options.pass === "string" ? options.pass : "rear-before-player";
-      const playerCenterX = Number.isFinite(options.playerCenterX) ? options.playerCenterX : null;
-      const playerFacingSign = Number.isFinite(options.playerFacingSign) && options.playerFacingSign < 0 ? -1 : 1;
       const frontPass = pass === "front-after-player";
       const rearAfterPlayer = pass === "rear-after-player";
       for (const fog of fogVolumes) {
@@ -1221,36 +1383,46 @@
           }
         }
 
+        const runtime = fog?.runtime;
+        if (!runtime || !(runtime.field instanceof Float32Array) || runtime.sampleCount < 3) {
+          continue;
+        }
         const layers = Math.max(6, Math.min(36, fog.layers | 0));
+        const field = runtime.field;
+        const N = runtime.sampleCount;
         const t = performance.now() * 0.001;
-        const isPlayerInsideFog = playerCenterX !== null && playerCenterX >= fog.x0 && playerCenterX <= fog.x1;
+        const pxPerCell = width / Math.max(1, (N - 1));
+        const falloffPx = Math.max(1, Math.min(width * 0.5, (fog.falloff / Math.max(1, widthWorld)) * width));
         for (let li = 0; li < layers; li += 1) {
           const a = layers <= 1 ? 0 : (li / (layers - 1));
           const passAlpha = frontPass ? 0.33 : 0.82;
-          const alpha = Math.max(0, Math.min(1, fog.density * (0.14 + (1 - a) * 0.62) * fog.exposure * passAlpha));
+          const sliceAlpha = 1 - a;
+          const alpha = Math.max(0, Math.min(1, (fog.density * 0.18) * (0.22 + (sliceAlpha * 0.98)) * fog.exposure * passAlpha));
           if (alpha <= 0.001) continue;
-          const lift = fog.lift + a * fog.thickness;
+          const yBase = height - fog.lift - (a * fog.thickness);
           octx.beginPath();
-          for (let ix = 0; ix <= width; ix += 1) {
-            const wave = Math.sin((ix * 0.02) + (t * (0.6 + li * 0.02))) * (7 + (1 - a) * 10);
-            let edgeMask = 1;
-            if (fog.falloff > 0) {
-              const falloffPx = Math.max(1, Math.min(width * 0.5, (fog.falloff / Math.max(1, widthWorld)) * width));
-              const d = Math.min(ix, width - ix);
-              const k = Math.max(0, Math.min(1, d / falloffPx));
-              edgeMask = k * k * (3 - 2 * k);
+          for (let i = 0; i < N; i += 1) {
+            const x = i * pxPerCell;
+            const d = Math.min(x, width - x);
+            const edgeMask = fog.falloff > 0 ? smooth01(Math.max(0, Math.min(1, d / falloffPx))) : 1;
+            if (edgeMask <= 0.0005) {
+              if (i === 0) octx.moveTo(x, height);
+              else octx.lineTo(x, height);
+              continue;
             }
-            let wakeClear = 0;
-            if (isPlayerInsideFog && fog.behindWake > 0) {
-              const worldX = fog.x0 + ((ix / Math.max(1, width)) * widthWorld);
-              const signedDx = (worldX - playerCenterX) * playerFacingSign;
-              // V1-backed wake: strengthen trailing clear behind Lumo using interaction.behind.
-              const trailing = Math.max(0, Math.min(1, (-signedDx) / Math.max(1, fog.radius * 0.9)));
-              wakeClear = (trailing * trailing) * Math.max(0, Math.min(3, fog.behindWake));
-            }
-            const y = ((height - lift) - (wave * edgeMask)) + (wakeClear * (2 + (1 - a) * 10));
-            if (ix === 0) octx.moveTo(ix, y);
-            else octx.lineTo(ix, y);
+            const topWeight = smooth01(Math.max(0, Math.min(1, (0.55 - a) / 0.55)));
+            const org = organicMaskAtX(fog.x0 + ((i / Math.max(1, N - 1)) * widthWorld), t, fog) * (0.70 + (0.30 * topWeight));
+            const dev = field[i];
+            const bulge = Math.max(0, dev);
+            const n = noise1((i * 0.22) + (t * (0.95 + (a * 0.85))) + fog.seed);
+            const m = (n * 0.5) + 0.5;
+            const wave = fog.noise * (m - 0.5) * (10 + ((1 - a) * 18));
+            const yyBaseRaw = yBase + wave - (bulge * (10 + ((1 - a) * 30)));
+            const yyOrg = height - ((height - yyBaseRaw) * org);
+            const yyBase = Math.min(yyOrg, height - 1);
+            const y = height - ((height - yyBase) * edgeMask);
+            if (i === 0) octx.moveTo(x, y);
+            else octx.lineTo(x, y);
           }
           octx.lineTo(width, height);
           octx.lineTo(0, height);
@@ -1258,6 +1430,35 @@
           octx.fillStyle = `rgba(${cr},${cg},${cb},${alpha})`;
           octx.fill();
         }
+        const topBase = height - fog.lift;
+        const topLineAlpha = Math.min(0.30, fog.density * 0.35) * (frontPass ? 0.75 : 1);
+        octx.lineWidth = 18;
+        octx.lineJoin = "round";
+        octx.strokeStyle = `rgba(${Math.max(0, cr - 15)},${Math.max(0, cg - 10)},${Math.max(0, cb)},${Math.max(0, Math.min(1, topLineAlpha))})`;
+        octx.beginPath();
+        for (let i = 0; i < N; i += 1) {
+          const x = i * pxPerCell;
+          const d = Math.min(x, width - x);
+          const edgeMask = fog.falloff > 0 ? smooth01(Math.max(0, Math.min(1, d / falloffPx))) : 1;
+          if (edgeMask <= 0.0005) {
+            if (i === 0) octx.moveTo(x, height);
+            else octx.lineTo(x, height);
+            continue;
+          }
+          const org = organicMaskAtX(fog.x0 + ((i / Math.max(1, N - 1)) * widthWorld), t, fog);
+          const dev = field[i];
+          const bulge = Math.max(0, dev);
+          const n = noise1((i * 0.22) + (t * 1.05) + fog.seed);
+          const m = (n * 0.5) + 0.5;
+          const wave = fog.noise * (m - 0.5) * 10;
+          const yyBaseRaw = topBase + wave - (bulge * 22);
+          const yyOrg = height - ((height - yyBaseRaw) * org);
+          const yyBase = Math.min(yyOrg, height - 1);
+          const y = height - ((height - yyBase) * edgeMask);
+          if (i === 0) octx.moveTo(x, y);
+          else octx.lineTo(x, y);
+        }
+        octx.stroke();
 
         ctx.save();
         const blend = typeof fog.blend === "string" ? fog.blend : "screen";
@@ -2261,6 +2462,9 @@
         const playerFootY = Number.isFinite(previousSnapshot.y) && Number.isFinite(currentSnapshot.y)
           ? lerp(previousSnapshot.y, currentSnapshot.y, alpha)
           : (Number.isFinite(player.y) ? player.y : null);
+        const playerVelocityX = Number.isFinite(previousSnapshot?.velocity?.x) && Number.isFinite(currentSnapshot?.velocity?.x)
+          ? lerp(previousSnapshot.velocity.x, currentSnapshot.velocity.x, alpha)
+          : (Number.isFinite(currentSnapshot?.velocity?.x) ? currentSnapshot.velocity.x : (Number.isFinite(player?.vx) ? player.vx : 0));
         const tileSize = Number.isFinite(payload?.tileSize) && payload.tileSize > 0 ? payload.tileSize : 24;
         const worldWidthRaw = Number.isFinite(payload?.worldWidth)
           ? payload.worldWidth
@@ -2289,6 +2493,21 @@
           targetX: Number.isFinite(playerCenterX) ? playerCenterX : worldWidthPx * 0.5,
           targetY: Number.isFinite(playerFootY) ? playerFootY : worldHeightPx - 1,
         });
+        const fogVisualState = ensureRechargedFogVisualState(state);
+        const nowMs = (typeof performance !== "undefined" && typeof performance.now === "function")
+          ? performance.now()
+          : Date.now();
+        const fogStepDt = fogVisualState && Number.isFinite(fogVisualState.lastStepAtMs)
+          ? Math.max(1 / 180, Math.min(0.05, (nowMs - fogVisualState.lastStepAtMs) / 1000))
+          : (1 / 60);
+        stepRechargedFogVolumes(fogVolumes, {
+          dt: fogStepDt,
+          playerCenterX,
+          playerVelocityX,
+        });
+        if (fogVisualState) {
+          fogVisualState.lastStepAtMs = nowMs;
+        }
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         const backdropGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
