@@ -19,6 +19,16 @@ function resolveSessionWorld(world) {
     tileMapSummary: world?.tileMapSummary ?? null,
     layers: {
       tiles: Array.isArray(world?.layers?.tiles) ? [...world.layers.tiles] : [],
+      background: Array.isArray(world?.layers?.background) ? [...world.layers.background] : [],
+      bg: Array.isArray(world?.layers?.bg)
+        ? [...world.layers.bg]
+        : (world?.layers?.bg && typeof world.layers.bg === "object"
+          ? { ...world.layers.bg }
+          : []),
+      decor: Array.isArray(world?.layers?.decor) ? [...world.layers.decor] : [],
+      entities: Array.isArray(world?.layers?.entities) ? [...world.layers.entities] : [],
+      // Preserve authored Editor V2 audio entries into runtime session world state for live snapshot use/debuggability.
+      audio: Array.isArray(world?.layers?.audio) ? [...world.layers.audio] : [],
     },
     width: isFiniteNumber(world?.width) ? world.width : null,
     height: isFiniteNumber(world?.height) ? world.height : null,
