@@ -66,7 +66,7 @@ function runFogRenderGapChecks() {
     "Expected live fog step to run the V1 drift advection phase.",
   );
   assert.equal(
-    html.includes("const wake = (fog.push * fog.behind) * amp * w * (0.25 + (0.75 * backMask));"),
+    html.includes("const wake = (fog.push * fog.behind) * amp * q * q * (0.25 + (0.75 * backMask));"),
     true,
     "Expected live fog step to apply authored push+behind wake strength.",
   );
@@ -121,6 +121,26 @@ function runFogRenderGapChecks() {
     "Expected authored interaction.gate to drive the visible live fog path.",
   );
   assert.equal(
+    html.includes("const playerTopY = playerFootY === null ? null : (playerFootY + 1 - RECHARGED_PLAYER_HITBOX_HEIGHT);"),
+    true,
+    "Expected live fog step to derive player vertical overlap from the runtime hitbox footprint.",
+  );
+  assert.equal(
+    html.includes("const overlapsHorizontally = (playerRight >= (fogLeft - horizontalContactSlack))"),
+    true,
+    "Expected live fog step to gate movement influence by per-volume horizontal contact.",
+  );
+  assert.equal(
+    html.includes("const overlapsVertically = (playerBottomY >= (fogTopY - verticalContactSlack))"),
+    true,
+    "Expected live fog step to gate movement influence by per-volume vertical overlap.",
+  );
+  assert.equal(
+    html.includes("if (!overlapsVertically) continue;"),
+    true,
+    "Expected live fog step to suppress influence when Lumo is above the fog body.",
+  );
+  assert.equal(
     html.includes("pass: \"rear-before-player\""),
     true,
     "Expected live Recharged flow to draw rear fog before Lumo for front-layer authored fog volumes.",
@@ -129,6 +149,11 @@ function runFogRenderGapChecks() {
     html.includes("stepRechargedFogVolumes(fogVolumes, {"),
     true,
     "Expected live Recharged frame flow to step V1 fog simulation before fog render passes.",
+  );
+  assert.equal(
+    html.includes("playerFootY,"),
+    true,
+    "Expected live Recharged frame flow to provide playerFootY so fog gating can enforce vertical overlap.",
   );
   assert.equal(
     html.includes("pass: \"rear-after-player\""),
