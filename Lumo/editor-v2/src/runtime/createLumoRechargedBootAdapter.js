@@ -296,6 +296,20 @@ function buildWorldSnapshot(snapshot) {
             : [],
         }
       : []);
+  // Preserve authored Editor V2 audio entries into live Recharged world snapshots for runtime use/debuggability.
+  const audioItems = Array.isArray(source.audioItems)
+    ? source.audioItems
+      .map((audio, index) => ({
+        audioId: typeof audio?.audioId === "string" ? audio.audioId : `audio-${index + 1}`,
+        audioType: typeof audio?.audioType === "string" ? audio.audioType : "ambient",
+        x: Number.isFinite(audio?.x) ? audio.x : null,
+        y: Number.isFinite(audio?.y) ? audio.y : null,
+        variant: Number.isFinite(audio?.variant) || typeof audio?.variant === "string" ? audio.variant : null,
+        tags: Array.isArray(audio?.tags) ? [...audio.tags] : [],
+        params: audio?.params && typeof audio.params === "object" ? clonePlainData(audio.params) : {},
+      }))
+      .filter((audio) => audio.x !== null && audio.y !== null)
+    : [];
 
   return {
     worldId: typeof source.worldId === "string" ? source.worldId : "",
@@ -307,6 +321,7 @@ function buildWorldSnapshot(snapshot) {
     bg,
     supportTiles,
     decorItems,
+    audioItems,
   };
 }
 
@@ -710,6 +725,7 @@ export function createLumoRechargedBootAdapter(options = {}) {
         background: world.background,
         bg: world.bg,
         decorItems: world.decorItems,
+        audioItems: world.audioItems,
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,
@@ -838,6 +854,7 @@ export function createLumoRechargedBootAdapter(options = {}) {
           background: world.background,
           bg: world.bg,
           decorItems: world.decorItems,
+          audioItems: world.audioItems,
           playerStatus: player.locomotion,
           playerX: player.x,
           playerY: player.y,

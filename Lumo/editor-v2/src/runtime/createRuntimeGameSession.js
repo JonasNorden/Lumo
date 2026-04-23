@@ -340,6 +340,20 @@ function buildWorldSnapshot(worldState) {
     : [];
   // Preserve bg in array or object-with-data form for downstream adapter snapshots.
   const bg = cloneBgPayload(worldState?.layers?.bg);
+  // Preserve authored Editor V2 audio entries into live Recharged world snapshots for runtime use/debuggability.
+  const audioItems = Array.isArray(worldState?.layers?.audio)
+    ? worldState.layers.audio
+      .map((audio, index) => ({
+        audioId: typeof audio?.audioId === "string" ? audio.audioId : `audio-${index + 1}`,
+        audioType: typeof audio?.audioType === "string" ? audio.audioType : "ambient",
+        x: Number.isFinite(audio?.x) ? audio.x : null,
+        y: Number.isFinite(audio?.y) ? audio.y : null,
+        variant: Number.isFinite(audio?.variant) || typeof audio?.variant === "string" ? audio.variant : null,
+        tags: Array.isArray(audio?.tags) ? [...audio.tags] : [],
+        params: audio?.params && typeof audio.params === "object" ? clonePlainData(audio.params) : {},
+      }))
+      .filter((audio) => audio.x !== null && audio.y !== null)
+    : [];
 
   return {
     ok: worldState && typeof worldState === "object",
@@ -352,6 +366,7 @@ function buildWorldSnapshot(worldState) {
     bg,
     supportTiles,
     decorItems,
+    audioItems,
   };
 }
 
