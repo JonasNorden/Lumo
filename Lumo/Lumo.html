@@ -52,6 +52,10 @@
       createFireflyAudioBridge,
       syncFireflyAudioFrame,
     } from "./editor-v2/src/runtime/fireflyAudioRuntime.js";
+    import {
+      createRechargedAuthoredAudioState,
+      syncRechargedAuthoredAudioFrame,
+    } from "./editor-v2/src/runtime/rechargedAuthoredAudioRuntime.js";
 
     const RECHARGED_FIXED_STEP_MS = 1000 / 60;
     const RECHARGED_MAX_CATCH_UP_STEPS = 6;
@@ -496,6 +500,58 @@
       };
     }
 
+    function ensureRechargedAuthoredAudioState(state) {
+      if (!state || typeof state !== "object") {
+        return createRechargedAuthoredAudioState();
+      }
+      if (!state.rechargedAuthoredAudio || typeof state.rechargedAuthoredAudio !== "object") {
+        state.rechargedAuthoredAudio = createRechargedAuthoredAudioState();
+      }
+      return state.rechargedAuthoredAudio;
+    }
+
+    // Reads authored world audio payload from adapter snapshots with payload-level fallback.
+    function readRechargedAuthoredAudioItems(payload) {
+      if (!payload || typeof payload !== "object") return [];
+      const payloadItems = Array.isArray(payload.audioItems) ? payload.audioItems : null;
+      if (payloadItems) return payloadItems;
+      const adapter = payload?.adapter && typeof payload.adapter === "object" ? payload.adapter : null;
+      const worldSnapshot = adapter?.getWorldSnapshot?.();
+      return Array.isArray(worldSnapshot?.audioItems) ? worldSnapshot.audioItems : [];
+    }
+
+    function syncRechargedAuthoredAudio(payload, state) {
+      if (!payload || !state) return;
+      const authoredAudioItems = readRechargedAuthoredAudioItems(payload);
+      const authoredAudioState = ensureRechargedAuthoredAudioState(state);
+      if (!authoredAudioState.bridge) {
+        authoredAudioState.bridge = createFireflyAudioBridge({
+          runtimeGlobal: window,
+          getSfxVolume() {
+            try {
+              if (window?.Lumo && typeof window.Lumo.getAudioSettings === "function") {
+                const settings = window.Lumo.getAudioSettings();
+                if (Number.isFinite(settings?.sfxVolume)) {
+                  return settings.sfxVolume;
+                }
+              }
+            } catch (_error) {
+              // Safe fallback keeps authored runtime audio audible when settings lookup fails.
+            }
+            return 1;
+          },
+        });
+      }
+      syncRechargedAuthoredAudioFrame({
+        audioItems: authoredAudioItems,
+        playerSnapshot: state.currentPlayerSnapshot,
+        previousPlayerSnapshot: state.previousPlayerSnapshot,
+        tileSize: Number.isFinite(payload?.tileSize) ? payload.tileSize : 24,
+        bridge: authoredAudioState.bridge,
+        runtimeState: authoredAudioState,
+      });
+    }
+
     // Renders V1-style respawn countdown overlay in active Recharged canvas.
     function drawRechargedRespawnOverlay(canvas, ctx, payload, state) {
       const hudSnapshot = buildRechargedHudSnapshot(payload, state);
@@ -819,6 +875,7 @@
         const livePayload = readLatestRechargedBootPayload();
         if (livePayload && typeof livePayload === "object") {
           syncRechargedFireflyAudio(livePayload, state);
+          syncRechargedAuthoredAudio(livePayload, state);
         }
       } catch (_error) {
         if (state && typeof state === "object") {
