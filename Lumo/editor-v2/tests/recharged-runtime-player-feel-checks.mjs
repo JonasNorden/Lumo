@@ -191,9 +191,9 @@ function runOutOfBoundsRespawnChecks() {
 
   const step = stepRuntimePlayerSimulation(worldPacket, outOfBoundsPlayer, { input: { moveX: 0, jump: false } });
   assert.equal(step.ok, true);
-  assert.equal(step.status, "respawned-out-of-bounds");
-  assert.equal(step.player.position.x, worldPacket.spawn.x);
-  assert.equal(step.player.position.y, worldPacket.spawn.y);
+  assert.equal(step.status, "respawn-pending");
+  assert.equal(step.player.respawnCountdown?.active, true);
+  assert.equal(step.player.respawnCountdown?.source, "authored-spawn");
 }
 
 function runBoostTriggerAndVelocityChecks() {

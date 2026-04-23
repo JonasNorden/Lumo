@@ -1,0 +1,120 @@
+import assert from "node:assert/strict";
+
+import { stepRuntimePlayerSimulation } from "../src/runtime/stepRuntimePlayerSimulation.js";
+
+function buildWorldPacket() {
+  return {
+    world: { width: 20, height: null, tileSize: 24 },
+    layers: { tiles: [] },
+    spawn: { x: 96, y: 503 },
+    tileBounds: { maxY: 18 },
+  };
+}
+
+function buildInstantDeathLiquid() {
+  return {
+    id: "liquid-1",
+    type: "bubbling_liquid_volume",
+    active: true,
+    x: 0,
+    y: 504,
+    params: {
+      area: { x0: 0, x1: 240, y0: 504, depth: 96 },
+      hazard: { instantDeath: true },
+    },
+  };
+}
+
+function buildBasePlayer() {
+  return {
+    position: { x: 96, y: 503 },
+    velocity: { x: 0, y: 0 },
+    grounded: true,
+    falling: false,
+    rising: false,
+    landed: false,
+    lives: 4,
+  };
+}
+
+function advanceUntilRespawnPending({ worldPacket, entities, maxTicks = 180 } = {}) {
+  let player = buildBasePlayer();
+  let firstPendingStep = null;
+  let firstPendingTick = -1;
+
+  for (let tick = 0; tick < maxTicks; tick += 1) {
+    const step = stepRuntimePlayerSimulation(worldPacket, player, {
+      input: { moveX: 0, jump: false },
+      entities,
+    });
+    assert.equal(step.ok, true);
+    player = step.player;
+
+    if (player.status === "respawn-pending") {
+      firstPendingStep = step;
+      firstPendingTick = tick;
+      break;
+    }
+  }
+
+  assert.notEqual(firstPendingStep, null, "liquid death should eventually hand off into respawn-pending state");
+  return { player, firstPendingStep, firstPendingTick };
+}
+
+{
+  const worldPacket = buildWorldPacket();
+  const entities = [buildInstantDeathLiquid()];
+  const { player: pendingPlayer, firstPendingStep } = advanceUntilRespawnPending({ worldPacket, entities });
+
+  // 1) Completed liquid death must start countdown exactly once on the liquid-owned path.
+  assert.equal(firstPendingStep.player.respawnCountdown?.active, true, "liquid death handoff must activate respawn countdown");
+  assert.equal(firstPendingStep.player.respawnCountdown?.countdown, 3, "liquid death handoff must expose full 3-second countdown");
+  assert.equal(firstPendingStep.player.lives, 3, "liquid death handoff must decrement lives immediately");
+  assert.equal(String(firstPendingStep.player.respawnCountdown?.source || "").startsWith("liquid-"), true, "liquid death handoff must own respawn source");
+
+  // 2) During handoff/countdown, liquid death must not retrigger.
+  let player = pendingPlayer;
+  for (let i = 0; i < 12; i += 1) {
+    const step = stepRuntimePlayerSimulation(worldPacket, player, {
+      input: { moveX: 0, jump: false },
+      entities,
+    });
+    assert.equal(step.ok, true);
+    assert.equal(step.player.status, "respawn-pending", "countdown ticks should stay in respawn-pending instead of retriggering liquid-death");
+    assert.equal(step.player.respawnCountdown?.active, true, "countdown should stay active during pending ticks");
+    assert.equal(step.player.status !== "liquid-death", true, "liquid-death must not retrigger during pending handoff/countdown");
+
+    // 3) Bottom/out-of-bounds must not steal ownership after liquid completion.
+    assert.equal(String(step.player.respawnCountdown?.source || "").startsWith("liquid-"), true, "pending countdown source must remain liquid-owned");
+
+    // 4) Player must not resume ordinary falling while pending countdown owns state.
+    assert.equal(step.player.falling, false, "pending countdown should freeze ordinary falling");
+    player = step.player;
+  }
+}
+
+{
+  // 5) Non-liquid out-of-bounds respawn flow must remain intact.
+  const worldPacket = buildWorldPacket();
+  const outOfBoundsPlayer = {
+    ...buildBasePlayer(),
+    position: { x: 96, y: 999 },
+    grounded: false,
+    falling: true,
+    velocity: { x: 0, y: 12 },
+    lives: 4,
+  };
+
+  const step = stepRuntimePlayerSimulation(worldPacket, outOfBoundsPlayer, {
+    input: { moveX: 0, jump: false },
+    entities: [],
+  });
+
+  assert.equal(step.ok, true);
+  assert.equal(step.player.status, "respawn-pending", "non-liquid out-of-bounds should still enter pending respawn");
+  assert.equal(step.player.respawnCountdown?.active, true, "non-liquid out-of-bounds should still activate countdown");
+  assert.equal(step.player.respawnCountdown?.source, "authored-spawn", "non-liquid out-of-bounds should keep authored-spawn source");
+  assert.equal(step.player.lives, 3, "non-liquid out-of-bounds should still decrement one life");
+}
+
+console.log("recharged-runtime-liquid-death-respawn-handoff-checks: ok");

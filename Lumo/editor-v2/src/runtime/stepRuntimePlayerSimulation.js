@@ -2460,6 +2460,12 @@ function buildDeathRespawnState(worldPacket, playerState, triggerPosition, paylo
 }
 
 // Respawns to authored spawn after leaving the valid playable region downward.
+function isRespawnHandoffLocked(playerState) {
+  const status = typeof playerState?.status === "string" ? playerState.status : "";
+  const activeRespawnCountdown = resolveRespawnCountdownState(playerState);
+  return activeRespawnCountdown.active || status === "respawn-pending";
+}
+
 function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, options = {}) {
   const respawnY = resolveBottomBoundRespawnY(worldPacket, options);
   const currentY = verticalStep?.position?.y;
@@ -2469,9 +2475,8 @@ function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, optio
     return null;
   }
 
-  const activeRespawnCountdown = resolveRespawnCountdownState(playerState);
-
-  if (activeRespawnCountdown.active) {
+  // Once any death path has handed off into respawn-pending/countdown, block bottom-fall from stealing ownership.
+  if (isRespawnHandoffLocked(playerState)) {
     return null;
   }
   return buildDeathRespawnState(worldPacket, playerState, verticalStep.position, {
@@ -2483,8 +2488,8 @@ function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, optio
 }
 
 function maybeResolveLiquidDeath(worldPacket, playerState, verticalStep, sourceEntities, options = {}) {
-  const activeRespawnCountdown = resolveRespawnCountdownState(playerState);
-  if (activeRespawnCountdown.active) {
+  // Lock lethal-liquid ownership once respawn handoff starts so a second sink cannot retrigger mid-transition.
+  if (isRespawnHandoffLocked(playerState)) {
     return null;
   }
   const overlapType = resolveOverlappingLiquidType(worldPacket, { ...playerState, position: verticalStep.position }, sourceEntities);
@@ -3084,7 +3089,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     ? "game-over"
     : status === "liquid-death"
     ? "dying-liquid"
-    : status === "respawned-out-of-bounds"
+    : status === "respawn-pending" || status === "respawned-out-of-bounds"
     ? "respawning-out-of-bounds"
     : exitStep.completed
       ? "level-complete"
@@ -3156,8 +3161,13 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         ? Math.max(0, Math.min(1, resolvedPlayerStep.renderAlpha))
         : (Number.isFinite(resolvedLiquidDeath?.fade) ? Math.max(0, Math.min(1, resolvedLiquidDeath.fade)) : 1),
       status,
-      lives: Number.isFinite(bottomRespawn?.player?.lives) ? bottomRespawn.player.lives : lives,
-      respawnCountdown: bottomRespawn?.player?.respawnCountdown ?? respawnCountdown,
+      // Preserve countdown/life ownership from the death path that resolved this tick (liquid or bottom).
+      lives: Number.isFinite(resolvedPlayerStep?.lives)
+        ? Math.max(0, Math.floor(resolvedPlayerStep.lives))
+        : (Number.isFinite(bottomRespawn?.player?.lives) ? bottomRespawn.player.lives : lives),
+      respawnCountdown: (resolvedPlayerStep?.respawnCountdown && typeof resolvedPlayerStep.respawnCountdown === "object")
+        ? resolvedPlayerStep.respawnCountdown
+        : (bottomRespawn?.player?.respawnCountdown ?? respawnCountdown),
       brakeState,
     },
     collisions: {
