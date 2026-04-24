@@ -3117,12 +3117,21 @@ function resolveHazardFallTracker(worldPacket, playerState, verticalStep, source
   };
 }
 
-function publishFallDebug(debugState) {
+function publishFallDebug(debugState, metadata = {}) {
   try {
     if (typeof globalThis?.window !== "object" || !globalThis.window) {
       return;
     }
+    const playerYRaw = Number.isFinite(metadata?.playerYRaw) ? metadata.playerYRaw : null;
+    const playerFootY = playerYRaw;
+    const playerTopY = Number.isFinite(playerFootY) ? (playerFootY + 1 - 28) : null;
     globalThis.window.__LUMO_RECHARGED_FALL_DEBUG__ = {
+      frame: Number.isFinite(metadata?.frame) ? metadata.frame : null,
+      tick: Number.isFinite(metadata?.tick) ? metadata.tick : null,
+      playerYRaw,
+      playerFootY,
+      playerTopY,
+      playerReference: "foot-y",
       deathPlaneSource: typeof debugState?.deathPlaneSource === "string" ? debugState.deathPlaneSource : null,
       deathPlaneY: Number.isFinite(debugState?.deathPlaneY) ? debugState.deathPlaneY : null,
       effectiveDeathPlaneY: Number.isFinite(debugState?.effectiveDeathPlaneY) ? debugState.effectiveDeathPlaneY : null,
@@ -3139,6 +3148,8 @@ function publishFallDebug(debugState) {
       fallDistance: Number.isFinite(debugState?.fallDistance) ? debugState.fallDistance : 0,
       triggered: debugState?.triggered === true,
       respawnTriggered: debugState?.respawnTriggered === true,
+      respawnPending: metadata?.respawnPending === true,
+      status: typeof metadata?.status === "string" ? metadata.status : null,
     };
   } catch (_error) {
     // Debug export is best-effort only.
@@ -3339,6 +3350,13 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   if (respawnCountdown.active) {
     const pending = buildRespawnPendingPlayerState(playerState, respawnCountdown, options);
     if (pending.waiting) {
+      publishFallDebug(playerState?._fallTracker, {
+        playerYRaw: pending?.player?.position?.y,
+        frame: options?.frame,
+        tick: options?.tick,
+        respawnPending: true,
+        status: "respawn-pending",
+      });
       return {
         ok: true,
         darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
@@ -3384,6 +3402,13 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     const invulnDuration = Number.isFinite(playerState?.invulnDuration) && playerState.invulnDuration > 0
       ? playerState.invulnDuration
       : 1.6;
+    publishFallDebug(null, {
+      playerYRaw: spawnY,
+      frame: options?.frame,
+      tick: options?.tick,
+      respawnPending: false,
+      status: "respawned-out-of-bounds",
+    });
     return {
       ok: true,
       darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
@@ -3615,7 +3640,13 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   }
 
   const hazardFall = resolveHazardFallTracker(worldPacket, playerState, verticalStep, normalizedEntities);
-  publishFallDebug(hazardFall);
+  publishFallDebug(hazardFall, {
+    playerYRaw: verticalStep?.position?.y,
+    frame: options?.frame,
+    tick: options?.tick,
+    respawnPending: false,
+    status: "pre-handoff",
+  });
   const liquidDeathStep = maybeResolveLiquidDeath(worldPacket, playerState, verticalStep, normalizedEntities, hazardFall, options);
   const bottomRespawn = liquidDeathStep ? null : maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, hazardFall, options);
   const bottomRespawnIsGameOver = (
@@ -3628,6 +3659,13 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       ...playerState,
       ...(bottomRespawn?.player && typeof bottomRespawn.player === "object" ? bottomRespawn.player : {}),
       position: bottomRespawn?.player?.position ?? verticalStep?.position ?? playerState?.position,
+    });
+    publishFallDebug(hazardFall, {
+      playerYRaw: gameOverPlayer?.position?.y,
+      frame: options?.frame,
+      tick: options?.tick,
+      respawnPending: false,
+      status: "game-over",
     });
     return {
       ok: true,
@@ -3804,6 +3842,13 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     : finalPlayerState.grounded && brakeState.active
       ? "braking-grounded"
       : resolveFinalLocomotion(finalPlayerState, intent.moveX);
+  publishFallDebug(hazardFall, {
+    playerYRaw: resolvedPlayerStep?.position?.y,
+    frame: options?.frame,
+    tick: options?.tick,
+    respawnPending: status === "respawn-pending",
+    status,
+  });
 
   return {
     ok: true,
