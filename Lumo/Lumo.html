@@ -2833,17 +2833,25 @@
             const platformParams = entity?.params && typeof entity.params === "object" ? entity.params : {};
             const widthTiles = Number.isFinite(platformParams.widthTiles) && platformParams.widthTiles > 0
               ? Math.max(1, Math.round(platformParams.widthTiles))
-              : 1;
+              : 4;
             const heightTiles = Number.isFinite(platformParams.heightTiles) && platformParams.heightTiles > 0
               ? Math.max(1, Math.round(platformParams.heightTiles))
               : 1;
             const spriteTileId = typeof platformParams.spriteTileId === "string" && platformParams.spriteTileId.trim().length > 0
               ? platformParams.spriteTileId.trim()
               : null;
+            const movingPlatformLooksTileBased = Number.isFinite(entity?.x)
+              && Number.isFinite(entity?.y)
+              && entity.x <= worldWidthRaw + tileSize
+              && entity.y <= worldHeightRaw + tileSize;
+            const movingPlatformWorldX = movingPlatformLooksTileBased ? (entity.x * worldUnitsToPx) : entity.x;
+            const movingPlatformWorldY = movingPlatformLooksTileBased ? (entity.y * worldUnitsToPx) : entity.y;
+            const movingPlatformWidthPx = Math.max(1, widthTiles * tileSize);
+            const movingPlatformHeightPx = Math.max(1, heightTiles * tileSize);
             // movingPlatform reuses Recharged tile visual resolution so runtime platform art matches authored tile selections.
             const movingPlatformSupportLikeTile = {
-              x: entity.x,
-              y: entity.y,
+              x: movingPlatformWorldX / worldUnitsToPx,
+              y: movingPlatformWorldY / worldUnitsToPx,
               w: widthTiles,
               h: heightTiles,
               catalogTileId: spriteTileId,
@@ -2856,25 +2864,51 @@
               worldUnitsToPx,
               tileSize,
             );
-            if (renderedMovingPlatformVisual) {
+            let renderedMovingPlatformFallback = false;
+            if (!renderedMovingPlatformVisual) {
+              const movingPlatformRect = mapper.worldToCanvasRect(
+                movingPlatformWorldX,
+                movingPlatformWorldY,
+                movingPlatformWidthPx,
+                movingPlatformHeightPx,
+              );
+              ctx.fillStyle = "rgba(148, 163, 184, 0.14)";
+              ctx.fillRect(
+                movingPlatformRect.x,
+                movingPlatformRect.y,
+                movingPlatformRect.w,
+                movingPlatformRect.h,
+              );
+              ctx.strokeStyle = "rgba(248, 113, 113, 0.88)";
+              ctx.lineWidth = 2;
+              ctx.strokeRect(
+                movingPlatformRect.x + 1,
+                movingPlatformRect.y + 1,
+                Math.max(1, movingPlatformRect.w - 2),
+                Math.max(1, movingPlatformRect.h - 2),
+              );
+              renderedMovingPlatformFallback = true;
+            }
+            if (state && state.rechargedMovingPlatformRenderDebug) {
+              state.rechargedMovingPlatformRenderDebug.push({
+                id: entity?.id || null,
+                rawX: entity?.x,
+                rawY: entity?.y,
+                coordinateMode: movingPlatformLooksTileBased ? "tile" : "pixel",
+                drawRect: {
+                  x: movingPlatformWorldX,
+                  y: movingPlatformWorldY,
+                  w: movingPlatformWidthPx,
+                  h: movingPlatformHeightPx,
+                },
+                spriteTileId,
+                drewVisual: renderedMovingPlatformVisual === true,
+                drewFallback: renderedMovingPlatformFallback,
+              });
+            }
+            if (renderedMovingPlatformVisual || renderedMovingPlatformFallback) {
               continue;
             }
-
-            const movingPlatformRect = mapper.worldToCanvasRect(
-              entity.x * worldUnitsToPx,
-              entity.y * worldUnitsToPx,
-              widthTiles * worldUnitsToPx,
-              heightTiles * worldUnitsToPx,
-            );
-            ctx.strokeStyle = "rgba(248, 113, 113, 0.88)";
-            ctx.lineWidth = 2;
-            ctx.strokeRect(
-              movingPlatformRect.x + 1,
-              movingPlatformRect.y + 1,
-              Math.max(1, movingPlatformRect.w - 2),
-              Math.max(1, movingPlatformRect.h - 2),
-            );
-            continue;
           }
           const entityDrawW = Number.isFinite(entity.w) && entity.w > 0 ? entity.w : entity.size;
           const entityDrawH = Number.isFinite(entity.h) && entity.h > 0 ? entity.h : entity.size;

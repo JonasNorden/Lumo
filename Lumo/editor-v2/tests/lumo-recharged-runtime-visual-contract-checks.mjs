@@ -30,10 +30,19 @@ function runSupportGeometryPresentationChecks() {
 
 function runMovingPlatformVisualContractChecks() {
   assert.equal(html.includes("normalizedEntityType === \"movingplatform\" || normalizedEntityType === \"moving_platform\""), true, "expected movingPlatform type to have a dedicated runtime render branch");
+  assert.equal(html.includes("const movingPlatformLooksTileBased = Number.isFinite(entity?.x)"), true, "expected movingPlatform branch to detect tile-vs-pixel coordinates from live snapshot values");
+  assert.equal(html.includes("const movingPlatformWorldX = movingPlatformLooksTileBased ? (entity.x * worldUnitsToPx) : entity.x;"), true, "expected pixel-space movingPlatform x to bypass tileSize multiplication");
+  assert.equal(html.includes("const movingPlatformWorldY = movingPlatformLooksTileBased ? (entity.y * worldUnitsToPx) : entity.y;"), true, "expected pixel-space movingPlatform y to bypass tileSize multiplication");
+  assert.equal(html.includes("const movingPlatformWidthPx = Math.max(1, widthTiles * tileSize);"), true, "expected movingPlatform visual width to come from params.widthTiles");
+  assert.equal(html.includes("const movingPlatformHeightPx = Math.max(1, heightTiles * tileSize);"), true, "expected movingPlatform visual height to come from params.heightTiles");
   assert.equal(html.includes("const spriteTileId = typeof platformParams.spriteTileId === \"string\""), true, "expected movingPlatform runtime branch to read params.spriteTileId for tile-art resolution");
   assert.equal(html.includes("const movingPlatformSupportLikeTile = {"), true, "expected movingPlatform runtime branch to build a supportTile-shape visual object");
+  assert.equal(html.includes("x: movingPlatformWorldX / worldUnitsToPx,"), true, "expected movingPlatform visual helper bridge to convert pixel-space x back to tile-space input");
+  assert.equal(html.includes("y: movingPlatformWorldY / worldUnitsToPx,"), true, "expected movingPlatform visual helper bridge to convert pixel-space y back to tile-space input");
   assert.equal(html.includes("const renderedMovingPlatformVisual = drawRechargedTileV1Visual("), true, "expected movingPlatform runtime branch to reuse the support tile visual helper");
-  assert.equal(html.includes("if (renderedMovingPlatformVisual) {\n              continue;\n            }"), true, "expected movingPlatform to skip generic entity debug fallback when tile visual draw succeeds");
+  assert.equal(html.includes("let renderedMovingPlatformFallback = false;"), true, "expected movingPlatform branch to track fallback rendering visibility");
+  assert.equal(html.includes("if (!renderedMovingPlatformVisual) {"), true, "expected movingPlatform branch to draw fallback visuals when sprite art is unresolved");
+  assert.equal(html.includes("if (renderedMovingPlatformVisual || renderedMovingPlatformFallback) {\n              continue;\n            }"), true, "expected generic entity debug fallback to be skipped only after movingPlatform drew visual or fallback");
 }
 
 runRealRechargedRenderPathChecks();
