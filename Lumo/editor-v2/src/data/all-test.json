@@ -49391,6 +49391,25 @@
       "y": 17,
       "visible": true,
       "params": {}
+    },
+    {
+      "id": "entity-21",
+      "name": "Moving Platform",
+      "type": "movingPlatform",
+      "x": 156,
+      "y": 12,
+      "visible": true,
+      "params": {
+        "widthTiles": 7,
+        "heightTiles": 2,
+        "direction": "right",
+        "distanceTiles": 25,
+        "speed": 200,
+        "loop": "pingpong",
+        "oneWay": true,
+        "carryPlayer": true,
+        "spriteTileId": "stone_ct"
+      }
     }
   ],
   "sounds": [
