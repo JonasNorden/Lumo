@@ -49356,6 +49356,25 @@
       }
     },
     {
+      "id": "entity-20",
+      "name": "Moving Platform",
+      "type": "movingPlatform",
+      "x": 228,
+      "y": 15,
+      "visible": true,
+      "params": {
+        "widthTiles": 4,
+        "heightTiles": 1,
+        "direction": "right",
+        "distanceTiles": 10,
+        "speed": 70,
+        "loop": "pingpong",
+        "oneWay": true,
+        "carryPlayer": true,
+        "spriteTileId": "grass_bt"
+      }
+    },
+    {
       "id": "entity-spawn",
       "name": "Player Spawn",
       "type": "player-spawn",
@@ -49372,25 +49391,6 @@
       "y": 17,
       "visible": true,
       "params": {}
-    },
-    {
-      "id": "entity-20",
-      "name": "Moving Platform",
-      "type": "movingPlatform",
-      "x": 228,
-      "y": 15,
-      "visible": true,
-      "params": {
-        "widthTiles": 4,
-        "heightTiles": 1,
-        "direction": "right",
-        "distanceTiles": 10,
-        "speed": 70,
-        "loop": "pingpong",
-        "oneWay": true,
-        "carryPlayer": true,
-        "spriteTileId": "Stone CT"
-      }
     }
   ],
   "sounds": [
