@@ -51,6 +51,39 @@ function runTriggerEnterActivationCheck() {
   );
 
   assert.equal(frame.enteredRange, true, "trigger should activate when player enters authored width range.");
+  assert.equal(frame.targetVolume, 1, "trigger should use authored base volume when entering range.");
+}
+
+function runTriggerNoDistanceAttenuationCheck() {
+  const nearFrame = computeTriggerFrame(
+    {
+      audioId: "trigger-near",
+      audioType: "trigger",
+      x: 240,
+      y: 120,
+      params: { source: "data/assets/audio/events/enemies/common/swoosh_01.ogg", radius: 6, volume: 0.9, loop: false, spatial: true },
+    },
+    { x: 239, y: 120 },
+    { x: 50, y: 120 },
+    24,
+  );
+  const edgeFrame = computeTriggerFrame(
+    {
+      audioId: "trigger-edge",
+      audioType: "trigger",
+      x: 240,
+      y: 120,
+      params: { source: "data/assets/audio/events/enemies/common/swoosh_01.ogg", radius: 6, volume: 0.9, loop: false, spatial: true },
+    },
+    { x: 384, y: 120 },
+    { x: 390, y: 120 },
+    24,
+  );
+
+  assert.equal(nearFrame.inRange, true, "near trigger frame should be in range.");
+  assert.equal(edgeFrame.inRange, true, "edge trigger frame should still be in range.");
+  assert.equal(nearFrame.targetVolume, 0.9, "trigger should keep authored volume when in range.");
+  assert.equal(edgeFrame.targetVolume, 0.9, "trigger volume should not be distance attenuated.");
 }
 
 function runSyncBehaviorCheck() {
@@ -288,6 +321,11 @@ function runFootAnchoredActivationCheck() {
     "trigger telemetry should report entered-range activation.",
   );
   assert.equal(
+    runtimeState.debug.itemDebug.some((item) => item.id === "foot-trigger" && item.playedThisFrame === true && item.reason === "entered-range-one-shot"),
+    true,
+    "trigger telemetry should report one-shot playback state and reason.",
+  );
+  assert.equal(
     runtimeState.debug.itemDebug.some((item) => item.id === "foot-zone" && item.inside === true),
     true,
     "zone telemetry should report inside=true when player overlaps authored area.",
@@ -336,12 +374,69 @@ function runSourceResolutionCheck() {
   );
 }
 
+function runTriggerOneShotOnceCheck() {
+  const calls = [];
+  const bridge = {
+    getHandle(path, loop, key) {
+      return {
+        path,
+        loop,
+        key,
+        audio: {
+          paused: true,
+          currentTime: 0,
+          playbackRate: 1,
+          pause() {},
+        },
+      };
+    },
+    ensureSpatial(_handle) {},
+    setPan(_handle, _pan) {},
+    setVolume(handle, volume) {
+      calls.push({ key: handle.key, volume });
+    },
+  };
+  const runtimeState = createRechargedAuthoredAudioState();
+  const audioItems = [
+    {
+      audioId: "trigger-once",
+      audioType: "trigger",
+      x: 240,
+      y: 120,
+      source: "data/assets/audio/events/enemies/common/swoosh_01.ogg",
+      params: { radius: 6, loop: false, volume: 0.75, spatial: true },
+    },
+  ];
+
+  syncRechargedAuthoredAudioFrame({
+    audioItems,
+    playerSnapshot: { x: 230, y: 106, w: 22, h: 28 },
+    previousPlayerSnapshot: { x: 80, y: 106, w: 22, h: 28 },
+    tileSize: 24,
+    bridge,
+    runtimeState,
+  });
+  syncRechargedAuthoredAudioFrame({
+    audioItems,
+    playerSnapshot: { x: 231, y: 106, w: 22, h: 28 },
+    previousPlayerSnapshot: { x: 230, y: 106, w: 22, h: 28 },
+    tileSize: 24,
+    bridge,
+    runtimeState,
+  });
+
+  const triggerCalls = calls.filter((call) => call.key === "trigger::trigger-once" && call.volume > 0.001);
+  assert.equal(triggerCalls.length, 1, "one-shot trigger should play once on range entry.");
+}
+
 runSpotSpatialAttenuationCheck();
 runTriggerEnterActivationCheck();
+runTriggerNoDistanceAttenuationCheck();
 runSyncBehaviorCheck();
 runTileCoordinateInterpretationCheck();
 runFootAnchoredActivationCheck();
 runZoneFrameCheck();
 runSourceResolutionCheck();
+runTriggerOneShotOnceCheck();
 
 console.log("lumo-recharged-authored-audio-runtime-checks: ok");

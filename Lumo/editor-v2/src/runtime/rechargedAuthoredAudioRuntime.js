@@ -203,7 +203,7 @@ function computeTriggerFrame(audioItem, playerCenter, previousPlayerCenter, tile
   let inRange = false;
   let enteredRange = false;
   let pan = 0;
-  let volume = baseVolume;
+  const volume = baseVolume;
 
   if (playerCenter) {
     const dx = cx - playerCenter.x;
@@ -213,12 +213,9 @@ function computeTriggerFrame(audioItem, playerCenter, previousPlayerCenter, tile
     if (spatial && radiusPx > 0) {
       inRange = distance <= radiusPx;
       pan = clampPan(dx / radiusPx);
-      const t = inRange ? (1 - (distance / radiusPx)) : 0;
-      volume = baseVolume * clamp01(t * t);
     } else if (triggerWidthPx > 0) {
       inRange = Math.abs(playerCenter.x - cx) <= (triggerWidthPx * 0.5);
       pan = 0;
-      volume = baseVolume;
     }
 
     if (hasRange) {
@@ -239,7 +236,6 @@ function computeTriggerFrame(audioItem, playerCenter, previousPlayerCenter, tile
     enteredRange = crossed;
     inRange = currentX >= cx;
     pan = 0;
-    volume = baseVolume;
   }
 
   return {
@@ -423,6 +419,7 @@ function syncRechargedAuthoredAudioFrame({
         if (frame.inRange && frame.targetVolume > 0.001) activeThisFrame += 1;
       } else if (frame.enteredRange) {
         playTriggerOneShot(handle, bridge, frame.targetVolume);
+        entry.startedThisFrame = true;
         if (frame.targetVolume > 0.001) activeThisFrame += 1;
       }
       runtimeState.triggerHandlesByKey.set(key, handle);
@@ -434,10 +431,12 @@ function syncRechargedAuthoredAudioFrame({
       entry.enteredRange = frame.enteredRange;
       entry.inRange = frame.inRange;
       entry.targetVolume = frame.targetVolume;
+      entry.startedThisFrame = entry.startedThisFrame === true || (frame.loop && frame.inRange && frame.targetVolume > 0.001);
+      entry.playedThisFrame = entry.startedThisFrame;
       entry.active = frame.loop ? (frame.inRange && frame.targetVolume > 0.001) : frame.enteredRange;
       entry.reason = !playerCenter
         ? "missing-player-center"
-        : (entry.active ? "active" : (frame.inRange ? "in-range-low-volume" : "not-entered-range"));
+        : (entry.active ? (frame.loop ? "in-range-looping" : "entered-range-one-shot") : "not-entered-range");
       itemDebug.push(entry);
       continue;
     }
