@@ -134,6 +134,20 @@ function buildPlayerSnapshot(playerState) {
           // Keep authored params intact through runtime session snapshots.
           params: entity?.params && typeof entity.params === "object" ? clonePlainData(entity.params) : {},
           _projectileSpritePath: typeof entity?._projectileSpritePath === "string" ? entity._projectileSpritePath : "",
+          prevX: Number.isFinite(entity?.prevX) ? entity.prevX : null,
+          prevY: Number.isFinite(entity?.prevY) ? entity.prevY : null,
+          dx: Number.isFinite(entity?.dx) ? entity.dx : null,
+          dy: Number.isFinite(entity?.dy) ? entity.dy : null,
+          originX: Number.isFinite(entity?.originX) ? entity.originX : null,
+          originY: Number.isFinite(entity?.originY) ? entity.originY : null,
+          endX: Number.isFinite(entity?.endX) ? entity.endX : null,
+          endY: Number.isFinite(entity?.endY) ? entity.endY : null,
+          carryPlayer: typeof entity?.carryPlayer === "boolean" ? entity.carryPlayer : null,
+          oneWay: typeof entity?.oneWay === "boolean" ? entity.oneWay : null,
+          loop: typeof entity?.loop === "string" ? entity.loop : null,
+          speed: Number.isFinite(entity?.speed) ? entity.speed : null,
+          playerOnPlatform: entity?.playerOnPlatform === true,
+          carriedThisFrame: entity?.carriedThisFrame === true,
         };
       })
       .filter((entity) => entity.id !== null && entity.x !== null && entity.y !== null)
@@ -262,6 +276,7 @@ function buildPlayerSnapshot(playerState) {
     respawnCount: respawnPending ? respawnCount : 0,
     liquidDeath,
     renderAlpha: Number.isFinite(playerState?.renderAlpha) ? Math.max(0, Math.min(1, playerState.renderAlpha)) : 1,
+    onPlatformId: typeof playerState?.onPlatformId === "string" ? playerState.onPlatformId : null,
   };
 }
 

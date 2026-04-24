@@ -139,6 +139,13 @@ const FIREFLY_TAIL_MAX_POINTS = 14;
 const FIREFLY_TAIL_MAX_AGE_SECONDS = 0.35;
 const V1_PLAYER_HITBOX_WIDTH_PX = 22;
 const V1_PLAYER_HITBOX_HEIGHT_PX = 28;
+const MOVING_PLATFORM_DEFAULT_WIDTH_TILES = 4;
+const MOVING_PLATFORM_DEFAULT_HEIGHT_TILES = 1;
+const MOVING_PLATFORM_DEFAULT_DIRECTION = "right";
+const MOVING_PLATFORM_DEFAULT_DISTANCE_TILES = 4;
+const MOVING_PLATFORM_DEFAULT_SPEED_PX_PER_SECOND = 70;
+const MOVING_PLATFORM_DEFAULT_LOOP = "pingpong";
+const MOVING_PLATFORM_LANDING_EPSILON_PX = 4;
 
 function resolvePulseTargetType(entityType) {
   if (typeof entityType !== "string") {
@@ -215,6 +222,7 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
         : (Number.isFinite(params?.hp) && params.hp > 0 ? Math.floor(params.hp) : 1);
   const hp = Number.isFinite(source?.hp) && source.hp >= 0 ? Math.floor(source.hp) : maxHp;
   const normalizedType = String(type || "").trim().toLowerCase();
+  const isMovingPlatform = isMovingPlatformEntityType(normalizedType);
   const isDarkCreature = normalizedType === "dark_creature_01";
   const parseNumber = (value, fallback) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
   const parseFireflyNumber = (value, fallback) => ((value == null || value === "") ? fallback : parseNumber(value, fallback));
@@ -356,6 +364,25 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
         _landedT: Math.max(0, parseNumber(source?._landedT, 0)),
       }
     : {};
+  const movingPlatformRuntimeState = isMovingPlatform
+    ? {
+        prevX: Number.isFinite(source?.prevX) ? source.prevX : x,
+        prevY: Number.isFinite(source?.prevY) ? source.prevY : y,
+        dx: Number.isFinite(source?.dx) ? source.dx : 0,
+        dy: Number.isFinite(source?.dy) ? source.dy : 0,
+        originX: Number.isFinite(source?.originX) ? source.originX : x,
+        originY: Number.isFinite(source?.originY) ? source.originY : y,
+        endX: Number.isFinite(source?.endX) ? source.endX : null,
+        endY: Number.isFinite(source?.endY) ? source.endY : null,
+        speed: Number.isFinite(source?.speed) ? source.speed : MOVING_PLATFORM_DEFAULT_SPEED_PX_PER_SECOND,
+        loop: resolveMovingPlatformLoopMode(source?.loop ?? params?.loop),
+        oneWay: typeof source?.oneWay === "boolean" ? source.oneWay : (typeof params?.oneWay === "boolean" ? params.oneWay : true),
+        carryPlayer: typeof source?.carryPlayer === "boolean" ? source.carryPlayer : (typeof params?.carryPlayer === "boolean" ? params.carryPlayer : true),
+        _moveProgress: Number.isFinite(source?._moveProgress) ? source._moveProgress : 0,
+        _moveDirection: Number.isFinite(source?._moveDirection) && source._moveDirection < 0 ? -1 : 1,
+        _moveStopped: source?._moveStopped === true,
+      }
+    : {};
 
   return {
     id: typeof source.id === "string" && source.id.length > 0 ? source.id : `runtime-entity-${index + 1}`,
@@ -382,6 +409,7 @@ function normalizeRuntimeEntity(sourceEntity, index, tileSize, worldWidth, world
     ...darkCreatureRuntimeState,
     ...hoverRuntimeState,
     ...fireflyRuntimeState,
+    ...movingPlatformRuntimeState,
   };
 }
 
@@ -454,6 +482,271 @@ function isLiquidVolumeEntityType(entityType) {
   }
   const normalizedType = entityType.trim().toLowerCase();
   return normalizedType === "water_volume" || normalizedType === "lava_volume" || normalizedType === "bubbling_liquid_volume";
+}
+
+function isMovingPlatformEntityType(entityType) {
+  if (typeof entityType !== "string") {
+    return false;
+  }
+  const normalizedType = entityType.trim().toLowerCase();
+  return normalizedType === "movingplatform" || normalizedType === "moving_platform";
+}
+
+function resolveMovingPlatformDirectionVector(direction) {
+  const normalizedDirection = typeof direction === "string" ? direction.trim().toLowerCase() : "";
+  if (normalizedDirection === "left") return { x: -1, y: 0 };
+  if (normalizedDirection === "up") return { x: 0, y: -1 };
+  if (normalizedDirection === "down") return { x: 0, y: 1 };
+  return { x: 1, y: 0 };
+}
+
+function resolveMovingPlatformLoopMode(loopMode) {
+  const normalized = typeof loopMode === "string" ? loopMode.trim().toLowerCase() : "";
+  if (normalized === "loop" || normalized === "oneway" || normalized === "one_way") {
+    return normalized === "oneway" || normalized === "one_way" ? "oneWay" : "loop";
+  }
+  return "pingpong";
+}
+
+function resolveMovingPlatformRuntimeState(entity, tileSize) {
+  const params = entity?.params && typeof entity.params === "object" ? entity.params : {};
+  const widthTiles = Number.isFinite(params?.widthTiles) && params.widthTiles > 0
+    ? Math.max(1, Math.round(params.widthTiles))
+    : MOVING_PLATFORM_DEFAULT_WIDTH_TILES;
+  const heightTiles = Number.isFinite(params?.heightTiles) && params.heightTiles > 0
+    ? Math.max(1, Math.round(params.heightTiles))
+    : MOVING_PLATFORM_DEFAULT_HEIGHT_TILES;
+  const direction = typeof params?.direction === "string" && params.direction.trim().length > 0
+    ? params.direction.trim()
+    : MOVING_PLATFORM_DEFAULT_DIRECTION;
+  const distanceTiles = Number.isFinite(params?.distanceTiles) && params.distanceTiles >= 0
+    ? params.distanceTiles
+    : MOVING_PLATFORM_DEFAULT_DISTANCE_TILES;
+  const speed = Number.isFinite(params?.speed) && params.speed >= 0
+    ? params.speed
+    : MOVING_PLATFORM_DEFAULT_SPEED_PX_PER_SECOND;
+  const loop = resolveMovingPlatformLoopMode(params?.loop ?? entity?.loop);
+  const oneWay = typeof params?.oneWay === "boolean" ? params.oneWay : true;
+  const carryPlayer = typeof params?.carryPlayer === "boolean" ? params.carryPlayer : true;
+  const spriteTileId = typeof params?.spriteTileId === "string" && params.spriteTileId.trim().length > 0
+    ? params.spriteTileId.trim()
+    : null;
+  const originX = Number.isFinite(entity?.originX) ? entity.originX : (Number.isFinite(entity?.x) ? entity.x : 0);
+  const originY = Number.isFinite(entity?.originY) ? entity.originY : (Number.isFinite(entity?.y) ? entity.y : 0);
+  const directionVector = resolveMovingPlatformDirectionVector(direction);
+  const distancePx = Math.max(0, distanceTiles) * (Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24);
+  const endX = Number.isFinite(entity?.endX) ? entity.endX : (originX + (directionVector.x * distancePx));
+  const endY = Number.isFinite(entity?.endY) ? entity.endY : (originY + (directionVector.y * distancePx));
+  const segmentLength = Math.hypot(endX - originX, endY - originY);
+  return {
+    widthTiles,
+    heightTiles,
+    widthPx: Math.max(1, widthTiles * tileSize),
+    heightPx: Math.max(1, heightTiles * tileSize),
+    direction,
+    distanceTiles: Math.max(0, distanceTiles),
+    speed: Math.max(0, speed),
+    loop,
+    oneWay,
+    carryPlayer,
+    spriteTileId,
+    originX,
+    originY,
+    endX,
+    endY,
+    segmentLength,
+  };
+}
+
+function buildPlayerWorldBoundsFromFootPosition(position) {
+  const footX = Number.isFinite(position?.x) ? position.x : 0;
+  const footY = Number.isFinite(position?.y) ? position.y : 0;
+  return {
+    x: footX - (V1_PLAYER_HITBOX_WIDTH_PX * 0.5),
+    y: footY + 1 - V1_PLAYER_HITBOX_HEIGHT_PX,
+    w: V1_PLAYER_HITBOX_WIDTH_PX,
+    h: V1_PLAYER_HITBOX_HEIGHT_PX,
+  };
+}
+
+function stepMovingPlatformsRuntime(worldPacket, sourcePlayerState, verticalStep, sourceEntities, options = {}) {
+  const dt = resolveRuntimeDeltaSeconds(options);
+  const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0 ? worldPacket.world.tileSize : 24;
+  const movedEntities = [];
+  const platformDebug = [];
+  let playerOnPlatformId = null;
+  let carriedThisFrame = false;
+  let nextPlayerState = { ...verticalStep, position: { ...verticalStep.position }, velocity: { ...verticalStep.velocity } };
+  const previousPlayerFeet = Number.isFinite(sourcePlayerState?.position?.y) ? sourcePlayerState.position.y + 1 : null;
+  const previousOnPlatformId = typeof sourcePlayerState?.onPlatformId === "string" ? sourcePlayerState.onPlatformId : null;
+
+  for (const entity of sourceEntities) {
+    if (!isMovingPlatformEntityType(entity?.type)) {
+      movedEntities.push(entity);
+      continue;
+    }
+
+    const runtime = resolveMovingPlatformRuntimeState(entity, tileSize);
+    const previousX = Number.isFinite(entity?.x) ? entity.x : runtime.originX;
+    const previousY = Number.isFinite(entity?.y) ? entity.y : runtime.originY;
+    const previousProgress = Number.isFinite(entity?._moveProgress) ? entity._moveProgress : 0;
+    const previousDirection = Number.isFinite(entity?._moveDirection) && entity._moveDirection < 0 ? -1 : 1;
+    const progressDelta = runtime.segmentLength > 0 ? ((runtime.speed * dt) / runtime.segmentLength) : 0;
+    let nextProgress = previousProgress;
+    let nextDirection = previousDirection;
+    let stopped = false;
+
+    if (runtime.loop === "pingpong") {
+      nextProgress += progressDelta * nextDirection;
+      while (nextProgress > 1 || nextProgress < 0) {
+        if (nextProgress > 1) {
+          nextProgress = 2 - nextProgress;
+          nextDirection *= -1;
+        } else if (nextProgress < 0) {
+          nextProgress = -nextProgress;
+          nextDirection *= -1;
+        }
+      }
+    } else if (runtime.loop === "loop") {
+      nextProgress += progressDelta;
+      if (nextProgress >= 1) {
+        nextProgress %= 1;
+      }
+    } else {
+      nextProgress = Math.min(1, nextProgress + progressDelta);
+      stopped = nextProgress >= 1;
+    }
+
+    const nextX = lerp(runtime.originX, runtime.endX, nextProgress);
+    const nextY = lerp(runtime.originY, runtime.endY, nextProgress);
+    const dx = nextX - previousX;
+    const dy = nextY - previousY;
+    const platformLeft = nextX;
+    const platformRight = nextX + runtime.widthPx;
+    const platformTop = nextY;
+    const playerFeet = Number.isFinite(nextPlayerState?.position?.y) ? nextPlayerState.position.y + 1 : null;
+    const playerBounds = buildPlayerWorldBoundsFromFootPosition(nextPlayerState?.position);
+    const overlapsX = (playerBounds.x + playerBounds.w) > platformLeft && playerBounds.x < platformRight;
+    const wasOnSamePlatform = previousOnPlatformId !== null && previousOnPlatformId === entity.id;
+    const crossedDownward = previousPlayerFeet !== null
+      && playerFeet !== null
+      && previousPlayerFeet <= platformTop + MOVING_PLATFORM_LANDING_EPSILON_PX
+      && playerFeet >= platformTop - MOVING_PLATFORM_LANDING_EPSILON_PX;
+    const standingNearTop = playerFeet !== null
+      && Math.abs(playerFeet - platformTop) <= (MOVING_PLATFORM_LANDING_EPSILON_PX + Math.abs(dy) + 1);
+    const movingUpThroughPlatform = (nextPlayerState?.velocity?.y ?? 0) < 0;
+    const eligibleLanding = overlapsX && !movingUpThroughPlatform && (crossedDownward || (wasOnSamePlatform && standingNearTop));
+
+    if (eligibleLanding) {
+      nextPlayerState = {
+        ...nextPlayerState,
+        position: {
+          ...nextPlayerState.position,
+          y: platformTop - 1,
+        },
+        velocity: {
+          ...nextPlayerState.velocity,
+          y: 0,
+        },
+        grounded: true,
+        falling: false,
+        rising: false,
+        landed: nextPlayerState?.grounded !== true,
+        onPlatformId: entity.id,
+      };
+      playerOnPlatformId = entity.id;
+    }
+
+    let localCarried = false;
+    if (runtime.carryPlayer && playerOnPlatformId === entity.id) {
+      const candidatePosition = {
+        x: nextPlayerState.position.x + dx,
+        y: nextPlayerState.position.y + dy,
+      };
+      const candidateBounds = buildPlayerWorldBoundsFromFootPosition(candidatePosition);
+      if (!doesAabbOverlapSolidTile(worldPacket, tileSize, candidateBounds)) {
+        nextPlayerState.position = candidatePosition;
+      } else {
+        const xOnlyBounds = buildPlayerWorldBoundsFromFootPosition({ x: candidatePosition.x, y: nextPlayerState.position.y });
+        const yOnlyBounds = buildPlayerWorldBoundsFromFootPosition({ x: nextPlayerState.position.x, y: candidatePosition.y });
+        if (!doesAabbOverlapSolidTile(worldPacket, tileSize, xOnlyBounds)) {
+          nextPlayerState.position.x = candidatePosition.x;
+        }
+        if (!doesAabbOverlapSolidTile(worldPacket, tileSize, yOnlyBounds)) {
+          nextPlayerState.position.y = candidatePosition.y;
+        }
+      }
+      localCarried = Math.abs(dx) > 0.0001 || Math.abs(dy) > 0.0001;
+      carriedThisFrame = carriedThisFrame || localCarried;
+    }
+
+    movedEntities.push({
+      ...entity,
+      x: nextX,
+      y: nextY,
+      prevX: previousX,
+      prevY: previousY,
+      dx,
+      dy,
+      originX: runtime.originX,
+      originY: runtime.originY,
+      endX: runtime.endX,
+      endY: runtime.endY,
+      speed: runtime.speed,
+      loop: runtime.loop,
+      oneWay: runtime.oneWay,
+      carryPlayer: runtime.carryPlayer,
+      _moveProgress: nextProgress,
+      _moveDirection: nextDirection,
+      _moveStopped: stopped,
+      playerOnPlatform: playerOnPlatformId === entity.id,
+      carriedThisFrame: localCarried,
+      footprintW: runtime.widthPx,
+      footprintH: runtime.heightPx,
+      params: {
+        ...(entity?.params && typeof entity.params === "object" ? entity.params : {}),
+        widthTiles: runtime.widthTiles,
+        heightTiles: runtime.heightTiles,
+        direction: runtime.direction,
+        distanceTiles: runtime.distanceTiles,
+        speed: runtime.speed,
+        loop: runtime.loop,
+        oneWay: runtime.oneWay,
+        carryPlayer: runtime.carryPlayer,
+        spriteTileId: runtime.spriteTileId,
+      },
+    });
+    platformDebug.push({
+      id: entity?.id ?? null,
+      x: nextX,
+      y: nextY,
+      prevX: previousX,
+      prevY: previousY,
+      dx,
+      dy,
+      origin: { x: runtime.originX, y: runtime.originY },
+      end: { x: runtime.endX, y: runtime.endY },
+      loop: runtime.loop,
+      speed: runtime.speed,
+      playerOnPlatform: playerOnPlatformId === entity.id,
+      carriedThisFrame: localCarried,
+    });
+  }
+
+  if (playerOnPlatformId === null) {
+    nextPlayerState.onPlatformId = null;
+  }
+
+  return {
+    entities: movedEntities,
+    player: nextPlayerState,
+    debug: {
+      count: platformDebug.length,
+      playerOnPlatformId,
+      carriedThisFrame,
+      platforms: platformDebug,
+    },
+  };
 }
 
 function buildPlayerPickupBounds(playerState, tileSize) {
@@ -2969,15 +3262,23 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       entities: Array.isArray(playerState?.entities) ? playerState.entities.map((entity) => ({ ...entity })) : [],
     };
   }
-  const resolvedPlayerStep = liquidDeathStep?.player ?? bottomRespawn?.player ?? verticalStep;
+  const movingPlatformStep = stepMovingPlatformsRuntime(
+    worldPacket,
+    playerState,
+    liquidDeathStep?.player ?? bottomRespawn?.player ?? verticalStep,
+    normalizedEntities,
+    options,
+  );
+  const entitiesAfterMovingPlatforms = movingPlatformStep.entities;
+  const resolvedPlayerStep = movingPlatformStep.player;
   const checkpointStep = stepCheckpointOverlap(worldPacket, {
     ...playerState,
     position: resolvedPlayerStep.position,
-  }, normalizedEntities);
+  }, entitiesAfterMovingPlatforms);
   const pickupStep = stepPickupCollection(worldPacket, {
     ...playerState,
     position: resolvedPlayerStep.position,
-  }, normalizedEntities);
+  }, entitiesAfterMovingPlatforms);
   const exitStep = stepExitOverlap(worldPacket, {
     ...playerState,
     position: resolvedPlayerStep.position,
@@ -3169,6 +3470,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         ? resolvedPlayerStep.respawnCountdown
         : (bottomRespawn?.player?.respawnCountdown ?? respawnCountdown),
       brakeState,
+      onPlatformId: typeof resolvedPlayerStep?.onPlatformId === "string" ? resolvedPlayerStep.onPlatformId : null,
     },
     collisions: {
       moveX: intent.moveX,
@@ -3243,6 +3545,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         pulseEntityHits: entityStep.hits.length,
         flareEntityAffects: flareEntityStep.flareAffects.length,
         fireflyRuntimeLights: fireflyStep.lights.length,
+        movingPlatforms: movingPlatformStep.debug,
       },
     },
     entities: hoverVoidStep.entities,

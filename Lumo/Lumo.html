@@ -955,6 +955,7 @@
           liquidDeath: nestedPlayer?.liquidDeath && typeof nestedPlayer.liquidDeath === "object"
             ? { ...nestedPlayer.liquidDeath }
             : null,
+          onPlatformId: typeof nestedPlayer?.onPlatformId === "string" ? nestedPlayer.onPlatformId : null,
           renderAlpha: Number.isFinite(payload?.playerRenderAlpha)
             ? payload.playerRenderAlpha
             : (Number.isFinite(nestedPlayer?.renderAlpha) ? nestedPlayer.renderAlpha : 1),
@@ -972,6 +973,7 @@
           locomotion: "",
           status: "",
           liquidDeath: null,
+          onPlatformId: null,
           renderAlpha: 1,
           hidden: false,
         };
@@ -2813,6 +2815,7 @@
 
         const liquidEntityTypes = new Set(["water_volume", "lava_volume", "bubbling_liquid_volume"]);
         const hoverEyesAfterDarkness = [];
+        const movingPlatformDebugNow = [];
         for (const entity of entitySnapshots) {
           if (entity?.active !== true) {
             continue;
@@ -2889,23 +2892,31 @@
               );
               renderedMovingPlatformFallback = true;
             }
-            if (state && state.rechargedMovingPlatformRenderDebug) {
-              state.rechargedMovingPlatformRenderDebug.push({
-                id: entity?.id || null,
-                rawX: entity?.x,
-                rawY: entity?.y,
-                coordinateMode: movingPlatformLooksTileBased ? "tile" : "pixel",
-                drawRect: {
-                  x: movingPlatformWorldX,
-                  y: movingPlatformWorldY,
-                  w: movingPlatformWidthPx,
-                  h: movingPlatformHeightPx,
-                },
-                spriteTileId,
-                drewVisual: renderedMovingPlatformVisual === true,
-                drewFallback: renderedMovingPlatformFallback,
-              });
-            }
+            movingPlatformDebugNow.push({
+              id: entity?.id || null,
+              x: movingPlatformWorldX,
+              y: movingPlatformWorldY,
+              prevX: Number.isFinite(entity?.prevX) ? entity.prevX : movingPlatformWorldX,
+              prevY: Number.isFinite(entity?.prevY) ? entity.prevY : movingPlatformWorldY,
+              dx: Number.isFinite(entity?.dx) ? entity.dx : 0,
+              dy: Number.isFinite(entity?.dy) ? entity.dy : 0,
+              origin: {
+                x: Number.isFinite(entity?.originX) ? entity.originX : movingPlatformWorldX,
+                y: Number.isFinite(entity?.originY) ? entity.originY : movingPlatformWorldY,
+              },
+              end: {
+                x: Number.isFinite(entity?.endX) ? entity.endX : movingPlatformWorldX,
+                y: Number.isFinite(entity?.endY) ? entity.endY : movingPlatformWorldY,
+              },
+              loop: typeof entity?.loop === "string" ? entity.loop : (typeof platformParams?.loop === "string" ? platformParams.loop : "pingpong"),
+              speed: Number.isFinite(entity?.speed) ? entity.speed : (Number.isFinite(platformParams?.speed) ? platformParams.speed : 70),
+              playerOnPlatform: entity?.playerOnPlatform === true || (typeof player?.onPlatformId === "string" && player.onPlatformId === entity?.id),
+              carriedThisFrame: entity?.carriedThisFrame === true,
+              coordinateMode: movingPlatformLooksTileBased ? "tile" : "pixel",
+              spriteTileId,
+              drewVisual: renderedMovingPlatformVisual === true,
+              drewFallback: renderedMovingPlatformFallback,
+            });
             if (renderedMovingPlatformVisual || renderedMovingPlatformFallback) {
               continue;
             }
@@ -3210,6 +3221,11 @@
             Math.max(1, entityRect.h - 4),
           );
         }
+        window.__LUMO_RECHARGED_MOVING_PLATFORM_DEBUG__ = {
+          count: movingPlatformDebugNow.length,
+          playerOnPlatformId: typeof player?.onPlatformId === "string" ? player.onPlatformId : null,
+          platforms: movingPlatformDebugNow,
+        };
 
         // V1 layering parity: rear fog may be before Lumo when render.lumoBehindFog is false.
         drawRechargedFogOverDarkness(ctx, mapper, fogVolumes, {
