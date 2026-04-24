@@ -637,7 +637,11 @@ function stepMovingPlatformsRuntime(worldPacket, sourcePlayerState, verticalStep
     const movingUpThroughPlatform = (nextPlayerState?.velocity?.y ?? 0) < 0;
     const eligibleLanding = overlapsX && !movingUpThroughPlatform && (crossedDownward || (wasOnSamePlatform && standingNearTop));
 
+    let snapAppliedThisFrame = false;
+    const feetToPlatformTopDelta = playerFeet !== null ? (playerFeet - platformTop) : null;
+
     if (eligibleLanding) {
+      snapAppliedThisFrame = true;
       nextPlayerState = {
         ...nextPlayerState,
         position: {
@@ -658,10 +662,18 @@ function stepMovingPlatformsRuntime(worldPacket, sourcePlayerState, verticalStep
     }
 
     let localCarried = false;
+    let appliedCarryDx = 0;
+    let appliedCarryDy = 0;
     if (runtime.carryPlayer && playerOnPlatformId === entity.id) {
+      const carryDx = dx;
+      // Landing snap already reconciles vertical contact for this frame.
+      // Re-applying dy after snap can create visible 1px oscillation.
+      const carryDy = snapAppliedThisFrame ? 0 : dy;
+      appliedCarryDx = carryDx;
+      appliedCarryDy = carryDy;
       const candidatePosition = {
-        x: nextPlayerState.position.x + dx,
-        y: nextPlayerState.position.y + dy,
+        x: nextPlayerState.position.x + carryDx,
+        y: nextPlayerState.position.y + carryDy,
       };
       const candidateBounds = buildPlayerWorldBoundsFromFootPosition(candidatePosition);
       if (!doesAabbOverlapSolidTile(worldPacket, tileSize, candidateBounds)) {
@@ -676,7 +688,7 @@ function stepMovingPlatformsRuntime(worldPacket, sourcePlayerState, verticalStep
           nextPlayerState.position.y = candidatePosition.y;
         }
       }
-      localCarried = Math.abs(dx) > 0.0001 || Math.abs(dy) > 0.0001;
+      localCarried = Math.abs(carryDx) > 0.0001 || Math.abs(carryDy) > 0.0001;
       carriedThisFrame = carriedThisFrame || localCarried;
     }
 
@@ -701,6 +713,10 @@ function stepMovingPlatformsRuntime(worldPacket, sourcePlayerState, verticalStep
       _moveStopped: stopped,
       playerOnPlatform: playerOnPlatformId === entity.id,
       carriedThisFrame: localCarried,
+      playerCarryDx: appliedCarryDx,
+      playerCarryDy: appliedCarryDy,
+      snapAppliedThisFrame,
+      feetToPlatformTopDelta,
       footprintW: runtime.widthPx,
       footprintH: runtime.heightPx,
       params: {
@@ -730,6 +746,10 @@ function stepMovingPlatformsRuntime(worldPacket, sourcePlayerState, verticalStep
       speed: runtime.speed,
       playerOnPlatform: playerOnPlatformId === entity.id,
       carriedThisFrame: localCarried,
+      playerCarryDx: appliedCarryDx,
+      playerCarryDy: appliedCarryDy,
+      snapAppliedThisFrame,
+      feetToPlatformTopDelta,
     });
   }
 
