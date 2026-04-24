@@ -149,4 +149,58 @@ function advanceUntilRespawnPending({ worldPacket, entities, maxTicks = 180 } = 
   assert.equal(step.debug?.vertical?.fallTracking?.active === true, false, "normal in-bounds jumps should not start hazard fall tracking");
 }
 
+{
+  // 7) Authored lower hazard volume top must win over deepest support-derived bottoms.
+  const tileSize = 24;
+  const worldPacket = {
+    world: { width: 40, height: null, tileSize },
+    layers: {
+      tiles: [
+        { x: 0, y: 2, w: 10, h: 1, coordinateSpace: "grid" },
+        { x: 0, y: 2000, w: 1, h: 1, coordinateSpace: "world" },
+      ],
+    },
+    spawn: { x: 96, y: 70 },
+    tileBounds: { maxY: 2000 },
+  };
+  let player = {
+    ...buildBasePlayer(),
+    position: { x: 96, y: 118 },
+    grounded: false,
+    falling: true,
+    velocity: { x: 0, y: 400 },
+  };
+  const entities = [{
+    id: "hazard-volume-top",
+    type: "bubbling_liquid_volume",
+    active: true,
+    x: 0,
+    y: 120,
+    params: {
+      area: { x0: 0, x1: 240, y0: 120, depth: 300 },
+      hazard: { instantDeath: true },
+    },
+  }];
+
+  let armedStep = null;
+  for (let tick = 0; tick < 20; tick += 1) {
+    const step = stepRuntimePlayerSimulation(worldPacket, player, {
+      input: { moveX: 0, jump: false },
+      entities,
+    });
+    assert.equal(step.ok, true);
+    if (step.debug?.vertical?.fallTracking?.active === true) {
+      armedStep = step;
+      break;
+    }
+    player = step.player;
+  }
+
+  assert.notEqual(armedStep, null, "hazard fall tracking should arm near volume top, not at deepest support/world bottom");
+  assert.equal(armedStep.debug?.vertical?.fallTracking?.deathPlaneSource, "authored-hazard-volume-top", "death plane should prefer authored hazard volume top");
+  assert.equal(armedStep.debug?.vertical?.fallTracking?.deathPlaneY, 120, "deathPlaneY should match authored volume top");
+  assert.equal(armedStep.debug?.vertical?.fallTracking?.effectiveDeathPlaneY, 132, "effectiveDeathPlaneY should include +0.5 tile arm offset");
+  assert.equal(armedStep.debug?.vertical?.fallTracking?.supportBottomY, null, "authored volume priority should not require support-bottom fallback");
+}
+
 console.log("recharged-runtime-liquid-death-respawn-handoff-checks: ok");
