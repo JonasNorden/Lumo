@@ -229,4 +229,68 @@ function advanceUntilRespawnPending({ worldPacket, entities, maxTicks = 180 } = 
   assert.equal(hazardPendingStep.debug?.vertical?.fallTracking?.respawnTriggered, true, "fall tracking should expose respawnTriggered at hazard handoff");
 }
 
+{
+  // 8) Live fall debug export should use player foot Y and publish respawnTriggered + respawnPending on the same handoff tick.
+  const originalWindow = globalThis.window;
+  globalThis.window = {};
+  try {
+    const tileSize = 24;
+    const worldPacket = {
+      world: { width: 40, height: null, tileSize },
+      layers: { tiles: [] },
+      spawn: { x: 96, y: 60 },
+      tileBounds: { maxY: 40 },
+    };
+    const entities = [{
+      id: "hazard-volume-top-debug",
+      type: "bubbling_liquid_volume",
+      active: true,
+      x: 0,
+      y: 120,
+      params: {
+        area: { x0: 0, x1: 240, y0: 120, depth: 300 },
+        hazard: { instantDeath: true },
+      },
+    }];
+    let player = {
+      ...buildBasePlayer(),
+      position: { x: 96, y: 118 },
+      grounded: false,
+      falling: true,
+      velocity: { x: 0, y: 400 },
+    };
+
+    let handoffDebug = null;
+    let handoffStep = null;
+    for (let tick = 0; tick < 24; tick += 1) {
+      const step = stepRuntimePlayerSimulation(worldPacket, player, {
+        input: { moveX: 0, jump: false },
+        entities,
+        tick,
+      });
+      assert.equal(step.ok, true);
+      player = step.player;
+      if (step.player.status === "respawn-pending") {
+        handoffStep = step;
+        handoffDebug = globalThis.window.__LUMO_RECHARGED_FALL_DEBUG__;
+        break;
+      }
+    }
+
+    assert.notEqual(handoffStep, null, "hazard scenario should still handoff into respawn-pending");
+    assert.equal(Number.isFinite(handoffDebug?.playerYRaw), true, "live fall debug should publish playerYRaw");
+    assert.equal(handoffDebug?.playerYRaw, handoffDebug?.playerFootY, "live fall debug should use foot anchor for playerY fields");
+    assert.equal(handoffDebug?.playerReference, "foot-y", "live fall debug should explicitly report foot-based anchoring");
+    assert.equal(handoffDebug?.respawnTriggered, true, "live fall debug should keep respawnTriggered at handoff");
+    assert.equal(handoffDebug?.respawnPending, true, "live fall debug should report respawnPending on the same handoff tick");
+    const handoffFromVolumeTop = (handoffDebug?.playerFootY ?? 0) - 120;
+    assert.ok(
+      handoffFromVolumeTop >= tileSize * 1.5 && handoffFromVolumeTop <= tileSize * 2.25,
+      "live handoff distance from volume top should remain near expected foot-based trigger range",
+    );
+  } finally {
+    globalThis.window = originalWindow;
+  }
+}
+
 console.log("recharged-runtime-liquid-death-respawn-handoff-checks: ok");
