@@ -37,6 +37,12 @@ const ENTITY_VISUALS = {
     stroke: "#cba7ff",
     hitRadius: 8.5,
   },
+  movingplatform: {
+    key: "movingPlatform",
+    label: "Moving Platform",
+    stroke: "#ffd89b",
+    hitRadius: 12,
+  },
   trigger: {
     key: "trigger",
     label: "Trigger",

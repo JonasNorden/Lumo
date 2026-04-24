@@ -10,6 +10,9 @@ const ENTITY_LIKE_EDITABLE_TYPES = new Set([
 ]);
 
 const EDITABLE_TYPE_ALIASES = new Map([
+  ["movingplatform", "movingPlatform"],
+  ["moving_platform", "movingPlatform"],
+  ["moving platform", "movingPlatform"],
   ["lantern", "lantern_01"],
   ["spawn", "player-spawn"],
   ["player_spawn", "player-spawn"],

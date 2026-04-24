@@ -1,6 +1,7 @@
 import { cloneEntityParams, mergeEntityParams } from "./entityParams.js";
 import { normalizeEditableObjectType } from "../placeables/editableObjectBuckets.js";
 import { normalizeThemeIds } from "../theme/themeTagging.js";
+import { MOVING_PLATFORM_DEFAULT_PARAMS } from "./movingPlatform.js";
 
 export const ENTITY_PRESETS = [
   {
@@ -119,6 +120,22 @@ export const ENTITY_PRESETS = [
     footprintH: 16,
     drawAnchor: "BL",
     hitRadius: 8.5,
+  },
+  {
+    id: "movingPlatform",
+    type: "movingPlatform",
+    defaultName: "Moving Platform",
+    defaultParams: {
+      ...MOVING_PLATFORM_DEFAULT_PARAMS,
+    },
+    img: null,
+    drawW: 96,
+    drawH: 24,
+    footprintW: 96,
+    footprintH: 24,
+    drawAnchor: "TL",
+    hitRadius: 12,
+    group: "World Objects",
   },
   {
     id: "trigger",
