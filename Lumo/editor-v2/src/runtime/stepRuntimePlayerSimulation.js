@@ -2612,6 +2612,43 @@ function resolveGameplayDeathPlaneY(worldPacket, sourceEntities = []) {
   const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0
     ? worldPacket.world.tileSize
     : 24;
+  const isGridAuthoredTileRect = (tile) => {
+    const worldWidth = worldPacket?.world?.width;
+    const worldHeight = worldPacket?.world?.height;
+
+    if (!Number.isInteger(worldWidth) || !Number.isInteger(worldHeight)) {
+      return false;
+    }
+
+    // Grid-authored runtime worlds keep compact cell dimensions.
+    if (worldWidth > 256 || worldHeight > 256) {
+      return false;
+    }
+
+    return (
+      Number.isInteger(tile?.x)
+      && Number.isInteger(tile?.y)
+      && Number.isInteger(tile?.w)
+      && Number.isInteger(tile?.h)
+      && tile.x >= 0
+      && tile.y >= 0
+      && tile.x + tile.w <= worldWidth
+      && tile.y + tile.h <= worldHeight
+    );
+  };
+  const resolveTileBottomY = (tile) => {
+    const tileY = Number.isFinite(tile?.y) ? tile.y : null;
+    const tileH = Number.isFinite(tile?.h) ? tile.h : null;
+    if (!Number.isFinite(tileY) || !Number.isFinite(tileH) || tileH <= 0) {
+      return Number.NEGATIVE_INFINITY;
+    }
+
+    if (tile?.coordinateSpace === "grid" || (tile?.coordinateSpace == null && isGridAuthoredTileRect(tile))) {
+      return (tileY + tileH) * tileSize - 1;
+    }
+
+    return tileY + tileH - 1;
+  };
   const explicitFallHazardTopY = [
     worldPacket?.fallHazardTopY,
     worldPacket?.world?.fallHazardTopY,
@@ -2626,12 +2663,7 @@ function resolveGameplayDeathPlaneY(worldPacket, sourceEntities = []) {
 
   const supportBottomY = Array.isArray(worldPacket?.layers?.tiles)
     ? worldPacket.layers.tiles.reduce((maxBottom, tile) => {
-      const tileY = Number.isFinite(tile?.y) ? tile.y : null;
-      const tileH = Number.isFinite(tile?.h) ? tile.h : null;
-      if (!Number.isFinite(tileY) || !Number.isFinite(tileH) || tileH <= 0) {
-        return maxBottom;
-      }
-      return Math.max(maxBottom, tileY + tileH - 1);
+      return Math.max(maxBottom, resolveTileBottomY(tile));
     }, Number.NEGATIVE_INFINITY)
     : Number.NEGATIVE_INFINITY;
   const movingPlatformBottomY = Array.isArray(sourceEntities)
