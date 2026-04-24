@@ -350,6 +350,7 @@ function renderParamFields(prefix, params, selectedIndex, itemId = null, options
   return Object.entries(cloneEntityParams(params))
     .map(([paramKey, paramValue]) => {
       if (prefix === "entity" && isMovingPlatformEntityType(objectType) && paramKey === "spriteTileId") {
+        // Moving platforms expose tile visuals as a picker so designers do not need to memorize raw tile IDs.
         return renderMovingPlatformSpriteTileField(prefix, paramKey, String(paramValue || ""), selectedIndex, itemId);
       }
       return renderParamField(prefix, paramKey, paramValue, selectedIndex, itemId);
