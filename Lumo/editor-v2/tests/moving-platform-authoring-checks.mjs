@@ -9,6 +9,8 @@ import {
 import { serializeLevelDocument } from "../src/data/exportLevelDocument.js";
 import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
 import { createNewLevelDocument } from "../src/data/createNewLevelDocument.js";
+import { getSelectionEditorPanelContent } from "../src/ui/selectionEditorPanel.js";
+import { BRUSH_SPRITE_OPTIONS } from "../src/domain/tiles/tileSpriteCatalog.js";
 
 function runMovingPlatformPresetChecks() {
   const preset = findEntityPresetById("movingPlatform");
@@ -84,7 +86,61 @@ function runMovingPlatformPreviewDerivationChecks() {
   assert.deepEqual(path.end, { x: 8, y: 3 }, "expected endpoint to be derived from direction + distance");
 }
 
+function runMovingPlatformInspectorVisualSelectionChecks() {
+  const selectedTileOption = BRUSH_SPRITE_OPTIONS.find((option) => typeof option?.value === "string" && option.value.trim())
+    || { value: "soil_c", label: "Soil C" };
+
+  const state = {
+    document: {
+      status: "ready",
+      error: null,
+      active: {
+        id: "moving-platform-inspector-level",
+        dimensions: { width: 12, height: 8, tileSize: 24 },
+        entities: [
+          {
+            id: "entity-moving-platform-01",
+            name: "Moving Platform",
+            type: "movingPlatform",
+            x: 3,
+            y: 4,
+            visible: true,
+            params: {
+              ...MOVING_PLATFORM_DEFAULT_PARAMS,
+              spriteTileId: selectedTileOption.value,
+            },
+          },
+        ],
+        decor: [],
+        sounds: [],
+      },
+    },
+    interaction: {
+      selectedEntityIndices: [0],
+      selectedEntityIndex: 0,
+      selectedEntityIds: ["entity-moving-platform-01"],
+      selectedEntityId: "entity-moving-platform-01",
+      selectedDecorIndices: [],
+      selectedDecorIndex: null,
+      selectedDecorIds: [],
+      selectedDecorId: null,
+      selectedSoundIndices: [],
+      selectedSoundIndex: null,
+      selectedSoundIds: [],
+      selectedSoundId: null,
+    },
+  };
+
+  const { markup } = getSelectionEditorPanelContent(state);
+  assert.equal(markup.includes('data-entity-param-key="spriteTileId"'), true, "moving platform inspector should expose spriteTileId field");
+  assert.equal(markup.includes("<select"), true, "moving platform sprite selector should render a dropdown");
+  assert.equal(markup.includes(selectedTileOption.label), true, "moving platform sprite selector should render human-readable tile labels");
+  assert.equal(markup.includes('class="selectionTileSwatch"'), true, "moving platform sprite selector should render a selected tile swatch preview");
+  assert.equal(markup.includes(`value="${selectedTileOption.value}" selected`), true, "moving platform sprite selector should preserve selected spriteTileId value");
+}
+
 runMovingPlatformPresetChecks();
 runMovingPlatformPersistenceChecks();
 runMovingPlatformPreviewDerivationChecks();
+runMovingPlatformInspectorVisualSelectionChecks();
 console.log("moving platform authoring checks passed");
