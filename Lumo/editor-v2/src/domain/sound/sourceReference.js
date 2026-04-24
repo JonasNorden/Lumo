@@ -1,3 +1,5 @@
+import { getSoundAssetOptionsForType } from "./audioAssetCatalog.js";
+
 export function normalizeSoundSourceValue(value) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -28,8 +30,35 @@ export function getAuthoredSoundSource(sound) {
   return null;
 }
 
+function readSoundOrdinalFromId(sound) {
+  const rawId = typeof sound?.audioId === "string"
+    ? sound.audioId
+    : (typeof sound?.id === "string" ? sound.id : "");
+  const match = rawId.trim().match(/(?:^|[-_])(sound|audio)[-_]?(\d+)$/i);
+  if (!match) return null;
+  const ordinal = Number.parseInt(match[2], 10);
+  return Number.isInteger(ordinal) && ordinal > 0 ? ordinal : null;
+}
+
+export function resolveSoundCatalogSource(sound) {
+  const soundType = typeof sound?.audioType === "string" ? sound.audioType : sound?.type;
+  const catalogOptions = getSoundAssetOptionsForType(soundType);
+  if (!Array.isArray(catalogOptions) || catalogOptions.length === 0) return null;
+
+  const ordinal = readSoundOrdinalFromId(sound);
+  const index = Number.isInteger(ordinal)
+    ? Math.max(0, Math.min(catalogOptions.length - 1, ordinal - 1))
+    : 0;
+  const path = catalogOptions[index]?.value;
+  return normalizeSoundSourceValue(path);
+}
+
+export function resolveAuthoredSoundSource(sound) {
+  return getAuthoredSoundSource(sound) || resolveSoundCatalogSource(sound);
+}
+
 export function resolveSoundPlaybackSource(sound) {
-  const authoredSource = getAuthoredSoundSource(sound);
+  const authoredSource = resolveAuthoredSoundSource(sound);
   if (!authoredSource) return null;
   if (hasAbsoluteUrlScheme(authoredSource) || authoredSource.startsWith("//")) return authoredSource;
   if (authoredSource.startsWith("/")) return authoredSource;
