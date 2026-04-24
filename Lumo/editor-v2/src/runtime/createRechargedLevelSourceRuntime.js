@@ -1,5 +1,6 @@
 import { createRechargedBootIntegration } from "./createRechargedBootIntegration.js";
 import { buildRechargedHudSnapshot } from "./buildRechargedHudSnapshot.js";
+import { resolveAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 
 // Clones plain JSON-like values so snapshots never share mutable params references.
 function clonePlainData(value) {
@@ -105,10 +106,10 @@ function buildWorldSnapshot(snapshot) {
         audioType: typeof audio?.audioType === "string" ? audio.audioType : "ambient",
         x: Number.isFinite(audio?.x) ? audio.x : null,
         y: Number.isFinite(audio?.y) ? audio.y : null,
-        source: typeof audio?.source === "string"
-          ? audio.source
-          : (typeof audio?.params?.source === "string" ? audio.params.source : null),
-        asset: typeof audio?.asset === "string" ? audio.asset : null,
+        source: resolveAuthoredSoundSource(audio),
+        asset: typeof audio?.asset === "string" && audio.asset.trim()
+          ? audio.asset
+          : resolveAuthoredSoundSource(audio),
         variant: Number.isFinite(audio?.variant) || typeof audio?.variant === "string" ? audio.variant : null,
         tags: Array.isArray(audio?.tags) ? [...audio.tags] : [],
         params: audio?.params && typeof audio.params === "object" ? clonePlainData(audio.params) : {},

@@ -1,5 +1,6 @@
 import { resolveLegacyBehaviorByTileId } from "./runtimeTileBehavior.js";
 import { getDecorVisual } from "../domain/decor/decorVisuals.js";
+import { getAuthoredSoundSource, resolveSoundCatalogSource } from "../domain/sound/sourceReference.js";
 
 // Recharged level loader v1.
 // This module validates and normalizes the new level document shape without
@@ -385,13 +386,24 @@ function convertEditorEntities(editorLevel) {
 
 function convertEditorAudio(editorLevel) {
   const sounds = Array.isArray(editorLevel?.sounds) ? editorLevel.sounds : [];
-  return sounds.map((entry, index) => ({
-    audioId: typeof entry?.id === "string" ? entry.id : `audio-${index + 1}`,
-    audioType: typeof entry?.type === "string" ? entry.type : "ambient",
-    x: Number.isFinite(entry?.x) ? Math.round(entry.x) : 0,
-    y: Number.isFinite(entry?.y) ? Math.round(entry.y) : 0,
-    params: isPlainObject(entry?.params) ? { ...entry.params } : {},
-  }));
+  return sounds.map((entry, index) => {
+    const params = isPlainObject(entry?.params) ? { ...entry.params } : {};
+    const authoredSource = getAuthoredSoundSource(entry);
+    const resolvedSource = authoredSource || resolveSoundCatalogSource(entry);
+    const authoredAsset = typeof entry?.asset === "string" && entry.asset.trim() ? entry.asset.trim() : null;
+    const authoredSoundFile = typeof entry?.soundFile === "string" && entry.soundFile.trim() ? entry.soundFile.trim() : null;
+
+    return {
+      audioId: typeof entry?.id === "string" ? entry.id : `audio-${index + 1}`,
+      audioType: typeof entry?.type === "string" ? entry.type : "ambient",
+      x: Number.isFinite(entry?.x) ? Math.round(entry.x) : 0,
+      y: Number.isFinite(entry?.y) ? Math.round(entry.y) : 0,
+      ...(resolvedSource ? { source: resolvedSource } : {}),
+      ...(authoredAsset || resolvedSource ? { asset: authoredAsset || resolvedSource } : {}),
+      ...(authoredSoundFile ? { soundFile: authoredSoundFile } : {}),
+      params,
+    };
+  });
 }
 
 // Validates required identity fields and returns a normalized identity object.
@@ -661,8 +673,13 @@ export function normalizeAudio(audioInput, errors) {
       pushError(errors, `layers.audio[${index}].y is required.`);
     }
 
+    const authoredSource = getAuthoredSoundSource(audio);
+    const resolvedSource = authoredSource || resolveSoundCatalogSource(audio);
+    const authoredAsset = typeof audio?.asset === "string" && audio.asset.trim() ? audio.asset.trim() : null;
     return {
       ...audio,
+      ...(resolvedSource ? { source: resolvedSource } : {}),
+      ...(authoredAsset || resolvedSource ? { asset: authoredAsset || resolvedSource } : {}),
       params: isPlainObject(audio.params) ? { ...audio.params } : {},
     };
   });
