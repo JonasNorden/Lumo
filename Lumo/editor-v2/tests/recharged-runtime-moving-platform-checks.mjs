@@ -7,7 +7,8 @@ function buildWorldPacket() {
     world: { width: 20, height: 12, tileSize: 24 },
     layers: { tiles: [], entities: [] },
     spawn: { x: 96, y: 96 },
-    tileBounds: { maxY: 11 },
+    // Keep bottom bound far below the fixture area so moving-platform checks stay focused on platform motion.
+    tileBounds: { maxY: 5000 },
   };
 }
 
@@ -61,12 +62,15 @@ function runMovementStateDerivationCheck() {
 function runPingPongAndLoopProgressionChecks() {
   const worldPacket = buildWorldPacket();
   const basePlayer = {
-    position: { x: 96, y: 96 },
+    // Keep the player parked on top of the platform so this test isolates
+    // pingpong/loop progression instead of entering out-of-bounds respawn flow.
+    position: { x: 108, y: 119 },
     velocity: { x: 0, y: 0 },
-    grounded: false,
-    falling: true,
+    grounded: true,
+    falling: false,
     rising: false,
     landed: false,
+    onPlatformId: "mp-1",
   };
 
   const oneTilePingPong = buildMovingPlatform({
@@ -89,6 +93,7 @@ function runPingPongAndLoopProgressionChecks() {
     bounds: { fallRespawnMarginTiles: 999 },
   });
   const firstPlatform = first.player.entities.find((entity) => entity.id === "mp-1");
+  assert.notEqual(first.status, "respawn-pending", "pingpong progression check should not enter respawn flow");
   assert.equal(Math.round(firstPlatform.x), 120, "pingpong should reach endpoint after one second at 24 px/s over 24px path");
 
   const second = stepRuntimePlayerSimulation(worldPacket, first.player, {
@@ -98,6 +103,7 @@ function runPingPongAndLoopProgressionChecks() {
     bounds: { fallRespawnMarginTiles: 999 },
   });
   const secondPlatform = second.player.entities.find((entity) => entity.id === "mp-1");
+  assert.notEqual(second.status, "respawn-pending", "pingpong return check should keep simulation active");
   assert.equal(Math.round(secondPlatform.x), 96, "pingpong should reverse back to origin on second second");
 
   const loopPlatform = buildMovingPlatform({
