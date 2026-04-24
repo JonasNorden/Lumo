@@ -202,7 +202,7 @@ function advanceUntilRespawnPending({ worldPacket, entities, maxTicks = 180 } = 
   assert.equal(armedStep.debug?.vertical?.fallTracking?.deathPlaneY, 120, "deathPlaneY should match authored volume top");
   assert.equal(armedStep.debug?.vertical?.fallTracking?.effectiveDeathPlaneY, 132, "effectiveDeathPlaneY should include +0.5 tile arm offset");
   assert.equal(armedStep.debug?.vertical?.fallTracking?.supportBottomY, null, "authored volume priority should not require support-bottom fallback");
-  assert.equal(armedStep.debug?.vertical?.fallTracking?.thresholdTiles, 1.25, "authored hazard volume should use tighter 1.25-tile trigger distance from arm point");
+  assert.equal(armedStep.debug?.vertical?.fallTracking?.thresholdTiles, 0.5, "authored hazard volume should use tighter 0.5-tile trigger distance from arm point");
   assert.equal(armedStep.player.status === "respawn-pending", false, "authored hazard volume should not respawn instantly on first contact/arm");
 
   let playerAfterArm = armedStep.player;
@@ -223,8 +223,8 @@ function advanceUntilRespawnPending({ worldPacket, entities, maxTicks = 180 } = 
   assert.notEqual(hazardPendingStep, null, "authored hazard volume should still handoff to respawn after a short sink");
   const totalFallFromDeathPlane = hazardPendingStep.debug?.vertical?.fallTracking?.totalFallFromDeathPlane ?? 0;
   assert.ok(
-    totalFallFromDeathPlane >= tileSize * 1.5 && totalFallFromDeathPlane <= tileSize * 2.25,
-    "authored hazard volume respawn should trigger after roughly 1.5-2.0 tiles of visual sink from hazard top",
+    totalFallFromDeathPlane >= tileSize * 0.5 && totalFallFromDeathPlane <= tileSize * 2.0,
+    "authored hazard volume respawn should not be instant and should stay bounded to about 2.0 tiles from hazard top",
   );
   assert.equal(hazardPendingStep.debug?.vertical?.fallTracking?.respawnTriggered, true, "fall tracking should expose respawnTriggered at hazard handoff");
 }
@@ -281,12 +281,13 @@ function advanceUntilRespawnPending({ worldPacket, entities, maxTicks = 180 } = 
     assert.equal(Number.isFinite(handoffDebug?.playerYRaw), true, "live fall debug should publish playerYRaw");
     assert.equal(handoffDebug?.playerYRaw, handoffDebug?.playerFootY, "live fall debug should use foot anchor for playerY fields");
     assert.equal(handoffDebug?.playerReference, "foot-y", "live fall debug should explicitly report foot-based anchoring");
+    assert.equal(handoffDebug?.thresholdTiles, 0.5, "live fall debug should expose tightened authored-hazard threshold");
     assert.equal(handoffDebug?.respawnTriggered, true, "live fall debug should keep respawnTriggered at handoff");
     assert.equal(handoffDebug?.respawnPending, true, "live fall debug should report respawnPending on the same handoff tick");
     const handoffFromVolumeTop = (handoffDebug?.playerFootY ?? 0) - 120;
     assert.ok(
-      handoffFromVolumeTop >= tileSize * 1.5 && handoffFromVolumeTop <= tileSize * 2.25,
-      "live handoff distance from volume top should remain near expected foot-based trigger range",
+      handoffFromVolumeTop >= tileSize * 0.5 && handoffFromVolumeTop <= tileSize * 2.0,
+      "live handoff distance from volume top should stay non-instant and bounded to about 2.0 tiles",
     );
   } finally {
     globalThis.window = originalWindow;
