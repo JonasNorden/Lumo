@@ -2412,11 +2412,10 @@
       return state.rechargedBgVisualState;
     }
 
-    // Mirrors V1 tile visual selection: tile id -> catalog entry image + draw metadata (no neighbor autotile pass).
-    function drawRechargedTileV1Visual(ctx, mapper, state, supportTile, worldUnitsToPx, tileSize) {
+    function resolveRechargedTileV1Visual(ctx, state, supportTile, tileSize) {
       const visualState = ensureRechargedTileVisualState(state);
       if (!visualState || !supportTile || typeof supportTile !== "object") {
-        return false;
+        return null;
       }
 
       const numericTileId = Number.isFinite(supportTile?.tileId) ? (supportTile.tileId | 0) : null;
@@ -2428,7 +2427,7 @@
         ? supportTile.img
         : (typeof catalogDef?.img === "string" ? catalogDef.img : null);
       if (!imageSrc) {
-        return false;
+        return null;
       }
 
       let img = visualState.imageByKey.get(imageSrc);
@@ -2440,10 +2439,6 @@
         img.onerror = () => { img._ok = false; };
         visualState.imageByKey.set(imageSrc, img);
       }
-      if (img._ok !== true) {
-        return false;
-      }
-
       const footprintW = Number.isFinite(supportTile?.w) && supportTile.w > 0 ? supportTile.w : 1;
       const footprintH = Number.isFinite(supportTile?.h) && supportTile.h > 0 ? supportTile.h : 1;
       const catalogFootprintW = Number.isFinite(catalogDef?.footprint?.w) && catalogDef.footprint.w > 0 ? catalogDef.footprint.w : 1;
@@ -2472,6 +2467,25 @@
       const drawAnchor = typeof supportTile?.drawAnchor === "string"
         ? supportTile.drawAnchor
         : (typeof catalogDef?.drawAnchor === "string" ? catalogDef.drawAnchor : "TL");
+      return {
+        img,
+        imageReady: img._ok === true,
+        drawW: Math.max(1, drawW),
+        drawH: Math.max(1, drawH),
+        drawOffX,
+        drawOffY,
+        drawAnchor,
+        footprintW,
+        footprintH,
+      };
+    }
+
+    // Mirrors V1 tile visual selection: tile id -> catalog entry image + draw metadata (no neighbor autotile pass).
+    function drawRechargedTileV1Visual(ctx, mapper, state, supportTile, worldUnitsToPx, tileSize) {
+      const visual = resolveRechargedTileV1Visual(ctx, state, supportTile, tileSize);
+      if (!visual || visual.imageReady !== true) {
+        return false;
+      }
 
       const tileX = Number.isFinite(supportTile?.x) ? supportTile.x : null;
       const tileY = Number.isFinite(supportTile?.y) ? supportTile.y : null;
@@ -2481,13 +2495,92 @@
 
       const tileWorldX = tileX * worldUnitsToPx;
       const tileWorldY = tileY * worldUnitsToPx;
-      const worldDrawX = tileWorldX + drawOffX;
-      const worldDrawY = drawAnchor === "BL"
-        ? ((tileY + footprintH) * worldUnitsToPx) - drawH + drawOffY
-        : tileWorldY + drawOffY;
-      const drawRect = mapper.worldToCanvasRect(worldDrawX, worldDrawY, Math.max(1, drawW), Math.max(1, drawH));
-      ctx.drawImage(img, drawRect.x, drawRect.y, drawRect.w, drawRect.h);
+      const worldDrawX = tileWorldX + visual.drawOffX;
+      const worldDrawY = visual.drawAnchor === "BL"
+        ? ((tileY + visual.footprintH) * worldUnitsToPx) - visual.drawH + visual.drawOffY
+        : tileWorldY + visual.drawOffY;
+      const drawRect = mapper.worldToCanvasRect(worldDrawX, worldDrawY, visual.drawW, visual.drawH);
+      ctx.drawImage(visual.img, drawRect.x, drawRect.y, drawRect.w, drawRect.h);
       return true;
+    }
+
+    function drawRechargedTileV1VisualAtWorldRect(ctx, mapper, state, supportTile, tileSize, worldRect) {
+      const visual = resolveRechargedTileV1Visual(ctx, state, supportTile, tileSize);
+      if (!visual || visual.imageReady !== true || !worldRect || typeof worldRect !== "object") {
+        return false;
+      }
+      const worldX = Number.isFinite(worldRect.x) ? worldRect.x : null;
+      const worldY = Number.isFinite(worldRect.y) ? worldRect.y : null;
+      const worldW = Number.isFinite(worldRect.w) && worldRect.w > 0 ? worldRect.w : null;
+      const worldH = Number.isFinite(worldRect.h) && worldRect.h > 0 ? worldRect.h : null;
+      if (worldX === null || worldY === null || worldW === null || worldH === null) {
+        return false;
+      }
+      const worldDrawX = worldX + visual.drawOffX;
+      const worldDrawY = visual.drawAnchor === "BL"
+        ? (worldY + worldH) - visual.drawH + visual.drawOffY
+        : worldY + visual.drawOffY;
+      const drawRect = mapper.worldToCanvasRect(worldDrawX, worldDrawY, visual.drawW, visual.drawH);
+      ctx.drawImage(visual.img, drawRect.x, drawRect.y, drawRect.w, drawRect.h);
+      return {
+        world: { x: worldDrawX, y: worldDrawY, w: visual.drawW, h: visual.drawH },
+        canvas: drawRect,
+      };
+    }
+
+    function drawMovingPlatformVisual(ctx, mapper, state, options) {
+      const worldX = Number.isFinite(options?.worldX) ? options.worldX : null;
+      const worldY = Number.isFinite(options?.worldY) ? options.worldY : null;
+      const widthPx = Number.isFinite(options?.widthPx) && options.widthPx > 0 ? options.widthPx : null;
+      const heightPx = Number.isFinite(options?.heightPx) && options.heightPx > 0 ? options.heightPx : null;
+      const tileSize = Number.isFinite(options?.tileSize) && options.tileSize > 0 ? options.tileSize : null;
+      if (worldX === null || worldY === null || widthPx === null || heightPx === null || tileSize === null) {
+        return { drewVisual: false, drewFallback: false, worldRect: null, canvasRect: null, visualRect: null };
+      }
+      const worldRect = { x: worldX, y: worldY, w: widthPx, h: heightPx };
+      const supportLikeTile = {
+        w: Math.max(1, Math.round(widthPx / tileSize)),
+        h: Math.max(1, Math.round(heightPx / tileSize)),
+        catalogTileId: typeof options?.spriteTileId === "string" ? options.spriteTileId : null,
+      };
+      const visualDescriptor = resolveRechargedTileV1Visual(ctx, state, supportLikeTile, tileSize);
+      const fallbackWorldDrawRect = visualDescriptor
+        ? {
+            x: worldX + visualDescriptor.drawOffX,
+            y: visualDescriptor.drawAnchor === "BL"
+              ? (worldY + heightPx) - visualDescriptor.drawH + visualDescriptor.drawOffY
+              : worldY + visualDescriptor.drawOffY,
+            w: visualDescriptor.drawW,
+            h: visualDescriptor.drawH,
+          }
+        : worldRect;
+      const visualResult = drawRechargedTileV1VisualAtWorldRect(ctx, mapper, state, supportLikeTile, tileSize, worldRect);
+      const movingPlatformRect = mapper.worldToCanvasRect(
+        fallbackWorldDrawRect.x,
+        fallbackWorldDrawRect.y,
+        fallbackWorldDrawRect.w,
+        fallbackWorldDrawRect.h,
+      );
+      if (visualResult) {
+        return { drewVisual: true, drewFallback: false, worldRect, canvasRect: movingPlatformRect, visualRect: visualResult, fallbackWorldDrawRect };
+      }
+
+      ctx.fillStyle = "rgba(148, 163, 184, 0.14)";
+      ctx.fillRect(
+        movingPlatformRect.x,
+        movingPlatformRect.y,
+        movingPlatformRect.w,
+        movingPlatformRect.h,
+      );
+      ctx.strokeStyle = "rgba(248, 113, 113, 0.88)";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        movingPlatformRect.x + 1,
+        movingPlatformRect.y + 1,
+        Math.max(1, movingPlatformRect.w - 2),
+        Math.max(1, movingPlatformRect.h - 2),
+      );
+      return { drewVisual: false, drewFallback: true, worldRect, canvasRect: movingPlatformRect, visualRect: null, fallbackWorldDrawRect };
     }
 
     // Draws one decor entry as a visual-only layer; never contributes collision or gameplay geometry.
@@ -2851,47 +2944,22 @@
             const movingPlatformWorldY = movingPlatformLooksTileBased ? (entity.y * worldUnitsToPx) : entity.y;
             const movingPlatformWidthPx = Math.max(1, widthTiles * tileSize);
             const movingPlatformHeightPx = Math.max(1, heightTiles * tileSize);
-            // movingPlatform reuses Recharged tile visual resolution so runtime platform art matches authored tile selections.
-            const movingPlatformSupportLikeTile = {
-              x: movingPlatformWorldX / worldUnitsToPx,
-              y: movingPlatformWorldY / worldUnitsToPx,
-              w: widthTiles,
-              h: heightTiles,
-              catalogTileId: spriteTileId,
-            };
-            const renderedMovingPlatformVisual = drawRechargedTileV1Visual(
+            // movingPlatform reuses Recharged tile visual catalog, but draws from runtime pixel/world rect without tile-grid reconversion.
+            const movingPlatformVisualResult = drawMovingPlatformVisual(
               ctx,
               mapper,
               state,
-              movingPlatformSupportLikeTile,
-              worldUnitsToPx,
-              tileSize,
+              {
+                worldX: movingPlatformWorldX,
+                worldY: movingPlatformWorldY,
+                widthPx: movingPlatformWidthPx,
+                heightPx: movingPlatformHeightPx,
+                tileSize,
+                spriteTileId,
+              },
             );
-            let renderedMovingPlatformFallback = false;
-            if (!renderedMovingPlatformVisual) {
-              const movingPlatformRect = mapper.worldToCanvasRect(
-                movingPlatformWorldX,
-                movingPlatformWorldY,
-                movingPlatformWidthPx,
-                movingPlatformHeightPx,
-              );
-              ctx.fillStyle = "rgba(148, 163, 184, 0.14)";
-              ctx.fillRect(
-                movingPlatformRect.x,
-                movingPlatformRect.y,
-                movingPlatformRect.w,
-                movingPlatformRect.h,
-              );
-              ctx.strokeStyle = "rgba(248, 113, 113, 0.88)";
-              ctx.lineWidth = 2;
-              ctx.strokeRect(
-                movingPlatformRect.x + 1,
-                movingPlatformRect.y + 1,
-                Math.max(1, movingPlatformRect.w - 2),
-                Math.max(1, movingPlatformRect.h - 2),
-              );
-              renderedMovingPlatformFallback = true;
-            }
+            const renderedMovingPlatformVisual = movingPlatformVisualResult?.drewVisual === true;
+            const renderedMovingPlatformFallback = movingPlatformVisualResult?.drewFallback === true;
             movingPlatformDebugNow.push({
               id: entity?.id || null,
               x: movingPlatformWorldX,
@@ -2916,6 +2984,13 @@
               spriteTileId,
               drewVisual: renderedMovingPlatformVisual === true,
               drewFallback: renderedMovingPlatformFallback,
+              visualMode: renderedMovingPlatformVisual ? "sprite" : (renderedMovingPlatformFallback ? "fallback" : "none"),
+              worldRect: movingPlatformVisualResult?.worldRect || null,
+              canvasRect: movingPlatformVisualResult?.canvasRect || null,
+              visualRect: movingPlatformVisualResult?.visualRect || null,
+              roundedDraw: movingPlatformVisualResult?.canvasRect
+                ? { x: movingPlatformVisualResult.canvasRect.x, y: movingPlatformVisualResult.canvasRect.y }
+                : null,
             });
             if (renderedMovingPlatformVisual || renderedMovingPlatformFallback) {
               continue;

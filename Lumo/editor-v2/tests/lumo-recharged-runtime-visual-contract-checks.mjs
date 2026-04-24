@@ -36,12 +36,14 @@ function runMovingPlatformVisualContractChecks() {
   assert.equal(html.includes("const movingPlatformWidthPx = Math.max(1, widthTiles * tileSize);"), true, "expected movingPlatform visual width to come from params.widthTiles");
   assert.equal(html.includes("const movingPlatformHeightPx = Math.max(1, heightTiles * tileSize);"), true, "expected movingPlatform visual height to come from params.heightTiles");
   assert.equal(html.includes("const spriteTileId = typeof platformParams.spriteTileId === \"string\""), true, "expected movingPlatform runtime branch to read params.spriteTileId for tile-art resolution");
-  assert.equal(html.includes("const movingPlatformSupportLikeTile = {"), true, "expected movingPlatform runtime branch to build a supportTile-shape visual object");
-  assert.equal(html.includes("x: movingPlatformWorldX / worldUnitsToPx,"), true, "expected movingPlatform visual helper bridge to convert pixel-space x back to tile-space input");
-  assert.equal(html.includes("y: movingPlatformWorldY / worldUnitsToPx,"), true, "expected movingPlatform visual helper bridge to convert pixel-space y back to tile-space input");
-  assert.equal(html.includes("const renderedMovingPlatformVisual = drawRechargedTileV1Visual("), true, "expected movingPlatform runtime branch to reuse the support tile visual helper");
-  assert.equal(html.includes("let renderedMovingPlatformFallback = false;"), true, "expected movingPlatform branch to track fallback rendering visibility");
-  assert.equal(html.includes("if (!renderedMovingPlatformVisual) {"), true, "expected movingPlatform branch to draw fallback visuals when sprite art is unresolved");
+  assert.equal(html.includes("function drawRechargedTileV1VisualAtWorldRect("), true, "expected movingPlatform visuals to use a helper that draws with explicit world rect input");
+  assert.equal(html.includes("function drawMovingPlatformVisual("), true, "expected movingPlatform visuals to use dedicated draw helper preserving runtime position");
+  assert.equal(html.includes("const visualResult = drawRechargedTileV1VisualAtWorldRect"), true, "expected movingPlatform path to resolve tile catalog art while drawing at explicit world x/y");
+  assert.equal(html.includes("const fallbackWorldDrawRect = visualDescriptor"), true, "expected fallback rendering rect to align with resolved sprite draw metadata");
+  assert.equal(html.includes("const movingPlatformVisualResult = drawMovingPlatformVisual("), true, "expected movingPlatform render branch to call dedicated visual helper");
+  assert.equal(html.includes("let renderedMovingPlatformFallback = false;"), false, "expected movingPlatform fallback flag to come from helper result");
+  assert.equal(html.includes("if (!renderedMovingPlatformVisual) {"), false, "expected movingPlatform fallback drawing to be encapsulated in helper");
+  assert.equal(html.includes("visualMode: renderedMovingPlatformVisual ? \"sprite\" : (renderedMovingPlatformFallback ? \"fallback\" : \"none\")"), true, "expected movingPlatform debug payload to expose visual mode for jitter tracing");
   assert.equal(html.includes("if (renderedMovingPlatformVisual || renderedMovingPlatformFallback) {\n              continue;\n            }"), true, "expected generic entity debug fallback to be skipped only after movingPlatform drew visual or fallback");
 }
 
