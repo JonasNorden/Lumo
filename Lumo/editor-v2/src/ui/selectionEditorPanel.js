@@ -3,6 +3,7 @@ import { getPrimarySelectedDecorId, getPrimarySelectedDecorIndex, getSelectedDec
 import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 import { getPrimarySelectedSoundId, getPrimarySelectedSoundIndex, getSelectedSoundIndices } from "../domain/sound/selection.js";
 import { cloneEntityParams, getEntityParamInputType } from "../domain/entities/entityParams.js";
+import { BRUSH_SPRITE_OPTIONS, findBrushSpriteOptionByValue } from "../domain/tiles/tileSpriteCatalog.js";
 import { SOUND_PRESETS } from "../domain/sound/soundPresets.js";
 import {
   findSoundAssetByPath,
@@ -286,9 +287,73 @@ function renderParamField(prefix, paramKey, paramValue, selectedIndex, itemId = 
   `;
 }
 
-function renderParamFields(prefix, params, selectedIndex, itemId = null) {
+function isMovingPlatformEntityType(type) {
+  return String(type || "").trim().toLowerCase() === "movingplatform";
+}
+
+function buildMovingPlatformVisualOptions(selectedValue) {
+  const fallbackOption = { value: "", label: "Default platform visual", img: null };
+  // Moving platforms should offer gameplay tile visuals (not decor/audio/entity assets).
+  // Prefer platform-compatible collision tiles first, then include the full tile visual catalog as a safe fallback.
+  const preferredOptions = BRUSH_SPRITE_OPTIONS.filter((option) => option?.collisionType === "solid");
+  const catalogOptions = (preferredOptions.length > 0 ? preferredOptions : BRUSH_SPRITE_OPTIONS)
+    .map((option) => ({
+      value: String(option?.value || "").trim(),
+      label: option?.group ? `${option.label} · ${option.group}` : option?.label || option?.value || "Unnamed tile",
+      img: option?.img || null,
+    }))
+    .filter((option) => option.value);
+
+  const normalizedSelectedValue = String(selectedValue || "").trim();
+  const hasSelectedCatalogOption = normalizedSelectedValue.length > 0
+    && catalogOptions.some((option) => option.value === normalizedSelectedValue);
+  if (normalizedSelectedValue.length > 0 && !hasSelectedCatalogOption) {
+    catalogOptions.unshift({
+      value: normalizedSelectedValue,
+      label: `Custom tile id · ${normalizedSelectedValue}`,
+      img: null,
+    });
+  }
+
+  return [fallbackOption, ...catalogOptions];
+}
+
+function renderMovingPlatformSpriteTileField(prefix, paramKey, paramValue, selectedIndex, itemId = null) {
+  const options = buildMovingPlatformVisualOptions(paramValue);
+  const selectedOption = options.find((option) => option.value === paramValue) || options[0];
+  const selectedSwatchSrc = selectedOption?.value
+    ? findBrushSpriteOptionByValue(selectedOption.value)?.img || selectedOption?.img || null
+    : null;
+
+  return `
+    <div class="selectionTilePickerField">
+      <label class="fieldRow fieldRowCompact selectionInlineField selectionParamField selectionTilePickerSelect">
+        <span class="label">${escapeHtml(formatParamLabel(paramKey))}</span>
+        <select
+          data-${prefix}-param-key="${escapeHtml(paramKey)}"
+          data-${prefix}-param-type="text"
+          data-${prefix}-index="${selectedIndex}"
+          ${renderObjectDatasetAttr(prefix, itemId)}
+        >
+          ${options.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === paramValue ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+        </select>
+      </label>
+      ${selectedSwatchSrc
+        ? `<span class="selectionTileSwatch"><img src="${escapeHtml(selectedSwatchSrc)}" alt="${escapeHtml(selectedOption?.label || "Selected tile")}" /><span>${escapeHtml(selectedOption?.label || "")}</span></span>`
+        : ""}
+    </div>
+  `;
+}
+
+function renderParamFields(prefix, params, selectedIndex, itemId = null, options = {}) {
+  const { objectType = "" } = options;
   return Object.entries(cloneEntityParams(params))
-    .map(([paramKey, paramValue]) => renderParamField(prefix, paramKey, paramValue, selectedIndex, itemId))
+    .map(([paramKey, paramValue]) => {
+      if (prefix === "entity" && isMovingPlatformEntityType(objectType) && paramKey === "spriteTileId") {
+        return renderMovingPlatformSpriteTileField(prefix, paramKey, String(paramValue || ""), selectedIndex, itemId);
+      }
+      return renderParamField(prefix, paramKey, paramValue, selectedIndex, itemId);
+    })
     .join("");
 }
 
@@ -644,7 +709,7 @@ function renderEntityEditor(entity, selectedEntityIndex) {
     renderNumberField("entity", "x", "X", entity.x, selectedEntityIndex, "", entity?.id || null),
     renderNumberField("entity", "y", "Y", entity.y, selectedEntityIndex, "", entity?.id || null),
     renderCheckboxField("entity", "visible", "Visible", entity.visible, selectedEntityIndex, "selectionFieldToggle", entity?.id || null),
-    renderParamFields("entity", entity?.params, selectedEntityIndex, entity?.id || null),
+    renderParamFields("entity", entity?.params, selectedEntityIndex, entity?.id || null, { objectType: entity?.type }),
   ].join(""));
 }
 
