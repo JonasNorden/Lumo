@@ -96,25 +96,57 @@ function advanceUntilRespawnPending({ worldPacket, entities, maxTicks = 180 } = 
 {
   // 5) Non-liquid out-of-bounds respawn flow must remain intact.
   const worldPacket = buildWorldPacket();
-  const outOfBoundsPlayer = {
+  let player = {
     ...buildBasePlayer(),
-    position: { x: 96, y: 999 },
+    position: { x: 96, y: 503 },
     grounded: false,
     falling: true,
-    velocity: { x: 0, y: 12 },
+    velocity: { x: 0, y: 1200 },
     lives: 4,
   };
 
-  const step = stepRuntimePlayerSimulation(worldPacket, outOfBoundsPlayer, {
+  let pendingStep = null;
+  for (let tick = 0; tick < 32; tick += 1) {
+    const step = stepRuntimePlayerSimulation(worldPacket, player, {
+      input: { moveX: 0, jump: false },
+      entities: [],
+    });
+    assert.equal(step.ok, true);
+    player = step.player;
+    if (step.player.status === "respawn-pending") {
+      pendingStep = step;
+      break;
+    }
+  }
+
+  assert.notEqual(pendingStep, null, "non-liquid out-of-bounds should still enter pending respawn");
+  assert.equal(pendingStep.player.respawnCountdown?.active, true, "non-liquid out-of-bounds should still activate countdown");
+  assert.equal(pendingStep.player.respawnCountdown?.source, "authored-spawn", "non-liquid out-of-bounds should keep authored-spawn source");
+  assert.equal(pendingStep.player.lives, 3, "non-liquid out-of-bounds should still decrement one life");
+  const expectedMaxFallDistance = (worldPacket.world.tileSize || 24) * 2;
+  assert.ok(
+    pendingStep.debug?.vertical?.fallTracking?.fallDistance >= expectedMaxFallDistance,
+    "non-liquid out-of-bounds should trigger once tracked death-fall distance reaches about 2 tiles",
+  );
+}
+
+{
+  // 6) Normal in-bounds movement should not arm death-fall tracking.
+  const worldPacket = buildWorldPacket();
+  const step = stepRuntimePlayerSimulation(worldPacket, {
+    ...buildBasePlayer(),
+    position: { x: 96, y: 200 },
+    grounded: false,
+    rising: true,
+    falling: false,
+    velocity: { x: 0, y: -220 },
+  }, {
     input: { moveX: 0, jump: false },
     entities: [],
   });
-
   assert.equal(step.ok, true);
-  assert.equal(step.player.status, "respawn-pending", "non-liquid out-of-bounds should still enter pending respawn");
-  assert.equal(step.player.respawnCountdown?.active, true, "non-liquid out-of-bounds should still activate countdown");
-  assert.equal(step.player.respawnCountdown?.source, "authored-spawn", "non-liquid out-of-bounds should keep authored-spawn source");
-  assert.equal(step.player.lives, 3, "non-liquid out-of-bounds should still decrement one life");
+  assert.equal(step.player.status === "respawn-pending", false, "normal in-bounds jumps should not trigger respawn");
+  assert.equal(step.debug?.vertical?.fallTracking?.active === true, false, "normal in-bounds jumps should not start hazard fall tracking");
 }
 
 console.log("recharged-runtime-liquid-death-respawn-handoff-checks: ok");
