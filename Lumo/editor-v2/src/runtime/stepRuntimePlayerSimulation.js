@@ -559,6 +559,24 @@ function resolveMovingPlatformRuntimeState(entity, tileSize) {
   };
 }
 
+function isPlayerLikelyOnMovingPlatform(sourceEntities, playerState, tileSize) {
+  const onPlatformId = typeof playerState?.onPlatformId === "string" ? playerState.onPlatformId : null;
+  if (!onPlatformId || !Array.isArray(sourceEntities)) {
+    return false;
+  }
+  const platform = sourceEntities.find((entity) => entity?.id === onPlatformId && isMovingPlatformEntityType(entity?.type));
+  if (!platform) {
+    return false;
+  }
+  const runtime = resolveMovingPlatformRuntimeState(platform, tileSize);
+  const platformTop = Number.isFinite(platform?.y) ? platform.y : runtime.originY;
+  const playerFeet = Number.isFinite(playerState?.position?.y) ? playerState.position.y + 1 : null;
+  if (!Number.isFinite(platformTop) || !Number.isFinite(playerFeet)) {
+    return false;
+  }
+  return Math.abs(playerFeet - platformTop) <= (MOVING_PLATFORM_LANDING_EPSILON_PX + 1);
+}
+
 function buildPlayerWorldBoundsFromFootPosition(position) {
   const footX = Number.isFinite(position?.x) ? position.x : 0;
   const footY = Number.isFinite(position?.y) ? position.y : 0;
@@ -2582,6 +2600,72 @@ function resolvePlayableBottomY(worldPacket) {
   return null;
 }
 
+function resolveWorldBottomFallbackY(worldPacket, tileSize) {
+  const playableBottomY = resolvePlayableBottomY(worldPacket);
+  if (!Number.isFinite(playableBottomY) || !Number.isFinite(tileSize) || tileSize <= 0) {
+    return null;
+  }
+  return playableBottomY - (tileSize * 2);
+}
+
+function resolveGameplayDeathPlaneY(worldPacket, sourceEntities = []) {
+  const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0
+    ? worldPacket.world.tileSize
+    : 24;
+  const explicitFallHazardTopY = [
+    worldPacket?.fallHazardTopY,
+    worldPacket?.world?.fallHazardTopY,
+    worldPacket?.bounds?.fallHazardTopY,
+  ].find((value) => Number.isFinite(value));
+  if (Number.isFinite(explicitFallHazardTopY)) {
+    return {
+      deathPlaneY: explicitFallHazardTopY,
+      source: "explicit-fall-hazard-top",
+    };
+  }
+
+  const supportBottomY = Array.isArray(worldPacket?.layers?.tiles)
+    ? worldPacket.layers.tiles.reduce((maxBottom, tile) => {
+      const tileY = Number.isFinite(tile?.y) ? tile.y : null;
+      const tileH = Number.isFinite(tile?.h) ? tile.h : null;
+      if (!Number.isFinite(tileY) || !Number.isFinite(tileH) || tileH <= 0) {
+        return maxBottom;
+      }
+      return Math.max(maxBottom, tileY + tileH - 1);
+    }, Number.NEGATIVE_INFINITY)
+    : Number.NEGATIVE_INFINITY;
+  const movingPlatformBottomY = Array.isArray(sourceEntities)
+    ? sourceEntities.reduce((maxBottom, entity) => {
+      if (!isMovingPlatformEntityType(entity?.type)) {
+        return maxBottom;
+      }
+      const runtime = resolveMovingPlatformRuntimeState(entity, tileSize);
+      const platformTop = Math.max(
+        Number.isFinite(entity?.y) ? entity.y : Number.NEGATIVE_INFINITY,
+        Number.isFinite(runtime?.originY) ? runtime.originY : Number.NEGATIVE_INFINITY,
+        Number.isFinite(runtime?.endY) ? runtime.endY : Number.NEGATIVE_INFINITY,
+      );
+      if (!Number.isFinite(platformTop)) {
+        return maxBottom;
+      }
+      const platformHeight = Number.isFinite(runtime?.heightPx) && runtime.heightPx > 0 ? runtime.heightPx : tileSize;
+      return Math.max(maxBottom, platformTop + platformHeight - 1);
+    }, Number.NEGATIVE_INFINITY)
+    : Number.NEGATIVE_INFINITY;
+  const contentBottomY = Math.max(supportBottomY, movingPlatformBottomY);
+  if (Number.isFinite(contentBottomY)) {
+    return {
+      deathPlaneY: contentBottomY + tileSize,
+      source: "derived-content-bottom-plus-tile",
+    };
+  }
+
+  return {
+    deathPlaneY: resolveWorldBottomFallbackY(worldPacket, tileSize),
+    source: "world-bottom-minus-two-tiles",
+  };
+}
+
 function resolveBottomBoundRespawnY(worldPacket, options = {}) {
   const tileSize = worldPacket?.world?.tileSize;
   const marginTiles = Number.isFinite(options?.bounds?.fallRespawnMarginTiles)
@@ -2796,13 +2880,48 @@ function resolveHazardFallTracker(worldPacket, playerState, verticalStep, source
     : 24;
   const maxFallDistance = tileSize * DEATH_FALL_MAX_DISTANCE_TILES;
   const currentY = Number.isFinite(verticalStep?.position?.y) ? verticalStep.position.y : null;
+  const velocityY = Number.isFinite(verticalStep?.velocity?.y) ? verticalStep.velocity.y : null;
+  const descending = verticalStep?.falling === true || (Number.isFinite(velocityY) && velocityY > 0);
+  const grounded = verticalStep?.grounded === true;
+  const onPlatform = (
+    typeof verticalStep?.onPlatformId === "string"
+    || isPlayerLikelyOnMovingPlatform(sourceEntities, playerState, tileSize)
+  );
   const overlapType = resolveOverlappingLiquidType(worldPacket, { ...playerState, position: verticalStep?.position }, sourceEntities);
   const carriedLiquidType = typeof playerState?.liquidDeath?.type === "string"
     ? playerState.liquidDeath.type
     : (typeof playerState?._liquidDeathType === "string" ? playerState._liquidDeathType : null);
   const liquidType = typeof overlapType === "string" ? overlapType : carriedLiquidType;
-  const playableBottomY = resolvePlayableBottomY(worldPacket);
-  const outOfBounds = Number.isFinite(currentY) && Number.isFinite(playableBottomY) && currentY > playableBottomY;
+  const deathPlane = resolveGameplayDeathPlaneY(worldPacket, sourceEntities);
+  const deathPlaneY = Number.isFinite(deathPlane?.deathPlaneY) ? deathPlane.deathPlaneY : null;
+  const hasMovingPlatforms = Array.isArray(sourceEntities) && sourceEntities.some((entity) => isMovingPlatformEntityType(entity?.type));
+  const forcedOutOfBoundsArm = (
+    Number.isFinite(currentY)
+    && Number.isFinite(deathPlaneY)
+    && Number.isFinite(maxFallDistance)
+    && maxFallDistance > 0
+    && currentY > (deathPlaneY + maxFallDistance)
+    && !onPlatform
+    && !hasMovingPlatforms
+  );
+  const outOfBounds = (
+    Number.isFinite(currentY)
+    && Number.isFinite(deathPlaneY)
+    && currentY > deathPlaneY
+    && (
+      forcedOutOfBoundsArm
+      || (descending && !grounded && !onPlatform)
+    )
+  );
+  const armReason = outOfBounds
+    ? (forcedOutOfBoundsArm
+        ? "forced-below-death-plane-plus-threshold"
+        : `below-${deathPlane?.source ?? "death-plane"}`)
+    : (!Number.isFinite(currentY)
+        ? "no-current-y"
+        : (!Number.isFinite(deathPlaneY)
+            ? "no-death-plane"
+            : (grounded ? "grounded" : (onPlatform ? "on-platform" : (descending ? "above-death-plane" : "not-descending")))));
   const hazardType = liquidType
     ? `liquid:${liquidType}`
     : (outOfBounds ? "out-of-bounds" : null);
@@ -2812,7 +2931,9 @@ function resolveHazardFallTracker(worldPacket, playerState, verticalStep, source
   const currentSource = typeof sourceTracker?.source === "string" ? sourceTracker.source : null;
   const hasSourceChanged = currentSource !== hazardType;
   const previousFallStartY = Number.isFinite(sourceTracker?.fallStartY) ? sourceTracker.fallStartY : null;
-  const initialFallStartY = outOfBounds && Number.isFinite(playableBottomY) ? playableBottomY : currentY;
+  const initialFallStartY = outOfBounds && forcedOutOfBoundsArm && Number.isFinite(deathPlaneY)
+    ? deathPlaneY
+    : currentY;
   const fallStartY = hazardType && Number.isFinite(currentY)
     ? (hasSourceChanged || !Number.isFinite(previousFallStartY) ? initialFallStartY : previousFallStartY)
     : null;
@@ -2828,6 +2949,9 @@ function resolveHazardFallTracker(worldPacket, playerState, verticalStep, source
         currentY,
         fallDistance,
         maxFallDistance,
+        armed: outOfBounds,
+        armReason,
+        deathPlaneY,
       }
     : null;
   return {
@@ -2835,7 +2959,9 @@ function resolveHazardFallTracker(worldPacket, playerState, verticalStep, source
     hazardType,
     liquidType,
     outOfBounds,
-    playableBottomY,
+    deathPlaneY,
+    armed: outOfBounds,
+    armReason,
     currentY,
     fallStartY,
     fallDistance,
@@ -2850,6 +2976,9 @@ function publishFallDebug(debugState) {
       return;
     }
     globalThis.window.__LUMO_RECHARGED_FALL_DEBUG__ = {
+      deathPlaneY: Number.isFinite(debugState?.deathPlaneY) ? debugState.deathPlaneY : null,
+      armed: debugState?.armed === true,
+      armReason: typeof debugState?.armReason === "string" ? debugState.armReason : null,
       fallStartY: Number.isFinite(debugState?.fallStartY) ? debugState.fallStartY : null,
       currentY: Number.isFinite(debugState?.currentY) ? debugState.currentY : null,
       fallDistance: Number.isFinite(debugState?.fallDistance) ? debugState.fallDistance : 0,
@@ -2863,8 +2992,8 @@ function publishFallDebug(debugState) {
 function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, hazardFall, options = {}) {
   const currentY = Number.isFinite(verticalStep?.position?.y) ? verticalStep.position.y : null;
   const shouldRespawn = hazardFall?.outOfBounds === true && hazardFall?.triggered === true;
-  const respawnY = Number.isFinite(hazardFall?.playableBottomY)
-    ? hazardFall.playableBottomY
+  const respawnY = Number.isFinite(hazardFall?.deathPlaneY)
+    ? hazardFall.deathPlaneY
     : resolveBottomBoundRespawnY(worldPacket, options);
 
   if (!shouldRespawn) {
