@@ -128,6 +128,7 @@ function advanceUntilRespawnPending({ worldPacket, entities, maxTicks = 180 } = 
     pendingStep.debug?.vertical?.fallTracking?.fallDistance >= expectedMaxFallDistance,
     "non-liquid out-of-bounds should trigger once tracked death-fall distance reaches about 2 tiles",
   );
+  assert.equal(pendingStep.debug?.vertical?.fallTracking?.thresholdTiles, 2, "world-bottom fallback should keep 2-tile threshold");
 }
 
 {
@@ -201,6 +202,31 @@ function advanceUntilRespawnPending({ worldPacket, entities, maxTicks = 180 } = 
   assert.equal(armedStep.debug?.vertical?.fallTracking?.deathPlaneY, 120, "deathPlaneY should match authored volume top");
   assert.equal(armedStep.debug?.vertical?.fallTracking?.effectiveDeathPlaneY, 132, "effectiveDeathPlaneY should include +0.5 tile arm offset");
   assert.equal(armedStep.debug?.vertical?.fallTracking?.supportBottomY, null, "authored volume priority should not require support-bottom fallback");
+  assert.equal(armedStep.debug?.vertical?.fallTracking?.thresholdTiles, 1.25, "authored hazard volume should use tighter 1.25-tile trigger distance from arm point");
+  assert.equal(armedStep.player.status === "respawn-pending", false, "authored hazard volume should not respawn instantly on first contact/arm");
+
+  let playerAfterArm = armedStep.player;
+  let hazardPendingStep = null;
+  for (let tick = 0; tick < 16; tick += 1) {
+    const step = stepRuntimePlayerSimulation(worldPacket, playerAfterArm, {
+      input: { moveX: 0, jump: false },
+      entities,
+    });
+    assert.equal(step.ok, true);
+    playerAfterArm = step.player;
+    if (step.player.status === "respawn-pending") {
+      hazardPendingStep = step;
+      break;
+    }
+  }
+
+  assert.notEqual(hazardPendingStep, null, "authored hazard volume should still handoff to respawn after a short sink");
+  const totalFallFromDeathPlane = hazardPendingStep.debug?.vertical?.fallTracking?.totalFallFromDeathPlane ?? 0;
+  assert.ok(
+    totalFallFromDeathPlane >= tileSize * 1.5 && totalFallFromDeathPlane <= tileSize * 2.25,
+    "authored hazard volume respawn should trigger after roughly 1.5-2.0 tiles of visual sink from hazard top",
+  );
+  assert.equal(hazardPendingStep.debug?.vertical?.fallTracking?.respawnTriggered, true, "fall tracking should expose respawnTriggered at hazard handoff");
 }
 
 console.log("recharged-runtime-liquid-death-respawn-handoff-checks: ok");
