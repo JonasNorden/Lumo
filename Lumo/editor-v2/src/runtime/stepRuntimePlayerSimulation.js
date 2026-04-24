@@ -124,6 +124,7 @@ const LIQUID_DEATH_DURATION_SECONDS = 0.82;
 const LIQUID_DEATH_SINK_SPEED_PX_PER_SECOND = 56;
 const LIQUID_DEATH_HORIZONTAL_DAMPING = 0.82;
 const LIQUID_DEATH_VERTICAL_LERP_FACTOR = 0.15;
+const DEATH_FALL_MAX_DISTANCE_TILES = 2;
 const ENTITY_HIT_FLASH_TICKS = 6;
 const ENTITY_DARK_CREATURE_PULSE_SCALE = 0.55;
 const ENTITY_HOVER_VOID_PULSE_SCALE = 0.6;
@@ -2545,14 +2546,11 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
   };
 }
 
-function resolveBottomBoundRespawnY(worldPacket, options = {}) {
+function resolvePlayableBottomY(worldPacket) {
   const tileSize = worldPacket?.world?.tileSize;
   const worldHeight = worldPacket?.world?.height;
   const tileBoundsMaxY = worldPacket?.tileBounds?.maxY;
   const spawnY = worldPacket?.spawn?.y;
-  const marginTiles = Number.isFinite(options?.bounds?.fallRespawnMarginTiles)
-    ? Math.max(0, Math.floor(options.bounds.fallRespawnMarginTiles))
-    : 4;
 
   if (!Number.isFinite(tileSize) || tileSize <= 0) {
     return null;
@@ -2574,16 +2572,26 @@ function resolveBottomBoundRespawnY(worldPacket, options = {}) {
   }
 
   if (Number.isFinite(tileBoundsMaxY)) {
-    const playableBottomY = resolveWorldYUnit(tileBoundsMaxY);
-    return playableBottomY + marginTiles * tileSize;
+    return resolveWorldYUnit(tileBoundsMaxY);
   }
 
   if (Number.isFinite(worldHeight) && worldHeight > 0) {
-    const playableBottomY = resolveWorldYUnit(worldHeight);
-    return playableBottomY + marginTiles * tileSize;
+    return resolveWorldYUnit(worldHeight);
   }
 
   return null;
+}
+
+function resolveBottomBoundRespawnY(worldPacket, options = {}) {
+  const tileSize = worldPacket?.world?.tileSize;
+  const marginTiles = Number.isFinite(options?.bounds?.fallRespawnMarginTiles)
+    ? Math.max(0, Math.floor(options.bounds.fallRespawnMarginTiles))
+    : 4;
+  const playableBottomY = resolvePlayableBottomY(worldPacket);
+  if (!Number.isFinite(tileSize) || tileSize <= 0 || !Number.isFinite(playableBottomY)) {
+    return null;
+  }
+  return playableBottomY + marginTiles * tileSize;
 }
 
 function resolveCheckpointRespawnPlacement(worldPacket, playerState) {
@@ -2664,6 +2672,7 @@ function buildRespawnPendingPlayerState(playerState, countdownState, options = {
       rising: false,
       landed: false,
       status: waiting ? "respawn-pending" : "respawn-ready",
+      _fallTracker: null,
     },
   };
 }
@@ -2693,6 +2702,7 @@ function buildGameOverPlayerState(playerState) {
     gameState: "gameover",
     levelComplete: false,
     intermissionReadyForInput: false,
+    _fallTracker: null,
   };
 }
 
@@ -2759,6 +2769,7 @@ function buildDeathRespawnState(worldPacket, playerState, triggerPosition, paylo
       _justRespawned: false,
       lockMinX: Number.isFinite(playerState?.lockMinX) ? playerState.lockMinX : 0,
       invulnDuration,
+      _fallTracker: null,
     },
     debug: {
       respawned: false,
@@ -2779,10 +2790,82 @@ function isRespawnHandoffLocked(playerState) {
   return activeRespawnCountdown.active || status === "respawn-pending";
 }
 
-function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, options = {}) {
-  const respawnY = resolveBottomBoundRespawnY(worldPacket, options);
-  const currentY = verticalStep?.position?.y;
-  const shouldRespawn = Number.isFinite(respawnY) && Number.isFinite(currentY) && currentY > respawnY;
+function resolveHazardFallTracker(worldPacket, playerState, verticalStep, sourceEntities) {
+  const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0
+    ? worldPacket.world.tileSize
+    : 24;
+  const maxFallDistance = tileSize * DEATH_FALL_MAX_DISTANCE_TILES;
+  const currentY = Number.isFinite(verticalStep?.position?.y) ? verticalStep.position.y : null;
+  const overlapType = resolveOverlappingLiquidType(worldPacket, { ...playerState, position: verticalStep?.position }, sourceEntities);
+  const carriedLiquidType = typeof playerState?.liquidDeath?.type === "string"
+    ? playerState.liquidDeath.type
+    : (typeof playerState?._liquidDeathType === "string" ? playerState._liquidDeathType : null);
+  const liquidType = typeof overlapType === "string" ? overlapType : carriedLiquidType;
+  const playableBottomY = resolvePlayableBottomY(worldPacket);
+  const outOfBounds = Number.isFinite(currentY) && Number.isFinite(playableBottomY) && currentY > playableBottomY;
+  const hazardType = liquidType
+    ? `liquid:${liquidType}`
+    : (outOfBounds ? "out-of-bounds" : null);
+  const sourceTracker = playerState?._fallTracker && typeof playerState._fallTracker === "object"
+    ? playerState._fallTracker
+    : null;
+  const currentSource = typeof sourceTracker?.source === "string" ? sourceTracker.source : null;
+  const hasSourceChanged = currentSource !== hazardType;
+  const previousFallStartY = Number.isFinite(sourceTracker?.fallStartY) ? sourceTracker.fallStartY : null;
+  const initialFallStartY = outOfBounds && Number.isFinite(playableBottomY) ? playableBottomY : currentY;
+  const fallStartY = hazardType && Number.isFinite(currentY)
+    ? (hasSourceChanged || !Number.isFinite(previousFallStartY) ? initialFallStartY : previousFallStartY)
+    : null;
+  const fallDistance = Number.isFinite(currentY) && Number.isFinite(fallStartY)
+    ? Math.max(0, currentY - fallStartY)
+    : 0;
+  const triggered = Boolean(hazardType) && Number.isFinite(maxFallDistance) && maxFallDistance > 0 && fallDistance >= maxFallDistance;
+  const tracker = hazardType
+    ? {
+        active: true,
+        source: hazardType,
+        fallStartY,
+        currentY,
+        fallDistance,
+        maxFallDistance,
+      }
+    : null;
+  return {
+    tracker,
+    hazardType,
+    liquidType,
+    outOfBounds,
+    playableBottomY,
+    currentY,
+    fallStartY,
+    fallDistance,
+    maxFallDistance,
+    triggered,
+  };
+}
+
+function publishFallDebug(debugState) {
+  try {
+    if (typeof globalThis?.window !== "object" || !globalThis.window) {
+      return;
+    }
+    globalThis.window.__LUMO_RECHARGED_FALL_DEBUG__ = {
+      fallStartY: Number.isFinite(debugState?.fallStartY) ? debugState.fallStartY : null,
+      currentY: Number.isFinite(debugState?.currentY) ? debugState.currentY : null,
+      fallDistance: Number.isFinite(debugState?.fallDistance) ? debugState.fallDistance : 0,
+      triggered: debugState?.triggered === true,
+    };
+  } catch (_error) {
+    // Debug export is best-effort only.
+  }
+}
+
+function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, hazardFall, options = {}) {
+  const currentY = Number.isFinite(verticalStep?.position?.y) ? verticalStep.position.y : null;
+  const shouldRespawn = hazardFall?.outOfBounds === true && hazardFall?.triggered === true;
+  const respawnY = Number.isFinite(hazardFall?.playableBottomY)
+    ? hazardFall.playableBottomY
+    : resolveBottomBoundRespawnY(worldPacket, options);
 
   if (!shouldRespawn) {
     return null;
@@ -2796,20 +2879,18 @@ function maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, optio
     sourceTag: "authored-spawn",
     triggerY: currentY,
     respawnY,
-    warning: "Player fell below playable world bounds; respawn countdown started at authored spawn.",
+    warning: "Player fell below playable world bounds; reached max death-fall distance and respawn countdown started at authored spawn.",
   });
 }
 
-function maybeResolveLiquidDeath(worldPacket, playerState, verticalStep, sourceEntities, options = {}) {
+function maybeResolveLiquidDeath(worldPacket, playerState, verticalStep, sourceEntities, hazardFall, options = {}) {
   // Lock lethal-liquid ownership once respawn handoff starts so a second sink cannot retrigger mid-transition.
   if (isRespawnHandoffLocked(playerState)) {
     return null;
   }
-  const overlapType = resolveOverlappingLiquidType(worldPacket, { ...playerState, position: verticalStep.position }, sourceEntities);
-  const carriedLiquidType = typeof playerState?.liquidDeath?.type === "string"
-    ? playerState.liquidDeath.type
-    : (typeof playerState?._liquidDeathType === "string" ? playerState._liquidDeathType : null);
-  const liquidType = typeof overlapType === "string" ? overlapType : carriedLiquidType;
+  const liquidType = typeof hazardFall?.liquidType === "string"
+    ? hazardFall.liquidType
+    : null;
   if (!liquidType) {
     return null;
   }
@@ -2827,6 +2908,23 @@ function maybeResolveLiquidDeath(worldPacket, playerState, verticalStep, sourceE
   const velocityX = velocityXBase * LIQUID_DEATH_HORIZONTAL_DAMPING;
   const velocityY = lerp(velocityYBase, sinkSpeed, LIQUID_DEATH_VERTICAL_LERP_FACTOR);
   const sinkDistance = velocityY * dt;
+  const reachedMaxFallDistance = hazardFall?.triggered === true;
+
+  if (reachedMaxFallDistance) {
+    return buildDeathRespawnState(worldPacket, {
+      ...playerState,
+      liquidDeath: null,
+      _liquidDeathType: null,
+      renderAlpha: 1,
+    }, {
+      x: baseX,
+      y: baseY + sinkDistance,
+    }, {
+      sourceTag: `liquid-${liquidType}`,
+      triggerY: Number.isFinite(hazardFall?.fallStartY) ? hazardFall.fallStartY : baseY,
+      warning: `Player sank in ${liquidType}; reached max death-fall distance and respawn countdown started.`,
+    });
+  }
 
   if (elapsed < duration) {
     return {
@@ -2969,6 +3067,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
           respawnCountdown: pending.countdown,
           locomotion: "respawning-out-of-bounds",
           gameState: "playing",
+          _fallTracker: null,
         },
         collisions: {
           moveX: 0,
@@ -3026,6 +3125,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
           remaining: 0,
           countdown: 0,
         },
+        _fallTracker: null,
       },
       collisions: {
         moveX: 0,
@@ -3229,8 +3329,10 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     };
   }
 
-  const liquidDeathStep = maybeResolveLiquidDeath(worldPacket, playerState, verticalStep, normalizedEntities, options);
-  const bottomRespawn = liquidDeathStep ? null : maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, options);
+  const hazardFall = resolveHazardFallTracker(worldPacket, playerState, verticalStep, normalizedEntities);
+  publishFallDebug(hazardFall);
+  const liquidDeathStep = maybeResolveLiquidDeath(worldPacket, playerState, verticalStep, normalizedEntities, hazardFall, options);
+  const bottomRespawn = liquidDeathStep ? null : maybeResolveBottomRespawn(worldPacket, playerState, verticalStep, hazardFall, options);
   const bottomRespawnIsGameOver = (
     bottomRespawn?.player?.gameState === "gameover"
     || bottomRespawn?.player?.status === "game-over"
@@ -3491,6 +3593,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         : (bottomRespawn?.player?.respawnCountdown ?? respawnCountdown),
       brakeState,
       onPlatformId: typeof resolvedPlayerStep?.onPlatformId === "string" ? resolvedPlayerStep.onPlatformId : null,
+      _fallTracker: (resolvedPlayerStep && Object.prototype.hasOwnProperty.call(resolvedPlayerStep, "_fallTracker"))
+        ? resolvedPlayerStep._fallTracker
+        : (finalPlayerState.grounded ? null : (hazardFall?.tracker ?? null)),
     },
     collisions: {
       moveX: intent.moveX,
@@ -3537,6 +3642,15 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         respawnSpawnY: bottomRespawn?.debug?.spawnY ?? null,
         respawnSource: bottomRespawn?.debug?.source ?? null,
         liquidDeath: liquidDeathStep?.debug ?? null,
+        fallTracking: hazardFall ? {
+          active: hazardFall?.tracker?.active === true,
+          source: hazardFall?.tracker?.source ?? null,
+          fallStartY: Number.isFinite(hazardFall?.fallStartY) ? hazardFall.fallStartY : null,
+          currentY: Number.isFinite(hazardFall?.currentY) ? hazardFall.currentY : null,
+          fallDistance: Number.isFinite(hazardFall?.fallDistance) ? hazardFall.fallDistance : 0,
+          maxFallDistance: Number.isFinite(hazardFall?.maxFallDistance) ? hazardFall.maxFallDistance : null,
+          triggered: hazardFall?.triggered === true,
+        } : null,
       },
       finalized: {
         locomotion: finalLocomotion,
