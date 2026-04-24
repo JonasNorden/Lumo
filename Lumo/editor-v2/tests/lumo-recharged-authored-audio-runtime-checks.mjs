@@ -211,6 +211,92 @@ function runTileCoordinateInterpretationCheck() {
   assert.equal(runtimeState.debug.startedThisFrame >= 4, true, "debug state should report authored handle starts.");
 }
 
+function runFootAnchoredActivationCheck() {
+  const calls = [];
+  const bridge = {
+    getHandle(path, loop, key) {
+      return {
+        path,
+        loop,
+        key,
+        audio: {
+          paused: true,
+          currentTime: 0,
+          playbackRate: 1,
+          pause() {},
+        },
+      };
+    },
+    ensureSpatial(_handle) {},
+    setPan(_handle, _pan) {},
+    setVolume(handle, volume) {
+      calls.push({ key: handle.key, volume });
+    },
+  };
+  const runtimeState = createRechargedAuthoredAudioState();
+  syncRechargedAuthoredAudioFrame({
+    audioItems: [
+      {
+        audioId: "foot-spot",
+        audioType: "spot",
+        x: 10,
+        y: 15,
+        source: "data/assets/audio/spot/hum/spot_hum_01.ogg",
+        params: { radius: 4, volume: 0.9, loop: true, spatial: true },
+      },
+      {
+        audioId: "foot-trigger",
+        audioType: "trigger",
+        x: 11,
+        y: 15,
+        source: "data/assets/audio/events/enemies/common/swoosh_01.ogg",
+        params: { triggerWidth: 2, loop: false, volume: 1, spatial: true },
+      },
+      {
+        audioId: "foot-zone",
+        audioType: "ambientZone",
+        x: 9,
+        y: 14,
+        source: "data/assets/audio/ambient/ruin/dark-ambient-horror.ogg",
+        params: { width: 5, height: 3, loop: true, volume: 0.5 },
+      },
+    ],
+    // Runtime snapshots expose x/y as feet anchors (center-x, foot-y).
+    playerSnapshot: { x: 240, y: 360 },
+    previousPlayerSnapshot: { x: 120, y: 360 },
+    tileSize: 24,
+    coordinateScale: 24,
+    bridge,
+    runtimeState,
+  });
+
+  assert.equal(runtimeState.debug.activeThisFrame > 0, true, "foot-anchored snapshots should still activate authored audio.");
+  assert.equal(
+    runtimeState.debug.playerCenterUsed?.anchor === "feetFromXY",
+    true,
+    "debug state should report feet-from-xy player anchoring for runtime snapshots without explicit size.",
+  );
+  assert.equal(Array.isArray(runtimeState.debug.itemDebug), true, "debug state should include per-item activation telemetry.");
+  assert.equal(
+    runtimeState.debug.itemDebug.some((item) => item.id === "foot-spot" && item.active === true && item.targetVolume > 0),
+    true,
+    "spot telemetry should report active when player overlaps scaled authored position.",
+  );
+  assert.equal(
+    runtimeState.debug.itemDebug.some((item) => item.id === "foot-trigger" && item.enteredRange === true),
+    true,
+    "trigger telemetry should report entered-range activation.",
+  );
+  assert.equal(
+    runtimeState.debug.itemDebug.some((item) => item.id === "foot-zone" && item.inside === true),
+    true,
+    "zone telemetry should report inside=true when player overlaps authored area.",
+  );
+
+  const audibleCalls = calls.filter((call) => call.volume > 0.001);
+  assert.equal(audibleCalls.length >= 2, true, "foot-anchored overlap should drive non-zero bridge volume calls.");
+}
+
 function runZoneFrameCheck() {
   const activeFrame = computeZoneFrame(
     {
@@ -254,6 +340,7 @@ runSpotSpatialAttenuationCheck();
 runTriggerEnterActivationCheck();
 runSyncBehaviorCheck();
 runTileCoordinateInterpretationCheck();
+runFootAnchoredActivationCheck();
 runZoneFrameCheck();
 runSourceResolutionCheck();
 
