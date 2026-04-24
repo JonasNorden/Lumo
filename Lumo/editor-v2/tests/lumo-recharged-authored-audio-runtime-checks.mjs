@@ -56,9 +56,23 @@ function runTriggerEnterActivationCheck() {
 function runSyncBehaviorCheck() {
   const calls = [];
   const handleByKey = new Map();
+  let handleCreates = 0;
   const bridge = {
     getHandle(path, loop, key) {
-      const handle = { path, loop, key, audio: { paused: true, currentTime: 0, playbackRate: 1, pause() {} } };
+      if (!handleByKey.has(key)) {
+        handleCreates += 1;
+      }
+      const handle = {
+        path,
+        loop,
+        key,
+        audio: {
+          paused: true,
+          currentTime: 0,
+          playbackRate: 1,
+          pause() {},
+        },
+      };
       handleByKey.set(key, handle);
       return handle;
     },
@@ -122,6 +136,79 @@ function runSyncBehaviorCheck() {
   assert.ok(musicZoneCall && musicZoneCall.volume > 0, "music zones should produce active runtime volume while player is in-zone.");
   assert.equal(handleByKey.get("spot::spot-live")?.path, "data/assets/audio/spot/hum/spot_hum_01.ogg");
   assert.equal(handleByKey.get("ambientZone::ambient-zone-live")?.path, "data/assets/audio/ambient/ruin/dark-ambient-horror.ogg");
+  assert.equal(handleCreates >= 4, true, "sync should create one authored handle per active authored source.");
+  assert.equal(runtimeState.debug.activeThisFrame > 0, true, "sync debug state should report active authored audio frames.");
+}
+
+function runTileCoordinateInterpretationCheck() {
+  const calls = [];
+  const bridge = {
+    getHandle(path, loop, key) {
+      return {
+        path,
+        loop,
+        key,
+        audio: {
+          paused: true,
+          currentTime: 0,
+          playbackRate: 1,
+          pause() {},
+        },
+      };
+    },
+    ensureSpatial(_handle) {},
+    setPan(_handle, _pan) {},
+    setVolume(handle, volume) {
+      calls.push({ key: handle.key, volume });
+    },
+  };
+  const runtimeState = createRechargedAuthoredAudioState();
+  syncRechargedAuthoredAudioFrame({
+    audioItems: [
+      {
+        audioId: "tile-spot",
+        audioType: "spot",
+        x: 10,
+        y: 5,
+        source: "data/assets/audio/spot/hum/spot_hum_01.ogg",
+        params: { radius: 6, volume: 0.9, loop: true, spatial: true },
+      },
+      {
+        audioId: "tile-trigger",
+        audioType: "trigger",
+        x: 11,
+        y: 5,
+        source: "data/assets/audio/events/enemies/common/swoosh_01.ogg",
+        params: { triggerWidth: 2, loop: false, volume: 1, spatial: true },
+      },
+      {
+        audioId: "tile-ambient",
+        audioType: "ambientZone",
+        x: 8,
+        y: 4,
+        source: "data/assets/audio/ambient/ruin/dark-ambient-horror.ogg",
+        params: { width: 6, height: 4, loop: true, volume: 0.5 },
+      },
+      {
+        audioId: "tile-music",
+        audioType: "musicZone",
+        x: 8,
+        y: 4,
+        source: "data/assets/audio/music/game_play_1.ogg",
+        params: { width: 6, height: 4, loop: true, volume: 0.65 },
+      },
+    ],
+    playerSnapshot: { x: 240, y: 116, w: 22, h: 28 },
+    previousPlayerSnapshot: { x: 120, y: 116, w: 22, h: 28 },
+    tileSize: 24,
+    coordinateScale: 24,
+    bridge,
+    runtimeState,
+  });
+  const audibleCalls = calls.filter((call) => call.volume > 0.001);
+  assert.equal(audibleCalls.length >= 3, true, "tile-space authored audio should become audible after tile-to-pixel scaling.");
+  assert.equal(runtimeState.debug.coordinateScale, 24, "debug state should record the authored coordinate scale used.");
+  assert.equal(runtimeState.debug.startedThisFrame >= 4, true, "debug state should report authored handle starts.");
 }
 
 function runZoneFrameCheck() {
@@ -166,6 +253,7 @@ function runSourceResolutionCheck() {
 runSpotSpatialAttenuationCheck();
 runTriggerEnterActivationCheck();
 runSyncBehaviorCheck();
+runTileCoordinateInterpretationCheck();
 runZoneFrameCheck();
 runSourceResolutionCheck();
 

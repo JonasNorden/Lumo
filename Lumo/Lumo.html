@@ -520,10 +520,39 @@
       return Array.isArray(worldSnapshot?.audioItems) ? worldSnapshot.audioItems : [];
     }
 
+    function resolveRechargedAuthoredAudioCoordinateScale(payload, state, audioItems) {
+      const tileSize = Number.isFinite(payload?.tileSize) && payload.tileSize > 0 ? payload.tileSize : 24;
+      const worldWidthRaw = Number.isFinite(payload?.worldWidth)
+        ? payload.worldWidth
+        : (Number.isFinite(payload?.cols) ? payload.cols : null);
+      const worldHeightRaw = Number.isFinite(payload?.worldHeight)
+        ? payload.worldHeight
+        : (Number.isFinite(payload?.rows) ? payload.rows : null);
+      const playerSnapshot = state?.currentPlayerSnapshot;
+      const playerLooksPixel = (
+        Number.isFinite(playerSnapshot?.x)
+        && Number.isFinite(worldWidthRaw)
+        && playerSnapshot.x > worldWidthRaw + tileSize
+      ) || (
+        Number.isFinite(playerSnapshot?.y)
+        && Number.isFinite(worldHeightRaw)
+        && playerSnapshot.y > worldHeightRaw + tileSize
+      );
+      if (!playerLooksPixel) return 1;
+      const authoredEntries = Array.isArray(audioItems) ? audioItems.filter((item) => Number.isFinite(item?.x) && Number.isFinite(item?.y)) : [];
+      if (authoredEntries.length <= 0) return 1;
+      const authoredLooksTile = authoredEntries.every((item) => (
+        (!Number.isFinite(worldWidthRaw) || item.x <= worldWidthRaw + 1)
+        && (!Number.isFinite(worldHeightRaw) || item.y <= worldHeightRaw + 1)
+      ));
+      return authoredLooksTile ? tileSize : 1;
+    }
+
     function syncRechargedAuthoredAudio(payload, state) {
       if (!payload || !state) return;
       const authoredAudioItems = readRechargedAuthoredAudioItems(payload);
       const authoredAudioState = ensureRechargedAuthoredAudioState(state);
+      const authoredCoordinateScale = resolveRechargedAuthoredAudioCoordinateScale(payload, state, authoredAudioItems);
       // Authored audio reuses the same live bridge backend as runtime entities, but keeps its own persistent authored handle maps.
       if (!authoredAudioState.bridge) {
         authoredAudioState.bridge = createFireflyAudioBridge({
@@ -549,9 +578,17 @@
         playerSnapshot: state.currentPlayerSnapshot,
         previousPlayerSnapshot: state.previousPlayerSnapshot,
         tileSize: Number.isFinite(payload?.tileSize) ? payload.tileSize : 24,
+        coordinateScale: authoredCoordinateScale,
         bridge: authoredAudioState.bridge,
         runtimeState: authoredAudioState,
       });
+      const authoredDebug = {
+        ...(authoredAudioState.debug && typeof authoredAudioState.debug === "object" ? authoredAudioState.debug : {}),
+        bridgeReady: authoredAudioState?.bridge?.ready === true,
+        bridgeSource: typeof authoredAudioState?.bridge?.source === "string" ? authoredAudioState.bridge.source : "none",
+      };
+      payload.rechargedAuthoredAudioDebug = authoredDebug;
+      window.__LUMO_RECHARGED_AUTHORED_AUDIO_DEBUG__ = authoredDebug;
     }
 
     // Renders V1-style respawn countdown overlay in active Recharged canvas.
