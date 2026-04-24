@@ -11,6 +11,8 @@ import {
   isSpecialVolumeEntityType,
   isWaterVolumeEntityType,
 } from "../../domain/entities/specialVolumeTypes.js";
+import { getEntityPresetDefaultParams } from "../../domain/entities/entityPresets.js";
+import { getMovingPlatformPathFromAnchor, normalizeMovingPlatformParams } from "../../domain/entities/movingPlatform.js";
 import { isObjectPlacementPreviewSuppressed } from "./objectPlacementPreview.js";
 
 function getEntityCenter(entity, tileSize) {
@@ -364,6 +366,57 @@ function drawBubblingLiquidVolumeRegion(ctx, entity, tileSize, viewport, { isSel
   ctx.restore();
 }
 
+function isMovingPlatformEntityType(type) {
+  return String(type || "").trim().toLowerCase() === "movingplatform";
+}
+
+function drawMovingPlatformAuthoringPreview(ctx, entity, tileSize, viewport, { isSelected = false, isHovered = false, preview = false } = {}) {
+  const params = normalizeMovingPlatformParams(entity?.params);
+  // Moving platform authoring in V2 uses anchor + direction + distance.
+  // Draw footprint at anchor, then preview the derived endpoint/path for authoring clarity.
+  const path = getMovingPlatformPathFromAnchor(entity.x, entity.y, params);
+  const zoomTile = tileSize * viewport.zoom;
+  const originX = viewport.offsetX + path.anchor.x * zoomTile;
+  const originY = viewport.offsetY + path.anchor.y * zoomTile;
+  const endX = viewport.offsetX + path.end.x * zoomTile;
+  const endY = viewport.offsetY + path.end.y * zoomTile;
+  const width = params.widthTiles * zoomTile;
+  const height = params.heightTiles * zoomTile;
+  const scale = 1 / Math.max(0.001, viewport.zoom);
+  const outlineWidth = (preview ? 1.9 : isSelected ? 1.8 : isHovered ? 1.4 : 1.15) * scale;
+  const pathStroke = preview ? "rgba(255, 222, 156, 0.9)" : isSelected ? "rgba(255, 205, 115, 0.9)" : "rgba(255, 229, 172, 0.72)";
+
+  const centerOffsetX = width / 2;
+  const centerOffsetY = height / 2;
+  const anchorCenterX = originX + centerOffsetX;
+  const anchorCenterY = originY + centerOffsetY;
+  const endCenterX = endX + centerOffsetX;
+  const endCenterY = endY + centerOffsetY;
+
+  ctx.save();
+  ctx.fillStyle = preview ? "rgba(255, 198, 112, 0.14)" : "rgba(255, 182, 98, 0.18)";
+  ctx.strokeStyle = preview ? "rgba(255, 222, 156, 0.9)" : isSelected ? "rgba(255, 194, 105, 0.92)" : "rgba(255, 211, 143, 0.66)";
+  ctx.lineWidth = outlineWidth;
+  if (preview) ctx.setLineDash([6 * scale, 4 * scale]);
+  ctx.fillRect(originX, originY, width, height);
+  ctx.strokeRect(originX, originY, width, height);
+  ctx.setLineDash([]);
+
+  if (path.anchor.x !== path.end.x || path.anchor.y !== path.end.y) {
+    ctx.beginPath();
+    ctx.moveTo(anchorCenterX, anchorCenterY);
+    ctx.lineTo(endCenterX, endCenterY);
+    ctx.strokeStyle = pathStroke;
+    ctx.lineWidth = Math.max(1, 1.15 * scale);
+    ctx.stroke();
+
+    const endpointInset = 1.5 * scale;
+    ctx.strokeStyle = preview ? "rgba(255, 214, 138, 0.72)" : "rgba(255, 214, 138, 0.55)";
+    ctx.strokeRect(endX + endpointInset, endY + endpointInset, Math.max(1, width - endpointInset * 2), Math.max(1, height - endpointInset * 2));
+  }
+  ctx.restore();
+}
+
 export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 3) {
   const entities = doc.entities || [];
   const tileSize = doc.dimensions.tileSize;
@@ -384,6 +437,23 @@ export function findEntityAtCanvasPoint(doc, viewport, pointX, pointY, radius = 
         && pointX <= rect.x + rect.width + margin
         && pointY >= rect.y - margin
         && pointY <= rect.y + rect.height + margin;
+      if (inBounds) return i;
+      continue;
+    }
+    if (isMovingPlatformEntityType(entity.type)) {
+      const params = normalizeMovingPlatformParams(entity?.params);
+      const zoomTile = tileSize * viewport.zoom;
+      const footprint = {
+        x: viewport.offsetX + entity.x * zoomTile,
+        y: viewport.offsetY + entity.y * zoomTile,
+        width: params.widthTiles * zoomTile,
+        height: params.heightTiles * zoomTile,
+      };
+      const margin = Math.max(5, radius * viewport.zoom);
+      const inBounds = pointX >= footprint.x - margin
+        && pointX <= footprint.x + footprint.width + margin
+        && pointY >= footprint.y - margin
+        && pointY <= footprint.y + footprint.height + margin;
       if (inBounds) return i;
       continue;
     }
@@ -452,6 +522,13 @@ export function renderEntities(ctx, doc, viewport, interaction) {
       });
       continue;
     }
+    if (isMovingPlatformEntityType(renderEntity.type)) {
+      drawMovingPlatformAuthoringPreview(ctx, renderEntity, tileSize, viewport, {
+        isSelected: selectedEntityIds.has(entity.id),
+        isHovered: hoveredEntityId === entity.id,
+      });
+      continue;
+    }
     const { x, y } = getEntityScreenCenter(renderEntity, tileSize, viewport);
     drawEntityMarker(ctx, entity, x, y, viewport, {
       isSelected: selectedEntityIds.has(entity.id),
@@ -490,7 +567,10 @@ export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, ac
   }
   const previewEntity = {
     type: presetType,
-    params: presetId ? { presetId } : undefined,
+    params: {
+      ...(getEntityPresetDefaultParams(presetId || presetType)),
+      ...(presetId ? { presetId } : {}),
+    },
     x: interaction.hoverCell.x,
     y: interaction.hoverCell.y,
   };
@@ -503,6 +583,13 @@ export function renderEntityPlacementPreview(ctx, doc, viewport, interaction, ac
           ? drawBubblingLiquidVolumeRegion
         : drawFogVolumeRegion;
     drawVolume(ctx, previewEntity, doc.dimensions.tileSize, viewport, {
+      preview: true,
+      isSelected: true,
+    });
+    return;
+  }
+  if (isMovingPlatformEntityType(previewEntity.type)) {
+    drawMovingPlatformAuthoringPreview(ctx, previewEntity, doc.dimensions.tileSize, viewport, {
       preview: true,
       isSelected: true,
     });
