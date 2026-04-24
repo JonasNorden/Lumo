@@ -9,7 +9,7 @@ import {
 import { serializeLevelDocument } from "../src/data/exportLevelDocument.js";
 import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
 import { createNewLevelDocument } from "../src/data/createNewLevelDocument.js";
-import { getSelectionEditorPanelContent } from "../src/ui/selectionEditorPanel.js";
+import { bindSelectionEditorPanel, getSelectionEditorPanelContent } from "../src/ui/selectionEditorPanel.js";
 import { BRUSH_SPRITE_OPTIONS } from "../src/domain/tiles/tileSpriteCatalog.js";
 
 function runMovingPlatformPresetChecks() {
@@ -139,8 +139,170 @@ function runMovingPlatformInspectorVisualSelectionChecks() {
   assert.equal(markup.includes(`value="${selectedTileOption.value}" selected`), true, "moving platform sprite selector should preserve selected spriteTileId value");
 }
 
+function runMovingPlatformInspectorPersistenceChecks() {
+  const originalDocument = globalThis.document;
+  const originalHTMLElement = globalThis.HTMLElement;
+  const originalHTMLInputElement = globalThis.HTMLInputElement;
+  const originalHTMLTextAreaElement = globalThis.HTMLTextAreaElement;
+  const originalHTMLSelectElement = globalThis.HTMLSelectElement;
+  const originalHTMLButtonElement = globalThis.HTMLButtonElement;
+  const originalEvent = globalThis.Event;
+
+  class MockHTMLElement {}
+  class MockHTMLInputElement extends MockHTMLElement {}
+  class MockHTMLTextAreaElement extends MockHTMLElement {}
+  class MockHTMLSelectElement extends MockHTMLElement {
+    constructor() {
+      super();
+      this.dataset = {};
+      this.value = "";
+    }
+  }
+  class MockHTMLButtonElement extends MockHTMLElement {}
+  class MockEvent {
+    constructor(type) {
+      this.type = type;
+      this.target = null;
+    }
+  }
+
+  class MockPanel extends MockHTMLElement {
+    constructor() {
+      super();
+      this.listeners = new Map();
+    }
+
+    addEventListener(type, handler) {
+      this.listeners.set(type, handler);
+    }
+
+    removeEventListener(type, handler) {
+      const current = this.listeners.get(type);
+      if (current === handler) this.listeners.delete(type);
+    }
+
+    querySelector() {
+      return null;
+    }
+
+    contains() {
+      return false;
+    }
+
+    emit(type, target) {
+      const handler = this.listeners.get(type);
+      assert.ok(handler, `expected ${type} handler to be registered`);
+      const event = new MockEvent(type);
+      event.target = target;
+      handler(event);
+    }
+  }
+
+  const mockDocument = {
+    activeElement: null,
+    addEventListener() {},
+    removeEventListener() {},
+  };
+
+  globalThis.document = mockDocument;
+  globalThis.HTMLElement = MockHTMLElement;
+  globalThis.HTMLInputElement = MockHTMLInputElement;
+  globalThis.HTMLTextAreaElement = MockHTMLTextAreaElement;
+  globalThis.HTMLSelectElement = MockHTMLSelectElement;
+  globalThis.HTMLButtonElement = MockHTMLButtonElement;
+  globalThis.Event = MockEvent;
+
+  try {
+    const panel = new MockPanel();
+    const mutations = [];
+    const dispose = bindSelectionEditorPanel(panel, null, {
+      onEntityUpdate: (...args) => mutations.push(args),
+    });
+
+    const input = new MockHTMLSelectElement();
+    input.value = "platform_steel_01";
+    input.dataset.entityIndex = "0";
+    input.dataset.entityParamKey = "spriteTileId";
+    input.dataset.entityParamType = "text";
+    input.dataset.entityId = "entity-moving-platform-01";
+
+    panel.emit("change", input);
+    dispose();
+
+    assert.equal(mutations.length, 1, "changing moving platform sprite tile select should emit one entity mutation");
+    assert.deepEqual(mutations[0], [
+      0,
+      "param",
+      {
+        __canonicalMutation: true,
+        itemId: "entity-moving-platform-01",
+        key: "spriteTileId",
+        path: undefined,
+        value: "platform_steel_01",
+      },
+    ], "moving platform sprite tile select should persist back to params.spriteTileId");
+  } finally {
+    globalThis.document = originalDocument;
+    globalThis.HTMLElement = originalHTMLElement;
+    globalThis.HTMLInputElement = originalHTMLInputElement;
+    globalThis.HTMLTextAreaElement = originalHTMLTextAreaElement;
+    globalThis.HTMLSelectElement = originalHTMLSelectElement;
+    globalThis.HTMLButtonElement = originalHTMLButtonElement;
+    globalThis.Event = originalEvent;
+  }
+}
+
+function runNonMovingPlatformParamFallbackChecks() {
+  const state = {
+    document: {
+      status: "ready",
+      error: null,
+      active: {
+        id: "non-moving-entity-inspector-level",
+        dimensions: { width: 12, height: 8, tileSize: 24 },
+        entities: [
+          {
+            id: "entity-switch-01",
+            name: "Floor Switch",
+            type: "switch",
+            x: 2,
+            y: 2,
+            visible: true,
+            params: {
+              spriteTileId: "switch_plate_01",
+            },
+          },
+        ],
+        decor: [],
+        sounds: [],
+      },
+    },
+    interaction: {
+      selectedEntityIndices: [0],
+      selectedEntityIndex: 0,
+      selectedEntityIds: ["entity-switch-01"],
+      selectedEntityId: "entity-switch-01",
+      selectedDecorIndices: [],
+      selectedDecorIndex: null,
+      selectedDecorIds: [],
+      selectedDecorId: null,
+      selectedSoundIndices: [],
+      selectedSoundIndex: null,
+      selectedSoundIds: [],
+      selectedSoundId: null,
+    },
+  };
+
+  const { markup } = getSelectionEditorPanelContent(state);
+  assert.equal(markup.includes('data-entity-param-key="spriteTileId"'), true, "non-moving platform entity should still expose spriteTileId param");
+  assert.equal(markup.includes('data-entity-param-type="text"'), true, "non-moving platform entity spriteTileId should render with generic text param type");
+  assert.equal(markup.includes('value="switch_plate_01"'), true, "non-moving platform entity spriteTileId should preserve generic text value");
+}
+
 runMovingPlatformPresetChecks();
 runMovingPlatformPersistenceChecks();
 runMovingPlatformPreviewDerivationChecks();
 runMovingPlatformInspectorVisualSelectionChecks();
+runMovingPlatformInspectorPersistenceChecks();
+runNonMovingPlatformParamFallbackChecks();
 console.log("moving platform authoring checks passed");
