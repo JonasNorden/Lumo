@@ -43,14 +43,65 @@ function normalizeRuntimeAudioType(audioType) {
 }
 
 function buildPlayerCenter(playerSnapshot = null) {
+  if (!playerSnapshot || typeof playerSnapshot !== "object") return null;
+
+  const centerX = Number.isFinite(playerSnapshot?.centerX) ? playerSnapshot.centerX : null;
+  const centerY = Number.isFinite(playerSnapshot?.centerY) ? playerSnapshot.centerY : null;
+  if (centerX !== null && centerY !== null) {
+    return {
+      x: centerX,
+      y: centerY,
+      anchor: "center",
+      rawX: centerX,
+      rawY: centerY,
+      w: Number.isFinite(playerSnapshot?.w) ? playerSnapshot.w : 22,
+      h: Number.isFinite(playerSnapshot?.h) ? playerSnapshot.h : 28,
+    };
+  }
+
+  const w = Number.isFinite(playerSnapshot?.w) ? playerSnapshot.w : 22;
+  const h = Number.isFinite(playerSnapshot?.h) ? playerSnapshot.h : 28;
+  const feetX = Number.isFinite(playerSnapshot?.feetX)
+    ? playerSnapshot.feetX
+    : (Number.isFinite(playerSnapshot?.footX) ? playerSnapshot.footX : null);
+  const feetY = Number.isFinite(playerSnapshot?.feetY)
+    ? playerSnapshot.feetY
+    : (Number.isFinite(playerSnapshot?.footY) ? playerSnapshot.footY : null);
+  if (feetX !== null && feetY !== null) {
+    return {
+      x: feetX,
+      y: feetY + 1 - (h * 0.5),
+      anchor: "feet",
+      rawX: feetX,
+      rawY: feetY,
+      w,
+      h,
+    };
+  }
+
   const x = Number.isFinite(playerSnapshot?.x) ? playerSnapshot.x : null;
   const y = Number.isFinite(playerSnapshot?.y) ? playerSnapshot.y : null;
   if (x === null || y === null) return null;
-  const w = Number.isFinite(playerSnapshot?.w) ? playerSnapshot.w : 22;
-  const h = Number.isFinite(playerSnapshot?.h) ? playerSnapshot.h : 28;
+  const hasExplicitRect = Number.isFinite(playerSnapshot?.w) || Number.isFinite(playerSnapshot?.h);
+  if (hasExplicitRect) {
+    return {
+      x: x + (w * 0.5),
+      y: y + (h * 0.5),
+      anchor: "topLeft",
+      rawX: x,
+      rawY: y,
+      w,
+      h,
+    };
+  }
   return {
-    x: x + (w * 0.5),
-    y: y + (h * 0.5),
+    x,
+    y: y + 1 - (h * 0.5),
+    anchor: "feetFromXY",
+    rawX: x,
+    rawY: y,
+    w,
+    h,
   };
 }
 
@@ -143,7 +194,7 @@ function computeTriggerFrame(audioItem, playerCenter, previousPlayerCenter, tile
   const pitch = readPitch(audioItem, 1);
   const spatial = readSpatial(audioItem, true);
   const loop = readLoop(audioItem, false);
-  const radiusPx = readRadiusPx(audioItem, tileSize, 3);
+  const radiusPx = readRadiusPx(audioItem, tileSize, 3, coordinateScale);
   const rawTriggerWidth = Math.max(0, readNumber(params.triggerWidth, 0));
   const triggerWidthPx = positionScale > 1 ? rawTriggerWidth * positionScale : rawTriggerWidth;
 
@@ -300,11 +351,30 @@ function syncRechargedAuthoredAudioFrame({
   const authoredCoordinateScale = readCoordinateScale(coordinateScale);
   let startedThisFrame = 0;
   let activeThisFrame = 0;
+  const itemDebug = [];
   for (const audioItem of audioItems) {
     const audioType = normalizeRuntimeAudioType(audioItem?.audioType);
     const audioId = typeof audioItem?.audioId === "string" ? audioItem.audioId : "audio";
     const source = readAudioItemSource(audioItem);
-    if (!source) continue;
+    const entry = {
+      id: audioId,
+      type: audioType,
+      scaledPosition: {
+        x: readNumber(audioItem?.x, 0) * authoredCoordinateScale,
+        y: readNumber(audioItem?.y, 0) * authoredCoordinateScale,
+      },
+      playerUsed: playerCenter
+        ? { x: playerCenter.x, y: playerCenter.y, anchor: playerCenter.anchor, rawX: playerCenter.rawX, rawY: playerCenter.rawY }
+        : null,
+      active: false,
+      reason: "none",
+      targetVolume: 0,
+    };
+    if (!source) {
+      entry.reason = "missing-source";
+      itemDebug.push(entry);
+      continue;
+    }
 
     if (audioType === "spot") {
       const key = `spot::${audioId}`;
@@ -321,6 +391,17 @@ function syncRechargedAuthoredAudioFrame({
       bridge.setVolume(handle, frame.targetVolume);
       if (frame.targetVolume > 0.001) activeThisFrame += 1;
       runtimeState.spotHandlesByKey.set(key, handle);
+      const dx = playerCenter ? entry.scaledPosition.x - playerCenter.x : null;
+      const dy = playerCenter ? entry.scaledPosition.y - playerCenter.y : null;
+      const radiusPx = readRadiusPx(audioItem, tileSize, 4, authoredCoordinateScale);
+      entry.distance = dx !== null && dy !== null ? Math.hypot(dx, dy) : null;
+      entry.range = radiusPx;
+      entry.targetVolume = frame.targetVolume;
+      entry.active = frame.targetVolume > 0.001;
+      entry.reason = !playerCenter
+        ? "missing-player-center"
+        : (entry.active ? "active" : (radiusPx <= 0 ? "zero-radius" : "outside-range"));
+      itemDebug.push(entry);
       continue;
     }
 
@@ -345,6 +426,19 @@ function syncRechargedAuthoredAudioFrame({
         if (frame.targetVolume > 0.001) activeThisFrame += 1;
       }
       runtimeState.triggerHandlesByKey.set(key, handle);
+      const triggerRadiusPx = readRadiusPx(audioItem, tileSize, 3, authoredCoordinateScale);
+      const triggerWidthRaw = Math.max(0, readNumber(audioItem?.params?.triggerWidth, 0));
+      const triggerWidthPx = authoredCoordinateScale > 1 ? triggerWidthRaw * authoredCoordinateScale : triggerWidthRaw;
+      entry.range = triggerRadiusPx;
+      entry.triggerWidth = triggerWidthPx;
+      entry.enteredRange = frame.enteredRange;
+      entry.inRange = frame.inRange;
+      entry.targetVolume = frame.targetVolume;
+      entry.active = frame.loop ? (frame.inRange && frame.targetVolume > 0.001) : frame.enteredRange;
+      entry.reason = !playerCenter
+        ? "missing-player-center"
+        : (entry.active ? "active" : (frame.inRange ? "in-range-low-volume" : "not-entered-range"));
+      itemDebug.push(entry);
       continue;
     }
 
@@ -363,7 +457,26 @@ function syncRechargedAuthoredAudioFrame({
       bridge.setVolume(handle, frame.targetVolume);
       if (frame.targetVolume > 0.001) activeThisFrame += 1;
       runtimeState.zoneHandlesByKey.set(key, handle);
+      const zoneDimensions = readZoneDimensionsPx(audioItem, tileSize, authoredCoordinateScale);
+      const left = entry.scaledPosition.x;
+      const top = entry.scaledPosition.y;
+      const right = left + zoneDimensions.widthPx;
+      const bottom = top + zoneDimensions.heightPx;
+      entry.bounds = { left, top, right, bottom, width: zoneDimensions.widthPx, height: zoneDimensions.heightPx };
+      entry.inside = playerCenter
+        ? (playerCenter.x >= left && playerCenter.x <= right && playerCenter.y >= top && playerCenter.y <= bottom)
+        : false;
+      entry.targetVolume = frame.targetVolume;
+      entry.active = frame.targetVolume > 0.001;
+      entry.reason = !playerCenter
+        ? "missing-player-center"
+        : (entry.active ? "active" : (entry.inside ? "inside-faded-to-zero" : "outside-zone"));
+      itemDebug.push(entry);
+      continue;
     }
+
+    entry.reason = "unsupported-type";
+    itemDebug.push(entry);
   }
 
   for (const [key, handle] of runtimeState.spotHandlesByKey.entries()) {
@@ -392,6 +505,13 @@ function syncRechargedAuthoredAudioFrame({
     totalSpotHandles: runtimeState.spotHandlesByKey.size,
     totalTriggerHandles: runtimeState.triggerHandlesByKey.size,
     totalZoneHandles: runtimeState.zoneHandlesByKey.size,
+    playerCenterUsed: playerCenter
+      ? { x: playerCenter.x, y: playerCenter.y, anchor: playerCenter.anchor, rawX: playerCenter.rawX, rawY: playerCenter.rawY }
+      : null,
+    previousPlayerCenterUsed: previousPlayerCenter
+      ? { x: previousPlayerCenter.x, y: previousPlayerCenter.y, anchor: previousPlayerCenter.anchor, rawX: previousPlayerCenter.rawX, rawY: previousPlayerCenter.rawY }
+      : null,
+    itemDebug,
   };
 }
 
