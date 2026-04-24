@@ -11,6 +11,11 @@ function readNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function readCoordinateScale(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
 function normalizeSoundPath(path) {
   const trimmed = String(path || "").trim();
   if (!trimmed) return "";
@@ -49,10 +54,17 @@ function buildPlayerCenter(playerSnapshot = null) {
   };
 }
 
-function readRadiusPx(audioItem, tileSize = 24, fallbackTiles = 4) {
+function readRadiusPx(audioItem, tileSize = 24, fallbackTiles = 4, coordinateScale = 1) {
   const params = audioItem?.params && typeof audioItem.params === "object" ? audioItem.params : {};
   const radiusTiles = Number.isFinite(Number(params.radius)) ? Number(params.radius) : fallbackTiles;
   const safeTileSize = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24;
+  const scale = readCoordinateScale(coordinateScale);
+  if (scale > 1) {
+    return Math.max(0, radiusTiles * safeTileSize);
+  }
+  if (radiusTiles > safeTileSize * 0.75) {
+    return Math.max(0, radiusTiles);
+  }
   return Math.max(0, radiusTiles * safeTileSize);
 }
 
@@ -77,10 +89,11 @@ function readLoop(audioItem, fallback = true) {
   return typeof params.loop === "boolean" ? params.loop : fallback;
 }
 
-function computeSpotFrame(audioItem, playerCenter, tileSize) {
-  const cx = readNumber(audioItem?.x, 0);
-  const cy = readNumber(audioItem?.y, 0);
-  const radiusPx = readRadiusPx(audioItem, tileSize, 4);
+function computeSpotFrame(audioItem, playerCenter, tileSize, coordinateScale = 1) {
+  const positionScale = readCoordinateScale(coordinateScale);
+  const cx = readNumber(audioItem?.x, 0) * positionScale;
+  const cy = readNumber(audioItem?.y, 0) * positionScale;
+  const radiusPx = readRadiusPx(audioItem, tileSize, 4, coordinateScale);
   const baseVolume = readBaseVolume(audioItem, 0.8);
   const spatial = readSpatial(audioItem, true);
 
@@ -121,16 +134,18 @@ function computeSpotFrame(audioItem, playerCenter, tileSize) {
   };
 }
 
-function computeTriggerFrame(audioItem, playerCenter, previousPlayerCenter, tileSize) {
+function computeTriggerFrame(audioItem, playerCenter, previousPlayerCenter, tileSize, coordinateScale = 1) {
   const params = audioItem?.params && typeof audioItem.params === "object" ? audioItem.params : {};
-  const cx = readNumber(audioItem?.x, 0);
-  const cy = readNumber(audioItem?.y, 0);
+  const positionScale = readCoordinateScale(coordinateScale);
+  const cx = readNumber(audioItem?.x, 0) * positionScale;
+  const cy = readNumber(audioItem?.y, 0) * positionScale;
   const baseVolume = readBaseVolume(audioItem, 1);
   const pitch = readPitch(audioItem, 1);
   const spatial = readSpatial(audioItem, true);
   const loop = readLoop(audioItem, false);
   const radiusPx = readRadiusPx(audioItem, tileSize, 3);
-  const triggerWidthPx = Math.max(0, readNumber(params.triggerWidth, 0));
+  const rawTriggerWidth = Math.max(0, readNumber(params.triggerWidth, 0));
+  const triggerWidthPx = positionScale > 1 ? rawTriggerWidth * positionScale : rawTriggerWidth;
 
   const hasRange = radiusPx > 0 || triggerWidthPx > 0;
 
@@ -207,18 +222,26 @@ function playTriggerOneShot(handle, bridge, volume) {
   bridge.setVolume(handle, volume);
 }
 
-function readZoneDimensionsPx(audioItem, tileSize = 24) {
+function readZoneDimensionsPx(audioItem, tileSize = 24, coordinateScale = 1) {
   const params = audioItem?.params && typeof audioItem.params === "object" ? audioItem.params : {};
   const safeTileSize = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24;
+  const scale = readCoordinateScale(coordinateScale);
   const widthTiles = Math.max(1, readNumber(params.width, 1));
   const heightTiles = Math.max(1, readNumber(params.height, 1));
+  if (scale > 1) {
+    return {
+      widthPx: widthTiles * safeTileSize,
+      heightPx: heightTiles * safeTileSize,
+    };
+  }
+  const likelyPixelAuthored = widthTiles > 8 || heightTiles > 8;
   return {
-    widthPx: widthTiles * safeTileSize,
-    heightPx: heightTiles * safeTileSize,
+    widthPx: likelyPixelAuthored ? widthTiles : widthTiles * safeTileSize,
+    heightPx: likelyPixelAuthored ? heightTiles : heightTiles * safeTileSize,
   };
 }
 
-function computeZoneFrame(audioItem, playerCenter, tileSize, fallbackVolume) {
+function computeZoneFrame(audioItem, playerCenter, tileSize, fallbackVolume, coordinateScale = 1) {
   const baseVolume = readBaseVolume(audioItem, fallbackVolume);
   const loop = readLoop(audioItem, true);
   const pitch = readPitch(audioItem, 1);
@@ -227,9 +250,10 @@ function computeZoneFrame(audioItem, playerCenter, tileSize, fallbackVolume) {
     return { active: false, targetVolume: 0, pan: 0, pitch, spatial, loop };
   }
 
-  const left = readNumber(audioItem?.x, 0);
-  const top = readNumber(audioItem?.y, 0);
-  const { widthPx, heightPx } = readZoneDimensionsPx(audioItem, tileSize);
+  const positionScale = readCoordinateScale(coordinateScale);
+  const left = readNumber(audioItem?.x, 0) * positionScale;
+  const top = readNumber(audioItem?.y, 0) * positionScale;
+  const { widthPx, heightPx } = readZoneDimensionsPx(audioItem, tileSize, coordinateScale);
   const right = left + widthPx;
   const bottom = top + heightPx;
   const inX = playerCenter.x >= left && playerCenter.x <= right;
@@ -262,6 +286,7 @@ function syncRechargedAuthoredAudioFrame({
   playerSnapshot = null,
   previousPlayerSnapshot = null,
   tileSize = 24,
+  coordinateScale = 1,
   bridge = null,
   runtimeState = null,
 } = {}) {
@@ -272,6 +297,9 @@ function syncRechargedAuthoredAudioFrame({
   const seenTriggerKeys = new Set();
   const activeZoneKeys = new Set();
 
+  const authoredCoordinateScale = readCoordinateScale(coordinateScale);
+  let startedThisFrame = 0;
+  let activeThisFrame = 0;
   for (const audioItem of audioItems) {
     const audioType = normalizeRuntimeAudioType(audioItem?.audioType);
     const audioId = typeof audioItem?.audioId === "string" ? audioItem.audioId : "audio";
@@ -281,15 +309,17 @@ function syncRechargedAuthoredAudioFrame({
     if (audioType === "spot") {
       const key = `spot::${audioId}`;
       activeSpotKeys.add(key);
-      const frame = computeSpotFrame(audioItem, playerCenter, tileSize);
+      const frame = computeSpotFrame(audioItem, playerCenter, tileSize, authoredCoordinateScale);
       const handle = bridge.getHandle(source, frame.loop, key);
       if (!handle) continue;
+      if (!runtimeState.spotHandlesByKey.has(key)) startedThisFrame += 1;
       applyHandlePitch(handle, frame.pitch);
       if (frame.spatial) {
         bridge.ensureSpatial(handle);
         bridge.setPan(handle, frame.pan);
       }
       bridge.setVolume(handle, frame.targetVolume);
+      if (frame.targetVolume > 0.001) activeThisFrame += 1;
       runtimeState.spotHandlesByKey.set(key, handle);
       continue;
     }
@@ -297,9 +327,10 @@ function syncRechargedAuthoredAudioFrame({
     if (audioType === "trigger") {
       const key = `trigger::${audioId}`;
       seenTriggerKeys.add(key);
-      const frame = computeTriggerFrame(audioItem, playerCenter, previousPlayerCenter, tileSize);
+      const frame = computeTriggerFrame(audioItem, playerCenter, previousPlayerCenter, tileSize, authoredCoordinateScale);
       const handle = bridge.getHandle(source, frame.loop, key);
       if (!handle) continue;
+      if (!runtimeState.triggerHandlesByKey.has(key)) startedThisFrame += 1;
       applyHandlePitch(handle, frame.pitch);
       if (frame.spatial) {
         bridge.ensureSpatial(handle);
@@ -308,8 +339,10 @@ function syncRechargedAuthoredAudioFrame({
 
       if (frame.loop) {
         bridge.setVolume(handle, frame.inRange ? frame.targetVolume : 0);
+        if (frame.inRange && frame.targetVolume > 0.001) activeThisFrame += 1;
       } else if (frame.enteredRange) {
         playTriggerOneShot(handle, bridge, frame.targetVolume);
+        if (frame.targetVolume > 0.001) activeThisFrame += 1;
       }
       runtimeState.triggerHandlesByKey.set(key, handle);
       continue;
@@ -318,15 +351,17 @@ function syncRechargedAuthoredAudioFrame({
     if (audioType === "ambientZone" || audioType === "musicZone") {
       const key = `${audioType}::${audioId}`;
       activeZoneKeys.add(key);
-      const frame = computeZoneFrame(audioItem, playerCenter, tileSize, audioType === "musicZone" ? 0.78 : 0.45);
+      const frame = computeZoneFrame(audioItem, playerCenter, tileSize, audioType === "musicZone" ? 0.78 : 0.45, authoredCoordinateScale);
       const handle = bridge.getHandle(source, frame.loop, key);
       if (!handle) continue;
+      if (!runtimeState.zoneHandlesByKey.has(key)) startedThisFrame += 1;
       applyHandlePitch(handle, frame.pitch);
       if (frame.spatial) {
         bridge.ensureSpatial(handle);
         bridge.setPan(handle, frame.pan);
       }
       bridge.setVolume(handle, frame.targetVolume);
+      if (frame.targetVolume > 0.001) activeThisFrame += 1;
       runtimeState.zoneHandlesByKey.set(key, handle);
     }
   }
@@ -348,6 +383,16 @@ function syncRechargedAuthoredAudioFrame({
     bridge.setPan(handle, 0);
     bridge.setVolume(handle, 0);
   }
+
+  runtimeState.debug = {
+    coordinateScale: authoredCoordinateScale,
+    seenAudioItems: Array.isArray(audioItems) ? audioItems.length : 0,
+    startedThisFrame,
+    activeThisFrame,
+    totalSpotHandles: runtimeState.spotHandlesByKey.size,
+    totalTriggerHandles: runtimeState.triggerHandlesByKey.size,
+    totalZoneHandles: runtimeState.zoneHandlesByKey.size,
+  };
 }
 
 function createRechargedAuthoredAudioState() {
@@ -356,6 +401,15 @@ function createRechargedAuthoredAudioState() {
     spotHandlesByKey: new Map(),
     triggerHandlesByKey: new Map(),
     zoneHandlesByKey: new Map(),
+    debug: {
+      coordinateScale: 1,
+      seenAudioItems: 0,
+      startedThisFrame: 0,
+      activeThisFrame: 0,
+      totalSpotHandles: 0,
+      totalTriggerHandles: 0,
+      totalZoneHandles: 0,
+    },
   };
 }
 
