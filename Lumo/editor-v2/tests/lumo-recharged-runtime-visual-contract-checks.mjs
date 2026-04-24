@@ -28,7 +28,16 @@ function runSupportGeometryPresentationChecks() {
   assert.equal(html.includes("normalizedEntityType === \"player-spawn\" || normalizedEntityType === \"start_01\" || normalizedEntityType === \"start\""), true, "expected Recharged entity render loop to keep spawn/start markers invisible so they cannot hit unknown fallback visuals");
 }
 
+function runMovingPlatformVisualContractChecks() {
+  assert.equal(html.includes("normalizedEntityType === \"movingplatform\" || normalizedEntityType === \"moving_platform\""), true, "expected movingPlatform type to have a dedicated runtime render branch");
+  assert.equal(html.includes("const spriteTileId = typeof platformParams.spriteTileId === \"string\""), true, "expected movingPlatform runtime branch to read params.spriteTileId for tile-art resolution");
+  assert.equal(html.includes("const movingPlatformSupportLikeTile = {"), true, "expected movingPlatform runtime branch to build a supportTile-shape visual object");
+  assert.equal(html.includes("const renderedMovingPlatformVisual = drawRechargedTileV1Visual("), true, "expected movingPlatform runtime branch to reuse the support tile visual helper");
+  assert.equal(html.includes("if (renderedMovingPlatformVisual) {\n              continue;\n            }"), true, "expected movingPlatform to skip generic entity debug fallback when tile visual draw succeeds");
+}
+
 runRealRechargedRenderPathChecks();
 runSupportGeometryPresentationChecks();
+runMovingPlatformVisualContractChecks();
 
 console.log("lumo-recharged-runtime-visual-contract-checks: ok");

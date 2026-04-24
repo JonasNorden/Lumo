@@ -2829,6 +2829,53 @@
           if (normalizedEntityType === "player-spawn" || normalizedEntityType === "start_01" || normalizedEntityType === "start") {
             continue;
           }
+          if (normalizedEntityType === "movingplatform" || normalizedEntityType === "moving_platform") {
+            const platformParams = entity?.params && typeof entity.params === "object" ? entity.params : {};
+            const widthTiles = Number.isFinite(platformParams.widthTiles) && platformParams.widthTiles > 0
+              ? Math.max(1, Math.round(platformParams.widthTiles))
+              : 1;
+            const heightTiles = Number.isFinite(platformParams.heightTiles) && platformParams.heightTiles > 0
+              ? Math.max(1, Math.round(platformParams.heightTiles))
+              : 1;
+            const spriteTileId = typeof platformParams.spriteTileId === "string" && platformParams.spriteTileId.trim().length > 0
+              ? platformParams.spriteTileId.trim()
+              : null;
+            // movingPlatform reuses Recharged tile visual resolution so runtime platform art matches authored tile selections.
+            const movingPlatformSupportLikeTile = {
+              x: entity.x,
+              y: entity.y,
+              w: widthTiles,
+              h: heightTiles,
+              catalogTileId: spriteTileId,
+            };
+            const renderedMovingPlatformVisual = drawRechargedTileV1Visual(
+              ctx,
+              mapper,
+              state,
+              movingPlatformSupportLikeTile,
+              worldUnitsToPx,
+              tileSize,
+            );
+            if (renderedMovingPlatformVisual) {
+              continue;
+            }
+
+            const movingPlatformRect = mapper.worldToCanvasRect(
+              entity.x * worldUnitsToPx,
+              entity.y * worldUnitsToPx,
+              widthTiles * worldUnitsToPx,
+              heightTiles * worldUnitsToPx,
+            );
+            ctx.strokeStyle = "rgba(248, 113, 113, 0.88)";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(
+              movingPlatformRect.x + 1,
+              movingPlatformRect.y + 1,
+              Math.max(1, movingPlatformRect.w - 2),
+              Math.max(1, movingPlatformRect.h - 2),
+            );
+            continue;
+          }
           const entityDrawW = Number.isFinite(entity.w) && entity.w > 0 ? entity.w : entity.size;
           const entityDrawH = Number.isFinite(entity.h) && entity.h > 0 ? entity.h : entity.size;
           const entityRect = mapper.worldToCanvasRect(
