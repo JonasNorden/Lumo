@@ -126,6 +126,7 @@ const LIQUID_DEATH_HORIZONTAL_DAMPING = 0.82;
 const LIQUID_DEATH_VERTICAL_LERP_FACTOR = 0.15;
 const DEATH_FALL_ARM_OFFSET_TILES = 0.5;
 const DEATH_FALL_MAX_DISTANCE_TILES = 2;
+const DEATH_FALL_MAX_DISTANCE_TILES_TIGHT = 1.25;
 const ENTITY_HIT_FLASH_TICKS = 6;
 const ENTITY_DARK_CREATURE_PULSE_SCALE = 0.55;
 const ENTITY_HOVER_VOID_PULSE_SCALE = 0.6;
@@ -2778,6 +2779,13 @@ function resolveGameplayDeathPlaneY(worldPacket, sourceEntities = []) {
   };
 }
 
+function resolveDeathFallThresholdTiles(deathPlaneSource) {
+  if (deathPlaneSource === "authored-hazard-volume-top" || deathPlaneSource === "explicit-fall-hazard-top" || deathPlaneSource === "derived-lower-hazard-top") {
+    return DEATH_FALL_MAX_DISTANCE_TILES_TIGHT;
+  }
+  return DEATH_FALL_MAX_DISTANCE_TILES;
+}
+
 function resolveBottomBoundRespawnY(worldPacket, options = {}) {
   const tileSize = worldPacket?.world?.tileSize;
   const marginTiles = Number.isFinite(options?.bounds?.fallRespawnMarginTiles)
@@ -2990,7 +2998,6 @@ function resolveHazardFallTracker(worldPacket, playerState, verticalStep, source
   const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0
     ? worldPacket.world.tileSize
     : 24;
-  const maxFallDistance = tileSize * DEATH_FALL_MAX_DISTANCE_TILES;
   const currentY = Number.isFinite(verticalStep?.position?.y) ? verticalStep.position.y : null;
   const velocityY = Number.isFinite(verticalStep?.velocity?.y) ? verticalStep.velocity.y : null;
   const descending = verticalStep?.falling === true || (Number.isFinite(velocityY) && velocityY > 0);
@@ -3005,6 +3012,9 @@ function resolveHazardFallTracker(worldPacket, playerState, verticalStep, source
     : (typeof playerState?._liquidDeathType === "string" ? playerState._liquidDeathType : null);
   const liquidType = typeof overlapType === "string" ? overlapType : carriedLiquidType;
   const deathPlane = resolveGameplayDeathPlaneY(worldPacket, sourceEntities);
+  const deathPlaneSource = typeof deathPlane?.source === "string" ? deathPlane.source : null;
+  const thresholdTiles = resolveDeathFallThresholdTiles(deathPlaneSource);
+  const threshold = tileSize * thresholdTiles;
   const deathPlaneY = Number.isFinite(deathPlane?.deathPlaneY) ? deathPlane.deathPlaneY : null;
   const effectiveDeathPlaneY = Number.isFinite(deathPlaneY)
     ? deathPlaneY + tileSize * DEATH_FALL_ARM_OFFSET_TILES
@@ -3014,9 +3024,9 @@ function resolveHazardFallTracker(worldPacket, playerState, verticalStep, source
   const forcedOutOfBoundsArm = (
     Number.isFinite(currentY)
     && Number.isFinite(effectiveDeathPlaneY)
-    && Number.isFinite(maxFallDistance)
-    && maxFallDistance > 0
-    && currentY > (effectiveDeathPlaneY + maxFallDistance)
+    && Number.isFinite(threshold)
+    && threshold > 0
+    && currentY > (effectiveDeathPlaneY + threshold)
     && !onPlatform
     && !hasMovingPlatforms
   );
@@ -3056,7 +3066,10 @@ function resolveHazardFallTracker(worldPacket, playerState, verticalStep, source
   const fallDistance = Number.isFinite(currentY) && Number.isFinite(fallStartY)
     ? Math.max(0, currentY - fallStartY)
     : 0;
-  const triggered = Boolean(hazardType) && Number.isFinite(maxFallDistance) && maxFallDistance > 0 && fallDistance >= maxFallDistance;
+  const triggered = Boolean(hazardType) && Number.isFinite(threshold) && threshold > 0 && fallDistance >= threshold;
+  const totalFallFromDeathPlane = Number.isFinite(currentY) && Number.isFinite(deathPlaneY)
+    ? Math.max(0, currentY - deathPlaneY)
+    : 0;
   const tracker = hazardType
     ? {
         active: true,
@@ -3064,7 +3077,9 @@ function resolveHazardFallTracker(worldPacket, playerState, verticalStep, source
         fallStartY,
         currentY,
         fallDistance,
-        maxFallDistance,
+        threshold,
+        thresholdTiles,
+        maxFallDistance: threshold,
         armed: outOfBounds,
         armReason,
         deathPlaneY,
@@ -3073,6 +3088,8 @@ function resolveHazardFallTracker(worldPacket, playerState, verticalStep, source
         supportBottomY: Number.isFinite(deathPlane?.supportBottomY) ? deathPlane.supportBottomY : null,
         volumeTopY: Number.isFinite(deathPlane?.volumeTopY) ? deathPlane.volumeTopY : null,
         worldBottom,
+        totalFallFromDeathPlane,
+        respawnTriggered: triggered,
       }
     : null;
   return {
@@ -3091,8 +3108,12 @@ function resolveHazardFallTracker(worldPacket, playerState, verticalStep, source
     currentY,
     fallStartY,
     fallDistance,
-    maxFallDistance,
+    maxFallDistance: threshold,
+    threshold,
+    thresholdTiles,
+    totalFallFromDeathPlane,
     triggered,
+    respawnTriggered: triggered,
   };
 }
 
@@ -3108,12 +3129,16 @@ function publishFallDebug(debugState) {
       supportBottomY: Number.isFinite(debugState?.supportBottomY) ? debugState.supportBottomY : null,
       volumeTopY: Number.isFinite(debugState?.volumeTopY) ? debugState.volumeTopY : null,
       worldBottom: Number.isFinite(debugState?.worldBottom) ? debugState.worldBottom : null,
+      thresholdTiles: Number.isFinite(debugState?.thresholdTiles) ? debugState.thresholdTiles : null,
+      threshold: Number.isFinite(debugState?.threshold) ? debugState.threshold : null,
+      totalFallFromDeathPlane: Number.isFinite(debugState?.totalFallFromDeathPlane) ? debugState.totalFallFromDeathPlane : 0,
       armed: debugState?.armed === true,
       armReason: typeof debugState?.armReason === "string" ? debugState.armReason : null,
       fallStartY: Number.isFinite(debugState?.fallStartY) ? debugState.fallStartY : null,
       currentY: Number.isFinite(debugState?.currentY) ? debugState.currentY : null,
       fallDistance: Number.isFinite(debugState?.fallDistance) ? debugState.fallDistance : 0,
       triggered: debugState?.triggered === true,
+      respawnTriggered: debugState?.respawnTriggered === true,
     };
   } catch (_error) {
     // Debug export is best-effort only.
@@ -3916,7 +3941,11 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
           currentY: Number.isFinite(hazardFall?.currentY) ? hazardFall.currentY : null,
           fallDistance: Number.isFinite(hazardFall?.fallDistance) ? hazardFall.fallDistance : 0,
           maxFallDistance: Number.isFinite(hazardFall?.maxFallDistance) ? hazardFall.maxFallDistance : null,
+          threshold: Number.isFinite(hazardFall?.threshold) ? hazardFall.threshold : null,
+          thresholdTiles: Number.isFinite(hazardFall?.thresholdTiles) ? hazardFall.thresholdTiles : null,
+          totalFallFromDeathPlane: Number.isFinite(hazardFall?.totalFallFromDeathPlane) ? hazardFall.totalFallFromDeathPlane : 0,
           triggered: hazardFall?.triggered === true,
+          respawnTriggered: hazardFall?.respawnTriggered === true,
         } : null,
       },
       finalized: {
