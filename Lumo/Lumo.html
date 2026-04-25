@@ -510,6 +510,7 @@
       const logoReady = Boolean(v2State?.logoImage?.complete && v2State?.logoImage?.naturalWidth > 0);
 
       const viewport = getRechargedHudV2Viewport(canvas);
+      const gameplayViewport = getRechargedHudV2GameplayViewport(canvas);
       const t = (typeof performance?.now === "function" ? performance.now() : Date.now()) / 1000;
       const { orb } = getRechargedHudV2Layout();
 
@@ -617,15 +618,22 @@
 
       window.__LUMO_RECHARGED_HUD_V2_DEBUG__ = {
         enabled: true,
+        source: "dashboard-html-structural-code-port",
         frame,
         energyPct,
         lives,
-        livesMax: liveLivesMax,
+        livesMax,
         flares,
-        flareMax,
+        flareMax: 3,
         score,
         logoReady,
-        source: "dashboard-html-exact-port",
+        playfieldRect: {
+          x: gameplayViewport.x,
+          y: gameplayViewport.y,
+          w: gameplayViewport.w,
+          h: gameplayViewport.h,
+        },
+        runtimeUsesDashboardHtml: false,
       };
     }
 
