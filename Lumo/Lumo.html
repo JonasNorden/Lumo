@@ -419,7 +419,6 @@
         w,
         h,
         gameplay: { x: 40, y: 157, w: w - 80, h: 861 },
-        orb: { x: w * 0.665, y: (h * 0.165) - 33, r: (Math.min(w, h) * 0.084) * 0.7 },
       };
     }
 
@@ -450,171 +449,15 @@
       };
     }
 
-    function createRechargedHudV2State() {
-      const logoImage = new Image();
-      logoImage.src = "data/assets/ui/lumo-logo-sepia.png";
-      return {
-        logoImage,
-        motes: [],
-        initialized: false,
-      };
-    }
-
-    function ensureRechargedHudV2State(state) {
-      if (!state || typeof state !== "object") {
-        return createRechargedHudV2State();
-      }
-      if (!state.rechargedHudV2 || typeof state.rechargedHudV2 !== "object") {
-        state.rechargedHudV2 = createRechargedHudV2State();
-      }
-      return state.rechargedHudV2;
-    }
-
-    function initializeRechargedHudV2Motes(v2State) {
-      if (!v2State || v2State.initialized === true) return;
-      const motes = [];
-      for (let i = 0; i < 24; i += 1) {
-        const edgeBand = i % 3;
-        const x = edgeBand === 0
-          ? 38 + Math.random() * 64
-          : edgeBand === 1
-            ? 1820 + Math.random() * 64
-            : 120 + Math.random() * 1680;
-        const y = edgeBand === 2 ? 1000 + Math.random() * 48 : 60 + Math.random() * 940;
-        motes.push({
-          x,
-          y,
-          vx: (Math.random() - 0.5) * 0.35,
-          vy: (Math.random() - 0.5) * 0.2,
-          r: 0.6 + Math.random() * 1.8,
-          a: 0.03 + Math.random() * 0.12,
-          phase: Math.random() * Math.PI * 2,
-        });
-      }
-      v2State.motes = motes;
-      v2State.initialized = true;
-    }
-
     function drawRechargedHudV2(canvas, ctx, state, hudSnapshot) {
       if (!canvas || !ctx || !hudSnapshot) return;
-      const v2State = ensureRechargedHudV2State(state);
-      initializeRechargedHudV2Motes(v2State);
       const frame = Number.isFinite(state?.frameCount) ? state.frameCount : 0;
       const energyPct = Number.isFinite(hudSnapshot.energyPct) ? Math.max(0, Math.min(100, Math.round(hudSnapshot.energyPct))) : 0;
       const lives = Number.isFinite(hudSnapshot.lives) ? Math.max(0, Math.floor(hudSnapshot.lives)) : 0;
-      const liveLivesMax = Number.isFinite(hudSnapshot.livesMax) ? Math.max(1, Math.floor(hudSnapshot.livesMax)) : Math.max(1, lives);
-      const livesMax = 4;
-      const flareMax = 3;
-      const flares = Number.isFinite(hudSnapshot.flares) ? Math.max(0, Math.min(flareMax, Math.floor(hudSnapshot.flares))) : 0;
+      const livesMax = Number.isFinite(hudSnapshot.livesMax) ? Math.max(1, Math.floor(hudSnapshot.livesMax)) : Math.max(1, lives);
+      const flares = Number.isFinite(hudSnapshot.flares) ? Math.max(0, Math.floor(hudSnapshot.flares)) : 0;
       const score = Number.isFinite(hudSnapshot.score) ? Math.max(0, Math.floor(hudSnapshot.score)) : 0;
-      const logoReady = Boolean(v2State?.logoImage?.complete && v2State?.logoImage?.naturalWidth > 0);
-
-      const viewport = getRechargedHudV2Viewport(canvas);
       const gameplayViewport = getRechargedHudV2GameplayViewport(canvas);
-      const t = (typeof performance?.now === "function" ? performance.now() : Date.now()) / 1000;
-      const { orb } = getRechargedHudV2Layout();
-
-      ctx.save();
-      ctx.translate(viewport.x, viewport.y);
-      ctx.scale(viewport.scale, viewport.scale);
-
-      ctx.fillStyle = 'rgba(34,24,20,.92)';
-      ctx.fillRect(0, 0, RECHARGED_HUD_V2_MASTER_W, 157);
-      ctx.fillRect(0, RECHARGED_HUD_V2_MASTER_H - 58, RECHARGED_HUD_V2_MASTER_W, 58);
-      ctx.fillRect(0, 0, 46, RECHARGED_HUD_V2_MASTER_H);
-      ctx.fillRect(RECHARGED_HUD_V2_MASTER_W - 46, 0, 46, RECHARGED_HUD_V2_MASTER_H);
-
-      ctx.fillStyle = 'rgba(42,30,24,.96)';
-      ctx.fillRect(28, 18, RECHARGED_HUD_V2_MASTER_W - 56, 94);
-
-      ctx.strokeStyle = 'rgba(120,92,62,.55)';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(40, 157, RECHARGED_HUD_V2_MASTER_W - 80, 861);
-
-      if (logoReady) {
-        const x = 312;
-        const y = 18;
-        const w = 308;
-        const h = 104;
-        const targetW = 270;
-        const ratio = v2State.logoImage.naturalHeight / v2State.logoImage.naturalWidth;
-        const drawW = targetW;
-        const drawH = drawW * ratio;
-        const dx = x + (w - drawW) / 2;
-        const dy = y + (h - drawH) / 2 + 2;
-        ctx.save();
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.globalAlpha = 0.98;
-        ctx.drawImage(v2State.logoImage, dx, dy, drawW, drawH);
-        ctx.restore();
-      }
-
-      const or = orb.r;
-      const halo = ctx.createRadialGradient(orb.x, orb.y, or * 0.10, orb.x, orb.y, or * 2.35);
-      halo.addColorStop(0, energyPct <= 20 ? 'rgba(120,18,10,0.16)' : 'rgba(255,180,86,0.18)');
-      halo.addColorStop(1, 'rgba(20,10,8,0)');
-      ctx.fillStyle = halo;
-      ctx.fillRect(0, 0, RECHARGED_HUD_V2_MASTER_W, RECHARGED_HUD_V2_MASTER_H);
-
-      const body = ctx.createRadialGradient(orb.x - or * 0.16, orb.y - or * 0.20, or * 0.05, orb.x, orb.y, or * 1.02);
-      body.addColorStop(0, energyPct <= 20 ? 'rgba(180,80,50,0.2)' : 'rgba(255,226,186,0.22)');
-      body.addColorStop(.52, energyPct <= 20 ? 'rgba(90,16,10,0.34)' : 'rgba(255,132,34,0.38)');
-      body.addColorStop(1, 'rgba(12,3,2,0.78)');
-      ctx.fillStyle = body;
-      ctx.beginPath(); ctx.arc(orb.x, orb.y, or, 0, Math.PI * 2); ctx.fill();
-
-      ctx.strokeStyle = 'rgba(148,112,84,.48)';
-      ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.arc(orb.x, orb.y, or + 21, 0, Math.PI * 2); ctx.stroke();
-
-      ctx.font = '700 40px Arial, sans-serif';
-      ctx.textAlign = 'left';
-      ctx.fillStyle = energyPct <= 18 ? 'rgba(255,110,96,0.98)' : 'rgba(255,230,180,0.98)';
-      ctx.fillText(`${energyPct}%`, orb.x + or + 28, orb.y + 6);
-
-      const scoreText = String(score).padStart(6, '0');
-      ctx.textAlign = 'right';
-      ctx.fillStyle = 'rgba(235,220,188,0.95)';
-      ctx.font = "700 28px 'Courier New', monospace";
-      ctx.fillText(scoreText, RECHARGED_HUD_V2_MASTER_W - 84, RECHARGED_HUD_V2_MASTER_H - 16);
-
-      const livesX = 80;
-      const livesY = RECHARGED_HUD_V2_MASTER_H - 38;
-      for (let i = 0; i < livesMax; i += 1) {
-        const x = livesX + i * 30;
-        ctx.beginPath();
-        ctx.arc(x, livesY, 9, 0, Math.PI * 2);
-        ctx.fillStyle = i < Math.min(lives, livesMax) ? 'rgba(255,192,112,0.92)' : 'rgba(76,52,38,0.95)';
-        ctx.fill();
-      }
-
-      const flareX = 420;
-      for (let i = 0; i < flareMax; i += 1) {
-        const x = flareX + i * 26;
-        const y = RECHARGED_HUD_V2_MASTER_H - 49;
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(-0.14);
-        ctx.fillStyle = i < flares ? 'rgba(120,255,188,0.95)' : 'rgba(46,70,62,0.8)';
-        ctx.fillRect(-6, -10, 12, 20);
-        ctx.restore();
-      }
-
-      for (const mote of v2State.motes) {
-        mote.x += mote.vx;
-        mote.y += mote.vy;
-        if (mote.x < 42) mote.x = 42;
-        if (mote.x > RECHARGED_HUD_V2_MASTER_W - 42) mote.x = RECHARGED_HUD_V2_MASTER_W - 42;
-        if (mote.y < 18) mote.y = 18;
-        if (mote.y > RECHARGED_HUD_V2_MASTER_H - 20) mote.y = RECHARGED_HUD_V2_MASTER_H - 20;
-        ctx.globalAlpha = mote.a + Math.sin(t * 2.5 + mote.phase) * 0.02;
-        ctx.fillStyle = 'rgba(255,202,148,1)';
-        ctx.beginPath();
-        ctx.arc(mote.x, mote.y, mote.r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-      ctx.restore();
 
       window.__LUMO_RECHARGED_HUD_V2_DEBUG__ = {
         enabled: true,
@@ -626,7 +469,7 @@
         flares,
         flareMax: 3,
         score,
-        logoReady,
+        logoReady: false,
         playfieldRect: {
           x: gameplayViewport.x,
           y: gameplayViewport.y,
@@ -3613,8 +3456,8 @@
         const worldHeightPx = Math.max(tileSize, Math.round(worldHeightRaw * worldUnitsToPx));
         const hudGameplayViewport = getRechargedHudV2GameplayViewport(canvas);
         const worldRenderCanvas = {
-          width: Math.max(1, Math.round(hudGameplayViewport.w)),
-          height: Math.max(1, Math.round(hudGameplayViewport.h)),
+          width: Math.max(1, hudGameplayViewport.w),
+          height: Math.max(1, hudGameplayViewport.h),
         };
         const mapper = buildRechargedWorldToCanvasMapper({
           canvas: worldRenderCanvas,
