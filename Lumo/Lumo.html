@@ -2689,20 +2689,32 @@
     const RECHARGED_PLAYER_PUNCH_INTENSITY = 0.55;
     const RECHARGED_PLAYER_DOWNLIGHT = 0.20;
     const RECHARGED_OCCLUSION_DEFAULTS = Object.freeze({
-      rays: 312,
-      stepPx: 1,
+      // V1 used 312.
+      // Recharged starts at 192 for runtime performance.
+      rays: 192,
+      // V1 used 1.
+      // Recharged uses 2 for performance.
+      stepPx: 2,
       featherPx: 45,
       penumbra: 1.7,
       contactGlowPx: 60,
       contactGlowIntensity: 1.2,
     });
 
-    function buildRechargedOcclusionRects({ supportTiles, worldUnitsToPx, tileSize }) {
-      void tileSize;
+    function buildRechargedOcclusionLookup({ supportTiles, worldUnitsToPx, tileSize }) {
       if (!Array.isArray(supportTiles) || !Number.isFinite(worldUnitsToPx) || worldUnitsToPx <= 0) {
-        return [];
+        return {
+          rects: [],
+          grid: new Map(),
+          cellSize: 48,
+          gridCellCount: 0,
+        };
       }
-      const occlusionRects = [];
+      const fallbackCellSize = 48;
+      const tileCellSize = Number.isFinite(tileSize) && tileSize > 0 ? Math.round(tileSize * worldUnitsToPx) : 0;
+      const cellSize = Math.max(1, tileCellSize > 0 ? tileCellSize : fallbackCellSize);
+      const rects = [];
+      const grid = new Map();
       for (const tile of supportTiles) {
         const tileX = Number.isFinite(tile?.x) ? tile.x : null;
         const tileY = Number.isFinite(tile?.y) ? tile.y : null;
@@ -2711,18 +2723,92 @@
         if (tileX === null || tileY === null || tileW === null || tileH === null || tileW <= 0 || tileH <= 0) {
           continue;
         }
-        occlusionRects.push({
+        const rect = {
           x: tileX * worldUnitsToPx,
           y: tileY * worldUnitsToPx,
           w: tileW * worldUnitsToPx,
           h: tileH * worldUnitsToPx,
-        });
+        };
+        const rectIndex = rects.length;
+        rects.push(rect);
+        const minCellX = Math.floor(rect.x / cellSize);
+        const minCellY = Math.floor(rect.y / cellSize);
+        const maxCellX = Math.floor((rect.x + Math.max(0, rect.w - 1e-6)) / cellSize);
+        const maxCellY = Math.floor((rect.y + Math.max(0, rect.h - 1e-6)) / cellSize);
+        for (let cellY = minCellY; cellY <= maxCellY; cellY += 1) {
+          for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
+            const cellKey = `${cellX},${cellY}`;
+            let bucket = grid.get(cellKey);
+            if (!bucket) {
+              bucket = [];
+              grid.set(cellKey, bucket);
+            }
+            bucket.push(rectIndex);
+          }
+        }
       }
-      return occlusionRects;
+      return {
+        rects,
+        grid,
+        cellSize,
+        gridCellCount: grid.size,
+      };
     }
 
-    function isRechargedOcclusionSolidAtWorld(wx, wy, occlusionRects) {
-      if (!Number.isFinite(wx) || !Number.isFinite(wy) || !Array.isArray(occlusionRects) || occlusionRects.length <= 0) {
+    function ensureRechargedOcclusionLookup(state, { supportTiles, worldUnitsToPx, tileSize }) {
+      const cache = state && typeof state === "object" ? state.rechargedOcclusionLookupCache : null;
+      if (
+        cache
+        && cache.supportTilesRef === supportTiles
+        && cache.worldUnitsToPx === worldUnitsToPx
+        && cache.tileSize === tileSize
+        && cache.lookup
+      ) {
+        return cache.lookup;
+      }
+      const lookup = buildRechargedOcclusionLookup({ supportTiles, worldUnitsToPx, tileSize });
+      if (state && typeof state === "object") {
+        state.rechargedOcclusionLookupCache = {
+          supportTilesRef: supportTiles,
+          worldUnitsToPx,
+          tileSize,
+          lookup,
+        };
+      }
+      return lookup;
+    }
+
+    function isRechargedOcclusionSolidAtWorld(wx, wy, occlusionLookup) {
+      if (!Number.isFinite(wx) || !Number.isFinite(wy)) {
+        return false;
+      }
+      const lookup = occlusionLookup && typeof occlusionLookup === "object" ? occlusionLookup : null;
+      const occlusionRects = Array.isArray(lookup?.rects)
+        ? lookup.rects
+        : (Array.isArray(occlusionLookup) ? occlusionLookup : []);
+      if (occlusionRects.length <= 0) {
+        return false;
+      }
+      const cellSize = Number.isFinite(lookup?.cellSize) && lookup.cellSize > 0 ? lookup.cellSize : 0;
+      const grid = lookup?.grid instanceof Map ? lookup.grid : null;
+      const indices = (grid && cellSize > 0)
+        ? grid.get(`${Math.floor(wx / cellSize)},${Math.floor(wy / cellSize)}`)
+        : null;
+      if (Array.isArray(indices) && indices.length > 0) {
+        for (let bucketIndex = 0; bucketIndex < indices.length; bucketIndex += 1) {
+          const rect = occlusionRects[indices[bucketIndex]];
+          if (!rect) continue;
+          const rx = Number.isFinite(rect.x) ? rect.x : null;
+          const ry = Number.isFinite(rect.y) ? rect.y : null;
+          const rw = Number.isFinite(rect.w) ? rect.w : null;
+          const rh = Number.isFinite(rect.h) ? rect.h : null;
+          if (rx === null || ry === null || rw === null || rh === null || rw <= 0 || rh <= 0) {
+            continue;
+          }
+          if (wx >= rx && wx <= (rx + rw) && wy >= ry && wy <= (ry + rh)) {
+            return true;
+          }
+        }
         return false;
       }
       for (let index = 0; index < occlusionRects.length; index += 1) {
@@ -2742,14 +2828,17 @@
       return false;
     }
 
-    function buildRechargedPlayerLightOcclusionPolyScreen({ sx, sy, radius, mapper, occlusionRects, options }) {
+    function buildRechargedPlayerLightOcclusionPolyScreen({ sx, sy, radius, mapper, occlusionLookup, options }) {
       if (!Number.isFinite(sx) || !Number.isFinite(sy) || !Number.isFinite(radius) || radius <= 0) {
         return null;
       }
       if (!mapper || typeof mapper.canvasToWorldPoint !== "function") {
         return null;
       }
-      if (!Array.isArray(occlusionRects) || occlusionRects.length <= 0) {
+      const rects = Array.isArray(occlusionLookup?.rects)
+        ? occlusionLookup.rects
+        : (Array.isArray(occlusionLookup) ? occlusionLookup : []);
+      if (rects.length <= 0) {
         return null;
       }
       const opt = options && typeof options === "object" ? options : RECHARGED_OCCLUSION_DEFAULTS;
@@ -2770,7 +2859,7 @@
           const sampleX = sx + dx * d;
           const sampleY = sy + dy * d;
           const worldPoint = mapper.canvasToWorldPoint(sampleX, sampleY);
-          if (isRechargedOcclusionSolidAtWorld(worldPoint.x, worldPoint.y, occlusionRects)) {
+          if (isRechargedOcclusionSolidAtWorld(worldPoint.x, worldPoint.y, occlusionLookup)) {
             hitDist = Math.max(0, d - step);
             break;
           }
@@ -2900,7 +2989,10 @@
         return false;
       }
       const mapper = options?.mapper && typeof options.mapper === "object" ? options.mapper : null;
-      const occlusionRects = Array.isArray(options?.occlusionRects) ? options.occlusionRects : null;
+      const occlusionLookup = options?.occlusionLookup && typeof options.occlusionLookup === "object"
+        ? options.occlusionLookup
+        : null;
+      const occlusionRects = Array.isArray(occlusionLookup?.rects) ? occlusionLookup.rects : null;
       const occOptions = options?.occlusionOptions && typeof options.occlusionOptions === "object"
         ? options.occlusionOptions
         : RECHARGED_OCCLUSION_DEFAULTS;
@@ -2934,7 +3026,7 @@
             sy: light.y,
             radius,
             mapper,
-            occlusionRects,
+            occlusionLookup,
             options: occOptions,
           });
           if (Array.isArray(pts) && pts.length > 0) {
@@ -3101,7 +3193,8 @@
           targetX: Number.isFinite(playerCenterX) ? playerCenterX : worldWidthPx * 0.5,
           targetY: Number.isFinite(playerFootY) ? playerFootY : worldHeightPx - 1,
         });
-        const occlusionRects = buildRechargedOcclusionRects({ supportTiles, worldUnitsToPx, tileSize });
+        const occlusionLookup = ensureRechargedOcclusionLookup(state, { supportTiles, worldUnitsToPx, tileSize });
+        const occlusionRects = Array.isArray(occlusionLookup?.rects) ? occlusionLookup.rects : [];
         stepRechargedFogVolumes(fogVolumes, {
           dt: fogStepDt,
           playerCenterX,
@@ -3714,7 +3807,7 @@
         });
         drawRechargedDarkness(ctx, canvas, state, darknessLights, {
           mapper,
-          occlusionRects,
+          occlusionLookup,
           occlusionOptions: RECHARGED_OCCLUSION_DEFAULTS,
         });
         if (state.rechargedDarknessSummaryLogged !== true) {
@@ -3728,7 +3821,10 @@
             lightCount: darknessLights.length,
             kinds,
             playerOcclusion: true,
+            rays: RECHARGED_OCCLUSION_DEFAULTS.rays,
+            stepPx: RECHARGED_OCCLUSION_DEFAULTS.stepPx,
             occlusionRectCount: occlusionRects.length,
+            gridCellCount: Number.isFinite(occlusionLookup?.gridCellCount) ? occlusionLookup.gridCellCount : 0,
           });
           state.rechargedDarknessSummaryLogged = true;
         }
