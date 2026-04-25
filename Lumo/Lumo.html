@@ -2913,15 +2913,58 @@
       return pts;
     }
 
-    function buildRechargedDarknessLights(options) {
-      const lights = [];
+    function clamp01(value) {
+      return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
+    }
+
+    function safeFinite(value, fallback) {
+      return Number.isFinite(value) ? value : fallback;
+    }
+
+    function easeOutQuad01(value) {
+      const t = clamp01(value);
+      return 1 - ((1 - t) * (1 - t));
+    }
+
+    function deriveRechargedPlayerLightRadiusPx(energy) {
       const PLAYER_LIGHT_MIN_RADIUS_PX = 80;
       const PLAYER_LIGHT_MAX_RADIUS_PX = 320;
-      const clamp01 = (value) => (Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1);
-      const derivePlayerLightRadius = (energy) => (
-        PLAYER_LIGHT_MIN_RADIUS_PX
-        + ((PLAYER_LIGHT_MAX_RADIUS_PX - PLAYER_LIGHT_MIN_RADIUS_PX) * clamp01(energy))
+      return PLAYER_LIGHT_MIN_RADIUS_PX
+        + ((PLAYER_LIGHT_MAX_RADIUS_PX - PLAYER_LIGHT_MIN_RADIUS_PX) * clamp01(energy));
+    }
+
+    function resolveRechargedFlareRadii(flare) {
+      const visualGlowRadius = Math.max(
+        1,
+        Math.min(
+          RECHARGED_FLARE_VISUAL_GLOW_RADIUS_MAX_PX,
+          Number.isFinite(flare?.visualGlowRadius)
+            ? flare.visualGlowRadius
+            : (Number.isFinite(flare?.renderRadius)
+              ? flare.renderRadius
+              : safeFinite(flare?.radius, 4)),
+        ),
       );
+      const darknessRadius = Math.max(
+        1,
+        Math.min(
+          RECHARGED_FLARE_DARKNESS_RADIUS_MAX_PX,
+          Number.isFinite(flare?.darknessRadius)
+            ? flare.darknessRadius
+            : (Number.isFinite(flare?.finalRadius)
+              ? flare.finalRadius
+              : (Number.isFinite(flare?.lightRadius) ? flare.lightRadius : RECHARGED_FLARE_DARKNESS_RADIUS_MAX_PX)),
+        ),
+      );
+      return { visualGlowRadius, darknessRadius };
+    }
+
+    function resolveRechargedFlareAlpha(flare) {
+      return clamp01(safeFinite(flare?.alpha, 1));
+    }
+
+    function buildRechargedDarknessLights(options) {
+      const lights = [];
       if (!options || typeof options !== "object") {
         return lights;
       }
@@ -2949,7 +2992,7 @@
         const resolvedEnergy = Number.isFinite(currentSnapshot?.energy)
           ? currentSnapshot.energy
           : (Number.isFinite(player?.energy) ? player.energy : 1);
-        const derivedPlayerRadius = derivePlayerLightRadius(resolvedEnergy);
+        const derivedPlayerRadius = deriveRechargedPlayerLightRadiusPx(resolvedEnergy);
         const resolvedPlayerLightRadius = Number.isFinite(currentSnapshot?.renderLightRadius)
           ? currentSnapshot.renderLightRadius
           : (Number.isFinite(currentSnapshot?.lightRadius)
@@ -3029,18 +3072,8 @@
           kind: "flare",
           x: flareRect.x + flareRect.w * 0.5,
           y: flareRect.y + flareRect.h * 0.5,
-          radius: Math.max(
-            1,
-            Math.min(
-              RECHARGED_FLARE_DARKNESS_RADIUS_MAX_PX,
-              Number.isFinite(flare?.darknessRadius)
-                ? flare.darknessRadius
-                : (Number.isFinite(flare?.finalRadius)
-                  ? flare.finalRadius
-                  : (Number.isFinite(flare?.lightRadius) ? flare.lightRadius : RECHARGED_FLARE_DARKNESS_RADIUS_MAX_PX)),
-            ),
-          ),
-          strength: Math.max(0, Math.min(1, Number.isFinite(flare?.alpha) ? flare.alpha : 1)) * 0.9,
+          radius: resolveRechargedFlareRadii(flare).darknessRadius,
+          strength: resolveRechargedFlareAlpha(flare) * 0.9,
         });
       }
 
@@ -3440,6 +3473,7 @@
         const liquidEntityTypes = new Set(["water_volume", "lava_volume", "bubbling_liquid_volume"]);
         const hoverEyesAfterDarkness = [];
         const movingPlatformDebugNow = [];
+        state._rechargedFrameFireflyGlowCount = 0;
         for (const entity of entitySnapshots) {
           if (entity?.active !== true) {
             continue;
@@ -3778,10 +3812,11 @@
                   : null;
                 const centerX = tailTipRect ? tailTipRect.x : rumpX;
                 const centerY = tailTipRect ? tailTipRect.y : rumpY;
-                const glowRadius = Math.max(entityRect.w, entityRect.h) * 0.65;
+                const glowRadius = Math.max(entityRect.w, entityRect.h) * (0.56 + (0.09 * easeOutQuad01(kGlow)));
+                const glowAlphaK = easeOutQuad01(kGlow);
                 const glow = ctx.createRadialGradient(centerX, centerY, 1, centerX, centerY, glowRadius);
-                glow.addColorStop(0, `rgba(255, 220, 140, ${(0.52 * kGlow).toFixed(3)})`);
-                glow.addColorStop(0.45, `rgba(255, 195, 95, ${(0.26 * kGlow).toFixed(3)})`);
+                glow.addColorStop(0, `rgba(255, 220, 140, ${(0.52 * glowAlphaK).toFixed(3)})`);
+                glow.addColorStop(0.45, `rgba(255, 195, 95, ${(0.26 * glowAlphaK).toFixed(3)})`);
                 glow.addColorStop(1, "rgba(255, 195, 95, 0)");
                 ctx.fillStyle = glow;
                 ctx.beginPath();
@@ -3790,8 +3825,8 @@
 
                 const rumpOuter = 14;
                 const rumpGrad = ctx.createRadialGradient(rumpX, rumpY, 2.5, rumpX, rumpY, rumpOuter);
-                rumpGrad.addColorStop(0, `rgba(255,220,140,${(0.85 * kGlow).toFixed(3)})`);
-                rumpGrad.addColorStop(0.35, `rgba(255,195,95,${(0.55 * kGlow).toFixed(3)})`);
+                rumpGrad.addColorStop(0, `rgba(255,220,140,${(0.85 * glowAlphaK).toFixed(3)})`);
+                rumpGrad.addColorStop(0.35, `rgba(255,195,95,${(0.55 * glowAlphaK).toFixed(3)})`);
                 rumpGrad.addColorStop(1, "rgba(255,195,95,0)");
                 ctx.save();
                 ctx.globalCompositeOperation = "lighter";
@@ -3805,6 +3840,7 @@
                   glowY: centerY,
                   visualGlowRadius: glowRadius,
                 };
+                state._rechargedFrameFireflyGlowCount = (state._rechargedFrameFireflyGlowCount | 0) + 1;
               }
               if (sprite && sprite.complete) {
                 // Render at true 1x1 footprint, centered on anchor, with hard 16x16 cap.
@@ -3896,7 +3932,7 @@
           : (Number.isFinite(currentSnapshot?.energy) ? currentSnapshot.energy : 1);
         const playerLightRadius = Number.isFinite(currentSnapshot?.lightRadius)
           ? currentSnapshot.lightRadius
-          : (80 + ((320 - 80) * Math.max(0, Math.min(1, playerEnergy))));
+          : deriveRechargedPlayerLightRadiusPx(playerEnergy);
         const playerRenderLightRadius = Number.isFinite(currentSnapshot?.renderLightRadius)
           ? currentSnapshot.renderLightRadius
           : (Number.isFinite(playerLight?.radius) ? playerLight.radius : playerLightRadius);
@@ -3988,28 +4024,7 @@
             && flare.y <= worldHeightRaw + tileSize;
           const flareWorldX = flareLooksTileBased ? flare.x * worldUnitsToPx : flare.x;
           const flareWorldY = flareLooksTileBased ? flare.y * worldUnitsToPx : flare.y;
-          const flareVisualGlowRadius = Math.max(
-            1,
-            Math.min(
-              RECHARGED_FLARE_VISUAL_GLOW_RADIUS_MAX_PX,
-              Number.isFinite(flare.visualGlowRadius)
-                ? flare.visualGlowRadius
-                : (Number.isFinite(flare.renderRadius)
-                  ? flare.renderRadius
-                  : (Number.isFinite(flare.radius) ? flare.radius : 4)),
-            ),
-          );
-          const flareDarknessRadius = Math.max(
-            1,
-            Math.min(
-              RECHARGED_FLARE_DARKNESS_RADIUS_MAX_PX,
-              Number.isFinite(flare.darknessRadius)
-                ? flare.darknessRadius
-                : (Number.isFinite(flare.finalRadius)
-                  ? flare.finalRadius
-                  : (Number.isFinite(flare.lightRadius) ? flare.lightRadius : RECHARGED_FLARE_DARKNESS_RADIUS_MAX_PX)),
-            ),
-          );
+          const { visualGlowRadius: flareVisualGlowRadius, darknessRadius: flareDarknessRadius } = resolveRechargedFlareRadii(flare);
           const flareRect = mapper.worldToCanvasRect(
             flareWorldX - flareVisualGlowRadius,
             flareWorldY - flareVisualGlowRadius,
@@ -4021,10 +4036,11 @@
           if (centerX >= 0 && centerX <= canvas.width && centerY >= 0 && centerY <= canvas.height) {
             visibleFlares += 1;
           }
-          const flareAlpha = Math.max(0, Math.min(1, Number.isFinite(flare.alpha) ? flare.alpha : 1));
+          const flareAlpha = resolveRechargedFlareAlpha(flare);
+          const flareGlowAlpha = easeOutQuad01(flareAlpha);
           const glowRadius = Math.max(1, flareRect.w * 0.5);
           const glowGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, glowRadius);
-          glowGradient.addColorStop(0, `rgba(110, 231, 183, ${(0.35 * flareAlpha).toFixed(3)})`);
+          glowGradient.addColorStop(0, `rgba(110, 231, 183, ${(0.35 * flareGlowAlpha).toFixed(3)})`);
           glowGradient.addColorStop(1, "rgba(110, 231, 183, 0)");
           ctx.fillStyle = glowGradient;
           ctx.fillRect(centerX - glowRadius, centerY - glowRadius, glowRadius * 2, glowRadius * 2);
@@ -4065,6 +4081,24 @@
           age: flareSnapshots[0]?.ageTicks ?? null,
           lifetime: flareSnapshots[0]?.lifetimeTicks ?? null,
           normalizedLife: flareSnapshots[0]?.normalizedLife ?? null,
+        };
+        window.__LUMO_RECHARGED_LIGHT_DEBUG__ = {
+          player: {
+            energy: playerEnergy,
+            lightRadius: playerLightRadius,
+            renderLightRadius: playerRenderLightRadius,
+          },
+          flares: {
+            count: flareSnapshots.length,
+            visibleCount: visibleFlares,
+            firstAlpha: flareSnapshots[0] ? resolveRechargedFlareAlpha(flareSnapshots[0]) : null,
+            firstVisualGlowRadius: flareSnapshots[0] ? resolveRechargedFlareRadii(flareSnapshots[0]).visualGlowRadius : null,
+            firstDarknessRadius: flareSnapshots[0] ? resolveRechargedFlareRadii(flareSnapshots[0]).darknessRadius : null,
+          },
+          fireflies: {
+            visualGlowCount: state._rechargedFrameFireflyGlowCount | 0,
+          },
+          frame: Number.isFinite(payload?.tick) ? payload.tick : null,
         };
 
         drawRechargedHudReplica(canvas, state);
