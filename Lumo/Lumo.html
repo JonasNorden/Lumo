@@ -412,6 +412,44 @@
     const RECHARGED_HUD_V2_MASTER_W = 1920;
     const RECHARGED_HUD_V2_MASTER_H = 1080;
 
+    function getRechargedHudV2Layout() {
+      const w = RECHARGED_HUD_V2_MASTER_W;
+      const h = RECHARGED_HUD_V2_MASTER_H;
+      return {
+        w,
+        h,
+        gameplay: { x: 40, y: 157, w: w - 80, h: 861 },
+        orb: { x: w * 0.665, y: (h * 0.165) - 33, r: (Math.min(w, h) * 0.084) * 0.7 },
+      };
+    }
+
+    function getRechargedHudV2Viewport(canvas) {
+      const w = Number.isFinite(canvas?.width) && canvas.width > 0 ? canvas.width : RECHARGED_HUD_V2_MASTER_W;
+      const h = Number.isFinite(canvas?.height) && canvas.height > 0 ? canvas.height : RECHARGED_HUD_V2_MASTER_H;
+      const scale = Math.min(w / RECHARGED_HUD_V2_MASTER_W, h / RECHARGED_HUD_V2_MASTER_H);
+      const drawW = RECHARGED_HUD_V2_MASTER_W * scale;
+      const drawH = RECHARGED_HUD_V2_MASTER_H * scale;
+      return {
+        x: (w - drawW) * 0.5,
+        y: (h - drawH) * 0.5,
+        scale,
+        w: drawW,
+        h: drawH,
+      };
+    }
+
+    function getRechargedHudV2GameplayViewport(canvas) {
+      const viewport = getRechargedHudV2Viewport(canvas);
+      const { gameplay } = getRechargedHudV2Layout();
+      return {
+        x: viewport.x + gameplay.x * viewport.scale,
+        y: viewport.y + gameplay.y * viewport.scale,
+        w: gameplay.w * viewport.scale,
+        h: gameplay.h * viewport.scale,
+        scale: viewport.scale,
+      };
+    }
+
     function createRechargedHudV2State() {
       const logoImage = new Image();
       logoImage.src = "data/assets/ui/lumo-logo-sepia.png";
@@ -464,92 +502,101 @@
       const frame = Number.isFinite(state?.frameCount) ? state.frameCount : 0;
       const energyPct = Number.isFinite(hudSnapshot.energyPct) ? Math.max(0, Math.min(100, Math.round(hudSnapshot.energyPct))) : 0;
       const lives = Number.isFinite(hudSnapshot.lives) ? Math.max(0, Math.floor(hudSnapshot.lives)) : 0;
-      const livesMax = Number.isFinite(hudSnapshot.livesMax) ? Math.max(lives, Math.floor(hudSnapshot.livesMax)) : Math.max(lives, 4);
-      const flares = Number.isFinite(hudSnapshot.flares) ? Math.max(0, Math.floor(hudSnapshot.flares)) : 0;
-      const score = Number.isFinite(hudSnapshot.score) ? Math.max(0, Math.floor(hudSnapshot.score)) : null;
+      const liveLivesMax = Number.isFinite(hudSnapshot.livesMax) ? Math.max(1, Math.floor(hudSnapshot.livesMax)) : Math.max(1, lives);
+      const livesMax = 4;
+      const flareMax = 3;
+      const flares = Number.isFinite(hudSnapshot.flares) ? Math.max(0, Math.min(flareMax, Math.floor(hudSnapshot.flares))) : 0;
+      const score = Number.isFinite(hudSnapshot.score) ? Math.max(0, Math.floor(hudSnapshot.score)) : 0;
       const logoReady = Boolean(v2State?.logoImage?.complete && v2State?.logoImage?.naturalWidth > 0);
 
-      const sx = canvas.width / RECHARGED_HUD_V2_MASTER_W;
-      const sy = canvas.height / RECHARGED_HUD_V2_MASTER_H;
+      const viewport = getRechargedHudV2Viewport(canvas);
       const t = (typeof performance?.now === "function" ? performance.now() : Date.now()) / 1000;
-      const scoreText = score === null ? "" : String(score).padStart(6, "0");
+      const { orb } = getRechargedHudV2Layout();
 
       ctx.save();
-      ctx.scale(sx, sy);
+      ctx.translate(viewport.x, viewport.y);
+      ctx.scale(viewport.scale, viewport.scale);
 
-      ctx.fillStyle = "rgba(34,24,20,0.88)";
-      ctx.fillRect(0, 0, RECHARGED_HUD_V2_MASTER_W, 110);
-      ctx.fillRect(0, RECHARGED_HUD_V2_MASTER_H - 52, RECHARGED_HUD_V2_MASTER_W, 52);
-      ctx.fillRect(0, 0, 42, RECHARGED_HUD_V2_MASTER_H);
-      ctx.fillRect(RECHARGED_HUD_V2_MASTER_W - 42, 0, 42, RECHARGED_HUD_V2_MASTER_H);
+      ctx.fillStyle = 'rgba(34,24,20,.92)';
+      ctx.fillRect(0, 0, RECHARGED_HUD_V2_MASTER_W, 157);
+      ctx.fillRect(0, RECHARGED_HUD_V2_MASTER_H - 58, RECHARGED_HUD_V2_MASTER_W, 58);
+      ctx.fillRect(0, 0, 46, RECHARGED_HUD_V2_MASTER_H);
+      ctx.fillRect(RECHARGED_HUD_V2_MASTER_W - 46, 0, 46, RECHARGED_HUD_V2_MASTER_H);
 
-      ctx.fillStyle = "rgba(55,40,30,0.88)";
-      ctx.fillRect(58, 18, 305, 74);
-      ctx.fillRect(RECHARGED_HUD_V2_MASTER_W - 462, 18, 404, 74);
-      if (logoReady) {
-        ctx.globalAlpha = 0.9;
-        ctx.drawImage(v2State.logoImage, 70, 25, 170, 58);
-        ctx.globalAlpha = 1;
-      }
+      ctx.fillStyle = 'rgba(42,30,24,.96)';
+      ctx.fillRect(28, 18, RECHARGED_HUD_V2_MASTER_W - 56, 94);
 
-      const orbX = 1275;
-      const orbY = 74;
-      const orbR = 56;
-      const energyRatio = energyPct / 100;
-      const core = ctx.createRadialGradient(orbX, orbY, 5, orbX, orbY, orbR);
-      core.addColorStop(0, energyPct < 20 ? "rgba(146,18,16,0.95)" : "rgba(255,220,148,0.98)");
-      core.addColorStop(0.4, energyPct < 20 ? "rgba(108,12,10,0.85)" : "rgba(255,128,30,0.85)");
-      core.addColorStop(1, "rgba(22,8,6,0.2)");
-      ctx.fillStyle = core;
-      ctx.beginPath();
-      ctx.arc(orbX, orbY, orbR, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = `rgba(255,186,96,${0.3 + energyRatio * 0.5})`;
+      ctx.strokeStyle = 'rgba(120,92,62,.55)';
       ctx.lineWidth = 4;
-      for (let i = 0; i < 18; i += 1) {
-        const start = (i / 18) * Math.PI * 2 + t * 0.08;
-        const end = start + 0.18 + (i % 3) * 0.02;
-        ctx.globalAlpha = i / 18 < energyRatio ? 0.9 : 0.2;
-        ctx.beginPath();
-        ctx.arc(orbX, orbY, orbR + 10 + (i % 2) * 2, start, end);
-        ctx.stroke();
+      ctx.strokeRect(40, 157, RECHARGED_HUD_V2_MASTER_W - 80, 861);
+
+      if (logoReady) {
+        const x = 312;
+        const y = 18;
+        const w = 308;
+        const h = 104;
+        const targetW = 270;
+        const ratio = v2State.logoImage.naturalHeight / v2State.logoImage.naturalWidth;
+        const drawW = targetW;
+        const drawH = drawW * ratio;
+        const dx = x + (w - drawW) / 2;
+        const dy = y + (h - drawH) / 2 + 2;
+        ctx.save();
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 0.98;
+        ctx.drawImage(v2State.logoImage, dx, dy, drawW, drawH);
+        ctx.restore();
       }
-      ctx.globalAlpha = 1;
 
-      ctx.font = "600 30px Arial";
-      ctx.textAlign = "right";
-      ctx.fillStyle = energyPct <= 18 ? "rgba(255,110,96,0.98)" : "rgba(255,230,180,0.98)";
-      ctx.fillText(`${energyPct}%`, RECHARGED_HUD_V2_MASTER_W - 84, 77);
-      ctx.font = "600 11px Arial";
-      ctx.fillStyle = "rgba(255,206,150,0.75)";
-      ctx.fillText("ENERGY", RECHARGED_HUD_V2_MASTER_W - 84, 92);
+      const or = orb.r;
+      const halo = ctx.createRadialGradient(orb.x, orb.y, or * 0.10, orb.x, orb.y, or * 2.35);
+      halo.addColorStop(0, energyPct <= 20 ? 'rgba(120,18,10,0.16)' : 'rgba(255,180,86,0.18)');
+      halo.addColorStop(1, 'rgba(20,10,8,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(0, 0, RECHARGED_HUD_V2_MASTER_W, RECHARGED_HUD_V2_MASTER_H);
 
-      const livesPanelX = 74;
-      const livesPanelY = RECHARGED_HUD_V2_MASTER_H - 44;
-      const livesDotSize = 16;
-      const livesGap = 9;
+      const body = ctx.createRadialGradient(orb.x - or * 0.16, orb.y - or * 0.20, or * 0.05, orb.x, orb.y, or * 1.02);
+      body.addColorStop(0, energyPct <= 20 ? 'rgba(180,80,50,0.2)' : 'rgba(255,226,186,0.22)');
+      body.addColorStop(.52, energyPct <= 20 ? 'rgba(90,16,10,0.34)' : 'rgba(255,132,34,0.38)');
+      body.addColorStop(1, 'rgba(12,3,2,0.78)');
+      ctx.fillStyle = body;
+      ctx.beginPath(); ctx.arc(orb.x, orb.y, or, 0, Math.PI * 2); ctx.fill();
+
+      ctx.strokeStyle = 'rgba(148,112,84,.48)';
+      ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(orb.x, orb.y, or + 21, 0, Math.PI * 2); ctx.stroke();
+
+      ctx.font = '700 40px Arial, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = energyPct <= 18 ? 'rgba(255,110,96,0.98)' : 'rgba(255,230,180,0.98)';
+      ctx.fillText(`${energyPct}%`, orb.x + or + 28, orb.y + 6);
+
+      const scoreText = String(score).padStart(6, '0');
+      ctx.textAlign = 'right';
+      ctx.fillStyle = 'rgba(235,220,188,0.95)';
+      ctx.font = "700 28px 'Courier New', monospace";
+      ctx.fillText(scoreText, RECHARGED_HUD_V2_MASTER_W - 84, RECHARGED_HUD_V2_MASTER_H - 16);
+
+      const livesX = 80;
+      const livesY = RECHARGED_HUD_V2_MASTER_H - 38;
       for (let i = 0; i < livesMax; i += 1) {
-        const x = livesPanelX + i * (livesDotSize + livesGap);
+        const x = livesX + i * 30;
         ctx.beginPath();
-        ctx.arc(x, livesPanelY, livesDotSize * 0.45, 0, Math.PI * 2);
-        ctx.fillStyle = i < lives ? "rgba(255,192,112,0.92)" : "rgba(76,52,38,0.95)";
+        ctx.arc(x, livesY, 9, 0, Math.PI * 2);
+        ctx.fillStyle = i < Math.min(lives, livesMax) ? 'rgba(255,192,112,0.92)' : 'rgba(76,52,38,0.95)';
         ctx.fill();
       }
-      ctx.font = "600 13px Arial";
-      ctx.textAlign = "left";
-      ctx.fillStyle = "rgba(240,208,166,0.9)";
-      ctx.fillText(`LIVES ${lives}/${livesMax}`, livesPanelX, RECHARGED_HUD_V2_MASTER_H - 18);
 
-      ctx.textAlign = "left";
-      ctx.font = "600 13px Arial";
-      ctx.fillStyle = "rgba(172,255,198,0.95)";
-      ctx.fillText(`FLARES ${flares}`, 420, RECHARGED_HUD_V2_MASTER_H - 18);
-
-      if (scoreText.length > 0) {
-        ctx.textAlign = "right";
-        ctx.fillStyle = "rgba(235,220,188,0.95)";
-        ctx.font = "600 22px 'Courier New', monospace";
-        ctx.fillText(scoreText, RECHARGED_HUD_V2_MASTER_W - 84, RECHARGED_HUD_V2_MASTER_H - 16);
+      const flareX = 420;
+      for (let i = 0; i < flareMax; i += 1) {
+        const x = flareX + i * 26;
+        const y = RECHARGED_HUD_V2_MASTER_H - 49;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(-0.14);
+        ctx.fillStyle = i < flares ? 'rgba(120,255,188,0.95)' : 'rgba(46,70,62,0.8)';
+        ctx.fillRect(-6, -10, 12, 20);
+        ctx.restore();
       }
 
       for (const mote of v2State.motes) {
@@ -560,7 +607,7 @@
         if (mote.y < 18) mote.y = 18;
         if (mote.y > RECHARGED_HUD_V2_MASTER_H - 20) mote.y = RECHARGED_HUD_V2_MASTER_H - 20;
         ctx.globalAlpha = mote.a + Math.sin(t * 2.5 + mote.phase) * 0.02;
-        ctx.fillStyle = "rgba(255,202,148,1)";
+        ctx.fillStyle = 'rgba(255,202,148,1)';
         ctx.beginPath();
         ctx.arc(mote.x, mote.y, mote.r, 0, Math.PI * 2);
         ctx.fill();
@@ -573,9 +620,12 @@
         frame,
         energyPct,
         lives,
-        livesMax,
+        livesMax: liveLivesMax,
         flares,
+        flareMax,
+        score,
         logoReady,
+        source: "dashboard-html-exact-port",
       };
     }
 
@@ -3553,8 +3603,13 @@
         const worldUnitsToPx = coordinatesLookTileBased ? tileSize : 1;
         const worldWidthPx = Math.max(tileSize, Math.round(worldWidthRaw * worldUnitsToPx));
         const worldHeightPx = Math.max(tileSize, Math.round(worldHeightRaw * worldUnitsToPx));
+        const hudGameplayViewport = getRechargedHudV2GameplayViewport(canvas);
+        const worldRenderCanvas = {
+          width: Math.max(1, Math.round(hudGameplayViewport.w)),
+          height: Math.max(1, Math.round(hudGameplayViewport.h)),
+        };
         const mapper = buildRechargedWorldToCanvasMapper({
-          canvas,
+          canvas: worldRenderCanvas,
           worldWidthPx,
           worldHeightPx,
           targetX: Number.isFinite(playerCenterX) ? playerCenterX : worldWidthPx * 0.5,
@@ -3573,11 +3628,19 @@
         }
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const backdropGradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(hudGameplayViewport.x, hudGameplayViewport.y, hudGameplayViewport.w, hudGameplayViewport.h);
+        ctx.clip();
+        ctx.translate(hudGameplayViewport.x, hudGameplayViewport.y);
+
+        const backdropGradient = ctx.createLinearGradient(0, 0, 0, worldRenderCanvas.height);
         backdropGradient.addColorStop(0, "#0b1220");
         backdropGradient.addColorStop(1, "#111b31");
         ctx.fillStyle = backdropGradient;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, worldRenderCanvas.width, worldRenderCanvas.height);
 
         const playfieldRect = mapper.worldToCanvasRect(0, 0, worldWidthPx, worldHeightPx);
         ctx.fillStyle = "rgba(15, 23, 42, 0.52)";
@@ -4394,6 +4457,8 @@
           },
           frame: Number.isFinite(payload?.tick) ? payload.tick : null,
         };
+
+        ctx.restore();
 
         drawRechargedHudReplica(canvas, state);
 
