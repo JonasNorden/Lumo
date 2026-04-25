@@ -139,8 +139,12 @@ export function createRuntimeRunner(options = {}) {
       : [];
     runtimeState.playerState = {
       position: {
-        x: lastBuild.initialization.player?.finalPosition?.x ?? null,
-        y: lastBuild.initialization.player?.finalPosition?.y ?? null,
+        x: lastBuild.initialization.player?.startPosition?.x
+          ?? lastBuild.initialization.player?.finalPosition?.x
+          ?? null,
+        y: lastBuild.initialization.player?.startPosition?.y
+          ?? lastBuild.initialization.player?.finalPosition?.y
+          ?? null,
       },
       velocity: {
         x: lastBuild.initialization.player?.finalVelocity?.x ?? 0,
@@ -304,8 +308,12 @@ export function createRuntimeRunner(options = {}) {
           : [];
         next.playerState = {
           position: {
-            x: lastBuild.initialization.player?.finalPosition?.x ?? null,
-            y: lastBuild.initialization.player?.finalPosition?.y ?? null,
+            x: lastBuild.initialization.player?.startPosition?.x
+              ?? lastBuild.initialization.player?.finalPosition?.x
+              ?? null,
+            y: lastBuild.initialization.player?.startPosition?.y
+              ?? lastBuild.initialization.player?.finalPosition?.y
+              ?? null,
           },
           velocity: {
             x: lastBuild.initialization.player?.finalVelocity?.x ?? 0,
