@@ -409,21 +409,174 @@
       };
     }
 
-    function ensureRechargedHudRenderer(state, canvas) {
-      if (!state || !canvas || typeof canvas.getContext !== "function") {
-        return null;
+    const RECHARGED_HUD_V2_MASTER_W = 1920;
+    const RECHARGED_HUD_V2_MASTER_H = 1080;
+
+    function createRechargedHudV2State() {
+      const logoImage = new Image();
+      logoImage.src = "data/assets/ui/lumo-logo-sepia.png";
+      return {
+        logoImage,
+        motes: [],
+        initialized: false,
+      };
+    }
+
+    function ensureRechargedHudV2State(state) {
+      if (!state || typeof state !== "object") {
+        return createRechargedHudV2State();
+      }
+      if (!state.rechargedHudV2 || typeof state.rechargedHudV2 !== "object") {
+        state.rechargedHudV2 = createRechargedHudV2State();
+      }
+      return state.rechargedHudV2;
+    }
+
+    function initializeRechargedHudV2Motes(v2State) {
+      if (!v2State || v2State.initialized === true) return;
+      const motes = [];
+      for (let i = 0; i < 24; i += 1) {
+        const edgeBand = i % 3;
+        const x = edgeBand === 0
+          ? 38 + Math.random() * 64
+          : edgeBand === 1
+            ? 1820 + Math.random() * 64
+            : 120 + Math.random() * 1680;
+        const y = edgeBand === 2 ? 1000 + Math.random() * 48 : 60 + Math.random() * 940;
+        motes.push({
+          x,
+          y,
+          vx: (Math.random() - 0.5) * 0.35,
+          vy: (Math.random() - 0.5) * 0.2,
+          r: 0.6 + Math.random() * 1.8,
+          a: 0.03 + Math.random() * 0.12,
+          phase: Math.random() * Math.PI * 2,
+        });
+      }
+      v2State.motes = motes;
+      v2State.initialized = true;
+    }
+
+    function drawRechargedHudV2(canvas, ctx, state, hudSnapshot) {
+      if (!canvas || !ctx || !hudSnapshot) return;
+      const v2State = ensureRechargedHudV2State(state);
+      initializeRechargedHudV2Motes(v2State);
+      const frame = Number.isFinite(state?.frameCount) ? state.frameCount : 0;
+      const energyPct = Number.isFinite(hudSnapshot.energyPct) ? Math.max(0, Math.min(100, Math.round(hudSnapshot.energyPct))) : 0;
+      const lives = Number.isFinite(hudSnapshot.lives) ? Math.max(0, Math.floor(hudSnapshot.lives)) : 0;
+      const livesMax = Number.isFinite(hudSnapshot.livesMax) ? Math.max(lives, Math.floor(hudSnapshot.livesMax)) : Math.max(lives, 4);
+      const flares = Number.isFinite(hudSnapshot.flares) ? Math.max(0, Math.floor(hudSnapshot.flares)) : 0;
+      const score = Number.isFinite(hudSnapshot.score) ? Math.max(0, Math.floor(hudSnapshot.score)) : null;
+      const logoReady = Boolean(v2State?.logoImage?.complete && v2State?.logoImage?.naturalWidth > 0);
+
+      const sx = canvas.width / RECHARGED_HUD_V2_MASTER_W;
+      const sy = canvas.height / RECHARGED_HUD_V2_MASTER_H;
+      const t = (typeof performance?.now === "function" ? performance.now() : Date.now()) / 1000;
+      const scoreText = score === null ? "" : String(score).padStart(6, "0");
+
+      ctx.save();
+      ctx.scale(sx, sy);
+
+      ctx.fillStyle = "rgba(34,24,20,0.88)";
+      ctx.fillRect(0, 0, RECHARGED_HUD_V2_MASTER_W, 110);
+      ctx.fillRect(0, RECHARGED_HUD_V2_MASTER_H - 52, RECHARGED_HUD_V2_MASTER_W, 52);
+      ctx.fillRect(0, 0, 42, RECHARGED_HUD_V2_MASTER_H);
+      ctx.fillRect(RECHARGED_HUD_V2_MASTER_W - 42, 0, 42, RECHARGED_HUD_V2_MASTER_H);
+
+      ctx.fillStyle = "rgba(55,40,30,0.88)";
+      ctx.fillRect(58, 18, 305, 74);
+      ctx.fillRect(RECHARGED_HUD_V2_MASTER_W - 462, 18, 404, 74);
+      if (logoReady) {
+        ctx.globalAlpha = 0.9;
+        ctx.drawImage(v2State.logoImage, 70, 25, 170, 58);
+        ctx.globalAlpha = 1;
       }
 
-      const rendererCtor = window?.Lumo?.Renderer;
-      if (typeof rendererCtor !== "function") {
-        return null;
+      const orbX = 1275;
+      const orbY = 74;
+      const orbR = 56;
+      const energyRatio = energyPct / 100;
+      const core = ctx.createRadialGradient(orbX, orbY, 5, orbX, orbY, orbR);
+      core.addColorStop(0, energyPct < 20 ? "rgba(146,18,16,0.95)" : "rgba(255,220,148,0.98)");
+      core.addColorStop(0.4, energyPct < 20 ? "rgba(108,12,10,0.85)" : "rgba(255,128,30,0.85)");
+      core.addColorStop(1, "rgba(22,8,6,0.2)");
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(orbX, orbY, orbR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(255,186,96,${0.3 + energyRatio * 0.5})`;
+      ctx.lineWidth = 4;
+      for (let i = 0; i < 18; i += 1) {
+        const start = (i / 18) * Math.PI * 2 + t * 0.08;
+        const end = start + 0.18 + (i % 3) * 0.02;
+        ctx.globalAlpha = i / 18 < energyRatio ? 0.9 : 0.2;
+        ctx.beginPath();
+        ctx.arc(orbX, orbY, orbR + 10 + (i % 2) * 2, start, end);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+
+      ctx.font = "600 30px Arial";
+      ctx.textAlign = "right";
+      ctx.fillStyle = energyPct <= 18 ? "rgba(255,110,96,0.98)" : "rgba(255,230,180,0.98)";
+      ctx.fillText(`${energyPct}%`, RECHARGED_HUD_V2_MASTER_W - 84, 77);
+      ctx.font = "600 11px Arial";
+      ctx.fillStyle = "rgba(255,206,150,0.75)";
+      ctx.fillText("ENERGY", RECHARGED_HUD_V2_MASTER_W - 84, 92);
+
+      const livesPanelX = 74;
+      const livesPanelY = RECHARGED_HUD_V2_MASTER_H - 44;
+      const livesDotSize = 16;
+      const livesGap = 9;
+      for (let i = 0; i < livesMax; i += 1) {
+        const x = livesPanelX + i * (livesDotSize + livesGap);
+        ctx.beginPath();
+        ctx.arc(x, livesPanelY, livesDotSize * 0.45, 0, Math.PI * 2);
+        ctx.fillStyle = i < lives ? "rgba(255,192,112,0.92)" : "rgba(76,52,38,0.95)";
+        ctx.fill();
+      }
+      ctx.font = "600 13px Arial";
+      ctx.textAlign = "left";
+      ctx.fillStyle = "rgba(240,208,166,0.9)";
+      ctx.fillText(`LIVES ${lives}/${livesMax}`, livesPanelX, RECHARGED_HUD_V2_MASTER_H - 18);
+
+      ctx.textAlign = "left";
+      ctx.font = "600 13px Arial";
+      ctx.fillStyle = "rgba(172,255,198,0.95)";
+      ctx.fillText(`FLARES ${flares}`, 420, RECHARGED_HUD_V2_MASTER_H - 18);
+
+      if (scoreText.length > 0) {
+        ctx.textAlign = "right";
+        ctx.fillStyle = "rgba(235,220,188,0.95)";
+        ctx.font = "600 22px 'Courier New', monospace";
+        ctx.fillText(scoreText, RECHARGED_HUD_V2_MASTER_W - 84, RECHARGED_HUD_V2_MASTER_H - 16);
       }
 
-      if (!state.rechargedHudRenderer || state.rechargedHudRenderer.cv !== canvas) {
-        state.rechargedHudRenderer = new rendererCtor(canvas);
+      for (const mote of v2State.motes) {
+        mote.x += mote.vx;
+        mote.y += mote.vy;
+        if (mote.x < 42) mote.x = 42;
+        if (mote.x > RECHARGED_HUD_V2_MASTER_W - 42) mote.x = RECHARGED_HUD_V2_MASTER_W - 42;
+        if (mote.y < 18) mote.y = 18;
+        if (mote.y > RECHARGED_HUD_V2_MASTER_H - 20) mote.y = RECHARGED_HUD_V2_MASTER_H - 20;
+        ctx.globalAlpha = mote.a + Math.sin(t * 2.5 + mote.phase) * 0.02;
+        ctx.fillStyle = "rgba(255,202,148,1)";
+        ctx.beginPath();
+        ctx.arc(mote.x, mote.y, mote.r, 0, Math.PI * 2);
+        ctx.fill();
       }
+      ctx.globalAlpha = 1;
+      ctx.restore();
 
-      return state.rechargedHudRenderer;
+      window.__LUMO_RECHARGED_HUD_V2_DEBUG__ = {
+        enabled: true,
+        frame,
+        energyPct,
+        lives,
+        livesMax,
+        flares,
+        logoReady,
+      };
     }
 
     function drawRechargedHudReplica(canvas, state) {
@@ -431,34 +584,11 @@
       if (!hud) {
         return;
       }
-
-      const renderer = ensureRechargedHudRenderer(state, canvas);
-      if (!renderer || typeof renderer.drawHUD !== "function") {
+      const ctx = canvas?.getContext?.("2d");
+      if (!ctx) {
         return;
       }
-
-      renderer.w = canvas.width;
-      renderer.h = canvas.height;
-      const hudCtx = renderer.ctx;
-      const originalFillText = hudCtx && typeof hudCtx.fillText === "function"
-        ? hudCtx.fillText.bind(hudCtx)
-        : null;
-      if (hudCtx && originalFillText) {
-        hudCtx.fillText = (text, ...args) => {
-          if (typeof text === "string" && text.trim().toUpperCase() === "MENU") {
-            return;
-          }
-          return originalFillText(text, ...args);
-        };
-      }
-      try {
-        renderer.drawHUD(hud);
-      } finally {
-        if (hudCtx && originalFillText) {
-          hudCtx.fillText = originalFillText;
-        }
-      }
-      hud._pauseBtn = null;
+      drawRechargedHudV2(canvas, ctx, state, hud);
     }
 
     // Updates Recharged HUD model from live adapter snapshots with safe fallbacks.
@@ -482,8 +612,20 @@
 
       hud._prevFlares = flareStash;
       hud.lives = Number.isFinite(snapshot.lives) ? Math.max(0, Math.floor(snapshot.lives)) : hud.lives;
+      const payloadPlayer = payload?.player && typeof payload.player === "object" ? payload.player : null;
+      const nextLivesMax = Number.isFinite(payloadPlayer?.maxLives)
+        ? Math.max(1, Math.floor(payloadPlayer.maxLives))
+        : Number.isFinite(payloadPlayer?.livesMax)
+          ? Math.max(1, Math.floor(payloadPlayer.livesMax))
+          : null;
+      if (Number.isFinite(nextLivesMax)) {
+        hud.livesMax = Math.max(hud.lives, nextLivesMax);
+      } else if (!Number.isFinite(hud.livesMax) || hud.livesMax < hud.lives) {
+        hud.livesMax = Math.max(hud.lives, 4);
+      }
       hud.energyPct = Math.round(energyRatio * 100);
       hud.flares = flareStash;
+      hud.score = Number.isFinite(snapshot.score) ? Math.max(0, Math.floor(snapshot.score)) : hud.score;
       const hudDebug = document.getElementById("hudDebug");
       if (hudDebug) {
         hudDebug.textContent = state?.intermissionAcknowledgedMessage || "";
