@@ -449,6 +449,33 @@
       };
     }
 
+    // Dashboard.html structural port (Phase 3): outer frame + base panel geometry only.
+    // Source mapping:
+    // - getLayout().gameplay: {x:40,y:157,w:w-80,h:861}
+    // - drawFrame() base panel rectangles + gameplay stroke frame
+    // Intentionally excludes: orb, logo, lives/flares/score, patina/noise/scratches, animations.
+    function drawRechargedHudV2BaseFrame(ctx) {
+      const { w, h, gameplay } = getRechargedHudV2Layout();
+      ctx.fillStyle = "rgba(34,24,20,.92)";
+      ctx.fillRect(0, 0, w, 157);
+      ctx.fillRect(0, h - 58, w, 58);
+      ctx.fillRect(0, 0, 46, h);
+      ctx.fillRect(w - 46, 0, 46, h);
+
+      ctx.fillStyle = "rgba(42,30,24,.96)";
+      ctx.fillRect(28, 18, w - 56, 94);
+
+      ctx.fillStyle = "rgba(18,10,8,.75)";
+      ctx.fillRect(76, 24, 92, 32);
+      ctx.strokeStyle = "rgba(120,92,62,.35)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(76, 24, 92, 32);
+
+      ctx.strokeStyle = "rgba(120,92,62,.55)";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(gameplay.x, gameplay.y, gameplay.w, gameplay.h);
+    }
+
     function drawRechargedHudV2(canvas, ctx, state, hudSnapshot) {
       if (!canvas || !ctx || !hudSnapshot) return;
       const frame = Number.isFinite(state?.frameCount) ? state.frameCount : 0;
@@ -457,7 +484,14 @@
       const livesMax = Number.isFinite(hudSnapshot.livesMax) ? Math.max(1, Math.floor(hudSnapshot.livesMax)) : Math.max(1, lives);
       const flares = Number.isFinite(hudSnapshot.flares) ? Math.max(0, Math.floor(hudSnapshot.flares)) : 0;
       const score = Number.isFinite(hudSnapshot.score) ? Math.max(0, Math.floor(hudSnapshot.score)) : 0;
+      const viewport = getRechargedHudV2Viewport(canvas);
       const gameplayViewport = getRechargedHudV2GameplayViewport(canvas);
+
+      ctx.save();
+      ctx.translate(viewport.x, viewport.y);
+      ctx.scale(viewport.scale, viewport.scale);
+      drawRechargedHudV2BaseFrame(ctx);
+      ctx.restore();
 
       window.__LUMO_RECHARGED_HUD_V2_DEBUG__ = {
         enabled: true,
