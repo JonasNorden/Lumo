@@ -86,10 +86,11 @@ function stepRuntimePlayerBrakeState(playerState, intent, locomotionState, optio
 
 const DEFAULT_FLARE_SPEED_PX_PER_SECOND = 360;
 const DEFAULT_FLARE_UPWARD_IMPULSE_PX_PER_SECOND = 420;
-const DEFAULT_FLARE_LIFETIME_TICKS = Math.round(5.5 * 60);
+const DEFAULT_FLARE_LIFETIME_TICKS = Math.round(10 * 60);
 const DEFAULT_FLARE_RADIUS_PX = 5;
-const DEFAULT_FLARE_LIGHT_RADIUS_PX = 180;
-const DEFAULT_FLARE_FADE_LAST_TICKS = Math.round(DEFAULT_FLARE_LIFETIME_TICKS * (1 - 0.62));
+const DEFAULT_FLARE_LIGHT_RADIUS_PX = 150;
+const DEFAULT_FLARE_VISUAL_GLOW_RADIUS_PX = 75;
+const DEFAULT_FLARE_FADE_LAST_TICKS = Math.round(2.5 * 60);
 const DEFAULT_FLARE_THROW_ENERGY_COST = 0.11;
 const DEFAULT_PLAYER_FLARE_STASH = 1;
 const DEFAULT_FLARE_SPAWN_OFFSET_PX = 10;
@@ -150,9 +151,18 @@ const MOVING_PLATFORM_DEFAULT_DISTANCE_TILES = 4;
 const MOVING_PLATFORM_DEFAULT_SPEED_PX_PER_SECOND = 70;
 const MOVING_PLATFORM_DEFAULT_LOOP = "pingpong";
 const MOVING_PLATFORM_LANDING_EPSILON_PX = 4;
+const FLARE_DARKNESS_RADIUS_MAX_PX = 150;
+const FLARE_VISUAL_GLOW_RADIUS_MAX_PX = 75;
 
 function clampPlayerEnergy(energy) {
   return Number.isFinite(energy) ? Math.max(0, Math.min(1, energy)) : 1;
+}
+
+function clampFlareRadius(radius, maxRadius) {
+  if (!Number.isFinite(radius) || radius <= 0) {
+    return maxRadius;
+  }
+  return Math.max(1, Math.min(maxRadius, radius));
 }
 
 function resolvePlayerLightRadiusFromEnergy(energy) {
@@ -1914,7 +1924,14 @@ function buildFlareLightSnapshot(flare) {
   if (!flare || !Number.isFinite(flare.x) || !Number.isFinite(flare.y)) {
     return null;
   }
-  const lightRadiusBase = Number.isFinite(flare?.lightRadius) && flare.lightRadius > 0 ? flare.lightRadius : DEFAULT_FLARE_LIGHT_RADIUS_PX;
+  const darknessRadiusBase = clampFlareRadius(
+    Number.isFinite(flare?.darknessRadius) ? flare.darknessRadius : flare?.lightRadius,
+    FLARE_DARKNESS_RADIUS_MAX_PX,
+  );
+  const visualGlowRadiusBase = clampFlareRadius(
+    Number.isFinite(flare?.visualGlowRadius) ? flare.visualGlowRadius : flare?.renderRadius,
+    FLARE_VISUAL_GLOW_RADIUS_MAX_PX,
+  );
   const ttlTicks = Number.isFinite(flare?.ttlTicks) ? flare.ttlTicks : 0;
   const lifetimeTicks = Number.isFinite(flare?.lifetimeTicks) && flare.lifetimeTicks > 0 ? flare.lifetimeTicks : DEFAULT_FLARE_LIFETIME_TICKS;
   const ageTicks = Number.isFinite(flare?.ageTicks) && flare.ageTicks >= 0 ? flare.ageTicks : Math.max(0, lifetimeTicks - ttlTicks);
@@ -1930,19 +1947,19 @@ function buildFlareLightSnapshot(flare) {
     }
   }
   const alpha = Math.max(0, Math.min(1, lightScale));
-  const renderRadius = lightRadiusBase * alpha;
-  const pulsePhase = lifetimeTicks > 0 ? (ageTicks / lifetimeTicks) * Math.PI * 10 : 0;
-  const pulseScale = 1 + (Math.sin(pulsePhase) * 0.035);
-  const finalRadius = Math.max(0, renderRadius * pulseScale);
+  const visualGlowRadius = Math.max(0, visualGlowRadiusBase * alpha);
+  const darknessRadius = Math.max(0, darknessRadiusBase * alpha);
   return {
     id: Number.isFinite(flare?.id) ? Math.floor(flare.id) : -1,
     x: flare.x,
     y: flare.y,
     alpha,
-    renderRadius,
-    finalRadius,
+    visualGlowRadius,
+    darknessRadius,
+    renderRadius: visualGlowRadius,
+    finalRadius: darknessRadius,
     // Backward-compatible field expected by existing contracts/entity interactions.
-    lightRadius: renderRadius,
+    lightRadius: darknessRadius,
   };
 }
 
@@ -2392,8 +2409,10 @@ function buildFlareProjectile(playerState, facingX, flareId) {
     ageTicks: 0,
     radius: DEFAULT_FLARE_RADIUS_PX,
     lightRadius: DEFAULT_FLARE_LIGHT_RADIUS_PX,
+    darknessRadius: DEFAULT_FLARE_LIGHT_RADIUS_PX,
+    visualGlowRadius: DEFAULT_FLARE_VISUAL_GLOW_RADIUS_PX,
     alpha: 1,
-    renderRadius: DEFAULT_FLARE_LIGHT_RADIUS_PX,
+    renderRadius: DEFAULT_FLARE_VISUAL_GLOW_RADIUS_PX,
     finalRadius: DEFAULT_FLARE_LIGHT_RADIUS_PX,
     lifetimeTicks: DEFAULT_FLARE_LIFETIME_TICKS,
     fadeLastTicks: DEFAULT_FLARE_FADE_LAST_TICKS,
@@ -2422,10 +2441,25 @@ function normalizeExistingFlares(playerState) {
         : (Number.isFinite(flare?.ttl) && flare.ttl > 0 ? Math.ceil(flare.ttl * 60) : 0),
       ageTicks: Number.isFinite(flare?.ageTicks) && flare.ageTicks >= 0 ? Math.floor(flare.ageTicks) : 0,
       radius: Number.isFinite(flare?.radius) && flare.radius > 0 ? flare.radius : DEFAULT_FLARE_RADIUS_PX,
-      lightRadius: Number.isFinite(flare?.lightRadius) && flare.lightRadius > 0 ? flare.lightRadius : DEFAULT_FLARE_LIGHT_RADIUS_PX,
+      lightRadius: clampFlareRadius(
+        Number.isFinite(flare?.lightRadius) && flare.lightRadius > 0 ? flare.lightRadius : DEFAULT_FLARE_LIGHT_RADIUS_PX,
+        FLARE_DARKNESS_RADIUS_MAX_PX,
+      ),
+      darknessRadius: clampFlareRadius(
+        Number.isFinite(flare?.darknessRadius) && flare.darknessRadius > 0 ? flare.darknessRadius : flare?.lightRadius,
+        FLARE_DARKNESS_RADIUS_MAX_PX,
+      ),
+      visualGlowRadius: clampFlareRadius(
+        Number.isFinite(flare?.visualGlowRadius) && flare.visualGlowRadius > 0 ? flare.visualGlowRadius : flare?.renderRadius,
+        FLARE_VISUAL_GLOW_RADIUS_MAX_PX,
+      ),
       alpha: Number.isFinite(flare?.alpha) ? Math.max(0, Math.min(1, flare.alpha)) : 1,
-      renderRadius: Number.isFinite(flare?.renderRadius) ? Math.max(0, flare.renderRadius) : null,
-      finalRadius: Number.isFinite(flare?.finalRadius) ? Math.max(0, flare.finalRadius) : null,
+      renderRadius: Number.isFinite(flare?.renderRadius)
+        ? clampFlareRadius(flare.renderRadius, FLARE_VISUAL_GLOW_RADIUS_MAX_PX)
+        : null,
+      finalRadius: Number.isFinite(flare?.finalRadius)
+        ? clampFlareRadius(flare.finalRadius, FLARE_DARKNESS_RADIUS_MAX_PX)
+        : null,
       lifetimeTicks: Number.isFinite(flare?.lifetimeTicks) && flare.lifetimeTicks > 0 ? Math.floor(flare.lifetimeTicks) : DEFAULT_FLARE_LIFETIME_TICKS,
       fadeLastTicks: Number.isFinite(flare?.fadeLastTicks) && flare.fadeLastTicks > 0 ? Math.floor(flare.fadeLastTicks) : DEFAULT_FLARE_FADE_LAST_TICKS,
     }))
@@ -2579,6 +2613,8 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
       ttl: nextTtlTicks * dt,
       ageTicks: nextAgeTicks,
       lightRadius: flare.lightRadius,
+      darknessRadius: flare.darknessRadius,
+      visualGlowRadius: flare.visualGlowRadius,
       alpha: flare.alpha,
       renderRadius: flare.renderRadius,
       finalRadius: flare.finalRadius,
@@ -2594,6 +2630,12 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
       renderRadius: Number.isFinite(lightSnapshot?.renderRadius) ? lightSnapshot.renderRadius : steppedFlare.renderRadius,
       finalRadius: Number.isFinite(lightSnapshot?.finalRadius) ? lightSnapshot.finalRadius : steppedFlare.finalRadius,
       lightRadius: Number.isFinite(lightSnapshot?.lightRadius) ? lightSnapshot.lightRadius : steppedFlare.lightRadius,
+      darknessRadius: Number.isFinite(lightSnapshot?.darknessRadius)
+        ? lightSnapshot.darknessRadius
+        : steppedFlare.darknessRadius,
+      visualGlowRadius: Number.isFinite(lightSnapshot?.visualGlowRadius)
+        ? lightSnapshot.visualGlowRadius
+        : steppedFlare.visualGlowRadius,
     });
   }
 
@@ -2612,6 +2654,12 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
       renderRadius: Number.isFinite(lightSnapshot?.renderRadius) ? lightSnapshot.renderRadius : spawnedFlare.renderRadius,
       finalRadius: Number.isFinite(lightSnapshot?.finalRadius) ? lightSnapshot.finalRadius : spawnedFlare.finalRadius,
       lightRadius: Number.isFinite(lightSnapshot?.lightRadius) ? lightSnapshot.lightRadius : spawnedFlare.lightRadius,
+      darknessRadius: Number.isFinite(lightSnapshot?.darknessRadius)
+        ? lightSnapshot.darknessRadius
+        : spawnedFlare.darknessRadius,
+      visualGlowRadius: Number.isFinite(lightSnapshot?.visualGlowRadius)
+        ? lightSnapshot.visualGlowRadius
+        : spawnedFlare.visualGlowRadius,
     });
     nextFlareId += 1;
     nextFlareStash = Math.max(0, flareStash - 1);
