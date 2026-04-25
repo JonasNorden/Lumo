@@ -88,7 +88,7 @@ const DEFAULT_FLARE_SPEED_PX_PER_SECOND = 360;
 const DEFAULT_FLARE_UPWARD_IMPULSE_PX_PER_SECOND = 420;
 const DEFAULT_FLARE_LIFETIME_TICKS = Math.round(5.5 * 60);
 const DEFAULT_FLARE_RADIUS_PX = 5;
-const DEFAULT_FLARE_LIGHT_RADIUS_PX = 120;
+const DEFAULT_FLARE_LIGHT_RADIUS_PX = 180;
 const DEFAULT_FLARE_FADE_LAST_TICKS = Math.round(DEFAULT_FLARE_LIFETIME_TICKS * (1 - 0.62));
 const DEFAULT_FLARE_THROW_ENERGY_COST = 0.11;
 const DEFAULT_PLAYER_FLARE_STASH = 1;
@@ -1924,7 +1924,9 @@ function buildFlareLightSnapshot(flare) {
     const fadeStartTick = Math.max(0, lifetimeTicks - fadeLastTicks);
     if (ageTicks > fadeStartTick) {
       const fadeProgress = Math.max(0, Math.min(1, (ageTicks - fadeStartTick) / fadeLastTicks));
-      lightScale = Math.max(0, 1 - fadeProgress);
+      // Smooth cubic fade near end-of-life to avoid visible pop-off.
+      const smoothFade = fadeProgress * fadeProgress * (3 - (2 * fadeProgress));
+      lightScale = Math.max(0, 1 - smoothFade);
     }
   }
   const alpha = Math.max(0, Math.min(1, lightScale));

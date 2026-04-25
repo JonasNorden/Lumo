@@ -96,6 +96,7 @@
     const RECHARGED_ENTITY_SPRITE_DARK_SPELL_IMPACT03 = "data/assets/sprites/creatures/void_m_03.png";
     const RECHARGED_ENTITY_SPRITE_DARK_SPELL_IMPACT02 = "data/assets/sprites/creatures/void_m_02.png";
     const RECHARGED_ENTITY_SPRITE_DARK_SPELL_IMPACT01 = "data/assets/sprites/creatures/void_m_01.png";
+    const RECHARGED_FLARE_LIGHT_PICKUP_FOOTPRINT_PX = 12;
     const RECHARGED_PLAYER_HORIZONTAL_SPEED_EPSILON = 0.05;
     const RECHARGED_PLAYER_VERTICAL_SPEED_EPSILON = 0.05;
     const RECHARGED_PLAYER_IDLE_FPS = 7;
@@ -1023,6 +1024,18 @@
             vx: Number.isFinite(flare?.vx) ? flare.vx : 0,
             vy: Number.isFinite(flare?.vy) ? flare.vy : 0,
             radius: Number.isFinite(flare?.radius) && flare.radius > 0 ? flare.radius : 4,
+            lightRadius: Number.isFinite(flare?.lightRadius) && flare.lightRadius > 0 ? flare.lightRadius : null,
+            alpha: Number.isFinite(flare?.alpha) ? Math.max(0, Math.min(1, flare.alpha)) : 1,
+            renderRadius: Number.isFinite(flare?.renderRadius) && flare.renderRadius >= 0 ? flare.renderRadius : null,
+            finalRadius: Number.isFinite(flare?.finalRadius) && flare.finalRadius >= 0 ? flare.finalRadius : null,
+            ttlTicks: Number.isFinite(flare?.ttlTicks) ? flare.ttlTicks : null,
+            ageTicks: Number.isFinite(flare?.ageTicks) ? flare.ageTicks : null,
+            lifetimeTicks: Number.isFinite(flare?.lifetimeTicks) ? flare.lifetimeTicks : null,
+            fadeLastTicks: Number.isFinite(flare?.fadeLastTicks) ? flare.fadeLastTicks : null,
+            normalizedLife: Number.isFinite(flare?.lifetimeTicks) && flare.lifetimeTicks > 0 && Number.isFinite(flare?.ageTicks)
+              ? Math.max(0, Math.min(1, flare.ageTicks / flare.lifetimeTicks))
+              : null,
+            spritePath: typeof flare?.spritePath === "string" ? flare.spritePath : "",
           }))
           .filter((flare) => flare.x !== null && flare.y !== null);
       } catch (_error) {
@@ -2363,6 +2376,7 @@
       if (!state.rechargedEntityVisualState || typeof state.rechargedEntityVisualState !== "object") {
         state.rechargedEntityVisualState = {
           flarePickup: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_FLARE_PICKUP),
+          flareThrown: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_FLARE_PICKUP),
           powerCells: RECHARGED_ENTITY_SPRITE_POWERCELLS.map((src) => createRechargedSpriteImage(src)),
           checkpoints: [createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_CHECKPOINT)],
           lantern: createRechargedSpriteImage(RECHARGED_ENTITY_SPRITE_LANTERN),
@@ -3007,8 +3021,12 @@
           kind: "flare",
           x: flareRect.x + flareRect.w * 0.5,
           y: flareRect.y + flareRect.h * 0.5,
-          radius: Number.isFinite(flare?.radius) ? flare.radius : 220,
-          strength: 0.9,
+          radius: Number.isFinite(flare?.finalRadius)
+            ? flare.finalRadius
+            : (Number.isFinite(flare?.renderRadius)
+              ? flare.renderRadius
+              : (Number.isFinite(flare?.lightRadius) ? flare.lightRadius : 180)),
+          strength: Math.max(0, Math.min(1, Number.isFinite(flare?.alpha) ? flare.alpha : 1)) * 0.9,
         });
       }
 
@@ -3931,6 +3949,8 @@
           ctx.stroke();
         }
 
+        const entityVisualState = ensureRechargedEntityVisualState(state);
+        const flareSprite = entityVisualState?.flareThrown || entityVisualState?.flarePickup || null;
         let visibleFlares = 0;
         for (const flare of flareSnapshots) {
           const flareLooksTileBased = coordinatesLookTileBased
@@ -3940,7 +3960,16 @@
             && flare.y <= worldHeightRaw + tileSize;
           const flareWorldX = flareLooksTileBased ? flare.x * worldUnitsToPx : flare.x;
           const flareWorldY = flareLooksTileBased ? flare.y * worldUnitsToPx : flare.y;
-          const flareRadius = Math.max(2, Math.round(flare.radius));
+          const flareRadius = Math.max(
+            2,
+            Math.round(
+              Number.isFinite(flare.finalRadius)
+                ? flare.finalRadius
+                : (Number.isFinite(flare.renderRadius)
+                  ? flare.renderRadius
+                  : (Number.isFinite(flare.lightRadius) ? flare.lightRadius : flare.radius)),
+            ),
+          );
           const flareRect = mapper.worldToCanvasRect(
             flareWorldX - flareRadius,
             flareWorldY - flareRadius,
@@ -3952,32 +3981,50 @@
           if (centerX >= 0 && centerX <= canvas.width && centerY >= 0 && centerY <= canvas.height) {
             visibleFlares += 1;
           }
+          const flareAlpha = Math.max(0, Math.min(1, Number.isFinite(flare.alpha) ? flare.alpha : 1));
           const glowRadius = Math.max(flareRect.w, flareRect.h) * 1.8;
           const glowGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, glowRadius);
-          glowGradient.addColorStop(0, "rgba(251, 191, 36, 0.95)");
+          glowGradient.addColorStop(0, `rgba(251, 191, 36, ${(0.95 * flareAlpha).toFixed(3)})`);
           glowGradient.addColorStop(1, "rgba(251, 191, 36, 0)");
           ctx.fillStyle = glowGradient;
           ctx.fillRect(centerX - glowRadius, centerY - glowRadius, glowRadius * 2, glowRadius * 2);
 
-          ctx.fillStyle = "#fde68a";
-          ctx.fillRect(flareRect.x, flareRect.y, flareRect.w, flareRect.h);
-          ctx.fillStyle = "#f97316";
-          ctx.fillRect(flareRect.x + 1, flareRect.y + 1, Math.max(1, flareRect.w - 2), Math.max(1, flareRect.h - 2));
+          const spriteFootprintRect = mapper.worldToCanvasRect(
+            flareWorldX - (RECHARGED_FLARE_LIGHT_PICKUP_FOOTPRINT_PX * 0.5),
+            flareWorldY - (RECHARGED_FLARE_LIGHT_PICKUP_FOOTPRINT_PX * 0.5),
+            RECHARGED_FLARE_LIGHT_PICKUP_FOOTPRINT_PX,
+            RECHARGED_FLARE_LIGHT_PICKUP_FOOTPRINT_PX,
+          );
+          const spriteDrawSize = Math.max(1, Math.min(spriteFootprintRect.w, spriteFootprintRect.h));
+          const spriteDrawX = centerX - (spriteDrawSize * 0.5);
+          const spriteDrawY = centerY - (spriteDrawSize * 0.5);
+          ctx.save();
+          ctx.globalAlpha = flareAlpha;
+          if (flareSprite && flareSprite.complete) {
+            const flareAngle = (Math.abs(flare.vx) + Math.abs(flare.vy)) > 0.5
+              ? Math.atan2(flare.vy, flare.vx)
+              : 0;
+            ctx.translate(centerX, centerY);
+            ctx.rotate(flareAngle);
+            ctx.drawImage(flareSprite, -spriteDrawSize * 0.5, -spriteDrawSize * 0.5, spriteDrawSize, spriteDrawSize);
+          } else {
+            ctx.fillStyle = "#fde68a";
+            ctx.fillRect(spriteDrawX, spriteDrawY, spriteDrawSize, spriteDrawSize);
+            ctx.fillStyle = "#f97316";
+            ctx.fillRect(spriteDrawX + 1, spriteDrawY + 1, Math.max(1, spriteDrawSize - 2), Math.max(1, spriteDrawSize - 2));
+          }
+          ctx.restore();
         }
 
-        // Minimal fallback marker: if flare state exists but no flare is visible, draw simple circles
-        // so renderer-vs-state issues can be diagnosed in live Lumo.html quickly.
-        if (flareSnapshots.length > 0 && visibleFlares === 0) {
-          ctx.fillStyle = "#facc15";
-          for (const flare of flareSnapshots.slice(0, 3)) {
-            const fallbackRect = mapper.worldToCanvasRect(flare.x - 3, flare.y - 3, 6, 6);
-            const fallbackCenterX = fallbackRect.x + fallbackRect.w * 0.5;
-            const fallbackCenterY = fallbackRect.y + fallbackRect.h * 0.5;
-            ctx.beginPath();
-            ctx.arc(fallbackCenterX, fallbackCenterY, 4, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
+        window.__LUMO_RECHARGED_FLARE_VISUAL_DEBUG__ = {
+          flareCount: flareSnapshots.length,
+          sampleSpritePath: (flareSnapshots[0]?.spritePath || RECHARGED_ENTITY_SPRITE_FLARE_PICKUP),
+          alpha: flareSnapshots[0]?.alpha ?? null,
+          renderRadius: flareSnapshots[0]?.renderRadius ?? null,
+          finalRadius: flareSnapshots[0]?.finalRadius ?? null,
+          ageTicks: flareSnapshots[0]?.ageTicks ?? null,
+          normalizedLife: flareSnapshots[0]?.normalizedLife ?? null,
+        };
 
         drawRechargedHudReplica(canvas, state);
 

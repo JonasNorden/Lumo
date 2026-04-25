@@ -250,6 +250,7 @@ function buildPlayerSnapshot(playerState) {
           settled: flare?.settled === true,
           bounceCount: Number.isFinite(flare?.bounceCount) ? flare.bounceCount : 0,
           ttlTicks: Number.isFinite(flare?.ttlTicks) ? flare.ttlTicks : null,
+          ageTicks: Number.isFinite(flare?.ageTicks) ? flare.ageTicks : null,
           radius: Number.isFinite(flare?.radius) ? flare.radius : null,
           lightRadius: Number.isFinite(flare?.lightRadius) ? flare.lightRadius : null,
           alpha: Number.isFinite(flare?.alpha) ? flare.alpha : null,
@@ -257,6 +258,7 @@ function buildPlayerSnapshot(playerState) {
           finalRadius: Number.isFinite(flare?.finalRadius) ? flare.finalRadius : null,
           lifetimeTicks: Number.isFinite(flare?.lifetimeTicks) ? flare.lifetimeTicks : null,
           fadeLastTicks: Number.isFinite(flare?.fadeLastTicks) ? flare.fadeLastTicks : null,
+          spritePath: typeof flare?.spritePath === "string" ? flare.spritePath : "",
         }))
         .filter((flare) => flare.id !== null && flare.x !== null && flare.y !== null && flare.radius !== null)
       : [],
