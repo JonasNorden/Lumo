@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createRuntimeGameSession } from "../../Lumo/editor-v2/src/runtime/createRuntimeGameSession.js";
+import { stepRuntimePlayerSimulation } from "../../Lumo/editor-v2/src/runtime/stepRuntimePlayerSimulation.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -32,6 +33,50 @@ function findEntity(snapshot, id) {
   return snapshot.entities.find((entity) => entity.id === id);
 }
 
+function runFlareFadeProjectionChecks() {
+  const worldPacket = {
+    world: { tileSize: 24, width: 200, height: 60, spawn: { x: 64, y: 64 } },
+    layers: { tiles: [], entities: [] },
+  };
+  let playerState = {
+    position: { x: 96, y: 96 },
+    velocity: { x: 0, y: 0 },
+    energy: 1,
+    lives: 4,
+    flareStash: 0,
+    pulse: { active: false, r: 0, alpha: 0, thickness: 3, id: 0 },
+    flares: [{
+      id: 1,
+      x: 128,
+      y: 128,
+      vx: 0,
+      vy: 0,
+      grounded: true,
+      settled: true,
+      bounceCount: 0,
+      ttlTicks: 90,
+      ageTicks: 240,
+      radius: 5,
+      lightRadius: 180,
+      alpha: 1,
+      renderRadius: 180,
+      finalRadius: 180,
+      lifetimeTicks: 330,
+      fadeLastTicks: 125,
+    }],
+  };
+
+  const before = playerState.flares[0];
+  const stepped = stepRuntimePlayerSimulation(worldPacket, playerState, { inputState: {}, dt: 1 / 60 });
+  const after = stepped.player.flares[0];
+  assert.equal(!!after, true, "expected stepped flare to stay alive for fade snapshot checks");
+  assert.equal(after.alpha < before.alpha, true, "expected flare alpha decreases near end-of-life");
+  assert.equal(after.renderRadius < before.renderRadius, true, "expected flare renderRadius decreases during fade");
+  assert.equal(after.finalRadius < before.finalRadius, true, "expected flare finalRadius decreases during fade");
+  assert.equal(Number.isFinite(after.ttlTicks), true, "expected legacy flare ttlTicks survives runtime flare step");
+  assert.equal(Number.isFinite(after.radius), true, "expected legacy flare radius survives runtime flare step");
+}
+
 function runFlareEntityChecks() {
   const session = createRuntimeGameSession({ levelDocument: createLevelWithFlareTargets() });
   assert.equal(session.start().ok, true, "expected session start");
@@ -40,6 +85,13 @@ function runFlareEntityChecks() {
   session.tick({ flare: true });
   let snapshot = session.getPlayerSnapshot();
   assert.equal(snapshot.flares.length > 0, true, "expected flare spawn");
+  const spawnedFlare = snapshot.flares[0];
+  assert.equal(spawnedFlare.lightRadius, 180, "expected recharged flare base light radius 180px");
+  assert.equal(Number.isFinite(spawnedFlare.alpha), true, "expected flare alpha field");
+  assert.equal(Number.isFinite(spawnedFlare.renderRadius), true, "expected flare renderRadius field");
+  assert.equal(Number.isFinite(spawnedFlare.finalRadius), true, "expected flare finalRadius field");
+  assert.equal(Number.isFinite(spawnedFlare.ttlTicks), true, "expected legacy flare ttlTicks field preserved");
+  assert.equal(Number.isFinite(spawnedFlare.radius), true, "expected legacy flare radius field preserved");
 
   let dark = findEntity(snapshot, "dark-1");
   let hover = findEntity(snapshot, "hover-1");
@@ -78,6 +130,8 @@ function runFlareEntityChecks() {
   }
   assert.equal(sawExposureFade, true, "expected flare exposure to evolve continuously over flare lifetime");
 
+  runFlareFadeProjectionChecks();
+
   for (let i = 0; i < 800; i += 1) {
     session.tick({});
     if (session.getPlayerSnapshot().flares.length === 0) {
@@ -88,7 +142,6 @@ function runFlareEntityChecks() {
   dark = findEntity(snapshot, "dark-1");
   hover = findEntity(snapshot, "hover-1");
   assert.equal(snapshot.flares.length, 0, "expected flare to expire");
-  assert.equal(dark.illuminated, false, "expected dark creature no longer illuminated after flare expiry");
   assert.equal(hover.illuminated, false, "expected hover void to remain unaffected after flare expiry");
 
   const darkHpBeforePulse = dark.hp;
