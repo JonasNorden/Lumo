@@ -252,6 +252,9 @@ function buildPlayerSnapshot(playerState) {
           ttlTicks: Number.isFinite(flare?.ttlTicks) ? flare.ttlTicks : null,
           radius: Number.isFinite(flare?.radius) ? flare.radius : null,
           lightRadius: Number.isFinite(flare?.lightRadius) ? flare.lightRadius : null,
+          alpha: Number.isFinite(flare?.alpha) ? flare.alpha : null,
+          renderRadius: Number.isFinite(flare?.renderRadius) ? flare.renderRadius : null,
+          finalRadius: Number.isFinite(flare?.finalRadius) ? flare.finalRadius : null,
           lifetimeTicks: Number.isFinite(flare?.lifetimeTicks) ? flare.lifetimeTicks : null,
           fadeLastTicks: Number.isFinite(flare?.fadeLastTicks) ? flare.fadeLastTicks : null,
         }))
