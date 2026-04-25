@@ -447,6 +447,47 @@ function runLanternAuraRechargeChecks() {
   assert.equal(Math.abs(outOfAuraStep.player.energy - player.energy) < 1e-6, true, "expected no lantern recharge outside aura");
 }
 
+function runPlayerLightRadiusTracksEnergyChecks() {
+  const worldPacket = buildFlatWorldPacket();
+  let player = {
+    position: { x: 4 * 24, y: (10 * 24) - 1 },
+    velocity: { x: 0, y: 0 },
+    grounded: true,
+    falling: false,
+    rising: false,
+    landed: false,
+    facingX: 1,
+    flares: [],
+    flareStash: 1,
+    energy: 1,
+    flareHeldLastTick: false,
+    pulseHeldLastTick: false,
+    nextFlareId: 1,
+    pulse: { active: false, r: 0, alpha: 0, thickness: 3, id: 0 },
+    entities: [],
+  };
+
+  assert.equal(Math.abs(player.energy - 1) < 1e-6, true, "expected full-energy bootstrap");
+  const movementStep = stepRuntimePlayerSimulation(worldPacket, player, { input: { moveX: 1, jump: false } });
+  assert.equal(movementStep.ok, true);
+  assert.equal(movementStep.player.energy < 1, true, "expected moving to drain energy");
+  assert.equal(movementStep.player.lightRadius < 320, true, "expected moving drain to shrink light radius below max");
+  assert.equal(Math.abs(movementStep.player.renderLightRadius - movementStep.player.lightRadius) < 1e-6, true, "expected render radius to match light radius when fully visible");
+  player = movementStep.player;
+
+  const flareStep = stepRuntimePlayerSimulation(worldPacket, player, { input: { flare: true } });
+  assert.equal(flareStep.ok, true);
+  assert.equal(flareStep.player.energy < player.energy, true, "expected flare throw to spend energy");
+  assert.equal(flareStep.player.lightRadius < player.lightRadius, true, "expected flare energy spend to further shrink light radius");
+  player = flareStep.player;
+
+  const pulseStep = stepRuntimePlayerSimulation(worldPacket, player, { input: { pulse: true } });
+  assert.equal(pulseStep.ok, true);
+  assert.equal(pulseStep.player.energy < player.energy, true, "expected pulse to spend energy");
+  assert.equal(pulseStep.player.lightRadius < player.lightRadius, true, "expected pulse energy spend to further shrink light radius");
+  assert.equal(Math.abs(pulseStep.player.renderLightRadius - pulseStep.player.lightRadius) < 1e-6, true, "expected render radius parity while not in fade/death state");
+}
+
 runBaselineConstantChecks();
 runHorizontalControlChecks();
 runReadableJumpArcChecks();
@@ -461,5 +502,6 @@ runFlareThrowSuppressedWhenEmptyChecks();
 runFlarePickupCollectionChecks();
 runPowerCellRechargeChecks();
 runLanternAuraRechargeChecks();
+runPlayerLightRadiusTracksEnergyChecks();
 
 console.log("recharged-runtime-player-feel-checks: ok");

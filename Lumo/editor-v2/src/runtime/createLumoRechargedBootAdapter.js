@@ -765,6 +765,10 @@ export function createLumoRechargedBootAdapter(options = {}) {
         lives: Number.isFinite(hud?.lives) ? hud.lives : 0,
         flareStash: Number.isFinite(hud?.flareStash) ? hud.flareStash : 0,
         energy: Number.isFinite(hud?.energy) ? hud.energy : 0,
+        lightRadius: Number.isFinite(player?.lightRadius) ? player.lightRadius : derivePlayerLightRadiusFromEnergy(player?.energy),
+        renderLightRadius: Number.isFinite(player?.renderLightRadius)
+          ? player.renderLightRadius
+          : (Number.isFinite(player?.lightRadius) ? player.lightRadius : derivePlayerLightRadiusFromEnergy(player?.energy)),
         respawnPending: player.respawnPending === true,
         respawnCount: player.respawnPending === true && Number.isFinite(player.respawnCount) ? player.respawnCount : 0,
         liquidDeath: player.liquidDeath,
@@ -894,6 +898,10 @@ export function createLumoRechargedBootAdapter(options = {}) {
           lives: Number.isFinite(hud?.lives) ? hud.lives : 0,
           flareStash: Number.isFinite(hud?.flareStash) ? hud.flareStash : 0,
           energy: Number.isFinite(hud?.energy) ? hud.energy : 0,
+          lightRadius: Number.isFinite(player?.lightRadius) ? player.lightRadius : derivePlayerLightRadiusFromEnergy(player?.energy),
+          renderLightRadius: Number.isFinite(player?.renderLightRadius)
+            ? player.renderLightRadius
+            : (Number.isFinite(player?.lightRadius) ? player.lightRadius : derivePlayerLightRadiusFromEnergy(player?.energy)),
           ...(typeof hud?.statusText === "string" ? { statusText: hud.statusText } : {}),
         };
       },

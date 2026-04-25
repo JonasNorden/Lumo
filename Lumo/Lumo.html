@@ -951,6 +951,9 @@
           rising: nestedPlayer?.rising === true,
           facingX: Number.isFinite(nestedPlayer?.facingX) ? nestedPlayer.facingX : null,
           locomotion: typeof nestedPlayer?.locomotion === "string" ? nestedPlayer.locomotion : "",
+          energy: Number.isFinite(nestedPlayer?.energy) ? nestedPlayer.energy : (Number.isFinite(payload?.energy) ? payload.energy : 1),
+          lightRadius: Number.isFinite(nestedPlayer?.lightRadius) ? nestedPlayer.lightRadius : null,
+          renderLightRadius: Number.isFinite(nestedPlayer?.renderLightRadius) ? nestedPlayer.renderLightRadius : null,
           status,
           liquidDeath: nestedPlayer?.liquidDeath && typeof nestedPlayer.liquidDeath === "object"
             ? { ...nestedPlayer.liquidDeath }
@@ -971,6 +974,9 @@
           rising: false,
           facingX: null,
           locomotion: "",
+          energy: 1,
+          lightRadius: null,
+          renderLightRadius: null,
           status: "",
           liquidDeath: null,
           onPlatformId: null,
@@ -978,6 +984,21 @@
           hidden: false,
         };
       }
+    }
+
+    function resolveRechargedLivePlayerSnapshot(payload, state) {
+      const adapter = payload?.adapter && typeof payload.adapter === "object" ? payload.adapter : null;
+      const adapterPlayerSnapshot = adapter?.getPlayerSnapshot?.();
+      if (adapterPlayerSnapshot && typeof adapterPlayerSnapshot === "object") {
+        return { snapshot: adapterPlayerSnapshot, source: "adapter.getPlayerSnapshot" };
+      }
+      if (state?.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object") {
+        return { snapshot: state.currentPlayerSnapshot, source: "state.currentPlayerSnapshot" };
+      }
+      if (payload?.player && typeof payload.player === "object") {
+        return { snapshot: payload.player, source: "payload.player" };
+      }
+      return { snapshot: null, source: "none" };
     }
 
     function readRechargedFlareSnapshots(payload, state) {
@@ -3123,6 +3144,7 @@
 
         const payload = readLatestRechargedBootPayload() || {};
         const statusText = typeof payload?.statusText === "string" ? payload.statusText : "";
+        const livePlayer = resolveRechargedLivePlayerSnapshot(payload, state);
         const player = readRechargedPlayerSnapshot(payload);
         const flareSnapshots = readRechargedFlareSnapshots(payload, state);
         const pulseSnapshot = readRechargedPulseSnapshot(payload, state);
@@ -3134,12 +3156,14 @@
         const previousSnapshot = readRechargedPlayerSnapshot({
           player: state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
             ? state.previousPlayerSnapshot
-            : payload?.player,
+            : livePlayer.snapshot || payload?.player,
         });
         const currentSnapshot = readRechargedPlayerSnapshot({
-          player: state?.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object"
-            ? state.currentPlayerSnapshot
-            : payload?.player,
+          player: livePlayer.snapshot
+            || (state?.currentPlayerSnapshot && typeof state.currentPlayerSnapshot === "object" ? state.currentPlayerSnapshot : null)
+            || payload?.player,
+          energy: Number.isFinite(payload?.energy) ? payload.energy : undefined,
+          playerRenderAlpha: Number.isFinite(payload?.playerRenderAlpha) ? payload.playerRenderAlpha : undefined,
         });
         const alphaRaw = Number.isFinite(state?.stepAccumulatorMs)
           ? state.stepAccumulatorMs / RECHARGED_FIXED_STEP_MS
@@ -3820,22 +3844,29 @@
           occlusionLookup,
           occlusionOptions: RECHARGED_OCCLUSION_DEFAULTS,
         });
+        const playerLight = darknessLights.find((light) => light?.kind === "player");
+        const playerEnergy = Number.isFinite(playerLight?.energy)
+          ? playerLight.energy
+          : (Number.isFinite(currentSnapshot?.energy) ? currentSnapshot.energy : 1);
+        const playerLightRadius = Number.isFinite(currentSnapshot?.lightRadius)
+          ? currentSnapshot.lightRadius
+          : (80 + ((320 - 80) * Math.max(0, Math.min(1, playerEnergy))));
+        const playerRenderLightRadius = Number.isFinite(currentSnapshot?.renderLightRadius)
+          ? currentSnapshot.renderLightRadius
+          : (Number.isFinite(playerLight?.radius) ? playerLight.radius : playerLightRadius);
+        window.__LUMO_RECHARGED_PLAYER_LIGHT_DEBUG__ = {
+          energy: playerEnergy,
+          lightRadius: playerLightRadius,
+          renderLightRadius: playerRenderLightRadius,
+          source: livePlayer.source,
+          frame: Number.isFinite(payload?.tick) ? payload.tick : null,
+        };
         if (state.rechargedDarknessSummaryLogged !== true) {
           const kinds = {};
           for (const light of darknessLights) {
             const kind = typeof light?.kind === "string" ? light.kind : "unknown";
             kinds[kind] = (kinds[kind] || 0) + 1;
           }
-          const playerLight = darknessLights.find((light) => light?.kind === "player");
-          const playerEnergy = Number.isFinite(playerLight?.energy)
-            ? playerLight.energy
-            : (Number.isFinite(currentSnapshot?.energy) ? currentSnapshot.energy : 1);
-          const playerLightRadius = Number.isFinite(currentSnapshot?.lightRadius)
-            ? currentSnapshot.lightRadius
-            : (80 + ((320 - 80) * Math.max(0, Math.min(1, playerEnergy))));
-          const playerRenderLightRadius = Number.isFinite(currentSnapshot?.renderLightRadius)
-            ? currentSnapshot.renderLightRadius
-            : (Number.isFinite(playerLight?.radius) ? playerLight.radius : playerLightRadius);
           console.info("[Lumo Recharged] darkness", {
             enabled: true,
             lightCount: darknessLights.length,
