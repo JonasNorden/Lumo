@@ -411,6 +411,10 @@
 
     const RECHARGED_HUD_V2_MASTER_W = 1920;
     const RECHARGED_HUD_V2_MASTER_H = 1080;
+    const RECHARGED_HUD_V2_LOGO_PLATE = { x: 312, y: 18, w: 308, h: 104 };
+    const RECHARGED_HUD_V2_LOGO_TARGET_W = 270;
+    const rechargedHudV2LumoLogoImg = new Image();
+    rechargedHudV2LumoLogoImg.src = "data/assets/ui/lumo-logo-sepia.png";
 
     function getRechargedHudV2Layout() {
       const w = RECHARGED_HUD_V2_MASTER_W;
@@ -476,6 +480,30 @@
       ctx.strokeRect(gameplay.x, gameplay.y, gameplay.w, gameplay.h);
     }
 
+    // Dashboard.html structural port (Phase 4): drawTopLogoPlate(time)
+    // Source mapping:
+    // - x=312,y=18,w=308,h=104
+    // - targetW=270 + centered draw + +2px Y offset
+    // - source-over, alpha 0.98, image draw only when complete/naturalWidth > 0
+    function drawRechargedHudV2TopLogoPlate(ctx) {
+      const x = RECHARGED_HUD_V2_LOGO_PLATE.x;
+      const y = RECHARGED_HUD_V2_LOGO_PLATE.y;
+      const w = RECHARGED_HUD_V2_LOGO_PLATE.w;
+      const h = RECHARGED_HUD_V2_LOGO_PLATE.h;
+      if (rechargedHudV2LumoLogoImg.complete && rechargedHudV2LumoLogoImg.naturalWidth > 0) {
+        const ratio = rechargedHudV2LumoLogoImg.naturalHeight / rechargedHudV2LumoLogoImg.naturalWidth;
+        const drawW = RECHARGED_HUD_V2_LOGO_TARGET_W;
+        const drawH = drawW * ratio;
+        const dx = x + (w - drawW) / 2;
+        const dy = y + (h - drawH) / 2 + 2;
+        ctx.save();
+        ctx.globalCompositeOperation = "source-over";
+        ctx.globalAlpha = 0.98;
+        ctx.drawImage(rechargedHudV2LumoLogoImg, dx, dy, drawW, drawH);
+        ctx.restore();
+      }
+    }
+
     function drawRechargedHudV2(canvas, ctx, state, hudSnapshot) {
       if (!canvas || !ctx || !hudSnapshot) return;
       const frame = Number.isFinite(state?.frameCount) ? state.frameCount : 0;
@@ -491,6 +519,7 @@
       ctx.translate(viewport.x, viewport.y);
       ctx.scale(viewport.scale, viewport.scale);
       drawRechargedHudV2BaseFrame(ctx);
+      drawRechargedHudV2TopLogoPlate(ctx);
       ctx.restore();
 
       window.__LUMO_RECHARGED_HUD_V2_DEBUG__ = {
@@ -503,7 +532,7 @@
         flares,
         flareMax: 3,
         score,
-        logoReady: false,
+        logoReady: !!(rechargedHudV2LumoLogoImg.complete && rechargedHudV2LumoLogoImg.naturalWidth > 0),
         playfieldRect: {
           x: gameplayViewport.x,
           y: gameplayViewport.y,
