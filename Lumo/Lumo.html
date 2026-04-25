@@ -2872,6 +2872,13 @@
 
     function buildRechargedDarknessLights(options) {
       const lights = [];
+      const PLAYER_LIGHT_MIN_RADIUS_PX = 80;
+      const PLAYER_LIGHT_MAX_RADIUS_PX = 320;
+      const clamp01 = (value) => (Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 1);
+      const derivePlayerLightRadius = (energy) => (
+        PLAYER_LIGHT_MIN_RADIUS_PX
+        + ((PLAYER_LIGHT_MAX_RADIUS_PX - PLAYER_LIGHT_MIN_RADIUS_PX) * clamp01(energy))
+      );
       if (!options || typeof options !== "object") {
         return lights;
       }
@@ -2896,19 +2903,22 @@
       if (Number.isFinite(playerCenterX) && Number.isFinite(playerFootY)) {
         const playerLightWorldY = playerFootY - 18;
         const playerRect = mapper.worldToCanvasRect(playerCenterX, playerLightWorldY, 1, 1);
+        const resolvedEnergy = Number.isFinite(currentSnapshot?.energy)
+          ? currentSnapshot.energy
+          : (Number.isFinite(player?.energy) ? player.energy : 1);
+        const derivedPlayerRadius = derivePlayerLightRadius(resolvedEnergy);
+        const resolvedPlayerLightRadius = Number.isFinite(currentSnapshot?.renderLightRadius)
+          ? currentSnapshot.renderLightRadius
+          : (Number.isFinite(currentSnapshot?.lightRadius)
+            ? currentSnapshot.lightRadius
+            : derivedPlayerRadius);
         lights.push({
           kind: "player",
           x: playerRect.x + (playerRect.w * 0.5),
           y: playerRect.y + (playerRect.h * 0.5),
-          radius: Number.isFinite(currentSnapshot?.renderLightRadius)
-            ? currentSnapshot.renderLightRadius
-            : (Number.isFinite(currentSnapshot?.lightRadius)
-                ? currentSnapshot.lightRadius
-                : (Number.isFinite(player?.lightRadius) ? player.lightRadius : 170)),
+          radius: Number.isFinite(resolvedPlayerLightRadius) ? resolvedPlayerLightRadius : PLAYER_LIGHT_MAX_RADIUS_PX,
           strength: 0.6,
-          energy: Number.isFinite(currentSnapshot?.energy)
-            ? currentSnapshot.energy
-            : (Number.isFinite(player?.energy) ? player.energy : null),
+          energy: resolvedEnergy,
         });
       }
 
@@ -3816,6 +3826,16 @@
             const kind = typeof light?.kind === "string" ? light.kind : "unknown";
             kinds[kind] = (kinds[kind] || 0) + 1;
           }
+          const playerLight = darknessLights.find((light) => light?.kind === "player");
+          const playerEnergy = Number.isFinite(playerLight?.energy)
+            ? playerLight.energy
+            : (Number.isFinite(currentSnapshot?.energy) ? currentSnapshot.energy : 1);
+          const playerLightRadius = Number.isFinite(currentSnapshot?.lightRadius)
+            ? currentSnapshot.lightRadius
+            : (80 + ((320 - 80) * Math.max(0, Math.min(1, playerEnergy))));
+          const playerRenderLightRadius = Number.isFinite(currentSnapshot?.renderLightRadius)
+            ? currentSnapshot.renderLightRadius
+            : (Number.isFinite(playerLight?.radius) ? playerLight.radius : playerLightRadius);
           console.info("[Lumo Recharged] darkness", {
             enabled: true,
             lightCount: darknessLights.length,
@@ -3825,6 +3845,13 @@
             stepPx: RECHARGED_OCCLUSION_DEFAULTS.stepPx,
             occlusionRectCount: occlusionRects.length,
             gridCellCount: Number.isFinite(occlusionLookup?.gridCellCount) ? occlusionLookup.gridCellCount : 0,
+          });
+          console.info("[Lumo Recharged] player light parity", {
+            energy: playerEnergy,
+            lightRadius: playerLightRadius,
+            renderLightRadius: playerRenderLightRadius,
+            min: 80,
+            max: 320,
           });
           state.rechargedDarknessSummaryLogged = true;
         }
