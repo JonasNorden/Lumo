@@ -54,15 +54,17 @@ function runFlareFadeProjectionChecks() {
       grounded: true,
       settled: true,
       bounceCount: 0,
-      ttlTicks: 90,
-      ageTicks: 240,
+      ttlTicks: 80,
+      ageTicks: 520,
       radius: 5,
-      lightRadius: 180,
+      lightRadius: 150,
+      darknessRadius: 150,
+      visualGlowRadius: 75,
       alpha: 1,
-      renderRadius: 180,
-      finalRadius: 180,
-      lifetimeTicks: 330,
-      fadeLastTicks: 125,
+      renderRadius: 75,
+      finalRadius: 150,
+      lifetimeTicks: 600,
+      fadeLastTicks: 150,
     }],
   };
 
@@ -86,7 +88,9 @@ function runFlareEntityChecks() {
   let snapshot = session.getPlayerSnapshot();
   assert.equal(snapshot.flares.length > 0, true, "expected flare spawn");
   const spawnedFlare = snapshot.flares[0];
-  assert.equal(spawnedFlare.lightRadius, 180, "expected recharged flare base light radius 180px");
+  assert.equal(spawnedFlare.lightRadius, 150, "expected recharged flare base darkness radius 150px");
+  assert.equal(spawnedFlare.darknessRadius, 150, "expected flare darknessRadius field");
+  assert.equal(spawnedFlare.visualGlowRadius, 75, "expected flare visualGlowRadius field");
   assert.equal(Number.isFinite(spawnedFlare.alpha), true, "expected flare alpha field");
   assert.equal(Number.isFinite(spawnedFlare.renderRadius), true, "expected flare renderRadius field");
   assert.equal(Number.isFinite(spawnedFlare.finalRadius), true, "expected flare finalRadius field");

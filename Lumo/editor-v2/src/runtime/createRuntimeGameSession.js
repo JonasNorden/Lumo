@@ -253,6 +253,8 @@ function buildPlayerSnapshot(playerState) {
           ageTicks: Number.isFinite(flare?.ageTicks) ? flare.ageTicks : null,
           radius: Number.isFinite(flare?.radius) ? flare.radius : null,
           lightRadius: Number.isFinite(flare?.lightRadius) ? flare.lightRadius : null,
+          darknessRadius: Number.isFinite(flare?.darknessRadius) ? flare.darknessRadius : null,
+          visualGlowRadius: Number.isFinite(flare?.visualGlowRadius) ? flare.visualGlowRadius : null,
           alpha: Number.isFinite(flare?.alpha) ? flare.alpha : null,
           renderRadius: Number.isFinite(flare?.renderRadius) ? flare.renderRadius : null,
           finalRadius: Number.isFinite(flare?.finalRadius) ? flare.finalRadius : null,
