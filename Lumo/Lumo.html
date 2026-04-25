@@ -419,6 +419,8 @@
     rechargedHudV2BulbOnImg.src = "data/assets/ui/bulb_on.png";
     const rechargedHudV2BulbOffImg = new Image();
     rechargedHudV2BulbOffImg.src = "data/assets/ui/bulb_off.png";
+    const rechargedHudV2FlareImg = new Image();
+    rechargedHudV2FlareImg.src = "data/assets/ui/flare.png";
 
     function getRechargedHudV2Layout() {
       const w = RECHARGED_HUD_V2_MASTER_W;
@@ -601,6 +603,99 @@
       ctx.restore();
     }
 
+    // Dashboard.html structural port (Phase 6): drawFlarePanel(time)
+    // Source mapping:
+    // - startX=900,y=26,slotW=56,iconW=34,iconH=34
+    // - label "FLARE" at startX-44,y+18
+    // - loop count: MAX_FLARES(3)
+    // - active slot condition: i < currentFlares
+    // - active/inactive flare seat + aura + sprite rendering
+    function drawRechargedHudV2FlarePanel(ctx, time, flares) {
+      const drawRoundedRectPath = (x, ry, w, h, r) => {
+        ctx.beginPath();
+        ctx.moveTo(x + r, ry);
+        ctx.arcTo(x + w, ry, x + w, ry + h, r);
+        ctx.arcTo(x + w, ry + h, x, ry + h, r);
+        ctx.arcTo(x, ry + h, x, ry, r);
+        ctx.arcTo(x, ry, x + w, ry, r);
+        ctx.closePath();
+      };
+      const startX = 900;
+      const y = 26;
+      const slotW = 56;
+      const iconW = 34;
+      const iconH = 34;
+      const maxFlares = 3;
+      const currentFlares = Math.max(0, Math.floor(flares));
+
+      ctx.save();
+      ctx.font = "600 9px Arial, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "rgba(255,196,122,0.20)";
+      ctx.fillText("FLARE", startX - 44, y + 18);
+
+      for (let i = 0; i < maxFlares; i += 1) {
+        const x = startX + i * slotW;
+        const on = i < currentFlares;
+
+        const seatGrad = ctx.createLinearGradient(0, y - 3, 0, y + iconH + 5);
+        seatGrad.addColorStop(0, "rgba(10,4,2,0.26)");
+        seatGrad.addColorStop(1, "rgba(0,0,0,0.20)");
+        ctx.fillStyle = seatGrad;
+        drawRoundedRectPath(x - 6, y - 2, 42, 38, 8);
+        ctx.fill();
+
+        if (on) {
+          const pulse = 0.95 + Math.sin(time * 0.95 + i * 0.8) * 0.05;
+          const gx = x + iconW / 2;
+          const gy = y + 16;
+
+          const auraOuter = ctx.createRadialGradient(gx, gy, 0, gx, gy, 28);
+          auraOuter.addColorStop(0, `rgba(216,255,126,${0.18 * pulse})`);
+          auraOuter.addColorStop(0.36, `rgba(138,255,72,${0.14 * pulse})`);
+          auraOuter.addColorStop(0.70, `rgba(70,210,40,${0.08 * pulse})`);
+          auraOuter.addColorStop(1, "rgba(40,120,30,0)");
+          ctx.fillStyle = auraOuter;
+          ctx.beginPath();
+          ctx.arc(gx, gy, 28, 0, Math.PI * 2);
+          ctx.fill();
+
+          const auraInner = ctx.createRadialGradient(gx, gy, 0, gx, gy, 14);
+          auraInner.addColorStop(0, `rgba(238,255,188,${0.24 * pulse})`);
+          auraInner.addColorStop(0.52, `rgba(182,255,110,${0.14 * pulse})`);
+          auraInner.addColorStop(1, "rgba(60,180,36,0)");
+          ctx.fillStyle = auraInner;
+          ctx.beginPath();
+          ctx.arc(gx, gy, 14, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (rechargedHudV2FlareImg.complete && rechargedHudV2FlareImg.naturalWidth > 0) {
+            ctx.drawImage(rechargedHudV2FlareImg, x, y, iconW, iconH);
+          }
+
+          const overGlow = ctx.createRadialGradient(gx, gy, 0, gx, gy, 12);
+          overGlow.addColorStop(0, `rgba(236,255,176,${0.14 * pulse})`);
+          overGlow.addColorStop(0.60, `rgba(160,255,92,${0.08 * pulse})`);
+          overGlow.addColorStop(1, "rgba(60,180,36,0)");
+          ctx.fillStyle = overGlow;
+          ctx.beginPath();
+          ctx.arc(gx, gy, 12, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = "rgba(0,0,0,0.18)";
+          drawRoundedRectPath(x - 2, y + 2, 30, 28, 7);
+          ctx.fill();
+
+          ctx.strokeStyle = "rgba(140,180,100,0.08)";
+          ctx.lineWidth = 1;
+          drawRoundedRectPath(x - 2, y + 2, 30, 28, 7);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+
     function drawRechargedHudV2(canvas, ctx, state, hudSnapshot) {
       if (!canvas || !ctx || !hudSnapshot) return;
       const frame = Number.isFinite(state?.frameCount) ? state.frameCount : 0;
@@ -618,6 +713,7 @@
       drawRechargedHudV2BaseFrame(ctx);
       drawRechargedHudV2TopLogoPlate(ctx);
       drawRechargedHudV2LivesPanel(ctx, frame / 60, lives, livesMax);
+      drawRechargedHudV2FlarePanel(ctx, frame / 60, flares);
       ctx.restore();
 
       window.__LUMO_RECHARGED_HUD_V2_DEBUG__ = {
