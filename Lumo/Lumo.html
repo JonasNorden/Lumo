@@ -2136,8 +2136,16 @@
       return {
         cameraX,
         cameraY,
+        offsetX,
+        offsetY,
         viewportWorldWidth,
         viewportWorldHeight,
+        canvasToWorldPoint(x, y) {
+          return {
+            x: x - offsetX + cameraX,
+            y: y - offsetY + cameraY,
+          };
+        },
         worldToCanvasRect(rectX, rectY, rectW, rectH) {
           return {
             x: Math.round(rectX - cameraX + offsetX),
@@ -2677,6 +2685,102 @@
       }
     }
 
+    const RECHARGED_ENABLE_PLAYER_LIGHT_OCCLUSION = true;
+    const RECHARGED_PLAYER_PUNCH_INTENSITY = 0.55;
+    const RECHARGED_PLAYER_DOWNLIGHT = 0.20;
+    const RECHARGED_OCCLUSION_DEFAULTS = Object.freeze({
+      rays: 312,
+      stepPx: 1,
+      featherPx: 45,
+      penumbra: 1.7,
+      contactGlowPx: 60,
+      contactGlowIntensity: 1.2,
+    });
+
+    function buildRechargedOcclusionRects({ supportTiles, worldUnitsToPx, tileSize }) {
+      void tileSize;
+      if (!Array.isArray(supportTiles) || !Number.isFinite(worldUnitsToPx) || worldUnitsToPx <= 0) {
+        return [];
+      }
+      const occlusionRects = [];
+      for (const tile of supportTiles) {
+        const tileX = Number.isFinite(tile?.x) ? tile.x : null;
+        const tileY = Number.isFinite(tile?.y) ? tile.y : null;
+        const tileW = Number.isFinite(tile?.w) ? tile.w : null;
+        const tileH = Number.isFinite(tile?.h) ? tile.h : null;
+        if (tileX === null || tileY === null || tileW === null || tileH === null || tileW <= 0 || tileH <= 0) {
+          continue;
+        }
+        occlusionRects.push({
+          x: tileX * worldUnitsToPx,
+          y: tileY * worldUnitsToPx,
+          w: tileW * worldUnitsToPx,
+          h: tileH * worldUnitsToPx,
+        });
+      }
+      return occlusionRects;
+    }
+
+    function isRechargedOcclusionSolidAtWorld(wx, wy, occlusionRects) {
+      if (!Number.isFinite(wx) || !Number.isFinite(wy) || !Array.isArray(occlusionRects) || occlusionRects.length <= 0) {
+        return false;
+      }
+      for (let index = 0; index < occlusionRects.length; index += 1) {
+        const rect = occlusionRects[index];
+        if (!rect) continue;
+        const rx = Number.isFinite(rect.x) ? rect.x : null;
+        const ry = Number.isFinite(rect.y) ? rect.y : null;
+        const rw = Number.isFinite(rect.w) ? rect.w : null;
+        const rh = Number.isFinite(rect.h) ? rect.h : null;
+        if (rx === null || ry === null || rw === null || rh === null || rw <= 0 || rh <= 0) {
+          continue;
+        }
+        if (wx >= rx && wx <= (rx + rw) && wy >= ry && wy <= (ry + rh)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function buildRechargedPlayerLightOcclusionPolyScreen({ sx, sy, radius, mapper, occlusionRects, options }) {
+      if (!Number.isFinite(sx) || !Number.isFinite(sy) || !Number.isFinite(radius) || radius <= 0) {
+        return null;
+      }
+      if (!mapper || typeof mapper.canvasToWorldPoint !== "function") {
+        return null;
+      }
+      if (!Array.isArray(occlusionRects) || occlusionRects.length <= 0) {
+        return null;
+      }
+      const opt = options && typeof options === "object" ? options : RECHARGED_OCCLUSION_DEFAULTS;
+      const rays = Math.max(24, opt.rays | 0);
+      const step = Math.max(1, opt.stepPx | 0);
+      const pts = new Array(rays);
+      const TAU = Math.PI * 2;
+
+      for (let i = 0; i < rays; i += 1) {
+        const ang = (i / rays) * TAU;
+        const dx = Math.cos(ang);
+        const dy = Math.sin(ang);
+        const down = Math.max(0, dy);
+        const rayRadius = radius * (1 - down * (1 - RECHARGED_PLAYER_DOWNLIGHT));
+        let hitDist = rayRadius;
+
+        for (let d = 0; d <= rayRadius; d += step) {
+          const sampleX = sx + dx * d;
+          const sampleY = sy + dy * d;
+          const worldPoint = mapper.canvasToWorldPoint(sampleX, sampleY);
+          if (isRechargedOcclusionSolidAtWorld(worldPoint.x, worldPoint.y, occlusionRects)) {
+            hitDist = Math.max(0, d - step);
+            break;
+          }
+        }
+        pts[i] = [sx + dx * hitDist, sy + dy * hitDist];
+      }
+
+      return pts;
+    }
+
     function buildRechargedDarknessLights(options) {
       const lights = [];
       if (!options || typeof options !== "object") {
@@ -2711,7 +2815,7 @@
             ? currentSnapshot.renderLightRadius
             : (Number.isFinite(currentSnapshot?.lightRadius)
                 ? currentSnapshot.lightRadius
-                : (Number.isFinite(player?.lightRadius) ? player.lightRadius : 130)),
+                : (Number.isFinite(player?.lightRadius) ? player.lightRadius : 170)),
           strength: 0.6,
           energy: Number.isFinite(currentSnapshot?.energy)
             ? currentSnapshot.energy
@@ -2791,10 +2895,15 @@
       return lights;
     }
 
-    function drawRechargedDarkness(ctx, canvas, state, lights) {
+    function drawRechargedDarkness(ctx, canvas, state, lights, options) {
       if (!ctx || !canvas || !state) {
         return false;
       }
+      const mapper = options?.mapper && typeof options.mapper === "object" ? options.mapper : null;
+      const occlusionRects = Array.isArray(options?.occlusionRects) ? options.occlusionRects : null;
+      const occOptions = options?.occlusionOptions && typeof options.occlusionOptions === "object"
+        ? options.occlusionOptions
+        : RECHARGED_OCCLUSION_DEFAULTS;
       const darknessState = ensureRechargedDarknessState(state, canvas);
       if (!darknessState?.ctx || !darknessState?.canvas) {
         return false;
@@ -2813,6 +2922,77 @@
         }
         const radius = Math.max(40, Number.isFinite(light?.radius) ? light.radius : 130);
         const strength = Math.max(0, Math.min(1.25, Number.isFinite(light?.strength) ? light.strength : 0.85));
+
+        const shouldUsePlayerOcclusion = RECHARGED_ENABLE_PLAYER_LIGHT_OCCLUSION === true
+          && light?.kind === "player"
+          && mapper
+          && Array.isArray(occlusionRects)
+          && occlusionRects.length > 0;
+        if (shouldUsePlayerOcclusion) {
+          const pts = buildRechargedPlayerLightOcclusionPolyScreen({
+            sx: light.x,
+            sy: light.y,
+            radius,
+            mapper,
+            occlusionRects,
+            options: occOptions,
+          });
+          if (Array.isArray(pts) && pts.length > 0) {
+            const punch = Math.max(0, Math.min(1, strength * RECHARGED_PLAYER_PUNCH_INTENSITY));
+            const corePunch = Math.max(0, Math.min(1, punch * 0.10));
+            const feather = Math.max(0, occOptions.featherPx | 0);
+            darknessCtx.save();
+            darknessCtx.beginPath();
+            darknessCtx.moveTo(pts[0][0], pts[0][1]);
+            for (let pointIndex = 1; pointIndex < pts.length; pointIndex += 1) {
+              darknessCtx.lineTo(pts[pointIndex][0], pts[pointIndex][1]);
+            }
+            darknessCtx.closePath();
+            darknessCtx.shadowColor = "rgba(0,0,0,1)";
+            darknessCtx.shadowBlur = feather;
+            darknessCtx.fillStyle = `rgba(0,0,0,${Math.max(0.05, Math.min(1, corePunch)).toFixed(3)})`;
+            darknessCtx.fill();
+
+            if (feather > 0) {
+              const passes = 10;
+              const downFeather = 0.0;
+              for (let passIndex = 0; passIndex < passes; passIndex += 1) {
+                const t = passIndex / (passes - 1);
+                const extra = feather * (1.15 - 1.05 * t);
+                const a0 = 0.030 + 0.170 * (1 - t);
+                const alpha = a0 * punch;
+                darknessCtx.beginPath();
+                for (let i = 0; i < pts.length; i += 1) {
+                  const px = pts[i][0];
+                  const py = pts[i][1];
+                  let vx = px - light.x;
+                  let vy = py - light.y;
+                  const norm = Math.hypot(vx, vy) || 1;
+                  vx /= norm;
+                  vy /= norm;
+                  const down = Math.max(0, vy);
+                  const expand = extra * (1 - down * (1 - downFeather));
+                  const ex = px + vx * expand;
+                  const ey = py + vy * expand;
+                  if (i === 0) darknessCtx.moveTo(ex, ey);
+                  else darknessCtx.lineTo(ex, ey);
+                }
+                darknessCtx.closePath();
+                darknessCtx.fillStyle = `rgba(0,0,0,${alpha.toFixed(3)})`;
+                darknessCtx.fill();
+              }
+            }
+            const penumbra = Number.isFinite(occOptions.penumbra) ? occOptions.penumbra : 1;
+            if (penumbra > 1.01) {
+              darknessCtx.shadowBlur = feather * 1.35;
+              darknessCtx.globalAlpha = 0.55 * corePunch;
+              darknessCtx.fill();
+            }
+            darknessCtx.restore();
+            continue;
+          }
+        }
+
         const gradient = darknessCtx.createRadialGradient(light.x, light.y, 0, light.x, light.y, radius);
         gradient.addColorStop(0, `rgba(0,0,0,${strength.toFixed(3)})`);
         gradient.addColorStop(0.55, `rgba(0,0,0,${(strength * 0.85).toFixed(3)})`);
@@ -2921,6 +3101,7 @@
           targetX: Number.isFinite(playerCenterX) ? playerCenterX : worldWidthPx * 0.5,
           targetY: Number.isFinite(playerFootY) ? playerFootY : worldHeightPx - 1,
         });
+        const occlusionRects = buildRechargedOcclusionRects({ supportTiles, worldUnitsToPx, tileSize });
         stepRechargedFogVolumes(fogVolumes, {
           dt: fogStepDt,
           playerCenterX,
@@ -3531,14 +3712,24 @@
           worldHeightRaw,
           tileSize,
         });
-        drawRechargedDarkness(ctx, canvas, state, darknessLights);
+        drawRechargedDarkness(ctx, canvas, state, darknessLights, {
+          mapper,
+          occlusionRects,
+          occlusionOptions: RECHARGED_OCCLUSION_DEFAULTS,
+        });
         if (state.rechargedDarknessSummaryLogged !== true) {
           const kinds = {};
           for (const light of darknessLights) {
             const kind = typeof light?.kind === "string" ? light.kind : "unknown";
             kinds[kind] = (kinds[kind] || 0) + 1;
           }
-          console.info("[Lumo Recharged] darkness", { enabled: true, lightCount: darknessLights.length, kinds });
+          console.info("[Lumo Recharged] darkness", {
+            enabled: true,
+            lightCount: darknessLights.length,
+            kinds,
+            playerOcclusion: true,
+            occlusionRectCount: occlusionRects.length,
+          });
           state.rechargedDarknessSummaryLogged = true;
         }
 
