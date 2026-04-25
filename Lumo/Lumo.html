@@ -2728,6 +2728,128 @@
       }
     }
 
+    function ensureRechargedDarknessPolishState(state, canvas) {
+      if (!state || typeof state !== "object" || !canvas) {
+        return null;
+      }
+      try {
+        const width = Number.isFinite(canvas.width) && canvas.width > 0 ? Math.floor(canvas.width) : 0;
+        const height = Number.isFinite(canvas.height) && canvas.height > 0 ? Math.floor(canvas.height) : 0;
+        if (width <= 0 || height <= 0) {
+          return null;
+        }
+        if (!state.rechargedDarknessPolishState || typeof state.rechargedDarknessPolishState !== "object") {
+          state.rechargedDarknessPolishState = {
+            noiseCanvas: null,
+            noisePattern: null,
+            noiseReady: false,
+            noiseTileSize: 96,
+            mode: "noise-vignette-breathe",
+          };
+        }
+        const polishState = state.rechargedDarknessPolishState;
+        const tileSize = Number.isFinite(polishState.noiseTileSize) && polishState.noiseTileSize > 0
+          ? Math.floor(polishState.noiseTileSize)
+          : 96;
+        if (
+          !polishState.noiseCanvas
+          || polishState.noiseCanvas.width !== tileSize
+          || polishState.noiseCanvas.height !== tileSize
+        ) {
+          const noiseCanvas = document.createElement("canvas");
+          noiseCanvas.width = tileSize;
+          noiseCanvas.height = tileSize;
+          const noiseCtx = noiseCanvas.getContext("2d");
+          if (!noiseCtx) {
+            polishState.noiseCanvas = null;
+            polishState.noisePattern = null;
+            polishState.noiseReady = false;
+            return polishState;
+          }
+          noiseCtx.clearRect(0, 0, tileSize, tileSize);
+          for (let y = 0; y < tileSize; y += 2) {
+            for (let x = 0; x < tileSize; x += 2) {
+              const v = Math.floor((Math.random() * 20) + 28);
+              noiseCtx.fillStyle = `rgba(${v},${v},${v},${(0.10 + Math.random() * 0.26).toFixed(3)})`;
+              noiseCtx.fillRect(x, y, 2, 2);
+            }
+          }
+          polishState.noiseCanvas = noiseCanvas;
+          polishState.noisePattern = null;
+        }
+        if (!polishState.noisePattern && polishState.noiseCanvas) {
+          const targetCtx = state?.rechargedDarknessState?.ctx || canvas.getContext("2d");
+          polishState.noisePattern = targetCtx?.createPattern(polishState.noiseCanvas, "repeat") || null;
+        }
+        polishState.noiseReady = polishState.noisePattern !== null;
+        return polishState;
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    function drawRechargedLivingDarknessPolish(darknessCtx, darknessCanvas, state, options = {}) {
+      if (!darknessCtx || !darknessCanvas || !state) {
+        return;
+      }
+      const polishState = ensureRechargedDarknessPolishState(state, darknessCanvas);
+      const frame = Number.isFinite(options?.frame) ? options.frame : null;
+      const nowMs = Number.isFinite(options?.nowMs)
+        ? options.nowMs
+        : ((typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now());
+      const breathe = 0.5 + (0.5 * Math.sin(nowMs * 0.00055));
+      const polishAlpha = 0.02 + (0.03 * breathe);
+      const width = darknessCanvas.width | 0;
+      const height = darknessCanvas.height | 0;
+      if (width <= 0 || height <= 0 || !polishState) {
+        window.__LUMO_RECHARGED_DARKNESS_POLISH_DEBUG__ = {
+          enabled: true,
+          frame,
+          noiseReady: false,
+          alpha: Number(polishAlpha.toFixed(4)),
+          mode: "noise-vignette-breathe",
+        };
+        return;
+      }
+
+      darknessCtx.save();
+      darknessCtx.globalCompositeOperation = "source-atop";
+      darknessCtx.globalAlpha = Math.max(0, Math.min(1, polishAlpha));
+      if (polishState.noiseReady && polishState.noisePattern) {
+        const driftX = Math.sin(nowMs * 0.00009) * 32;
+        const driftY = Math.cos(nowMs * 0.00007) * 24;
+        darknessCtx.translate(driftX, driftY);
+        darknessCtx.fillStyle = polishState.noisePattern;
+        darknessCtx.fillRect(-64, -64, width + 128, height + 128);
+      }
+      darknessCtx.restore();
+
+      darknessCtx.save();
+      darknessCtx.globalCompositeOperation = "source-atop";
+      darknessCtx.globalAlpha = 1;
+      const vignette = darknessCtx.createRadialGradient(
+        width * 0.5,
+        height * 0.5,
+        Math.max(width, height) * 0.18,
+        width * 0.5,
+        height * 0.5,
+        Math.max(width, height) * 0.72,
+      );
+      vignette.addColorStop(0, "rgba(0,0,0,0)");
+      vignette.addColorStop(1, `rgba(0,0,0,${(polishAlpha * 0.9).toFixed(4)})`);
+      darknessCtx.fillStyle = vignette;
+      darknessCtx.fillRect(0, 0, width, height);
+      darknessCtx.restore();
+
+      window.__LUMO_RECHARGED_DARKNESS_POLISH_DEBUG__ = {
+        enabled: true,
+        frame,
+        noiseReady: polishState.noiseReady === true,
+        alpha: Number(polishAlpha.toFixed(4)),
+        mode: typeof polishState.mode === "string" ? polishState.mode : "noise-vignette-breathe",
+      };
+    }
+
     const RECHARGED_ENABLE_PLAYER_LIGHT_OCCLUSION = true;
     const RECHARGED_PLAYER_PUNCH_INTENSITY = 0.55;
     const RECHARGED_PLAYER_DOWNLIGHT = 0.20;
@@ -3191,6 +3313,10 @@
         darknessCtx.fill();
       }
 
+      drawRechargedLivingDarknessPolish(darknessCtx, darknessCanvas, state, {
+        frame: Number.isFinite(options?.frame) ? options.frame : null,
+        nowMs: Number.isFinite(options?.nowMs) ? options.nowMs : undefined,
+      });
       ctx.globalCompositeOperation = "source-over";
       ctx.drawImage(darknessCanvas, 0, 0);
       return true;
@@ -3949,6 +4075,8 @@
           mapper,
           occlusionLookup,
           occlusionOptions: RECHARGED_OCCLUSION_DEFAULTS,
+          frame: Number.isFinite(payload?.tick) ? payload.tick : null,
+          nowMs,
         });
         const playerLight = darknessLights.find((light) => light?.kind === "player");
         const playerEnergy = Number.isFinite(playerLight?.energy)
