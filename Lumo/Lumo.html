@@ -3764,9 +3764,21 @@
                 }
               }
               if (kGlow > 0.01) {
-                const centerX = entityRect.x + entityRect.w * 0.5;
-                const centerY = entityRect.y + entityRect.h * 0.5;
-                const glowRadius = Math.max(entityRect.w, entityRect.h) * 1.3;
+                const dir = Number.isFinite(entity?.dir) && entity.dir < 0 ? -1 : 1;
+                const rumpX = dir === 1 ? (entityRect.x + 2) : (entityRect.x + entityRect.w - 2);
+                const rumpY = entityRect.y + entityRect.h * 0.92;
+                const tailTip = tail.length > 0 ? tail[tail.length - 1] : null;
+                const tailTipRect = tailTip
+                  ? mapper.worldToCanvasRect(
+                    Number.isFinite(tailTip?.x) ? tailTip.x : entity.x,
+                    Number.isFinite(tailTip?.y) ? tailTip.y : entity.y,
+                    1,
+                    1,
+                  )
+                  : null;
+                const centerX = tailTipRect ? tailTipRect.x : rumpX;
+                const centerY = tailTipRect ? tailTipRect.y : rumpY;
+                const glowRadius = Math.max(entityRect.w, entityRect.h) * 0.65;
                 const glow = ctx.createRadialGradient(centerX, centerY, 1, centerX, centerY, glowRadius);
                 glow.addColorStop(0, `rgba(255, 220, 140, ${(0.52 * kGlow).toFixed(3)})`);
                 glow.addColorStop(0.45, `rgba(255, 195, 95, ${(0.26 * kGlow).toFixed(3)})`);
@@ -3776,9 +3788,6 @@
                 ctx.arc(centerX, centerY, glowRadius, 0, Math.PI * 2);
                 ctx.fill();
 
-                const dir = Number.isFinite(entity?.dir) && entity.dir < 0 ? -1 : 1;
-                const rumpX = dir === 1 ? (entityRect.x + 2) : (entityRect.x + entityRect.w - 2);
-                const rumpY = entityRect.y + entityRect.h * 0.92;
                 const rumpOuter = 14;
                 const rumpGrad = ctx.createRadialGradient(rumpX, rumpY, 2.5, rumpX, rumpY, rumpOuter);
                 rumpGrad.addColorStop(0, `rgba(255,220,140,${(0.85 * kGlow).toFixed(3)})`);
@@ -3791,6 +3800,11 @@
                 ctx.arc(rumpX, rumpY, rumpOuter, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.restore();
+                window.__LUMO_FIREFLY_DEBUG__ = {
+                  glowX: centerX,
+                  glowY: centerY,
+                  visualGlowRadius: glowRadius,
+                };
               }
               if (sprite && sprite.complete) {
                 // Render at true 1x1 footprint, centered on anchor, with hard 16x16 cap.
