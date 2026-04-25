@@ -2,6 +2,22 @@ import { createRechargedRuntimeOrchestrator } from "./createRechargedRuntimeOrch
 import { buildRechargedHudSnapshot } from "./buildRechargedHudSnapshot.js";
 import { resolveAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 
+const DEFAULT_PLAYER_LIGHT_MIN_RADIUS_PX = 80;
+const DEFAULT_PLAYER_LIGHT_MAX_RADIUS_PX = 320;
+
+function clampEnergy(energy) {
+  return Number.isFinite(energy) ? Math.max(0, Math.min(1, energy)) : 1;
+}
+
+function lerp(from, to, t) {
+  const amount = Number.isFinite(t) ? Math.max(0, Math.min(1, t)) : 0;
+  return from + ((to - from) * amount);
+}
+
+function derivePlayerLightRadiusFromEnergy(energy) {
+  return lerp(DEFAULT_PLAYER_LIGHT_MIN_RADIUS_PX, DEFAULT_PLAYER_LIGHT_MAX_RADIUS_PX, clampEnergy(energy));
+}
+
 // Keeps adapter status values deterministic for Lumo.html-facing integration.
 function normalizeStatus(status, fallback = "invalid") {
   if (status === "idle" || status === "prepared" || status === "booted" || status === "running" || status === "stopped" || status === "invalid") {
@@ -115,6 +131,15 @@ function cloneSnapshotEntity(entity) {
 // Returns a compact player snapshot with stable primitive defaults.
 function buildPlayerSnapshot(snapshot) {
   const source = snapshot && typeof snapshot === "object" ? snapshot : {};
+  const energy = clampEnergy(source.energy);
+  const lightRadius = Number.isFinite(source?.lightRadius)
+    ? source.lightRadius
+    : derivePlayerLightRadiusFromEnergy(energy);
+  const renderLightRadius = Number.isFinite(source?.renderLightRadius)
+    ? source.renderLightRadius
+    : (Number.isFinite(source?.lightRadius)
+      ? source.lightRadius
+      : derivePlayerLightRadiusFromEnergy(energy));
   const pulse = source?.pulse && typeof source.pulse === "object" ? source.pulse : null;
   const velocityX = Number.isFinite(source?.velocity?.x) ? source.velocity.x : null;
   const velocityY = Number.isFinite(source?.velocity?.y) ? source.velocity.y : null;
@@ -180,7 +205,9 @@ function buildPlayerSnapshot(snapshot) {
     status: typeof source?.status === "string" ? source.status : null,
     facingX: Number.isFinite(source.facingX) ? source.facingX : null,
     locomotion: typeof source.locomotion === "string" ? source.locomotion : "unknown",
-    energy: Number.isFinite(source.energy) ? source.energy : null,
+    energy,
+    lightRadius,
+    renderLightRadius,
     _hoverVoidAttackGlobalCd: Number.isFinite(source._hoverVoidAttackGlobalCd) ? source._hoverVoidAttackGlobalCd : 0,
     lives: Number.isFinite(source.lives) ? source.lives : null,
     score: Number.isFinite(source.score) ? source.score : null,

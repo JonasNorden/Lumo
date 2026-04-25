@@ -113,7 +113,8 @@ const DEFAULT_BOOST_ENERGY_DRAIN_PER_SECOND = 0.18;
 const DEFAULT_LANTERN_CHARGE_RATE_PER_SECOND = 0.12;
 const DEFAULT_LANTERN_RADIUS_PX = 170;
 const DEFAULT_LANTERN_STRENGTH = 0.85;
-const DEFAULT_PLAYER_LIGHT_RADIUS_PX = 170;
+const DEFAULT_PLAYER_LIGHT_MIN_RADIUS_PX = 80;
+const DEFAULT_PLAYER_LIGHT_MAX_RADIUS_PX = 320;
 const DEFAULT_LANTERN_FOOTPRINT_PX = 14;
 const DEFAULT_FLARE_PICKUP_FOOTPRINT_PX = 12;
 const DEFAULT_POWERCELL_FOOTPRINT_PX = 24;
@@ -149,6 +150,34 @@ const MOVING_PLATFORM_DEFAULT_DISTANCE_TILES = 4;
 const MOVING_PLATFORM_DEFAULT_SPEED_PX_PER_SECOND = 70;
 const MOVING_PLATFORM_DEFAULT_LOOP = "pingpong";
 const MOVING_PLATFORM_LANDING_EPSILON_PX = 4;
+
+function clampPlayerEnergy(energy) {
+  return Number.isFinite(energy) ? Math.max(0, Math.min(1, energy)) : 1;
+}
+
+function resolvePlayerLightRadiusFromEnergy(energy) {
+  return lerp(
+    DEFAULT_PLAYER_LIGHT_MIN_RADIUS_PX,
+    DEFAULT_PLAYER_LIGHT_MAX_RADIUS_PX,
+    clampPlayerEnergy(energy),
+  );
+}
+
+function applyPlayerLightParity(playerState) {
+  const source = playerState && typeof playerState === "object" ? playerState : {};
+  const energy = clampPlayerEnergy(source.energy);
+  const lightRadius = resolvePlayerLightRadiusFromEnergy(energy);
+  const renderFade = Number.isFinite(source?.renderAlpha)
+    ? Math.max(0, Math.min(1, source.renderAlpha))
+    : (Number.isFinite(source?.liquidDeath?.fade) ? Math.max(0, Math.min(1, source.liquidDeath.fade)) : 1);
+
+  return {
+    ...source,
+    energy,
+    lightRadius,
+    renderLightRadius: lightRadius * renderFade,
+  };
+}
 
 function resolvePulseTargetType(entityType) {
   if (typeof entityType !== "string") {
@@ -1392,14 +1421,14 @@ function applyDarkCreatureDamageToPlayer(playerState, sourceCenterX, knockbackX,
   const resolvedKnockbackY = Number.isFinite(knockbackY) ? knockbackY : 0;
   const energyLossNormalized = Math.max(0, Number.isFinite(energyLoss) ? energyLoss : 0) / 100;
 
-  return {
+  return applyPlayerLightParity({
     ...playerState,
     velocity: {
       x: resolvedKnockbackX,
       y: resolvedKnockbackY,
     },
     energy: Math.max(0, Math.min(1, (Number.isFinite(playerState?.energy) ? playerState.energy : 1) - energyLossNormalized)),
-  };
+  });
 }
 
 function stepHoverVoidRuntime(worldPacket, playerState, sourceEntities, options = {}) {
@@ -1673,10 +1702,10 @@ function stepHoverVoidRuntime(worldPacket, playerState, sourceEntities, options 
 
   return {
     entities,
-    player: {
+    player: applyPlayerLightParity({
       ...nextPlayer,
       _hoverVoidAttackGlobalCd: hoverVoidAttackGlobalCd,
-    },
+    }),
   };
 }
 
@@ -2075,7 +2104,7 @@ function stepFireflyRuntime(worldPacket, playerState, sourceEntities, flares, op
     y: Number.isFinite(playerState?.position?.y) ? playerState.position.y - (tileSize * 0.5) : 0,
     radius: Number.isFinite(playerState?.lightRadius) && playerState.lightRadius > 0
       ? playerState.lightRadius
-      : DEFAULT_PLAYER_LIGHT_RADIUS_PX,
+      : resolvePlayerLightRadiusFromEnergy(playerState?.energy),
   };
   const flareLights = buildRuntimeFlareLights(flares);
   const lights = [];
@@ -2865,7 +2894,7 @@ function buildRespawnPendingPlayerState(playerState, countdownState, options = {
   return {
     waiting,
     countdown: finalRespawnState,
-    player: {
+    player: applyPlayerLightParity({
       position: {
         x: Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0,
         y: Number.isFinite(playerState?.position?.y) ? playerState.position.y : 0,
@@ -2877,14 +2906,14 @@ function buildRespawnPendingPlayerState(playerState, countdownState, options = {
       landed: false,
       status: waiting ? "respawn-pending" : "respawn-ready",
       _fallTracker: null,
-    },
+    }),
   };
 }
 
 function buildGameOverPlayerState(playerState) {
   const lives = resolveRemainingLives(playerState);
   const gameOverLives = lives <= 0 ? 0 : lives;
-  return {
+  return applyPlayerLightParity({
     ...playerState,
     velocity: { x: 0, y: 0 },
     grounded: false,
@@ -2907,7 +2936,7 @@ function buildGameOverPlayerState(playerState) {
     levelComplete: false,
     intermissionReadyForInput: false,
     _fallTracker: null,
-  };
+  });
 }
 
 function buildDeathRespawnState(worldPacket, playerState, triggerPosition, payload = {}) {
@@ -2930,11 +2959,11 @@ function buildDeathRespawnState(worldPacket, playerState, triggerPosition, paylo
   const livesAfterDeath = Math.max(0, lives - 1);
   if (livesAfterDeath <= 0) {
     return {
-      player: buildGameOverPlayerState({
+      player: applyPlayerLightParity(buildGameOverPlayerState({
         ...playerState,
         position: triggerPosition,
         lives: 0,
-      }),
+      })),
       debug: {
         respawned: false,
         triggerY,
@@ -2947,7 +2976,7 @@ function buildDeathRespawnState(worldPacket, playerState, triggerPosition, paylo
     };
   }
   return {
-    player: {
+    player: applyPlayerLightParity({
       position: triggerPosition,
       velocity: { x: 0, y: 0 },
       grounded: false,
@@ -2974,7 +3003,7 @@ function buildDeathRespawnState(worldPacket, playerState, triggerPosition, paylo
       lockMinX: Number.isFinite(playerState?.lockMinX) ? playerState.lockMinX : 0,
       invulnDuration,
       _fallTracker: null,
-    },
+    }),
     debug: {
       respawned: false,
       triggerY,
@@ -3224,7 +3253,7 @@ function maybeResolveLiquidDeath(worldPacket, playerState, verticalStep, sourceE
 
   if (elapsed < duration) {
     return {
-      player: {
+      player: applyPlayerLightParity({
         ...verticalStep,
         position: { x: baseX, y: baseY + sinkDistance },
         velocity: { x: velocityX, y: velocityY },
@@ -3244,7 +3273,7 @@ function maybeResolveLiquidDeath(worldPacket, playerState, verticalStep, sourceE
         },
         _liquidDeathType: liquidType,
         renderAlpha: fade,
-      },
+      }),
       debug: {
         active: true,
         type: liquidType,
@@ -3278,7 +3307,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       ok: true,
       darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
       nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
-      player: buildGameOverPlayerState(playerState),
+      player: applyPlayerLightParity(buildGameOverPlayerState(playerState)),
       collisions: {
         moveX: 0,
         jump: false,
@@ -3313,13 +3342,13 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       ok: true,
       darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
       nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
-      player: {
+      player: applyPlayerLightParity({
         ...playerState,
         levelComplete: true,
         intermissionReadyForInput: true,
         gameState: "intermission",
         status: "level-complete",
-      },
+      }),
       collisions: {
         moveX: 0,
         jump: false,
@@ -3361,7 +3390,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         ok: true,
         darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
         nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
-        player: {
+        player: applyPlayerLightParity({
           ...playerState,
           ...pending.player,
           lives,
@@ -3371,7 +3400,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
           locomotion: "respawning-out-of-bounds",
           gameState: "playing",
           _fallTracker: null,
-        },
+        }),
         collisions: {
           moveX: 0,
           jump: false,
@@ -3413,7 +3442,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       ok: true,
       darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
       nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
-      player: {
+      player: applyPlayerLightParity({
         ...playerState,
         position: { x: spawnX, y: spawnY },
         velocity: { x: 0, y: 0 },
@@ -3436,7 +3465,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
           countdown: 0,
         },
         _fallTracker: null,
-      },
+      }),
       collisions: {
         moveX: 0,
         jump: false,
@@ -3855,7 +3884,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     // FIX: propagate dark projectiles from darkCreatureRuntime to runner
     darkProjectiles: darkCreatureStep.darkProjectiles,
     nextDarkProjectileId: darkCreatureStep.nextDarkProjectileId,
-    player: {
+    player: applyPlayerLightParity({
       position: resolvedPlayerStep.position,
       velocity: finalVelocity,
       coyoteTimer: Number.isFinite(verticalInputState?.coyoteTimer) ? verticalInputState.coyoteTimer : 0,
@@ -3926,7 +3955,7 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       _fallTracker: (resolvedPlayerStep && Object.prototype.hasOwnProperty.call(resolvedPlayerStep, "_fallTracker"))
         ? resolvedPlayerStep._fallTracker
         : (finalPlayerState.grounded ? null : (hazardFall?.tracker ?? null)),
-    },
+    }),
     collisions: {
       moveX: intent.moveX,
       jump: intent.jump === true,
