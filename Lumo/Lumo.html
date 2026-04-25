@@ -415,6 +415,10 @@
     const RECHARGED_HUD_V2_LOGO_TARGET_W = 270;
     const rechargedHudV2LumoLogoImg = new Image();
     rechargedHudV2LumoLogoImg.src = "data/assets/ui/lumo-logo-sepia.png";
+    const rechargedHudV2BulbOnImg = new Image();
+    rechargedHudV2BulbOnImg.src = "data/assets/ui/bulb_on.png";
+    const rechargedHudV2BulbOffImg = new Image();
+    rechargedHudV2BulbOffImg.src = "data/assets/ui/bulb_off.png";
 
     function getRechargedHudV2Layout() {
       const w = RECHARGED_HUD_V2_MASTER_W;
@@ -504,6 +508,99 @@
       }
     }
 
+    // Dashboard.html structural port (Phase 5): drawLivesPanel(time)
+    // Source mapping:
+    // - startX=610,y=26,slotW=42,iconW=30,iconH=30
+    // - label "LIFE" at startX-36,y+18
+    // - loop count: ownedLives
+    // - active slot condition: i < currentLives
+    // - active/inactive bulb sprite + seat/aura rendering
+    function drawRechargedHudV2LivesPanel(ctx, time, lives, livesMax) {
+      const drawRoundedRectPath = (x, ry, w, h, r) => {
+        ctx.beginPath();
+        ctx.moveTo(x + r, ry);
+        ctx.arcTo(x + w, ry, x + w, ry + h, r);
+        ctx.arcTo(x + w, ry + h, x, ry + h, r);
+        ctx.arcTo(x, ry + h, x, ry, r);
+        ctx.arcTo(x, ry, x + w, ry, r);
+        ctx.closePath();
+      };
+      const startX = 610;
+      const y = 26;
+      const slotW = 42;
+      const iconW = 30;
+      const iconH = 30;
+      const ownedLives = Math.max(1, Math.floor(livesMax));
+      const currentLives = Math.max(0, Math.min(ownedLives, Math.floor(lives)));
+
+      ctx.save();
+      ctx.font = "600 9px Arial, sans-serif";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "rgba(255,196,122,0.20)";
+      ctx.fillText("LIFE", startX - 36, y + 18);
+
+      for (let i = 0; i < ownedLives; i += 1) {
+        const x = startX + i * slotW;
+        const on = i < currentLives;
+
+        const seatGrad = ctx.createLinearGradient(0, y - 2, 0, y + iconH + 4);
+        seatGrad.addColorStop(0, "rgba(10,4,2,0.24)");
+        seatGrad.addColorStop(1, "rgba(0,0,0,0.18)");
+        ctx.fillStyle = seatGrad;
+        drawRoundedRectPath(x - 4, y - 1, 34, 34, 7);
+        ctx.fill();
+
+        if (on) {
+          const pulse = 0.96 + Math.sin(time * 0.9 + i * 0.6) * 0.06;
+          const gx = x + iconW / 2;
+          const gy = y + 10;
+
+          const auraOuter = ctx.createRadialGradient(gx, gy, 0, gx, gy, 34);
+          auraOuter.addColorStop(0, `rgba(255,246,190,${0.24 * pulse})`);
+          auraOuter.addColorStop(0.30, `rgba(255,214,110,${0.18 * pulse})`);
+          auraOuter.addColorStop(0.62, `rgba(255,168,72,${0.10 * pulse})`);
+          auraOuter.addColorStop(1, "rgba(255,120,60,0)");
+          ctx.fillStyle = auraOuter;
+          ctx.beginPath();
+          ctx.arc(gx, gy, 34, 0, Math.PI * 2);
+          ctx.fill();
+
+          const auraInner = ctx.createRadialGradient(gx, gy, 0, gx, gy, 18);
+          auraInner.addColorStop(0, `rgba(255,252,226,${0.30 * pulse})`);
+          auraInner.addColorStop(0.45, `rgba(255,224,132,${0.16 * pulse})`);
+          auraInner.addColorStop(1, "rgba(255,150,70,0)");
+          ctx.fillStyle = auraInner;
+          ctx.beginPath();
+          ctx.arc(gx, gy, 18, 0, Math.PI * 2);
+          ctx.fill();
+
+          if (rechargedHudV2BulbOnImg.complete && rechargedHudV2BulbOnImg.naturalWidth > 0) {
+            ctx.drawImage(rechargedHudV2BulbOnImg, x, y, iconW, iconH);
+          }
+
+          const overGlow = ctx.createRadialGradient(gx, gy, 0, gx, gy, 14);
+          overGlow.addColorStop(0, `rgba(255,248,214,${0.14 * pulse})`);
+          overGlow.addColorStop(0.55, `rgba(255,210,116,${0.08 * pulse})`);
+          overGlow.addColorStop(1, "rgba(255,150,70,0)");
+          ctx.fillStyle = overGlow;
+          ctx.beginPath();
+          ctx.arc(gx, gy, 14, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          if (rechargedHudV2BulbOffImg.complete && rechargedHudV2BulbOffImg.naturalWidth > 0) {
+            ctx.globalAlpha = 0.92;
+            ctx.drawImage(rechargedHudV2BulbOffImg, x, y, iconW, iconH);
+            ctx.globalAlpha = 1;
+          }
+          ctx.fillStyle = "rgba(0,0,0,0.10)";
+          drawRoundedRectPath(x - 1, y + 1, 26, 24, 6);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
     function drawRechargedHudV2(canvas, ctx, state, hudSnapshot) {
       if (!canvas || !ctx || !hudSnapshot) return;
       const frame = Number.isFinite(state?.frameCount) ? state.frameCount : 0;
@@ -520,6 +617,7 @@
       ctx.scale(viewport.scale, viewport.scale);
       drawRechargedHudV2BaseFrame(ctx);
       drawRechargedHudV2TopLogoPlate(ctx);
+      drawRechargedHudV2LivesPanel(ctx, frame / 60, lives, livesMax);
       ctx.restore();
 
       window.__LUMO_RECHARGED_HUD_V2_DEBUG__ = {
