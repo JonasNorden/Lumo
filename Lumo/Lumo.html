@@ -3890,6 +3890,30 @@
           playerFacingSign: Number.isFinite(player?.vx) && player.vx < 0 ? -1 : 1,
         });
 
+        // Visual-only local emissive glow around Lumo; does not participate in darkness/gameplay light math.
+        if (player.hidden !== true && Number.isFinite(playerCenterX) && Number.isFinite(playerFootY)) {
+          const playerAnchorRect = mapper.worldToCanvasRect(
+            playerCenterX - 0.5,
+            playerFootY - 0.5,
+            1,
+            1,
+          );
+          const cx = playerAnchorRect.x + playerAnchorRect.w * 0.5;
+          const cy = playerAnchorRect.y + playerAnchorRect.h * 0.5;
+          const r = 100;
+          const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+          g.addColorStop(0.0, "rgba(200,255,140,0.18)");
+          g.addColorStop(0.6, "rgba(200,255,140,0.08)");
+          g.addColorStop(1.0, "rgba(200,255,140,0.00)");
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
         if (player.hidden !== true) {
           drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, currentSnapshot);
