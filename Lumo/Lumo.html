@@ -2637,6 +2637,197 @@
       }
     }
 
+    function ensureRechargedDarknessState(state, canvas) {
+      if (!state || typeof state !== "object" || !canvas) {
+        return null;
+      }
+      try {
+        const width = Number.isFinite(canvas.width) && canvas.width > 0 ? Math.floor(canvas.width) : 0;
+        const height = Number.isFinite(canvas.height) && canvas.height > 0 ? Math.floor(canvas.height) : 0;
+        if (width <= 0 || height <= 0) {
+          return null;
+        }
+        if (!state.rechargedDarknessState || typeof state.rechargedDarknessState !== "object") {
+          const darknessCanvas = document.createElement("canvas");
+          state.rechargedDarknessState = {
+            canvas: darknessCanvas,
+            ctx: darknessCanvas.getContext("2d"),
+          };
+        }
+        const darknessState = state.rechargedDarknessState;
+        if (!darknessState.canvas || typeof darknessState.canvas.getContext !== "function") {
+          return null;
+        }
+        if (!darknessState.ctx) {
+          darknessState.ctx = darknessState.canvas.getContext("2d");
+        }
+        if (!darknessState.ctx) {
+          return null;
+        }
+        if (darknessState.canvas.width !== width || darknessState.canvas.height !== height) {
+          darknessState.canvas.width = width;
+          darknessState.canvas.height = height;
+        }
+        if ("imageSmoothingEnabled" in darknessState.ctx) {
+          darknessState.ctx.imageSmoothingEnabled = false;
+        }
+        return darknessState;
+      } catch (_error) {
+        return null;
+      }
+    }
+
+    function buildRechargedDarknessLights(options) {
+      const lights = [];
+      if (!options || typeof options !== "object") {
+        return lights;
+      }
+      const {
+        player,
+        playerCenterX,
+        playerFootY,
+        currentSnapshot,
+        entitySnapshots,
+        flareSnapshots,
+        mapper,
+        coordinatesLookTileBased,
+        worldUnitsToPx,
+        worldWidthRaw,
+        worldHeightRaw,
+        tileSize,
+      } = options;
+      if (!mapper || typeof mapper.worldToCanvasRect !== "function") {
+        return lights;
+      }
+
+      if (Number.isFinite(playerCenterX) && Number.isFinite(playerFootY)) {
+        const playerLightWorldY = playerFootY - 18;
+        const playerRect = mapper.worldToCanvasRect(playerCenterX, playerLightWorldY, 1, 1);
+        lights.push({
+          kind: "player",
+          x: playerRect.x + (playerRect.w * 0.5),
+          y: playerRect.y + (playerRect.h * 0.5),
+          radius: Number.isFinite(currentSnapshot?.renderLightRadius)
+            ? currentSnapshot.renderLightRadius
+            : (Number.isFinite(currentSnapshot?.lightRadius)
+                ? currentSnapshot.lightRadius
+                : (Number.isFinite(player?.lightRadius) ? player.lightRadius : 130)),
+          strength: 0.6,
+          energy: Number.isFinite(currentSnapshot?.energy)
+            ? currentSnapshot.energy
+            : (Number.isFinite(player?.energy) ? player.energy : null),
+        });
+      }
+
+      for (const entity of (Array.isArray(entitySnapshots) ? entitySnapshots : [])) {
+        const entityType = typeof entity?.type === "string" ? entity.type : "";
+        if (entityType !== "lantern_01" && entityType !== "lantern" && entityType !== "firefly_01" && entityType !== "firefly") {
+          continue;
+        }
+        const entityWorldX = Number.isFinite(entity?.x) ? entity.x : null;
+        const entityWorldY = Number.isFinite(entity?.y) ? entity.y : null;
+        const entityWorldW = Number.isFinite(entity?.w) && entity.w > 0 ? entity.w : null;
+        const entityWorldH = Number.isFinite(entity?.h) && entity.h > 0 ? entity.h : null;
+        if (entityWorldX === null || entityWorldY === null || entityWorldW === null || entityWorldH === null) {
+          continue;
+        }
+        const entityRect = mapper.worldToCanvasRect(entityWorldX, entityWorldY, entityWorldW, entityWorldH);
+        const centerX = entityRect.x + entityRect.w * 0.5;
+        const centerY = entityRect.y + entityRect.h * 0.5;
+
+        if (entityType === "lantern_01" || entityType === "lantern") {
+          lights.push({
+            kind: "lantern",
+            x: centerX,
+            y: centerY,
+            radius: Number.isFinite(entity?.radius)
+              ? entity.radius
+              : (Number.isFinite(entity?.params?.radius) ? entity.params.radius : 170),
+            strength: Number.isFinite(entity?.strength)
+              ? entity.strength
+              : (Number.isFinite(entity?.params?.strength) ? entity.params.strength : 0.85),
+          });
+          continue;
+        }
+
+        const lightK = Number.isFinite(entity?.lightK) ? Math.max(0, entity.lightK) : 0;
+        if (lightK <= 0.01) {
+          continue;
+        }
+        const fireflyBaseRadius = Number.isFinite(entity?.lightDiameter)
+          ? entity.lightDiameter * 0.5
+          : (Number.isFinite(entity?.lightRadius) ? entity.lightRadius : 120);
+        const fireflyBaseStrength = Number.isFinite(entity?.lightStrength) ? entity.lightStrength : 0.8;
+        lights.push({
+          kind: "firefly",
+          x: centerX,
+          y: centerY,
+          radius: fireflyBaseRadius * lightK,
+          strength: fireflyBaseStrength * lightK,
+        });
+      }
+
+      for (const flare of (Array.isArray(flareSnapshots) ? flareSnapshots : [])) {
+        const flareLooksTileBased = coordinatesLookTileBased
+          && Number.isFinite(flare?.x)
+          && Number.isFinite(flare?.y)
+          && flare.x <= worldWidthRaw + tileSize
+          && flare.y <= worldHeightRaw + tileSize;
+        const flareWorldX = flareLooksTileBased ? flare.x * worldUnitsToPx : flare.x;
+        const flareWorldY = flareLooksTileBased ? flare.y * worldUnitsToPx : flare.y;
+        if (!Number.isFinite(flareWorldX) || !Number.isFinite(flareWorldY)) {
+          continue;
+        }
+        const flareRect = mapper.worldToCanvasRect(flareWorldX, flareWorldY, 1, 1);
+        lights.push({
+          kind: "flare",
+          x: flareRect.x + flareRect.w * 0.5,
+          y: flareRect.y + flareRect.h * 0.5,
+          radius: Number.isFinite(flare?.radius) ? flare.radius : 220,
+          strength: 0.9,
+        });
+      }
+
+      return lights;
+    }
+
+    function drawRechargedDarkness(ctx, canvas, state, lights) {
+      if (!ctx || !canvas || !state) {
+        return false;
+      }
+      const darknessState = ensureRechargedDarknessState(state, canvas);
+      if (!darknessState?.ctx || !darknessState?.canvas) {
+        return false;
+      }
+      const darknessCtx = darknessState.ctx;
+      const darknessCanvas = darknessState.canvas;
+      darknessCtx.clearRect(0, 0, darknessCanvas.width, darknessCanvas.height);
+      darknessCtx.globalCompositeOperation = "source-over";
+      darknessCtx.fillStyle = "rgba(0,0,0,0.93)";
+      darknessCtx.fillRect(0, 0, darknessCanvas.width, darknessCanvas.height);
+      darknessCtx.globalCompositeOperation = "destination-out";
+
+      for (const light of (Array.isArray(lights) ? lights : [])) {
+        if (!Number.isFinite(light?.x) || !Number.isFinite(light?.y)) {
+          continue;
+        }
+        const radius = Math.max(40, Number.isFinite(light?.radius) ? light.radius : 130);
+        const strength = Math.max(0, Math.min(1.25, Number.isFinite(light?.strength) ? light.strength : 0.85));
+        const gradient = darknessCtx.createRadialGradient(light.x, light.y, 0, light.x, light.y, radius);
+        gradient.addColorStop(0, `rgba(0,0,0,${strength.toFixed(3)})`);
+        gradient.addColorStop(0.55, `rgba(0,0,0,${(strength * 0.85).toFixed(3)})`);
+        gradient.addColorStop(1, "rgba(0,0,0,0)");
+        darknessCtx.fillStyle = gradient;
+        darknessCtx.beginPath();
+        darknessCtx.arc(light.x, light.y, radius, 0, Math.PI * 2);
+        darknessCtx.fill();
+      }
+
+      ctx.globalCompositeOperation = "source-over";
+      ctx.drawImage(darknessCanvas, 0, 0);
+      return true;
+    }
+
     function renderRechargedCanvasFrame(canvas, state) {
       if (!canvas || typeof canvas.getContext !== "function") {
         return false;
@@ -3325,6 +3516,31 @@
           playerCenterX,
           playerFacingSign: Number.isFinite(player?.vx) && player.vx < 0 ? -1 : 1,
         });
+
+        const darknessLights = buildRechargedDarknessLights({
+          player,
+          playerCenterX,
+          playerFootY,
+          currentSnapshot,
+          entitySnapshots,
+          flareSnapshots,
+          mapper,
+          coordinatesLookTileBased,
+          worldUnitsToPx,
+          worldWidthRaw,
+          worldHeightRaw,
+          tileSize,
+        });
+        drawRechargedDarkness(ctx, canvas, state, darknessLights);
+        if (state.rechargedDarknessSummaryLogged !== true) {
+          const kinds = {};
+          for (const light of darknessLights) {
+            const kind = typeof light?.kind === "string" ? light.kind : "unknown";
+            kinds[kind] = (kinds[kind] || 0) + 1;
+          }
+          console.info("[Lumo Recharged] darkness", { enabled: true, lightCount: darknessLights.length, kinds });
+          state.rechargedDarknessSummaryLogged = true;
+        }
 
         // V1 parity: eyes are a dedicated post-darkness style pass (kept procedural and never sprite-based).
         for (const eyeDraw of hoverEyesAfterDarkness) {
