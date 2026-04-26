@@ -365,6 +365,51 @@ function runFlarePickupCollectionChecks() {
   assert.equal(throwStep.player.flareStash, 0, "expected throw to consume collected flare stash");
 }
 
+function runFlarePickupRespectsThreeSlotCapRegressionChecks() {
+  const worldPacket = buildFlatWorldPacket();
+  const basePlayer = {
+    position: { x: 4 * 24, y: (10 * 24) - 1 },
+    velocity: { x: 0, y: 0 },
+    grounded: true,
+    falling: false,
+    rising: false,
+    landed: false,
+    facingX: 1,
+    flares: [],
+    flareStash: 1,
+    energy: 1,
+    flareHeldLastTick: false,
+    nextFlareId: 1,
+    entities: [],
+  };
+  const overlappingPickups = Array.from({ length: 4 }, (_, index) => ({
+    id: `pickup-cap-${index + 1}`,
+    type: "flare_pickup_01",
+    x: basePlayer.position.x - 6,
+    y: basePlayer.position.y - 11,
+    size: 12,
+    active: true,
+    alive: true,
+    amount: 1,
+  }));
+
+  const firstPickupStep = stepRuntimePlayerSimulation(worldPacket, basePlayer, { input: { flare: false }, entities: overlappingPickups });
+  assert.equal(firstPickupStep.ok, true);
+  assert.equal(firstPickupStep.player.flareStash, 3, "expected flare stash to clamp at three-slot cap");
+  const remainingAfterFirstPass = firstPickupStep.player.entities.filter((entity) => entity.type === "flare_pickup_01" && entity.active === true);
+  assert.equal(remainingAfterFirstPass.length, 2, "expected two flare pickups to remain after filling cap");
+
+  const throwStep = stepRuntimePlayerSimulation(worldPacket, firstPickupStep.player, { input: { flare: true }, entities: firstPickupStep.player.entities });
+  assert.equal(throwStep.ok, true);
+  assert.equal(throwStep.player.flareStash, 2, "expected flare throw to free one slot");
+
+  const secondPickupStep = stepRuntimePlayerSimulation(worldPacket, throwStep.player, { input: { flare: false }, entities: throwStep.player.entities });
+  assert.equal(secondPickupStep.ok, true);
+  assert.equal(secondPickupStep.player.flareStash, 3, "expected one remaining pickup to refill freed slot");
+  const remainingAfterSecondPass = secondPickupStep.player.entities.filter((entity) => entity.type === "flare_pickup_01" && entity.active === true);
+  assert.equal(remainingAfterSecondPass.length, 1, "expected exactly one flare pickup to remain after second pass");
+}
+
 function runPowerCellRechargeChecks() {
   const worldPacket = buildFlatWorldPacket();
   const player = {
@@ -500,6 +545,7 @@ runBoostJumpCompatibilityChecks();
 runFlareSpawnChecks();
 runFlareThrowSuppressedWhenEmptyChecks();
 runFlarePickupCollectionChecks();
+runFlarePickupRespectsThreeSlotCapRegressionChecks();
 runPowerCellRechargeChecks();
 runLanternAuraRechargeChecks();
 runPlayerLightRadiusTracksEnergyChecks();

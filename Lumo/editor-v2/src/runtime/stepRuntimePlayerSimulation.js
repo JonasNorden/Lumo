@@ -93,6 +93,7 @@ const DEFAULT_FLARE_VISUAL_GLOW_RADIUS_PX = 75;
 const DEFAULT_FLARE_FADE_LAST_TICKS = Math.round(2.5 * 60);
 const DEFAULT_FLARE_THROW_ENERGY_COST = 0.11;
 const DEFAULT_PLAYER_FLARE_STASH = 1;
+const PLAYER_FLARE_STASH_CAP = 3;
 const DEFAULT_FLARE_SPAWN_OFFSET_PX = 10;
 const DEFAULT_FLARE_SPAWN_HEIGHT_OFFSET_PX = 8;
 const DEFAULT_FLARE_GRAVITY_PX_PER_SECOND = 980;
@@ -959,9 +960,9 @@ function resolveLiquidAreaBounds(entity) {
 
 function resolvePlayerFlareStash(playerState) {
   if (Number.isFinite(playerState?.flareStash)) {
-    return Math.max(0, Math.floor(playerState.flareStash));
+    return Math.min(PLAYER_FLARE_STASH_CAP, Math.max(0, Math.floor(playerState.flareStash)));
   }
-  return DEFAULT_PLAYER_FLARE_STASH;
+  return Math.min(PLAYER_FLARE_STASH_CAP, DEFAULT_PLAYER_FLARE_STASH);
 }
 
 function isAabbOverlap(a, b) {
@@ -1137,20 +1138,31 @@ function stepPickupCollection(worldPacket, playerState, sourceEntities) {
       return next;
     }
 
-    next.active = false;
-    next.alive = false;
-    next.state = "collected";
     if (isFlarePickupEntityType(next.type)) {
+      if (flareStash >= PLAYER_FLARE_STASH_CAP) {
+        return next;
+      }
       const pickupAmount = Number.isFinite(next?.amount)
         ? next.amount
         : (Number.isFinite(next?.params?.amount) ? next.params.amount : 1);
-      flareStash += Math.max(1, Math.floor(pickupAmount));
+      const flareGain = Math.max(1, Math.floor(pickupAmount));
+      const nextFlareStash = Math.min(PLAYER_FLARE_STASH_CAP, flareStash + flareGain);
+      if (nextFlareStash <= flareStash) {
+        return next;
+      }
+      flareStash = nextFlareStash;
+      next.active = false;
+      next.alive = false;
+      next.state = "collected";
       flareCollectedCount += 1;
       if (typeof next.id === "string" && next.id.length > 0) {
         flareCollectedIds.push(next.id);
       }
       return next;
     }
+    next.active = false;
+    next.alive = false;
+    next.state = "collected";
     // Power-cell starts the same V1 timed ease-out refill instead of instant full.
     powerCellFill = { t: 0, dur: DEFAULT_POWERCELL_FILL_DURATION_SECONDS, from: null };
     powerCellCollectedCount += 1;
@@ -2503,7 +2515,7 @@ function stepFlares(worldPacket, playerState, intent, options = {}) {
   const previousHeld = playerState?.flareHeldLastTick === true;
   const pressedThisTick = intent?.flare === true && previousHeld !== true;
   const flareStash = Number.isFinite(options?.flareStash)
-    ? Math.max(0, Math.floor(options.flareStash))
+    ? Math.min(PLAYER_FLARE_STASH_CAP, Math.max(0, Math.floor(options.flareStash)))
     : resolvePlayerFlareStash(playerState);
   const availableEnergy = Number.isFinite(options?.availableEnergy)
     ? options.availableEnergy
