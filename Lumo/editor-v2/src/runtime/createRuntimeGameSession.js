@@ -223,6 +223,8 @@ function buildPlayerSnapshot(playerState) {
           py: Number.isFinite(playerState?.checkpoint?.py) ? playerState.checkpoint.py : null,
         }
       : null,
+    checkpointTouched: playerState?.checkpointTouched === true,
+    checkpointActivationKey: typeof playerState?.checkpointActivationKey === "string" ? playerState.checkpointActivationKey : "",
     pulse: playerState?.pulse && typeof playerState.pulse === "object"
       ? {
           active: playerState.pulse.active === true,

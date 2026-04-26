@@ -225,6 +225,8 @@ function buildPlayerSnapshot(snapshot) {
           py: Number.isFinite(source?.checkpoint?.py) ? source.checkpoint.py : null,
         }
       : null,
+    checkpointTouched: source?.checkpointTouched === true,
+    checkpointActivationKey: typeof source?.checkpointActivationKey === "string" ? source.checkpointActivationKey : "",
     pulse: pulse
       ? {
           active: pulse.active === true,

@@ -987,12 +987,36 @@ function resolvePlayerCheckpointState(playerState, checkpointEntity, tileSize) {
   return { tx, ty, px: tx * ts, py: ty * ts };
 }
 
+function resolveCheckpointActivationKey(checkpointEntity, tileSize) {
+  if (!checkpointEntity || typeof checkpointEntity !== "object") {
+    return "";
+  }
+  if (typeof checkpointEntity.id === "string" && checkpointEntity.id.trim().length > 0) {
+    return checkpointEntity.id.trim();
+  }
+  const ts = Number.isFinite(tileSize) && tileSize > 0 ? tileSize : 24;
+  const px = Number.isFinite(checkpointEntity?.x) ? checkpointEntity.x : null;
+  const py = Number.isFinite(checkpointEntity?.y) ? checkpointEntity.y : null;
+  const tx = Number.isFinite(px) ? Math.floor(px / ts) : null;
+  const ty = Number.isFinite(py) ? Math.floor(py / ts) : null;
+  const type = typeof checkpointEntity?.type === "string" && checkpointEntity.type.trim().length > 0
+    ? checkpointEntity.type.trim()
+    : "checkpoint";
+  if (Number.isFinite(tx) && Number.isFinite(ty)) {
+    return `${type}:${tx},${ty}`;
+  }
+  if (Number.isFinite(px) && Number.isFinite(py)) {
+    return `${type}:${Math.round(px)},${Math.round(py)}`;
+  }
+  return type;
+}
+
 function stepCheckpointOverlap(worldPacket, playerState, sourceEntities) {
   const checkpointState = playerState?.checkpoint && typeof playerState.checkpoint === "object"
     ? { ...playerState.checkpoint }
     : null;
   if (!Array.isArray(sourceEntities) || sourceEntities.length === 0) {
-    return { checkpoint: checkpointState, touched: false };
+    return { checkpoint: checkpointState, touched: false, touchedKey: "" };
   }
 
   const tileSize = Number.isFinite(worldPacket?.world?.tileSize) && worldPacket.world.tileSize > 0 ? worldPacket.world.tileSize : 24;
@@ -1002,6 +1026,7 @@ function stepCheckpointOverlap(worldPacket, playerState, sourceEntities) {
   const playerBounds = buildPlayerCheckpointBounds(playerState);
   let nextCheckpoint = checkpointState;
   let touched = false;
+  let touchedKey = "";
 
   for (const entity of sourceEntities) {
     if (entity?.active !== true || !isCheckpointEntityType(entity?.type)) {
@@ -1032,11 +1057,13 @@ function stepCheckpointOverlap(worldPacket, playerState, sourceEntities) {
     }
     nextCheckpoint = resolvePlayerCheckpointState(playerState, entity, tileSize);
     touched = true;
+    touchedKey = resolveCheckpointActivationKey(entity, tileSize);
   }
 
   return {
     checkpoint: nextCheckpoint,
     touched,
+    touchedKey,
   };
 }
 
@@ -4067,6 +4094,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       nextFlareId: flareStep.nextFlareId,
       entities: finalEntities,
       checkpoint: checkpointStep.checkpoint,
+      checkpointTouched: checkpointStep.touched,
+      checkpointActivationKey: checkpointStep.touched ? checkpointStep.touchedKey : "",
       levelComplete: exitStep.completed === true,
       intermissionReadyForInput: exitStep.completed === true,
       gameState: finalGameOver ? "gameover" : (exitStep.completed === true ? "intermission" : "playing"),
