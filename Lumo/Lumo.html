@@ -1680,11 +1680,6 @@
       ctx.fillStyle = `rgba(${label.r},${label.g},${label.b},${0.72 + (intensity * 0.16)})`;
       ctx.fillText(`${Math.round(energyPct)}%`, x, y + 0.5);
       ctx.shadowBlur = 0;
-      if (energyPct <= 18) {
-        ctx.font = "700 8px Arial";
-        ctx.fillStyle = "rgba(180,42,24,0.82)";
-        ctx.fillText("CRITICAL", x - 4, y + 12);
-      }
       ctx.restore();
     }
 
