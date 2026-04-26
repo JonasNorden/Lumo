@@ -484,6 +484,10 @@
       rightTilt: 0.10,
       blinkCountLeft: 0,
     };
+    let rechargedHudV2PanelPulseWarm = 0;
+    let rechargedHudV2PanelPulseGreen = 0;
+    let rechargedHudV2PrevLivesForSoul = null;
+    let rechargedHudV2PrevFlaresForSoul = null;
 
     function getRechargedHudV2Layout() {
       const w = RECHARGED_HUD_V2_MASTER_W;
@@ -602,6 +606,44 @@
         ctx.fillStyle = "rgba(255,210,150,0.05)";
         ctx.fillRect(sm.x, sm.y - 1, sm.w, 1);
       });
+
+      const tags = [
+        { x: 480, y: 58, s: 0.72, r: -0.01, a: 0.08 },
+        { x: 1270, y: 60, s: 0.60, r: 0.008, a: 0.07 },
+        { x: 1715, y: 56, s: 0.78, r: -0.006, a: 0.075 },
+      ];
+      const glyphs = [
+        [[0, 0], [10, 0], [13, -3], [19, -3]],
+        [[26, 0], [32, -4], [36, 0], [40, -2]],
+        [[50, -1], [56, -1], [60, 1], [66, 1]],
+        [[74, 0], [80, -3], [87, -3]],
+        [[96, -1], [102, -4], [108, -1], [113, -3], [118, -1]],
+      ];
+      tags.forEach((tag) => {
+        ctx.save();
+        ctx.translate(tag.x, tag.y);
+        ctx.rotate(tag.r + (Math.sin((time * 0.14) + (tag.x * 0.001)) * 0.002));
+        ctx.scale(tag.s, tag.s);
+        ctx.strokeStyle = `rgba(255,188,120,${tag.a})`;
+        ctx.lineWidth = 1;
+        glyphs.forEach((points) => {
+          ctx.beginPath();
+          ctx.moveTo(points[0][0], points[0][1]);
+          for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i][0], points[i][1]);
+          ctx.stroke();
+        });
+        ctx.fillStyle = `rgba(255,176,96,${tag.a * 0.7})`;
+        ctx.fillRect(126, -3, 10, 2);
+        ctx.fillRect(142, -3, 16, 2);
+        ctx.restore();
+      });
+    }
+
+    function drawRechargedHudV2FutureHudGuides(ctx) {
+      ctx.strokeStyle = "rgba(255,210,150,0.012)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(566, 16, 320, 116);
+      ctx.strokeRect(1328, 18, 330, 112);
     }
 
     function drawRechargedHudV2FramePatina(ctx, time) {
@@ -636,6 +678,75 @@
       openingBottom.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = openingBottom;
       ctx.fillRect(40, 848, 1840, 52);
+    }
+
+    // Dashboard.html structural port (Phase 17): top panel "soul" layer.
+    // Source mapping:
+    // - updateSoulState() decay + trigger on life/flare spend
+    // - drawPanelSoul(time, orb) sweep, orb bleed, warm/green pulses, glitch flicker
+    function updateRechargedHudV2PanelSoulState(lives, flares) {
+      rechargedHudV2PanelPulseWarm *= 0.90;
+      rechargedHudV2PanelPulseGreen *= 0.88;
+
+      if (Number.isFinite(rechargedHudV2PrevLivesForSoul) && lives < rechargedHudV2PrevLivesForSoul) {
+        rechargedHudV2PanelPulseWarm = Math.max(rechargedHudV2PanelPulseWarm, 1.0);
+      }
+      if (Number.isFinite(rechargedHudV2PrevFlaresForSoul) && flares < rechargedHudV2PrevFlaresForSoul) {
+        rechargedHudV2PanelPulseGreen = Math.max(rechargedHudV2PanelPulseGreen, 1.0);
+      }
+
+      rechargedHudV2PrevLivesForSoul = lives;
+      rechargedHudV2PrevFlaresForSoul = flares;
+    }
+
+    function drawRechargedHudV2PanelSoul(ctx, time, orb, energyPct) {
+      const intensity = Math.max(0, Math.min(1, energyPct / 100));
+      const sweepX = 220 + ((Math.sin(time * 0.11) * 0.5 + 0.5) * 1180);
+      const drift = ctx.createLinearGradient(sweepX - 260, 0, sweepX + 260, 0);
+      drift.addColorStop(0, "rgba(255,180,90,0)");
+      drift.addColorStop(0.5, `rgba(255,194,118,${0.018 + (intensity * 0.018)})`);
+      drift.addColorStop(1, "rgba(255,180,90,0)");
+      ctx.fillStyle = drift;
+      ctx.fillRect(80, 8, 1760, 146);
+
+      const bleed = ctx.createRadialGradient(orb.x, orb.y - 10, 0, orb.x, orb.y - 10, 180);
+      bleed.addColorStop(0, `rgba(255,176,82,${0.06 + (intensity * 0.10)})`);
+      bleed.addColorStop(0.36, `rgba(255,132,48,${0.03 + (intensity * 0.05)})`);
+      bleed.addColorStop(1, "rgba(255,90,30,0)");
+      ctx.fillStyle = bleed;
+      ctx.beginPath();
+      ctx.arc(orb.x, orb.y - 8, 180, Math.PI, Math.PI * 2);
+      ctx.lineTo(orb.x + 180, 0);
+      ctx.lineTo(orb.x - 180, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      if (rechargedHudV2PanelPulseWarm > 0.02) {
+        const a = rechargedHudV2PanelPulseWarm * 0.10;
+        const warm = ctx.createLinearGradient(0, 0, 0, 160);
+        warm.addColorStop(0, `rgba(255,188,100,${a})`);
+        warm.addColorStop(0.45, `rgba(255,120,46,${a * 0.55})`);
+        warm.addColorStop(1, "rgba(255,100,30,0)");
+        ctx.fillStyle = warm;
+        ctx.fillRect(80, 0, 1760, 160);
+      }
+
+      if (rechargedHudV2PanelPulseGreen > 0.02) {
+        const a = rechargedHudV2PanelPulseGreen * 0.10;
+        const green = ctx.createLinearGradient(0, 0, 0, 160);
+        green.addColorStop(0, `rgba(186,255,116,${a})`);
+        green.addColorStop(0.50, `rgba(92,255,64,${a * 0.50})`);
+        green.addColorStop(1, "rgba(60,180,36,0)");
+        ctx.fillStyle = green;
+        ctx.fillRect(80, 0, 1760, 160);
+      }
+
+      const glitchWindow = (Math.sin((time * 0.63) + 1.2) + Math.sin((time * 0.37) + 2.9)) * 0.5;
+      if (glitchWindow > 0.93) {
+        const gx = 520 + ((Math.sin(time * 6.7) * 0.5 + 0.5) * 760);
+        ctx.fillStyle = "rgba(255,214,140,0.035)";
+        ctx.fillRect(gx, 24, 44, 82);
+      }
     }
 
     // Dashboard.html structural port (Phase 16): bottom panel atmosphere/smoke-creature layer.
@@ -1571,12 +1682,15 @@
       seedRechargedHudV2OrbModel();
       seedRechargedHudV2AmbientMotesModel();
       updateRechargedHudV2BottomPanelLife(visualTime);
+      updateRechargedHudV2PanelSoulState(lives, flares);
 
       ctx.save();
       ctx.translate(viewport.x, viewport.y);
       ctx.scale(viewport.scale, viewport.scale);
       drawRechargedHudV2BaseFrame(ctx);
       drawRechargedHudV2TopPanelSurfacePolish(ctx, visualTime);
+      drawRechargedHudV2PanelSoul(ctx, visualTime, orb, energyPct);
+      drawRechargedHudV2FutureHudGuides(ctx);
       drawRechargedHudV2LivesPanel(ctx, frame / 60, lives, livesMax);
       drawRechargedHudV2FlarePanel(ctx, frame / 60, flares, flareMax);
       drawRechargedHudV2ScorePanel(ctx, frame / 60, score);
