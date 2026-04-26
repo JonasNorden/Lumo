@@ -412,6 +412,7 @@
 
     const RECHARGED_HUD_V2_MASTER_W = 1920;
     const RECHARGED_HUD_V2_MASTER_H = 1080;
+    const RECHARGED_HUD_V2_ORB_SPEED_TUNING = 1.4;
     const RECHARGED_HUD_V2_LOGO_PLATE = { x: 272, y: 18, w: 308, h: 104 };
     const RECHARGED_HUD_V2_LOGO_TARGET_W = 270;
     const rechargedHudV2LumoLogoImg = new Image();
@@ -1174,7 +1175,7 @@
       for (let i = 0; i < rechargedHudV2OrbModel.sparks.length; i += 1) {
         const s = rechargedHudV2OrbModel.sparks[i];
         const f = rechargedHudV2OrbModel.lines[s.line % rechargedHudV2OrbModel.lines.length];
-        s.p += s.speed * s.dir * (0.45 + (intensity * 0.55)) * sparkStepScale;
+        s.p += s.speed * s.dir * (0.45 + (intensity * 0.55)) * sparkStepScale * RECHARGED_HUD_V2_ORB_SPEED_TUNING;
         if (s.p > 1 || s.p < 0) {
           s.p = s.dir > 0 ? 0 : 1;
           s.line = Math.floor(Math.random() * rechargedHudV2OrbModel.lines.length);
