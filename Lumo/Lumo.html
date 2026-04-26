@@ -1586,10 +1586,10 @@
       const drawNixieDigitStack = (digit, slotX, slotY, slotIndex) => {
         const active = Number.isFinite(digit) ? Math.max(0, Math.min(9, digit)) : 0;
         const flicker = 0.96 + Math.sin(time * 4.2 + slotIndex * 0.37) * 0.04;
-        const compressedScaleX = 0.72;
+        const compressedScaleX = 0.88;
 
         ctx.save();
-        ctx.font = "400 25px \"Courier New\", Courier, monospace";
+        ctx.font = "400 42px \"Courier New\", Courier, monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.translate(slotX, slotY);
@@ -1633,14 +1633,21 @@
         ctx.restore();
       };
 
-      const digitWidth = 24;
-      const digitsRight = x + w - 18;
-      const digitsY = y + 30;
+      const digitsMarginX = 10;
+      const digitsLeft = x + digitsMarginX;
+      const digitsUsableWidth = w - (digitsMarginX * 2);
+      const digitSlotWidth = digitsUsableWidth / scoreText.length;
+      const digitsY = y + (h * 0.5);
+
+      ctx.save();
+      drawRoundedRectPath(x + 8, y + 8, w - 16, h - 16, 6);
+      ctx.clip();
       for (let i = 0; i < scoreText.length; i++) {
         const digit = Number.parseInt(scoreText[i], 10);
-        const slotX = digitsRight - (scoreText.length - 1 - i) * digitWidth;
+        const slotX = digitsLeft + (digitSlotWidth * (i + 0.5));
         drawNixieDigitStack(digit, slotX, digitsY, i);
       }
+      ctx.restore();
 
       const glass = ctx.createLinearGradient(0, y + 10, 0, y + 22);
       glass.addColorStop(0, "rgba(255,255,255,0.08)");
