@@ -1161,7 +1161,7 @@
       ctx.fillStyle = warmScan;
       ctx.fillRect(innerX + 2, innerY + 2, innerW - 4, innerH - 4);
 
-      ctx.strokeStyle = "rgba(232,178,114,0.24)";
+      ctx.strokeStyle = "rgba(236,186,122,0.30)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(innerX + 8, scaleY);
@@ -1176,7 +1176,7 @@
         const major = i % majorStep === 0;
         const mid = !major && i % 4 === 0;
         const tickH = major ? 7 : (mid ? 5 : 3);
-        ctx.strokeStyle = major ? "rgba(245,194,130,0.33)" : "rgba(210,158,98,0.18)";
+        ctx.strokeStyle = major ? "rgba(248,202,136,0.40)" : "rgba(216,166,104,0.24)";
         ctx.beginPath();
         ctx.moveTo(tx, scaleY - tickH);
         ctx.lineTo(tx, scaleY + 1);
@@ -1184,15 +1184,18 @@
       }
 
       const labels = [88, 92, 96, 100, 104, 108];
-      ctx.fillStyle = "rgba(240,198,142,0.44)";
+      ctx.fillStyle = "rgba(244,204,148,0.50)";
       ctx.font = "600 8px 'Courier New', monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
+      ctx.shadowColor = "rgba(255,186,112,0.34)";
+      ctx.shadowBlur = 2.4;
       for (let i = 0; i < labels.length; i += 1) {
         const t = i / (labels.length - 1);
         const lx = innerX + 8 + (t * (innerW - 16));
         ctx.fillText(String(labels[i]), lx, innerY + innerH - 1);
       }
+      ctx.shadowBlur = 0;
 
       ctx.textAlign = "left";
       ctx.fillStyle = "rgba(230,182,126,0.34)";
@@ -1212,6 +1215,26 @@
         ctx.stroke();
       }
 
+      const edgeSparkPhases = [0.0, 1.3, 2.8, 3.9, 5.1, 6.2];
+      for (let i = 0; i < edgeSparkPhases.length; i += 1) {
+        const t = i / (edgeSparkPhases.length - 1);
+        const ex = innerX + 16 + (t * (innerW - 32));
+        const pulse = Math.sin((time * 0.062) + edgeSparkPhases[i]) * 0.5 + 0.5;
+        const edgeA = 0.014 + pulse * 0.035;
+        const sparkW = 8 + pulse * 2;
+        ctx.strokeStyle = `rgba(255,214,160,${edgeA.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.moveTo(ex - sparkW * 0.5, innerY + 1.6);
+        ctx.lineTo(ex + sparkW * 0.5, innerY + 1.6);
+        ctx.stroke();
+
+        ctx.strokeStyle = `rgba(212,156,102,${(edgeA * 0.62).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.moveTo(ex - (sparkW * 0.4), innerY + innerH - 1.6);
+        ctx.lineTo(ex + (sparkW * 0.4), innerY + innerH - 1.6);
+        ctx.stroke();
+      }
+
       const markerBase =
         0.5
         + (Math.sin((time * 0.081) + 0.7) * 0.26)
@@ -1220,13 +1243,15 @@
       const markerT = Math.max(0.02, Math.min(0.98, markerBase));
       const markerX = innerX + 8 + (markerT * (innerW - 16));
       const markerGlow = ctx.createLinearGradient(0, innerY, 0, innerY + innerH);
-      markerGlow.addColorStop(0, "rgba(255,235,190,0.26)");
-      markerGlow.addColorStop(0.5, "rgba(255,188,122,0.18)");
-      markerGlow.addColorStop(1, "rgba(180,120,80,0.14)");
+      markerGlow.addColorStop(0, "rgba(255,236,194,0.34)");
+      markerGlow.addColorStop(0.5, "rgba(255,194,126,0.24)");
+      markerGlow.addColorStop(1, "rgba(188,126,84,0.17)");
       ctx.fillStyle = markerGlow;
       ctx.fillRect(markerX - 0.65, innerY + 1, 1.3, innerH - 2);
-      ctx.fillStyle = "rgba(255,225,178,0.15)";
-      ctx.fillRect(markerX - 2, innerY + 1, 4, innerH - 2);
+      ctx.fillStyle = "rgba(255,225,178,0.19)";
+      ctx.fillRect(markerX - 2.2, innerY + 1, 4.4, innerH - 2);
+      ctx.fillStyle = "rgba(255,244,222,0.34)";
+      ctx.fillRect(markerX - 0.35, innerY + 1.2, 0.7, innerH - 2.4);
 
       ctx.restore();
     }
