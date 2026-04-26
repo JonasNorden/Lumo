@@ -1505,6 +1505,135 @@
       ctx.restore();
     }
 
+    function drawRechargedHudV2NixieScore(ctx, time, score) {
+      const panelX = 1240;
+      const panelY = 20;
+      const panelW = 290;
+      const panelH = 88;
+      const digits = String(Math.max(0, Math.floor(score))).padStart(5, "0").slice(-5);
+      const tubeGap = 8;
+      const innerPadX = 10;
+      const innerPadY = 6;
+      const tubeW = (panelW - (innerPadX * 2) - (tubeGap * 4)) / 5;
+      const tubeH = panelH - (innerPadY * 2);
+
+      ctx.save();
+      drawRechargedHudV2RoundedRectPath(ctx, panelX, panelY, panelW, panelH, 12);
+      const panelGrad = ctx.createLinearGradient(panelX, panelY, panelX, panelY + panelH);
+      panelGrad.addColorStop(0, "rgba(20,12,8,0.66)");
+      panelGrad.addColorStop(1, "rgba(8,4,2,0.78)");
+      ctx.fillStyle = panelGrad;
+      ctx.fill();
+      ctx.strokeStyle = "rgba(180,124,72,0.25)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      for (let i = 0; i < 5; i += 1) {
+        const tx = panelX + innerPadX + i * (tubeW + tubeGap);
+        const ty = panelY + innerPadY;
+        const tr = Math.min(tubeW, tubeH) * 0.44;
+        const digitValue = Number.parseInt(digits[i], 10) || 0;
+        const flicker = 0.92 + (Math.sin((time * 4.5) + (i * 0.72)) * 0.08);
+        const tubeMidX = tx + (tubeW * 0.5);
+        const tubeBottomY = ty + tubeH - 7;
+        const tubeDigitY = ty + tubeH * 0.52;
+
+        ctx.save();
+        drawRechargedHudV2RoundedRectPath(ctx, tx, ty, tubeW, tubeH, tr);
+        ctx.clip();
+
+        const glassGrad = ctx.createLinearGradient(tx, ty, tx, ty + tubeH);
+        glassGrad.addColorStop(0, "rgba(48,30,20,0.56)");
+        glassGrad.addColorStop(0.45, "rgba(20,12,8,0.30)");
+        glassGrad.addColorStop(1, "rgba(8,4,2,0.62)");
+        ctx.fillStyle = glassGrad;
+        ctx.fillRect(tx, ty, tubeW, tubeH);
+
+        const innerGlow = ctx.createRadialGradient(tubeMidX, tubeDigitY, 4, tubeMidX, tubeDigitY, tubeW * 1.1);
+        innerGlow.addColorStop(0, "rgba(255,168,80,0.10)");
+        innerGlow.addColorStop(1, "rgba(255,120,60,0)");
+        ctx.fillStyle = innerGlow;
+        ctx.fillRect(tx, ty, tubeW, tubeH);
+
+        const topShade = ctx.createLinearGradient(tx, ty, tx, ty + (tubeH * 0.25));
+        topShade.addColorStop(0, "rgba(255,220,184,0.08)");
+        topShade.addColorStop(1, "rgba(255,220,184,0)");
+        ctx.fillStyle = topShade;
+        ctx.fillRect(tx, ty, tubeW, tubeH * 0.32);
+
+        ctx.fillStyle = "rgba(255,255,255,0.08)";
+        ctx.fillRect(tx + (tubeW * 0.18), ty + 4, tubeW * 0.08, tubeH * 0.74);
+        ctx.fillStyle = "rgba(255,255,255,0.03)";
+        ctx.fillRect(tx + (tubeW * 0.30), ty + 8, tubeW * 0.05, tubeH * 0.62);
+
+        ctx.strokeStyle = "rgba(255,214,176,0.08)";
+        ctx.lineWidth = 0.8;
+        for (let gy = ty + 10; gy < ty + tubeH - 8; gy += 6) {
+          ctx.beginPath();
+          ctx.moveTo(tx + 3, gy + ((i % 2) * 0.5));
+          ctx.lineTo(tx + tubeW - 3, gy + ((i % 2) * 0.5));
+          ctx.stroke();
+        }
+        ctx.strokeStyle = "rgba(255,214,176,0.05)";
+        for (let gx = tx + 4; gx < tx + tubeW - 3; gx += 5) {
+          ctx.beginPath();
+          ctx.moveTo(gx, ty + 8);
+          ctx.lineTo(gx, ty + tubeH - 9);
+          ctx.stroke();
+        }
+
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = `600 ${Math.floor(tubeH * 0.68)}px "Courier New", monospace`;
+        ctx.save();
+        ctx.translate(tubeMidX, tubeDigitY);
+        ctx.scale(0.76, 1);
+        for (let d = 9; d >= 0; d -= 1) {
+          const delta = d - digitValue;
+          const yOffset = delta * 0.44;
+          const xOffset = delta * 0.08;
+          if (d === digitValue) {
+            ctx.shadowColor = `rgba(255,162,78,${0.56 * flicker})`;
+            ctx.shadowBlur = 4;
+            ctx.fillStyle = `rgba(255,210,142,${0.88 * flicker})`;
+            ctx.fillText(String(d), xOffset, yOffset);
+            ctx.shadowBlur = 14;
+            ctx.fillStyle = `rgba(255,150,64,${0.45 * flicker})`;
+            ctx.fillText(String(d), xOffset, yOffset);
+            ctx.shadowBlur = 28;
+            ctx.fillStyle = `rgba(255,116,42,${0.24 * flicker})`;
+            ctx.fillText(String(d), xOffset, yOffset);
+            ctx.shadowBlur = 0;
+          } else {
+            const alpha = Math.max(0.025, 0.065 - (Math.abs(delta) * 0.005));
+            ctx.fillStyle = `rgba(255,172,106,${alpha})`;
+            ctx.fillText(String(d), xOffset, yOffset);
+          }
+        }
+        ctx.restore();
+
+        const baseGlow = ctx.createRadialGradient(tubeMidX, tubeBottomY, 0, tubeMidX, tubeBottomY, tubeW * 0.6);
+        baseGlow.addColorStop(0, `rgba(255,138,58,${0.30 * flicker})`);
+        baseGlow.addColorStop(1, "rgba(255,120,52,0)");
+        ctx.fillStyle = baseGlow;
+        ctx.fillRect(tx + 2, ty + tubeH - 16, tubeW - 4, 16);
+
+        ctx.strokeStyle = "rgba(212,146,82,0.30)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(tubeMidX - (tubeW * 0.16), ty + tubeH - 3);
+        ctx.lineTo(tubeMidX + (tubeW * 0.16), ty + tubeH - 3);
+        ctx.stroke();
+        ctx.restore();
+
+        ctx.strokeStyle = "rgba(196,132,78,0.34)";
+        ctx.lineWidth = 1;
+        drawRechargedHudV2RoundedRectPath(ctx, tx, ty, tubeW, tubeH, tr);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
     // Dashboard.html structural port (Phase 9): center orb system only.
     // Source mapping:
     // - getLayout().orb
@@ -2094,6 +2223,7 @@
         drawRechargedHudV2InnerEdgeWear(ctx, visualTime);
         drawRechargedHudV2LivesPanel(ctx, frame / 60, lives, livesMax);
         drawRechargedHudV2FlarePanel(ctx, frame / 60, flares, flareMax);
+        drawRechargedHudV2NixieScore(ctx, visualTime, score);
       });
       drawRechargedHudV2OrbCutout(ctx, orb.x, orb.y, orb.r);
       drawRechargedHudV2FramePatina(ctx, visualTime);
