@@ -1415,6 +1415,7 @@
     };
     const rechargedHudV2AmbientMotesModel = {
       leds: [],
+      pixels: [],
       motes: [],
       seeded: false,
     };
@@ -1510,19 +1511,26 @@
         [80, 44], [110, 44], [140, 44],
         [RECHARGED_HUD_V2_MASTER_W - 130, 44], [RECHARGED_HUD_V2_MASTER_W - 100, 44], [RECHARGED_HUD_V2_MASTER_W - 70, 44],
         [RECHARGED_HUD_V2_MASTER_W - 220, RECHARGED_HUD_V2_MASTER_H - 36], [RECHARGED_HUD_V2_MASTER_W - 185, RECHARGED_HUD_V2_MASTER_H - 36],
-        [80, RECHARGED_HUD_V2_MASTER_H - 36], [110, RECHARGED_HUD_V2_MASTER_H - 36], [140, RECHARGED_HUD_V2_MASTER_H - 36],
-      ].forEach((d, i) => {
-        const isBottomLeft = i >= 8;
-        const energyThresholdPct = isBottomLeft ? (i - 8) * 34 : null;
+      ].forEach((d) => {
         rechargedHudV2AmbientMotesModel.leds.push({
           x: d[0],
           y: d[1],
           phase: rechargedHudV2Rand(0, 10),
           dead: Math.random() < 0.2,
           weak: Math.random() < 0.45,
-          energyThresholdPct,
         });
       });
+      const pixelStartX = 88;
+      const pixelY = RECHARGED_HUD_V2_MASTER_H - 40;
+      for (let i = 0; i < 26; i += 1) {
+        rechargedHudV2AmbientMotesModel.pixels.push({
+          x: pixelStartX + (i * 6.5),
+          y: pixelY,
+          dead: Math.random() < 0.22,
+          weak: Math.random() < 0.3,
+          phase: rechargedHudV2Rand(0, 10),
+        });
+      }
       const { w, h } = getRechargedHudV2Layout();
       const gameplay = { x: 40, y: 157, w: w - 80, h: 861 };
       const zones = {
@@ -1561,11 +1569,6 @@
           const glitch = d.weak && Math.sin((time * 2.2) + (d.phase * 3.1)) > 0.985 ? 0.02 : 1.0;
           a = base * pulse * glitch;
         }
-        if (Number.isFinite(d.energyThresholdPct)) {
-          const active = energyPct >= d.energyThresholdPct;
-          const thresholdBand = Math.max(0, Math.min(1, (energyPct - d.energyThresholdPct) / 34));
-          a = active ? Math.max(0.08, a * (0.62 + (thresholdBand * 0.38))) : 0.03;
-        }
         const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, 12);
         g.addColorStop(0, `rgba(255,225,170,${a * 1.8})`);
         g.addColorStop(0.35, `rgba(255,165,90,${a})`);
@@ -1585,9 +1588,35 @@
       ctx.restore();
     }
 
+    function drawRechargedHudV2LowerEnergyPixels(ctx, time, energyPct) {
+      ctx.save();
+      for (let i = 0; i < rechargedHudV2AmbientMotesModel.pixels.length; i += 1) {
+        const p = rechargedHudV2AmbientMotesModel.pixels[i];
+        let a = 0.08;
+        if (!p.dead) {
+          const active = ((i / rechargedHudV2AmbientMotesModel.pixels.length) * 100) < (energyPct + 8);
+          if (active) {
+            const pulse = 0.72 + (Math.sin((time * 0.45) + p.phase) * 0.18);
+            const glitch = p.weak && Math.sin((time * 1.9) + (p.phase * 2.8)) > 0.992 ? 0.0 : 1.0;
+            a = 0.12 + (0.26 * pulse * glitch);
+          } else if (p.weak && energyPct > ((i / rechargedHudV2AmbientMotesModel.pixels.length) * 100) - 10) {
+            a = 0.08 + (Math.sin((time * 1.4) + p.phase) * 0.04);
+          }
+        }
+        ctx.fillStyle = p.dead ? "rgba(70,46,36,0.7)" : `rgba(255,176,96,${a})`;
+        ctx.fillRect(p.x, p.y, 4, 2);
+        if (!p.dead && a > 0.14) {
+          ctx.fillStyle = `rgba(255,220,160,${a * 0.35})`;
+          ctx.fillRect(p.x - 1, p.y - 1, 6, 4);
+        }
+      }
+      ctx.restore();
+    }
+
     function drawRechargedHudV2AmbientMotes(ctx, time, energyPct) {
       ctx.save();
       drawRechargedHudV2CornerLeds(ctx, time, energyPct);
+      drawRechargedHudV2LowerEnergyPixels(ctx, time, energyPct);
       const { w, h } = getRechargedHudV2Layout();
       const gameplay = { x: 40, y: 157, w: w - 80, h: 861 };
       const zones = {
@@ -1625,30 +1654,37 @@
       ctx.restore();
     }
 
-    function drawRechargedHudV2TopLeftEnergySlot(ctx, time, energyPct) {
+    function drawRechargedHudV2OrbSideEnergyPct(ctx, orb, energyPct) {
       ctx.save();
-      const x = 76;
-      const y = 24;
-      const w = 92;
-      const h = 32;
-      const intensity = Math.max(0, Math.min(1, energyPct / 100));
-      const pulse = 0.96 + (Math.sin(time * 0.9) * 0.04);
-
-      const slotInner = ctx.createLinearGradient(0, y, 0, y + h);
-      slotInner.addColorStop(0, "rgba(18,10,8,.75)");
-      slotInner.addColorStop(1, "rgba(12,6,4,.88)");
-      ctx.fillStyle = slotInner;
-      ctx.fillRect(x, y, w, h);
-      ctx.strokeStyle = "rgba(120,92,62,.35)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x, y, w, h);
-
-      const textAlpha = (0.36 + (intensity * 0.58)) * pulse;
-      ctx.font = "700 12px Arial, sans-serif";
-      ctx.textAlign = "center";
+      ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillStyle = `rgba(255,196,122,${textAlpha})`;
-      ctx.fillText(`${Math.round(energyPct)}%`, x + (w * 0.5), y + (h * 0.52));
+      ctx.font = "700 9px Arial";
+      const x = orb.x + orb.r + 28;
+      const y = orb.y - (orb.r * 0.05);
+      const intensity = Math.max(0, Math.min(1, energyPct / 100));
+      const pctGlow = 0.12 + (intensity * 0.22);
+      ctx.fillStyle = `rgba(255,170,120,${0.10 + (pctGlow * 0.25)})`;
+      drawRechargedHudV2RoundedRectPath(ctx, x - 9, y - 9, 38, 18, 6);
+      ctx.fill();
+      ctx.strokeStyle = `rgba(170,72,42,${0.16 + (pctGlow * 0.18)})`;
+      ctx.lineWidth = 1;
+      drawRechargedHudV2RoundedRectPath(ctx, x - 9, y - 9, 38, 18, 6);
+      ctx.stroke();
+      ctx.shadowColor = `rgba(255,90,40,${0.08 + (pctGlow * 0.12)})`;
+      ctx.shadowBlur = 6;
+      const label = {
+        r: Math.round(120 + (intensity * 120)),
+        g: Math.round(18 + (intensity * 120)),
+        b: Math.round(16 + (intensity * 80)),
+      };
+      ctx.fillStyle = `rgba(${label.r},${label.g},${label.b},${0.72 + (intensity * 0.16)})`;
+      ctx.fillText(`${Math.round(energyPct)}%`, x, y + 0.5);
+      ctx.shadowBlur = 0;
+      if (energyPct <= 18) {
+        ctx.font = "700 8px Arial";
+        ctx.fillStyle = "rgba(180,42,24,0.82)";
+        ctx.fillText("CRITICAL", x - 4, y + 12);
+      }
       ctx.restore();
     }
 
@@ -1953,7 +1989,6 @@
       ctx.translate(viewport.x, viewport.y);
       ctx.scale(viewport.scale, viewport.scale);
       drawRechargedHudV2BaseFrame(ctx);
-      drawRechargedHudV2TopLeftEnergySlot(ctx, visualTime, energyPct);
       drawRechargedHudV2WithFrameClip(ctx, () => {
         drawRechargedHudV2TopPanelSurfacePolish(ctx, visualTime);
         drawRechargedHudV2PanelSoul(ctx, visualTime, orb, energyPct);
@@ -1972,6 +2007,7 @@
       drawRechargedHudV2TechGraffiti(ctx, visualTime);
       drawRechargedHudV2OrbCore(ctx, orb.x, orb.y, orb.r, visualTime, w, h, energyPct, sparkStepScale);
       drawRechargedHudV2OrbBrokenRing(ctx, orb.x, orb.y, orb.r, visualTime, energyPct);
+      drawRechargedHudV2OrbSideEnergyPct(ctx, orb, energyPct);
       drawRechargedHudV2AmbientMotes(ctx, visualTime, energyPct);
       drawRechargedHudV2TopLogoPlate(ctx);
       ctx.restore();
