@@ -118,6 +118,11 @@
       land: "data/assets/audio/sfx/player/movement/player_land.ogg",
       pulse: "data/assets/audio/sfx/player/abilities/player_pulse.ogg",
     });
+    const RECHARGED_PLAYER_ACTION_SFX_VOLUME = Object.freeze({
+      jump: 0.6,
+      land: 0.5,
+      pulse: 0.7,
+    });
 
     function createRechargedSpriteImage(src) {
       const image = new Image();
@@ -2459,6 +2464,13 @@
       }
     }
 
+    function resolveRechargedPlayerActionSfxVolume(actionType) {
+      const actionVolume = Number.isFinite(RECHARGED_PLAYER_ACTION_SFX_VOLUME?.[actionType])
+        ? RECHARGED_PLAYER_ACTION_SFX_VOLUME[actionType]
+        : 1;
+      return Math.max(0, Math.min(1, actionVolume));
+    }
+
     function syncRechargedPlayerActionSfx(state, previousPlayerSnapshot, currentPlayerSnapshot) {
       if (!state || !currentPlayerSnapshot || typeof currentPlayerSnapshot !== "object") return;
       const playerAudioState = ensureRechargedPlayerActionAudioState(state);
@@ -2483,13 +2495,13 @@
       }
 
       if (jumpStarted) {
-        playRechargedPlayerActionSfx(RECHARGED_PLAYER_ACTION_SFX.jump, 1);
+        playRechargedPlayerActionSfx(RECHARGED_PLAYER_ACTION_SFX.jump, resolveRechargedPlayerActionSfxVolume("jump"));
       }
       if (landingTransition) {
-        playRechargedPlayerActionSfx(RECHARGED_PLAYER_ACTION_SFX.land, 1);
+        playRechargedPlayerActionSfx(RECHARGED_PLAYER_ACTION_SFX.land, resolveRechargedPlayerActionSfxVolume("land"));
       }
       if (pulseStarted) {
-        playRechargedPlayerActionSfx(RECHARGED_PLAYER_ACTION_SFX.pulse, 1);
+        playRechargedPlayerActionSfx(RECHARGED_PLAYER_ACTION_SFX.pulse, resolveRechargedPlayerActionSfxVolume("pulse"));
       }
     }
 
