@@ -1583,19 +1583,64 @@
       ctx.fillStyle = "rgba(255,196,122,0.40)";
       ctx.fillText("SCORE", x + 16, y + 14);
 
-      ctx.font = "900 24px Arial Black, Arial, sans-serif";
-      ctx.textAlign = "right";
-      ctx.textBaseline = "middle";
+      const drawNixieDigitStack = (digit, slotX, slotY, slotIndex) => {
+        const active = Number.isFinite(digit) ? Math.max(0, Math.min(9, digit)) : 0;
+        const flicker = 0.96 + Math.sin(time * 4.2 + slotIndex * 0.37) * 0.04;
+        const compressedScaleX = 0.72;
 
-      ctx.fillStyle = "rgba(0,0,0,0.35)";
-      ctx.fillText(scoreText, x + w - 16, y + 31);
+        ctx.save();
+        ctx.font = "400 25px \"Courier New\", Courier, monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.translate(slotX, slotY);
+        ctx.scale(compressedScaleX, 1);
 
-      const textGradient = ctx.createLinearGradient(0, y + 18, 0, y + 40);
-      textGradient.addColorStop(0, "rgba(255,244,204,0.98)");
-      textGradient.addColorStop(0.42, "rgba(255,218,138,0.96)");
-      textGradient.addColorStop(1, "rgba(214,132,54,0.96)");
-      ctx.fillStyle = textGradient;
-      ctx.fillText(scoreText, x + w - 17, y + 30);
+        for (let ghost = 9; ghost >= 0; ghost--) {
+          const depth = 9 - ghost;
+          const offsetX = (depth - 4.5) * 0.12 + slotIndex * 0.02;
+          const offsetY = (depth - 4.5) * 0.08 - slotIndex * 0.015;
+          const isActive = ghost === active;
+          if (!isActive) {
+            ctx.shadowBlur = 0;
+            ctx.shadowColor = "transparent";
+            ctx.fillStyle = "rgba(132,72,34,0.16)";
+            ctx.globalAlpha = 0.07;
+            ctx.fillText(String(ghost), offsetX, offsetY + 0.9);
+            continue;
+          }
+
+          const glowStrength = 0.92 * flicker;
+          ctx.globalAlpha = 1;
+          ctx.shadowColor = `rgba(255,156,64,${0.36 * glowStrength})`;
+          ctx.shadowBlur = 12;
+          ctx.fillStyle = `rgba(255,152,68,${0.38 * glowStrength})`;
+          ctx.fillText(String(ghost), offsetX, offsetY);
+
+          ctx.shadowColor = `rgba(255,184,98,${0.48 * glowStrength})`;
+          ctx.shadowBlur = 6;
+          ctx.fillStyle = `rgba(255,188,108,${0.62 * glowStrength})`;
+          ctx.fillText(String(ghost), offsetX, offsetY);
+
+          ctx.shadowColor = "rgba(255,226,164,0.48)";
+          ctx.shadowBlur = 2;
+          ctx.fillStyle = `rgba(255,236,186,${0.88 * glowStrength})`;
+          ctx.fillText(String(ghost), offsetX, offsetY);
+        }
+
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = "transparent";
+        ctx.restore();
+      };
+
+      const digitWidth = 24;
+      const digitsRight = x + w - 18;
+      const digitsY = y + 30;
+      for (let i = 0; i < scoreText.length; i++) {
+        const digit = Number.parseInt(scoreText[i], 10);
+        const slotX = digitsRight - (scoreText.length - 1 - i) * digitWidth;
+        drawNixieDigitStack(digit, slotX, digitsY, i);
+      }
 
       const glass = ctx.createLinearGradient(0, y + 10, 0, y + 22);
       glass.addColorStop(0, "rgba(255,255,255,0.08)");
