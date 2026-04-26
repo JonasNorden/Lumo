@@ -1108,6 +1108,129 @@
       drawRechargedHudV2BottomVentCutout(ctx, 1410, 1028, 154, 44, "eyes", time);
     }
 
+    function drawRechargedHudV2VintageRadioScale(ctx, time) {
+      const w = 516;
+      const h = 34;
+      const x = Math.round((RECHARGED_HUD_V2_MASTER_W - w) * 0.5);
+      const y = 1023;
+      const pad = 12;
+      const innerX = x + pad;
+      const innerY = y + 8;
+      const innerW = w - (pad * 2);
+      const innerH = h - 16;
+      const scaleY = innerY + innerH * 0.56;
+
+      ctx.save();
+      const frameGrad = ctx.createLinearGradient(0, y, 0, y + h);
+      frameGrad.addColorStop(0, "rgba(104,76,52,0.56)");
+      frameGrad.addColorStop(0.42, "rgba(68,46,30,0.72)");
+      frameGrad.addColorStop(1, "rgba(34,22,14,0.80)");
+      ctx.fillStyle = frameGrad;
+      drawRechargedHudV2RoundedRectPath(ctx, x, y, w, h, 8);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255,208,148,0.14)";
+      ctx.lineWidth = 1;
+      drawRechargedHudV2RoundedRectPath(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 8);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255,226,178,0.04)";
+      drawRechargedHudV2RoundedRectPath(ctx, x + 2, y + 2, w - 4, 6, 6);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(0,0,0,0.22)";
+      drawRechargedHudV2RoundedRectPath(ctx, x + 2, y + h - 8, w - 4, 6, 6);
+      ctx.fill();
+
+      const glassGrad = ctx.createLinearGradient(0, innerY, 0, innerY + innerH);
+      glassGrad.addColorStop(0, "rgba(12,8,6,0.88)");
+      glassGrad.addColorStop(0.45, "rgba(28,18,12,0.86)");
+      glassGrad.addColorStop(1, "rgba(6,4,3,0.90)");
+      ctx.fillStyle = glassGrad;
+      drawRechargedHudV2RoundedRectPath(ctx, innerX, innerY, innerW, innerH, 5);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255,205,140,0.10)";
+      drawRechargedHudV2RoundedRectPath(ctx, innerX + 0.5, innerY + 0.5, innerW - 1, innerH - 1, 5);
+      ctx.stroke();
+
+      const warmScan = ctx.createLinearGradient(innerX, 0, innerX + innerW, 0);
+      warmScan.addColorStop(0, "rgba(255,180,106,0)");
+      warmScan.addColorStop(0.5, "rgba(255,196,128,0.08)");
+      warmScan.addColorStop(1, "rgba(255,180,106,0)");
+      ctx.fillStyle = warmScan;
+      ctx.fillRect(innerX + 2, innerY + 2, innerW - 4, innerH - 4);
+
+      ctx.strokeStyle = "rgba(232,178,114,0.24)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(innerX + 8, scaleY);
+      ctx.lineTo(innerX + innerW - 8, scaleY);
+      ctx.stroke();
+
+      const majorStep = 8;
+      const tickCount = 40;
+      for (let i = 0; i <= tickCount; i += 1) {
+        const t = i / tickCount;
+        const tx = innerX + 8 + (t * (innerW - 16));
+        const major = i % majorStep === 0;
+        const mid = !major && i % 4 === 0;
+        const tickH = major ? 7 : (mid ? 5 : 3);
+        ctx.strokeStyle = major ? "rgba(245,194,130,0.33)" : "rgba(210,158,98,0.18)";
+        ctx.beginPath();
+        ctx.moveTo(tx, scaleY - tickH);
+        ctx.lineTo(tx, scaleY + 1);
+        ctx.stroke();
+      }
+
+      const labels = [88, 92, 96, 100, 104, 108];
+      ctx.fillStyle = "rgba(240,198,142,0.44)";
+      ctx.font = "600 8px 'Courier New', monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "bottom";
+      for (let i = 0; i < labels.length; i += 1) {
+        const t = i / (labels.length - 1);
+        const lx = innerX + 8 + (t * (innerW - 16));
+        ctx.fillText(String(labels[i]), lx, innerY + innerH - 1);
+      }
+
+      ctx.textAlign = "left";
+      ctx.fillStyle = "rgba(230,182,126,0.34)";
+      ctx.fillText("FM", innerX + 6, innerY + 7);
+      ctx.textAlign = "right";
+      ctx.fillText("MHz", innerX + innerW - 6, innerY + 7);
+
+      for (let i = 0; i < 10; i += 1) {
+        const t = i / 9;
+        const sx = innerX + 10 + (t * (innerW - 20)) + (Math.sin((time * 0.09) + i * 1.7) * 2.8);
+        const sy = innerY + 3 + (Math.sin((time * 0.13) + i * 0.9) * 1.4);
+        const sa = 0.02 + ((Math.sin((time * 0.17) + i * 2.4) * 0.5 + 0.5) * 0.03);
+        ctx.strokeStyle = `rgba(255,220,182,${sa.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.moveTo(sx - 5, sy);
+        ctx.lineTo(sx + 7, sy + 0.4);
+        ctx.stroke();
+      }
+
+      const markerBase =
+        0.5
+        + (Math.sin((time * 0.081) + 0.7) * 0.26)
+        + (Math.sin((time * 0.047) + 2.1) * 0.17)
+        + (Math.sin((time * 0.133) + 4.6) * 0.09);
+      const markerT = Math.max(0.02, Math.min(0.98, markerBase));
+      const markerX = innerX + 8 + (markerT * (innerW - 16));
+      const markerGlow = ctx.createLinearGradient(0, innerY, 0, innerY + innerH);
+      markerGlow.addColorStop(0, "rgba(255,235,190,0.26)");
+      markerGlow.addColorStop(0.5, "rgba(255,188,122,0.18)");
+      markerGlow.addColorStop(1, "rgba(180,120,80,0.14)");
+      ctx.fillStyle = markerGlow;
+      ctx.fillRect(markerX - 0.65, innerY + 1, 1.3, innerH - 2);
+      ctx.fillStyle = "rgba(255,225,178,0.15)";
+      ctx.fillRect(markerX - 2, innerY + 1, 4, innerH - 2);
+
+      ctx.restore();
+    }
+
     // Dashboard.html structural port (Phase 4): drawTopLogoPlate(time)
     // Source mapping:
     // - x=312,y=18,w=308,h=104
@@ -2015,6 +2138,7 @@
       drawRechargedHudV2WithFrameClip(ctx, () => {
         drawRechargedHudV2InsetLightStrip(ctx, visualTime, energyPct);
         drawRechargedHudV2BottomVents(ctx, visualTime);
+        drawRechargedHudV2VintageRadioScale(ctx, visualTime);
       });
       drawRechargedHudV2TechGraffiti(ctx, visualTime);
       drawRechargedHudV2OrbCore(ctx, orb.x, orb.y, orb.r, visualTime, w, h, energyPct, sparkStepScale);
