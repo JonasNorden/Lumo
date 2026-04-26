@@ -1508,9 +1508,9 @@
       if (rechargedHudV2AmbientMotesModel.seeded) return;
       [
         [80, 44], [110, 44], [140, 44],
-        [MASTER_W - 130, 44], [MASTER_W - 100, 44], [MASTER_W - 70, 44],
-        [MASTER_W - 220, MASTER_H - 36], [MASTER_W - 185, MASTER_H - 36],
-        [80, MASTER_H - 36], [110, MASTER_H - 36], [140, MASTER_H - 36],
+        [RECHARGED_HUD_V2_MASTER_W - 130, 44], [RECHARGED_HUD_V2_MASTER_W - 100, 44], [RECHARGED_HUD_V2_MASTER_W - 70, 44],
+        [RECHARGED_HUD_V2_MASTER_W - 220, RECHARGED_HUD_V2_MASTER_H - 36], [RECHARGED_HUD_V2_MASTER_W - 185, RECHARGED_HUD_V2_MASTER_H - 36],
+        [80, RECHARGED_HUD_V2_MASTER_H - 36], [110, RECHARGED_HUD_V2_MASTER_H - 36], [140, RECHARGED_HUD_V2_MASTER_H - 36],
       ].forEach((d, i) => {
         const isBottomLeft = i >= 8;
         const energyThresholdPct = isBottomLeft ? (i - 8) * 34 : null;
@@ -1551,6 +1551,7 @@
     }
 
     function drawRechargedHudV2CornerLeds(ctx, time, energyPct) {
+      ctx.save();
       for (let i = 0; i < rechargedHudV2AmbientMotesModel.leds.length; i += 1) {
         const d = rechargedHudV2AmbientMotesModel.leds[i];
         let a = 0.05;
@@ -1581,9 +1582,11 @@
         ctx.arc(d.x, d.y, 3.4, 0, Math.PI * 2);
         ctx.fill();
       }
+      ctx.restore();
     }
 
     function drawRechargedHudV2AmbientMotes(ctx, time, energyPct) {
+      ctx.save();
       drawRechargedHudV2CornerLeds(ctx, time, energyPct);
       const { w, h } = getRechargedHudV2Layout();
       const gameplay = { x: 40, y: 157, w: w - 80, h: 861 };
@@ -1619,9 +1622,11 @@
         ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
         ctx.fill();
       }
+      ctx.restore();
     }
 
     function drawRechargedHudV2TopLeftEnergySlot(ctx, time, energyPct) {
+      ctx.save();
       const x = 76;
       const y = 24;
       const w = 92;
@@ -1644,6 +1649,7 @@
       ctx.textBaseline = "middle";
       ctx.fillStyle = `rgba(255,196,122,${textAlpha})`;
       ctx.fillText(`${Math.round(energyPct)}%`, x + (w * 0.5), y + (h * 0.52));
+      ctx.restore();
     }
 
     function pointOnRechargedHudV2OrbLine(f, p, ox, oy, or, time) {
