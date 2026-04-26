@@ -770,28 +770,13 @@
         ctx.fillStyle = grad;
         ctx.fillRect(gp.x, gp.y, gp.w, gp.h);
 
-        const sweep = (((time * RECHARGED_HUD_V2_GLINT_SWEEP_RATE) + (i * 0.11) + ((gp.x + gp.y) * 0.0006)) % 1.8) - 0.4;
-        const bandSoft = 0.30;
-        const bandWide = 0.78;
-        const shimmer = RECHARGED_HUD_V2_GLINT_ALPHA_BASE
-          + ((Math.sin((time * 0.028) + (i * 0.65)) * 0.5 + 0.5) * RECHARGED_HUD_V2_GLINT_ALPHA_RANGE);
-        const glint = ctx.createLinearGradient(
-          gp.x + (gp.w * (sweep - bandWide)),
-          gp.y - (gp.h * 0.22),
-          gp.x + (gp.w * (sweep + bandWide)),
-          gp.y + gp.h + (gp.h * 0.22),
-        );
-        glint.addColorStop(0, "rgba(255,214,160,0)");
-        glint.addColorStop(Math.max(0, 0.5 - bandSoft), `rgba(255,220,170,${shimmer * 0.42})`);
-        glint.addColorStop(0.5, `rgba(255,230,186,${shimmer})`);
-        glint.addColorStop(Math.min(1, 0.5 + bandSoft), `rgba(255,216,168,${shimmer * 0.42})`);
-        glint.addColorStop(1, "rgba(255,214,160,0)");
-        ctx.fillStyle = glint;
-        ctx.fillRect(gp.x, gp.y, gp.w, gp.h);
+        const shimmer = 0.012 + ((Math.sin((time * 0.08) + (i * 1.9)) * 0.5 + 0.5) * 0.012);
+        ctx.fillStyle = `rgba(255,214,160,${shimmer})`;
+        ctx.fillRect(gp.x + 6, gp.y + 2, Math.max(8, gp.w * 0.18), 1);
       });
 
       RECHARGED_HUD_V2_FRAME_PATINA_SPECKS.forEach((p, i) => {
-        const a = 0.032 + ((Math.sin((time * 0.032) + (i * 0.42) + ((p[0] + p[1]) * 0.003)) * 0.5 + 0.5) * 0.012);
+        const a = 0.045 + ((Math.sin((time * 0.11) + (i * 1.7)) * 0.5 + 0.5) * 0.02);
         ctx.fillStyle = `rgba(255,214,160,${a})`;
         ctx.fillRect(p[0], p[1], 2, 1);
       });
