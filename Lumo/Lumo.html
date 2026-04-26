@@ -468,6 +468,22 @@
     rechargedHudV2BulbOffImg.src = "data/assets/ui/bulb_off.png";
     const rechargedHudV2FlareImg = new Image();
     rechargedHudV2FlareImg.src = "data/assets/ui/flare.png";
+    let rechargedHudV2VentSmokePuffs = [];
+    const rechargedHudV2EyeState = {
+      active: false,
+      timer: 0,
+      phase: "idle",
+      blinkTimer: 0,
+      nextWake: 120 + (Math.random() * 240),
+      baseX: 1490,
+      baseY: 1050,
+      driftPhase: Math.random() * 10,
+      leftScale: 1.0,
+      rightScale: 0.86,
+      leftTilt: -0.12,
+      rightTilt: 0.10,
+      blinkCountLeft: 0,
+    };
 
     function getRechargedHudV2Layout() {
       const w = RECHARGED_HUD_V2_MASTER_W;
@@ -622,12 +638,73 @@
       ctx.fillRect(40, 848, 1840, 52);
     }
 
-    // Dashboard.html structural port (Phase 10): drawBottomVentCutout() geometry/slats only.
+    // Dashboard.html structural port (Phase 16): bottom panel atmosphere/smoke-creature layer.
     // Source mapping:
-    // - drawBottomVentCutout(x, y, w, h, mode): cavity + bevel + deep interior + 6 slats
-    // - drawBottomPanelCreatures(): placements (256,1028,154,44) and (1410,1028,154,44)
-    // Intentionally excludes: eye + smoke animation systems and related particles.
-    function drawRechargedHudV2BottomVentCutout(ctx, x, y, w, h) {
+    // - ventSmokePuffs[] + eyeState model
+    // - resetEyes(), updateBottomPanelLife()
+    // - drawBottomVentCutout(x, y, w, h, mode) eye/smoke branches
+    // - drawBottomPanelCreatures() placements (256,1028,154,44) and (1410,1028,154,44)
+    function resetRechargedHudV2Eyes() {
+      rechargedHudV2EyeState.active = true;
+      rechargedHudV2EyeState.phase = "open";
+      rechargedHudV2EyeState.timer = 900;
+      rechargedHudV2EyeState.blinkTimer = 220 + (Math.random() * 360);
+      rechargedHudV2EyeState.baseX = 1462 + (Math.random() * 50);
+      rechargedHudV2EyeState.baseY = 1048 + (Math.random() * 10);
+      rechargedHudV2EyeState.driftPhase = Math.random() * 10;
+      rechargedHudV2EyeState.leftScale = 0.46 + (Math.random() * 0.11);
+      rechargedHudV2EyeState.rightScale = 0.36 + (Math.random() * 0.14);
+      rechargedHudV2EyeState.leftTilt = 0.10 + (Math.random() * 0.08);
+      rechargedHudV2EyeState.rightTilt = -0.18 + (Math.random() * 0.08);
+      rechargedHudV2EyeState.blinkCountLeft = 1;
+    }
+
+    function updateRechargedHudV2BottomPanelLife(time) {
+      if (Math.random() < 0.06) {
+        rechargedHudV2VentSmokePuffs.push({
+          x: 350 + ((Math.random() - 0.5) * 20),
+          y: 1040 + ((Math.random() - 0.5) * 4),
+          vx: -0.08 + (Math.random() * 0.16),
+          vy: -0.10 - (Math.random() * 0.10),
+          life: 0,
+          maxLife: 70 + (Math.random() * 30),
+          r: 8 + (Math.random() * 8),
+          drift: Math.random() * 10,
+        });
+      }
+      rechargedHudV2VentSmokePuffs = rechargedHudV2VentSmokePuffs.filter((p) => {
+        p.life += 1;
+        p.x += p.vx + (Math.sin((time + p.drift) * 0.8) * 0.035);
+        p.y += p.vy;
+        p.r += 0.08;
+        return p.life < p.maxLife;
+      });
+
+      if (!rechargedHudV2EyeState.active) {
+        rechargedHudV2EyeState.nextWake -= 1;
+        if (rechargedHudV2EyeState.nextWake <= 0) {
+          resetRechargedHudV2Eyes();
+        }
+      } else {
+        rechargedHudV2EyeState.timer -= 1;
+        rechargedHudV2EyeState.blinkTimer -= 1;
+        if (rechargedHudV2EyeState.phase === "open" && rechargedHudV2EyeState.blinkCountLeft > 0 && rechargedHudV2EyeState.blinkTimer <= 0) {
+          rechargedHudV2EyeState.phase = "blink";
+          rechargedHudV2EyeState.blinkTimer = 18 + (Math.random() * 10);
+          rechargedHudV2EyeState.blinkCountLeft -= 1;
+        } else if (rechargedHudV2EyeState.phase === "blink" && rechargedHudV2EyeState.blinkTimer <= 0) {
+          rechargedHudV2EyeState.phase = "open";
+          rechargedHudV2EyeState.blinkTimer = 9999;
+        }
+        if (rechargedHudV2EyeState.timer <= 0) {
+          rechargedHudV2EyeState.active = false;
+          rechargedHudV2EyeState.phase = "idle";
+          rechargedHudV2EyeState.nextWake = 1200 + (Math.random() * 120);
+        }
+      }
+    }
+
+    function drawRechargedHudV2BottomVentCutout(ctx, x, y, w, h, mode, time) {
       const cavity = ctx.createLinearGradient(0, y, 0, y + h);
       cavity.addColorStop(0, "rgba(0,0,0,0.62)");
       cavity.addColorStop(0.5, "rgba(8,3,2,0.85)");
@@ -653,6 +730,43 @@
       drawRechargedHudV2RoundedRectPath(ctx, x + 4, y + 4, w - 8, h - 8, 6);
       ctx.fill();
 
+      if (mode === "eyes" && rechargedHudV2EyeState.active) {
+        const lid = rechargedHudV2EyeState.phase === "blink" ? 0.12 : 1.0;
+        const dy = Math.sin((time * 0.08) + rechargedHudV2EyeState.driftPhase) * 1.0;
+        const lx = rechargedHudV2EyeState.baseX - 10;
+        const rx = rechargedHudV2EyeState.baseX + 12;
+        const ey = rechargedHudV2EyeState.baseY + dy;
+        const eyes = [
+          { x: lx, y: ey, sx: (5.7 * rechargedHudV2EyeState.leftScale) / 0.5, tilt: rechargedHudV2EyeState.leftTilt },
+          { x: rx, y: ey + 0.8, sx: (5.0 * rechargedHudV2EyeState.rightScale) / 0.5, tilt: rechargedHudV2EyeState.rightTilt },
+        ];
+        eyes.forEach((e) => {
+          const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, 8);
+          g.addColorStop(0, `rgba(255,236,160,${0.18 * lid})`);
+          g.addColorStop(0.42, `rgba(255,120,54,${0.10 * lid})`);
+          g.addColorStop(1, "rgba(255,80,40,0)");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.ellipse(e.x, e.y, 7, 4.6 * lid, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.save();
+          ctx.translate(e.x, e.y);
+          ctx.rotate(e.tilt);
+          ctx.fillStyle = `rgba(255,234,170,${0.60 * lid})`;
+          ctx.beginPath();
+          ctx.arc(0, 0, e.sx, 0, Math.PI, false);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = `rgba(255,252,220,${0.30 * lid})`;
+          ctx.beginPath();
+          ctx.arc(0, 0.5, e.sx * 0.38, 0, Math.PI, false);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        });
+      }
+
       for (let i = 0; i < 6; i += 1) {
         const sy = y + 7 + i * 6;
         const slatGrad = ctx.createLinearGradient(0, sy, 0, sy + 3);
@@ -663,11 +777,25 @@
         drawRechargedHudV2RoundedRectPath(ctx, x + 8, sy, w - 16, 3, 2);
         ctx.fill();
       }
+
+      if (mode === "smoke") {
+        rechargedHudV2VentSmokePuffs.forEach((p) => {
+          const alpha = (1 - (p.life / p.maxLife)) * 0.18;
+          const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+          g.addColorStop(0, `rgba(230,230,230,${alpha})`);
+          g.addColorStop(0.45, `rgba(140,140,140,${alpha * 0.42})`);
+          g.addColorStop(1, "rgba(80,80,80,0)");
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
     }
 
-    function drawRechargedHudV2BottomVents(ctx) {
-      drawRechargedHudV2BottomVentCutout(ctx, 256, 1028, 154, 44);
-      drawRechargedHudV2BottomVentCutout(ctx, 1410, 1028, 154, 44);
+    function drawRechargedHudV2BottomVents(ctx, time) {
+      drawRechargedHudV2BottomVentCutout(ctx, 256, 1028, 154, 44, "smoke", time);
+      drawRechargedHudV2BottomVentCutout(ctx, 1410, 1028, 154, 44, "eyes", time);
     }
 
     // Dashboard.html structural port (Phase 4): drawTopLogoPlate(time)
@@ -1442,6 +1570,7 @@
       };
       seedRechargedHudV2OrbModel();
       seedRechargedHudV2AmbientMotesModel();
+      updateRechargedHudV2BottomPanelLife(visualTime);
 
       ctx.save();
       ctx.translate(viewport.x, viewport.y);
@@ -1451,7 +1580,7 @@
       drawRechargedHudV2LivesPanel(ctx, frame / 60, lives, livesMax);
       drawRechargedHudV2FlarePanel(ctx, frame / 60, flares, flareMax);
       drawRechargedHudV2ScorePanel(ctx, frame / 60, score);
-      drawRechargedHudV2BottomVents(ctx);
+      drawRechargedHudV2BottomVents(ctx, visualTime);
       drawRechargedHudV2OrbCutout(ctx, orb.x, orb.y, orb.r);
       drawRechargedHudV2FramePatina(ctx, visualTime);
       drawRechargedHudV2OrbCore(ctx, orb.x, orb.y, orb.r, visualTime, w, h, energyPct, sparkStepScale);
