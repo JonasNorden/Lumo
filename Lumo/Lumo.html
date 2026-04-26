@@ -867,6 +867,11 @@
       ring: [],
       seeded: false,
     };
+    const RECHARGED_HUD_V2_ORB_PARTICLE_SPEED_SCALE = 1.25;
+    const rechargedHudV2AmbientMotesModel = {
+      motes: [],
+      seeded: false,
+    };
     const rechargedHudV2Rand = (a, b) => a + (Math.random() * (b - a));
     const rechargedHudV2Lerp = (a, b, t) => a + ((b - a) * t);
     const rechargedHudV2MixColor = (c1, c2, t) => ({
@@ -940,6 +945,83 @@
         });
       }
       rechargedHudV2OrbModel.seeded = true;
+    }
+
+    function pointInRechargedHudV2Rect(x, y, r) {
+      return x >= r.x && x <= (r.x + r.w) && y >= r.y && y <= (r.y + r.h);
+    }
+
+    function getRechargedHudV2MoteRandomPointInZone(zone) {
+      return {
+        x: rechargedHudV2Rand(zone.x + 8, (zone.x + zone.w) - 8),
+        y: rechargedHudV2Rand(zone.y + 8, (zone.y + zone.h) - 8),
+      };
+    }
+
+    function seedRechargedHudV2AmbientMotesModel() {
+      if (rechargedHudV2AmbientMotesModel.seeded) return;
+      const { w, h } = getRechargedHudV2Layout();
+      const gameplay = { x: 40, y: 157, w: w - 80, h: 861 };
+      const zones = {
+        left: { x: 0, y: 0, w: 58, h },
+        right: { x: w - 58, y: 0, w: 58, h },
+        bottom: { x: 58, y: h - 58, w: w - 116, h: 58 },
+        topLeft: { x: 58, y: 18, w: 180, h: 64 },
+        topRight: { x: w - 240, y: 18, w: 182, h: 64 },
+      };
+      const allowedZones = [zones.left, zones.right, zones.bottom, zones.topLeft, zones.topRight];
+      for (let i = 0; i < 24; i += 1) {
+        const zoneIndex = Math.floor(Math.random() * allowedZones.length);
+        const p = getRechargedHudV2MoteRandomPointInZone(allowedZones[zoneIndex]);
+        rechargedHudV2AmbientMotesModel.motes.push({
+          x: p.x,
+          y: p.y,
+          vx: rechargedHudV2Rand(-0.025, 0.025),
+          vy: rechargedHudV2Rand(-0.02, 0.02),
+          a: rechargedHudV2Rand(0.02, 0.10),
+          r: rechargedHudV2Rand(0.8, 2.0),
+          phase: rechargedHudV2Rand(0, 10),
+          zoneIndex,
+        });
+      }
+      rechargedHudV2AmbientMotesModel.seeded = true;
+    }
+
+    function drawRechargedHudV2AmbientMotes(ctx, time) {
+      const { w, h } = getRechargedHudV2Layout();
+      const gameplay = { x: 40, y: 157, w: w - 80, h: 861 };
+      const zones = {
+        left: { x: 0, y: 0, w: 58, h },
+        right: { x: w - 58, y: 0, w: 58, h },
+        bottom: { x: 58, y: h - 58, w: w - 116, h: 58 },
+        topLeft: { x: 58, y: 18, w: 180, h: 64 },
+        topRight: { x: w - 240, y: 18, w: 182, h: 64 },
+      };
+      const allZones = [zones.left, zones.right, zones.bottom, zones.topLeft, zones.topRight];
+      for (let i = 0; i < rechargedHudV2AmbientMotesModel.motes.length; i += 1) {
+        const m = rechargedHudV2AmbientMotesModel.motes[i];
+        const zone = allZones[m.zoneIndex];
+        m.x += m.vx;
+        m.y += m.vy;
+        if (!pointInRechargedHudV2Rect(m.x, m.y, zone) || pointInRechargedHudV2Rect(m.x, m.y, gameplay)) {
+          const p = getRechargedHudV2MoteRandomPointInZone(zone);
+          m.x = p.x;
+          m.y = p.y;
+        }
+        const a = m.a * (0.55 + (Math.sin(time * 0.4 + m.phase) * 0.25));
+        const g = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, m.r * 6);
+        g.addColorStop(0, `rgba(255,235,180,${a * 1.8})`);
+        g.addColorStop(0.35, `rgba(255,170,96,${a})`);
+        g.addColorStop(1, "rgba(255,120,60,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.r * 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = `rgba(255,220,160,${a * 0.75})`;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     function pointOnRechargedHudV2OrbLine(f, p, ox, oy, or, time) {
@@ -1093,7 +1175,7 @@
       for (let i = 0; i < rechargedHudV2OrbModel.sparks.length; i += 1) {
         const s = rechargedHudV2OrbModel.sparks[i];
         const f = rechargedHudV2OrbModel.lines[s.line % rechargedHudV2OrbModel.lines.length];
-        s.p += s.speed * s.dir * (0.45 + (intensity * 0.55));
+        s.p += s.speed * s.dir * (0.45 + (intensity * 0.55)) * RECHARGED_HUD_V2_ORB_PARTICLE_SPEED_SCALE;
         if (s.p > 1 || s.p < 0) {
           s.p = s.dir > 0 ? 0 : 1;
           s.line = Math.floor(Math.random() * rechargedHudV2OrbModel.lines.length);
@@ -1234,6 +1316,7 @@
         r: (Math.min(w, h) * 0.084) * 0.7,
       };
       seedRechargedHudV2OrbModel();
+      seedRechargedHudV2AmbientMotesModel();
 
       ctx.save();
       ctx.translate(viewport.x, viewport.y);
@@ -1246,6 +1329,7 @@
       drawRechargedHudV2OrbCutout(ctx, orb.x, orb.y, orb.r);
       drawRechargedHudV2OrbCore(ctx, orb.x, orb.y, orb.r, visualTime, w, h, energyPct);
       drawRechargedHudV2OrbBrokenRing(ctx, orb.x, orb.y, orb.r, visualTime, energyPct);
+      drawRechargedHudV2AmbientMotes(ctx, visualTime);
       drawRechargedHudV2TopLogoPlate(ctx);
       ctx.restore();
 
