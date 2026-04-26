@@ -260,6 +260,9 @@
         hud: null,
         currentLevelPath: "",
         nextLevelLoadPending: false,
+        score: 0,
+        scoreAwardedEvents: new Set(),
+        scoreLastCheckpointKey: "",
       };
     }
 
@@ -301,6 +304,11 @@
           state.currentPlayerSnapshot = playerSnapshot;
           state.lastPlayerX = Number.isFinite(payload?.playerX) ? payload.playerX : null;
           state.lastPlayerY = Number.isFinite(payload?.playerY) ? payload.playerY : null;
+          state.scoreAwardedEvents = new Set();
+          state.scoreLastCheckpointKey = "";
+          if (playerSnapshot && typeof playerSnapshot === "object") {
+            playerSnapshot.score = Number.isFinite(state.score) ? Math.max(0, Math.floor(state.score)) : 0;
+          }
           return true;
         }
 
@@ -2649,6 +2657,105 @@
       return activeFireflyKeys;
     }
 
+    function makeRechargedScoreEntityKey(entity) {
+      if (!entity || typeof entity !== "object") {
+        return "";
+      }
+      if (typeof entity.id === "string" && entity.id.trim().length > 0) {
+        return entity.id.trim();
+      }
+      const type = typeof entity.type === "string" ? entity.type : "entity";
+      const x = Number.isFinite(entity.x) ? Math.round(entity.x) : "x";
+      const y = Number.isFinite(entity.y) ? Math.round(entity.y) : "y";
+      return `${type}:${x}:${y}`;
+    }
+
+    function resolveRechargedCheckpointKey(checkpoint) {
+      if (!checkpoint || typeof checkpoint !== "object") {
+        return "";
+      }
+      const tx = Number.isFinite(checkpoint.tx) ? Math.floor(checkpoint.tx) : null;
+      const ty = Number.isFinite(checkpoint.ty) ? Math.floor(checkpoint.ty) : null;
+      if (!Number.isFinite(tx) || !Number.isFinite(ty)) {
+        return "";
+      }
+      return `${tx},${ty}`;
+    }
+
+    function applyRechargedScoreEvents(state, previousPlayerSnapshot, currentPlayerSnapshot) {
+      if (!state || typeof state !== "object" || !currentPlayerSnapshot || typeof currentPlayerSnapshot !== "object") {
+        return;
+      }
+
+      if (!(state.scoreAwardedEvents instanceof Set)) {
+        state.scoreAwardedEvents = new Set();
+      }
+      if (!Number.isFinite(state.score)) {
+        state.score = 0;
+      }
+
+      const previousById = new Map();
+      const previousEntities = Array.isArray(previousPlayerSnapshot?.entities) ? previousPlayerSnapshot.entities : [];
+      for (const entity of previousEntities) {
+        const key = makeRechargedScoreEntityKey(entity);
+        if (key.length > 0) {
+          previousById.set(key, entity);
+        }
+      }
+
+      const currentById = new Map();
+      const currentEntities = Array.isArray(currentPlayerSnapshot?.entities) ? currentPlayerSnapshot.entities : [];
+      for (const entity of currentEntities) {
+        const key = makeRechargedScoreEntityKey(entity);
+        if (key.length > 0) {
+          currentById.set(key, entity);
+        }
+      }
+
+      const award = (eventKey, points) => {
+        if (!eventKey || !Number.isFinite(points) || points <= 0) {
+          return;
+        }
+        if (state.scoreAwardedEvents.has(eventKey)) {
+          return;
+        }
+        state.scoreAwardedEvents.add(eventKey);
+        state.score += points;
+      };
+
+      for (const [key, previousEntity] of previousById.entries()) {
+        const entityType = typeof previousEntity?.type === "string" ? previousEntity.type : "";
+        const currentEntity = currentById.get(key);
+        const wasActive = previousEntity?.active === true || previousEntity?.alive === true;
+        const nowInactive = !currentEntity
+          || currentEntity.active !== true
+          || currentEntity.alive === false
+          || currentEntity.state === "collected"
+          || currentEntity.state === "destroyed"
+          || currentEntity.state === "dead";
+
+        if (!wasActive || !nowInactive) {
+          continue;
+        }
+
+        if (entityType === "powercell_01" || entityType === "flare_pickup_01") {
+          award(`pickup:${key}`, 50);
+        } else if (entityType === "dark_creature_01") {
+          award(`kill:${key}`, 200);
+        } else if (entityType === "hover_void_01") {
+          award(`kill:${key}`, 300);
+        }
+      }
+
+      const checkpointKey = resolveRechargedCheckpointKey(currentPlayerSnapshot?.checkpoint);
+      if (checkpointKey.length > 0 && checkpointKey !== state.scoreLastCheckpointKey) {
+        state.score += 500;
+        state.scoreLastCheckpointKey = checkpointKey;
+      }
+
+      currentPlayerSnapshot.score = Math.max(0, Math.floor(state.score));
+    }
+
     function tickLiveRechargedAdapter(state) {
       try {
         const payload = readLatestRechargedBootPayload();
@@ -2707,6 +2814,7 @@
           }
           previousPlayerSnapshot = currentPlayerSnapshot;
           currentPlayerSnapshot = readSnapshot();
+          applyRechargedScoreEvents(state, previousPlayerSnapshot, currentPlayerSnapshot);
           steppedAtLeastOnce = true;
           nextAccumulatorMs -= RECHARGED_FIXED_STEP_MS;
         }
@@ -2728,6 +2836,9 @@
 
         const nextPayload = adapter.getBootPayload?.();
         const nextPlayerSnapshot = currentPlayerSnapshot || readSnapshot();
+        if (nextPlayerSnapshot && typeof nextPlayerSnapshot === "object") {
+          nextPlayerSnapshot.score = Number.isFinite(state?.score) ? Math.max(0, Math.floor(state.score)) : 0;
+        }
         if (nextPayload && typeof nextPayload === "object") {
           const intermissionReady = (
             nextPayload?.gameState === "intermission"
