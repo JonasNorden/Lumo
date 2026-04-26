@@ -646,6 +646,103 @@
       ctx.strokeRect(1328, 18, 330, 112);
     }
 
+    function drawRechargedHudV2WithFrameClip(ctx, drawFn) {
+      const fx = 40;
+      const fy = 157;
+      const fw = 1920 - 80;
+      const fh = 861;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, 1920, 1080);
+      ctx.rect(fx, fy, fw, fh);
+      ctx.clip("evenodd");
+      drawFn();
+      ctx.restore();
+    }
+
+    function drawRechargedHudV2InnerEdgeWear(ctx, time) {
+      const segmentsTop = [
+        { x: 84, y: 157, w: 74 },
+        { x: 246, y: 157, w: 38 },
+        { x: 412, y: 157, w: 58 },
+        { x: 628, y: 157, w: 46 },
+        { x: 882, y: 157, w: 62 },
+        { x: 1186, y: 157, w: 52 },
+        { x: 1452, y: 157, w: 68 },
+        { x: 1688, y: 157, w: 42 },
+      ];
+      const segmentsBottom = [
+        { x: 116, y: 1018, w: 52 },
+        { x: 288, y: 1018, w: 32 },
+        { x: 764, y: 1018, w: 58 },
+        { x: 1108, y: 1018, w: 44 },
+        { x: 1492, y: 1018, w: 56 },
+        { x: 1714, y: 1018, w: 34 },
+      ];
+      const segmentsLeft = [
+        { x: 40, y: 206, h: 46 },
+        { x: 40, y: 364, h: 38 },
+        { x: 40, y: 612, h: 54 },
+      ];
+      const segmentsRight = [
+        { x: 1880, y: 232, h: 42 },
+        { x: 1880, y: 472, h: 58 },
+        { x: 1880, y: 744, h: 46 },
+      ];
+
+      segmentsTop.forEach((s, i) => {
+        const a = 0.06 + ((Math.sin(time * 0.10 + i * 1.9) * 0.5 + 0.5) * 0.03);
+        ctx.fillStyle = `rgba(255,220,162,${a})`;
+        ctx.fillRect(s.x, s.y, s.w, 1);
+        ctx.fillStyle = `rgba(0,0,0,${a * 0.45})`;
+        ctx.fillRect(s.x, s.y + 1, s.w, 1);
+        ctx.fillStyle = `rgba(255,238,190,${a * 0.55})`;
+        ctx.fillRect(s.x + Math.floor(s.w * 0.18), s.y, Math.max(4, Math.floor(s.w * 0.14)), 1);
+      });
+
+      segmentsBottom.forEach((s, i) => {
+        const a = 0.05 + ((Math.sin(time * 0.11 + i * 1.6) * 0.5 + 0.5) * 0.025);
+        ctx.fillStyle = `rgba(255,212,150,${a})`;
+        ctx.fillRect(s.x, s.y, s.w, 1);
+        ctx.fillStyle = `rgba(0,0,0,${a * 0.42})`;
+        ctx.fillRect(s.x, s.y - 1, s.w, 1);
+        ctx.fillStyle = `rgba(255,232,180,${a * 0.5})`;
+        ctx.fillRect(s.x + Math.floor(s.w * 0.35), s.y, Math.max(3, Math.floor(s.w * 0.12)), 1);
+      });
+
+      segmentsLeft.forEach((s, i) => {
+        const a = 0.045 + ((Math.sin(time * 0.09 + i * 2.1) * 0.5 + 0.5) * 0.02);
+        ctx.fillStyle = `rgba(255,206,146,${a})`;
+        ctx.fillRect(s.x, s.y, 1, s.h);
+        ctx.fillStyle = `rgba(0,0,0,${a * 0.45})`;
+        ctx.fillRect(s.x + 1, s.y, 1, s.h);
+        ctx.fillStyle = `rgba(255,232,184,${a * 0.45})`;
+        ctx.fillRect(s.x, s.y + Math.floor(s.h * 0.28), 1, Math.max(4, Math.floor(s.h * 0.16)));
+      });
+
+      segmentsRight.forEach((s, i) => {
+        const a = 0.045 + ((Math.sin(time * 0.08 + i * 1.7) * 0.5 + 0.5) * 0.02);
+        ctx.fillStyle = `rgba(255,206,146,${a})`;
+        ctx.fillRect(s.x, s.y, 1, s.h);
+        ctx.fillStyle = `rgba(0,0,0,${a * 0.45})`;
+        ctx.fillRect(s.x - 1, s.y, 1, s.h);
+        ctx.fillStyle = `rgba(255,232,184,${a * 0.45})`;
+        ctx.fillRect(s.x, s.y + Math.floor(s.h * 0.34), 1, Math.max(4, Math.floor(s.h * 0.15)));
+      });
+
+      const nicks = [
+        [198, 157, 3], [354, 157, 2], [582, 157, 3], [736, 157, 2],
+        [980, 157, 3], [1264, 157, 2], [1560, 157, 3], [1762, 157, 2],
+      ];
+      nicks.forEach((n, i) => {
+        const a = 0.08 + ((Math.sin(time * 0.14 + i * 1.3) * 0.5 + 0.5) * 0.02);
+        ctx.fillStyle = `rgba(255,240,196,${a})`;
+        ctx.fillRect(n[0], n[1], n[2], 1);
+        ctx.fillStyle = `rgba(20,8,4,${a * 0.65})`;
+        ctx.fillRect(n[0], n[1] + 1, n[2], 1);
+      });
+    }
+
     function drawRechargedHudV2FramePatina(ctx, time) {
       RECHARGED_HUD_V2_FRAME_PATINA_GRIME.forEach((gp, i) => {
         const grad = ctx.createLinearGradient(gp.x, gp.y, gp.x + gp.w, gp.y + gp.h);
@@ -678,6 +775,91 @@
       openingBottom.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = openingBottom;
       ctx.fillRect(40, 848, 1840, 52);
+    }
+
+    function drawRechargedHudV2InsetLightStrip(ctx, time, energyPct) {
+      const intensity = Math.max(0, Math.min(1, energyPct / 100));
+      const alpha = 0.16 + intensity * 0.28;
+      const pulse = 0.96 + Math.sin(time * 0.42) * 0.035;
+      const strips = [
+        { x: 760, y: 1035, w: 168, h: 1 },
+        { x: 1490, y: 1039, w: 126, h: 1 },
+      ];
+
+      strips.forEach((s, i) => {
+        const local = pulse * (0.98 + i * 0.02);
+        ctx.fillStyle = "rgba(8,3,2,0.90)";
+        ctx.fillRect(s.x, s.y, s.w, 2);
+
+        const core = ctx.createLinearGradient(s.x, s.y, s.x + s.w, s.y);
+        core.addColorStop(0, "rgba(255,160,70,0)");
+        core.addColorStop(0.16, `rgba(255,196,108,${alpha * local * 0.95})`);
+        core.addColorStop(0.50, `rgba(255,236,164,${alpha * local * 1.55})`);
+        core.addColorStop(0.84, `rgba(255,196,108,${alpha * local * 0.92})`);
+        core.addColorStop(1, "rgba(255,160,70,0)");
+        ctx.fillStyle = core;
+        ctx.fillRect(s.x, s.y, s.w, s.h);
+
+        const tight = ctx.createLinearGradient(0, s.y - 4, 0, s.y + 6);
+        tight.addColorStop(0, "rgba(255,130,60,0)");
+        tight.addColorStop(0.50, `rgba(255,188,98,${alpha * local * 0.42})`);
+        tight.addColorStop(1, "rgba(255,130,60,0)");
+        ctx.fillStyle = tight;
+        ctx.fillRect(s.x, s.y - 4, s.w, 10);
+
+        const spill = ctx.createLinearGradient(0, s.y, 0, s.y + 26);
+        spill.addColorStop(0, `rgba(255,214,120,${alpha * local * 0.18})`);
+        spill.addColorStop(0.26, `rgba(255,164,86,${alpha * local * 0.12})`);
+        spill.addColorStop(1, "rgba(255,120,60,0)");
+        ctx.fillStyle = spill;
+        ctx.fillRect(s.x, s.y, s.w, 26);
+
+        ctx.fillStyle = `rgba(255,224,170,${alpha * local * 0.10})`;
+        ctx.fillRect(s.x, s.y - 2, s.w, 1);
+      });
+    }
+
+    function drawRechargedHudV2TechGraffiti(ctx, time) {
+      const alpha = 0.095;
+      const jitter = Math.sin(time * 0.18) * 0.004;
+      const tags = [
+        { x: 86, y: 948, s: 1.0, r: -0.01 },
+        { x: 520, y: 72, s: 0.72, r: 0.008 },
+        { x: 1480, y: 78, s: 0.86, r: -0.006 },
+        { x: 1828, y: 278, s: 0.58, r: 1.57 },
+        { x: 92, y: 300, s: 0.55, r: -1.57 },
+      ];
+      const glyphs = [
+        [[0, 0], [10, 0], [12, -3], [18, -3]],
+        [[26, 0], [30, -4], [34, 0], [38, -2]],
+        [[48, -2], [56, -2], [60, 0], [66, 0]],
+        [[74, 0], [80, -3], [88, -3]],
+        [[98, -1], [102, -4], [108, -1], [112, -3], [118, -1]],
+        [[128, 0], [138, 0], [142, -2], [148, -2]],
+      ];
+
+      tags.forEach((tag, ti) => {
+        ctx.save();
+        ctx.translate(tag.x, tag.y);
+        ctx.rotate(tag.r + jitter * (ti + 1));
+        ctx.scale(tag.s, tag.s);
+        ctx.strokeStyle = `rgba(255,188,120,${alpha * (0.92 + ti * 0.04)})`;
+        ctx.lineWidth = 1;
+        glyphs.forEach((points) => {
+          ctx.beginPath();
+          ctx.moveTo(points[0][0], points[0][1]);
+          for (let i = 1; i < points.length; i += 1) {
+            ctx.lineTo(points[i][0], points[i][1]);
+          }
+          ctx.stroke();
+        });
+        ctx.globalAlpha = 0.42;
+        ctx.fillStyle = `rgba(255,176,96,${alpha})`;
+        ctx.fillRect(154, -4, 8, 2);
+        ctx.fillRect(166, -4, 14, 2);
+        ctx.fillRect(184, -4, 4, 2);
+        ctx.restore();
+      });
     }
 
     // Dashboard.html structural port (Phase 17): top panel "soul" layer.
@@ -1688,15 +1870,22 @@
       ctx.translate(viewport.x, viewport.y);
       ctx.scale(viewport.scale, viewport.scale);
       drawRechargedHudV2BaseFrame(ctx);
-      drawRechargedHudV2TopPanelSurfacePolish(ctx, visualTime);
-      drawRechargedHudV2PanelSoul(ctx, visualTime, orb, energyPct);
-      drawRechargedHudV2FutureHudGuides(ctx);
-      drawRechargedHudV2LivesPanel(ctx, frame / 60, lives, livesMax);
-      drawRechargedHudV2FlarePanel(ctx, frame / 60, flares, flareMax);
+      drawRechargedHudV2WithFrameClip(ctx, () => {
+        drawRechargedHudV2TopPanelSurfacePolish(ctx, visualTime);
+        drawRechargedHudV2PanelSoul(ctx, visualTime, orb, energyPct);
+        drawRechargedHudV2FutureHudGuides(ctx);
+        drawRechargedHudV2InnerEdgeWear(ctx, visualTime);
+        drawRechargedHudV2LivesPanel(ctx, frame / 60, lives, livesMax);
+        drawRechargedHudV2FlarePanel(ctx, frame / 60, flares, flareMax);
+      });
       drawRechargedHudV2ScorePanel(ctx, frame / 60, score);
-      drawRechargedHudV2BottomVents(ctx, visualTime);
       drawRechargedHudV2OrbCutout(ctx, orb.x, orb.y, orb.r);
       drawRechargedHudV2FramePatina(ctx, visualTime);
+      drawRechargedHudV2WithFrameClip(ctx, () => {
+        drawRechargedHudV2InsetLightStrip(ctx, visualTime, energyPct);
+        drawRechargedHudV2BottomVents(ctx, visualTime);
+      });
+      drawRechargedHudV2TechGraffiti(ctx, visualTime);
       drawRechargedHudV2OrbCore(ctx, orb.x, orb.y, orb.r, visualTime, w, h, energyPct, sparkStepScale);
       drawRechargedHudV2OrbBrokenRing(ctx, orb.x, orb.y, orb.r, visualTime, energyPct);
       drawRechargedHudV2AmbientMotes(ctx, visualTime);
