@@ -27,6 +27,9 @@ function readAdapterPlayerSnapshot(payload, state) {
 // Builds one compact Recharged HUD snapshot from live adapter-facing player state.
 export function buildRechargedHudSnapshot(payload = {}, state = null) {
   const playerSnapshot = readAdapterPlayerSnapshot(payload, state);
+  const runtimeScore = Number.isFinite(state?.score) ? Math.max(0, Math.floor(state.score || 0)) : null;
+  const snapshotScore = toWholeNumber(playerSnapshot?.score);
+  const payloadScore = toWholeNumber(payload?.score);
   const levelComplete = playerSnapshot?.levelComplete === true;
   const respawnCountdown = playerSnapshot?.respawnCountdown && typeof playerSnapshot.respawnCountdown === "object"
     ? playerSnapshot.respawnCountdown
@@ -46,7 +49,7 @@ export function buildRechargedHudSnapshot(payload = {}, state = null) {
     flareStash: toWholeNumber(playerSnapshot?.flareStash),
     energy: toFiniteNumber(playerSnapshot?.energy),
     lives: toWholeNumber(playerSnapshot?.lives),
-    score: toWholeNumber(playerSnapshot?.score),
+    score: runtimeScore ?? snapshotScore ?? payloadScore ?? 0,
     levelComplete,
     intermissionReadyForInput: playerSnapshot?.intermissionReadyForInput === true,
     gameState,
