@@ -6,6 +6,19 @@ function toWholeNumber(value) {
   return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null;
 }
 
+function toComboMultiplier(value) {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  if (value >= 2) {
+    return 2;
+  }
+  if (value >= 1.5) {
+    return 1.5;
+  }
+  return 1;
+}
+
 function readAdapterPlayerSnapshot(payload, state) {
   const adapter = payload?.adapter && typeof payload.adapter === "object" ? payload.adapter : null;
   const adapterSnapshot = adapter?.getPlayerSnapshot?.();
@@ -28,8 +41,11 @@ function readAdapterPlayerSnapshot(payload, state) {
 export function buildRechargedHudSnapshot(payload = {}, state = null) {
   const playerSnapshot = readAdapterPlayerSnapshot(payload, state);
   const runtimeScore = Number.isFinite(state?.score) ? Math.max(0, Math.floor(state.score || 0)) : null;
+  const runtimeCombo = toComboMultiplier(state?.comboMultiplier);
   const snapshotScore = toWholeNumber(playerSnapshot?.score);
+  const snapshotCombo = toComboMultiplier(playerSnapshot?.comboMultiplier);
   const payloadScore = toWholeNumber(payload?.score);
+  const payloadCombo = toComboMultiplier(payload?.comboMultiplier);
   const levelComplete = playerSnapshot?.levelComplete === true;
   const respawnCountdown = playerSnapshot?.respawnCountdown && typeof playerSnapshot.respawnCountdown === "object"
     ? playerSnapshot.respawnCountdown
@@ -50,6 +66,7 @@ export function buildRechargedHudSnapshot(payload = {}, state = null) {
     energy: toFiniteNumber(playerSnapshot?.energy),
     lives: toWholeNumber(playerSnapshot?.lives),
     score: runtimeScore ?? snapshotScore ?? payloadScore ?? 0,
+    comboMultiplier: runtimeCombo ?? snapshotCombo ?? payloadCombo ?? 1,
     levelComplete,
     intermissionReadyForInput: playerSnapshot?.intermissionReadyForInput === true,
     gameState,

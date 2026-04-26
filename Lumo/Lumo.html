@@ -418,6 +418,9 @@
         flares: 0,
         flareFlash: 0,
         score: 0,
+        comboMultiplier: 1,
+        scorePulse: 0,
+        _scorePulseAgeSec: 1,
         checkpointLit: false,
         checkpointRingT: 0,
         popups: [],
@@ -425,6 +428,8 @@
         _pauseBtnHover: false,
       };
     }
+
+    const RECHARGED_HUD_V2_SCORE_PULSE_DURATION_SEC = 0.22;
 
     const RECHARGED_HUD_V2_MASTER_W = 1920;
     const RECHARGED_HUD_V2_MASTER_H = 1080;
@@ -1521,7 +1526,10 @@
       ctx.restore();
     }
 
-    function drawRechargedHudV2NixieScore(ctx, time, score) {
+    function drawRechargedHudV2NixieScore(ctx, time, score, options = {}) {
+      const comboMultiplier = Number.isFinite(options?.comboMultiplier) ? Math.max(1, Math.min(2, options.comboMultiplier)) : 1;
+      const scorePulse = Number.isFinite(options?.scorePulse) ? Math.max(0, Math.min(1, options.scorePulse)) : 0;
+      const comboHeat = comboMultiplier >= 2 ? 1 : comboMultiplier >= 1.5 ? 0.55 : 0;
       const panelX = 1240 + 150;
       const panelY = 20 + 20;
       const panelW = 290;
@@ -1544,12 +1552,26 @@
       ctx.lineWidth = 1;
       ctx.stroke();
 
+      const panelAuraAlpha = (0.045 + (comboHeat * 0.05) + (scorePulse * 0.11));
+      if (panelAuraAlpha > 0.001) {
+        const panelMidX = panelX + (panelW * 0.5);
+        const panelMidY = panelY + (panelH * 0.56);
+        const panelAura = ctx.createRadialGradient(panelMidX, panelMidY, panelH * 0.25, panelMidX, panelMidY, panelW * 0.88);
+        panelAura.addColorStop(0, `rgba(255,162,74,${panelAuraAlpha})`);
+        panelAura.addColorStop(0.6, `rgba(255,132,64,${panelAuraAlpha * 0.45})`);
+        panelAura.addColorStop(1, "rgba(255,118,62,0)");
+        ctx.fillStyle = panelAura;
+        ctx.fillRect(panelX - 18, panelY - 10, panelW + 36, panelH + 24);
+      }
+
       for (let i = 0; i < 5; i += 1) {
         const tx = panelX + innerPadX + i * (tubeW + tubeGap);
         const ty = panelY + innerPadY;
         const tr = Math.min(tubeW, tubeH) * 0.44;
         const digitValue = Number.parseInt(digits[i], 10) || 0;
-        const flicker = 0.92 + (Math.sin((time * 4.5) + (i * 0.72)) * 0.08);
+        const flickerAmplitude = 0.08 + (comboHeat * 0.02) + (scorePulse * 0.015);
+        const flickerBase = 0.92 + (comboHeat * 0.04) + (scorePulse * 0.05);
+        const flicker = flickerBase + (Math.sin((time * (4.5 + (comboHeat * 0.4))) + (i * 0.72)) * flickerAmplitude);
         const tubeMidX = tx + (tubeW * 0.5);
         const tubeBottomY = ty + tubeH - 7;
         const tubeDigitY = ty + tubeH * 0.52;
@@ -1566,7 +1588,8 @@
         ctx.fillRect(tx, ty, tubeW, tubeH);
 
         const innerGlow = ctx.createRadialGradient(tubeMidX, tubeDigitY, 4, tubeMidX, tubeDigitY, tubeW * 1.1);
-        innerGlow.addColorStop(0, "rgba(255,168,80,0.10)");
+        const innerGlowAlpha = 0.10 + (comboHeat * 0.05) + (scorePulse * 0.06);
+        innerGlow.addColorStop(0, `rgba(255,168,80,${innerGlowAlpha})`);
         innerGlow.addColorStop(1, "rgba(255,120,60,0)");
         ctx.fillStyle = innerGlow;
         ctx.fillRect(tx, ty, tubeW, tubeH);
@@ -1609,15 +1632,16 @@
           const yOffset = delta * 0.44;
           const xOffset = delta * 0.08;
           if (d === digitValue) {
-            ctx.shadowColor = `rgba(255,162,78,${0.56 * flicker})`;
+            const activeDigitGlowBoost = 1 + (comboHeat * 0.16) + (scorePulse * 0.18);
+            ctx.shadowColor = `rgba(255,162,78,${0.56 * flicker * activeDigitGlowBoost})`;
             ctx.shadowBlur = 4;
-            ctx.fillStyle = `rgba(255,210,142,${0.88 * flicker})`;
+            ctx.fillStyle = `rgba(255,210,142,${0.88 * flicker * activeDigitGlowBoost})`;
             ctx.fillText(String(d), xOffset, yOffset);
             ctx.shadowBlur = 14;
-            ctx.fillStyle = `rgba(255,150,64,${0.45 * flicker})`;
+            ctx.fillStyle = `rgba(255,150,64,${0.45 * flicker * activeDigitGlowBoost})`;
             ctx.fillText(String(d), xOffset, yOffset);
             ctx.shadowBlur = 28;
-            ctx.fillStyle = `rgba(255,116,42,${0.24 * flicker})`;
+            ctx.fillStyle = `rgba(255,116,42,${0.24 * flicker * activeDigitGlowBoost})`;
             ctx.fillText(String(d), xOffset, yOffset);
             ctx.shadowBlur = 0;
           } else {
@@ -1629,7 +1653,8 @@
         ctx.restore();
 
         const baseGlow = ctx.createRadialGradient(tubeMidX, tubeBottomY, 0, tubeMidX, tubeBottomY, tubeW * 0.6);
-        baseGlow.addColorStop(0, `rgba(255,138,58,${0.30 * flicker})`);
+        const tubeBaseGlowBoost = 1 + (comboHeat * 0.18) + (scorePulse * 0.2);
+        baseGlow.addColorStop(0, `rgba(255,138,58,${0.30 * flicker * tubeBaseGlowBoost})`);
         baseGlow.addColorStop(1, "rgba(255,120,52,0)");
         ctx.fillStyle = baseGlow;
         ctx.fillRect(tx + 2, ty + tubeH - 16, tubeW - 4, 16);
@@ -2215,6 +2240,8 @@
       const flares = Number.isFinite(hudSnapshot.flares) ? Math.max(0, Math.floor(hudSnapshot.flares)) : 0;
       const flareMax = Number.isFinite(hudSnapshot.flareMax) ? Math.max(1, Math.floor(hudSnapshot.flareMax)) : 3;
       const score = Number.isFinite(hudSnapshot.score) ? Math.max(0, Math.floor(hudSnapshot.score)) : 0;
+      const comboMultiplier = Number.isFinite(hudSnapshot.comboMultiplier) ? Math.max(1, Math.min(2, hudSnapshot.comboMultiplier)) : 1;
+      const scorePulse = Number.isFinite(state?.hud?.scorePulse) ? Math.max(0, Math.min(1, state.hud.scorePulse)) : 0;
       const viewport = getRechargedHudV2Viewport(canvas);
       const gameplayViewport = getRechargedHudV2GameplayViewport(canvas);
       const { w, h } = getRechargedHudV2Layout();
@@ -2239,7 +2266,10 @@
         drawRechargedHudV2InnerEdgeWear(ctx, visualTime);
         drawRechargedHudV2LivesPanel(ctx, frame / 60, lives, livesMax);
         drawRechargedHudV2FlarePanel(ctx, frame / 60, flares, flareMax);
-        drawRechargedHudV2NixieScore(ctx, visualTime, score);
+        drawRechargedHudV2NixieScore(ctx, visualTime, score, {
+          comboMultiplier,
+          scorePulse,
+        });
       });
       drawRechargedHudV2OrbCutout(ctx, orb.x, orb.y, orb.r);
       drawRechargedHudV2FramePatina(ctx, visualTime);
@@ -2266,6 +2296,8 @@
         flares,
         flareMax,
         score,
+        comboMultiplier,
+        scorePulse,
         logoReady: !!(rechargedHudV2LumoLogoImg.complete && rechargedHudV2LumoLogoImg.naturalWidth > 0),
         playfieldRect: {
           x: gameplayViewport.x,
@@ -2309,6 +2341,20 @@
       }
 
       hud._prevFlares = flareStash;
+      const previousScore = Number.isFinite(hud.score) ? Math.max(0, Math.floor(hud.score)) : 0;
+      const snapshotScore = Number.isFinite(snapshot.score) ? Math.max(0, Math.floor(snapshot.score)) : previousScore;
+      if (snapshotScore > previousScore) {
+        hud._scorePulseAgeSec = 0;
+      } else if (!Number.isFinite(hud._scorePulseAgeSec)) {
+        hud._scorePulseAgeSec = RECHARGED_HUD_V2_SCORE_PULSE_DURATION_SEC;
+      } else {
+        hud._scorePulseAgeSec += dt;
+      }
+      const pulseDurationSec = Math.max(0.18, RECHARGED_HUD_V2_SCORE_PULSE_DURATION_SEC);
+      const pulseT = Math.max(0, Math.min(1, (hud._scorePulseAgeSec || 0) / pulseDurationSec));
+      const pulseEase = 1 - (pulseT * pulseT);
+      hud.scorePulse = pulseT < 1 ? pulseEase : 0;
+
       hud.lives = Number.isFinite(snapshot.lives) ? Math.max(0, Math.floor(snapshot.lives)) : hud.lives;
       const payloadPlayer = payload?.player && typeof payload.player === "object" ? payload.player : null;
       const nextLivesMax = Number.isFinite(payloadPlayer?.maxLives)
@@ -2335,7 +2381,10 @@
       }
       hud.energyPct = Math.round(energyRatio * 100);
       hud.flares = flareStash;
-      hud.score = Number.isFinite(snapshot.score) ? Math.max(0, Math.floor(snapshot.score)) : hud.score;
+      hud.score = snapshotScore;
+      hud.comboMultiplier = Number.isFinite(snapshot.comboMultiplier)
+        ? Math.max(1, Math.min(2, snapshot.comboMultiplier))
+        : 1;
       const hudDebug = document.getElementById("hudDebug");
       if (hudDebug) {
         hudDebug.textContent = state?.intermissionAcknowledgedMessage || "";
