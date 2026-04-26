@@ -113,6 +113,11 @@
     const RECHARGED_PLAYER_BRAKE_SPRITE_HEIGHT = 48;
     const RECHARGED_PLAYER_BRAKE_SPRITE_MAX_WIDTH = 28;
     const RECHARGED_UI_GAME_OVER_IMAGE = "data/assets/ui/gameover.png";
+    const RECHARGED_PLAYER_ACTION_SFX = Object.freeze({
+      jump: "data/assets/audio/sfx/player/movement/player_jump_01.ogg",
+      land: "data/assets/audio/sfx/player/movement/player_land.ogg",
+      pulse: "data/assets/audio/sfx/player/abilities/player_pulse.ogg",
+    });
 
     function createRechargedSpriteImage(src) {
       const image = new Image();
@@ -2404,6 +2409,90 @@
       };
     }
 
+    function createRechargedPlayerActionAudioState() {
+      return {
+        lastPulseId: 0,
+      };
+    }
+
+    function ensureRechargedPlayerActionAudioState(state) {
+      if (!state || typeof state !== "object") {
+        return createRechargedPlayerActionAudioState();
+      }
+      if (!state.rechargedPlayerActionAudio || typeof state.rechargedPlayerActionAudio !== "object") {
+        state.rechargedPlayerActionAudio = createRechargedPlayerActionAudioState();
+      }
+      return state.rechargedPlayerActionAudio;
+    }
+
+    function resolveRechargedSfxVolume() {
+      try {
+        if (window?.Lumo && typeof window.Lumo.getAudioSettings === "function") {
+          const settings = window.Lumo.getAudioSettings();
+          if (Number.isFinite(settings?.sfxVolume)) {
+            return Math.max(0, Math.min(1, settings.sfxVolume));
+          }
+        }
+      } catch (_error) {
+        // Safe fallback keeps runtime SFX audible when settings lookup fails.
+      }
+      return 1;
+    }
+
+    function playRechargedPlayerActionSfx(path, volume = 1) {
+      if (typeof path !== "string" || path.length === 0) return;
+      const AudioCtor = window?.Audio;
+      if (typeof AudioCtor !== "function") return;
+      const sfxVolume = resolveRechargedSfxVolume();
+      const finalVolume = Math.max(0, Math.min(1, volume * sfxVolume));
+      if (finalVolume <= 0) return;
+      try {
+        const audio = new AudioCtor(path);
+        audio.preload = "auto";
+        audio.volume = finalVolume;
+        const playPromise = audio.play?.();
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(() => {});
+        }
+      } catch (_error) {
+        // Ignore action SFX failures so runtime simulation is never blocked by audio.
+      }
+    }
+
+    function syncRechargedPlayerActionSfx(state, previousPlayerSnapshot, currentPlayerSnapshot) {
+      if (!state || !currentPlayerSnapshot || typeof currentPlayerSnapshot !== "object") return;
+      const playerAudioState = ensureRechargedPlayerActionAudioState(state);
+      const previous = previousPlayerSnapshot && typeof previousPlayerSnapshot === "object"
+        ? previousPlayerSnapshot
+        : null;
+      const current = currentPlayerSnapshot;
+      const hasPrevious = previous !== null;
+
+      const previousGrounded = previous?.grounded === true;
+      const currentGrounded = current?.grounded === true;
+      const currentVelocityY = Number.isFinite(current?.velocity?.y) ? current.velocity.y : 0;
+      const currentRising = current?.rising === true || currentVelocityY < -1;
+      const jumpStarted = hasPrevious && previousGrounded && !currentGrounded && currentRising;
+
+      const landingTransition = hasPrevious && (current?.landed === true || (!previousGrounded && currentGrounded));
+
+      const currentPulseId = Number.isFinite(current?.pulse?.id) ? Math.max(0, Math.floor(current.pulse.id)) : 0;
+      const pulseStarted = currentPulseId > playerAudioState.lastPulseId && current?.pulse?.active === true;
+      if (currentPulseId > playerAudioState.lastPulseId) {
+        playerAudioState.lastPulseId = currentPulseId;
+      }
+
+      if (jumpStarted) {
+        playRechargedPlayerActionSfx(RECHARGED_PLAYER_ACTION_SFX.jump, 1);
+      }
+      if (landingTransition) {
+        playRechargedPlayerActionSfx(RECHARGED_PLAYER_ACTION_SFX.land, 1);
+      }
+      if (pulseStarted) {
+        playRechargedPlayerActionSfx(RECHARGED_PLAYER_ACTION_SFX.pulse, 1);
+      }
+    }
+
     function ensureRechargedAuthoredAudioState(state) {
       if (!state || typeof state !== "object") {
         return createRechargedAuthoredAudioState();
@@ -2959,6 +3048,7 @@
           }
           previousPlayerSnapshot = currentPlayerSnapshot;
           currentPlayerSnapshot = readSnapshot();
+          syncRechargedPlayerActionSfx(state, previousPlayerSnapshot, currentPlayerSnapshot);
           steppedAtLeastOnce = true;
           nextAccumulatorMs -= RECHARGED_FIXED_STEP_MS;
         }
