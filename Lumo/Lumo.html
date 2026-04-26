@@ -2684,6 +2684,19 @@
       return `${tx},${ty}`;
     }
 
+    function resolveRechargedCheckpointActivationKey(livePlayer) {
+      if (!livePlayer || typeof livePlayer !== "object") {
+        return "";
+      }
+      const runtimeActivationKey = typeof livePlayer?.checkpointActivationKey === "string"
+        ? livePlayer.checkpointActivationKey.trim()
+        : "";
+      if (runtimeActivationKey.length > 0) {
+        return runtimeActivationKey;
+      }
+      return resolveRechargedCheckpointKey(livePlayer?.checkpoint);
+    }
+
     function awardRechargedScore(state, eventKey, points) {
       if (!state || typeof state !== "object") {
         return;
@@ -2781,8 +2794,9 @@
       }
 
       const livePlayer = resolveRechargedLivePlayerSnapshot(payload, state).snapshot;
-      const checkpointKey = resolveRechargedCheckpointKey(livePlayer?.checkpoint);
-      if (checkpointKey.length > 0 && checkpointKey !== state.scoreLastCheckpointKey) {
+      const checkpointTouched = livePlayer?.checkpointTouched === true;
+      const checkpointKey = resolveRechargedCheckpointActivationKey(livePlayer);
+      if (checkpointTouched && checkpointKey.length > 0 && checkpointKey !== state.scoreLastCheckpointKey) {
         awardRechargedScore(state, `checkpoint:${checkpointKey}`, 500);
         state.scoreLastCheckpointKey = checkpointKey;
       }

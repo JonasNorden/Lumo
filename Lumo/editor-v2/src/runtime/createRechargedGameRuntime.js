@@ -86,6 +86,16 @@ function buildPlayerSnapshot(player) {
     intermissionReadyForInput: source.intermissionReadyForInput === true,
     gameState: typeof source.gameState === "string" ? source.gameState : "playing",
     lastExitId: typeof source.lastExitId === "string" ? source.lastExitId : null,
+    checkpoint: source?.checkpoint && typeof source.checkpoint === "object"
+      ? {
+          tx: Number.isFinite(source?.checkpoint?.tx) ? source.checkpoint.tx : null,
+          ty: Number.isFinite(source?.checkpoint?.ty) ? source.checkpoint.ty : null,
+          px: Number.isFinite(source?.checkpoint?.px) ? source.checkpoint.px : null,
+          py: Number.isFinite(source?.checkpoint?.py) ? source.checkpoint.py : null,
+        }
+      : null,
+    checkpointTouched: source?.checkpointTouched === true,
+    checkpointActivationKey: typeof source?.checkpointActivationKey === "string" ? source.checkpointActivationKey : "",
     pulse: pulse
       ? {
           active: pulse.active === true,
