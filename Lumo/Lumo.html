@@ -487,6 +487,64 @@
       ctx.strokeRect(gameplay.x, gameplay.y, gameplay.w, gameplay.h);
     }
 
+    function drawRechargedHudV2RoundedRectPath(ctx, x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    }
+
+    // Dashboard.html structural port (Phase 10): drawBottomVentCutout() geometry/slats only.
+    // Source mapping:
+    // - drawBottomVentCutout(x, y, w, h, mode): cavity + bevel + deep interior + 6 slats
+    // - drawBottomPanelCreatures(): placements (256,1028,154,44) and (1410,1028,154,44)
+    // Intentionally excludes: eye + smoke animation systems and related particles.
+    function drawRechargedHudV2BottomVentCutout(ctx, x, y, w, h) {
+      const cavity = ctx.createLinearGradient(0, y, 0, y + h);
+      cavity.addColorStop(0, "rgba(0,0,0,0.62)");
+      cavity.addColorStop(0.5, "rgba(8,3,2,0.85)");
+      cavity.addColorStop(1, "rgba(0,0,0,0.68)");
+      ctx.fillStyle = cavity;
+      drawRechargedHudV2RoundedRectPath(ctx, x, y, w, h, 8);
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(255,214,154,0.10)";
+      ctx.lineWidth = 1;
+      drawRechargedHudV2RoundedRectPath(ctx, x + 0.5, y + 0.5, w - 1, h - 1, 8);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255,220,170,0.06)";
+      drawRechargedHudV2RoundedRectPath(ctx, x + 2, y + 2, w - 4, 6, 6);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(0,0,0,0.24)";
+      drawRechargedHudV2RoundedRectPath(ctx, x + 2, y + h - 8, w - 4, 6, 6);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(0,0,0,0.46)";
+      drawRechargedHudV2RoundedRectPath(ctx, x + 4, y + 4, w - 8, h - 8, 6);
+      ctx.fill();
+
+      for (let i = 0; i < 6; i += 1) {
+        const sy = y + 7 + i * 6;
+        const slatGrad = ctx.createLinearGradient(0, sy, 0, sy + 3);
+        slatGrad.addColorStop(0, "rgba(255,214,154,0.11)");
+        slatGrad.addColorStop(0.45, "rgba(38,14,7,0.92)");
+        slatGrad.addColorStop(1, "rgba(0,0,0,0.46)");
+        ctx.fillStyle = slatGrad;
+        drawRechargedHudV2RoundedRectPath(ctx, x + 8, sy, w - 16, 3, 2);
+        ctx.fill();
+      }
+    }
+
+    function drawRechargedHudV2BottomVents(ctx) {
+      drawRechargedHudV2BottomVentCutout(ctx, 256, 1028, 154, 44);
+      drawRechargedHudV2BottomVentCutout(ctx, 1410, 1028, 154, 44);
+    }
+
     // Dashboard.html structural port (Phase 4): drawTopLogoPlate(time)
     // Source mapping:
     // - x=312,y=18,w=308,h=104
@@ -1155,6 +1213,12 @@
     function drawRechargedHudV2(canvas, ctx, state, hudSnapshot) {
       if (!canvas || !ctx || !hudSnapshot) return;
       const frame = Number.isFinite(state?.frameCount) ? state.frameCount : 0;
+      const nowMs = typeof performance?.now === "function" ? performance.now() : Date.now();
+      const previousVisualMs = Number.isFinite(state?.hudVisualTimePrevMs) ? state.hudVisualTimePrevMs : nowMs;
+      const visualDt = Math.max(0, Math.min((nowMs - previousVisualMs) / 1000, 1 / 20));
+      const visualTime = Math.max(0, Number(state?.hudVisualTimeSec || 0) + visualDt);
+      state.hudVisualTimePrevMs = nowMs;
+      state.hudVisualTimeSec = visualTime;
       const energyPct = Number.isFinite(hudSnapshot.energyPct) ? Math.max(0, Math.min(100, Math.round(hudSnapshot.energyPct))) : 0;
       const lives = Number.isFinite(hudSnapshot.lives) ? Math.max(0, Math.floor(hudSnapshot.lives)) : 0;
       const livesMax = Number.isFinite(hudSnapshot.livesMax) ? Math.max(1, Math.floor(hudSnapshot.livesMax)) : Math.max(1, lives);
@@ -1178,9 +1242,10 @@
       drawRechargedHudV2LivesPanel(ctx, frame / 60, lives, livesMax);
       drawRechargedHudV2FlarePanel(ctx, frame / 60, flares, flareMax);
       drawRechargedHudV2ScorePanel(ctx, frame / 60, score);
+      drawRechargedHudV2BottomVents(ctx);
       drawRechargedHudV2OrbCutout(ctx, orb.x, orb.y, orb.r);
-      drawRechargedHudV2OrbCore(ctx, orb.x, orb.y, orb.r, frame / 60, w, h, energyPct);
-      drawRechargedHudV2OrbBrokenRing(ctx, orb.x, orb.y, orb.r, frame / 60, energyPct);
+      drawRechargedHudV2OrbCore(ctx, orb.x, orb.y, orb.r, visualTime, w, h, energyPct);
+      drawRechargedHudV2OrbBrokenRing(ctx, orb.x, orb.y, orb.r, visualTime, energyPct);
       drawRechargedHudV2TopLogoPlate(ctx);
       ctx.restore();
 
