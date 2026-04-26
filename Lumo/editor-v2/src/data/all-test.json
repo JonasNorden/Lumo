@@ -49375,6 +49375,25 @@
       }
     },
     {
+      "id": "entity-21",
+      "name": "Moving Platform",
+      "type": "movingPlatform",
+      "x": 156,
+      "y": 12,
+      "visible": true,
+      "params": {
+        "widthTiles": 7,
+        "heightTiles": 2,
+        "direction": "right",
+        "distanceTiles": 25,
+        "speed": 200,
+        "loop": "pingpong",
+        "oneWay": true,
+        "carryPlayer": true,
+        "spriteTileId": "stone_ct"
+      }
+    },
+    {
       "id": "entity-spawn",
       "name": "Player Spawn",
       "type": "player-spawn",
@@ -49393,23 +49412,221 @@
       "params": {}
     },
     {
-      "id": "entity-21",
-      "name": "Moving Platform",
-      "type": "movingPlatform",
-      "x": 156,
+      "id": "entity-22",
+      "name": "Hover Void",
+      "type": "hover_void_01",
+      "x": 63,
+      "y": 15,
+      "visible": true,
+      "params": {
+        "aggroTiles": 7,
+        "followTiles": 7,
+        "maxHp": 3,
+        "loseSightTiles": 11,
+        "attackCooldownMin": 1,
+        "attackCooldownMax": 3,
+        "attackDamage": 12,
+        "attackPushback": 180,
+        "braveGroupSize": 3,
+        "swarmGroupSize": 6
+      }
+    },
+    {
+      "id": "entity-23",
+      "name": "Hover Void",
+      "type": "hover_void_01",
+      "x": 66,
+      "y": 14,
+      "visible": true,
+      "params": {
+        "aggroTiles": 7,
+        "followTiles": 7,
+        "maxHp": 3,
+        "loseSightTiles": 11,
+        "attackCooldownMin": 1,
+        "attackCooldownMax": 3,
+        "attackDamage": 12,
+        "attackPushback": 180,
+        "braveGroupSize": 3,
+        "swarmGroupSize": 6
+      }
+    },
+    {
+      "id": "entity-24",
+      "name": "Hover Void",
+      "type": "hover_void_01",
+      "x": 75,
+      "y": 13,
+      "visible": true,
+      "params": {
+        "aggroTiles": 7,
+        "followTiles": 7,
+        "maxHp": 3,
+        "loseSightTiles": 11,
+        "attackCooldownMin": 1,
+        "attackCooldownMax": 3,
+        "attackDamage": 12,
+        "attackPushback": 180,
+        "braveGroupSize": 3,
+        "swarmGroupSize": 6
+      }
+    },
+    {
+      "id": "entity-25",
+      "name": "Dark Creature",
+      "type": "dark_creature_01",
+      "x": 149,
+      "y": 17,
+      "visible": true,
+      "params": {
+        "hp": 3,
+        "hitCooldown": 0.6,
+        "safeDelay": 0.6,
+        "patrolTiles": 0,
+        "aggroTiles": 0,
+        "castCooldown": 5.5,
+        "energyLoss": 40,
+        "knockbackX": 260,
+        "knockbackY": -220,
+        "reactsToFlares": true
+      }
+    },
+    {
+      "id": "entity-26",
+      "name": "Dark Creature",
+      "type": "dark_creature_01",
+      "x": 222,
+      "y": 17,
+      "visible": true,
+      "params": {
+        "hp": 3,
+        "hitCooldown": 0.6,
+        "safeDelay": 0.6,
+        "patrolTiles": 0,
+        "aggroTiles": 0,
+        "castCooldown": 5.5,
+        "energyLoss": 40,
+        "knockbackX": 260,
+        "knockbackY": -220,
+        "reactsToFlares": true
+      }
+    },
+    {
+      "id": "entity-27",
+      "name": "Hover Void",
+      "type": "hover_void_01",
+      "x": 234,
       "y": 12,
       "visible": true,
       "params": {
-        "widthTiles": 7,
-        "heightTiles": 2,
-        "direction": "right",
-        "distanceTiles": 25,
-        "speed": 200,
-        "loop": "pingpong",
-        "oneWay": true,
-        "carryPlayer": true,
-        "spriteTileId": "stone_ct"
+        "aggroTiles": 7,
+        "followTiles": 7,
+        "maxHp": 3,
+        "loseSightTiles": 11,
+        "attackCooldownMin": 1,
+        "attackCooldownMax": 3,
+        "attackDamage": 12,
+        "attackPushback": 180,
+        "braveGroupSize": 3,
+        "swarmGroupSize": 6
       }
+    },
+    {
+      "id": "entity-28",
+      "name": "Hover Void",
+      "type": "hover_void_01",
+      "x": 247,
+      "y": 12,
+      "visible": true,
+      "params": {
+        "aggroTiles": 7,
+        "followTiles": 7,
+        "maxHp": 3,
+        "loseSightTiles": 11,
+        "attackCooldownMin": 1,
+        "attackCooldownMax": 3,
+        "attackDamage": 12,
+        "attackPushback": 180,
+        "braveGroupSize": 3,
+        "swarmGroupSize": 6
+      }
+    },
+    {
+      "id": "entity-29",
+      "name": "Lantern",
+      "type": "lantern_01",
+      "x": 328,
+      "y": 13,
+      "visible": true,
+      "params": {
+        "radius": 170,
+        "strength": 0.85
+      }
+    },
+    {
+      "id": "entity-30",
+      "name": "Checkpoint",
+      "type": "checkpoint",
+      "x": 328,
+      "y": 17,
+      "visible": true,
+      "params": {
+        "respawnId": ""
+      }
+    },
+    {
+      "id": "entity-31",
+      "name": "Power-cell",
+      "type": "powercell_01",
+      "x": 420,
+      "y": 18,
+      "visible": true,
+      "params": {}
+    },
+    {
+      "id": "entity-32",
+      "name": "Power-cell",
+      "type": "powercell_01",
+      "x": 271,
+      "y": 17,
+      "visible": true,
+      "params": {}
+    },
+    {
+      "id": "entity-33",
+      "name": "Flare Pickup",
+      "type": "flare_pickup_01",
+      "x": 268,
+      "y": 17,
+      "visible": true,
+      "params": {}
+    },
+    {
+      "id": "entity-34",
+      "name": "Flare Pickup",
+      "type": "flare_pickup_01",
+      "x": 267,
+      "y": 17,
+      "visible": true,
+      "params": {}
+    },
+    {
+      "id": "entity-35",
+      "name": "Flare Pickup",
+      "type": "flare_pickup_01",
+      "x": 267,
+      "y": 16,
+      "visible": true,
+      "params": {}
+    },
+    {
+      "id": "entity-36",
+      "name": "Flare Pickup",
+      "type": "flare_pickup_01",
+      "x": 268,
+      "y": 16,
+      "visible": true,
+      "params": {}
     }
   ],
   "sounds": [
