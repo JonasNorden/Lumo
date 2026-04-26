@@ -1506,8 +1506,8 @@
     }
 
     function drawRechargedHudV2NixieScore(ctx, time, score) {
-      const panelX = 1240;
-      const panelY = 20;
+      const panelX = 1240 + 150;
+      const panelY = 20 + 20;
       const panelW = 290;
       const panelH = 88;
       const digits = String(Math.max(0, Math.floor(score))).padStart(5, "0").slice(-5);
