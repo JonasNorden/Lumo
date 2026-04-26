@@ -264,6 +264,9 @@
         scoreAwardedEvents: new Set(),
         scoreLastCheckpointKey: "",
         scoreLiveEntitiesByKey: new Map(),
+        comboCount: 0,
+        comboLastEventTime: Number.NEGATIVE_INFINITY,
+        comboMultiplier: 1,
       };
     }
 
@@ -308,6 +311,9 @@
           state.scoreAwardedEvents = new Set();
           state.scoreLastCheckpointKey = "";
           state.scoreLiveEntitiesByKey = new Map();
+          state.comboCount = 0;
+          state.comboLastEventTime = Number.NEGATIVE_INFINITY;
+          state.comboMultiplier = 1;
           if (playerSnapshot && typeof playerSnapshot === "object") {
             playerSnapshot.score = Number.isFinite(state.score) ? Math.max(0, Math.floor(state.score)) : 0;
           }
@@ -2697,6 +2703,39 @@
       return resolveRechargedCheckpointKey(livePlayer?.checkpoint);
     }
 
+    function getRechargedComboMultiplier(state, nowMs) {
+      if (!state || typeof state !== "object") {
+        return 1;
+      }
+
+      if (!Number.isFinite(state.comboCount)) {
+        state.comboCount = 0;
+      }
+      if (!Number.isFinite(state.comboLastEventTime)) {
+        state.comboLastEventTime = Number.NEGATIVE_INFINITY;
+      }
+      if (!Number.isFinite(state.comboMultiplier)) {
+        state.comboMultiplier = 1;
+      }
+
+      const normalizedNowMs = Number.isFinite(nowMs) ? nowMs : Date.now();
+      if ((normalizedNowMs - state.comboLastEventTime) > 2000) {
+        state.comboCount = 0;
+      }
+
+      state.comboCount += 1;
+      let multiplier = 1;
+      if (state.comboCount === 2) {
+        multiplier = 1.5;
+      } else if (state.comboCount >= 3) {
+        multiplier = 2;
+      }
+
+      state.comboLastEventTime = normalizedNowMs;
+      state.comboMultiplier = multiplier;
+      return multiplier;
+    }
+
     function awardRechargedScore(state, eventKey, points) {
       if (!state || typeof state !== "object") {
         return;
@@ -2715,13 +2754,22 @@
       if (state.scoreAwardedEvents.has(normalizedEventKey)) {
         return;
       }
+
+      const nowMs = (typeof performance !== "undefined" && typeof performance.now === "function")
+        ? performance.now()
+        : Date.now();
+      const multiplier = getRechargedComboMultiplier(state, nowMs);
+      const finalPoints = Math.floor(points * multiplier);
       state.scoreAwardedEvents.add(normalizedEventKey);
-      state.score += points;
+      state.score += finalPoints;
 
       if (window.__LUMO_RECHARGED_SCORE_DEBUG__ === true) {
         console.log("[Lumo Recharged score]", {
           eventKey: normalizedEventKey,
-          points,
+          basePoints: points,
+          multiplier,
+          finalPoints,
+          comboCount: Number.isFinite(state.comboCount) ? state.comboCount : 0,
           score: Math.max(0, Math.floor(state.score)),
         });
       }
