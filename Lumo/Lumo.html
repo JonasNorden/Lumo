@@ -1161,7 +1161,9 @@
       ctx.fillStyle = warmScan;
       ctx.fillRect(innerX + 2, innerY + 2, innerW - 4, innerH - 4);
 
-      ctx.strokeStyle = "rgba(236,186,122,0.30)";
+      ctx.shadowColor = "rgba(255,182,104,0.30)";
+      ctx.shadowBlur = 4.2;
+      ctx.strokeStyle = "rgba(236,186,122,0.42)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(innerX + 8, scaleY);
@@ -1176,32 +1178,48 @@
         const major = i % majorStep === 0;
         const mid = !major && i % 4 === 0;
         const tickH = major ? 7 : (mid ? 5 : 3);
-        ctx.strokeStyle = major ? "rgba(248,202,136,0.40)" : "rgba(216,166,104,0.24)";
+        if (major) {
+          ctx.shadowBlur = 4.8;
+          ctx.strokeStyle = "rgba(248,202,136,0.58)";
+        } else if (mid) {
+          ctx.shadowBlur = 3.2;
+          ctx.strokeStyle = "rgba(230,176,112,0.34)";
+        } else {
+          ctx.shadowBlur = 1.8;
+          ctx.strokeStyle = "rgba(216,166,104,0.26)";
+        }
         ctx.beginPath();
         ctx.moveTo(tx, scaleY - tickH);
         ctx.lineTo(tx, scaleY + 1);
         ctx.stroke();
       }
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
 
       const labels = [88, 92, 96, 100, 104, 108];
-      ctx.fillStyle = "rgba(244,204,148,0.50)";
+      ctx.fillStyle = "rgba(248,206,146,0.68)";
       ctx.font = "600 8px 'Courier New', monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "bottom";
-      ctx.shadowColor = "rgba(255,186,112,0.34)";
-      ctx.shadowBlur = 2.4;
+      ctx.shadowColor = "rgba(255,186,112,0.56)";
+      ctx.shadowBlur = 4.6;
       for (let i = 0; i < labels.length; i += 1) {
         const t = i / (labels.length - 1);
         const lx = innerX + 8 + (t * (innerW - 16));
         ctx.fillText(String(labels[i]), lx, innerY + innerH - 1);
       }
       ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
 
       ctx.textAlign = "left";
-      ctx.fillStyle = "rgba(230,182,126,0.34)";
+      ctx.fillStyle = "rgba(236,188,132,0.46)";
+      ctx.shadowColor = "rgba(255,178,98,0.32)";
+      ctx.shadowBlur = 2.2;
       ctx.fillText("FM", innerX + 6, innerY + 7);
       ctx.textAlign = "right";
       ctx.fillText("MHz", innerX + innerW - 6, innerY + 7);
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
 
       for (let i = 0; i < 10; i += 1) {
         const t = i / 9;
@@ -1242,16 +1260,37 @@
         + (Math.sin((time * 0.133) + 4.6) * 0.09);
       const markerT = Math.max(0.02, Math.min(0.98, markerBase));
       const markerX = innerX + 8 + (markerT * (innerW - 16));
+      const markerPulse = 0.86 + ((Math.sin((time * 0.25) + 0.5) * 0.5 + 0.5) * 0.22);
       const markerGlow = ctx.createLinearGradient(0, innerY, 0, innerY + innerH);
-      markerGlow.addColorStop(0, "rgba(255,236,194,0.34)");
-      markerGlow.addColorStop(0.5, "rgba(255,194,126,0.24)");
-      markerGlow.addColorStop(1, "rgba(188,126,84,0.17)");
+      markerGlow.addColorStop(0, `rgba(255,236,194,${(0.50 * markerPulse).toFixed(3)})`);
+      markerGlow.addColorStop(0.5, `rgba(255,196,120,${(0.36 * markerPulse).toFixed(3)})`);
+      markerGlow.addColorStop(1, `rgba(188,126,84,${(0.24 * markerPulse).toFixed(3)})`);
+      ctx.shadowColor = `rgba(255,184,108,${(0.54 * markerPulse).toFixed(3)})`;
+      ctx.shadowBlur = 8.8;
       ctx.fillStyle = markerGlow;
-      ctx.fillRect(markerX - 0.65, innerY + 1, 1.3, innerH - 2);
-      ctx.fillStyle = "rgba(255,225,178,0.19)";
-      ctx.fillRect(markerX - 2.2, innerY + 1, 4.4, innerH - 2);
-      ctx.fillStyle = "rgba(255,244,222,0.34)";
-      ctx.fillRect(markerX - 0.35, innerY + 1.2, 0.7, innerH - 2.4);
+      ctx.fillRect(markerX - 0.75, innerY + 1, 1.5, innerH - 2);
+      ctx.fillStyle = `rgba(255,224,170,${(0.30 * markerPulse).toFixed(3)})`;
+      ctx.fillRect(markerX - 2.6, innerY + 1, 5.2, innerH - 2);
+      ctx.fillStyle = `rgba(255,245,220,${(0.56 * markerPulse).toFixed(3)})`;
+      ctx.fillRect(markerX - 0.32, innerY + 1.2, 0.64, innerH - 2.4);
+
+      const markerCapGlow = ctx.createRadialGradient(markerX, innerY + 2.1, 0.2, markerX, innerY + 2.1, 4.2);
+      markerCapGlow.addColorStop(0, `rgba(255,240,196,${(0.56 * markerPulse).toFixed(3)})`);
+      markerCapGlow.addColorStop(0.45, `rgba(255,196,126,${(0.30 * markerPulse).toFixed(3)})`);
+      markerCapGlow.addColorStop(1, "rgba(255,190,120,0)");
+      ctx.fillStyle = markerCapGlow;
+      ctx.beginPath();
+      ctx.ellipse(markerX, innerY + 2.1, 3.6, 2.1, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowColor = "rgba(255,174,96,0.24)";
+      ctx.shadowBlur = 2.4;
+      ctx.strokeStyle = "rgba(255,208,150,0.22)";
+      ctx.lineWidth = 1;
+      drawRechargedHudV2RoundedRectPath(ctx, innerX + 1.5, innerY + 1.5, innerW - 3, innerH - 3, 4);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
 
       ctx.restore();
     }
