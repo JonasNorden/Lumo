@@ -1414,6 +1414,7 @@
       seeded: false,
     };
     const rechargedHudV2AmbientMotesModel = {
+      leds: [],
       motes: [],
       seeded: false,
     };
@@ -1505,6 +1506,23 @@
 
     function seedRechargedHudV2AmbientMotesModel() {
       if (rechargedHudV2AmbientMotesModel.seeded) return;
+      [
+        [80, 44], [110, 44], [140, 44],
+        [MASTER_W - 130, 44], [MASTER_W - 100, 44], [MASTER_W - 70, 44],
+        [MASTER_W - 220, MASTER_H - 36], [MASTER_W - 185, MASTER_H - 36],
+        [80, MASTER_H - 36], [110, MASTER_H - 36], [140, MASTER_H - 36],
+      ].forEach((d, i) => {
+        const isBottomLeft = i >= 8;
+        const energyThresholdPct = isBottomLeft ? (i - 8) * 34 : null;
+        rechargedHudV2AmbientMotesModel.leds.push({
+          x: d[0],
+          y: d[1],
+          phase: rechargedHudV2Rand(0, 10),
+          dead: Math.random() < 0.2,
+          weak: Math.random() < 0.45,
+          energyThresholdPct,
+        });
+      });
       const { w, h } = getRechargedHudV2Layout();
       const gameplay = { x: 40, y: 157, w: w - 80, h: 861 };
       const zones = {
@@ -1532,7 +1550,41 @@
       rechargedHudV2AmbientMotesModel.seeded = true;
     }
 
-    function drawRechargedHudV2AmbientMotes(ctx, time) {
+    function drawRechargedHudV2CornerLeds(ctx, time, energyPct) {
+      for (let i = 0; i < rechargedHudV2AmbientMotesModel.leds.length; i += 1) {
+        const d = rechargedHudV2AmbientMotesModel.leds[i];
+        let a = 0.05;
+        if (!d.dead) {
+          const base = d.weak ? 0.10 : 0.18;
+          const pulse = 0.65 + (Math.sin((time * (d.weak ? 0.6 : 0.35)) + d.phase) * 0.25);
+          const glitch = d.weak && Math.sin((time * 2.2) + (d.phase * 3.1)) > 0.985 ? 0.02 : 1.0;
+          a = base * pulse * glitch;
+        }
+        if (Number.isFinite(d.energyThresholdPct)) {
+          const active = energyPct >= d.energyThresholdPct;
+          const thresholdBand = Math.max(0, Math.min(1, (energyPct - d.energyThresholdPct) / 34));
+          a = active ? Math.max(0.08, a * (0.62 + (thresholdBand * 0.38))) : 0.03;
+        }
+        const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, 12);
+        g.addColorStop(0, `rgba(255,225,170,${a * 1.8})`);
+        g.addColorStop(0.35, `rgba(255,165,90,${a})`);
+        g.addColorStop(1, "rgba(255,120,40,0)");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, 12, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = d.dead
+          ? "rgba(95,62,48,0.55)"
+          : `rgba(255,196,120,${0.35 + a})`;
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, 3.4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawRechargedHudV2AmbientMotes(ctx, time, energyPct) {
+      drawRechargedHudV2CornerLeds(ctx, time, energyPct);
       const { w, h } = getRechargedHudV2Layout();
       const gameplay = { x: 40, y: 157, w: w - 80, h: 861 };
       const zones = {
@@ -1567,6 +1619,31 @@
         ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2);
         ctx.fill();
       }
+    }
+
+    function drawRechargedHudV2TopLeftEnergySlot(ctx, time, energyPct) {
+      const x = 76;
+      const y = 24;
+      const w = 92;
+      const h = 32;
+      const intensity = Math.max(0, Math.min(1, energyPct / 100));
+      const pulse = 0.96 + (Math.sin(time * 0.9) * 0.04);
+
+      const slotInner = ctx.createLinearGradient(0, y, 0, y + h);
+      slotInner.addColorStop(0, "rgba(18,10,8,.75)");
+      slotInner.addColorStop(1, "rgba(12,6,4,.88)");
+      ctx.fillStyle = slotInner;
+      ctx.fillRect(x, y, w, h);
+      ctx.strokeStyle = "rgba(120,92,62,.35)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, w, h);
+
+      const textAlpha = (0.36 + (intensity * 0.58)) * pulse;
+      ctx.font = "700 12px Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = `rgba(255,196,122,${textAlpha})`;
+      ctx.fillText(`${Math.round(energyPct)}%`, x + (w * 0.5), y + (h * 0.52));
     }
 
     function pointOnRechargedHudV2OrbLine(f, p, ox, oy, or, time) {
@@ -1870,6 +1947,7 @@
       ctx.translate(viewport.x, viewport.y);
       ctx.scale(viewport.scale, viewport.scale);
       drawRechargedHudV2BaseFrame(ctx);
+      drawRechargedHudV2TopLeftEnergySlot(ctx, visualTime, energyPct);
       drawRechargedHudV2WithFrameClip(ctx, () => {
         drawRechargedHudV2TopPanelSurfacePolish(ctx, visualTime);
         drawRechargedHudV2PanelSoul(ctx, visualTime, orb, energyPct);
@@ -1888,7 +1966,7 @@
       drawRechargedHudV2TechGraffiti(ctx, visualTime);
       drawRechargedHudV2OrbCore(ctx, orb.x, orb.y, orb.r, visualTime, w, h, energyPct, sparkStepScale);
       drawRechargedHudV2OrbBrokenRing(ctx, orb.x, orb.y, orb.r, visualTime, energyPct);
-      drawRechargedHudV2AmbientMotes(ctx, visualTime);
+      drawRechargedHudV2AmbientMotes(ctx, visualTime, energyPct);
       drawRechargedHudV2TopLogoPlate(ctx);
       ctx.restore();
 
