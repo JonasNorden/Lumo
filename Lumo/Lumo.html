@@ -1060,7 +1060,7 @@
       ctx.stroke();
     }
 
-    function drawRechargedHudV2OrbCore(ctx, ox, oy, or, time, w, h, energyPct) {
+    function drawRechargedHudV2OrbCore(ctx, ox, oy, or, time, w, h, energyPct, sparkStepScale = 1) {
       const intensity = Math.max(0, Math.min(1, energyPct / 100));
       const inv = 1 - intensity;
       const pal = getRechargedHudV2OrbPalette(intensity);
@@ -1174,7 +1174,7 @@
       for (let i = 0; i < rechargedHudV2OrbModel.sparks.length; i += 1) {
         const s = rechargedHudV2OrbModel.sparks[i];
         const f = rechargedHudV2OrbModel.lines[s.line % rechargedHudV2OrbModel.lines.length];
-        s.p += s.speed * s.dir * (0.45 + (intensity * 0.55));
+        s.p += s.speed * s.dir * (0.45 + (intensity * 0.55)) * sparkStepScale;
         if (s.p > 1 || s.p < 0) {
           s.p = s.dir > 0 ? 0 : 1;
           s.line = Math.floor(Math.random() * rechargedHudV2OrbModel.lines.length);
@@ -1294,8 +1294,13 @@
     function drawRechargedHudV2(canvas, ctx, state, hudSnapshot) {
       if (!canvas || !ctx || !hudSnapshot) return;
       const frame = Number.isFinite(state?.frameCount) ? state.frameCount : 0;
-      const visualTime = Math.max(0, Number(state?.hudVisualTimeSec || 0) + 0.016);
+      const nowSec = (typeof performance?.now === "function" ? performance.now() : Date.now()) / 1000;
+      const prevNowSec = Number.isFinite(state?.hudLastVisualNowSec) ? state.hudLastVisualNowSec : nowSec;
+      const visualDt = Math.max(1 / 240, Math.min(0.05, nowSec - prevNowSec));
+      const visualTime = Math.max(0, Number(state?.hudVisualTimeSec || 0) + visualDt);
+      const sparkStepScale = visualDt / (1 / 60);
       state.hudVisualTimeSec = visualTime;
+      state.hudLastVisualNowSec = nowSec;
       const energyPct = Number.isFinite(hudSnapshot.energyPct) ? Math.max(0, Math.min(100, Math.round(hudSnapshot.energyPct))) : 0;
       const lives = Number.isFinite(hudSnapshot.lives) ? Math.max(0, Math.floor(hudSnapshot.lives)) : 0;
       const livesMax = Number.isFinite(hudSnapshot.livesMax) ? Math.max(1, Math.floor(hudSnapshot.livesMax)) : Math.max(1, lives);
@@ -1322,7 +1327,7 @@
       drawRechargedHudV2ScorePanel(ctx, frame / 60, score);
       drawRechargedHudV2BottomVents(ctx);
       drawRechargedHudV2OrbCutout(ctx, orb.x, orb.y, orb.r);
-      drawRechargedHudV2OrbCore(ctx, orb.x, orb.y, orb.r, visualTime, w, h, energyPct);
+      drawRechargedHudV2OrbCore(ctx, orb.x, orb.y, orb.r, visualTime, w, h, energyPct, sparkStepScale);
       drawRechargedHudV2OrbBrokenRing(ctx, orb.x, orb.y, orb.r, visualTime, energyPct);
       drawRechargedHudV2AmbientMotes(ctx, visualTime);
       drawRechargedHudV2TopLogoPlate(ctx);
