@@ -867,7 +867,6 @@
       ring: [],
       seeded: false,
     };
-    const RECHARGED_HUD_V2_ORB_PARTICLE_SPEED_SCALE = 1.25;
     const rechargedHudV2AmbientMotesModel = {
       motes: [],
       seeded: false,
@@ -1175,7 +1174,7 @@
       for (let i = 0; i < rechargedHudV2OrbModel.sparks.length; i += 1) {
         const s = rechargedHudV2OrbModel.sparks[i];
         const f = rechargedHudV2OrbModel.lines[s.line % rechargedHudV2OrbModel.lines.length];
-        s.p += s.speed * s.dir * (0.45 + (intensity * 0.55)) * RECHARGED_HUD_V2_ORB_PARTICLE_SPEED_SCALE;
+        s.p += s.speed * s.dir * (0.45 + (intensity * 0.55));
         if (s.p > 1 || s.p < 0) {
           s.p = s.dir > 0 ? 0 : 1;
           s.line = Math.floor(Math.random() * rechargedHudV2OrbModel.lines.length);
@@ -1295,11 +1294,7 @@
     function drawRechargedHudV2(canvas, ctx, state, hudSnapshot) {
       if (!canvas || !ctx || !hudSnapshot) return;
       const frame = Number.isFinite(state?.frameCount) ? state.frameCount : 0;
-      const nowMs = typeof performance?.now === "function" ? performance.now() : Date.now();
-      const previousVisualMs = Number.isFinite(state?.hudVisualTimePrevMs) ? state.hudVisualTimePrevMs : nowMs;
-      const visualDt = Math.max(0, Math.min((nowMs - previousVisualMs) / 1000, 1 / 20));
-      const visualTime = Math.max(0, Number(state?.hudVisualTimeSec || 0) + visualDt);
-      state.hudVisualTimePrevMs = nowMs;
+      const visualTime = Math.max(0, Number(state?.hudVisualTimeSec || 0) + 0.016);
       state.hudVisualTimeSec = visualTime;
       const energyPct = Number.isFinite(hudSnapshot.energyPct) ? Math.max(0, Math.min(100, Math.round(hudSnapshot.energyPct))) : 0;
       const lives = Number.isFinite(hudSnapshot.lives) ? Math.max(0, Math.floor(hudSnapshot.lives)) : 0;
