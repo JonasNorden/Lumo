@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hover Void Demo v8</title>
+<style>
+body{
+  margin:0;
+  background:#040912;
+  font-family:system-ui,Segoe UI,Roboto,sans-serif;
+  color:#dfeeff;
+}
+.top{
+  padding:12px 16px;
+  background:rgba(10,20,35,.92);
+  border-bottom:1px solid rgba(120,180,255,.15);
+  line-height:1.45;
+}
+canvas{
+  display:block;
+  margin:auto;
+  background:#030710;
+}
+.hint{
+  color:#bcd3ea;
+  font-size:14px;
+}
+</style>
+</head>
+<body>
+<div class="top">
+  <strong>Hover Void Demo v8</strong><br>
+  <span class="hint">
+    Piltangenter = styr Lumo. Mellanslag = Pulse.  
+    Nytt i v8: flocken omringar Lumo men bara en HV i taget gör en tydlig jojo-attack, fysisk träff krävs, längre synradie innan de tappar Lumo, och när de tappar honom slocknar de och driftar bort så flocken löses upp.
+  </span>
+</div>
+
+<canvas id="c" width="1900" height="760"></canvas>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+const FLOOR = 620;
+const LIGHT_RADIUS = 165;
+
+const WAKE_RADIUS = 280;
+const SOCIAL_RADIUS = 260;
+const FOLLOW_RADIUS = 78;
+const LOSE_PLAYER_RADIUS = 412;     // + ~3 tiles jämfört med tidigare
+const PAIR_JOIN_DIST = 92;
+const FLOCK_JOIN_DIST = 155;
+const COMFORT_ZONE = 12;
+const PLAYER_CONTACT_DIST = 34;     // fysisk kontakt
+const HV_BUMP_DIST = 34;
+const MAX_SPEED = 220;
+
+let simT = 0;
+let last = performance.now();
+
+function rand(a,b){ return a + Math.random() * (b-a); }
+function dist(ax,ay,bx,by){ return Math.hypot(bx-ax, by-ay); }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+function lerp(a,b,t){ return a + (b-a) * t; }
+
+const keys = { left:false, right:false, up:false, down:false, pulse:false };
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowLeft") keys.left = true;
+  if (e.key === "ArrowRight") keys.right = true;
+  if (e.key === "ArrowUp") keys.up = true;
+  if (e.key === "ArrowDown") keys.down = true;
+  if (e.key === " ") {
+    e.preventDefault();
+    keys.pulse = true;
+  }
+});
+
+window.addEventListener("keyup", (e) => {
+  if (e.key === "ArrowLeft") keys.left = false;
+  if (e.key === "ArrowRight") keys.right = false;
+  if (e.key === "ArrowUp") keys.up = false;
+  if (e.key === "ArrowDown") keys.down = false;
+});
+
+const player = {
+  x: 120,
+  y: FLOOR - 18,
+  vx: 0,
+  vy: 0,
+  bob: 0,
+  energy: 100,
+  pushX: 0,
+  pushY: 0,
+  pulseT: 0
+};
+
+function makeHV(x, y, id){
+  return {
+    id,
+    x, y,
+    baseX:x, baseY:y,
+    vx:0, vy:0,
+    pushX:0, pushY:0,
+    size:rand(0.95, 1.08),
+    phase:rand(0, Math.PI*2),
+    phase2:rand(0, Math.PI*2),
+    phase3:rand(0, Math.PI*2),
+    awake:false,
+    sleeping:true,
+    dead:false,
+    bodySeen:0,
+    wakeGlow:0,
+    hp:3,
+    angry:false,
+    angryT:0,
+    angryCooldown:0,
+    blinkT:0,
+    blinkCooldown:rand(4,9),
+    blinkWindowStart:performance.now()/1000,
+    blinksInWindow:0,
+    bumpCd:rand(1.0,2.0),
+    state:"sleep",
+    seesPlayer:false,
+    lostTimer:0,
+    driftAwayT:0,
+    socialAnchorX:x,
+    socialAnchorY:y,
+    // attack state
+    attackState:"none",      // none, lunge, retreat
+    attackTimer:0,
+    attackStartX:x,
+    attackStartY:y,
+    attackTargetX:x,
+    attackTargetY:y,
+    hasHitThisAttack:false
+  };
+}
+
+const hvs = [
+  makeHV(360, 420, 0),
+  makeHV(660, 330, 1),
+  makeHV(910, 470, 2),
+  makeHV(1160, 310, 3),
+  makeHV(1410, 430, 4),
+  makeHV(1630, 290, 5),
+  makeHV(1760, 500, 6),
+  makeHV(1860, 360, 7)
+];
+
+let flockAttackCooldown = 0;
+
+function activeHVs(){
+  return hvs.filter(v => v.awake && !v.dead);
+}
+
+function nearbyActive(v, d){
+  return activeHVs().filter(o => o !== v && dist(v.x,v.y,o.x,o.y) <= d);
+}
+
+function nearestHVToPlayerWake(){
+  let best = null;
+  let bd = Infinity;
+  for(const v of hvs){
+    if(v.dead) continue;
+    const d = dist(player.x, player.y, v.x, v.y);
+    if(d < WAKE_RADIUS && d < bd){
+      bd = d;
+      best = v;
+    }
+  }
+  return best;
+}
+
+function updateWake(){
+  const seed = nearestHVToPlayerWake();
+  if(seed){
+    seed.awake = true;
+    seed.sleeping = false;
+    seed.lostTimer = 0;
+  }
+}
+
+function triggerAngry(v){
+  if(v.angry || v.angryCooldown > 0 || v.dead) return;
+  v.angry = true;
+  v.angryT = rand(3,5);
+}
+
+function updateBlink(v, dt){
+  if(!v.awake || v.dead) return;
+
+  const now = performance.now()/1000;
+  if(now - v.blinkWindowStart > 15){
+    v.blinkWindowStart = now;
+    v.blinksInWindow = 0;
+  }
+
+  v.blinkCooldown -= dt;
+  if(v.blinkCooldown <= 0 && v.blinksInWindow < 2){
+    v.blinkT = rand(0.08,0.12);
+    v.blinksInWindow += 1;
+    v.blinkCooldown = rand(5,10);
+  }
+
+  if(v.blinkT > 0) v.blinkT -= dt;
+}
+
+function updatePlayer(dt){
+  let dx = 0;
+  let dy = 0;
+
+  if(keys.left) dx -= 1;
+  if(keys.right) dx += 1;
+  if(keys.up) dy -= 1;
+  if(keys.down) dy += 1;
+
+  if(dx !== 0 || dy !== 0){
+    const len = Math.hypot(dx, dy);
+    dx /= len;
+    dy /= len;
+  }
+
+  player.vx = dx * MAX_SPEED;
+  player.vy = dy * MAX_SPEED;
+
+  player.pushX *= 0.84;
+  player.pushY *= 0.84;
+
+  player.x += (player.vx + player.pushX) * dt;
+  player.y += (player.vy + player.pushY) * dt;
+
+  player.x = clamp(player.x, 40, canvas.width - 40);
+  player.y = clamp(player.y, 100, FLOOR - 12);
+
+  player.bob = Math.sin(simT * 7) * 1.0;
+
+  if(keys.pulse && player.energy >= 8){
+    player.energy -= 8;
+    player.pulseT = 0.35;
+    keys.pulse = false;
+  }
+  if(player.pulseT > 0) player.pulseT -= dt;
+}
+
+function updatePulseOnHVs(){
+  if(player.pulseT <= 0) return;
+  const pulseRadius = 110;
+  for(const v of hvs){
+    if(v.dead || !v.awake) continue;
+    const d = dist(player.x, player.y, v.x, v.y);
+    if(d < pulseRadius){
+      v.hp -= 1;
+      v.pushX += (v.x - player.x) * 0.6;
+      v.pushY += (v.y - player.y) * 0.35;
+      if(v.hp <= 0){
+        v.dead = true;
+        v.state = "dead";
+      }
+    }
+  }
+}
+
+function separationForce(v){
+  let sx = 0, sy = 0, count = 0;
+  for(const o of activeHVs()){
+    if(o === v || o.dead) continue;
+    const dx = v.x - o.x;
+    const dy = v.y - o.y;
+    const d = Math.hypot(dx, dy);
+    if(d > 0 && d < COMFORT_ZONE * 3){
+      const strength = (COMFORT_ZONE * 3 - d) / (COMFORT_ZONE * 3);
+      sx += (dx / d) * strength;
+      sy += (dy / d) * strength;
+      count++;
+    }
+  }
+  if(count > 0){
+    sx /= count;
+    sy /= count;
+  }
+  return { x:sx, y:sy };
+}
+
+function socialTarget(v){
+  let best = null, bd = Infinity;
+  for(const o of activeHVs()){
+    if(o === v || o.dead) continue;
+    const d = dist(v.x, v.y, o.x, o.y);
+    if(d < SOCIAL_RADIUS && d < bd){
+      bd = d;
+      best = o;
+    }
+  }
+  return best;
+}
+
+function applyHVtoHVPhysicalBumps(){
+  const alive = activeHVs();
+  for(let i=0;i<alive.length;i++){
+    for(let j=i+1;j<alive.length;j++){
+      const a = alive[i], b = alive[j];
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const d = Math.hypot(dx, dy);
+
+      if(d > 0 && d < HV_BUMP_DIST){
+        const nx = dx / d;
+        const ny = dy / d;
+        const push = (HV_BUMP_DIST - d) * 1.8;
+
+        a.pushX -= nx * push * 18;
+        a.pushY -= ny * push * 10;
+        b.pushX += nx * push * 18;
+        b.pushY += ny * push * 10;
+      }
+    }
+  }
+}
+
+function startLungeAttack(v){
+  v.attackState = "lunge";
+  v.attackTimer = 0.16;
+  v.attackStartX = v.x;
+  v.attackStartY = v.y;
+  const dx = player.x - v.x;
+  const dy = player.y - v.y;
+  const len = Math.max(1, Math.hypot(dx, dy));
+  v.attackTargetX = player.x - (dx / len) * 6;
+  v.attackTargetY = player.y - (dy / len) * 6;
+  v.hasHitThisAttack = false;
+  triggerAngry(v);
+}
+
+function updateAttackState(v, dt){
+  if(v.attackState === "none") return false;
+
+  if(v.attackState === "lunge"){
+    v.attackTimer -= dt;
+    const k = 1 - Math.max(0, v.attackTimer / 0.16);
+    v.x = lerp(v.attackStartX, v.attackTargetX, k);
+    v.y = lerp(v.attackStartY, v.attackTargetY, k);
+
+    const d = dist(player.x, player.y, v.x, v.y);
+    if(!v.hasHitThisAttack && d < PLAYER_CONTACT_DIST){
+      v.hasHitThisAttack = true;
+
+      const dx = player.x - v.x;
+      const dy = player.y - v.y;
+      const len = Math.max(1, Math.hypot(dx, dy));
+
+      player.pushX += (dx / len) * 130;
+      player.pushY += (dy / len) * 60;
+      player.energy = clamp(player.energy - rand(0.4, 0.8), 0, 100);
+
+      v.pushX -= (dx / len) * 60;
+      v.pushY -= (dy / len) * 28;
+    }
+
+    if(v.attackTimer <= 0){
+      v.attackState = "retreat";
+      v.attackTimer = 0.18;
+    }
+    return true;
+  }
+
+  if(v.attackState === "retreat"){
+    v.attackTimer -= dt;
+    const k = 1 - Math.max(0, v.attackTimer / 0.18);
+    v.x = lerp(v.attackTargetX, v.attackStartX, k);
+    v.y = lerp(v.attackTargetY, v.attackStartY, k);
+
+    if(v.attackTimer <= 0){
+      v.attackState = "none";
+      v.state = "bold flock";
+    }
+    return true;
+  }
+
+  return false;
+}
+
+function chooseFlockAttacker(group){
+  let best = null;
+  let bd = Infinity;
+  for(const v of group){
+    if(v.dead || v.attackState !== "none") continue;
+    const d = dist(player.x, player.y, v.x, v.y);
+    if(d < bd){
+      bd = d;
+      best = v;
+    }
+  }
+  return best;
+}
+
+function updateHV(dt){
+  updateWake();
+  flockAttackCooldown = Math.max(0, flockAttackCooldown - dt);
+
+  for(const v of hvs){
+    if(v.dead) continue;
+
+    updateBlink(v, dt);
+
+    const dPlayer = dist(player.x, player.y, v.x, v.y);
+    v.seesPlayer = dPlayer <= LOSE_PLAYER_RADIUS;
+
+    if(v.awake){
+      if(v.seesPlayer){
+        v.lostTimer = 0;
+      } else {
+        v.lostTimer += dt;
+      }
+    }
+
+    if(v.awake && v.lostTimer > 2.2){
+      // sleep return
+      v.awake = false;
+      v.sleeping = true;
+      v.wakeGlow = 0;
+      v.angry = false;
+      v.attackState = "none";
+
+      // drift anchor away from Lumo so flock dissolves
+      const dx = v.x - player.x;
+      const dy = v.y - player.y;
+      const len = Math.max(1, Math.hypot(dx, dy));
+      v.baseX = clamp(v.x + (dx / len) * WAKE_RADIUS, 80, canvas.width - 80);
+      v.baseY = clamp(v.y + (dy / len) * WAKE_RADIUS * 0.35, 120, FLOOR - 30);
+
+      v.state = "sleep";
+    }
+
+    v.wakeGlow += ((v.awake ? 1 : 0) - v.wakeGlow) * Math.min(1, dt * 3);
+
+    const dLight = dist(player.x, player.y, v.x, v.y);
+    const seenTarget = dLight < LIGHT_RADIUS ? (1 - dLight / LIGHT_RADIUS) : 0;
+    v.bodySeen += (seenTarget - v.bodySeen) * Math.min(1, dt * 4.5);
+
+    if(v.angry){
+      v.angryT -= dt;
+      if(v.angryT <= 0){
+        v.angry = false;
+        v.angryCooldown = 15 + rand(0,3);
+      }
+    } else {
+      v.angryCooldown = Math.max(0, v.angryCooldown - dt);
+    }
+
+    if(!v.awake || v.dead) continue;
+
+    if(updateAttackState(v, dt)){
+      continue;
+    }
+
+    const hover =
+      Math.sin(simT * 0.6 + v.phase) * 12 +
+      Math.sin(simT * 1.1 + v.phase2) * 8 +
+      Math.sin(simT * 0.4 + v.phase3) * 6;
+
+    let tx = v.baseX;
+    let ty = v.baseY + hover;
+    v.state = "solo";
+
+    const alliesNear = nearbyActive(v, FLOCK_JOIN_DIST);
+    const groupSize = 1 + alliesNear.length;
+    const social = socialTarget(v);
+
+    if(groupSize === 1){
+      if(v.seesPlayer){
+        const dx = player.x - v.x;
+        const dy = player.y - v.y;
+        const d = Math.max(1, Math.hypot(dx, dy));
+        tx = player.x - (dx / d) * FOLLOW_RADIUS;
+        ty = player.y - (dy / d) * FOLLOW_RADIUS;
+        v.state = "follow cute";
+      } else if(social){
+        tx = social.x;
+        ty = social.y;
+        v.state = "seek social";
+      } else {
+        v.state = "lost player";
+      }
+    }
+
+    else if(groupSize === 2){
+      const buddy = alliesNear[0];
+      const dBuddy = dist(v.x, v.y, buddy.x, buddy.y);
+
+      if(dBuddy > PAIR_JOIN_DIST){
+        tx = lerp(v.x, buddy.x, 0.7);
+        ty = lerp(v.y, buddy.y, 0.7);
+        v.state = "seek pair";
+      } else {
+        v.bumpCd -= dt;
+        if(v.bumpCd <= 0){
+          v.bumpCd = rand(1.0, 2.3);
+          const push = (v.id < buddy.id ? -1 : 1) * rand(20, 34);
+          v.pushX += push * 3.5;
+          buddy.pushX -= push * 3.5;
+          triggerAngry(v);
+          triggerAngry(buddy);
+          v.state = "bicker";
+        } else {
+          v.state = "pair hover";
+        }
+      }
+
+      if(v.seesPlayer){
+        const offset = v.id < buddy.id ? -48 : 48;
+        tx = lerp(tx, player.x + offset, 0.45);
+        ty = lerp(ty, player.y - 65, 0.45);
+        if(Math.abs(player.vx) > 170 || Math.abs(player.vy) > 170){
+          v.state = "lost track";
+        } else {
+          v.state = dBuddy <= PAIR_JOIN_DIST ? "bicker + follow" : "follow pair";
+        }
+      } else {
+        v.state = "lost player";
+      }
+    }
+
+    else if(groupSize >= 3){
+      const group = [v, ...alliesNear];
+      let cx = 0, cy = 0;
+      for(const g of group){
+        cx += g.x;
+        cy += g.y;
+      }
+      cx /= group.length;
+      cy /= group.length;
+
+      const sep = separationForce(v);
+
+      if(v.seesPlayer){
+        // ring around player, keep distance
+        const dx = v.x - player.x;
+        const dy = v.y - player.y;
+        const d = Math.max(1, Math.hypot(dx, dy));
+        const orbitRadius = 86 + Math.sin(simT + v.id) * 10;
+
+        tx = player.x + (dx / d) * orbitRadius + sep.x * 60;
+        ty = player.y + (dy / d) * orbitRadius + sep.y * 36;
+        v.state = groupSize >= 10 ? "swarm ring" : "bold ring";
+
+        if(flockAttackCooldown <= 0){
+          const attacker = chooseFlockAttacker(group);
+          if(attacker === v && d < 140){
+            startLungeAttack(v);
+            flockAttackCooldown = rand(1.0, 3.0);
+            v.state = "lunge";
+            continue;
+          }
+        }
+      } else {
+        tx = cx + sep.x * 70;
+        ty = cy + sep.y * 50;
+        v.state = "lost player";
+      }
+    }
+
+    v.pushX *= 0.84;
+    v.pushY *= 0.84;
+
+    v.vx += (tx - v.x) * dt * 2.0;
+    v.vy += (ty - v.y) * dt * 1.8;
+    v.vx *= 0.86;
+    v.vy *= 0.86;
+
+    v.x += (v.vx + v.pushX) * dt * 8.5;
+    v.y += (v.vy + v.pushY) * dt * 8.5;
+  }
+
+  applyHVtoHVPhysicalBumps();
+  updatePulseOnHVs();
+}
+
+function drawBackground(){
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  g.addColorStop(0, "#07101b");
+  g.addColorStop(1, "#02060b");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for(let x = 0; x < canvas.width; x += 60){
+    ctx.strokeStyle = "rgba(90,120,160,0.04)";
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, canvas.height);
+    ctx.stroke();
+  }
+
+  for(let y = 0; y < canvas.height; y += 60){
+    ctx.strokeStyle = "rgba(90,120,160,0.03)";
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(canvas.width, y);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "#14181f";
+  ctx.fillRect(0, FLOOR, canvas.width, canvas.height - FLOOR);
+}
+
+function drawPlayer(){
+  const x = player.x;
+  const y = player.y + player.bob;
+
+  const glow = ctx.createRadialGradient(x, y, 0, x, y, LIGHT_RADIUS);
+  glow.addColorStop(0, "rgba(255,220,130,.24)");
+  glow.addColorStop(1, "rgba(255,220,130,0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(x, y, LIGHT_RADIUS, 0, Math.PI * 2);
+  ctx.fill();
+
+  if(player.pulseT > 0){
+    const pulseR = 110 * (1 - player.pulseT / 0.35);
+    ctx.strokeStyle = "rgba(170,235,255,0.75)";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x, y, pulseR, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = "#e98acc";
+  ctx.beginPath();
+  ctx.ellipse(x, y, 14, 12, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#6cb0ff";
+  ctx.beginPath();
+  ctx.arc(x, y - 12, 8, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(x - 2, y - 13, 1.4, 0, Math.PI * 2);
+  ctx.arc(x + 3, y - 13, 1.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(220,235,255,.92)";
+  ctx.font = "600 15px system-ui,sans-serif";
+  ctx.fillText("Lumo", x - 18, y - 30);
+}
+
+function drawNormalEyes(v, s){
+  if(v.wakeGlow < 0.06) return;
+
+  const blink = v.blinkT > 0;
+  const scale = 0.55 + v.wakeGlow * 0.9;
+
+  if(!blink){
+    const g1 = ctx.createRadialGradient(v.x - 7 * s, v.y - 6 * s, 0, v.x - 7 * s, v.y - 6 * s, 11 * scale);
+    g1.addColorStop(0, "rgba(255,255,255,0.98)");
+    g1.addColorStop(0.4, "rgba(220,190,255,0.65)");
+    g1.addColorStop(1, "rgba(140,80,255,0)");
+    ctx.fillStyle = g1;
+    ctx.beginPath();
+    ctx.arc(v.x - 7 * s, v.y - 6 * s, 11 * scale, 0, Math.PI * 2);
+    ctx.fill();
+
+    const g2 = ctx.createRadialGradient(v.x + 6 * s, v.y - 4 * s, 0, v.x + 6 * s, v.y - 4 * s, 8 * scale);
+    g2.addColorStop(0, "rgba(255,245,255,0.95)");
+    g2.addColorStop(0.4, "rgba(220,180,255,0.55)");
+    g2.addColorStop(1, "rgba(140,80,255,0)");
+    ctx.fillStyle = g2;
+    ctx.beginPath();
+    ctx.arc(v.x + 6 * s, v.y - 4 * s, 8 * scale, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(v.x - 7 * s, v.y - 6 * s, 3.5 * s, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#d8c6ff";
+    ctx.beginPath();
+    ctx.arc(v.x + 6 * s, v.y - 4 * s, 2.3 * s, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.strokeStyle = "rgba(215,190,255,0.92)";
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(v.x - 10 * s, v.y - 6 * s);
+    ctx.lineTo(v.x - 4 * s, v.y - 6 * s);
+    ctx.moveTo(v.x + 4 * s, v.y - 4 * s);
+    ctx.lineTo(v.x + 8 * s, v.y - 4 * s);
+    ctx.stroke();
+  }
+}
+
+function drawAngryEyes(v, s){
+  const blink = v.blinkT > 0;
+
+  function drawFilledAngryEye(cx, cy, r, tilt){
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    // Klipp så att bara den nedre delen av cirkeln blir kvar,
+    // med en sned överkant.
+    ctx.beginPath();
+
+    if (tilt < 0) {
+      // vänster öga: överkanten lutar nedåt åt höger
+      ctx.moveTo(-r * 1.6, -r * 0.95);
+      ctx.lineTo(r * 1.6, -r * 0.20);
+      ctx.lineTo(r * 1.6, r * 1.6);
+      ctx.lineTo(-r * 1.6, r * 1.6);
+    } else {
+      // höger öga: överkanten lutar nedåt åt vänster
+      ctx.moveTo(-r * 1.6, -r * 0.20);
+      ctx.lineTo(r * 1.6, -r * 0.95);
+      ctx.lineTo(r * 1.6, r * 1.6);
+      ctx.lineTo(-r * 1.6, r * 1.6);
+    }
+
+    ctx.closePath();
+    ctx.clip();
+
+    // Fylld cirkel som klipps till rätt form
+    ctx.fillStyle = "#f3f0ff";
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  if (!blink) {
+    // vänster stort öga
+    drawFilledAngryEye(
+      v.x - 7 * s,
+      v.y - 6 * s,
+      3.5 * s,
+      -1
+    );
+
+    // höger mindre öga
+    drawFilledAngryEye(
+      v.x + 6 * s,
+      v.y - 4 * s,
+      2.3 * s,
+      1
+    );
+  } else {
+    // Blink i samma riktning som arga ögonformen
+    ctx.strokeStyle = "#f3f0ff";
+    ctx.lineWidth = 1.8;
+    ctx.lineCap = "round";
+
+    ctx.beginPath();
+
+    // vänster blink
+    ctx.moveTo(v.x - 10.2 * s, v.y - 8.0 * s);
+    ctx.lineTo(v.x - 4.2 * s, v.y - 5.8 * s);
+
+    // höger blink
+    ctx.moveTo(v.x + 4.0 * s, v.y - 5.8 * s);
+    ctx.lineTo(v.x + 8.2 * s, v.y - 8.0 * s);
+
+    ctx.stroke();
+  }
+}
+
+function drawHV(v){
+  if(v.dead) return;
+  const s = v.size;
+
+  if(v.bodySeen > 0.01){
+    ctx.save();
+    ctx.globalAlpha = v.bodySeen * 0.6;
+
+    const g = ctx.createRadialGradient(v.x, v.y, 0, v.x, v.y, 30 * s);
+    g.addColorStop(0, "rgba(120,60,255,.6)");
+    g.addColorStop(0.35, "rgba(30,10,80,.82)");
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(v.x, v.y, 28 * s, 20 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  if(v.angry){
+    drawAngryEyes(v, s);
+  } else {
+    drawNormalEyes(v, s);
+  }
+
+  if(v.awake){
+    ctx.fillStyle = "rgba(200,220,255,.55)";
+    ctx.font = "600 12px system-ui,sans-serif";
+    ctx.fillText(v.state, v.x - 34, v.y - 34);
+  }
+}
+
+function drawHUD(){
+  ctx.fillStyle = "rgba(220,235,255,.92)";
+  ctx.font = "600 16px system-ui,sans-serif";
+  ctx.fillText("Energy: " + player.energy.toFixed(0), 18, 28);
+  ctx.fillText("Active HV: " + activeHVs().length, 18, 52);
+  ctx.fillText("Pulse: Space", 18, 76);
+}
+
+function draw(){
+  drawBackground();
+  drawPlayer();
+  for(const v of hvs) drawHV(v);
+  drawHUD();
+}
+
+function frame(now){
+  const dt = Math.min(0.033, (now - last) / 1000);
+  last = now;
+  simT += dt;
+
+  updatePlayer(dt);
+  updateHV(dt);
+  draw();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

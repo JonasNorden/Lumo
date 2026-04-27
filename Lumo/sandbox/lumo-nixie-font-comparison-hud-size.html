@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lumo Nixie Font Comparison — HUD Size</title>
+<style>
+  :root {
+    --amber: #ff9d32;
+    --amber2: #ff6d1a;
+    --bg: #0c0907;
+  }
+
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background:
+      radial-gradient(circle at 50% 20%, rgba(255,140,35,.09), transparent 34%),
+      linear-gradient(180deg, #15100c, #050403 80%);
+    color: #e8c28b;
+    font-family: system-ui, Segoe UI, sans-serif;
+  }
+
+  body { padding: 22px; box-sizing: border-box; }
+
+  .header {
+    max-width: 1280px;
+    margin: 0 auto 18px;
+    color: rgba(255,207,142,.82);
+  }
+
+  h1 {
+    margin: 0 0 6px;
+    font-size: 18px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    font-weight: 650;
+  }
+
+  .note {
+    margin: 0;
+    font-size: 13px;
+    color: rgba(255,207,142,.62);
+  }
+
+  .grid {
+    max-width: 1280px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .card {
+    border-radius: 18px;
+    padding: 14px 16px 16px;
+    background:
+      linear-gradient(180deg, rgba(255,180,85,.065), transparent 30%),
+      linear-gradient(135deg, rgba(255,255,255,.03), transparent 28%),
+      #130e0a;
+    box-shadow:
+      inset 0 0 0 1px rgba(255,180,80,.14),
+      inset 0 0 32px rgba(0,0,0,.75),
+      0 20px 42px rgba(0,0,0,.34);
+  }
+
+  .label {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: baseline;
+    margin-bottom: 10px;
+    font-size: 12px;
+    color: rgba(255,207,142,.72);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .label small {
+    color: rgba(255,207,142,.42);
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .scoreboard {
+    position: relative;
+    display: flex;
+    gap: 7px;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 14px 14px;
+    border-radius: 15px;
+    background:
+      radial-gradient(circle at 50% 0%, rgba(255,146,44,.105), transparent 52%),
+      linear-gradient(180deg, rgba(88,54,25,.58), rgba(18,12,8,.95));
+    box-shadow:
+      inset 0 0 0 1px rgba(255,181,83,.19),
+      inset 0 9px 20px rgba(255,196,102,.045),
+      inset 0 -18px 28px rgba(0,0,0,.68),
+      0 0 28px rgba(255,124,31,.055);
+    overflow: hidden;
+  }
+
+  .scoreboard::before {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border-radius: 11px;
+    pointer-events: none;
+    background:
+      linear-gradient(110deg, transparent 8%, rgba(255,230,180,.07) 18%, transparent 32%),
+      repeating-linear-gradient(90deg, transparent 0 19px, rgba(255,200,120,.022) 20px, transparent 22px);
+    mix-blend-mode: screen;
+    opacity: .52;
+    z-index: 10;
+  }
+
+  .tube {
+    position: relative;
+    width: 58px;
+    height: 88px;
+    border-radius: 28px 28px 21px 21px / 18px 18px 19px 19px;
+    background:
+      radial-gradient(ellipse at 38% 12%, rgba(255,240,205,.16), transparent 30%),
+      radial-gradient(ellipse at 50% 56%, rgba(255,120,25,.13), transparent 48%),
+      linear-gradient(90deg, rgba(255,255,255,.04), transparent 18%, transparent 82%, rgba(255,255,255,.035)),
+      rgba(25, 16, 10, .72);
+    box-shadow:
+      inset 0 0 0 1px rgba(255,210,135,.19),
+      inset 0 0 12px rgba(255,148,48,.12),
+      inset 0 -15px 20px rgba(0,0,0,.58),
+      0 0 12px rgba(255,114,29,.08);
+    overflow: hidden;
+  }
+
+  .tube::before {
+    content: "";
+    position: absolute;
+    inset: 6px 7px;
+    border-radius: 22px;
+    background:
+      linear-gradient(105deg, rgba(255,255,255,.13), transparent 18%, transparent 70%, rgba(255,245,210,.055)),
+      linear-gradient(180deg, rgba(255,210,135,.055), transparent 44%, rgba(0,0,0,.18));
+    pointer-events: none;
+    z-index: 7;
+    opacity: .62;
+  }
+
+  .tube::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 8px;
+    height: 7px;
+    border-radius: 50%;
+    background: rgba(255,154,55,.18);
+    filter: blur(5px);
+    z-index: 0;
+  }
+
+  .mesh {
+    position: absolute;
+    inset: 8px 8px;
+    border-radius: 20px;
+    background-image:
+      repeating-linear-gradient(90deg, rgba(255,210,145,.034) 0 1px, transparent 1px 6px),
+      repeating-linear-gradient(0deg, rgba(255,210,145,.021) 0 1px, transparent 1px 7px);
+    opacity: .65;
+    z-index: 1;
+  }
+
+  .digit-stack {
+    position: absolute;
+    inset: 9px 4px 8px;
+    z-index: 3;
+  }
+
+  .digit {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 54px;
+    line-height: 1;
+    font-weight: 500;
+    transform: translateY(1px) scaleX(.86);
+    color: rgba(255,124,32,.052);
+    opacity: .62;
+    text-shadow: 0 0 4px rgba(255,116,32,.04);
+    filter: blur(.08px);
+  }
+
+  .digit.active {
+    color: rgba(255,157,54,.97);
+    opacity: 1;
+    text-shadow:
+      0 0 1px rgba(255,238,190,.95),
+      0 0 5px rgba(255,150,45,.92),
+      0 0 13px rgba(255,94,20,.70),
+      0 0 26px rgba(255,85,10,.34),
+      0 0 45px rgba(255,80,10,.13);
+    filter: brightness(1.08);
+    animation: nixieBreath 2.7s ease-in-out infinite;
+  }
+
+  .digit.active::before {
+    content: attr(data-n);
+    position: absolute;
+    color: rgba(255,87,18,.19);
+    transform: translate(1px, .7px);
+    filter: blur(2px);
+    z-index: -1;
+  }
+
+  @keyframes nixieBreath {
+    0%, 100% { opacity: .97; filter: brightness(1.05); }
+    47% { opacity: 1; filter: brightness(1.20); }
+    52% { opacity: .92; filter: brightness(.99); }
+    58% { opacity: 1; filter: brightness(1.14); }
+  }
+
+  .wires {
+    position: absolute;
+    left: 13px;
+    right: 13px;
+    bottom: 4px;
+    height: 13px;
+    z-index: 2;
+    background:
+      linear-gradient(90deg, transparent 0 8%, rgba(255,154,64,.20) 9% 10%, transparent 11% 22%, rgba(255,154,64,.17) 23% 24%, transparent 25% 39%, rgba(255,154,64,.15) 40% 41%, transparent 42% 56%, rgba(255,154,64,.14) 57% 58%, transparent 59% 73%, rgba(255,154,64,.17) 74% 75%, transparent 76%);
+    opacity: .72;
+  }
+
+  .base {
+    position: absolute;
+    left: 9px;
+    right: 9px;
+    bottom: -1px;
+    height: 10px;
+    border-radius: 4px 4px 7px 7px;
+    background: linear-gradient(180deg, rgba(70,42,22,.9), rgba(16,11,8,.96));
+    box-shadow: inset 0 1px rgba(255,199,120,.18);
+    z-index: 8;
+  }
+
+  .controls {
+    max-width: 1280px;
+    margin: 18px auto 0;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    align-items: center;
+  }
+
+  input, button {
+    background: rgba(255,150,55,.10);
+    color: #ffd19a;
+    border: 1px solid rgba(255,180,85,.25);
+    border-radius: 999px;
+    padding: 9px 14px;
+    font: inherit;
+  }
+
+  input {
+    width: 120px;
+    border-radius: 12px;
+    text-align: center;
+  }
+
+  button { cursor: pointer; }
+  button:hover { background: rgba(255,150,55,.18); }
+
+  @media (max-width: 880px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1>Lumo Nixie Scoreboard — 10 typsnitt / HUD-storlek</h1>
+    <p class="note">Samma “äkta tube”-bygge: ghost-siffror, glas, mesh och glow. Endast sifferformen skiljer sig.</p>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="controls">
+    <button id="minus">−100</button>
+    <input id="scoreInput" value="001280" maxlength="6" />
+    <button id="plus">+100</button>
+    <button id="random">Random</button>
+  </div>
+
+<script>
+  const variants = [
+    { name: "01 Georgia Classic", font: 'Georgia, "Times New Roman", serif', weight: 500, sx: .86, y: 1 },
+    { name: "02 Times Tall", font: '"Times New Roman", Times, serif', weight: 400, sx: .82, y: 0 },
+    { name: "03 Didot Elegant", font: 'Didot, "Bodoni 72", "Times New Roman", serif', weight: 500, sx: .78, y: 0 },
+    { name: "04 Palatino Warm", font: 'Palatino, "Palatino Linotype", "Book Antiqua", serif', weight: 500, sx: .82, y: 1 },
+    { name: "05 Garamond Thin", font: 'Garamond, "EB Garamond", Georgia, serif', weight: 500, sx: .86, y: 1 },
+    { name: "06 Baskerville", font: 'Baskerville, "Libre Baskerville", Georgia, serif', weight: 500, sx: .82, y: 0 },
+    { name: "07 Courier Wire", font: '"Courier New", Courier, monospace', weight: 400, sx: .72, y: 1 },
+    { name: "08 Trebuchet Tech", font: '"Trebuchet MS", Arial, sans-serif', weight: 400, sx: .76, y: 1 },
+    { name: "09 Arial Narrow Tube", font: '"Arial Narrow", Arial, sans-serif', weight: 400, sx: .66, y: 0 },
+    { name: "10 Verdana Rounded", font: 'Verdana, Geneva, sans-serif', weight: 400, sx: .68, y: 0 }
+  ];
+
+  const DIGITS = 6;
+  let score = 1280;
+  const grid = document.getElementById("grid");
+  const input = document.getElementById("scoreInput");
+
+  function createBoard(variant, idx) {
+    const card = document.createElement("section");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="label"><span>${variant.name}</span><small>${variant.font.split(",")[0].replaceAll('"', "")}</small></div>
+      <div class="scoreboard" data-board="${idx}"></div>
+    `;
+    const board = card.querySelector(".scoreboard");
+
+    for (let i = 0; i < DIGITS; i++) {
+      const tube = document.createElement("div");
+      tube.className = "tube";
+      tube.innerHTML = `
+        <div class="mesh"></div>
+        <div class="digit-stack"></div>
+        <div class="wires"></div>
+        <div class="base"></div>
+      `;
+      const stack = tube.querySelector(".digit-stack");
+
+      for (let n = 9; n >= 0; n--) {
+        const d = document.createElement("div");
+        d.className = "digit ghost";
+        d.dataset.n = String(n);
+        d.textContent = String(n);
+        d.style.fontFamily = variant.font;
+        d.style.fontWeight = variant.weight;
+        d.style.transform = `translate(${(n - 4.5) * 0.08}px, ${variant.y + (n % 3) * 0.12}px) scaleX(${variant.sx})`;
+        stack.appendChild(d);
+      }
+
+      board.appendChild(tube);
+    }
+
+    grid.appendChild(card);
+  }
+
+  variants.forEach(createBoard);
+
+  function setScore(value) {
+    score = Math.max(0, Math.min(999999, Math.floor(value || 0)));
+    const text = String(score).padStart(DIGITS, "0");
+    input.value = text;
+
+    document.querySelectorAll(".scoreboard").forEach((board, boardIndex) => {
+      [...board.children].forEach((tube, i) => {
+        const active = text[i];
+        tube.querySelectorAll(".digit").forEach(d => {
+          const isActive = d.dataset.n === active;
+          d.classList.toggle("active", isActive);
+          d.classList.toggle("ghost", !isActive);
+          d.style.animationDelay = `${-(i * 0.17 + boardIndex * 0.05)}s`;
+        });
+      });
+    });
+  }
+
+  document.getElementById("minus").onclick = () => setScore(score - 100);
+  document.getElementById("plus").onclick = () => setScore(score + 100);
+  document.getElementById("random").onclick = () => setScore(Math.floor(Math.random() * 999999));
+  input.addEventListener("input", () => setScore(Number(input.value.replace(/\D/g, ""))));
+
+  setScore(score);
+</script>
+</body>
+</html>

@@ -1,0 +1,2445 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Lumo Parallax Theme Demo</title>
+<style>
+  :root {
+    --bg: #0d1320;
+    --panel: rgba(11, 18, 31, 0.88);
+    --panel-border: rgba(255,255,255,0.08);
+    --text: #edf3ff;
+    --muted: #b4c2de;
+    --accent: #ffd86a;
+  }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  .app {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    height: 100%;
+  }
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 16px;
+    background: rgba(8, 13, 22, 0.92);
+    border-bottom: 1px solid var(--panel-border);
+    backdrop-filter: blur(10px);
+  }
+  .title strong { font-size: 15px; }
+  .title span { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .controls label {
+    font-size: 13px;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  select, input[type="checkbox"] {
+    accent-color: var(--accent);
+  }
+  select {
+    background: #111a2a;
+    color: var(--text);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .stage {
+    position: relative;
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .hud {
+    display: none;
+    position: absolute;
+    right: 16px;
+    top: 132px;
+    width: min(340px, calc(100% - 32px));
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 12px 14px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    z-index: 3;
+  }
+  .hud .row { margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+  .hud .row:last-child { margin-bottom: 0; }
+  .value { color: var(--text); }
+  .good { color: #95f0a9; }
+  .warn { color: #ffd86a; }
+
+  .fx-panel {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    top: 12px;
+    z-index: 4;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .fx-modal {
+    width: min(1240px, calc(100% - 8px));
+    background: rgba(8, 13, 22, 0.92);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.28);
+    overflow: hidden;
+    pointer-events: auto;
+  }
+  .fx-modal summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 16px;
+    user-select: none;
+  }
+  .fx-modal summary::-webkit-details-marker { display: none; }
+  .fx-modal-title-wrap strong { display: block; font-size: 15px; }
+  .fx-modal-title-wrap span { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .fx-collapse-hint { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .fx-modal-body {
+    border-top: 1px solid var(--panel-border);
+    padding: 12px;
+  }
+  .fx-sections {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(260px, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+  .fx-section {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .fx-section > summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .fx-section > summary::-webkit-details-marker { display: none; }
+  .fx-section > summary span { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .fx-section-body {
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding: 10px 12px 12px;
+    display: grid;
+    gap: 10px;
+  }
+  .fx-control-row {
+    display: grid;
+    grid-template-columns: auto minmax(88px, 1fr) 180px 56px auto;
+    gap: 8px;
+    align-items: center;
+    min-height: 32px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .fx-control-row.no-slider {
+    grid-template-columns: auto minmax(88px, 1fr) auto;
+  }
+  .fx-check {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+  }
+  .fx-label {
+    color: var(--text);
+    line-height: 1.2;
+  }
+  .fx-control-row input[type="range"] {
+    width: 180px;
+    margin: 0;
+  }
+  .fx-slider-value {
+    width: 56px;
+    text-align: right;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+  }
+  .fx-inline-select {
+    min-width: 82px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  .fx-helper {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: -2px;
+  }
+  @media (max-width: 1200px) {
+    .fx-sections { grid-template-columns: repeat(2, minmax(260px, 1fr)); }
+  }
+  @media (max-width: 860px) {
+    .fx-sections { grid-template-columns: 1fr; }
+    .fx-control-row { grid-template-columns: auto minmax(88px, 1fr) minmax(120px, 1fr) 56px auto; }
+    .fx-control-row input[type="range"] { width: 100%; }
+  }
+  .fx-slider-row {
+    display: grid;
+    grid-template-columns: 150px minmax(120px, 1fr) 72px;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .fx-slider-row input[type="range"] { width: 100%; }
+  .fx-slider-value {
+    text-align: right;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  @media (max-width: 1100px) {
+    .fx-grid { grid-template-columns: repeat(2, minmax(180px, 1fr)); }
+    .fx-slider-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div class="title">
+      <strong>Lumo – Parallax Theme Demo</strong>
+      <span>Piltangenter = vänster/höger · Space = hopp · testar loop, alpha-öppningar och layering</span>
+    </div>
+    <div class="controls">
+      <label>Tema
+        <select id="themeSelect"></select>
+      </label>
+      <label><input id="debugToggle" type="checkbox"> Visa debug</label>
+    </div>
+  </div>
+  <div class="stage">
+    <canvas id="game"></canvas>
+
+    <div class="fx-panel" id="fxPanel">
+      <details class="fx-modal" open>
+        <summary>
+          <div class="fx-modal-title-wrap">
+            <strong>FX control center</strong>
+            <span>Vänster sida = neutral · höger sida = live FX · sliders får gärna gå too much</span>
+          </div>
+          <span class="fx-collapse-hint">kollapsa / expandera</span>
+        </summary>
+        <div class="fx-modal-body">
+          <div class="fx-sections" id="fxSections"></div>
+        </div>
+      </details>
+    </div>
+
+
+    <div class="hud">
+      <div class="row"><span class="good">Rekommenderad pipeline:</span> separata filer för <span class="value">far / mid / near</span>.</div>
+      <div class="row"><span class="warn">Spritesheet-stöd:</span> inbyggt i demot, men bäst för export/debug är fortfarande separata filer.</div>
+      <div class="row">Nuvarande tema: <span class="value" id="themeName">–</span></div>
+      <div class="row">Layer ratio: <span class="value" id="layerRatio">–</span></div>
+      <div class="row">Kontroller: <span class="value">← → + Space</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const THEMES = {
+  cave: {
+    label: 'Cave',
+    atmosphere: ['#0f1b31', '#14253f', '#09111d'],
+    mist: 'rgba(138, 176, 255, 0.06)',
+    layers: {
+      far:  { src: 'parallax/cave/cave_far.png',  speed: 0.18, y: 54, scale: 0.68 },
+      mid:  { src: 'parallax/cave/cave_mid.png',  speed: 0.38, y: 54, scale: 0.68 },
+      near: { src: 'parallax/cave/cave_near.png', speed: 0.64, y: 54, scale: 0.68 }
+    }
+  },
+
+  castle: {
+    label: 'Castle',
+    atmosphere: ['#1a1410', '#241a14', '#0f0b08'],
+    mist: 'rgba(255, 180, 120, 0.04)',
+    layers: {
+      far:  { src: 'parallax/castle/castle_far.png',  speed: 0.18, y: 54, scale: 0.68 },
+      mid:  { src: 'parallax/castle/castle_mid.png',  speed: 0.38, y: 54, scale: 0.68 },
+      near: { src: 'parallax/castle/castle_near.png', speed: 0.64, y: 54, scale: 0.68 }
+    }
+  },
+
+  steampunk: {
+    label: 'Steampunk',
+    atmosphere: ['#2a1b10', '#3a2415', '#120a05'],
+    mist: 'rgba(255, 180, 80, 0.05)',
+    layers: {
+      far:  { src: 'parallax/steampunk/steampunk_far.png', speed: 0.18, y: 0, scale: 0.68 },
+      mid:  { src: 'parallax/steampunk/steampunk_mid.png', speed: 0.38, y: 0, scale: 0.68 },
+      near: { src: 'parallax/steampunk/steampunk_near.png', speed: 0.64, y: 0, scale: 0.68 }
+    },
+    decor: {
+      cogwheel:  { src: 'parallax/steampunk/cogwheel.png',  worldX: 1320, scale: 0.80, placement: 'groundHub', rotationSpeed: 0.16 },
+      cogwheel2: { src: 'parallax/steampunk/cogwheel_2.png', worldX: 1880, scale: 1.18, placement: 'groundHub', rotationSpeed: -0.105, pauseMin: 0.8, pauseMax: 3.0, pauseCooldown: 15.0 },
+      cogwheel3: { src: 'parallax/steampunk/cogwheel_3.png', worldX: 2440, y: 370, scale: 0.19, placement: 'free', rotationSpeed: -0.12 },
+      cogwheel4: { src: 'parallax/steampunk/cogwheel_4.png', worldX: 3060, y: 300, scale: 0.20, placement: 'free', rotationSpeed: 0.08 },
+      cogwheel5: { src: 'parallax/steampunk/cogwheel_5.png', worldX: 3600, y: 348, scale: 0.18, placement: 'free', rotationSpeed: -0.14, defectMotion: true },
+
+      bgGearA: { src: 'parallax/steampunk/bgGearA.png', worldX: 340,  y: 128, scale: 0.62, rotationSpeed: 0.10, wobbleAccel: true, wobbleFreq: 0.8, wobbleAmount: 0.18 },
+      bgGearB: { src: 'parallax/steampunk/bgGearB.png', worldX: 640,  y: 162, scale: 0.48, rotationSpeed: -0.08 },
+      bgGearC: { src: 'parallax/steampunk/bgGearC.png', worldX: 980,  y: 116, scale: 0.56, rotationSpeed: 0.06, wobbleAccel: true, wobbleFreq: 1.3, wobbleAmount: 0.28 },
+      bgGearD: { src: 'parallax/steampunk/bgGearD.png', worldX: 1320, y: 176, scale: 0.44, rotationSpeed: -0.11 },
+      bgGearE: { src: 'parallax/steampunk/bgGearE.png', worldX: 1710, y: 136, scale: 0.72, rotationSpeed: 0.05 },
+      bgGearF: { src: 'parallax/steampunk/bgGearF.png', worldX: 2140, y: 104, scale: 0.40, rotationSpeed: -0.13, wobbleAccel: true, wobbleFreq: 1.8, wobbleAmount: 0.32 },
+      bgGearG: { src: 'parallax/steampunk/bgGearG.png', worldX: 2580, y: 148, scale: 0.58, rotationSpeed: 0.08 },
+      bgGearH: { src: 'parallax/steampunk/bgGearH.png', worldX: 3040, y: 120, scale: 0.66, rotationSpeed: -0.07 },
+      bgGearI: { src: 'parallax/steampunk/bgGearI.png', worldX: 3500, y: 180, scale: 0.50, rotationSpeed: 0.12 }
+    }
+  }
+};
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const themeSelect = document.getElementById('themeSelect');
+const debugToggle = document.getElementById('debugToggle');
+const themeNameEl = document.getElementById('themeName');
+const layerRatioEl = document.getElementById('layerRatio');
+
+const fxState = {
+  heatBeams: true,
+  pulseGlow: true,
+  impactGlow: true,
+  surfaceLighting: true,
+  dust: true,
+  bgFloat: true,
+  junkRain: true,
+  bgGears: true,
+  extraGears: true,
+  rimLight: false,
+  depthFog: true,
+  fogVolumes: true,
+  selectiveBloom: true,
+  distortionZones: true,
+  specularHighlights: false,
+  contactShadow: true,
+  shadowSkew: true,
+  shadowTint: true,
+  shadowTintPreset: 'auto',
+  vignette: true,
+  ambientFlicker: false,
+  cameraDrift: false,
+  splitDemo: true,
+  junkRainLayer: 'mid',
+  bgGearLayer: 'far',
+  gearLayers: {
+    cogwheel3: 'mid',
+    cogwheel4: 'far',
+    cogwheel5: 'near'
+  }
+};
+
+const fxIntensity = {
+  heatBeams: 1.00,
+  pulseGlow: 1.00,
+  impactGlow: 1.80,
+  surfaceLighting: 3.20,
+  dust: 1.00,
+  bgFloat: 1.00,
+  junkRain: 1.00,
+  bgGears: 1.00,
+  extraGears: 1.00,
+  depthFog: 1.00,
+  fogVolumes: 1.00,
+  selectiveBloom: 1.00,
+  distortionZones: 1.00,
+  specularHighlights: 1.00,
+  contactShadow: 1.00,
+  shadowSkew: 1.00,
+  shadowTint: 1.00,
+  vignette: 1.00
+};
+
+const fxSliderConfig = [
+  { key: 'heatBeams', label: 'Heat beams', min: 0, max: 5, step: 0.05 },
+  { key: 'pulseGlow', label: 'Pulse glow', min: 0, max: 5, step: 0.05 },
+  { key: 'impactGlow', label: 'Impact glow', min: 0, max: 8, step: 0.05 },
+  { key: 'surfaceLighting', label: 'Surface lighting', min: 0, max: 8, step: 0.05 },
+  { key: 'dust', label: 'Dust', min: 0, max: 5, step: 0.05 },
+  { key: 'bgFloat', label: 'BG float', min: 0, max: 4, step: 0.05 },
+  { key: 'junkRain', label: 'Junk rain', min: 0, max: 5, step: 0.05 },
+  { key: 'bgGears', label: 'BG gears', min: 0, max: 4, step: 0.05 },
+  { key: 'extraGears', label: 'Extra gears', min: 0, max: 4, step: 0.05 },
+  { key: 'depthFog', label: 'Depth fog', min: 0, max: 5, step: 0.05 },
+  { key: 'fogVolumes', label: 'Local fog', min: 0, max: 5, step: 0.05 },
+  { key: 'selectiveBloom', label: 'Selective bloom', min: 0, max: 5, step: 0.05 },
+  { key: 'distortionZones', label: 'Distortion zones', min: 0, max: 5, step: 0.05 },
+  { key: 'specularHighlights', label: 'Specular highlights', min: 0, max: 5, step: 0.05 },
+  { key: 'contactShadow', label: 'Contact shadow', min: 0, max: 5, step: 0.05 },
+  { key: 'shadowSkew', label: 'Shadow skew', min: 0, max: 4, step: 0.05 },
+  { key: 'shadowTint', label: 'Shadow tint', min: 0, max: 3, step: 0.05 },
+  { key: 'vignette', label: 'Vignette', min: 0, max: 4, step: 0.05 }
+];
+
+const fxSliderMeta = Object.fromEntries(fxSliderConfig.map(cfg => [cfg.key, cfg]));
+
+const fxSectionsConfig = [
+  {
+    title: 'Atmosphere',
+    hint: 'djup, luft och fokus',
+    open: true,
+    items: [
+      { type: 'toggle-slider', key: 'depthFog', id: 'fxDepthFog', label: 'Depth fog' },
+      { type: 'toggle-slider', key: 'fogVolumes', id: 'fxFogVolumes', label: 'Local fog' },
+      { type: 'toggle-slider', key: 'distortionZones', id: 'fxDistortionZones', label: 'Distortion zones' },
+      { type: 'toggle-slider', key: 'bgFloat', id: 'fxBgFloat', label: 'BG float' },
+      { type: 'toggle-slider', key: 'vignette', id: 'fxVignette', label: 'Vignette' }
+    ]
+  },
+  {
+    title: 'Light',
+    hint: 'glow, beam, highlights',
+    open: true,
+    items: [
+      { type: 'toggle-slider', key: 'heatBeams', id: 'fxHeat', label: 'Heat beams' },
+      { type: 'toggle-slider', key: 'pulseGlow', id: 'fxPulseGlow', label: 'Pulse glow' },
+      { type: 'toggle-slider', key: 'impactGlow', id: 'fxImpactGlow', label: 'Impact glow' },
+      { type: 'toggle-slider', key: 'surfaceLighting', id: 'fxSurfaceLighting', label: 'Surface lighting' },
+      { type: 'toggle-slider', key: 'selectiveBloom', id: 'fxSelectiveBloom', label: 'Selective bloom' },
+      { type: 'toggle-slider', key: 'specularHighlights', id: 'fxSpecularHighlights', label: 'Specular highlights' }
+    ]
+  },
+  {
+    title: 'Particles',
+    hint: 'skrot, damm, flöde',
+    open: true,
+    items: [
+      { type: 'toggle-slider', key: 'dust', id: 'fxDust', label: 'Dust' },
+      { type: 'toggle-slider', key: 'junkRain', id: 'fxJunkRain', label: 'Junk rain' },
+      { type: 'select', id: 'fxJunkLayer', label: 'Junk layer', options: [['far','far'],['mid','mid'],['near','near']], value: 'mid' }
+    ]
+  },
+  {
+    title: 'Shadows',
+    hint: 'grounding och färg',
+    open: true,
+    items: [
+      { type: 'toggle-slider', key: 'contactShadow', id: 'fxContactShadow', label: 'Contact shadow' },
+      { type: 'toggle-slider', key: 'shadowSkew', id: 'fxShadowSkew', label: 'Shadow skew' },
+      { type: 'toggle-slider', key: 'shadowTint', id: 'fxShadowTint', label: 'Shadow tint' },
+      { type: 'select', id: 'fxShadowTintPreset', label: 'Shadow preset', options: [['auto','auto'],['grass','grass'],['stone','stone'],['ice','ice'],['steampunk','steam']], value: 'auto' }
+    ]
+  },
+  {
+    title: 'Mechanics / decor',
+    hint: 'gears och lager',
+    open: true,
+    items: [
+      { type: 'toggle-slider', key: 'bgGears', id: 'fxBgGears', label: 'BG gears' },
+      { type: 'select', id: 'fxBgGearLayer', label: 'BG gear layer', options: [['far','far'],['mid','mid'],['near','near']], value: 'far' },
+      { type: 'toggle-slider', key: 'extraGears', id: 'fxExtraGears', label: 'Extra gears 3-5' },
+      { type: 'select', id: 'fxGear3Layer', label: 'Cog 3 layer', options: [['far','far'],['mid','mid'],['near','near']], value: 'mid' },
+      { type: 'select', id: 'fxGear4Layer', label: 'Cog 4 layer', options: [['far','far'],['mid','mid'],['near','near']], value: 'far' },
+      { type: 'select', id: 'fxGear5Layer', label: 'Cog 5 layer', options: [['far','far'],['mid','mid'],['near','near']], value: 'near' }
+    ]
+  },
+  {
+    title: 'Demo',
+    hint: 'verktyg och jämförelse',
+    open: true,
+    items: [
+      { type: 'toggle', id: 'fxSplitDemo', label: 'Split demo', checked: true }
+    ]
+  }
+];
+
+function fxGain(key) {
+  return fxIntensity[key] ?? 1;
+}
+
+function formatFxValue(v) {
+  return `${Number(v).toFixed(2)}x`;
+}
+
+function buildFxPanel() {
+  const host = document.getElementById('fxSections');
+  if (!host) return;
+  host.innerHTML = '';
+
+  for (const section of fxSectionsConfig) {
+    const details = document.createElement('details');
+    details.className = 'fx-section';
+    if (section.open) details.open = true;
+
+    const summary = document.createElement('summary');
+    summary.innerHTML = `<span class="fx-label">${section.title}</span><span>${section.hint}</span>`;
+    details.appendChild(summary);
+
+    const body = document.createElement('div');
+    body.className = 'fx-section-body';
+
+    for (const item of section.items) {
+      const row = document.createElement('div');
+      row.className = 'fx-control-row';
+
+      if (item.type === 'toggle-slider') {
+        const slider = fxSliderMeta[item.key];
+        row.innerHTML = `
+          <input class="fx-check" id="${item.id}" type="checkbox" checked>
+          <label class="fx-label" for="${item.id}">${item.label}</label>
+          <input id="fxTune_${item.key}" type="range" min="${slider.min}" max="${slider.max}" step="${slider.step}" value="${fxIntensity[item.key]}">
+          <span class="fx-slider-value" id="fxTuneVal_${item.key}">${formatFxValue(fxIntensity[item.key])}</span>
+          <span></span>
+        `;
+      } else if (item.type === 'toggle') {
+        row.classList.add('no-slider');
+        row.innerHTML = `
+          <input class="fx-check" id="${item.id}" type="checkbox" ${item.checked ? 'checked' : ''}>
+          <label class="fx-label" for="${item.id}">${item.label}</label>
+          <span></span>
+        `;
+      } else if (item.type === 'select') {
+        row.classList.add('no-slider');
+        const options = item.options.map(([value, text]) => `<option value="${value}" ${value === item.value ? 'selected' : ''}>${text}</option>`).join('');
+        row.innerHTML = `
+          <span></span>
+          <label class="fx-label" for="${item.id}">${item.label}</label>
+          <select class="fx-inline-select" id="${item.id}">${options}</select>
+        `;
+      }
+
+      body.appendChild(row);
+    }
+
+    details.appendChild(body);
+    host.appendChild(details);
+  }
+}
+
+buildFxPanel();
+
+const fxInputs = {
+  heatBeams: document.getElementById('fxHeat'),
+  pulseGlow: document.getElementById('fxPulseGlow'),
+  impactGlow: document.getElementById('fxImpactGlow'),
+  surfaceLighting: document.getElementById('fxSurfaceLighting'),
+  dust: document.getElementById('fxDust'),
+  bgFloat: document.getElementById('fxBgFloat'),
+  junkRain: document.getElementById('fxJunkRain'),
+  bgGears: document.getElementById('fxBgGears'),
+  extraGears: document.getElementById('fxExtraGears'),
+  depthFog: document.getElementById('fxDepthFog'),
+  fogVolumes: document.getElementById('fxFogVolumes'),
+  selectiveBloom: document.getElementById('fxSelectiveBloom'),
+  distortionZones: document.getElementById('fxDistortionZones'),
+  specularHighlights: document.getElementById('fxSpecularHighlights'),
+  contactShadow: document.getElementById('fxContactShadow'),
+  shadowSkew: document.getElementById('fxShadowSkew'),
+  shadowTint: document.getElementById('fxShadowTint'),
+  shadowTintPreset: document.getElementById('fxShadowTintPreset'),
+  vignette: document.getElementById('fxVignette'),
+  splitDemo: document.getElementById('fxSplitDemo'),
+  junkRainLayer: document.getElementById('fxJunkLayer'),
+  bgGearLayer: document.getElementById('fxBgGearLayer'),
+  gear3Layer: document.getElementById('fxGear3Layer'),
+  gear4Layer: document.getElementById('fxGear4Layer'),
+  gear5Layer: document.getElementById('fxGear5Layer')
+};
+
+const fxSliderInputs = Object.fromEntries(
+  fxSliderConfig.map(cfg => [cfg.key, document.getElementById(`fxTune_${cfg.key}`)])
+);
+
+function bindFxPanel() {
+  const bindCheck = (key, targetKey = key) => {
+    const el = fxInputs[key];
+    if (!el) return;
+    el.addEventListener('change', e => fxState[targetKey] = e.target.checked);
+  };
+  const bindSelect = (key, fn) => {
+    const el = fxInputs[key];
+    if (!el) return;
+    el.addEventListener('change', e => fn(e.target.value));
+  };
+
+  bindCheck('heatBeams');
+  bindCheck('pulseGlow');
+  bindCheck('impactGlow');
+  bindCheck('surfaceLighting');
+  bindCheck('dust');
+  bindCheck('bgFloat');
+  bindCheck('junkRain');
+  bindCheck('bgGears');
+  bindCheck('extraGears');
+  bindCheck('depthFog');
+  bindCheck('fogVolumes');
+  bindCheck('selectiveBloom');
+  bindCheck('distortionZones');
+  bindCheck('specularHighlights');
+  bindCheck('contactShadow');
+  bindCheck('shadowSkew');
+  bindCheck('shadowTint');
+  bindCheck('vignette');
+  bindCheck('splitDemo');
+
+  bindSelect('shadowTintPreset', value => fxState.shadowTintPreset = value);
+  bindSelect('junkRainLayer', value => fxState.junkRainLayer = value);
+  bindSelect('bgGearLayer', value => fxState.bgGearLayer = value);
+  bindSelect('gear3Layer', value => fxState.gearLayers.cogwheel3 = value);
+  bindSelect('gear4Layer', value => fxState.gearLayers.cogwheel4 = value);
+  bindSelect('gear5Layer', value => fxState.gearLayers.cogwheel5 = value);
+
+  for (const cfg of fxSliderConfig) {
+    const input = fxSliderInputs[cfg.key];
+    const valueEl = document.getElementById(`fxTuneVal_${cfg.key}`);
+    if (!input || !valueEl) continue;
+    const sync = () => {
+      fxIntensity[cfg.key] = parseFloat(input.value);
+      valueEl.textContent = formatFxValue(input.value);
+    };
+    input.addEventListener('input', sync);
+    input.addEventListener('change', sync);
+    sync();
+  }
+}
+
+const DPR = Math.max(1, window.devicePixelRatio || 1);
+function resize() {
+  canvas.width = Math.floor(canvas.clientWidth * DPR);
+  canvas.height = Math.floor(canvas.clientHeight * DPR);
+  world.baseGroundY = (canvas.height / DPR) - world.horizonOffset;
+}
+window.addEventListener('resize', resize);
+
+Object.entries(THEMES).forEach(([key, theme]) => {
+  const option = document.createElement('option');
+  option.value = key;
+  option.textContent = theme.label;
+  themeSelect.appendChild(option);
+});
+
+function makeImage(src) {
+  const img = new Image();
+  img.src = src;
+  return img;
+}
+
+const assets = {
+  player: makeImage('sprites/lumo.png'),
+  ground: makeImage('tiles/grass_bt.png'),
+  layerImages: { far: null, mid: null, near: null },
+  themeSheet: null,
+  decorImages: {},
+  junkImages: []
+};
+
+const PLAYER_GROUND_OFFSET = 65;
+
+const world = {
+  width: 18000,
+  baseGroundY: 0,
+  gravity: 2200,
+  horizonOffset: 108,
+  tileW: 154,
+  tileH: 230,
+  tileTopInset: 32
+};
+
+const player = {
+  x: 260,
+  y: 0,
+  w: 82,
+  h: 94,
+  vx: 0,
+  vy: 0,
+  maxSpeed: 460,
+  jumpForce: 920,
+  facing: 1,
+  onGround: false,
+  hoverBob: 0
+};
+
+const keys = {};
+window.addEventListener('keydown', (e) => {
+  if (['ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+  keys[e.code] = true;
+});
+window.addEventListener('keyup', (e) => {
+  keys[e.code] = false;
+});
+
+const layerSpeedMap = {
+  far: 0.18,
+  mid: 0.38,
+  near: 0.64
+};
+
+const cogMotion = {
+  cogwheel: { angle: 0 },
+  cogwheel2: { angle: 0, pausedUntil: 0, nextPauseEligibleAt: 0 },
+  cogwheel3: { angle: 0 },
+  cogwheel4: { angle: 0 },
+  cogwheel5: { angle: 0 }
+};
+
+const heatBeams = Array.from({ length: 8 }, () => ({
+  worldX: 0,
+  width: 34 + Math.random() * 22,
+  alpha: 0,
+  maxAlpha: 0.20 + Math.random() * 0.12,
+  edgeAlpha: 0.06 + Math.random() * 0.05,
+  drift: -10 + Math.random() * 20,
+  swayAmp: 6 + Math.random() * 18,
+  swayFreq: 0.18 + Math.random() * 0.38,
+  phase: Math.random() * Math.PI * 2,
+  state: 'waiting',
+  nextChangeAt: 0,
+  life: 0,
+  fadeIn: 0.9 + Math.random() * 1.0,
+  hold: 1.0 + Math.random() * 2.2,
+  fadeOut: 1.2 + Math.random() * 1.1,
+  worldBand: 0,
+  topOffset: -36 - Math.random() * 40,
+  endY: 0,
+  fadeTail: 0
+}));
+
+const bgGearMotion = {};
+['bgGearA','bgGearB','bgGearC','bgGearD','bgGearE','bgGearF','bgGearG','bgGearH','bgGearI'].forEach((name, i) => {
+  bgGearMotion[name] = { angle: i * 0.47 };
+});
+
+const junkRain = {
+  initialized: false,
+  nextSpawnAt: 0,
+  active: []
+};
+
+const dustParticles = Array.from({ length: 28 }, (_, i) => ({
+  x: (i * 59.123) % 900,
+  y: 70 + (i * 21.77) % 240,
+  r: 0.6 + (i % 4) * 0.35,
+  vx: 4 + (i % 5) * 2.4,
+  phase: i * 0.61
+}));
+
+const HEAT_BEAM_TILT = (25 * Math.PI) / 180;
+
+
+function groundHeightAt(worldX) {
+  return world.baseGroundY
+    + Math.sin(worldX * 0.0012) * 10
+    + Math.sin(worldX * 0.0038) * 5;
+}
+
+function getCameraX(viewW = canvas.width / DPR, followBias = 0.5) {
+  return Math.max(0, Math.min(world.width - viewW, player.x - viewW * followBias));
+}
+
+function getLayerParallax(layerName) {
+  return layerSpeedMap[layerName] ?? layerSpeedMap.mid;
+}
+function getJunkRainParallax() {
+  return getLayerParallax(fxState.junkRainLayer);
+}
+function getBgGearParallax() {
+  return getLayerParallax(fxState.bgGearLayer);
+}
+
+function getHeatBeamStopY(beam, camX) {
+  const viewH = canvas.height / DPR;
+  const parallax = getLayerParallax('far');
+  const beamWorldX = beam.worldX / Math.max(parallax, 0.001);
+  const groundStopY = groundHeightAt(beamWorldX) - 8;
+
+  // Always start from the top, but let the beam end at varied depths.
+  let stopY = Math.min(
+    groundStopY,
+    280 + Math.random() * Math.max(240, viewH * 0.62)
+  );
+
+  // Optional occluders for future platform/collision-aware beams.
+  const blockers = Array.isArray(world.beamBlockers) ? world.beamBlockers : [];
+  for (const b of blockers) {
+    if (!b) continue;
+    const x1 = b.x ?? 0;
+    const x2 = x1 + (b.w ?? 0);
+    if (beamWorldX >= x1 && beamWorldX <= x2) {
+      stopY = Math.min(stopY, (b.y ?? stopY) + (b.beamPadding ?? 0));
+    }
+  }
+
+  stopY = Math.max(viewH * 0.48, stopY);
+  stopY = Math.min(viewH - 18, stopY);
+  return stopY;
+}
+
+function resetHeatBeam(beam, timeSec, index = 0) {
+  const viewW = canvas.width / DPR;
+  const camX = getCameraX(viewW);
+  const parallax = getLayerParallax('far');
+  beam.width = 34 + Math.random() * 26;
+  beam.maxAlpha = 0.22 + Math.random() * 0.12;
+  beam.edgeAlpha = 0.06 + Math.random() * 0.05;
+  beam.swayAmp = 6 + Math.random() * 18;
+  beam.swayFreq = 0.18 + Math.random() * 0.38;
+  beam.phase = Math.random() * Math.PI * 2;
+  beam.fadeIn = 0.8 + Math.random() * 1.0;
+  beam.hold = 0.8 + Math.random() * 2.6;
+  beam.fadeOut = 1.0 + Math.random() * 1.2;
+  beam.life = 0;
+  beam.alpha = 0;
+  beam.topOffset = -24 - Math.random() * 52;
+  beam.drift = -8 + Math.random() * 16;
+  beam.state = 'waiting';
+  beam.nextChangeAt = timeSec + 0.15 + Math.random() * 2.4 + index * 0.11;
+  beam.worldBand = viewW * (0.45 + Math.random() * 0.85);
+  beam.endY = getHeatBeamStopY(beam, camX);
+  beam.fadeTail = 86 + Math.random() * 116;
+  beam.worldX = camX * parallax + Math.random() * Math.max(viewW, 1);
+}
+
+function updateHeatBeams(dt, timeSec) {
+  if (!fxState.heatBeams) return;
+  const viewW = canvas.width / DPR;
+  const camX = getCameraX();
+  const parallax = getLayerParallax('far');
+  for (let i = 0; i < heatBeams.length; i++) {
+    const beam = heatBeams[i];
+    if (!beam.nextChangeAt && beam.nextChangeAt !== 0) resetHeatBeam(beam, timeSec, i);
+    if (beam.worldX === 0 && beam.alpha === 0 && beam.life === 0 && beam.state === 'waiting') resetHeatBeam(beam, timeSec, i);
+    const screenX = beam.worldX - camX * parallax;
+    if (beam.state === 'waiting' && timeSec >= beam.nextChangeAt) {
+      beam.state = 'fadeIn';
+      beam.life = 0;
+      beam.worldBand = viewW * (0.5 + Math.random() * 0.8);
+      beam.worldX = camX * parallax + Math.random() * Math.max(viewW, 1) + (Math.random() - 0.5) * beam.worldBand;
+      beam.endY = getHeatBeamStopY(beam, camX);
+      beam.fadeTail = 86 + Math.random() * 116;
+    }
+
+    if (beam.state === 'fadeIn') {
+      beam.life += dt;
+      beam.alpha = Math.min(beam.maxAlpha, beam.maxAlpha * (beam.life / beam.fadeIn));
+      if (beam.life >= beam.fadeIn) {
+        beam.state = 'hold';
+        beam.life = 0;
+      }
+    } else if (beam.state === 'hold') {
+      beam.life += dt;
+      beam.alpha = beam.maxAlpha * (0.92 + Math.sin(timeSec * (0.7 + i * 0.11) + beam.phase) * 0.08);
+      if (beam.life >= beam.hold) {
+        beam.state = 'fadeOut';
+        beam.life = 0;
+      }
+    } else if (beam.state === 'fadeOut') {
+      beam.life += dt;
+      beam.alpha = Math.max(0, beam.maxAlpha * (1 - beam.life / beam.fadeOut));
+      if (beam.life >= beam.fadeOut || screenX < -viewW * 0.4 || screenX > viewW * 1.4) {
+        resetHeatBeam(beam, timeSec, i);
+      }
+    }
+  }
+}
+
+function loadTheme(key) {
+  const theme = THEMES[key];
+  if (!theme) return;
+
+  themeNameEl.textContent = theme.label;
+  assets.layerImages = { far: null, mid: null, near: null };
+  assets.themeSheet = null;
+  assets.decorImages = {};
+  assets.junkImages = [];
+  junkRain.active = [];
+  junkRain.initialized = false;
+
+  if (theme.layers) {
+    ['far', 'mid', 'near'].forEach(name => {
+      const meta = theme.layers[name];
+      if (!meta || !meta.src) {
+        assets.layerImages[name] = null;
+        return;
+      }
+      const img = makeImage(meta.src);
+      assets.layerImages[name] = img;
+      img.onload = () => {
+        layerRatioEl.textContent = `${img.width} × ${img.height} (${(img.width / img.height).toFixed(2)}:1)`;
+      };
+    });
+  } else if (theme.sheet) {
+    const img = makeImage(theme.sheet.src);
+    assets.themeSheet = img;
+    const frame = theme.sheet.frames.far;
+    layerRatioEl.textContent = `${frame.w} × ${frame.h} (${(frame.w / frame.h).toFixed(2)}:1)`;
+  }
+
+  if (theme.decor) {
+    for (const [name, meta] of Object.entries(theme.decor)) {
+      if (!meta?.src) continue;
+      assets.decorImages[name] = makeImage(meta.src);
+    }
+    for (let i = 1; i <= 15; i++) {
+      const num = String(i).padStart(2, '0');
+      assets.junkImages.push(makeImage(`parallax/steampunk/junk_${num}.png`));
+    }
+  }
+}
+
+function getFrame(name) {
+  const theme = THEMES[themeSelect.value];
+  if (theme.layers) {
+    const img = assets.layerImages[name];
+    const meta = theme.layers[name];
+    if (!img || !img.complete || !img.naturalWidth || !meta) return null;
+    return {
+      image: img,
+      sx: 0,
+      sy: 0,
+      sw: img.width,
+      sh: img.height,
+      speed: meta.speed,
+      y: meta.y,
+      scale: meta.scale
+    };
+  }
+  if (theme.sheet && assets.themeSheet && assets.themeSheet.complete && assets.themeSheet.naturalWidth) {
+    const f = theme.sheet.frames[name];
+    return {
+      image: assets.themeSheet,
+      sx: f.x,
+      sy: f.y,
+      sw: f.w,
+      sh: f.h,
+      speed: f.speed,
+      y: f.yPos,
+      scale: f.scale
+    };
+  }
+  return null;
+}
+
+function getLayerYOffset(name, timeSec) {
+  if (!fxState.bgFloat) return 0;
+  const gain = fxGain('bgFloat');
+  const amount = (name === 'far' ? 8 : name === 'mid' ? 11 : 5) * gain;
+  const freq = name === 'far' ? 0.58 : name === 'mid' ? 0.82 : 1.08;
+  const phase = name === 'far' ? 0.2 : name === 'mid' ? 1.1 : 2.0;
+  return Math.sin(timeSec * freq + phase) * amount + Math.sin(timeSec * (freq * 0.43) + phase * 1.7) * (amount * 0.28);
+}
+
+function drawLayer(name, camX, timeSec) {
+  const frame = getFrame(name);
+  if (!frame) return;
+
+  const { image, sx, sy, sw, sh, speed } = frame;
+  const targetHeight = canvas.height / DPR;
+  const autoScale = targetHeight / sh;
+  const drawW = sw * autoScale;
+  const drawH = sh * autoScale;
+  const offset = ((camX * speed) % drawW + drawW) % drawW;
+  const startX = -offset - drawW;
+  const yOffset = getLayerYOffset(name, timeSec);
+  const drawY = (targetHeight - drawH) * 0.5 + yOffset;
+
+  for (let x = startX; x < canvas.width / DPR + drawW; x += drawW) {
+    ctx.drawImage(
+      image,
+      sx, sy, sw, sh,
+      x * DPR, drawY * DPR,
+      drawW * DPR, drawH * DPR
+    );
+  }
+}
+
+function drawAtmosphere(theme) {
+  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grad.addColorStop(0, theme.atmosphere[0]);
+  grad.addColorStop(0.58, theme.atmosphere[1]);
+  grad.addColorStop(1, theme.atmosphere[2]);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = theme.mist;
+  const t = performance.now() * 0.00022;
+  for (let i = 0; i < 4; i++) {
+    const y = 110 + i * 92 + Math.sin(t + i * 0.8) * 10;
+    ctx.fillRect(0, y * DPR, canvas.width, 22 * DPR);
+  }
+}
+
+
+function getAmbientFlicker(timeSec) {
+  if (!fxState.ambientFlicker) return 1;
+  return 0.88
+    + Math.sin(timeSec * 0.73 + 0.4) * 0.035
+    + Math.sin(timeSec * 1.37 + 1.2) * 0.022
+    + Math.sin(timeSec * 2.41 + 2.1) * 0.012;
+}
+
+function getCameraDrift(timeSec) {
+  if (!fxState.cameraDrift) return { x: 0, y: 0 };
+  return {
+    x: Math.sin(timeSec * 0.23 + 0.8) * 1.8 + Math.sin(timeSec * 0.61) * 0.7,
+    y: Math.sin(timeSec * 0.19 + 1.6) * 1.3 + Math.sin(timeSec * 0.47 + 0.3) * 0.5
+  };
+}
+
+
+function getFogVolumes() {
+  return [
+    { worldX: 760, y: 240, radius: 170, drift: 18, phase: 0.2, tint: [214, 197, 176] },
+    { worldX: 1680, y: 214, radius: 210, drift: 24, phase: 1.1, tint: [196, 182, 170] },
+    { worldX: 2920, y: 264, radius: 190, drift: 20, phase: 2.4, tint: [228, 205, 182] }
+  ];
+}
+
+function drawLocalFogVolumes(name, camX, timeSec) {
+  if (!fxState.fogVolumes) return;
+  const gain = fxGain('fogVolumes');
+  const layerMul = name === 'far' ? 1.0 : name === 'mid' ? 0.72 : 0;
+  if (layerMul <= 0) return;
+  const parallax = getLayerParallax(name);
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (const fog of getFogVolumes()) {
+    const sx = fog.worldX - camX * parallax + Math.sin(timeSec * 0.22 + fog.phase) * fog.drift * (0.75 + gain * 0.35);
+    const sy = fog.y + Math.sin(timeSec * 0.38 + fog.phase * 1.7) * 10 * (0.7 + gain * 0.3);
+    const r = fog.radius * (0.78 + gain * 0.28);
+    if (sx < -r - 80 || sx > canvas.width / DPR + r + 80) continue;
+    const [fr, fg, fb] = fog.tint;
+    const grad = ctx.createRadialGradient(sx * DPR, sy * DPR, 0, sx * DPR, sy * DPR, r * DPR);
+    grad.addColorStop(0.00, `rgba(${fr},${fg},${fb},${(0.11 * layerMul * gain).toFixed(3)})`);
+    grad.addColorStop(0.38, `rgba(${fr},${fg},${fb},${(0.07 * layerMul * gain).toFixed(3)})`);
+    grad.addColorStop(0.72, `rgba(${fr},${fg},${fb},${(0.032 * layerMul * gain).toFixed(3)})`);
+    grad.addColorStop(1.00, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(sx * DPR, sy * DPR, r * DPR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawDistortionZones(name, camX, timeSec) {
+  if (!fxState.distortionZones) return;
+  const gain = fxGain('distortionZones');
+  const layerMul = name === 'far' ? 1.0 : name === 'mid' ? 0.82 : 0;
+  if (layerMul <= 0) return;
+  const parallax = getLayerParallax(name);
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (const fog of getFogVolumes()) {
+    const sx = fog.worldX - camX * parallax + Math.sin(timeSec * 0.22 + fog.phase) * fog.drift * (0.7 + gain * 0.4);
+    const sy = fog.y + Math.sin(timeSec * 0.38 + fog.phase * 1.7) * 10 * (0.75 + gain * 0.3);
+    const reachX = fog.radius * (0.75 + gain * 0.32);
+    const reachY = fog.radius * (0.46 + gain * 0.18);
+    if (sx < -fog.radius - 80 || sx > canvas.width / DPR + fog.radius + 80) continue;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.ellipse(sx * DPR, sy * DPR, reachX * DPR, reachY * DPR, 0, 0, Math.PI * 2);
+    ctx.clip();
+
+    for (let i = 0; i < 11; i++) {
+      const t = i / 10;
+      const ribX = sx - reachX * 0.75 + t * reachX * 1.5 + Math.sin(timeSec * (1.6 + i * 0.09) + fog.phase * 2.0 + i) * (5 + i * 0.3);
+      const ribW = 10 + (i % 3) * 4;
+      const rib = ctx.createLinearGradient((ribX - ribW) * DPR, 0, (ribX + ribW) * DPR, 0);
+      const a = (0.030 + ((i % 2) * 0.010)) * layerMul * gain;
+      rib.addColorStop(0.00, 'rgba(255,255,255,0)');
+      rib.addColorStop(0.50, `rgba(255,220,176,${a.toFixed(3)})`);
+      rib.addColorStop(1.00, 'rgba(255,255,255,0)');
+      ctx.fillStyle = rib;
+      ctx.save();
+      ctx.translate(0, Math.sin(timeSec * 1.4 + i * 0.5 + fog.phase) * 3 * gain * DPR);
+      ctx.rotate((Math.sin(timeSec * 0.7 + fog.phase + i * 0.1) * 0.03));
+      ctx.fillRect((ribX - ribW) * DPR, (sy - reachY * 1.2) * DPR, (ribW * 2) * DPR, (reachY * 2.4) * DPR);
+      ctx.restore();
+    }
+
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawDepthFogForLayer(name, timeSec) {
+  if (!fxState.depthFog) return;
+  const flicker = getAmbientFlicker(timeSec);
+  let alpha = 0;
+  if (name === 'far') alpha = 0.15;
+  else if (name === 'mid') alpha = 0.07;
+  else if (name === 'near') alpha = 0.025;
+  alpha *= flicker * fxGain('depthFog');
+
+  if (alpha <= 0.001) return;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grad.addColorStop(0.0, `rgba(255, 196, 132, ${(alpha * 0.18).toFixed(3)})`);
+  grad.addColorStop(0.32, `rgba(210, 190, 176, ${(alpha * 0.42).toFixed(3)})`);
+  grad.addColorStop(0.72, `rgba(148, 122, 112, ${(alpha * 0.72).toFixed(3)})`);
+  grad.addColorStop(1.0, `rgba(58, 42, 38, ${(alpha * 0.22).toFixed(3)})`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
+}
+
+
+function getDynamicBeamGearCircles(camX) {
+  if (themeSelect.value !== 'steampunk') return [];
+  const theme = THEMES[themeSelect.value];
+  if (!theme?.decor) return [];
+
+  const circles = [];
+
+  for (const name of ['cogwheel', 'cogwheel2']) {
+    const meta = theme.decor[name];
+    const img = assets.decorImages[name];
+    if (!meta || !img || !img.complete || !img.naturalWidth) continue;
+
+    const drawW = img.width * meta.scale;
+    const drawH = img.height * meta.scale;
+    circles.push({
+      cx: meta.worldX - camX,
+      cy: groundHeightAt(meta.worldX),
+      r: Math.min(drawW, drawH) * 0.42
+    });
+  }
+
+  if (fxState.extraGears) {
+    for (const name of ['cogwheel3', 'cogwheel4', 'cogwheel5']) {
+      const meta = theme.decor[name];
+      const img = assets.decorImages[name];
+      if (!meta || !img || !img.complete || !img.naturalWidth) continue;
+
+      const layerName = fxState.gearLayers[name] || 'mid';
+      const parallax = getLayerParallax(layerName);
+      const drawW = img.width * meta.scale;
+      const drawH = img.height * meta.scale;
+      circles.push({
+        cx: meta.worldX - camX * parallax,
+        cy: meta.y ?? (canvas.height / DPR * 0.48),
+        r: Math.min(drawW, drawH) * 0.42
+      });
+    }
+  }
+
+  return circles;
+}
+
+function getBeamStripCircleHitLocalY(localX, localY, radius, beamWidth) {
+  const closestX = Math.max(0, Math.min(beamWidth, localX));
+  const dx = localX - closestX;
+  if (Math.abs(dx) >= radius) return Infinity;
+
+  const inside = Math.max(0, radius * radius - dx * dx);
+  return localY - Math.sqrt(inside);
+}
+
+function getDynamicBeamHitInfo(beamX, beamTop, beamWidth, camX) {
+  const viewH = canvas.height / DPR;
+  const cos = Math.cos(HEAT_BEAM_TILT);
+  const sin = Math.sin(HEAT_BEAM_TILT);
+  let stopY = viewH - 8;
+  let bestHit = null;
+
+  for (const circle of getDynamicBeamGearCircles(camX)) {
+    const dx = circle.cx - beamX;
+    const dy = circle.cy - beamTop;
+    const localX = dx * cos + dy * sin;
+    const localY = -dx * sin + dy * cos;
+    const hitLocalY = getBeamStripCircleHitLocalY(localX, localY, circle.r, beamWidth);
+    if (!Number.isFinite(hitLocalY)) continue;
+
+    const closestX = Math.max(0, Math.min(beamWidth, localX));
+    const hitY = beamTop + hitLocalY;
+    const candidateStopY = hitY - Math.max(6, circle.r * 0.08);
+
+    if (hitY > beamTop + 12 && candidateStopY < stopY) {
+      stopY = candidateStopY;
+      bestHit = {
+        circle,
+        localX: closestX,
+        localY: hitLocalY,
+        hitY,
+        stopY: candidateStopY
+      };
+    }
+  }
+
+  return { stopY, bestHit };
+}
+
+function getDynamicBeamStopY(beamX, beamTop, beamWidth, camX) {
+  return getDynamicBeamHitInfo(beamX, beamTop, beamWidth, camX).stopY;
+}
+
+function getCurrentBeamBottom(beam, camX, timeSec, beamWidthOverride = null) {
+  const parallax = getLayerParallax('far');
+  const gain = fxGain('heatBeams');
+  const beamX = beam.worldX - camX * parallax + Math.sin(timeSec * beam.swayFreq + beam.phase) * beam.swayAmp;
+  const beamW = beamWidthOverride ?? (beam.width * (0.72 + gain * 0.28));
+  const scatterW = beamW * (1.45 + gain * 0.40);
+  const baseBottom = Math.min(canvas.height / DPR - 8, beam.endY || canvas.height / DPR);
+  const dynamicBottom = getDynamicBeamStopY(beamX, beam.topOffset, scatterW, camX);
+  return Math.min(baseBottom, dynamicBottom);
+}
+
+function beamPointInfluence(beam, screenX, screenY, camX, timeSec) {
+  if (beam.alpha <= 0.002) return 0;
+  const parallax = getLayerParallax('far');
+  const beamX = beam.worldX - camX * parallax + Math.sin(timeSec * beam.swayFreq + beam.phase) * beam.swayAmp;
+  const beamY = beam.topOffset;
+  const beamBottom = getCurrentBeamBottom(beam, camX, timeSec);
+  const beamH = Math.max(80, beamBottom - beamY);
+
+  const dx = screenX - beamX;
+  const dy = screenY - beamY;
+  const cos = Math.cos(HEAT_BEAM_TILT);
+  const sin = Math.sin(HEAT_BEAM_TILT);
+  const localX = dx * cos + dy * sin;
+  const localY = -dx * sin + dy * cos;
+
+  if (localY < -30 || localY > beamH + 30) return 0;
+  const scatterW = beam.width * 1.85;
+  if (localX < -6 || localX > scatterW) return 0;
+
+  if (localX <= beam.width) {
+    const t = localX / Math.max(1, beam.width);
+    return beam.alpha * (1.55 - t * 0.78);
+  }
+
+  const t = 1 - ((localX - beam.width) / Math.max(1, scatterW - beam.width));
+  return beam.alpha * Math.max(0, t) * 0.62;
+}
+
+function getHeatBeamInfluenceAtPoint(screenX, screenY, camX, timeSec) {
+  if (!fxState.heatBeams) return 0;
+  let influence = 0;
+  for (const beam of heatBeams) {
+    influence += beamPointInfluence(beam, screenX, screenY, camX, timeSec);
+  }
+  return Math.min(1.6, influence);
+}
+
+function drawHeatBeams(camX, timeSec) {
+  if (!fxState.heatBeams) return;
+  const gain = fxGain('heatBeams');
+  const parallax = getLayerParallax('far');
+  const viewW = canvas.width / DPR;
+  const viewH = canvas.height / DPR;
+  const beamCos = Math.cos(HEAT_BEAM_TILT);
+  const beamSin = Math.sin(HEAT_BEAM_TILT);
+  const gearCircles = getDynamicBeamGearCircles(camX);
+
+  for (const beam of heatBeams) {
+    if (beam.alpha <= 0.002) continue;
+    const x = beam.worldX - camX * parallax + Math.sin(timeSec * beam.swayFreq + beam.phase) * beam.swayAmp;
+    if (x < -260 || x > viewW + 260) continue;
+
+    const beamW = beam.width * (0.72 + gain * 0.28);
+    const scatterW = beamW * (1.45 + gain * 0.40);
+    const alpha = Math.max(0, beam.alpha * gain);
+    const baseBottom = Math.min(viewH - 8, beam.endY || viewH);
+    const beamTop = beam.topOffset;
+    const hitInfo = getDynamicBeamHitInfo(x, beamTop, scatterW, camX);
+    const endY = Math.min(viewH - 8, beam.endY || viewH, hitInfo.stopY);
+    const cutByGear = !!hitInfo.bestHit && endY < baseBottom - 4;
+    const beamH = Math.max(cutByGear ? 80 : 190, endY - beamTop);
+    const tailFade = Math.min(beamH * (cutByGear ? 0.18 : 0.36), beam.fadeTail || 82);
+
+    const off = document.createElement('canvas');
+    off.width = Math.max(1, Math.ceil((scatterW + 12) * DPR));
+    off.height = Math.max(1, Math.ceil((beamH + 40) * DPR));
+    const bctx = off.getContext('2d');
+
+    const endMask = bctx.createLinearGradient(0, 0, 0, beamH * DPR);
+    endMask.addColorStop(0.00, 'rgba(255,255,255,1)');
+    endMask.addColorStop(Math.max(0, 1 - tailFade / Math.max(beamH, 1)), 'rgba(255,255,255,1)');
+    endMask.addColorStop(1.00, 'rgba(255,255,255,0)');
+
+    const body = bctx.createLinearGradient(0, 0, scatterW * DPR, 0);
+    body.addColorStop(0.0, `rgba(255, 252, 236, ${Math.min(0.26, alpha * 1.05).toFixed(3)})`);
+    body.addColorStop(Math.min(0.08, beamW / scatterW * 0.24), `rgba(255, 222, 164, ${Math.min(0.23, alpha * 0.96).toFixed(3)})`);
+    body.addColorStop(beamW / scatterW, `rgba(255, 170, 84, ${Math.min(0.15, alpha * 0.72).toFixed(3)})`);
+    body.addColorStop(1.0, 'rgba(255, 110, 34, 0)');
+    bctx.fillStyle = body;
+    bctx.fillRect(0, 0, scatterW * DPR, beamH * DPR);
+
+    const coreW = Math.max(4, beamW * 0.085);
+    const core = bctx.createLinearGradient(0, 0, coreW * DPR, 0);
+    core.addColorStop(0.0, `rgba(255, 255, 248, ${Math.min(0.18, alpha * 0.85).toFixed(3)})`);
+    core.addColorStop(1.0, 'rgba(255, 230, 196, 0)');
+    bctx.fillStyle = core;
+    bctx.fillRect(0, 0, coreW * DPR, beamH * DPR);
+
+    const bands = 7;
+    for (let i = 0; i < bands; i++) {
+      const t = i / Math.max(1, bands - 1);
+      const y = t * beamH;
+      const wobble = Math.sin(timeSec * (0.9 + i * 0.17) + beam.phase * 1.7 + i * 0.6);
+      const pocketX = beamW * (0.10 + i * 0.06) + wobble * (beamW * 0.08);
+      const pocketW = beamW * (0.14 + (i % 3) * 0.03);
+      const pocketA = Math.max(0, alpha * (0.06 + 0.05 * Math.sin(timeSec * 1.4 + i * 1.3 + beam.phase)) * Math.min(2.5, gain));
+      const pocket = bctx.createLinearGradient(pocketX * DPR, 0, (pocketX + pocketW) * DPR, 0);
+      pocket.addColorStop(0.0, `rgba(255, 244, 220, ${pocketA.toFixed(3)})`);
+      pocket.addColorStop(1.0, 'rgba(255, 194, 120, 0)');
+      bctx.fillStyle = pocket;
+      bctx.fillRect(pocketX * DPR, Math.max(0, y - beamH * 0.11) * DPR, pocketW * DPR, Math.max(18, beamH * 0.26) * DPR);
+    }
+
+    for (let i = 0; i < 10; i++) {
+      const t = i / 9;
+      const ribX = beamW * (0.05 + t * 0.42) + Math.sin(timeSec * (1.6 + i * 0.13) + beam.phase + i) * beamW * 0.025;
+      const ribA = Math.max(0, alpha * (0.028 + 0.022 * Math.sin(timeSec * 2.0 + i * 0.9 + beam.phase)));
+      bctx.fillStyle = `rgba(255, 245, 222, ${ribA.toFixed(3)})`;
+      bctx.fillRect(ribX * DPR, 0, Math.max(1.2, beamW * 0.018) * DPR, beamH * DPR);
+    }
+
+    // Punch soft gear-shaped holes into the beam body so it reads as interrupted,
+    // not just visually sitting behind the gear sprite.
+    if (gearCircles.length) {
+      bctx.globalCompositeOperation = 'destination-out';
+      for (const circle of gearCircles) {
+        const dx = circle.cx - x;
+        const dy = circle.cy - beamTop;
+        const localX = dx * beamCos + dy * beamSin;
+        const localY = -dx * beamSin + dy * beamCos;
+        const reach = circle.r * 1.35;
+
+        if (localY < -reach || localY > beamH + reach) continue;
+        if (localX < -reach || localX > scatterW + reach) continue;
+
+        const holeR = Math.max(18, circle.r * 1.08);
+        const hole = bctx.createRadialGradient(
+          localX * DPR,
+          localY * DPR,
+          Math.max(2, holeR * 0.18) * DPR,
+          localX * DPR,
+          localY * DPR,
+          holeR * DPR
+        );
+        hole.addColorStop(0.00, 'rgba(0, 0, 0, 0.96)');
+        hole.addColorStop(0.58, 'rgba(0, 0, 0, 0.70)');
+        hole.addColorStop(0.86, 'rgba(0, 0, 0, 0.18)');
+        hole.addColorStop(1.00, 'rgba(0, 0, 0, 0)');
+        bctx.fillStyle = hole;
+        bctx.beginPath();
+        bctx.arc(localX * DPR, localY * DPR, holeR * DPR, 0, Math.PI * 2);
+        bctx.fill();
+
+        // Slight shadow trail on the far side to hint that the gear is blocking light,
+        // not merely erasing pixels.
+        const trailL = Math.max(circle.r * 1.9, 42);
+        const trailW = Math.max(circle.r * 1.15, 24);
+        const trail = bctx.createLinearGradient(
+          localX * DPR,
+          localY * DPR,
+          localX * DPR,
+          (localY + trailL) * DPR
+        );
+        trail.addColorStop(0.00, 'rgba(0, 0, 0, 0.42)');
+        trail.addColorStop(0.40, 'rgba(0, 0, 0, 0.18)');
+        trail.addColorStop(1.00, 'rgba(0, 0, 0, 0)');
+        bctx.fillStyle = trail;
+        bctx.fillRect((localX - trailW * 0.5) * DPR, localY * DPR, trailW * DPR, trailL * DPR);
+      }
+      bctx.globalCompositeOperation = 'source-over';
+    }
+
+    bctx.globalCompositeOperation = 'destination-in';
+    bctx.fillStyle = endMask;
+    bctx.fillRect(0, 0, off.width, beamH * DPR + 2);
+    bctx.globalCompositeOperation = 'screen';
+
+    const terminalRadius = cutByGear ? Math.max(12, beamW * 0.72) : Math.max(26, beamW * 1.5);
+    const terminalCenterY = cutByGear ? Math.max(0, beamH - 2) * DPR : beamH * DPR;
+    const terminal = bctx.createRadialGradient(
+      beamW * 0.22 * DPR,
+      terminalCenterY,
+      0,
+      beamW * 0.22 * DPR,
+      terminalCenterY,
+      terminalRadius * DPR
+    );
+    terminal.addColorStop(0.0, `rgba(255, 212, 144, ${(alpha * (cutByGear ? 0.05 : 0.08)).toFixed(3)})`);
+    terminal.addColorStop(0.45, `rgba(255, 170, 94, ${(alpha * (cutByGear ? 0.022 : 0.04)).toFixed(3)})`);
+    terminal.addColorStop(1.0, 'rgba(255, 170, 94, 0)');
+    bctx.fillStyle = terminal;
+    bctx.beginPath();
+    bctx.arc(beamW * 0.22 * DPR, terminalCenterY, terminalRadius * DPR, 0, Math.PI * 2);
+    bctx.fill();
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.translate(x * DPR, beamTop * DPR);
+    ctx.rotate(HEAT_BEAM_TILT);
+    ctx.drawImage(off, 0, 0);
+    ctx.restore();
+
+    if (cutByGear && hitInfo.bestHit && fxState.impactGlow) {
+      const impactGain = fxGain('impactGlow');
+      const impactLocalX = Math.max(beamW * 0.10, Math.min(scatterW * 0.82, hitInfo.bestHit.localX));
+      const impactLocalY = Math.max(0, Math.min(beamH, hitInfo.bestHit.localY));
+      const impactX = x + impactLocalX * beamCos - impactLocalY * beamSin;
+      const impactY = beamTop + impactLocalX * beamSin + impactLocalY * beamCos;
+      const pulse = 0.90 + 0.10 * Math.sin(timeSec * 5.4 + beam.phase * 2.7);
+      const haloR = Math.max(16, (beamW * 0.78 + hitInfo.bestHit.circle.r * 0.12) * (0.75 + impactGain * 0.45));
+      const coreR = Math.max(6, beamW * 0.24 * (0.8 + impactGain * 0.35));
+
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+
+      const halo = ctx.createRadialGradient(
+        impactX * DPR,
+        impactY * DPR,
+        0,
+        impactX * DPR,
+        impactY * DPR,
+        haloR * DPR
+      );
+      halo.addColorStop(0.00, `rgba(255, 236, 188, ${Math.min(0.52, alpha * 0.62 * pulse * impactGain).toFixed(3)})`);
+      halo.addColorStop(0.32, `rgba(255, 186, 104, ${Math.min(0.34, alpha * 0.40 * pulse * impactGain).toFixed(3)})`);
+      halo.addColorStop(0.68, `rgba(255, 122, 50, ${Math.min(0.18, alpha * 0.22 * pulse * impactGain).toFixed(3)})`);
+      halo.addColorStop(1.00, 'rgba(255, 122, 50, 0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath();
+      ctx.arc(impactX * DPR, impactY * DPR, haloR * DPR, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.translate(impactX * DPR, impactY * DPR);
+      ctx.rotate(HEAT_BEAM_TILT - Math.PI * 0.5);
+      const fanW = Math.max(12, beamW * 0.80 * (0.85 + impactGain * 0.35)) * DPR;
+      const fanH = Math.max(18, beamW * 1.20 * (0.85 + impactGain * 0.40)) * DPR;
+      const fan = ctx.createLinearGradient(0, -fanH * 0.5, 0, fanH * 0.5);
+      fan.addColorStop(0.00, 'rgba(255, 222, 160, 0)');
+      fan.addColorStop(0.22, `rgba(255, 238, 206, ${Math.min(0.30, alpha * 0.34 * pulse * impactGain).toFixed(3)})`);
+      fan.addColorStop(0.50, `rgba(255, 186, 110, ${Math.min(0.22, alpha * 0.24 * pulse * impactGain).toFixed(3)})`);
+      fan.addColorStop(1.00, 'rgba(255, 126, 54, 0)');
+      ctx.fillStyle = fan;
+      ctx.fillRect(-fanW * 0.5, -fanH * 0.5, fanW, fanH);
+
+      const core = ctx.createRadialGradient(0, 0, 0, 0, 0, coreR * DPR);
+      core.addColorStop(0.00, `rgba(255, 252, 244, ${Math.min(0.56, alpha * 0.72 * pulse * impactGain).toFixed(3)})`);
+      core.addColorStop(0.42, `rgba(255, 228, 176, ${Math.min(0.36, alpha * 0.46 * pulse * impactGain).toFixed(3)})`);
+      core.addColorStop(1.00, 'rgba(255, 170, 90, 0)');
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(0, 0, coreR * DPR, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+  }
+}
+
+function drawPulseGlow(timeSec) {
+  if (!fxState.pulseGlow && !fxState.selectiveBloom) return;
+  const gain = fxGain('pulseGlow');
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+
+  const cx = canvas.width * 0.72;
+  const cy = canvas.height * 0.24;
+  const bloomBoost = (fxState.selectiveBloom ? 1.18 : 0.82) * (0.72 + gain * 0.28);
+  const radius = (122 + Math.sin(timeSec * 2.3) * 18) * DPR * bloomBoost;
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+  grad.addColorStop(0, `rgba(255, 214, 160, ${((fxState.selectiveBloom ? 0.26 : 0.14) * gain).toFixed(3)})`);
+  grad.addColorStop(0.20, `rgba(255, 168, 92, ${(0.13 * gain).toFixed(3)})`);
+  grad.addColorStop(0.56, `rgba(255, 106, 54, ${(0.07 * gain).toFixed(3)})`);
+  grad.addColorStop(1, 'rgba(255, 106, 54, 0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+  ctx.fill();
+
+  const radius2 = (68 + Math.sin(timeSec * 3.1 + 0.8) * 10) * DPR * bloomBoost;
+  const grad2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius2);
+  grad2.addColorStop(0, `rgba(255, 242, 214, ${(0.12 * gain).toFixed(3)})`);
+  grad2.addColorStop(0.5, `rgba(255, 170, 108, ${(0.06 * gain).toFixed(3)})`);
+  grad2.addColorStop(1, 'rgba(255, 170, 108, 0)');
+  ctx.fillStyle = grad2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function getHeatBeamGlowAt(screenX, timeSec, camX, screenY = canvas.height / DPR * 0.5) {
+  return getHeatBeamInfluenceAtPoint(screenX, screenY, camX, timeSec);
+}
+
+
+function getGearSurfaceLightInfo(centerX, centerY, drawW, drawH, angle, camX, timeSec) {
+  const cosA = Math.cos(angle);
+  const sinA = Math.sin(angle);
+  const outerR = Math.min(drawW, drawH) * 0.40;
+  const midR = Math.min(drawW, drawH) * 0.32;
+  const innerR = Math.min(drawW, drawH) * 0.22;
+  const rings = [
+    { r: outerR, weight: 1.28 },
+    { r: outerR * 0.88, weight: 1.10 },
+    { r: midR, weight: 0.92 },
+    { r: innerR, weight: 0.74 }
+  ];
+
+  let bestScore = 0;
+  let bestHeat = 0;
+  let bestLocalX = 0;
+  let bestLocalY = 0;
+
+  for (const ring of rings) {
+    const samples = ring.r >= outerR * 0.95 ? 32 : 20;
+    for (let i = 0; i < samples; i++) {
+      const t = (i / samples) * Math.PI * 2;
+      const localX = Math.cos(t) * ring.r;
+      const localY = Math.sin(t) * ring.r;
+      const dx = localX * cosA - localY * sinA;
+      const dy = localX * sinA + localY * cosA;
+      const px = centerX + dx;
+      const py = centerY + dy;
+      const heat = getHeatBeamInfluenceAtPoint(px, py, camX, timeSec);
+      const score = heat * ring.weight;
+      if (score > bestScore) {
+        bestScore = score;
+        bestHeat = heat;
+        bestLocalX = localX;
+        bestLocalY = localY;
+      }
+    }
+  }
+
+  return { heat: bestHeat, localX: bestLocalX, localY: bestLocalY };
+}
+
+function drawGearSprite(img, centerX, centerY, drawW, drawH, angle, camX, timeSec, opts = {}) {
+  const shadowScale = opts.shadowScale ?? 1;
+  const shadowLift = opts.shadowLift ?? 0;
+  const shadowAlpha = opts.shadowAlpha ?? 0.18;
+  const heatStrength = opts.heatStrength ?? 1;
+
+  ctx.save();
+  ctx.translate(centerX * DPR, centerY * DPR);
+
+  if (shadowAlpha > 0.001) {
+    ctx.save();
+    ctx.rotate(angle * 0.22);
+    ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha.toFixed(3)})`;
+    ctx.beginPath();
+    ctx.ellipse(
+      8 * DPR,
+      (drawH * (0.45 + shadowLift)) * DPR,
+      drawW * 0.42 * shadowScale * DPR,
+      Math.max(10, drawH * 0.14) * shadowScale * DPR,
+      0,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.rotate(angle);
+  ctx.drawImage(img, -drawW * 0.5 * DPR, -drawH * 0.5 * DPR, drawW * DPR, drawH * DPR);
+
+  // Cheap-but-rich rim light: warms the contour without needing normals or shaders.
+  if (fxState.rimLight) {
+    const ambientFlicker = getAmbientFlicker(timeSec);
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.rotate(-0.34);
+    const rimReach = Math.max(drawW, drawH) * DPR;
+    const rim = ctx.createLinearGradient(-rimReach * 0.55, -rimReach * 0.15, rimReach * 0.45, rimReach * 0.28);
+    rim.addColorStop(0.00, 'rgba(255,244,220,0)');
+    rim.addColorStop(0.28, `rgba(255,224,168, ${(0.06 * ambientFlicker).toFixed(3)})`);
+    rim.addColorStop(0.52, `rgba(255,164,90, ${(0.10 * ambientFlicker).toFixed(3)})`);
+    rim.addColorStop(0.72, `rgba(255,118,48, ${(0.045 * ambientFlicker).toFixed(3)})`);
+    rim.addColorStop(1.00, 'rgba(255,118,48,0)');
+    ctx.fillStyle = rim;
+    ctx.fillRect(-rimReach, -rimReach, rimReach * 2, rimReach * 2);
+    ctx.restore();
+  }
+
+  const heat = getHeatBeamGlowAt(centerX, timeSec, camX, centerY) * heatStrength;
+  const surfaceInfo = getGearSurfaceLightInfo(centerX, centerY, drawW, drawH, angle, camX, timeSec);
+
+
+  if (fxState.surfaceLighting && surfaceInfo.heat > 0.010) {
+    const surfaceGain = fxGain('surfaceLighting');
+    const surfaceHeat = surfaceInfo.heat * heatStrength * surfaceGain;
+    const pulse = 0.96 + 0.04 * Math.sin(timeSec * 3.8 + centerX * 0.006 + centerY * 0.004);
+    const hitX = surfaceInfo.localX * DPR;
+    const hitY = surfaceInfo.localY * DPR;
+
+    const lightCanvas = drawGearSprite._surfaceCanvas || (drawGearSprite._surfaceCanvas = document.createElement('canvas'));
+    const lightCtx = lightCanvas.getContext('2d');
+
+    const texW = Math.max(8, Math.ceil(drawW * DPR));
+    const texH = Math.max(8, Math.ceil(drawH * DPR));
+    if (lightCanvas.width !== texW || lightCanvas.height !== texH) {
+      lightCanvas.width = texW;
+      lightCanvas.height = texH;
+    }
+    lightCtx.clearRect(0, 0, texW, texH);
+    lightCtx.save();
+    lightCtx.translate(texW * 0.5, texH * 0.5);
+
+    const hitAngle = Math.atan2(surfaceInfo.localY, surfaceInfo.localX);
+    const edgeRadius = Math.hypot(surfaceInfo.localX, surfaceInfo.localY) * DPR;
+    const inwardDepth = Math.max(18 * DPR, drawW * 0.060 * DPR) * (0.92 + surfaceGain * 0.05);
+    const angularSpread = 0.28 + Math.min(0.18, surfaceHeat * 0.14);
+    const arcLayers = 5;
+    const segCount = 18;
+
+    // 1) Arc-based rim response: no beam-rect, only a wrapped highlight along the struck edge.
+    lightCtx.lineCap = 'round';
+    for (let layer = 0; layer < arcLayers; layer++) {
+      const layerT = layer / Math.max(1, arcLayers - 1);
+      const radius = edgeRadius - inwardDepth * layerT;
+      const width = Math.max(3 * DPR, (10 - layer * 1.35) * DPR);
+      const radialFade = Math.pow(1 - layerT, 2.6);
+      const spread = angularSpread * (1 - layerT * 0.20);
+
+      for (let s = 0; s < segCount; s++) {
+        const t0 = s / segCount;
+        const t1 = (s + 1) / segCount;
+        const a0 = hitAngle - spread + spread * 2 * t0;
+        const a1 = hitAngle - spread + spread * 2 * t1;
+        const mid = (a0 + a1) * 0.5;
+        const angularT = Math.min(1, Math.abs(mid - hitAngle) / Math.max(0.0001, spread));
+        const angularFade = Math.pow(1 - angularT, 2.35);
+        const alpha = surfaceHeat * pulse * radialFade * angularFade;
+        if (alpha <= 0.003) continue;
+
+        const hotness = Math.pow(1 - angularT, 1.25) * Math.pow(1 - layerT, 1.6);
+        const r = Math.round(255);
+        const g = Math.round(232 + hotness * 16);
+        const b = Math.round(188 - hotness * 20);
+        const a = Math.min(0.19, alpha * (0.10 + (layer === 0 ? 0.08 : 0.0)));
+
+        lightCtx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${a.toFixed(3)})`;
+        lightCtx.lineWidth = width;
+        lightCtx.beginPath();
+        lightCtx.arc(0, 0, radius, a0, a1);
+        lightCtx.stroke();
+      }
+    }
+
+    // 2) Tight edge hotspot right on the impact point, but warmer and less chalk-white.
+    lightCtx.save();
+    lightCtx.translate(hitX, hitY);
+    lightCtx.scale(1.06, 0.82);
+    const hotR = Math.max(11 * DPR, drawW * 0.040 * DPR) * (0.94 + surfaceGain * 0.04);
+    const hot = lightCtx.createRadialGradient(0, 0, 0, 0, 0, hotR);
+    hot.addColorStop(0.00, `rgba(255,246,220, ${Math.min(0.28, surfaceHeat * 0.18 * pulse).toFixed(3)})`);
+    hot.addColorStop(0.30, `rgba(255,228,182, ${Math.min(0.16, surfaceHeat * 0.10 * pulse).toFixed(3)})`);
+    hot.addColorStop(0.68, `rgba(255,206,144, ${Math.min(0.06, surfaceHeat * 0.04 * pulse).toFixed(3)})`);
+    hot.addColorStop(1.00, 'rgba(255,206,144,0)');
+    lightCtx.fillStyle = hot;
+    lightCtx.beginPath();
+    lightCtx.arc(0, 0, hotR, 0, Math.PI * 2);
+    lightCtx.fill();
+    lightCtx.restore();
+
+    // 3) Mask the light into the gear sprite so nothing leaks behind it.
+    lightCtx.globalCompositeOperation = 'destination-in';
+    lightCtx.drawImage(img, -texW * 0.5, -texH * 0.5, texW, texH);
+    lightCtx.restore();
+
+    // 4) Composite back onto the gear as a subtle luminance lift.
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = Math.min(1, 0.84 + surfaceGain * 0.04);
+    ctx.drawImage(lightCanvas, -drawW * 0.5 * DPR, -drawH * 0.5 * DPR, drawW * DPR, drawH * DPR);
+    ctx.restore();
+  }
+
+  if (fxState.specularHighlights && heat > 0.03) {
+    const specGain = fxGain('specularHighlights');
+    const reach = Math.max(drawW, drawH) * DPR;
+    const screenTilt = HEAT_BEAM_TILT - angle;
+    const beamBoost = Math.min(3.2, 0.35 + heat * 4.2) * specGain;
+    const pulse = 0.78 + 0.22 * Math.sin(timeSec * 9.0 + centerX * 0.015 + centerY * 0.009);
+
+    // Beam-driven hub flash: deliberately strong in the extreme test so we can
+    // verify whether the idea reads at all on these busy sprites.
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    const hubR = Math.max(drawW, drawH) * 0.16 * DPR;
+    const hubGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, hubR);
+    hubGlow.addColorStop(0.00, `rgba(255,255,244, ${(0.28 * beamBoost * pulse).toFixed(3)})`);
+    hubGlow.addColorStop(0.32, `rgba(255,236,178, ${(0.22 * beamBoost * pulse).toFixed(3)})`);
+    hubGlow.addColorStop(0.66, `rgba(255,182,92, ${(0.10 * beamBoost * pulse).toFixed(3)})`);
+    hubGlow.addColorStop(1.00, 'rgba(255,182,92,0)');
+    ctx.fillStyle = hubGlow;
+    ctx.beginPath();
+    ctx.arc(0, 0, hubR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Beam-facing rim strike: aligned to the light, not to the gear spin.
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.rotate(screenTilt);
+    const strikeW = Math.max(drawW * 0.22 * DPR, 18 * DPR);
+    const strikeSoft = Math.max(drawW * 0.34 * DPR, 34 * DPR);
+    const strikeX = (-drawW * 0.10 + Math.sin(timeSec * 5.2 + centerX * 0.007) * drawW * 0.03) * DPR;
+    const strike = ctx.createLinearGradient(strikeX - strikeW, 0, strikeX + strikeSoft, 0);
+    strike.addColorStop(0.00, 'rgba(255,255,255,0)');
+    strike.addColorStop(0.18, `rgba(255,255,248, ${(0.18 * beamBoost).toFixed(3)})`);
+    strike.addColorStop(0.36, `rgba(255,234,176, ${(0.34 * beamBoost).toFixed(3)})`);
+    strike.addColorStop(0.52, `rgba(255,178,88, ${(0.16 * beamBoost).toFixed(3)})`);
+    strike.addColorStop(1.00, 'rgba(255,178,88,0)');
+    ctx.fillStyle = strike;
+    ctx.fillRect(-reach, -reach, reach * 2.2, reach * 2.2);
+    ctx.restore();
+
+    // Small hot glints on rim segments where metal would really catch.
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.rotate(-angle);
+    const glints = [
+      { x: -drawW * 0.26, y: -drawH * 0.16, r: 0.10 },
+      { x: -drawW * 0.16, y:  drawH * 0.10, r: 0.08 },
+      { x:  drawW * 0.04, y: -drawH * 0.24, r: 0.07 }
+    ];
+    for (const g of glints) {
+      const r = Math.max(drawW, drawH) * g.r * DPR;
+      const grad = ctx.createRadialGradient(g.x * DPR, g.y * DPR, 0, g.x * DPR, g.y * DPR, r);
+      grad.addColorStop(0.00, `rgba(255,250,236, ${(0.16 * beamBoost * pulse).toFixed(3)})`);
+      grad.addColorStop(0.40, `rgba(255,216,146, ${(0.09 * beamBoost * pulse).toFixed(3)})`);
+      grad.addColorStop(1.00, 'rgba(255,216,146,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(g.x * DPR, g.y * DPR, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  if (fxState.selectiveBloom) {
+    const bloomGain = fxGain('selectiveBloom');
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    const bloomR = Math.max(drawW, drawH) * 0.58 * DPR;
+    const bloom = ctx.createRadialGradient(0, 0, 0, 0, 0, bloomR);
+    bloom.addColorStop(0.00, `rgba(255, 224, 176, ${(0.18 * bloomGain).toFixed(3)})`);
+    bloom.addColorStop(0.36, `rgba(255, 176, 92, ${(0.10 * bloomGain).toFixed(3)})`);
+    bloom.addColorStop(0.72, `rgba(255, 116, 52, ${(0.04 * bloomGain).toFixed(3)})`);
+    bloom.addColorStop(1.00, 'rgba(255, 116, 52, 0)');
+    ctx.fillStyle = bloom;
+    ctx.beginPath();
+    ctx.arc(0, 0, bloomR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+function updateDust(dt) {
+  const viewW = canvas.width / DPR;
+  for (const p of dustParticles) {
+    p.x += p.vx * dt;
+    p.y += Math.sin(performance.now() * 0.001 + p.phase) * 0.08;
+    if (p.x > viewW + 20) p.x = -20;
+  }
+}
+
+function drawDust(timeSec, camX) {
+  if (!fxState.dust) return;
+
+  const gain = fxGain('dust');
+  const bloomOn = !!fxState.selectiveBloom;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+
+  for (const p of dustParticles) {
+    const x = p.x;
+    const y = p.y + Math.sin(timeSec * 1.2 + p.phase) * 6;
+
+    const heat = getHeatBeamInfluenceAtPoint(x, y, camX, timeSec);
+    const beamT = Math.min(1, heat / 0.34);
+
+    const baseRadius = p.r * (0.72 + gain * 0.24);
+    const litRadius = baseRadius * (1 + beamT * 1.75);
+
+    const baseAlpha = (0.045 + p.r * 0.014) * gain;
+    const litAlpha = (0.14 + beamT * 0.34) * gain;
+    const pulse = 0.88 + 0.12 * Math.sin(timeSec * 3.2 + p.phase * 1.7);
+
+    let bodyColor;
+    if (beamT > 0.01) {
+      const a = Math.min(0.62, (baseAlpha + litAlpha * 0.45) * pulse).toFixed(3);
+      bodyColor = `rgba(255, 238, 206, ${a})`;
+    } else {
+      const a = Math.min(0.14, baseAlpha * 0.95).toFixed(3);
+      bodyColor = `rgba(214, 196, 170, ${a})`;
+    }
+
+    ctx.fillStyle = bodyColor;
+    ctx.beginPath();
+    ctx.arc(x * DPR, y * DPR, litRadius * DPR, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (beamT > 0.03 || bloomOn) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+
+      let glowR = litRadius * 1.9;
+      if (beamT > 0.03) {
+        glowR = litRadius * (2.8 + beamT * 2.4);
+      }
+
+      let glowA;
+      if (bloomOn) {
+        glowA = Math.max(0.03, (0.045 + beamT * 0.16) * gain);
+      } else {
+        glowA = (0.02 + beamT * 0.14) * gain;
+      }
+
+      const glow = ctx.createRadialGradient(
+        x * DPR, y * DPR, 0,
+        x * DPR, y * DPR, glowR * DPR
+      );
+      glow.addColorStop(0.00, `rgba(255, 236, 180, ${Math.min(0.28, glowA * 1.2).toFixed(3)})`);
+      glow.addColorStop(0.35, `rgba(255, 192, 110, ${Math.min(0.18, glowA * 0.78).toFixed(3)})`);
+      glow.addColorStop(0.72, `rgba(255, 126, 52, ${Math.min(0.09, glowA * 0.42).toFixed(3)})`);
+      glow.addColorStop(1.00, 'rgba(255, 126, 52, 0)');
+
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(x * DPR, y * DPR, glowR * DPR, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    if (beamT > 0.10) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+
+      const coreR = Math.max(0.6, litRadius * (0.34 + beamT * 0.18));
+      const core = ctx.createRadialGradient(
+        x * DPR, y * DPR, 0,
+        x * DPR, y * DPR, coreR * DPR
+      );
+      core.addColorStop(0.00, `rgba(255, 255, 244, ${Math.min(0.60, (0.18 + beamT * 0.34) * gain).toFixed(3)})`);
+      core.addColorStop(0.45, `rgba(255, 234, 188, ${Math.min(0.34, (0.10 + beamT * 0.18) * gain).toFixed(3)})`);
+      core.addColorStop(1.00, 'rgba(255, 210, 150, 0)');
+
+      ctx.fillStyle = core;
+      ctx.beginPath();
+      ctx.arc(x * DPR, y * DPR, coreR * DPR, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    if (beamT > 0.18) {
+      ctx.save();
+      ctx.globalCompositeOperation = 'screen';
+      ctx.translate(x * DPR, y * DPR);
+      ctx.rotate(HEAT_BEAM_TILT);
+
+      const streakW = Math.max(1.4, litRadius * (0.45 + beamT * 0.4)) * DPR;
+      const streakL = Math.max(6, litRadius * (3.2 + beamT * 3.8)) * DPR;
+
+      const streak = ctx.createLinearGradient(0, -streakL * 0.5, 0, streakL * 0.5);
+      streak.addColorStop(0.00, 'rgba(255, 232, 176, 0)');
+      streak.addColorStop(0.22, `rgba(255, 240, 204, ${Math.min(0.16, (0.05 + beamT * 0.09) * gain).toFixed(3)})`);
+      streak.addColorStop(0.50, `rgba(255, 208, 132, ${Math.min(0.12, (0.04 + beamT * 0.07) * gain).toFixed(3)})`);
+      streak.addColorStop(0.78, `rgba(255, 162, 88, ${Math.min(0.06, (0.02 + beamT * 0.04) * gain).toFixed(3)})`);
+      streak.addColorStop(1.00, 'rgba(255, 162, 88, 0)');
+
+      ctx.fillStyle = streak;
+      ctx.fillRect(-streakW * 0.5, -streakL * 0.5, streakW, streakL);
+
+      ctx.restore();
+    }
+  }
+
+  ctx.restore();
+}
+
+function updateCogMotion(dt, timeSec) {
+  const theme = THEMES[themeSelect.value];
+  const decor = theme.decor || {};
+
+  cogMotion.cogwheel.angle += (decor.cogwheel?.rotationSpeed || 0.16) * dt;
+  const extraGearGain = fxGain('extraGears');
+  cogMotion.cogwheel3.angle += (decor.cogwheel3?.rotationSpeed || -0.12) * dt * extraGearGain;
+  cogMotion.cogwheel4.angle += (decor.cogwheel4?.rotationSpeed || 0.08) * dt * extraGearGain;
+
+  const meta2 = decor.cogwheel2;
+  const state2 = cogMotion.cogwheel2;
+  if (meta2 && state2) {
+    if (timeSec >= state2.pausedUntil) {
+      state2.angle += (meta2.rotationSpeed || -0.105) * dt;
+      if (timeSec >= state2.nextPauseEligibleAt && Math.random() < dt * 0.085) {
+        const pauseDur = (meta2.pauseMin || 0.8) + Math.random() * ((meta2.pauseMax || 3.0) - (meta2.pauseMin || 0.8));
+        state2.pausedUntil = timeSec + pauseDur;
+        state2.nextPauseEligibleAt = timeSec + (meta2.pauseCooldown || 15.0);
+      }
+    }
+  }
+
+  const meta5 = decor.cogwheel5;
+  const state5 = cogMotion.cogwheel5;
+  if (meta5 && state5) {
+    const dir = Math.sign(meta5.rotationSpeed || -1);
+    const base = Math.abs(meta5.rotationSpeed || -0.14);
+    const phase = ((state5.angle % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    const deg = phase * 180 / Math.PI;
+
+    // Defect wheel physics: the heavy point in the source art sits at 225° when
+    // 0° is straight up. Because this wheel rotates counter-clockwise in the demo,
+    // the whole behaviour curve must be rotated 50° counter-clockwise as well,
+    // otherwise the acceleration starts too early relative to the visible mass.
+    const heavyPointDeg = 225;
+    const effectOffsetDeg = dir < 0 ? 50 : 0;
+    const localDegRaw = dir < 0
+      ? ((heavyPointDeg - deg) % 360 + 360) % 360
+      : ((deg - heavyPointDeg) % 360 + 360) % 360;
+    const localDeg = ((localDegRaw - effectOffsetDeg) % 360 + 360) % 360;
+
+    let mult;
+    if (localDeg < 22) {
+      // Heaviest section: still moving, but under clear load before the tip-over.
+      const t = localDeg / 22;
+      mult = 0.60 + t * 0.18;
+    } else if (localDeg < 192) {
+      // Gravity takes over hard here: much faster peak speed than the normal gears.
+      const t = (localDeg - 22) / (192 - 22);
+      mult = 0.78 + t * 5.05;
+    } else if (localDeg < 304) {
+      // Long braking arc from the fast side back toward the heavy region.
+      const t = (localDeg - 192) / (304 - 192);
+      mult = 5.83 - t * 4.05;
+    } else {
+      // Return into the heavy point: slower, but never crawling.
+      const t = (localDeg - 304) / 56;
+      mult = 1.78 - t * 0.96;
+    }
+
+    // Small irregularity so the missing-teeth feel is not too mathematically clean.
+    mult += Math.sin(timeSec * 9 + phase * 4.5) * 0.02;
+    mult = Math.max(0.58, mult);
+    state5.angle += dir * base * mult * dt * extraGearGain;
+  }
+}
+
+function updateBgGearMotion(dt, timeSec) {
+  const theme = THEMES[themeSelect.value];
+  const gain = fxGain('bgGears');
+  if (!theme || !theme.decor) return;
+  for (const [name, state] of Object.entries(bgGearMotion)) {
+    const meta = theme.decor[name];
+    if (!meta) continue;
+    let speed = (meta.rotationSpeed || 0) * gain;
+    if (meta.wobbleAccel) {
+      const mod = 1 + Math.sin(timeSec * (meta.wobbleFreq || 1.2)) * (meta.wobbleAmount || 0.35);
+      speed *= mod;
+    }
+    state.angle += speed * dt;
+  }
+}
+
+function drawBackgroundGears(camX) {
+  if (!fxState.bgGears || themeSelect.value !== 'steampunk') return;
+  const theme = THEMES[themeSelect.value];
+  const parallax = getBgGearParallax();
+  const names = ['bgGearA','bgGearB','bgGearC','bgGearD','bgGearE','bgGearF','bgGearG','bgGearH','bgGearI'];
+
+  for (const name of names) {
+    const meta = theme.decor?.[name];
+    const img = assets.decorImages[name];
+    const state = bgGearMotion[name];
+    if (!meta || !state || !img || !img.complete || !img.naturalWidth) continue;
+
+    const drawW = img.width * meta.scale;
+    const drawH = img.height * meta.scale;
+    const x = meta.worldX - camX * parallax;
+    const y = meta.y;
+
+    ctx.save();
+    ctx.translate(x * DPR, y * DPR);
+    ctx.rotate(state.angle);
+    ctx.drawImage(img, -drawW * 0.5 * DPR, -drawH * 0.5 * DPR, drawW * DPR, drawH * DPR);
+    ctx.restore();
+  }
+}
+
+function maybeSpawnJunkRain(timeSec) {
+  if (!fxState.junkRain || themeSelect.value !== 'steampunk') return;
+  const readyImages = assets.junkImages.filter(img => img.complete && img.naturalWidth);
+
+  if (!junkRain.initialized) {
+    junkRain.initialized = true;
+    junkRain.nextSpawnAt = timeSec + 0.45;
+  }
+  if (timeSec < junkRain.nextSpawnAt) return;
+
+  const img = readyImages.length ? readyImages[Math.floor(Math.random() * readyImages.length)] : null;
+  const imgW = img ? img.width : 22;
+  const imgH = img ? img.height : 14;
+  const maxPx = 24;
+  const fitScale = Math.min(maxPx / imgW, maxPx / imgH, 1);
+  const scale = fitScale * (0.68 + Math.random() * 0.32);
+  const drawW = imgW * scale;
+  const drawH = imgH * scale;
+  const viewW = canvas.width / DPR;
+  const camX = getCameraX(viewW);
+  const parallax = getJunkRainParallax();
+  const screenX = Math.random() * Math.max(1, viewW - drawW);
+  const worldX = screenX + camX * parallax;
+
+  junkRain.active.push({
+    image: img,
+    worldX,
+    y: -drawH - Math.random() * 18,
+    drawW,
+    drawH,
+    vy: (140 + Math.random() * 90) * (0.75 + fxGain('junkRain') * 0.25),
+    rotation: Math.random() * Math.PI * 2,
+    rotationSpeed: (Math.random() * 2 - 1) * 1.4,
+    parallax
+  });
+
+  junkRain.nextSpawnAt = timeSec + (0.18 + Math.random() * 0.18) / Math.max(0.18, fxGain('junkRain'));
+}
+
+function updateJunkRain(dt) {
+  if (!junkRain.active.length) return;
+  const viewH = canvas.height / DPR;
+  for (const item of junkRain.active) {
+    item.y += item.vy * dt;
+    item.rotation += item.rotationSpeed * dt;
+  }
+  junkRain.active = junkRain.active.filter(item => item.y < viewH + item.drawH + 10);
+}
+
+function drawFallbackJunk(drawW, drawH) {
+  ctx.fillStyle = 'rgba(140, 120, 98, 0.95)';
+  ctx.fillRect(-drawW * 0.5 * DPR, -drawH * 0.5 * DPR, drawW * DPR, drawH * DPR);
+  ctx.fillStyle = 'rgba(85, 72, 58, 0.95)';
+  ctx.fillRect(-drawW * 0.20 * DPR, -drawH * 0.20 * DPR, drawW * 0.40 * DPR, drawH * 0.40 * DPR);
+}
+
+function drawJunkRain(camX) {
+  if (!fxState.junkRain || themeSelect.value !== 'steampunk') return;
+  if (!junkRain.active.length) return;
+
+  ctx.save();
+  for (const item of junkRain.active) {
+    const screenX = item.worldX - camX * item.parallax;
+    const x = (screenX + item.drawW * 0.5) * DPR;
+    const y = (item.y + item.drawH * 0.5) * DPR;
+
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(item.rotation);
+    if (item.image && item.image.complete && item.image.naturalWidth) {
+      ctx.drawImage(
+        item.image,
+        -item.drawW * 0.5 * DPR,
+        -item.drawH * 0.5 * DPR,
+        item.drawW * DPR,
+        item.drawH * DPR
+      );
+    } else {
+      drawFallbackJunk(item.drawW, item.drawH);
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawGround(camX) {
+  const tile = assets.ground;
+  if (!tile.complete || !tile.naturalWidth) return;
+
+  const viewW = canvas.width / DPR;
+  const tileScreenW = world.tileW;
+  const visibleStart = Math.floor(camX / tileScreenW) - 2;
+  const visibleEnd = Math.ceil((camX + viewW) / tileScreenW) + 2;
+
+  for (let i = visibleStart; i <= visibleEnd; i++) {
+    const wx = i * tileScreenW;
+    const gx = wx - camX;
+    const groundY = groundHeightAt(wx + tileScreenW * 0.5);
+    const drawY = groundY - world.tileTopInset;
+    ctx.drawImage(tile, gx * DPR, drawY * DPR, tileScreenW * DPR, world.tileH * DPR);
+  }
+}
+
+function getGearAngle(name, meta, timeSec) {
+  if (cogMotion[name]) return cogMotion[name].angle;
+  return timeSec * (meta.rotationSpeed || 0.12);
+}
+
+function drawGroundHubGears(theme, camX, timeSec) {
+  if (!theme.decor) return;
+  for (const name of ['cogwheel', 'cogwheel2']) {
+    const meta = theme.decor[name];
+    const img = assets.decorImages[name];
+    if (!meta || !img || !img.complete || !img.naturalWidth) continue;
+    const drawW = img.width * meta.scale;
+    const drawH = img.height * meta.scale;
+    const centerX = meta.worldX - camX;
+    const centerY = groundHeightAt(meta.worldX);
+    const angle = getGearAngle(name, meta, timeSec);
+    drawGearSprite(img, centerX, centerY, drawW, drawH, angle, camX, timeSec, {
+      shadowScale: name === 'cogwheel2' ? 1.2 : 1.0,
+      shadowAlpha: 0,
+      heatStrength: name === 'cogwheel2' ? 1.15 : 1.0
+    });
+  }
+}
+
+function drawExtraGearsOnLayer(theme, camX, timeSec, layerName) {
+  if (!fxState.extraGears || !theme.decor) return;
+  for (const name of ['cogwheel3', 'cogwheel4', 'cogwheel5']) {
+    if (fxState.gearLayers[name] !== layerName) continue;
+    const meta = theme.decor[name];
+    const img = assets.decorImages[name];
+    if (!meta || !img || !img.complete || !img.naturalWidth) continue;
+    const drawW = img.width * meta.scale;
+    const drawH = img.height * meta.scale;
+    const parallax = getLayerParallax(layerName);
+    const centerX = meta.worldX - camX * parallax;
+    const centerY = meta.y ?? (canvas.height / DPR * 0.48);
+    const angle = getGearAngle(name, meta, timeSec);
+    drawGearSprite(img, centerX, centerY, drawW, drawH, angle, camX, timeSec, {
+      shadowScale: 0.82,
+      shadowLift: -0.02,
+      shadowAlpha: 0,
+      heatStrength: name === 'cogwheel5' ? 1.2 : 0.9
+    });
+  }
+}
+
+function update(dt) {
+  const timeSec = performance.now() * 0.001;
+  maybeSpawnJunkRain(timeSec);
+  updateJunkRain(dt);
+  updateCogMotion(dt, timeSec);
+  updateBgGearMotion(dt, timeSec);
+  updateHeatBeams(dt, timeSec);
+  updateDust(dt);
+
+  const move = (keys['ArrowLeft'] ? -1 : 0) + (keys['ArrowRight'] ? 1 : 0);
+  player.vx = move * player.maxSpeed;
+  if (move !== 0) player.facing = move > 0 ? 1 : -1;
+
+  if (keys['Space'] && player.onGround) {
+    player.vy = -player.jumpForce;
+    player.onGround = false;
+  }
+
+  player.vy += world.gravity * dt;
+  player.x += player.vx * dt;
+  player.y += player.vy * dt;
+
+  player.x = Math.max(0, Math.min(world.width - player.w, player.x));
+
+  const footX = player.x + player.w * 0.5;
+  const groundY = groundHeightAt(footX);
+  const targetY = groundY - player.h + PLAYER_GROUND_OFFSET;
+  if (player.y >= targetY) {
+    player.y = targetY;
+    player.vy = 0;
+    player.onGround = true;
+  }
+
+  player.hoverBob += dt * 8;
+}
+
+function getShadowTintRGB() {
+  const preset = fxState.shadowTintPreset || 'auto';
+  if (preset === 'grass') return [24, 42, 20];
+  if (preset === 'stone') return [44, 40, 36];
+  if (preset === 'ice') return [34, 64, 92];
+  if (preset === 'steampunk') return [56, 36, 20];
+
+  const src = (assets.ground?.src || '').toLowerCase();
+  if (src.includes('ice')) return [34, 64, 92];
+  if (src.includes('rock') || src.includes('stone')) return [44, 40, 36];
+  if (src.includes('grass')) return [24, 42, 20];
+  if (themeSelect.value === 'steampunk') return [56, 36, 20];
+  return [0, 0, 0];
+}
+
+function drawPlayer(camX) {
+  const drawX = player.x - camX;
+  const bob = player.onGround ? Math.sin(player.hoverBob) * 1.2 : 0;
+  const footX = drawX + player.w * 0.5;
+  const groundY = groundHeightAt(player.x + player.w * 0.5);
+  const airborne = Math.max(0, groundY - (player.y + player.h - PLAYER_GROUND_OFFSET));
+  const shadowAlpha = player.onGround ? 0.56 : Math.max(0.22, 0.54 - airborne * 0.0031);
+  const shadowW = player.onGround ? 52 : Math.max(32, 52 - airborne * 0.20);
+  const shadowH = player.onGround ? 9 : Math.max(6, 9 - airborne * 0.035);
+  const shadowY = groundY + 75;
+
+  if (fxState.contactShadow) {
+    const shadowGain = fxGain('contactShadow');
+    const skewGain = fxState.shadowSkew ? fxGain('shadowSkew') : 0;
+    const sx = footX * DPR;
+    const sy = shadowY * DPR;
+    const vxNorm = Math.max(-1, Math.min(1, player.vx / Math.max(1, player.maxSpeed)));
+    const baseSkew = (-0.22 - Math.abs(vxNorm) * 0.18) * skewGain;
+    const skewOffsetX = (6 + Math.abs(vxNorm) * 8) * skewGain * (vxNorm === 0 ? player.facing : Math.sign(vxNorm));
+    const rx = shadowW * (0.78 + shadowGain * 0.22 + skewGain * 0.06) * DPR;
+    const ry = shadowH * (0.80 + shadowGain * 0.20 - Math.min(0.18, skewGain * 0.08)) * DPR;
+    let [tr, tg, tb] = fxState.shadowTint ? getShadowTintRGB() : [0, 0, 0];
+    if (fxState.shadowTint) {
+      const tintMix = Math.min(1.4, fxGain('shadowTint') * 0.60);
+      tr = Math.round(tr * tintMix);
+      tg = Math.round(tg * tintMix);
+      tb = Math.round(tb * tintMix);
+    }
+
+    ctx.save();
+    ctx.translate(sx + skewOffsetX * DPR, sy);
+    ctx.transform(1, 0, baseSkew, 1, 0, 0);
+    ctx.scale(rx, ry);
+
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+    g.addColorStop(0.00, `rgba(${tr},${tg},${tb},${(shadowAlpha * 1.35 * shadowGain).toFixed(3)})`);
+    g.addColorStop(0.40, `rgba(${tr},${tg},${tb},${(shadowAlpha * 1.00 * shadowGain).toFixed(3)})`);
+    g.addColorStop(0.70, `rgba(${tr},${tg},${tb},${(shadowAlpha * 0.40 * shadowGain).toFixed(3)})`);
+    g.addColorStop(1.00, 'rgba(0,0,0,0)');
+
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(0, 0, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  if (assets.player.complete && assets.player.naturalWidth) {
+    const px = drawX * DPR;
+    const py = (player.y + bob) * DPR;
+    const pw = player.w * DPR;
+    const ph = player.h * DPR;
+
+    if (player.facing < 0) {
+      ctx.save();
+      ctx.translate((px + pw), 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(assets.player, 0, py, pw, ph);
+      ctx.restore();
+    } else {
+      ctx.drawImage(assets.player, px, py, pw, ph);
+    }
+  }
+}
+
+function drawVignette() {
+  if (!fxState.vignette) return;
+  const gain = fxGain('vignette');
+  ctx.save();
+  const w = canvas.width;
+  const h = canvas.height;
+  const g = ctx.createRadialGradient(w * 0.5, h * 0.46, Math.min(w, h) * 0.20, w * 0.5, h * 0.50, Math.max(w, h) * 0.72);
+  g.addColorStop(0.0, 'rgba(0,0,0,0)');
+  g.addColorStop(0.62, `rgba(0,0,0,${(0.05 * gain).toFixed(3)})`);
+  g.addColorStop(0.82, `rgba(0,0,0,${(0.16 * gain).toFixed(3)})`);
+  g.addColorStop(1.0, `rgba(0,0,0,${(0.28 * gain).toFixed(3)})`);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+}
+
+function drawDebug(camX) {
+  if (!debugToggle.checked) return;
+  ctx.fillStyle = 'rgba(237,243,255,0.95)';
+  ctx.font = `${14 * DPR}px ui-sans-serif, system-ui`;
+  ctx.fillText(`player x: ${player.x.toFixed(0)}`, 16 * DPR, 28 * DPR);
+  ctx.fillText(`camera x: ${camX.toFixed(0)}`, 16 * DPR, 48 * DPR);
+  ctx.fillText(`ground y: ${groundHeightAt(player.x + player.w * 0.5).toFixed(1)}`, 16 * DPR, 68 * DPR);
+  ctx.fillText(`facing: ${player.facing > 0 ? 'right' : 'left'}`, 16 * DPR, 88 * DPR);
+  ctx.fillText(`ground offset: ${PLAYER_GROUND_OFFSET}`, 16 * DPR, 108 * DPR);
+  ctx.fillText(`junk layer: ${fxState.junkRainLayer}`, 16 * DPR, 128 * DPR);
+  ctx.fillText(`bg gear layer: ${fxState.bgGearLayer}`, 16 * DPR, 148 * DPR);
+  ctx.fillText(`gear3/4/5: ${fxState.gearLayers.cogwheel3}/${fxState.gearLayers.cogwheel4}/${fxState.gearLayers.cogwheel5}`, 16 * DPR, 168 * DPR);
+  ctx.fillText(`split demo: ${fxState.splitDemo ? 'on' : 'off'}`, 16 * DPR, 188 * DPR);
+  ctx.fillText(`shadow: ${fxState.contactShadow ? 'on' : 'off'} / ${fxState.shadowTint ? fxState.shadowTintPreset : 'flat'}`, 16 * DPR, 208 * DPR);
+  ctx.fillText(`fog/bloom/distort: ${fxState.fogVolumes ? 'fog' : '-'} ${fxState.selectiveBloom ? 'bloom' : '-'} ${fxState.distortionZones ? 'distort' : '-'}`, 16 * DPR, 228 * DPR);
+  ctx.fillText(`tune heat/fog/shadow: ${fxGain('heatBeams').toFixed(2)}/${fxGain('fogVolumes').toFixed(2)}/${fxGain('contactShadow').toFixed(2)}`, 16 * DPR, 248 * DPR);
+}
+
+
+function buildNeutralFxState() {
+  return {
+    ...fxState,
+    heatBeams: false,
+    pulseGlow: false,
+    dust: false,
+    bgFloat: false,
+    junkRain: false,
+    bgGears: false,
+    extraGears: false,
+    rimLight: false,
+    depthFog: false,
+    fogVolumes: false,
+    selectiveBloom: false,
+    distortionZones: false,
+    specularHighlights: false,
+    contactShadow: false,
+    shadowSkew: false,
+    shadowTint: false,
+    vignette: false,
+    ambientFlicker: false,
+    cameraDrift: false,
+    gearLayers: { ...fxState.gearLayers }
+  };
+}
+
+function withFxState(tempFx, fn) {
+  const snapshot = {
+    ...fxState,
+    gearLayers: { ...fxState.gearLayers }
+  };
+  Object.assign(fxState, tempFx);
+  fxState.gearLayers = { ...tempFx.gearLayers };
+  try {
+    fn();
+  } finally {
+    Object.assign(fxState, snapshot);
+    fxState.gearLayers = { ...snapshot.gearLayers };
+  }
+}
+
+function drawSplitOverlay() {
+  const midX = canvas.width * 0.5;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 216, 106, 0.55)';
+  ctx.lineWidth = 2 * DPR;
+  ctx.beginPath();
+  ctx.moveTo(midX, 0);
+  ctx.lineTo(midX, canvas.height);
+  ctx.stroke();
+
+  ctx.font = `${12 * DPR}px ui-sans-serif, system-ui`;
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = 'rgba(8, 13, 22, 0.86)';
+  ctx.fillRect(14 * DPR, 14 * DPR, 84 * DPR, 26 * DPR);
+  ctx.fillRect(midX + 14 * DPR, 14 * DPR, 104 * DPR, 26 * DPR);
+  ctx.fillStyle = 'rgba(237,243,255,0.96)';
+  ctx.fillText('NEUTRAL', 24 * DPR, 22 * DPR);
+  ctx.fillText('FX PANEL', midX + 24 * DPR, 22 * DPR);
+  ctx.restore();
+}
+
+function renderScenePass(camX, timeSec, viewportW) {
+  const theme = THEMES[themeSelect.value];
+  const drift = getCameraDrift(timeSec);
+  drawAtmosphere(theme);
+  ctx.save();
+  ctx.translate(drift.x * DPR, drift.y * DPR);
+  renderLayerWithFx('far', camX, timeSec);
+  renderLayerWithFx('mid', camX, timeSec);
+  renderLayerWithFx('near', camX, timeSec);
+  drawPulseGlow(timeSec);
+  drawDust(timeSec, camX);
+  drawGround(camX);
+  drawPlayer(camX);
+  drawVignette();
+  ctx.restore();
+}
+
+function renderViewport(viewportX, viewportW, camX, timeSec, fxConfig) {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(viewportX, 0, viewportW, canvas.height);
+  ctx.clip();
+  ctx.translate(viewportX, 0);
+  withFxState(fxConfig, () => renderScenePass(camX, timeSec, viewportW / DPR));
+  ctx.restore();
+}
+
+function renderLayerWithFx(name, camX, timeSec) {
+  drawLayer(name, camX, timeSec);
+  drawDistortionZones(name, camX, timeSec);
+  drawLocalFogVolumes(name, camX, timeSec);
+  drawDepthFogForLayer(name, timeSec);
+  if (name === 'far') drawHeatBeams(camX, timeSec);
+  if (fxState.bgGears && fxState.bgGearLayer === name) drawBackgroundGears(camX);
+  if (name === 'mid') drawGroundHubGears(THEMES[themeSelect.value], camX, timeSec);
+  drawExtraGearsOnLayer(THEMES[themeSelect.value], camX, timeSec, name);
+  if (fxState.junkRain && fxState.junkRainLayer === name) drawJunkRain(camX);
+}
+
+function render() {
+  const timeSec = performance.now() * 0.001;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (fxState.splitDemo) {
+    const neutralFx = buildNeutralFxState();
+    const halfW = Math.floor(canvas.width * 0.5);
+    const viewW = halfW / DPR;
+    const camX = getCameraX(viewW, 0.5);
+
+    renderViewport(0, halfW, camX, timeSec, neutralFx);
+    renderViewport(halfW, canvas.width - halfW, camX, timeSec, { ...fxState, gearLayers: { ...fxState.gearLayers } });
+    drawSplitOverlay();
+    drawDebug(camX);
+    return;
+  }
+
+  const camX = getCameraX(canvas.width / DPR, 0.5);
+  renderScenePass(camX, timeSec, canvas.width / DPR);
+  drawDebug(camX);
+}
+
+let last = performance.now();
+function tick(now) {
+  const dt = Math.min(0.033, (now - last) / 1000);
+  last = now;
+  update(dt);
+  render();
+  requestAnimationFrame(tick);
+}
+
+themeSelect.addEventListener('change', () => loadTheme(themeSelect.value));
+bindFxPanel();
+themeSelect.value = 'steampunk';
+resize();
+player.y = groundHeightAt(player.x + player.w * 0.5) - player.h + PLAYER_GROUND_OFFSET;
+player.onGround = true;
+loadTheme(themeSelect.value);
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
