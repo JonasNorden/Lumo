@@ -6802,6 +6802,130 @@
       }
     }
 
+    const RECHARGED_CANVAS_ID = "recharged-runtime-canvas";
+
+    function safeNumber(value, fallback) {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : fallback;
+    }
+
+    function resolvePayload(boot) {
+      return boot?.result || boot || null;
+    }
+
+    function readRuntimeState(payload) {
+      const player = payload?.player || payload?.runtime?.player || payload?.state?.player || payload?.snapshot?.player || null;
+      const world = payload?.world || payload?.runtime?.world || payload?.state?.world || payload?.snapshot?.world || null;
+
+      const tileSize = safeNumber(
+        world?.tileSize || payload?.tileSize || payload?.config?.tileSize,
+        16,
+      );
+
+      const worldWidth = safeNumber(
+        world?.width || world?.tilesWide,
+        50,
+      ) * tileSize;
+      const worldHeight = safeNumber(
+        world?.height || world?.tilesHigh,
+        38,
+      ) * tileSize;
+
+      const playerX = safeNumber(player?.x ?? payload?.playerX, tileSize * 4);
+      const playerY = safeNumber(player?.y ?? payload?.playerY, tileSize * 4);
+      const grounded = Boolean(player?.grounded ?? payload?.grounded ?? false);
+
+      return {
+        playerX,
+        playerY,
+        grounded,
+        tileSize,
+        worldWidth,
+        worldHeight,
+      };
+    }
+
+    function tickRechargedAdapter(boot) {
+      const candidateFns = [
+        boot?.adapter?.tick,
+        boot?.result?.adapter?.tick,
+        boot?.tick,
+        boot?.result?.tick,
+      ];
+
+      for (const candidate of candidateFns) {
+        if (typeof candidate === "function") {
+          try {
+            candidate.call(boot?.adapter || boot?.result?.adapter || boot);
+          } catch {
+            // Never throw from minimal bridge renderer.
+          }
+          return;
+        }
+      }
+    }
+
+    function startRechargedCanvasBridge() {
+      const boot = window.__LumoRechargedBoot;
+      if (!(boot?.enabled === true && boot?.booted === true)) {
+        return;
+      }
+
+      const existingCanvas = document.getElementById(RECHARGED_CANVAS_ID);
+      if (existingCanvas) {
+        return;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.id = RECHARGED_CANVAS_ID;
+      canvas.width = 800;
+      canvas.height = 600;
+      canvas.style.display = "block";
+      canvas.style.margin = "0 auto";
+      canvas.style.background = "#090d16";
+
+      document.body.appendChild(canvas);
+
+      const context = canvas.getContext("2d");
+      if (!context) {
+        return;
+      }
+
+      const searchParams = new URLSearchParams(window.location.search);
+      const autoplayEnabled = searchParams.get("autoplay") === "1";
+
+      const frame = () => {
+        const currentBoot = window.__LumoRechargedBoot;
+        if (!(currentBoot?.enabled === true && currentBoot?.booted === true)) {
+          return;
+        }
+
+        if (autoplayEnabled) {
+          tickRechargedAdapter(currentBoot);
+        }
+
+        const payload = resolvePayload(currentBoot);
+        const runtime = readRuntimeState(payload);
+
+        context.fillStyle = "#0b1120";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        context.strokeStyle = "#22314f";
+        context.lineWidth = 2;
+        context.strokeRect(16, 16, Math.min(runtime.worldWidth, canvas.width - 32), Math.min(runtime.worldHeight, canvas.height - 32));
+
+        const clampedX = Math.max(0, Math.min(canvas.width - runtime.tileSize, runtime.playerX));
+        const clampedY = Math.max(0, Math.min(canvas.height - runtime.tileSize, runtime.playerY));
+
+        context.fillStyle = runtime.grounded ? "#4ade80" : "#60a5fa";
+        context.fillRect(clampedX, clampedY, runtime.tileSize, runtime.tileSize);
+
+        window.requestAnimationFrame(frame);
+      };
+
+      window.requestAnimationFrame(frame);
+    }
+
     // Loads legacy app.js only when Recharged mode is not active or did not boot.
     function loadLegacyBootScript() {
       return new Promise((resolve) => {
@@ -6873,6 +6997,7 @@
 
       if (queryBootResult?.enabled === true && queryBootResult?.booted === true) {
         console.info("[Lumo] Recharged query boot active", queryBootResult);
+        startRechargedCanvasBridge();
         return;
       }
 
