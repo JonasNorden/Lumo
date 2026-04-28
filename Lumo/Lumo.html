@@ -47,6 +47,7 @@
     import { createLumoRechargedBootAdapter } from "./editor-v2/src/runtime/createLumoRechargedBootAdapter.js";
     import { loadNextRechargedLevelFromIntermission } from "./editor-v2/src/runtime/rechargedIntermissionNextLevelFlow.js";
     import { buildRechargedHudSnapshot } from "./editor-v2/src/runtime/buildRechargedHudSnapshot.js";
+    import { renderReactiveGrass } from "./editor-v2/src/runtime/renderReactiveGrass.js";
     import {
       FIREFLY_AUDIO_PATH,
       createFireflyAudioBridge,
@@ -6473,6 +6474,13 @@
         };
 
         ctx.restore();
+
+        renderReactiveGrass(
+          ctx,
+          player?.x,
+          player?.y,
+          (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now(),
+        );
 
         drawRechargedHudReplica(canvas, state);
 
