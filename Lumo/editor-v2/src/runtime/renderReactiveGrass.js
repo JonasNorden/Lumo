@@ -1,17 +1,25 @@
-const PATCH = Object.freeze({
-  worldCenterX: 10.5 * 24,
-  worldBaseY: 19 * 24,
+const DEFAULT_PATCH = Object.freeze({
+  id: "reactive_grass_default",
+  kind: "reactive_grass",
+  x: 10.5 * 24,
+  y: 19 * 24,
   width: 166,
-  bladeCount: 416,
-  minHeight: 12,
-  maxHeight: 84,
+  density: 416,
+  heightMin: 12,
+  heightMax: 84,
+  heightProfile: "organic_wave",
+  heightVariation: 1,
+  baseColor: "#12391f",
+  topColor: "#7fd66b",
+  variant: "lush_default",
+  seed: 12345,
   windAmp: 13.5,
   reactFar: 176,
   reactMid: 94,
   reactNear: 36,
 });
 
-const bladeCache = [];
+const bladeCacheByPatch = new Map();
 
 function seeded(seed) {
   const value = Math.sin(seed * 12.9898) * 43758.5453;
@@ -35,47 +43,104 @@ function smoothstep(edge0, edge1, value) {
   return t * t * (3 - (2 * t));
 }
 
-function organicHeightProfile(u) {
+function parseColorHex(value, fallback) {
+  const source = typeof value === "string" ? value.trim() : "";
+  const normalized = /^#[0-9a-fA-F]{6}$/.test(source) ? source : fallback;
+  return {
+    r: parseInt(normalized.slice(1, 3), 16),
+    g: parseInt(normalized.slice(3, 5), 16),
+    b: parseInt(normalized.slice(5, 7), 16),
+  };
+}
+
+function organicHeightProfile(profile, u, seedOffset) {
+  if (profile !== "organic_wave") {
+    const rolled = seeded(seedOffset + (u * 29.73));
+    return clamp(0.62 + (rolled - 0.5) * 0.32, 0.18, 1.28);
+  }
+
   const a = Math.sin((u * 1.19 + 0.08) * Math.PI * 2);
   const b = Math.sin((u * 2.97 + 0.33) * Math.PI * 2);
   const c = Math.sin((u * 5.41 + 0.77) * Math.PI * 2);
   const d = Math.sin((u * 8.07 + 0.18) * Math.PI * 2);
-  const steppedNoise = seeded((Math.floor(u * 22) * 13.11) + 7.9) - 0.5;
+  const steppedNoise = seeded(seedOffset + (Math.floor(u * 22) * 13.11) + 7.9) - 0.5;
   return clamp(0.6 + (a * 0.25) + (b * 0.19) + (c * 0.13) + (d * 0.08) + (steppedNoise * 0.24), 0.18, 1.28);
 }
 
-function ensureBlades() {
-  if (bladeCache.length > 0) {
-    return bladeCache;
+function normalizePatch(patch, index, options) {
+  const seedBase = Number.isFinite(patch?.seed) ? patch.seed : (DEFAULT_PATCH.seed + index * 1009);
+  return {
+    id: typeof patch?.id === "string" && patch.id.trim() ? patch.id.trim() : `reactive_grass_patch_${index + 1}`,
+    kind: "reactive_grass",
+    x: Number.isFinite(patch?.x) ? Number(patch.x) : (Number.isFinite(options?.patchCenterX) ? Number(options.patchCenterX) : DEFAULT_PATCH.x),
+    y: Number.isFinite(patch?.y) ? Number(patch.y) : (Number.isFinite(options?.patchBaseY) ? Number(options.patchBaseY) : DEFAULT_PATCH.y),
+    width: Number.isFinite(patch?.width) && patch.width > 0 ? Number(patch.width) : DEFAULT_PATCH.width,
+    density: Number.isFinite(patch?.density) && patch.density > 0 ? Math.max(8, Math.round(patch.density)) : DEFAULT_PATCH.density,
+    heightMin: Number.isFinite(patch?.heightMin) ? Number(patch.heightMin) : DEFAULT_PATCH.heightMin,
+    heightMax: Number.isFinite(patch?.heightMax) ? Number(patch.heightMax) : DEFAULT_PATCH.heightMax,
+    heightProfile: typeof patch?.heightProfile === "string" ? patch.heightProfile.trim().toLowerCase() : DEFAULT_PATCH.heightProfile,
+    heightVariation: Number.isFinite(patch?.heightVariation) ? clamp01(Number(patch.heightVariation)) : DEFAULT_PATCH.heightVariation,
+    baseColor: typeof patch?.baseColor === "string" ? patch.baseColor : DEFAULT_PATCH.baseColor,
+    topColor: typeof patch?.topColor === "string" ? patch.topColor : DEFAULT_PATCH.topColor,
+    seed: seedBase,
+    windAmp: Number.isFinite(patch?.windAmp) ? Number(patch.windAmp) : DEFAULT_PATCH.windAmp,
+    reactFar: Number.isFinite(patch?.reactFar) ? Number(patch.reactFar) : DEFAULT_PATCH.reactFar,
+    reactMid: Number.isFinite(patch?.reactMid) ? Number(patch.reactMid) : DEFAULT_PATCH.reactMid,
+    reactNear: Number.isFinite(patch?.reactNear) ? Number(patch.reactNear) : DEFAULT_PATCH.reactNear,
+  };
+}
+
+function buildPatchCacheKey(patch) {
+  return [
+    patch.id,
+    patch.seed,
+    patch.width,
+    patch.density,
+    patch.heightMin,
+    patch.heightMax,
+    patch.heightProfile,
+    patch.heightVariation,
+  ].join("|");
+}
+
+function ensureBladesForPatch(patch) {
+  const cacheKey = buildPatchCacheKey(patch);
+  const cached = bladeCacheByPatch.get(cacheKey);
+  if (Array.isArray(cached) && cached.length > 0) {
+    return cached;
   }
 
-  const lane = PATCH.width / PATCH.bladeCount;
-  for (let index = 0; index < PATCH.bladeCount; index += 1) {
-    const u = (index + 0.5) / PATCH.bladeCount;
-    const jitter = (seeded(index * 13.17) - 0.5) * lane * 1.45;
-    const phase = seeded(index * 7.61) * Math.PI * 2;
-    const profile = organicHeightProfile(u);
-    const localHeightNoise = 0.48 + seeded(index * 2.93 + 9.3) * 0.85;
-    bladeCache.push({
+  const blades = [];
+  const lane = patch.width / patch.density;
+  for (let index = 0; index < patch.density; index += 1) {
+    const u = (index + 0.5) / patch.density;
+    const jitter = (seeded(patch.seed + index * 13.17) - 0.5) * lane * 1.45;
+    const phase = seeded(patch.seed + index * 7.61) * Math.PI * 2;
+    const profile = organicHeightProfile(patch.heightProfile, u, patch.seed * 0.00137);
+    const profileBase = clamp01((profile - 0.18) / (1.28 - 0.18));
+    const profiled = clamp01(lerp(0.5, profileBase, patch.heightVariation));
+    const localHeightNoise = 0.48 + seeded(patch.seed + index * 2.93 + 9.3) * 0.85;
+    blades.push({
       u,
       jitter,
-      heightMix: clamp01(profile * localHeightNoise),
-      thickness: 0.5 + seeded(index * 1.37) * 0.8,
-      swayScale: 0.62 + seeded(index * 4.79) * 1.28,
+      heightMix: clamp01(profiled * localHeightNoise),
+      thickness: 0.5 + seeded(patch.seed + index * 1.37) * 0.8,
+      swayScale: 0.62 + seeded(patch.seed + index * 4.79) * 1.28,
       phase,
-      speed: 0.58 + seeded(index * 5.11) * 1.45,
-      tint: 0.62 + seeded(index * 8.03) * 0.36,
-      waveOffset: seeded(index * 6.67) * Math.PI * 2,
-      waveScale: 0.75 + seeded(index * 12.73) * 0.88,
-      layer: seeded(index * 15.19),
-      lean: (seeded(index * 3.41) - 0.5) * 3.2,
+      speed: 0.58 + seeded(patch.seed + index * 5.11) * 1.45,
+      tint: 0.62 + seeded(patch.seed + index * 8.03) * 0.36,
+      waveOffset: seeded(patch.seed + index * 6.67) * Math.PI * 2,
+      waveScale: 0.75 + seeded(patch.seed + index * 12.73) * 0.88,
+      layer: seeded(patch.seed + index * 15.19),
+      lean: (seeded(patch.seed + index * 3.41) - 0.5) * 3.2,
     });
   }
 
-  return bladeCache;
+  bladeCacheByPatch.set(cacheKey, blades);
+  return blades;
 }
 
-function resolveReaction(bx, by, playerX, playerY) {
+function resolveReaction(patch, bx, by, playerX, playerY) {
   if (!Number.isFinite(playerX) || !Number.isFinite(playerY)) {
     return { bend: 0, avoid: 0 };
   }
@@ -84,21 +149,21 @@ function resolveReaction(bx, by, playerX, playerY) {
   const dy = playerY - by;
   const distance = Math.hypot(dx, dy * 0.52);
 
-  if (distance >= PATCH.reactFar) {
+  if (distance >= patch.reactFar) {
     return { bend: 0, avoid: 0 };
   }
 
-  if (distance <= PATCH.reactNear) {
-    const avoid = clamp01(1 - (distance / PATCH.reactNear));
+  if (distance <= patch.reactNear) {
+    const avoid = clamp01(1 - (distance / patch.reactNear));
     return { bend: 0, avoid };
   }
 
-  if (distance <= PATCH.reactMid) {
-    const t = clamp01(1 - ((distance - PATCH.reactNear) / (PATCH.reactMid - PATCH.reactNear)));
+  if (distance <= patch.reactMid) {
+    const t = clamp01(1 - ((distance - patch.reactNear) / (patch.reactMid - patch.reactNear)));
     return { bend: (Math.sign(dx || 1) * t * 1.18), avoid: 0 };
   }
 
-  const t = clamp01(1 - ((distance - PATCH.reactMid) / (PATCH.reactFar - PATCH.reactMid)));
+  const t = clamp01(1 - ((distance - patch.reactMid) / (patch.reactFar - patch.reactMid)));
   return { bend: Math.sign(dx || 1) * (t * 0.64), avoid: 0 };
 }
 
@@ -119,71 +184,87 @@ export function renderReactiveGrass(ctx, playerX, playerY, time, options = {}) {
   }
 
   const mapper = options && typeof options === "object" ? options.mapper : null;
-  const patchCenterX = Number.isFinite(options?.patchCenterX) ? options.patchCenterX : PATCH.worldCenterX;
-  const patchBaseY = Number.isFinite(options?.patchBaseY) ? options.patchBaseY : PATCH.worldBaseY;
   const safeTime = Number.isFinite(time) ? time : 0;
   const timeSec = safeTime * 0.001;
-  const blades = ensureBlades();
-  const left = patchCenterX - (PATCH.width * 0.5);
+  const authoredPatches = Array.isArray(options?.patches)
+    ? options.patches.filter((patch) => patch && typeof patch === "object")
+    : [];
+  const normalizedPatches = (authoredPatches.length > 0 ? authoredPatches : [DEFAULT_PATCH])
+    .map((patch, index) => normalizePatch(patch, index, options));
 
   ctx.save();
   ctx.lineCap = "round";
 
-  for (let pass = 0; pass < 2; pass += 1) {
-    for (let index = 0; index < blades.length; index += 1) {
-      const blade = blades[index];
-      const layerOffset = pass === 0 ? -2.4 : 0;
-      const bx = left + (blade.u * PATCH.width) + blade.jitter + blade.lean + (blade.layer - 0.5) * 2.6;
-      const by = patchBaseY + layerOffset;
-      const heightMix = clamp01((blade.heightMix * 0.78) + (blade.layer * 0.22));
-      const height = lerp(PATCH.minHeight, PATCH.maxHeight, heightMix);
+  for (const patch of normalizedPatches) {
+    const minHeight = Math.max(1, Math.min(patch.heightMin, patch.heightMax));
+    const maxHeight = Math.max(minHeight + 1, Math.max(patch.heightMin, patch.heightMax));
+    const left = patch.x - (patch.width * 0.5);
+    const blades = ensureBladesForPatch({ ...patch, heightMin: minHeight, heightMax: maxHeight });
+    const baseColor = parseColorHex(patch.baseColor, DEFAULT_PATCH.baseColor);
+    const topColor = parseColorHex(patch.topColor, DEFAULT_PATCH.topColor);
 
-      const travelA = (timeSec * (1.63 * blade.speed)) - (blade.u * 11.6) + blade.waveOffset;
-      const travelB = (timeSec * (2.28 * blade.waveScale)) + (blade.u * 16.1) + blade.phase * 0.47;
-      const travelC = (timeSec * 0.86) - (blade.u * 8.4) + blade.phase;
-      const waveA = Math.sin(travelA);
-      const waveB = Math.sin(travelB);
-      const waveC = Math.sin(travelC);
-      const waveEnvelope = 0.7 + (Math.sin((timeSec * 0.37) + blade.phase * 0.35) * 0.24);
+    for (let pass = 0; pass < 2; pass += 1) {
+      for (let index = 0; index < blades.length; index += 1) {
+        const blade = blades[index];
+        const layerOffset = pass === 0 ? -2.4 : 0;
+        const bx = left + (blade.u * patch.width) + blade.jitter + blade.lean + (blade.layer - 0.5) * 2.6;
+        const by = patch.y + layerOffset;
+        const heightMix = clamp01((blade.heightMix * 0.78) + (blade.layer * 0.22));
+        const height = lerp(minHeight, maxHeight, heightMix);
 
-      const gustSignalA = Math.sin((timeSec * 0.079) + 0.91);
-      const gustSignalB = Math.sin((timeSec * 0.121) + 1.73);
-      const gustSignalC = Math.sin((timeSec * 0.051) + blade.phase * 0.45 + 0.27);
-      const gustSignal = (gustSignalA * 0.44) + (gustSignalB * 0.37) + (gustSignalC * 0.19);
-      const gustRaw = smoothstep(0.46, 0.92, gustSignal);
-      const gustEnvelope = gustRaw * (1 - smoothstep(0.84, 1.0, gustRaw));
-      const gustTravel = Math.sin((timeSec * 3.22) - (blade.u * 22.7) + blade.waveOffset + blade.phase * 0.58);
-      const gustBend = gustTravel * PATCH.windAmp * 0.95 * blade.swayScale * blade.waveScale * gustEnvelope;
+        const travelA = (timeSec * (1.63 * blade.speed)) - (blade.u * 11.6) + blade.waveOffset;
+        const travelB = (timeSec * (2.28 * blade.waveScale)) + (blade.u * 16.1) + blade.phase * 0.47;
+        const travelC = (timeSec * 0.86) - (blade.u * 8.4) + blade.phase;
+        const waveA = Math.sin(travelA);
+        const waveB = Math.sin(travelB);
+        const waveC = Math.sin(travelC);
+        const waveEnvelope = 0.7 + (Math.sin((timeSec * 0.37) + blade.phase * 0.35) * 0.24);
 
-      const windBend = ((waveA * 0.54 + waveB * 0.31 + waveC * 0.15) * PATCH.windAmp * blade.swayScale * waveEnvelope) + gustBend;
+        const gustSignalA = Math.sin((timeSec * 0.079) + 0.91);
+        const gustSignalB = Math.sin((timeSec * 0.121) + 1.73);
+        const gustSignalC = Math.sin((timeSec * 0.051) + blade.phase * 0.45 + 0.27);
+        const gustSignal = (gustSignalA * 0.44) + (gustSignalB * 0.37) + (gustSignalC * 0.19);
+        const gustRaw = smoothstep(0.46, 0.92, gustSignal);
+        const gustEnvelope = gustRaw * (1 - smoothstep(0.84, 1.0, gustRaw));
+        const gustTravel = Math.sin((timeSec * 3.22) - (blade.u * 22.7) + blade.waveOffset + blade.phase * 0.58);
+        const gustBend = gustTravel * patch.windAmp * 0.95 * blade.swayScale * blade.waveScale * gustEnvelope;
 
-      const reaction = resolveReaction(bx, by, playerX, playerY);
-      const midBend = reaction.bend * 18;
-      const nearStraighten = reaction.avoid * 0.82;
-      const topXWorld = bx + (windBend + midBend) * (1 - nearStraighten);
-      const topYWorld = by - (height * (1 - (reaction.avoid * 0.24)));
+        const windBend = ((waveA * 0.54 + waveB * 0.31 + waveC * 0.15) * patch.windAmp * blade.swayScale * waveEnvelope) + gustBend;
 
-      const basePt = resolveCanvasPoint(mapper, bx, by);
-      const topPt = resolveCanvasPoint(mapper, topXWorld, topYWorld);
+        const reaction = resolveReaction(patch, bx, by, playerX, playerY);
+        const midBend = reaction.bend * 18;
+        const nearStraighten = reaction.avoid * 0.82;
+        const topXWorld = bx + (windBend + midBend) * (1 - nearStraighten);
+        const topYWorld = by - (height * (1 - (reaction.avoid * 0.24)));
 
-      const alpha = (pass === 0 ? 0.26 : 0.42) + (Math.abs(windBend) * 0.007) + (Math.abs(reaction.bend) * 0.09) + (reaction.avoid * 0.1);
-      const gradient = ctx.createLinearGradient(basePt.x, basePt.y, topPt.x, topPt.y);
-      gradient.addColorStop(0, `rgba(18, 46, 25, ${Math.min(1, alpha * 0.88)})`);
-      gradient.addColorStop(1, `rgba(${Math.round(120 * blade.tint)}, ${Math.round(212 * blade.tint)}, ${Math.round(128 + blade.tint * 56)}, ${Math.min(1, alpha + 0.16)})`);
+        const basePt = resolveCanvasPoint(mapper, bx, by);
+        const topPt = resolveCanvasPoint(mapper, topXWorld, topYWorld);
 
-      ctx.strokeStyle = gradient;
-      ctx.lineWidth = blade.thickness * (pass === 0 ? 0.82 : 1);
-      ctx.beginPath();
-      ctx.moveTo(basePt.x, basePt.y);
-      ctx.bezierCurveTo(
-        basePt.x + (topPt.x - basePt.x) * 0.15,
-        basePt.y - (Math.abs(basePt.y - topPt.y) * 0.26),
-        basePt.x + (topPt.x - basePt.x) * 0.58,
-        basePt.y - (Math.abs(basePt.y - topPt.y) * 0.74),
-        topPt.x,
-        topPt.y,
-      );
-      ctx.stroke();
+        const alpha = (pass === 0 ? 0.26 : 0.42) + (Math.abs(windBend) * 0.007) + (Math.abs(reaction.bend) * 0.09) + (reaction.avoid * 0.1);
+        const gradient = ctx.createLinearGradient(basePt.x, basePt.y, topPt.x, topPt.y);
+        gradient.addColorStop(
+          0,
+          `rgba(${baseColor.r}, ${baseColor.g}, ${baseColor.b}, ${Math.min(1, alpha * 0.88)})`,
+        );
+        gradient.addColorStop(
+          1,
+          `rgba(${Math.round(topColor.r * blade.tint)}, ${Math.round(topColor.g * blade.tint)}, ${Math.round(topColor.b * blade.tint)}, ${Math.min(1, alpha + 0.16)})`,
+        );
+
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = blade.thickness * (pass === 0 ? 0.82 : 1);
+        ctx.beginPath();
+        ctx.moveTo(basePt.x, basePt.y);
+        ctx.bezierCurveTo(
+          basePt.x + (topPt.x - basePt.x) * 0.15,
+          basePt.y - (Math.abs(basePt.y - topPt.y) * 0.26),
+          basePt.x + (topPt.x - basePt.x) * 0.58,
+          basePt.y - (Math.abs(basePt.y - topPt.y) * 0.74),
+          topPt.x,
+          topPt.y,
+        );
+        ctx.stroke();
+      }
     }
   }
 

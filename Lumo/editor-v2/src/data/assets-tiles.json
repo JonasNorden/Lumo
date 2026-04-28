@@ -31835,5 +31835,23 @@
       "source": "data/assets/audio/music/game_play_1.ogg"
     }
   ],
-  "extra": {}
+  "extra": {},
+  "reactiveGrassPatches": [
+    {
+      "id": "reactive_grass_001",
+      "kind": "reactive_grass",
+      "x": 252,
+      "y": 456,
+      "width": 166,
+      "density": 416,
+      "heightMin": 12,
+      "heightMax": 84,
+      "heightProfile": "organic_wave",
+      "heightVariation": 1.0,
+      "baseColor": "#12391f",
+      "topColor": "#7fd66b",
+      "variant": "lush_default",
+      "seed": 12345
+    }
+  ]
 }
