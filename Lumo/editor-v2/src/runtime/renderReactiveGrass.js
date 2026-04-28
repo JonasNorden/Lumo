@@ -30,6 +30,11 @@ function lerp(a, b, t) {
   return a + ((b - a) * t);
 }
 
+function smoothstep(edge0, edge1, value) {
+  const t = clamp01((value - edge0) / (edge1 - edge0));
+  return t * t * (3 - (2 * t));
+}
+
 function organicHeightProfile(u) {
   const a = Math.sin((u * 1.19 + 0.08) * Math.PI * 2);
   const b = Math.sin((u * 2.97 + 0.33) * Math.PI * 2);
@@ -140,7 +145,17 @@ export function renderReactiveGrass(ctx, playerX, playerY, time, options = {}) {
       const waveB = Math.sin(travelB);
       const waveC = Math.sin(travelC);
       const waveEnvelope = 0.7 + (Math.sin((timeSec * 0.37) + blade.phase * 0.35) * 0.24);
-      const windBend = (waveA * 0.54 + waveB * 0.31 + waveC * 0.15) * PATCH.windAmp * blade.swayScale * waveEnvelope;
+
+      const gustSignalA = Math.sin((timeSec * 0.079) + 0.91);
+      const gustSignalB = Math.sin((timeSec * 0.121) + 1.73);
+      const gustSignalC = Math.sin((timeSec * 0.051) + blade.phase * 0.45 + 0.27);
+      const gustSignal = (gustSignalA * 0.44) + (gustSignalB * 0.37) + (gustSignalC * 0.19);
+      const gustRaw = smoothstep(0.46, 0.92, gustSignal);
+      const gustEnvelope = gustRaw * (1 - smoothstep(0.84, 1.0, gustRaw));
+      const gustTravel = Math.sin((timeSec * 3.22) - (blade.u * 22.7) + blade.waveOffset + blade.phase * 0.58);
+      const gustBend = gustTravel * PATCH.windAmp * 0.95 * blade.swayScale * blade.waveScale * gustEnvelope;
+
+      const windBend = ((waveA * 0.54 + waveB * 0.31 + waveC * 0.15) * PATCH.windAmp * blade.swayScale * waveEnvelope) + gustBend;
 
       const reaction = resolveReaction(bx, by, playerX, playerY);
       const midBend = reaction.bend * 18;
