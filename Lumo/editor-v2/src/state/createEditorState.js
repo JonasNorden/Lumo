@@ -66,6 +66,7 @@ export function createEditorState() {
       entityDrag: null,
       decorDrag: null,
       soundDrag: null,
+      reactiveGrassPlacementDrag: null,
       scanDrag: null,
       decorScatterDrag: null,
       spacePanActive: false,
