@@ -4324,6 +4324,129 @@
     }
 
     // Reads decor from world snapshots while keeping decor flow separate from runtime entities.
+    const rechargedReactiveGrassLevelCache = {
+      levelPath: "",
+      patches: [],
+      loading: false,
+      loaded: false,
+    };
+
+    function normalizeReactiveGrassPatch(patch, index) {
+      if (!patch || typeof patch !== "object") {
+        return null;
+      }
+
+      const kind = typeof patch.kind === "string" ? patch.kind.trim().toLowerCase() : "";
+      if (kind && kind !== "reactive_grass") {
+        return null;
+      }
+
+      const x = Number.isFinite(patch.x) ? patch.x : null;
+      const y = Number.isFinite(patch.y) ? patch.y : null;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return null;
+      }
+
+      return {
+        id: typeof patch.id === "string" && patch.id.trim() ? patch.id.trim() : `reactive_grass_${index + 1}`,
+        kind: "reactive_grass",
+        x,
+        y,
+        width: Number.isFinite(patch.width) ? patch.width : null,
+        density: Number.isFinite(patch.density) ? patch.density : null,
+        heightMin: Number.isFinite(patch.heightMin) ? patch.heightMin : null,
+        heightMax: Number.isFinite(patch.heightMax) ? patch.heightMax : null,
+        heightProfile: typeof patch.heightProfile === "string" ? patch.heightProfile : null,
+        heightVariation: Number.isFinite(patch.heightVariation) ? patch.heightVariation : null,
+        baseColor: typeof patch.baseColor === "string" ? patch.baseColor : null,
+        topColor: typeof patch.topColor === "string" ? patch.topColor : null,
+        variant: typeof patch.variant === "string" ? patch.variant : null,
+        seed: Number.isFinite(patch.seed) ? patch.seed : null,
+      };
+    }
+
+    function extractReactiveGrassPatchesFromLevelDocument(document) {
+      if (!document || typeof document !== "object") {
+        return [];
+      }
+
+      const authored = Array.isArray(document.reactiveGrassPatches)
+        ? document.reactiveGrassPatches
+        : [];
+
+      return authored
+        .map((patch, index) => normalizeReactiveGrassPatch(patch, index))
+        .filter(Boolean);
+    }
+
+    function syncReactiveGrassCacheFromPayload(payload) {
+      const directPatches = Array.isArray(payload?.reactiveGrassPatches)
+        ? payload.reactiveGrassPatches
+        : null;
+
+      if (directPatches) {
+        rechargedReactiveGrassLevelCache.patches = directPatches
+          .map((patch, index) => normalizeReactiveGrassPatch(patch, index))
+          .filter(Boolean);
+        rechargedReactiveGrassLevelCache.loaded = true;
+      }
+    }
+
+    function beginReactiveGrassLevelLoad(levelPath) {
+      if (typeof levelPath !== "string" || !levelPath.trim()) {
+        return;
+      }
+
+      const normalizedPath = levelPath.trim();
+      if (rechargedReactiveGrassLevelCache.loading && rechargedReactiveGrassLevelCache.levelPath === normalizedPath) {
+        return;
+      }
+
+      rechargedReactiveGrassLevelCache.levelPath = normalizedPath;
+      rechargedReactiveGrassLevelCache.loading = true;
+      rechargedReactiveGrassLevelCache.loaded = false;
+      rechargedReactiveGrassLevelCache.patches = [];
+
+      fetch(normalizedPath, {
+        method: "GET",
+        headers: {
+          Accept: "application/json, text/plain;q=0.8, */*;q=0.1",
+        },
+      })
+        .then((response) => {
+          if (!response?.ok) {
+            throw new Error(`Reactive grass level load failed (${response?.status || "?"}).`);
+          }
+          return response.json();
+        })
+        .then((levelDocument) => {
+          rechargedReactiveGrassLevelCache.patches = extractReactiveGrassPatchesFromLevelDocument(levelDocument);
+          rechargedReactiveGrassLevelCache.loaded = true;
+        })
+        .catch((_error) => {
+          rechargedReactiveGrassLevelCache.patches = [];
+          rechargedReactiveGrassLevelCache.loaded = true;
+        })
+        .finally(() => {
+          rechargedReactiveGrassLevelCache.loading = false;
+        });
+    }
+
+    function readRechargedReactiveGrassPatches(payload) {
+      syncReactiveGrassCacheFromPayload(payload);
+
+      const levelPath = typeof payload?.levelPath === "string" && payload.levelPath.trim()
+        ? payload.levelPath.trim()
+        : "";
+      if (levelPath && rechargedReactiveGrassLevelCache.levelPath !== levelPath) {
+        beginReactiveGrassLevelLoad(levelPath);
+      }
+
+      return Array.isArray(rechargedReactiveGrassLevelCache.patches)
+        ? rechargedReactiveGrassLevelCache.patches
+        : [];
+    }
+
     function readRechargedDecorSnapshots(payload) {
       const normalizeDecorAnchorLayer = (value) => {
         const normalized = String(value || "").trim().toLowerCase();
@@ -5551,6 +5674,7 @@
         const liquidVolumes = readRechargedLiquidSnapshots(payload, state);
         const fogVolumes = readRechargedFogSnapshots(payload, state);
         const decorSnapshots = readRechargedDecorSnapshots(payload);
+        const reactiveGrassPatches = readRechargedReactiveGrassPatches(payload);
         const previousSnapshot = readRechargedPlayerSnapshot({
           player: state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
             ? state.previousPlayerSnapshot
@@ -6265,7 +6389,10 @@
           playerCenterX,
           playerFootY,
           (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now(),
-          { mapper },
+          {
+            mapper,
+            patches: reactiveGrassPatches,
+          },
         );
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
