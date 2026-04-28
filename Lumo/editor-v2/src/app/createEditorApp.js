@@ -7156,9 +7156,13 @@ if (event.shiftKey) {
   };
 
   const getAuthoredSpawnCell = (doc) => {
-    if (!doc || !Array.isArray(doc.entities)) return null;
-    const spawn = doc.entities.find((entity) => String(entity?.type || "").trim().toLowerCase() === "player-spawn");
-    if (!spawn) return null;
+    if (!doc || typeof doc !== "object") return null;
+    const worldSpawn = doc?.world?.spawn;
+    const entitySpawn = Array.isArray(doc.entities)
+      ? doc.entities.find((entity) => String(entity?.type || "").trim().toLowerCase() === "player-spawn")
+      : null;
+    const spawn = worldSpawn && typeof worldSpawn === "object" ? worldSpawn : entitySpawn;
+    if (!spawn || typeof spawn !== "object") return null;
     const x = Number(spawn.x);
     const y = Number(spawn.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
