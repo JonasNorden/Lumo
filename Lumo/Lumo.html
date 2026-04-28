@@ -6260,6 +6260,14 @@
           ctx.restore();
         }
 
+        renderReactiveGrass(
+          ctx,
+          playerCenterX,
+          playerFootY,
+          (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now(),
+          { mapper },
+        );
+
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
         if (player.hidden !== true) {
           drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, currentSnapshot);
@@ -6474,13 +6482,6 @@
         };
 
         ctx.restore();
-
-        renderReactiveGrass(
-          ctx,
-          player?.x,
-          player?.y,
-          (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now(),
-        );
 
         drawRechargedHudReplica(canvas, state);
 
