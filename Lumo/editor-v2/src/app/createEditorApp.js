@@ -7178,6 +7178,7 @@ if (event.shiftKey) {
       bridgeResult = v2ToRuntimeLevelObject(doc);
       launchEditorPlayRuntime({
         runtimeLevel: bridgeResult.runtimeLevel,
+        levelDocument: doc,
         spawnOverride,
       });
     } catch (error) {
