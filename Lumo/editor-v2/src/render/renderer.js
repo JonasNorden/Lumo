@@ -4,6 +4,7 @@ import { renderBackground } from "./layers/backgroundLayer.js";
 import { renderBrushPreviewOverlay, renderPlacementPreviewOverlay } from "./layers/previewLayer.js";
 import { renderEntities } from "./layers/entityLayer.js";
 import { renderDecor } from "./layers/decorLayer.js";
+import { renderReactiveGrassPatches } from "./layers/reactiveGrassLayer.js";
 import { renderSounds } from "./layers/soundLayer.js";
 import { renderProximityOverlays } from "./layers/proximityOverlayLayer.js";
 import { renderScanOverlay } from "./layers/scanLayer.js";
@@ -52,6 +53,7 @@ export function renderEditorFrame(ctx, state) {
   worldCtx.fillRect(0, 0, canvas.width, canvas.height);
   renderBackground(worldCtx, doc, state.viewport);
   renderDecor(worldCtx, doc, state.viewport, state.interaction);
+  renderReactiveGrassPatches(worldCtx, doc, state.viewport);
   renderTiles(worldCtx, doc, state.viewport);
   renderEntities(worldCtx, doc, state.viewport, state.interaction);
 

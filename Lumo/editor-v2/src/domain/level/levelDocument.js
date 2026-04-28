@@ -14,6 +14,25 @@ const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", 
 const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
 const DEFAULT_DECOR_VARIANT = "a";
 const FLOWER_DECOR_TYPE = "decor_flower_01";
+const DEFAULT_REACTIVE_GRASS_PATCH = Object.freeze({
+  kind: "reactive_grass",
+  x: 0,
+  y: 0,
+  width: 166,
+  density: 416,
+  heightMin: 12,
+  heightMax: 84,
+  heightProfile: "organic_wave",
+  heightVariation: 1,
+  baseColor: "#12391f",
+  topColor: "#7fd66b",
+  variant: "lush_default",
+  seed: 12345,
+  windAmp: 13.5,
+  reactFar: 176,
+  reactMid: 94,
+  reactNear: 36,
+});
 
 function parseFlowerVariant(value) {
   if (Number.isFinite(value)) {
@@ -43,6 +62,7 @@ function parseFlowerVariant(value) {
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, variant: string, params: Record<string, string | number | boolean>}[]} decor
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} entities
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, source?: string, params: Record<string, string | number | boolean>}[]} sounds
+ * @property {{id: string, kind: string, x: number, y: number, width: number, heightMin: number, heightMax: number, baseColor: string, topColor: string}[]} reactiveGrassPatches
  * @property {{notes?: string}} extra
  */
 
@@ -199,6 +219,55 @@ function normalizeSound(sound, index) {
   };
 }
 
+function normalizeReactiveGrassPatch(patch, index) {
+  const sourcePatch = patch && typeof patch === "object" ? patch : {};
+  const rawHeightMin = Number.isFinite(sourcePatch.heightMin)
+    ? Number(sourcePatch.heightMin)
+    : DEFAULT_REACTIVE_GRASS_PATCH.heightMin;
+  const rawHeightMax = Number.isFinite(sourcePatch.heightMax)
+    ? Number(sourcePatch.heightMax)
+    : DEFAULT_REACTIVE_GRASS_PATCH.heightMax;
+  const safeHeightMin = Math.max(1, Math.round(Math.min(rawHeightMin, rawHeightMax)));
+  const safeHeightMax = Math.max(safeHeightMin, Math.round(Math.max(rawHeightMin, rawHeightMax)));
+
+  return {
+    ...sourcePatch,
+    id: typeof sourcePatch.id === "string" && sourcePatch.id.trim()
+      ? sourcePatch.id.trim()
+      : `reactive_grass_patch_${index + 1}`,
+    kind: typeof sourcePatch.kind === "string" && sourcePatch.kind.trim()
+      ? sourcePatch.kind.trim()
+      : DEFAULT_REACTIVE_GRASS_PATCH.kind,
+    x: Number.isFinite(sourcePatch.x) ? Number(sourcePatch.x) : DEFAULT_REACTIVE_GRASS_PATCH.x,
+    y: Number.isFinite(sourcePatch.y) ? Number(sourcePatch.y) : DEFAULT_REACTIVE_GRASS_PATCH.y,
+    width: Number.isFinite(sourcePatch.width) && sourcePatch.width > 0
+      ? Number(sourcePatch.width)
+      : DEFAULT_REACTIVE_GRASS_PATCH.width,
+    density: Number.isFinite(sourcePatch.density) && sourcePatch.density > 0
+      ? Math.max(8, Math.round(sourcePatch.density))
+      : DEFAULT_REACTIVE_GRASS_PATCH.density,
+    heightMin: safeHeightMin,
+    heightMax: safeHeightMax,
+    heightProfile: typeof sourcePatch.heightProfile === "string" && sourcePatch.heightProfile.trim()
+      ? sourcePatch.heightProfile.trim()
+      : DEFAULT_REACTIVE_GRASS_PATCH.heightProfile,
+    heightVariation: Number.isFinite(sourcePatch.heightVariation)
+      ? Math.max(0, Math.min(1, Number(sourcePatch.heightVariation)))
+      : DEFAULT_REACTIVE_GRASS_PATCH.heightVariation,
+    baseColor: typeof sourcePatch.baseColor === "string" && sourcePatch.baseColor.trim()
+      ? sourcePatch.baseColor.trim()
+      : DEFAULT_REACTIVE_GRASS_PATCH.baseColor,
+    topColor: typeof sourcePatch.topColor === "string" && sourcePatch.topColor.trim()
+      ? sourcePatch.topColor.trim()
+      : DEFAULT_REACTIVE_GRASS_PATCH.topColor,
+    seed: Number.isFinite(sourcePatch.seed) ? Number(sourcePatch.seed) : DEFAULT_REACTIVE_GRASS_PATCH.seed,
+    windAmp: Number.isFinite(sourcePatch.windAmp) ? Number(sourcePatch.windAmp) : DEFAULT_REACTIVE_GRASS_PATCH.windAmp,
+    reactFar: Number.isFinite(sourcePatch.reactFar) ? Number(sourcePatch.reactFar) : DEFAULT_REACTIVE_GRASS_PATCH.reactFar,
+    reactMid: Number.isFinite(sourcePatch.reactMid) ? Number(sourcePatch.reactMid) : DEFAULT_REACTIVE_GRASS_PATCH.reactMid,
+    reactNear: Number.isFinite(sourcePatch.reactNear) ? Number(sourcePatch.reactNear) : DEFAULT_REACTIVE_GRASS_PATCH.reactNear,
+  };
+}
+
 /**
  * @param {LevelDocument} doc
  * @returns {LevelDocument}
@@ -269,6 +338,8 @@ export function validateLevelDocument(doc) {
 
   const rawSounds = Array.isArray(doc.sounds) ? doc.sounds : [];
   doc.sounds = rawSounds.map((sound, index) => normalizeSound(sound, index));
+  const rawReactiveGrassPatches = Array.isArray(doc.reactiveGrassPatches) ? doc.reactiveGrassPatches : [];
+  doc.reactiveGrassPatches = rawReactiveGrassPatches.map((patch, index) => normalizeReactiveGrassPatch(patch, index));
 
   return doc;
 }
