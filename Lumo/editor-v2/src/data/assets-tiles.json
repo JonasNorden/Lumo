@@ -31852,6 +31852,22 @@
       "topColor": "#7fd66b",
       "variant": "lush_default",
       "seed": 12345
+    },
+    {
+      "id": "reactive_grass_002",
+      "kind": "reactive_grass",
+      "x": 332,
+      "y": 456,
+      "width": 128,
+      "density": 360,
+      "heightMin": 12,
+      "heightMax": 84,
+      "heightProfile": "organic_wave",
+      "heightVariation": 1.0,
+      "baseColor": "#174428",
+      "topColor": "#8fe07a",
+      "variant": "lush_default",
+      "seed": 67890
     }
   ]
 }
