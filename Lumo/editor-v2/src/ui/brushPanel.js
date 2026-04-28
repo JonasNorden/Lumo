@@ -449,7 +449,7 @@ export function renderBrushPanel(panel, state) {
       </div>
     `)}
 
-    ${renderInlineSection("LAYER", renderLayerSection(state))}
+    ${renderInlineSection("LAYER", renderLayerSection(state), "layerPanelSection")}
 
     ${renderSection("tiles", "TILES", panelSections.tiles, `
       <div class="tilesPanelSpriteHeader">

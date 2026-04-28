@@ -572,6 +572,32 @@ select {
   white-space: nowrap;
 }
 
+.layerPanelSection {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.layerPanelSection .sectionTitle,
+.layerPanelSection .sectionTitleInline {
+  width: 100%;
+}
+
+.layerPanelSection .sectionContent {
+  width: 100%;
+}
+
+.layerPanelSection .layerSwitch {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.layerPanelSection .layerSwitch .toolButton {
+  flex: 0 0 auto;
+  min-width: 64px;
+  padding-inline: 10px;
+}
+
 .toolButton {
   display: inline-flex;
   align-items: center;
