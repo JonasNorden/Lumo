@@ -139,9 +139,53 @@ export function renderPlacementPreviewOverlay(ctx, doc, viewport, interaction, p
   renderWaterVolumePlacementPreview(ctx, doc, viewport, interaction);
   renderLavaVolumePlacementPreview(ctx, doc, viewport, interaction);
   renderBubblingLiquidVolumePlacementPreview(ctx, doc, viewport, interaction);
+  renderReactiveGrassPlacementPreview(ctx, doc, viewport, interaction);
   renderDecorPlacementPreview(ctx, doc, viewport, interaction, presets?.decor || null);
   renderEntityPlacementPreview(ctx, doc, viewport, interaction, presets?.entity || null);
   renderSoundPlacementPreview(ctx, doc, viewport, interaction, presets?.sound || null);
+}
+
+export function renderReactiveGrassPlacementPreview(ctx, doc, viewport, interaction) {
+  const drag = interaction?.reactiveGrassPlacementDrag;
+  if (!drag?.active || !drag.startCell || !drag.endCell) return;
+  if (interaction?.activeLayer !== "reactive-decor" || interaction?.activeTool !== EDITOR_TOOLS.PAINT) return;
+
+  const tileSize = Number.isFinite(doc?.dimensions?.tileSize) && doc.dimensions.tileSize > 0
+    ? doc.dimensions.tileSize
+    : 24;
+  const minX = Math.min(drag.startCell.x, drag.endCell.x);
+  const maxX = Math.max(drag.startCell.x, drag.endCell.x);
+  const baselineCellY = Math.max(drag.startCell.y, drag.endCell.y);
+  const heightPx = 80;
+  const worldX = minX * tileSize;
+  const worldY = (baselineCellY + 1) * tileSize;
+  const worldWidth = Math.max(tileSize, (maxX - minX + 1) * tileSize);
+  const zoom = viewport?.zoom || 1;
+  const screenX = viewport.offsetX + (worldX * zoom);
+  const screenY = viewport.offsetY + ((worldY - heightPx) * zoom);
+  const screenWidth = worldWidth * zoom;
+  const screenHeight = heightPx * zoom;
+  const lineWidth = Math.max(1, 1.15 * (1 / Math.max(0.35, zoom)));
+
+  ctx.save();
+  const bodyGradient = ctx.createLinearGradient(screenX, screenY, screenX, screenY + screenHeight);
+  bodyGradient.addColorStop(0, "rgba(127, 214, 107, 0.34)");
+  bodyGradient.addColorStop(1, "rgba(47, 111, 58, 0.24)");
+  ctx.fillStyle = bodyGradient;
+  ctx.fillRect(screenX, screenY, screenWidth, screenHeight);
+  ctx.strokeStyle = "rgba(184, 245, 143, 0.88)";
+  ctx.lineWidth = lineWidth;
+  ctx.setLineDash([Math.max(8, 10 * zoom), Math.max(5, 6 * zoom)]);
+  ctx.strokeRect(screenX + lineWidth * 0.5, screenY + lineWidth * 0.5, Math.max(0, screenWidth - lineWidth), Math.max(0, screenHeight - lineWidth));
+  ctx.setLineDash([]);
+  ctx.strokeStyle = "rgba(219, 255, 195, 0.72)";
+  ctx.lineWidth = Math.max(1, lineWidth * 0.9);
+  const baselineY = viewport.offsetY + (worldY * zoom);
+  ctx.beginPath();
+  ctx.moveTo(screenX, baselineY + 0.5);
+  ctx.lineTo(screenX + screenWidth, baselineY + 0.5);
+  ctx.stroke();
+  ctx.restore();
 }
 
 export function renderFogVolumePlacementPreview(ctx, doc, viewport, interaction) {

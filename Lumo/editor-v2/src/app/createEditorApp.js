@@ -215,6 +215,10 @@ const SOUND_DEBUG_MAX_EVENTS = 18;
 const ARROW_PAN_STEP_PX = 20;
 const ARROW_PAN_SHIFT_MULTIPLIER = 2;
 const FOG_DEFAULTS_STORAGE_KEY = "lumo.editor-v2.fog-defaults";
+const REACTIVE_GRASS_PATCH_MIN_WIDTH_PX = 24;
+const REACTIVE_GRASS_PATCH_DEFAULT_DENSITY = 416;
+const REACTIVE_GRASS_PATCH_DEFAULT_SEED_MIN = 10_000;
+const REACTIVE_GRASS_PATCH_DEFAULT_SEED_MAX = 999_999_999;
 
 
 function getInspectedCell(state) {
@@ -2508,6 +2512,49 @@ export function createEditorApp({
     }
 
     return `${prefix}-${nextNumber}`;
+  };
+
+  const isReactiveGrassPaintPlacementActive = (interaction) => {
+    return interaction?.activeLayer === PANEL_LAYERS.REACTIVE_DECOR
+      && interaction?.activeTool === EDITOR_TOOLS.PAINT;
+  };
+
+  const createReactiveGrassPatchFromDrag = (doc, startCell, endCell) => {
+    if (!doc || !startCell || !endCell) return null;
+    const tileSize = Number.isFinite(doc?.dimensions?.tileSize) && doc.dimensions.tileSize > 0
+      ? doc.dimensions.tileSize
+      : 24;
+    const minCellX = Math.max(0, Math.min(startCell.x, endCell.x));
+    const maxCellX = Math.max(0, Math.max(startCell.x, endCell.x));
+    const baselineCellY = Math.max(0, Math.max(startCell.y, endCell.y));
+    const baselineY = (baselineCellY + 1) * tileSize;
+    const patchWidth = Math.max(
+      REACTIVE_GRASS_PATCH_MIN_WIDTH_PX,
+      (maxCellX - minCellX + 1) * tileSize,
+    );
+    const leftEdgeX = minCellX * tileSize;
+    const centerX = leftEdgeX + patchWidth * 0.5;
+    const randomSeed = Math.floor(
+      REACTIVE_GRASS_PATCH_DEFAULT_SEED_MIN
+      + (Math.random() * (REACTIVE_GRASS_PATCH_DEFAULT_SEED_MAX - REACTIVE_GRASS_PATCH_DEFAULT_SEED_MIN)),
+    );
+
+    return {
+      id: getNextStringId(doc.reactiveGrassPatches || [], "id", "reactive_grass"),
+      kind: "reactive_grass",
+      x: centerX,
+      y: baselineY,
+      width: patchWidth,
+      density: REACTIVE_GRASS_PATCH_DEFAULT_DENSITY,
+      heightMin: 12,
+      heightMax: 80,
+      heightProfile: "organic_wave",
+      heightVariation: 1,
+      baseColor: "#2f6f3a",
+      topColor: "#7fd66b",
+      variant: "lush_default",
+      seed: randomSeed,
+    };
   };
 
   const clearDecorScatterDrag = (draft) => {
@@ -6226,6 +6273,26 @@ if (event.shiftKey) {
       return;
     }
 
+    if (isReactiveGrassPaintPlacementActive(state.interaction)) {
+      event.preventDefault();
+      store.setState((draft) => {
+        draft.interaction.selectedCell = cell;
+        draft.interaction.hoverCell = cell;
+        draft.interaction.reactiveGrassPlacementDrag = {
+          active: true,
+          startCell: { ...cell },
+          endCell: { ...cell },
+        };
+        clearEntitySelection(draft.interaction);
+        clearDecorSelection(draft.interaction);
+        clearSoundSelection(draft.interaction);
+        draft.interaction.entityDrag = null;
+        draft.interaction.decorDrag = null;
+        draft.interaction.soundDrag = null;
+      });
+      return;
+    }
+
     const drawableTool = activeTool === EDITOR_TOOLS.PAINT || activeTool === EDITOR_TOOLS.ERASE;
     if (!drawableTool) return;
 
@@ -6297,6 +6364,21 @@ if (event.shiftKey) {
         const volumePlacementDrag = draft.interaction.volumePlacementDrag;
         if (!volumePlacementDrag?.active) return;
         volumePlacementDrag.endCell = { ...cell };
+        draft.interaction.hoverCell = cell;
+        draft.interaction.selectedCell = cell;
+      });
+      return;
+    }
+
+    if (state.interaction.reactiveGrassPlacementDrag?.active) {
+      if ((event.buttons & 1) !== 1) return;
+      const point = getCanvasPointFromMouseEvent(canvas, event);
+      const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+      if (!cell) return;
+      store.setState((draft) => {
+        const reactiveGrassPlacementDrag = draft.interaction.reactiveGrassPlacementDrag;
+        if (!reactiveGrassPlacementDrag?.active) return;
+        reactiveGrassPlacementDrag.endCell = { ...cell };
         draft.interaction.hoverCell = cell;
         draft.interaction.selectedCell = cell;
       });
@@ -6569,6 +6651,28 @@ if (event.shiftKey) {
       return;
     }
 
+    if (state.interaction.reactiveGrassPlacementDrag?.active) {
+      store.setState((draft) => {
+        const reactiveGrassPlacementDrag = draft.interaction.reactiveGrassPlacementDrag;
+        if (!reactiveGrassPlacementDrag?.active) return;
+        const createdPatch = createReactiveGrassPatchFromDrag(
+          draft.document.active,
+          reactiveGrassPlacementDrag.startCell,
+          reactiveGrassPlacementDrag.endCell || reactiveGrassPlacementDrag.startCell,
+        );
+        if (createdPatch) {
+          if (!Array.isArray(draft.document.active.reactiveGrassPatches)) {
+            draft.document.active.reactiveGrassPatches = [];
+          }
+          const createdIndex = draft.document.active.reactiveGrassPatches.length;
+          draft.document.active.reactiveGrassPatches.push(createdPatch);
+          setReactiveGrassPatchSelection(draft, createdIndex);
+        }
+        draft.interaction.reactiveGrassPlacementDrag = null;
+      });
+      return;
+    }
+
     if (state.interaction.decorDrag?.active) {
       store.setState((draft) => {
         const decorDrag = draft.interaction.decorDrag;
@@ -6819,6 +6923,7 @@ if (event.shiftKey) {
     draft.history.redoStack = [];
     draft.history.activeBatch = null;
     draft.interaction.dragPaint = null;
+    draft.interaction.reactiveGrassPlacementDrag = null;
     draft.interaction.rectDrag = null;
     draft.interaction.lineDrag = null;
     draft.interaction.boxSelection = null;
