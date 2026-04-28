@@ -5361,6 +5361,46 @@ export function createEditorApp({
     });
   };
 
+  const isHexColor = (input) => typeof input === "string" && /^#[\da-f]{6}$/i.test(input.trim());
+
+  const normalizeReactiveGrassColor = (colorValue, fallbackColor) => {
+    if (isHexColor(colorValue)) return colorValue.trim().toLowerCase();
+    return fallbackColor;
+  };
+
+  const updateReactiveGrassPatch = (field, value, options = {}) => {
+    if (field !== "baseColor" && field !== "topColor") return;
+
+    store.setState((draft) => {
+      const patches = Array.isArray(draft.document.active?.reactiveGrassPatches)
+        ? draft.document.active.reactiveGrassPatches
+        : null;
+      if (!patches?.length) return;
+
+      const selectedPatchId = typeof options.patchId === "string" && options.patchId.trim()
+        ? options.patchId.trim()
+        : typeof draft.interaction.selectedReactiveGrassPatchId === "string" && draft.interaction.selectedReactiveGrassPatchId.trim()
+          ? draft.interaction.selectedReactiveGrassPatchId.trim()
+          : null;
+      const selectedPatchIndex = Number.isInteger(draft.interaction.selectedReactiveGrassPatchIndex)
+        ? draft.interaction.selectedReactiveGrassPatchIndex
+        : -1;
+
+      const resolvedPatchIndex = selectedPatchId
+        ? patches.findIndex((patch) => patch?.id === selectedPatchId)
+        : selectedPatchIndex;
+      if (!Number.isInteger(resolvedPatchIndex) || resolvedPatchIndex < 0 || resolvedPatchIndex >= patches.length) return;
+
+      const patch = patches[resolvedPatchIndex];
+      if (!patch || typeof patch !== "object") return;
+
+      const fallbackColor = field === "baseColor" ? "#12391f" : "#7fd66b";
+      const nextColor = normalizeReactiveGrassColor(value, fallbackColor);
+      if (patch[field] === nextColor) return;
+      patch[field] = nextColor;
+    });
+  };
+
   const updateScanControl = (field, rawValue) => {
     store.setState((draft) => {
       const doc = draft.document.active;
@@ -8587,6 +8627,7 @@ if (event.shiftKey) {
     onEntityUpdate: updateEntity,
     onDecorUpdate: updateDecor,
     onSoundUpdate: updateSound,
+    onReactiveGrassPatchUpdate: updateReactiveGrassPatch,
     onScanUpdate: updateScanControl,
   };
   const unbindInspectorPanel = bindInspectorPanel(inspector, store, panelBindingOptions);
@@ -8595,6 +8636,7 @@ if (event.shiftKey) {
     onEntityUpdate: updateEntity,
     onDecorUpdate: updateDecor,
     onSoundUpdate: updateSound,
+    onReactiveGrassPatchUpdate: updateReactiveGrassPatch,
     onVolumeUpdate: updateVolume,
     onCanvasTargetChange: setActiveCanvasTarget,
     onLayerChange: setActiveLayerFromPanel,

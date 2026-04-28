@@ -1632,6 +1632,16 @@ select {
   gap: 8px;
 }
 
+.selectionReactiveGrassColorField input[type="color"] {
+  width: 28px;
+  min-width: 28px;
+  height: 24px;
+  padding: 1px;
+  border-radius: 6px;
+  border: 1px solid rgba(92, 113, 158, 0.42);
+  background: rgba(16, 24, 38, 0.9);
+}
+
 .selectionValueChip {
   display: inline-flex;
   align-items: center;
