@@ -53,7 +53,7 @@ export function renderEditorFrame(ctx, state) {
   worldCtx.fillRect(0, 0, canvas.width, canvas.height);
   renderBackground(worldCtx, doc, state.viewport);
   renderDecor(worldCtx, doc, state.viewport, state.interaction);
-  renderReactiveGrassPatches(worldCtx, doc, state.viewport);
+  renderReactiveGrassPatches(worldCtx, doc, state.viewport, state.interaction);
   renderTiles(worldCtx, doc, state.viewport);
   renderEntities(worldCtx, doc, state.viewport, state.interaction);
 

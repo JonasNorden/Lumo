@@ -86,6 +86,7 @@ import { getBackgroundFloodFillCells } from "../domain/background/floodFill.js";
 import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
 import { findDecorAtCanvasPoint } from "../render/layers/decorLayer.js";
 import { findSoundAtCanvasPoint, getSoundPlacementPreviewDiagnostic } from "../render/layers/soundLayer.js";
+import { findReactiveGrassPatchAtCanvasPoint } from "../render/layers/reactiveGrassLayer.js";
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
 import {
   DEFAULT_ENTITY_PRESET_ID,
@@ -1566,6 +1567,24 @@ export function createEditorApp({
     if (!Array.isArray(sounds) || typeof soundId !== "string" || !soundId.trim()) return null;
     const index = sounds.findIndex((sound) => sound?.id === soundId);
     return index >= 0 ? index : null;
+  };
+
+  const clearReactiveGrassPatchSelection = (interaction) => {
+    interaction.selectedReactiveGrassPatchIndex = null;
+    interaction.selectedReactiveGrassPatchId = null;
+  };
+
+  const setReactiveGrassPatchSelection = (draft, patchIndex = null) => {
+    const patches = Array.isArray(draft.document.active?.reactiveGrassPatches)
+      ? draft.document.active.reactiveGrassPatches
+      : [];
+    const nextPatch = Number.isInteger(patchIndex) && patchIndex >= 0 && patchIndex < patches.length
+      ? patches[patchIndex]
+      : null;
+    draft.interaction.selectedReactiveGrassPatchIndex = nextPatch ? patchIndex : null;
+    draft.interaction.selectedReactiveGrassPatchId = typeof nextPatch?.id === "string" && nextPatch.id.trim()
+      ? nextPatch.id.trim()
+      : null;
   };
 
   const getObjectIndicesByIds = (items, ids = []) => {
@@ -3803,6 +3822,7 @@ export function createEditorApp({
     clearDecorScatterDrag(draft);
 
     if (nextMode === "decor") {
+      clearReactiveGrassPatchSelection(draft.interaction);
       clearEntitySelection(draft.interaction);
       clearSoundSelection(draft.interaction);
       draft.interaction.hoveredEntityIndex = null;
@@ -3815,6 +3835,7 @@ export function createEditorApp({
     }
 
     if (nextMode === "sound") {
+      clearReactiveGrassPatchSelection(draft.interaction);
       clearEntitySelection(draft.interaction);
       clearDecorSelection(draft.interaction);
       draft.interaction.hoveredEntityIndex = null;
@@ -3826,6 +3847,7 @@ export function createEditorApp({
       return;
     }
 
+    clearReactiveGrassPatchSelection(draft.interaction);
     clearDecorSelection(draft.interaction);
     clearSoundSelection(draft.interaction);
     setHoveredDecor(draft, null);
@@ -3838,6 +3860,7 @@ export function createEditorApp({
 
   const clearActiveSelection = (draft, nextMode = getSelectionMode(draft.interaction)) => {
     if (getActiveLayer(draft.interaction) === PANEL_LAYERS.TILES) {
+      clearReactiveGrassPatchSelection(draft.interaction);
       clearEntitySelection(draft.interaction);
       clearDecorSelection(draft.interaction);
       clearSoundSelection(draft.interaction);
@@ -3851,6 +3874,7 @@ export function createEditorApp({
     }
 
     if (nextMode === "decor") {
+      clearReactiveGrassPatchSelection(draft.interaction);
       clearEntitySelection(draft.interaction);
       clearSoundSelection(draft.interaction);
       draft.interaction.hoveredEntityIndex = null;
@@ -3861,6 +3885,7 @@ export function createEditorApp({
     }
 
     if (nextMode === "sound") {
+      clearReactiveGrassPatchSelection(draft.interaction);
       clearEntitySelection(draft.interaction);
       clearDecorSelection(draft.interaction);
       draft.interaction.hoveredEntityIndex = null;
@@ -3871,6 +3896,7 @@ export function createEditorApp({
       return;
     }
 
+    clearReactiveGrassPatchSelection(draft.interaction);
     clearDecorSelection(draft.interaction);
     clearSoundSelection(draft.interaction);
     setHoveredDecor(draft, null);
@@ -5666,6 +5692,7 @@ export function createEditorApp({
     Boolean(interaction.activeDecorPresetId);
 
   const handleCleanRoomEntitySelectionHit = (draft, entityId) => {
+    clearReactiveGrassPatchSelection(draft.interaction);
     syncCleanRoomEntitySelection(draft, entityId);
   };
 
@@ -5783,7 +5810,17 @@ export function createEditorApp({
     interactionState.suppressNextClick = true;
     event.preventDefault();
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+    const hitReactiveGrassPatchIndex = findReactiveGrassPatchAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     store.setState((draft) => {
+      if (hitEntityIndex < 0 && hitReactiveGrassPatchIndex >= 0) {
+        setReactiveGrassPatchSelection(draft, hitReactiveGrassPatchIndex);
+        clearEntitySelection(draft.interaction);
+        clearDecorSelection(draft.interaction);
+        clearSoundSelection(draft.interaction);
+        draft.interaction.selectedCell = cell;
+        return;
+      }
+      clearReactiveGrassPatchSelection(draft.interaction);
       const entityId = hitEntityIndex >= 0 ? draft.document.active?.entities?.[hitEntityIndex]?.id || null : null;
       const hitEntity = hitEntityIndex >= 0 ? draft.document.active?.entities?.[hitEntityIndex] : null;
       if (event.detail >= 2 && entityId && isSpecialVolumeEntityType(hitEntity?.type)) {
@@ -5917,6 +5954,7 @@ if (event.shiftKey) {
         applyCanvasTarget(draft, "sound");
         setHoveredSound(draft, soundId);
         if (event.shiftKey) {
+          clearReactiveGrassPatchSelection(draft.interaction);
           toggleSoundSelection(draft.interaction, soundId, soundItems);
           updateSoundSelectionCell(draft, getPrimarySelectedSoundIndex(draft.interaction, soundItems));
           draft.interaction.soundDrag = null;
@@ -5928,6 +5966,7 @@ if (event.shiftKey) {
           return;
         }
 
+        clearReactiveGrassPatchSelection(draft.interaction);
         selectSoundByIds(draft, [soundId], soundId, {
           clearHover: false,
           hoveredSoundId: soundId,
@@ -5955,6 +5994,7 @@ if (event.shiftKey) {
             ? selectedDecorIds.filter((selectedId) => selectedId !== decorId)
             : [...selectedDecorIds, decorId])
           : [decorId];
+        clearReactiveGrassPatchSelection(draft.interaction);
         selectDecorByIds(draft, nextSelectedDecorIds, nextSelectedDecorIds.at(-1) ?? null, {
           clearHover: true,
           clearHoverCell: true,
@@ -6602,6 +6642,7 @@ if (event.shiftKey) {
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     if (activeLayer === PANEL_LAYERS.ENTITIES && selectionMode === "entity" && hitEntityIndex >= 0) {
       store.setState((draft) => {
+        clearReactiveGrassPatchSelection(draft.interaction);
         const entityId = draft.document.active?.entities?.[hitEntityIndex]?.id || null;
         if (!entityId) return;
         if (event.shiftKey) {
@@ -6628,6 +6669,7 @@ if (event.shiftKey) {
     const hitDecorIndex = findDecorAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     if (activeLayer === PANEL_LAYERS.DECOR && selectionMode === "decor" && hitDecorIndex >= 0) {
       store.setState((draft) => {
+        clearReactiveGrassPatchSelection(draft.interaction);
         const decorItems = draft.document.active?.decor || [];
         const decorId = decorItems[hitDecorIndex]?.id || null;
         if (!decorId) return;
@@ -6648,6 +6690,7 @@ if (event.shiftKey) {
     const hitSoundIndex = findSoundAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     if (activeLayer === PANEL_LAYERS.SOUND && selectionMode === "sound" && hitSoundIndex >= 0) {
       store.setState((draft) => {
+        clearReactiveGrassPatchSelection(draft.interaction);
         const soundItems = draft.document.active?.sounds || [];
         applyCanvasTarget(draft, "sound");
         if (event.shiftKey) {
@@ -6670,6 +6713,7 @@ if (event.shiftKey) {
       draft.interaction.hoveredEntityId = null;
       clearDecorSelection(draft.interaction);
       clearSoundSelection(draft.interaction);
+      clearReactiveGrassPatchSelection(draft.interaction);
     });
   };
 
@@ -6714,6 +6758,7 @@ if (event.shiftKey) {
     clearDecorSelection(draft.interaction);
     clearEntitySelection(draft.interaction);
     clearSoundSelection(draft.interaction);
+    clearReactiveGrassPatchSelection(draft.interaction);
     draft.interaction.hoverCell = null;
     draft.ui.importStatus = statusMessage;
     draft.ui.newLevelSize = {
@@ -8433,6 +8478,7 @@ if (event.shiftKey) {
         state.interaction.canvasSelectionMode = "entity";
         clearDecorSelection(state.interaction);
         clearSoundSelection(state.interaction);
+        clearReactiveGrassPatchSelection(state.interaction);
         state.interaction.selectedCell = null;
         state.interaction.hoverCell = null;
         clearEntitySelection(state.interaction);

@@ -788,6 +788,51 @@ function renderMultiSelectionState(kind, count, primaryName) {
   `;
 }
 
+function formatReadOnlyValue(value) {
+  if (value === undefined || value === null || value === "") return "—";
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "—";
+    }
+  }
+  return String(value);
+}
+
+function renderReadOnlyField(label, value) {
+  return `
+    <label class="fieldRow fieldRowCompact selectionInlineField isReadOnly">
+      <span class="label">${escapeHtml(label)}</span>
+      <output class="value">${escapeHtml(formatReadOnlyValue(value))}</output>
+    </label>
+  `;
+}
+
+function renderReactiveGrassPatchInspector(patch) {
+  return renderSelectionFields([
+    `<div class="statusCard assetSelectionCard assetSelectionCardCompact">
+      <div class="assetSelectionMeta">
+        <span class="statusCardMeta">Reactive Grass Patch · Read-only authored data</span>
+      </div>
+    </div>`,
+    renderReadOnlyField("id", patch?.id),
+    renderReadOnlyField("kind", patch?.kind),
+    renderReadOnlyField("x", patch?.x),
+    renderReadOnlyField("y", patch?.y),
+    renderReadOnlyField("width", patch?.width),
+    renderReadOnlyField("density", patch?.density),
+    renderReadOnlyField("heightMin", patch?.heightMin),
+    renderReadOnlyField("heightMax", patch?.heightMax),
+    renderReadOnlyField("heightProfile", patch?.heightProfile),
+    renderReadOnlyField("heightVariation", patch?.heightVariation),
+    renderReadOnlyField("baseColor", patch?.baseColor),
+    renderReadOnlyField("topColor", patch?.topColor),
+    renderReadOnlyField("variant", patch?.variant),
+    renderReadOnlyField("seed", patch?.seed),
+  ].join(""));
+}
+
 function renderSelectionEditor(state, emptyMessage, options = {}) {
   const { soundMode = "full", hideEntityTypes = [] } = options;
   const active = state.document.active;
@@ -830,6 +875,17 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
     .map((index) => active.sounds?.[index] || null)
     .filter(Boolean);
   const themeId = active?.meta?.themeId;
+  const selectedReactiveGrassPatchId = typeof state?.interaction?.selectedReactiveGrassPatchId === "string" && state.interaction.selectedReactiveGrassPatchId.trim()
+    ? state.interaction.selectedReactiveGrassPatchId.trim()
+    : null;
+  const selectedReactiveGrassPatchIndex = Number.isInteger(state?.interaction?.selectedReactiveGrassPatchIndex)
+    ? state.interaction.selectedReactiveGrassPatchIndex
+    : null;
+  const selectedReactiveGrassPatch = selectedReactiveGrassPatchId
+    ? (active.reactiveGrassPatches || []).find((patch) => patch?.id === selectedReactiveGrassPatchId) || null
+    : Number.isInteger(selectedReactiveGrassPatchIndex) && selectedReactiveGrassPatchIndex >= 0
+      ? active.reactiveGrassPatches?.[selectedReactiveGrassPatchIndex] || null
+      : null;
 
   if (selectedEntityIndices.length > 1) {
     return { markup: renderMultiSelectionState("entity", selectedEntityIndices.length, selectedEntity?.name || "Entity"), isEmpty: false };
@@ -844,6 +900,10 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
       return { markup: "", isEmpty: true };
     }
     return { markup: renderBatchSoundEditor(selectedSounds, resolvedSelectedSoundIndex, themeId), isEmpty: false };
+  }
+
+  if (selectedReactiveGrassPatch) {
+    return { markup: renderReactiveGrassPatchInspector(selectedReactiveGrassPatch), isEmpty: false };
   }
 
   if (selectedEntity) {
