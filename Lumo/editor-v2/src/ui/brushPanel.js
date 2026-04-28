@@ -28,6 +28,7 @@ const PANEL_LAYERS = {
   BACKGROUND: "background",
   ENTITIES: "entities",
   DECOR: "decor",
+  REACTIVE_DECOR: "reactive-decor",
   SOUND: "sound",
 };
 
@@ -128,6 +129,7 @@ function renderLayerSection(state) {
       <button class="toolButton ${activeLayer === PANEL_LAYERS.TILES ? "isActive" : ""}" type="button" data-layer="tiles">Tiles</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.ENTITIES ? "isActive" : ""}" type="button" data-layer="entities">Entities</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.DECOR ? "isActive" : ""}" type="button" data-layer="decor">Decor</button>
+      <button class="toolButton ${activeLayer === PANEL_LAYERS.REACTIVE_DECOR ? "isActive" : ""}" type="button" data-layer="reactive-decor">Reactive Decor</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.SOUND ? "isActive" : ""}" type="button" data-layer="sound">Sound</button>
     </div>
   `;
@@ -637,10 +639,10 @@ export function bindBrushPanel(panel, store, options = {}) {
     const layerButton = target.closest("[data-layer]");
     if (layerButton instanceof HTMLButtonElement) {
       const nextLayer = layerButton.dataset.layer;
-      if (![PANEL_LAYERS.BACKGROUND, PANEL_LAYERS.TILES, PANEL_LAYERS.ENTITIES, PANEL_LAYERS.DECOR, PANEL_LAYERS.SOUND].includes(nextLayer)) return;
+      if (![PANEL_LAYERS.BACKGROUND, PANEL_LAYERS.TILES, PANEL_LAYERS.ENTITIES, PANEL_LAYERS.DECOR, PANEL_LAYERS.REACTIVE_DECOR, PANEL_LAYERS.SOUND].includes(nextLayer)) return;
       onLayerChange?.(nextLayer);
-      if (nextLayer === PANEL_LAYERS.DECOR || nextLayer === PANEL_LAYERS.SOUND || nextLayer === PANEL_LAYERS.ENTITIES) {
-        onCanvasTargetChange?.(nextLayer === PANEL_LAYERS.DECOR ? "decor" : nextLayer === PANEL_LAYERS.SOUND ? "sound" : "entity");
+      if (nextLayer === PANEL_LAYERS.DECOR || nextLayer === PANEL_LAYERS.SOUND || nextLayer === PANEL_LAYERS.ENTITIES || nextLayer === PANEL_LAYERS.REACTIVE_DECOR) {
+        onCanvasTargetChange?.(nextLayer === PANEL_LAYERS.DECOR ? "decor" : nextLayer === PANEL_LAYERS.SOUND ? "sound" : nextLayer === PANEL_LAYERS.REACTIVE_DECOR ? "reactiveDecor" : "entity");
       }
       return;
     }
