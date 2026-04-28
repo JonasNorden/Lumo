@@ -266,12 +266,14 @@ function renderCellHud(cellHud, state) {
 
   const inspectedCell = getInspectedCell(state);
   const activeLayer = getActiveLayer(state.interaction);
-  const activeTargetLabel = activeLayer === PANEL_LAYERS.BACKGROUND ? "Background" : activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : "Tiles";
+  const activeTargetLabel = activeLayer === PANEL_LAYERS.BACKGROUND ? "Background" : activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.REACTIVE_DECOR ? "Reactive Decor" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : "Tiles";
   const targetSelectionCount =
     activeLayer === PANEL_LAYERS.DECOR
       ? getSelectedDecorIndices(state.interaction, state.document.active?.decor || []).length
       : activeLayer === PANEL_LAYERS.ENTITIES
         ? getSelectedEntityIndices(state.interaction).length
+        : activeLayer === PANEL_LAYERS.REACTIVE_DECOR
+          ? (state.interaction.selectedReactiveGrassPatchId ? 1 : 0)
         : activeLayer === PANEL_LAYERS.SOUND
           ? getSelectedSoundIndices(state.interaction).length
           : 0;
@@ -351,6 +353,7 @@ const PANEL_LAYERS = {
   TILES: "tiles",
   ENTITIES: "entities",
   DECOR: "decor",
+  REACTIVE_DECOR: "reactive-decor",
   SOUND: "sound",
 };
 
@@ -358,12 +361,14 @@ function getActiveLayer(interaction) {
   if (interaction.activeLayer === PANEL_LAYERS.BACKGROUND) return PANEL_LAYERS.BACKGROUND;
   if (interaction.activeLayer === PANEL_LAYERS.DECOR) return PANEL_LAYERS.DECOR;
   if (interaction.activeLayer === PANEL_LAYERS.ENTITIES) return PANEL_LAYERS.ENTITIES;
+  if (interaction.activeLayer === PANEL_LAYERS.REACTIVE_DECOR) return PANEL_LAYERS.REACTIVE_DECOR;
   if (interaction.activeLayer === PANEL_LAYERS.SOUND) return PANEL_LAYERS.SOUND;
   return PANEL_LAYERS.TILES;
 }
 
 function getSelectionMode(interaction) {
   if (interaction.canvasSelectionMode === "decor") return "decor";
+  if (interaction.canvasSelectionMode === "reactiveDecor") return "reactiveDecor";
   if (interaction.canvasSelectionMode === "sound") return "sound";
   return "entity";
 }
@@ -2510,7 +2515,13 @@ export function createEditorApp({
   };
 
   const setCanvasSelectionMode = (draft, mode) => {
-    draft.interaction.canvasSelectionMode = mode === "decor" ? "decor" : mode === "sound" ? "sound" : "entity";
+    draft.interaction.canvasSelectionMode = mode === "decor"
+      ? "decor"
+      : mode === "sound"
+        ? "sound"
+        : mode === "reactiveDecor"
+          ? "reactiveDecor"
+          : "entity";
   };
 
   const openLayerSection = (draft, layer) => {
@@ -2529,6 +2540,8 @@ export function createEditorApp({
       ? PANEL_LAYERS.DECOR
       : layer === PANEL_LAYERS.ENTITIES
         ? PANEL_LAYERS.ENTITIES
+        : layer === PANEL_LAYERS.REACTIVE_DECOR
+          ? PANEL_LAYERS.REACTIVE_DECOR
         : layer === PANEL_LAYERS.SOUND
           ? PANEL_LAYERS.SOUND
           : PANEL_LAYERS.TILES;
@@ -2542,10 +2555,12 @@ export function createEditorApp({
       ? getSelectedDecorIndices(state.interaction, state.document.active?.decor || []).length
       : activeLayer === PANEL_LAYERS.ENTITIES
         ? getSelectedEntityIndices(state.interaction).length
+        : activeLayer === PANEL_LAYERS.REACTIVE_DECOR
+          ? (state.interaction.selectedReactiveGrassPatchId ? 1 : 0)
         : activeLayer === PANEL_LAYERS.SOUND
           ? getSelectedSoundIndices(state.interaction).length
           : 0;
-    const activeSelectionLabel = activeLayer === PANEL_LAYERS.BACKGROUND ? "Background" : activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : "Tiles";
+    const activeSelectionLabel = activeLayer === PANEL_LAYERS.BACKGROUND ? "Background" : activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.REACTIVE_DECOR ? "Reactive Decor" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : "Tiles";
     const statusLabel = state.ui.importStatus || `Layer: ${activeSelectionLabel} · ${selectedCount || 0} selected`;
 
     topBarStatus.textContent = statusLabel;
@@ -3809,10 +3824,19 @@ export function createEditorApp({
   };
 
   const applyCanvasTarget = (draft, mode) => {
-    const nextMode = mode === "decor" ? "decor" : mode === "sound" ? "sound" : "entity";
+    const nextMode = mode === "decor" ? "decor" : mode === "sound" ? "sound" : mode === "reactiveDecor" ? "reactiveDecor" : "entity";
     resumeObjectPlacementPreviews(draft, `canvas target ${nextMode}`);
     setCanvasSelectionMode(draft, nextMode);
-    setActiveLayer(draft, nextMode === "decor" ? PANEL_LAYERS.DECOR : nextMode === "sound" ? PANEL_LAYERS.SOUND : PANEL_LAYERS.ENTITIES);
+    setActiveLayer(
+      draft,
+      nextMode === "decor"
+        ? PANEL_LAYERS.DECOR
+        : nextMode === "sound"
+          ? PANEL_LAYERS.SOUND
+          : nextMode === "reactiveDecor"
+            ? PANEL_LAYERS.REACTIVE_DECOR
+            : PANEL_LAYERS.ENTITIES,
+    );
     draft.interaction.boxSelection = null;
     draft.interaction.entityDrag = null;
     draft.interaction.decorDrag = null;
@@ -3844,6 +3868,16 @@ export function createEditorApp({
       if (!getSelectedSoundIndices(draft.interaction, draft.document.active?.sounds || []).length) {
         draft.interaction.selectedCell = null;
       }
+      return;
+    }
+
+    if (nextMode === "reactiveDecor") {
+      clearEntitySelection(draft.interaction);
+      clearDecorSelection(draft.interaction);
+      clearSoundSelection(draft.interaction);
+      draft.interaction.hoveredEntityIndex = null;
+      setHoveredDecor(draft, null);
+      clearHoveredSound(draft.interaction);
       return;
     }
 
@@ -3893,6 +3927,19 @@ export function createEditorApp({
       clearHoveredSound(draft.interaction);
       draft.interaction.entityDrag = null;
       draft.interaction.decorDrag = null;
+      return;
+    }
+
+    if (nextMode === "reactiveDecor") {
+      clearEntitySelection(draft.interaction);
+      clearDecorSelection(draft.interaction);
+      clearSoundSelection(draft.interaction);
+      draft.interaction.hoveredEntityIndex = null;
+      setHoveredDecor(draft, null);
+      clearHoveredSound(draft.interaction);
+      draft.interaction.entityDrag = null;
+      draft.interaction.decorDrag = null;
+      draft.interaction.soundDrag = null;
       return;
     }
 
@@ -5810,16 +5857,7 @@ export function createEditorApp({
     interactionState.suppressNextClick = true;
     event.preventDefault();
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
-    const hitReactiveGrassPatchIndex = findReactiveGrassPatchAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     store.setState((draft) => {
-      if (hitEntityIndex < 0 && hitReactiveGrassPatchIndex >= 0) {
-        setReactiveGrassPatchSelection(draft, hitReactiveGrassPatchIndex);
-        clearEntitySelection(draft.interaction);
-        clearDecorSelection(draft.interaction);
-        clearSoundSelection(draft.interaction);
-        draft.interaction.selectedCell = cell;
-        return;
-      }
       clearReactiveGrassPatchSelection(draft.interaction);
       const entityId = hitEntityIndex >= 0 ? draft.document.active?.entities?.[hitEntityIndex]?.id || null : null;
       const hitEntity = hitEntityIndex >= 0 ? draft.document.active?.entities?.[hitEntityIndex] : null;
@@ -5849,6 +5887,7 @@ export function createEditorApp({
     const hitEntityIndex = findEntityAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitDecorIndex = findDecorAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitSoundIndex = findSoundAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+    const hitReactiveGrassPatchIndex = findReactiveGrassPatchAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const activeEntityPresetId = state.interaction.activeEntityPresetId;
     const activeDecorPresetId = state.interaction.activeDecorPresetId;
     const activeSoundPresetId = state.interaction.activeSoundPresetId;
@@ -6005,6 +6044,19 @@ if (event.shiftKey) {
 
     if (activeLayer === PANEL_LAYERS.TILES || activeLayer === PANEL_LAYERS.BACKGROUND) {
       return false;
+    }
+
+    if (activeLayer === PANEL_LAYERS.REACTIVE_DECOR) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        draft.interaction.selectedCell = cell;
+        setReactiveGrassPatchSelection(draft, hitReactiveGrassPatchIndex);
+        clearEntitySelection(draft.interaction);
+        clearDecorSelection(draft.interaction);
+        clearSoundSelection(draft.interaction);
+      });
+      return true;
     }
 
     interactionState.suppressNextClick = true;
@@ -6631,7 +6683,7 @@ if (event.shiftKey) {
     const state = store.getState();
     if (!state.document.active) return;
     if (state.interaction.activeTool !== EDITOR_TOOLS.INSPECT) return;
-    if (getActiveLayer(state.interaction) === PANEL_LAYERS.ENTITIES) {
+    if ([PANEL_LAYERS.ENTITIES, PANEL_LAYERS.REACTIVE_DECOR].includes(getActiveLayer(state.interaction))) {
       event.preventDefault();
       return;
     }
@@ -7076,6 +7128,11 @@ if (event.shiftKey) {
 
       if (layer === PANEL_LAYERS.SOUND) {
         applyCanvasTarget(draft, "sound");
+        return;
+      }
+
+      if (layer === PANEL_LAYERS.REACTIVE_DECOR) {
+        applyCanvasTarget(draft, "reactiveDecor");
         return;
       }
 
