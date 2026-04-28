@@ -435,7 +435,7 @@ function renderFieldActions(actions, className = "") {
   `;
 }
 
-function renderReadOnlyField(label, value, className = "") {
+function renderReadOnlyChipField(label, value, className = "") {
   const classes = ["fieldRow", "fieldRowCompact", "selectionInlineField", "selectionReadOnlyField", className].filter(Boolean).join(" ");
   return `
     <div class="${classes}">
@@ -581,7 +581,7 @@ function renderBatchSoundTypeSummary(selectedSounds, selectedSoundIndex) {
 
   return `
     <div class="selectionInlineCluster selectionSoundTypeCluster">
-      ${renderReadOnlyField("Type", typeLabel, "selectionFieldType")}
+      ${renderReadOnlyChipField("Type", typeLabel, "selectionFieldType")}
     </div>
   `;
 }
