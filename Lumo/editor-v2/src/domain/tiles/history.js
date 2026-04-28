@@ -44,6 +44,26 @@ export function createSoundEditEntry(mode, payload) {
   return createObjectLayerEditEntry("sound", mode, payload);
 }
 
+function cloneReactiveGrassPatchSnapshot(patch) {
+  return patch && typeof patch === "object" ? { ...patch } : null;
+}
+
+export function createReactiveGrassEditEntry(mode, payload = {}) {
+  const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
+  const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
+  const index = Number.isInteger(payload.index) ? payload.index : null;
+  const previousSnapshot = cloneReactiveGrassPatchSnapshot(payload.previousSnapshot);
+  const nextSnapshot = cloneReactiveGrassPatchSnapshot(payload.nextSnapshot);
+  return {
+    kind: "reactive-grass",
+    mode: normalizedMode,
+    objectId,
+    index,
+    previousSnapshot,
+    nextSnapshot,
+  };
+}
+
 
 function getHistoryEntryDomain(entry) {
   if (entry?.type === "batch") {
@@ -53,6 +73,7 @@ function getHistoryEntryDomain(entry) {
   }
 
   if (isObjectLayerKind(entry?.kind)) return entry.kind;
+  if (entry?.kind === "reactive-grass") return "reactive-grass";
   if (entry?.kind === "background") return "background";
   if (entry?.kind === "background-sized") return "background";
   return "tile";
@@ -162,6 +183,32 @@ function applyUndoEntry(doc, entry) {
   if (isObjectLayerKind(entry.kind)) {
     return applyObjectLayerUndoEntry(doc, entry);
   }
+  if (entry.kind === "reactive-grass") {
+    if (!Array.isArray(doc.reactiveGrassPatches)) doc.reactiveGrassPatches = [];
+    const patches = doc.reactiveGrassPatches;
+    const targetId = typeof entry.objectId === "string" && entry.objectId.trim() ? entry.objectId.trim() : null;
+    const authoredIndex = Number.isInteger(entry.index) ? Math.max(0, Math.min(patches.length, entry.index)) : patches.length;
+    const existingIndex = targetId ? patches.findIndex((patch) => patch?.id === targetId) : -1;
+
+    if (entry.mode === "create") {
+      if (existingIndex >= 0) patches.splice(existingIndex, 1);
+      return true;
+    }
+
+    if (entry.mode === "delete") {
+      if (!entry.previousSnapshot) return false;
+      const snapshot = cloneReactiveGrassPatchSnapshot(entry.previousSnapshot);
+      if (existingIndex >= 0) patches[existingIndex] = snapshot;
+      else patches.splice(authoredIndex, 0, snapshot);
+      return true;
+    }
+
+    if (!entry.previousSnapshot) return false;
+    const snapshot = cloneReactiveGrassPatchSnapshot(entry.previousSnapshot);
+    if (existingIndex >= 0) patches[existingIndex] = snapshot;
+    else patches.splice(authoredIndex, 0, snapshot);
+    return true;
+  }
 
   if (entry.kind === "background") {
     doc.background.base[entry.index] = entry.previousValue ?? null;
@@ -194,6 +241,32 @@ function applyRedoEntry(doc, entry) {
 
   if (isObjectLayerKind(entry.kind)) {
     return applyObjectLayerRedoEntry(doc, entry);
+  }
+  if (entry.kind === "reactive-grass") {
+    if (!Array.isArray(doc.reactiveGrassPatches)) doc.reactiveGrassPatches = [];
+    const patches = doc.reactiveGrassPatches;
+    const targetId = typeof entry.objectId === "string" && entry.objectId.trim() ? entry.objectId.trim() : null;
+    const authoredIndex = Number.isInteger(entry.index) ? Math.max(0, Math.min(patches.length, entry.index)) : patches.length;
+    const existingIndex = targetId ? patches.findIndex((patch) => patch?.id === targetId) : -1;
+
+    if (entry.mode === "delete") {
+      if (existingIndex >= 0) patches.splice(existingIndex, 1);
+      return true;
+    }
+
+    if (entry.mode === "create") {
+      if (!entry.nextSnapshot) return false;
+      const snapshot = cloneReactiveGrassPatchSnapshot(entry.nextSnapshot);
+      if (existingIndex >= 0) patches[existingIndex] = snapshot;
+      else patches.splice(authoredIndex, 0, snapshot);
+      return true;
+    }
+
+    if (!entry.nextSnapshot) return false;
+    const snapshot = cloneReactiveGrassPatchSnapshot(entry.nextSnapshot);
+    if (existingIndex >= 0) patches[existingIndex] = snapshot;
+    else patches.splice(authoredIndex, 0, snapshot);
+    return true;
   }
 
   if (entry.kind === "background") {

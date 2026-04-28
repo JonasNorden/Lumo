@@ -66,6 +66,7 @@ import { getFloodFillCells } from "../domain/tiles/floodFill.js";
 import {
   createEntityEditEntry,
   createDecorEditEntry,
+  createReactiveGrassEditEntry,
   createSizedPlacementEditEntry,
   createTileEditEntry,
   startTileEditBatch,
@@ -504,6 +505,15 @@ function historyEntryContainsSound(entry) {
   if (entry.kind === "sound") return true;
   if (entry.type === "batch") {
     return entry.edits?.some((edit) => historyEntryContainsSound(edit)) ?? false;
+  }
+  return false;
+}
+
+function historyEntryContainsReactiveGrass(entry) {
+  if (!entry) return false;
+  if (entry.kind === "reactive-grass") return true;
+  if (entry.type === "batch") {
+    return entry.edits?.some((edit) => historyEntryContainsReactiveGrass(edit)) ?? false;
   }
   return false;
 }
@@ -1596,6 +1606,20 @@ export function createEditorApp({
       : null;
   };
 
+  const setReactiveGrassPatchSelectionById = (draft, patchId = null) => {
+    const patches = Array.isArray(draft.document.active?.reactiveGrassPatches)
+      ? draft.document.active.reactiveGrassPatches
+      : [];
+    const resolvedIndex = typeof patchId === "string" && patchId.trim()
+      ? patches.findIndex((patch) => patch?.id === patchId.trim())
+      : -1;
+    if (resolvedIndex >= 0) {
+      setReactiveGrassPatchSelection(draft, resolvedIndex);
+      return;
+    }
+    clearReactiveGrassPatchSelection(draft.interaction);
+  };
+
   const getObjectIndicesByIds = (items, ids = []) => {
     const lookup = new Map();
     (Array.isArray(items) ? items : []).forEach((item, index) => {
@@ -2440,6 +2464,29 @@ export function createEditorApp({
       return;
     }
     reconcileObjectLayerMutationState(draft, getObjectHistorySelection(entry, direction), `history ${direction}`);
+  };
+
+  const applyReactiveGrassHistorySelection = (draft, entry, direction) => {
+    if (!historyEntryContainsReactiveGrass(entry)) return;
+    const selectedPatchIds = [];
+    collectHistoryEntries(entry, (edit) => {
+      if (edit?.kind !== "reactive-grass") return;
+      const mode = edit.mode;
+      const shouldSelect = mode === "update"
+        || (direction === "undo" && mode === "delete")
+        || (direction === "redo" && mode === "create");
+      if (!shouldSelect) return;
+      const patchId = typeof edit.objectId === "string" && edit.objectId.trim()
+        ? edit.objectId.trim()
+        : typeof edit.nextSnapshot?.id === "string" && edit.nextSnapshot.id.trim()
+          ? edit.nextSnapshot.id.trim()
+          : typeof edit.previousSnapshot?.id === "string" && edit.previousSnapshot.id.trim()
+            ? edit.previousSnapshot.id.trim()
+            : null;
+      if (patchId) selectedPatchIds.push(patchId);
+    });
+    const patchIdToSelect = selectedPatchIds.at(-1) ?? null;
+    setReactiveGrassPatchSelectionById(draft, patchIdToSelect);
   };
 
   const isTopBarInputElement = (value) =>
@@ -5444,7 +5491,14 @@ export function createEditorApp({
       const fallbackColor = field === "baseColor" ? "#12391f" : "#7fd66b";
       const nextColor = normalizeReactiveGrassColor(value, fallbackColor);
       if (patch[field] === nextColor) return;
+      const previousPatch = { ...patch };
       patch[field] = nextColor;
+      pushHistoryEntry(draft.history, createReactiveGrassEditEntry("update", {
+        objectId: typeof patch.id === "string" ? patch.id : null,
+        index: resolvedPatchIndex,
+        previousSnapshot: previousPatch,
+        nextSnapshot: { ...patch },
+      }));
     });
   };
 
@@ -6666,6 +6720,11 @@ if (event.shiftKey) {
           }
           const createdIndex = draft.document.active.reactiveGrassPatches.length;
           draft.document.active.reactiveGrassPatches.push(createdPatch);
+          pushHistoryEntry(draft.history, createReactiveGrassEditEntry("create", {
+            objectId: typeof createdPatch.id === "string" ? createdPatch.id : null,
+            index: createdIndex,
+            nextSnapshot: createdPatch,
+          }));
           setReactiveGrassPatchSelection(draft, createdIndex);
         }
         draft.interaction.reactiveGrassPlacementDrag = null;
@@ -7045,6 +7104,7 @@ if (event.shiftKey) {
       if (!timelineEntry) {
         const entry = undoTileEdit(doc, draft.history);
         applyHistoryObjectMutationState(draft, entry, "undo");
+        applyReactiveGrassHistorySelection(draft, entry, "undo");
         appendSoundDebugEvent("Undo handled", historyEntryContainsObjectLayer(entry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
         return;
       }
@@ -7085,6 +7145,7 @@ if (event.shiftKey) {
       if (entry?.globalActionId === timelineEntry.actionId) {
         const undoneEntry = undoTileEdit(doc, draft.history);
         applyHistoryObjectMutationState(draft, undoneEntry, "undo");
+        applyReactiveGrassHistorySelection(draft, undoneEntry, "undo");
         markGlobalHistoryActionUndone(globalHistoryTimeline, timelineEntry.actionId);
         appendSoundDebugEvent("Undo handled", historyEntryContainsObjectLayer(undoneEntry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
       }
@@ -7101,6 +7162,7 @@ if (event.shiftKey) {
       if (!timelineEntry) {
         const entry = redoTileEdit(doc, draft.history);
         applyHistoryObjectMutationState(draft, entry, "redo");
+        applyReactiveGrassHistorySelection(draft, entry, "redo");
         appendSoundDebugEvent("Redo handled", historyEntryContainsObjectLayer(entry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
         return;
       }
@@ -7141,6 +7203,7 @@ if (event.shiftKey) {
       if (entry?.globalActionId === timelineEntry.actionId) {
         const redoneEntry = redoTileEdit(doc, draft.history);
         applyHistoryObjectMutationState(draft, redoneEntry, "redo");
+        applyReactiveGrassHistorySelection(draft, redoneEntry, "redo");
         markGlobalHistoryActionRedone(globalHistoryTimeline, timelineEntry.actionId);
         appendSoundDebugEvent("Redo handled", historyEntryContainsObjectLayer(redoneEntry) ? "history entry touched object layer" : "history entry touched non-object data", beforeSnapshot, createSoundDebugSnapshot(draft));
       }
