@@ -21,12 +21,17 @@ function applySpawnOverrideToLevelDocument(levelDocument, spawnOverride = null) 
     return cloned;
   }
 
+  const normalizedX = x | 0;
+  const normalizedY = y | 0;
+  if (!cloned.world || typeof cloned.world !== "object") {
+    cloned.world = {};
+  }
+  cloned.world.spawn = { x: normalizedX, y: normalizedY };
+
   if (!Array.isArray(cloned.entities)) {
     cloned.entities = [];
   }
 
-  const normalizedX = x | 0;
-  const normalizedY = y | 0;
   const spawnEntity = cloned.entities.find((entity) => String(entity?.type || "").trim().toLowerCase() === "player-spawn");
   if (spawnEntity && typeof spawnEntity === "object") {
     spawnEntity.x = normalizedX;
@@ -86,6 +91,13 @@ export function launchEditorPlayRuntime({
   writeEditorPlaySessionPayload({ runtimeLevel, spawnOverride, sessionStorageRef });
 
   const runtimeUrl = buildRechargedRuntimeUrl({ levelDocument, spawnOverride });
+  const spawnX = Number.isFinite(Number(spawnOverride?.x)) ? (Number(spawnOverride.x) | 0) : null;
+  const spawnY = Number.isFinite(Number(spawnOverride?.y)) ? (Number(spawnOverride.y) | 0) : null;
+  console.info("[Editor V2] Play From Here launch", {
+    rechargedUrl: runtimeUrl.href,
+    spawn: { x: spawnX, y: spawnY },
+    handoff: "blob-url+sessionStorage",
+  });
   const win = typeof openFn === "function" ? openFn(runtimeUrl.href, "_blank") : null;
 
   if (!win && typeof globalThis?.location?.assign === "function") {

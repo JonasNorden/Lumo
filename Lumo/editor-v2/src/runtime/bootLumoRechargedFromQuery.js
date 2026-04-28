@@ -2,7 +2,7 @@ import { createLumoRechargedBootAdapter } from "./createLumoRechargedBootAdapter
 import { loadLevelDocument as loadRuntimeLevelDocument } from "./loadLevelDocument.js";
 
 const DEFAULT_LEVEL_URL = "editor-v2/src/data/testLevelDocument.v1.json";
-const VALID_LEVEL_QUERY_PROTOCOLS = new Set(["http:", "https:", ""]);
+const VALID_LEVEL_QUERY_PROTOCOLS = new Set(["http:", "https:", "blob:", ""]);
 const DEFAULT_AUTOPLAY_STEPS = 4;
 
 function createBaseResult(overrides = {}) {
