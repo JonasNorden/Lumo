@@ -57,6 +57,8 @@ export function createEditorState() {
       selectedSoundIndex: null,
       selectedSoundIds: [],
       selectedSoundId: null,
+      selectedReactiveGrassPatchIndex: null,
+      selectedReactiveGrassPatchId: null,
       dragPaint: null,
       rectDrag: null,
       lineDrag: null,
