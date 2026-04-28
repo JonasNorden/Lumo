@@ -5456,14 +5456,42 @@ export function createEditorApp({
   };
 
   const isHexColor = (input) => typeof input === "string" && /^#[\da-f]{6}$/i.test(input.trim());
+  const REACTIVE_GRASS_NUMERIC_RULES = Object.freeze({
+    width: { min: 8, max: 2000, integer: false },
+    density: { min: 1, max: 2000, integer: true },
+    heightMin: { min: 1, max: 300, integer: false },
+    heightMax: { min: 1, max: 400, integer: false },
+    heightVariation: { min: 0, max: 3, integer: false },
+    seed: { min: 1, max: 999999999, integer: true },
+  });
 
   const normalizeReactiveGrassColor = (colorValue, fallbackColor) => {
     if (isHexColor(colorValue)) return colorValue.trim().toLowerCase();
     return fallbackColor;
   };
 
+  const parseReactiveGrassNumericValue = (field, value, patch) => {
+    const rule = REACTIVE_GRASS_NUMERIC_RULES[field];
+    if (!rule) return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return null;
+    if (rule.integer && !Number.isInteger(parsed)) return null;
+    if (parsed < rule.min || parsed > rule.max) return null;
+    if (field === "heightMin") {
+      const currentMax = Number.isFinite(patch?.heightMax) ? Number(patch.heightMax) : rule.max;
+      if (parsed > currentMax) return null;
+    }
+    if (field === "heightMax") {
+      const currentMin = Number.isFinite(patch?.heightMin) ? Number(patch.heightMin) : rule.min;
+      if (parsed < currentMin) return null;
+    }
+    return rule.integer ? Math.round(parsed) : parsed;
+  };
+
   const updateReactiveGrassPatch = (field, value, options = {}) => {
-    if (field !== "baseColor" && field !== "topColor") return;
+    const supportsColor = field === "baseColor" || field === "topColor";
+    const supportsNumeric = Object.prototype.hasOwnProperty.call(REACTIVE_GRASS_NUMERIC_RULES, field);
+    if (!supportsColor && !supportsNumeric) return;
 
     store.setState((draft) => {
       const patches = Array.isArray(draft.document.active?.reactiveGrassPatches)
@@ -5488,11 +5516,17 @@ export function createEditorApp({
       const patch = patches[resolvedPatchIndex];
       if (!patch || typeof patch !== "object") return;
 
-      const fallbackColor = field === "baseColor" ? "#12391f" : "#7fd66b";
-      const nextColor = normalizeReactiveGrassColor(value, fallbackColor);
-      if (patch[field] === nextColor) return;
       const previousPatch = { ...patch };
-      patch[field] = nextColor;
+      if (supportsColor) {
+        const fallbackColor = field === "baseColor" ? "#12391f" : "#7fd66b";
+        const nextColor = normalizeReactiveGrassColor(value, fallbackColor);
+        if (patch[field] === nextColor) return;
+        patch[field] = nextColor;
+      } else {
+        const nextNumber = parseReactiveGrassNumericValue(field, value, patch);
+        if (nextNumber === null || Object.is(Number(patch[field]), nextNumber)) return;
+        patch[field] = nextNumber;
+      }
       pushHistoryEntry(draft.history, createReactiveGrassEditEntry("update", {
         objectId: typeof patch.id === "string" ? patch.id : null,
         index: resolvedPatchIndex,
