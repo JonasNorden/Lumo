@@ -16,6 +16,8 @@ import { stopNativeInputKeyboardPropagation } from "./nativeInputGuards.js";
 
 const MIXED_FIELD_VALUE = "__mixed__";
 const FLOWER_DECOR_TYPE = "decor_flower_01";
+const FALLBACK_REACTIVE_GRASS_BASE_COLOR = "#12391f";
+const FALLBACK_REACTIVE_GRASS_TOP_COLOR = "#7fd66b";
 
 function escapeHtml(value) {
   return String(value)
@@ -802,9 +804,34 @@ function formatReadOnlyValue(value) {
 
 function renderReadOnlyField(label, value) {
   return `
-    <label class="fieldRow fieldRowCompact selectionInlineField isReadOnly">
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionReadOnlyField isReadOnly">
       <span class="label">${escapeHtml(label)}</span>
-      <output class="value">${escapeHtml(formatReadOnlyValue(value))}</output>
+      <output class="selectionValueChip">${escapeHtml(formatReadOnlyValue(value))}</output>
+    </label>
+  `;
+}
+
+function isValidHexColor(value) {
+  return typeof value === "string" && /^#[\da-f]{6}$/i.test(value.trim());
+}
+
+function normalizeHexColor(value, fallbackColor) {
+  if (isValidHexColor(value)) return value.trim().toLowerCase();
+  return fallbackColor;
+}
+
+function renderReactiveGrassColorField(label, field, value, fallbackColor) {
+  const normalizedColor = normalizeHexColor(value, fallbackColor);
+  return `
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionReactiveGrassColorField">
+      <span class="label">${escapeHtml(label)}</span>
+      <input
+        type="color"
+        value="${escapeHtml(normalizedColor)}"
+        data-reactive-grass-field="${escapeHtml(field)}"
+        aria-label="${escapeHtml(label)} color"
+      />
+      <output class="selectionValueChip">${escapeHtml(normalizedColor)}</output>
     </label>
   `;
 }
@@ -813,7 +840,7 @@ function renderReactiveGrassPatchInspector(patch) {
   return renderSelectionFields([
     `<div class="statusCard assetSelectionCard assetSelectionCardCompact">
       <div class="assetSelectionMeta">
-        <span class="statusCardMeta">Reactive Grass Patch · Read-only authored data</span>
+        <span class="statusCardMeta">Reactive Grass Patch · Authored data</span>
       </div>
     </div>`,
     renderReadOnlyField("id", patch?.id),
@@ -826,8 +853,8 @@ function renderReactiveGrassPatchInspector(patch) {
     renderReadOnlyField("heightMax", patch?.heightMax),
     renderReadOnlyField("heightProfile", patch?.heightProfile),
     renderReadOnlyField("heightVariation", patch?.heightVariation),
-    renderReadOnlyField("baseColor", patch?.baseColor),
-    renderReadOnlyField("topColor", patch?.topColor),
+    renderReactiveGrassColorField("baseColor", "baseColor", patch?.baseColor, FALLBACK_REACTIVE_GRASS_BASE_COLOR),
+    renderReactiveGrassColorField("topColor", "topColor", patch?.topColor, FALLBACK_REACTIVE_GRASS_TOP_COLOR),
     renderReadOnlyField("variant", patch?.variant),
     renderReadOnlyField("seed", patch?.seed),
   ].join(""));
@@ -1011,7 +1038,7 @@ export function renderSelectionEditorPanel(panel, state, options = {}) {
 }
 
 export function bindSelectionEditorPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onSoundUpdate } = options;
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate } = options;
   let numberStepperSession = null;
   const getEditorPane = () => panel.querySelector("[data-bottom-panel-editor]");
 
@@ -1084,6 +1111,18 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
   const onChange = (event) => {
     const target = event.target;
     if (!isTextInputElement(target) && !isSelectElement(target)) return;
+
+    if (isTextInputElement(target)) {
+      const reactiveGrassField = target.dataset.reactiveGrassField;
+      if (reactiveGrassField === "baseColor" || reactiveGrassField === "topColor") {
+        const patchId = typeof store?.getState === "function"
+          ? store.getState()?.interaction?.selectedReactiveGrassPatchId
+          : null;
+        onReactiveGrassPatchUpdate?.(reactiveGrassField, target.value, { patchId });
+        clearInputDraft(target);
+        return;
+      }
+    }
 
     if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) {
       clearInputDraft(target);
