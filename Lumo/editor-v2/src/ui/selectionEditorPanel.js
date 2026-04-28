@@ -18,6 +18,14 @@ const MIXED_FIELD_VALUE = "__mixed__";
 const FLOWER_DECOR_TYPE = "decor_flower_01";
 const FALLBACK_REACTIVE_GRASS_BASE_COLOR = "#12391f";
 const FALLBACK_REACTIVE_GRASS_TOP_COLOR = "#7fd66b";
+const REACTIVE_GRASS_NUMERIC_FIELD_CONFIG = Object.freeze({
+  width: { min: 8, max: 2000, integer: false, inputMode: "decimal" },
+  density: { min: 1, max: 2000, integer: true, inputMode: "numeric" },
+  heightMin: { min: 1, max: 300, integer: false, inputMode: "decimal" },
+  heightMax: { min: 1, max: 400, integer: false, inputMode: "decimal" },
+  heightVariation: { min: 0, max: 3, integer: false, inputMode: "decimal" },
+  seed: { min: 1, max: 999999999, integer: true, inputMode: "numeric" },
+});
 
 function escapeHtml(value) {
   return String(value)
@@ -81,6 +89,9 @@ function buildTrackedDataset(target) {
     "soundParamKey",
     "soundParamPath",
     "soundParamType",
+    "reactiveGrassField",
+    "reactiveGrassId",
+    "reactiveGrassEditable",
   ];
 
   const dataset = {};
@@ -836,7 +847,31 @@ function renderReactiveGrassColorField(label, field, value, fallbackColor) {
   `;
 }
 
+function renderReactiveGrassNumberField(label, field, value, patchId) {
+  const config = REACTIVE_GRASS_NUMERIC_FIELD_CONFIG[field];
+  if (!config) {
+    return renderReadOnlyField(label, value);
+  }
+  const normalizedValue = Number.isFinite(value) ? String(value) : "";
+  return `
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
+      <span class="label">${escapeHtml(label)}</span>
+      <input
+        type="text"
+        value="${escapeHtml(normalizedValue)}"
+        inputmode="${escapeHtml(config.inputMode)}"
+        data-reactive-grass-field="${escapeHtml(field)}"
+        data-reactive-grass-id="${escapeHtml(patchId || "")}"
+        data-reactive-grass-editable="number"
+        data-reactive-grass-committed-value="${escapeHtml(normalizedValue)}"
+        aria-label="${escapeHtml(label)}"
+      />
+    </label>
+  `;
+}
+
 function renderReactiveGrassPatchInspector(patch) {
+  const patchId = typeof patch?.id === "string" ? patch.id : "";
   return renderSelectionFields([
     `<div class="statusCard assetSelectionCard assetSelectionCardCompact">
       <div class="assetSelectionMeta">
@@ -847,16 +882,16 @@ function renderReactiveGrassPatchInspector(patch) {
     renderReadOnlyField("kind", patch?.kind),
     renderReadOnlyField("x", patch?.x),
     renderReadOnlyField("y", patch?.y),
-    renderReadOnlyField("width", patch?.width),
-    renderReadOnlyField("density", patch?.density),
-    renderReadOnlyField("heightMin", patch?.heightMin),
-    renderReadOnlyField("heightMax", patch?.heightMax),
+    renderReactiveGrassNumberField("width", "width", patch?.width, patchId),
+    renderReactiveGrassNumberField("density", "density", patch?.density, patchId),
+    renderReactiveGrassNumberField("heightMin", "heightMin", patch?.heightMin, patchId),
+    renderReactiveGrassNumberField("heightMax", "heightMax", patch?.heightMax, patchId),
     renderReadOnlyField("heightProfile", patch?.heightProfile),
-    renderReadOnlyField("heightVariation", patch?.heightVariation),
+    renderReactiveGrassNumberField("heightVariation", "heightVariation", patch?.heightVariation, patchId),
     renderReactiveGrassColorField("baseColor", "baseColor", patch?.baseColor, FALLBACK_REACTIVE_GRASS_BASE_COLOR),
     renderReactiveGrassColorField("topColor", "topColor", patch?.topColor, FALLBACK_REACTIVE_GRASS_TOP_COLOR),
     renderReadOnlyField("variant", patch?.variant),
-    renderReadOnlyField("seed", patch?.seed),
+    renderReactiveGrassNumberField("seed", "seed", patch?.seed, patchId),
   ].join(""));
 }
 
@@ -1041,6 +1076,78 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
   const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate } = options;
   let numberStepperSession = null;
   const getEditorPane = () => panel.querySelector("[data-bottom-panel-editor]");
+  const getSelectedReactiveGrassPatch = (patchId) => {
+    if (typeof store?.getState !== "function") return null;
+    const state = store.getState();
+    const patches = Array.isArray(state?.document?.active?.reactiveGrassPatches)
+      ? state.document.active.reactiveGrassPatches
+      : [];
+    if (typeof patchId === "string" && patchId.trim()) {
+      return patches.find((patch) => patch?.id === patchId.trim()) || null;
+    }
+    const selectedPatchId = typeof state?.interaction?.selectedReactiveGrassPatchId === "string" && state.interaction.selectedReactiveGrassPatchId.trim()
+      ? state.interaction.selectedReactiveGrassPatchId.trim()
+      : null;
+    if (selectedPatchId) return patches.find((patch) => patch?.id === selectedPatchId) || null;
+    const selectedPatchIndex = Number.isInteger(state?.interaction?.selectedReactiveGrassPatchIndex)
+      ? state.interaction.selectedReactiveGrassPatchIndex
+      : -1;
+    return selectedPatchIndex >= 0 ? patches[selectedPatchIndex] || null : null;
+  };
+
+  const parseReactiveGrassNumericValue = (field, rawValue, patchSnapshot) => {
+    const config = REACTIVE_GRASS_NUMERIC_FIELD_CONFIG[field];
+    if (!config || typeof rawValue !== "string") return null;
+    const trimmed = rawValue.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed)) return null;
+    if (config.integer && !Number.isInteger(parsed)) return null;
+    if (parsed < config.min || parsed > config.max) return null;
+    if (field === "heightMin") {
+      const siblingMax = Number.isFinite(patchSnapshot?.heightMax) ? Number(patchSnapshot.heightMax) : config.max;
+      if (parsed > siblingMax) return null;
+    }
+    if (field === "heightMax") {
+      const siblingMin = Number.isFinite(patchSnapshot?.heightMin) ? Number(patchSnapshot.heightMin) : config.min;
+      if (parsed < siblingMin) return null;
+    }
+    return config.integer ? Math.round(parsed) : parsed;
+  };
+
+  const restoreReactiveGrassInputValue = (input, nextValue) => {
+    const displayValue = Number.isFinite(nextValue) ? String(nextValue) : "";
+    input.value = displayValue;
+    input.dataset.reactiveGrassCommittedValue = displayValue;
+  };
+
+  const commitReactiveGrassNumericInput = (input) => {
+    if (!isTextInputElement(input) || input.dataset.reactiveGrassEditable !== "number") return false;
+    const field = input.dataset.reactiveGrassField;
+    if (!field || !REACTIVE_GRASS_NUMERIC_FIELD_CONFIG[field]) return false;
+    const patchId = typeof input.dataset.reactiveGrassId === "string" && input.dataset.reactiveGrassId.trim()
+      ? input.dataset.reactiveGrassId.trim()
+      : null;
+    const patchSnapshot = getSelectedReactiveGrassPatch(patchId);
+    if (!patchSnapshot) return false;
+
+    const previousValue = Number(patchSnapshot[field]);
+    const parsedValue = parseReactiveGrassNumericValue(field, input.value, patchSnapshot);
+    if (parsedValue === null) {
+      restoreReactiveGrassInputValue(input, previousValue);
+      clearInputDraft(input);
+      return true;
+    }
+    if (Object.is(parsedValue, previousValue)) {
+      restoreReactiveGrassInputValue(input, previousValue);
+      clearInputDraft(input);
+      return true;
+    }
+    onReactiveGrassPatchUpdate?.(field, parsedValue, { patchId });
+    input.dataset.reactiveGrassCommittedValue = String(parsedValue);
+    clearInputDraft(input);
+    return true;
+  };
 
   const updateInputDraft = (target) => {
     if (!isDraftableInput(target)) return;
@@ -1113,6 +1220,9 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     if (!isTextInputElement(target) && !isSelectElement(target)) return;
 
     if (isTextInputElement(target)) {
+      if (target.dataset.reactiveGrassEditable === "number") {
+        if (commitReactiveGrassNumericInput(target)) return;
+      }
       const reactiveGrassField = target.dataset.reactiveGrassField;
       if (reactiveGrassField === "baseColor" || reactiveGrassField === "topColor") {
         const patchId = typeof store?.getState === "function"
@@ -1192,6 +1302,23 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
   const onKeyDown = (event) => {
     const target = event.target;
     if (!isTextInputElement(target)) return;
+    if (target.dataset.reactiveGrassEditable === "number") {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        commitReactiveGrassNumericInput(target);
+        target.blur();
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        const committedValue = target.dataset.reactiveGrassCommittedValue;
+        target.value = typeof committedValue === "string" ? committedValue : "";
+        clearInputDraft(target);
+        target.blur();
+        return;
+      }
+      return;
+    }
     if (target.dataset.numberCommit !== "deferred") return;
 
     if (event.key === "Enter") {
