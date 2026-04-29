@@ -18,12 +18,28 @@ const MIXED_FIELD_VALUE = "__mixed__";
 const FLOWER_DECOR_TYPE = "decor_flower_01";
 const FALLBACK_REACTIVE_GRASS_BASE_COLOR = "#12391f";
 const FALLBACK_REACTIVE_GRASS_TOP_COLOR = "#7fd66b";
+const FALLBACK_REACTIVE_BLOOM_STEM_COLOR = "#5f8f42";
+const FALLBACK_REACTIVE_BLOOM_PETAL_INNER_COLOR = "#f4a9ff";
+const FALLBACK_REACTIVE_BLOOM_PETAL_OUTER_COLOR = "#d86dff";
+const FALLBACK_REACTIVE_BLOOM_CORE_COLOR = "#fff4a3";
 const REACTIVE_GRASS_NUMERIC_FIELD_CONFIG = Object.freeze({
   width: { min: 8, max: 2000, integer: false, inputMode: "decimal" },
   density: { min: 1, max: 2000, integer: true, inputMode: "numeric" },
   heightMin: { min: 1, max: 300, integer: false, inputMode: "decimal" },
   heightMax: { min: 1, max: 400, integer: false, inputMode: "decimal" },
   heightVariation: { min: 0, max: 3, integer: false, inputMode: "decimal" },
+  seed: { min: 1, max: 999999999, integer: true, inputMode: "numeric" },
+});
+const REACTIVE_BLOOM_NUMERIC_FIELD_CONFIG = Object.freeze({
+  clusterCount: { min: 1, max: 32, integer: true, inputMode: "numeric" },
+  width: { min: 8, max: 2000, integer: false, inputMode: "decimal" },
+  heightMin: { min: 1, max: 300, integer: false, inputMode: "decimal" },
+  heightMax: { min: 1, max: 400, integer: false, inputMode: "decimal" },
+  triggerRadius: { min: 8, max: 800, integer: false, inputMode: "decimal" },
+  auraSensitivity: { min: 0.1, max: 5, integer: false, inputMode: "decimal" },
+  openSpeed: { min: 0.1, max: 5, integer: false, inputMode: "decimal" },
+  closeDelayMs: { min: 0, max: 10000, integer: true, inputMode: "numeric" },
+  closeSpeed: { min: 0.1, max: 5, integer: false, inputMode: "decimal" },
   seed: { min: 1, max: 999999999, integer: true, inputMode: "numeric" },
 });
 
@@ -831,15 +847,16 @@ function normalizeHexColor(value, fallbackColor) {
   return fallbackColor;
 }
 
-function renderReactiveGrassColorField(label, field, value, fallbackColor) {
+function renderReactiveGrassColorField(label, field, value, fallbackColor, patchType = "reactive-grass") {
   const normalizedColor = normalizeHexColor(value, fallbackColor);
+  const fieldAttr = patchType === "reactive-bloom" ? "data-reactive-bloom-field" : "data-reactive-grass-field";
   return `
     <label class="fieldRow fieldRowCompact selectionInlineField selectionReactiveGrassColorField">
       <span class="label">${escapeHtml(label)}</span>
       <input
         type="color"
         value="${escapeHtml(normalizedColor)}"
-        data-reactive-grass-field="${escapeHtml(field)}"
+        ${fieldAttr}="${escapeHtml(field)}"
         aria-label="${escapeHtml(label)} color"
       />
       <output class="selectionValueChip">${escapeHtml(normalizedColor)}</output>
@@ -847,12 +864,13 @@ function renderReactiveGrassColorField(label, field, value, fallbackColor) {
   `;
 }
 
-function renderReactiveGrassNumberField(label, field, value, patchId) {
-  const config = REACTIVE_GRASS_NUMERIC_FIELD_CONFIG[field];
+function renderReactiveGrassNumberField(label, field, value, patchId, patchType = "reactive-grass") {
+  const config = patchType === "reactive-bloom" ? REACTIVE_BLOOM_NUMERIC_FIELD_CONFIG[field] : REACTIVE_GRASS_NUMERIC_FIELD_CONFIG[field];
   if (!config) {
     return renderReadOnlyField(label, value);
   }
   const normalizedValue = Number.isFinite(value) ? String(value) : "";
+  const prefix = patchType === "reactive-bloom" ? "reactive-bloom" : "reactive-grass";
   return `
     <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
       <span class="label">${escapeHtml(label)}</span>
@@ -860,10 +878,10 @@ function renderReactiveGrassNumberField(label, field, value, patchId) {
         type="text"
         value="${escapeHtml(normalizedValue)}"
         inputmode="${escapeHtml(config.inputMode)}"
-        data-reactive-grass-field="${escapeHtml(field)}"
-        data-reactive-grass-id="${escapeHtml(patchId || "")}"
-        data-reactive-grass-editable="number"
-        data-reactive-grass-committed-value="${escapeHtml(normalizedValue)}"
+        data-${prefix}-field="${escapeHtml(field)}"
+        data-${prefix}-id="${escapeHtml(patchId || "")}"
+        data-${prefix}-editable="number"
+        data-${prefix}-committed-value="${escapeHtml(normalizedValue)}"
         aria-label="${escapeHtml(label)}"
       />
     </label>
@@ -897,31 +915,32 @@ function renderReactiveGrassPatchInspector(patch) {
 
 
 function renderReactiveBloomPatchInspector(patch) {
+  const patchId = typeof patch?.id === "string" ? patch.id : "";
   return renderSelectionFields([
     `<div class="statusCard assetSelectionCard assetSelectionCardCompact">
       <div class="assetSelectionMeta">
-        <span class="statusCardMeta">Reactive Bloom Patch · Authored data (read-only)</span>
+        <span class="statusCardMeta">Reactive Bloom Patch · Authored data</span>
       </div>
     </div>`,
     renderReadOnlyField("id", patch?.id),
     renderReadOnlyField("kind", patch?.kind),
     renderReadOnlyField("x", patch?.x),
     renderReadOnlyField("y", patch?.y),
-    renderReadOnlyField("clusterCount", patch?.clusterCount),
-    renderReadOnlyField("width", patch?.width),
-    renderReadOnlyField("heightMin", patch?.heightMin),
-    renderReadOnlyField("heightMax", patch?.heightMax),
-    renderReadOnlyField("triggerRadius", patch?.triggerRadius),
-    renderReadOnlyField("auraSensitivity", patch?.auraSensitivity),
-    renderReadOnlyField("openSpeed", patch?.openSpeed),
-    renderReadOnlyField("closeDelayMs", patch?.closeDelayMs),
-    renderReadOnlyField("closeSpeed", patch?.closeSpeed),
-    renderReadOnlyField("stemColor", patch?.stemColor),
-    renderReadOnlyField("petalInnerColor", patch?.petalInnerColor),
-    renderReadOnlyField("petalOuterColor", patch?.petalOuterColor),
-    renderReadOnlyField("coreColor", patch?.coreColor),
+    renderReactiveGrassNumberField("clusterCount", "clusterCount", patch?.clusterCount, patchId, "reactive-bloom"),
+    renderReactiveGrassNumberField("width", "width", patch?.width, patchId, "reactive-bloom"),
+    renderReactiveGrassNumberField("heightMin", "heightMin", patch?.heightMin, patchId, "reactive-bloom"),
+    renderReactiveGrassNumberField("heightMax", "heightMax", patch?.heightMax, patchId, "reactive-bloom"),
+    renderReactiveGrassNumberField("triggerRadius", "triggerRadius", patch?.triggerRadius, patchId, "reactive-bloom"),
+    renderReactiveGrassNumberField("auraSensitivity", "auraSensitivity", patch?.auraSensitivity, patchId, "reactive-bloom"),
+    renderReactiveGrassNumberField("openSpeed", "openSpeed", patch?.openSpeed, patchId, "reactive-bloom"),
+    renderReactiveGrassNumberField("closeDelayMs", "closeDelayMs", patch?.closeDelayMs, patchId, "reactive-bloom"),
+    renderReactiveGrassNumberField("closeSpeed", "closeSpeed", patch?.closeSpeed, patchId, "reactive-bloom"),
+    renderReactiveGrassColorField("stemColor", "stemColor", patch?.stemColor, FALLBACK_REACTIVE_BLOOM_STEM_COLOR, "reactive-bloom"),
+    renderReactiveGrassColorField("petalInnerColor", "petalInnerColor", patch?.petalInnerColor, FALLBACK_REACTIVE_BLOOM_PETAL_INNER_COLOR, "reactive-bloom"),
+    renderReactiveGrassColorField("petalOuterColor", "petalOuterColor", patch?.petalOuterColor, FALLBACK_REACTIVE_BLOOM_PETAL_OUTER_COLOR, "reactive-bloom"),
+    renderReactiveGrassColorField("coreColor", "coreColor", patch?.coreColor, FALLBACK_REACTIVE_BLOOM_CORE_COLOR, "reactive-bloom"),
     renderReadOnlyField("variant", patch?.variant),
-    renderReadOnlyField("seed", patch?.seed),
+    renderReactiveGrassNumberField("seed", "seed", patch?.seed, patchId, "reactive-bloom"),
   ].join(""));
 }
 
@@ -1111,7 +1130,7 @@ export function renderSelectionEditorPanel(panel, state, options = {}) {
 }
 
 export function bindSelectionEditorPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate } = options;
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate, onReactiveBloomPatchUpdate } = options;
   let numberStepperSession = null;
   const getEditorPane = () => panel.querySelector("[data-bottom-panel-editor]");
   const getSelectedReactiveGrassPatch = (patchId) => {
@@ -1130,6 +1149,16 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const selectedPatchIndex = Number.isInteger(state?.interaction?.selectedReactiveGrassPatchIndex)
       ? state.interaction.selectedReactiveGrassPatchIndex
       : -1;
+    return selectedPatchIndex >= 0 ? patches[selectedPatchIndex] || null : null;
+  };
+  const getSelectedReactiveBloomPatch = (patchId) => {
+    if (typeof store?.getState !== "function") return null;
+    const state = store.getState();
+    const patches = Array.isArray(state?.document?.active?.reactiveBloomPatches) ? state.document.active.reactiveBloomPatches : [];
+    if (typeof patchId === "string" && patchId.trim()) return patches.find((patch) => patch?.id === patchId.trim()) || null;
+    const selectedPatchId = typeof state?.interaction?.selectedReactiveBloomPatchId === "string" && state.interaction.selectedReactiveBloomPatchId.trim() ? state.interaction.selectedReactiveBloomPatchId.trim() : null;
+    if (selectedPatchId) return patches.find((patch) => patch?.id === selectedPatchId) || null;
+    const selectedPatchIndex = Number.isInteger(state?.interaction?.selectedReactiveBloomPatchIndex) ? state.interaction.selectedReactiveBloomPatchIndex : -1;
     return selectedPatchIndex >= 0 ? patches[selectedPatchIndex] || null : null;
   };
 
@@ -1183,6 +1212,37 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     }
     onReactiveGrassPatchUpdate?.(field, parsedValue, { patchId });
     input.dataset.reactiveGrassCommittedValue = String(parsedValue);
+    clearInputDraft(input);
+    return true;
+  };
+  const parseReactiveBloomNumericValue = (field, rawValue, patchSnapshot) => {
+    const config = REACTIVE_BLOOM_NUMERIC_FIELD_CONFIG[field];
+    if (!config || typeof rawValue !== "string") return null;
+    const trimmed = rawValue.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || (config.integer && !Number.isInteger(parsed))) return null;
+    if (parsed < config.min || parsed > config.max) return null;
+    if (field === "heightMin" && parsed > Number(patchSnapshot?.heightMax)) return null;
+    if (field === "heightMax" && parsed < Number(patchSnapshot?.heightMin)) return null;
+    return config.integer ? Math.round(parsed) : parsed;
+  };
+  const commitReactiveBloomNumericInput = (input) => {
+    if (!isTextInputElement(input) || input.dataset.reactiveBloomEditable !== "number") return false;
+    const field = input.dataset.reactiveBloomField;
+    if (!field || !REACTIVE_BLOOM_NUMERIC_FIELD_CONFIG[field]) return false;
+    const patchId = typeof input.dataset.reactiveBloomId === "string" && input.dataset.reactiveBloomId.trim() ? input.dataset.reactiveBloomId.trim() : null;
+    const patchSnapshot = getSelectedReactiveBloomPatch(patchId);
+    if (!patchSnapshot) return false;
+    const previousValue = Number(patchSnapshot[field]);
+    const parsedValue = parseReactiveBloomNumericValue(field, input.value, patchSnapshot);
+    if (parsedValue === null || Object.is(parsedValue, previousValue)) {
+      restoreReactiveGrassInputValue(input, previousValue);
+      clearInputDraft(input);
+      return true;
+    }
+    onReactiveBloomPatchUpdate?.(field, parsedValue, { patchId });
+    input.dataset.reactiveBloomCommittedValue = String(parsedValue);
     clearInputDraft(input);
     return true;
   };
@@ -1261,12 +1321,22 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       if (target.dataset.reactiveGrassEditable === "number") {
         if (commitReactiveGrassNumericInput(target)) return;
       }
+      if (target.dataset.reactiveBloomEditable === "number") {
+        if (commitReactiveBloomNumericInput(target)) return;
+      }
       const reactiveGrassField = target.dataset.reactiveGrassField;
       if (reactiveGrassField === "baseColor" || reactiveGrassField === "topColor") {
         const patchId = typeof store?.getState === "function"
           ? store.getState()?.interaction?.selectedReactiveGrassPatchId
           : null;
         onReactiveGrassPatchUpdate?.(reactiveGrassField, target.value, { patchId });
+        clearInputDraft(target);
+        return;
+      }
+      const reactiveBloomField = target.dataset.reactiveBloomField;
+      if (reactiveBloomField === "stemColor" || reactiveBloomField === "petalInnerColor" || reactiveBloomField === "petalOuterColor" || reactiveBloomField === "coreColor") {
+        const patchId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedReactiveBloomPatchId : null;
+        onReactiveBloomPatchUpdate?.(reactiveBloomField, target.value, { patchId });
         clearInputDraft(target);
         return;
       }
@@ -1351,6 +1421,22 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
         event.preventDefault();
         const committedValue = target.dataset.reactiveGrassCommittedValue;
         target.value = typeof committedValue === "string" ? committedValue : "";
+        clearInputDraft(target);
+        target.blur();
+        return;
+      }
+      return;
+    }
+    if (target.dataset.reactiveBloomEditable === "number") {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        commitReactiveBloomNumericInput(target);
+        target.blur();
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        target.value = typeof target.dataset.reactiveBloomCommittedValue === "string" ? target.dataset.reactiveBloomCommittedValue : "";
         clearInputDraft(target);
         target.blur();
         return;
