@@ -66,6 +66,7 @@ import { getFloodFillCells } from "../domain/tiles/floodFill.js";
 import {
   createEntityEditEntry,
   createDecorEditEntry,
+  createReactiveBloomEditEntry,
   createReactiveGrassEditEntry,
   createSizedPlacementEditEntry,
   createTileEditEntry,
@@ -5485,6 +5486,18 @@ export function createEditorApp({
     heightVariation: { min: 0, max: 3, integer: false },
     seed: { min: 1, max: 999999999, integer: true },
   });
+  const REACTIVE_BLOOM_NUMERIC_RULES = Object.freeze({
+    clusterCount: { min: 1, max: 32, integer: true },
+    width: { min: 8, max: 2000, integer: false },
+    heightMin: { min: 1, max: 300, integer: false },
+    heightMax: { min: 1, max: 400, integer: false },
+    triggerRadius: { min: 8, max: 800, integer: false },
+    auraSensitivity: { min: 0.1, max: 5, integer: false },
+    openSpeed: { min: 0.1, max: 5, integer: false },
+    closeDelayMs: { min: 0, max: 10000, integer: true },
+    closeSpeed: { min: 0.1, max: 5, integer: false },
+    seed: { min: 1, max: 999999999, integer: true },
+  });
 
   const normalizeReactiveGrassColor = (colorValue, fallbackColor) => {
     if (isHexColor(colorValue)) return colorValue.trim().toLowerCase();
@@ -5549,6 +5562,48 @@ export function createEditorApp({
         patch[field] = nextNumber;
       }
       pushHistoryEntry(draft.history, createReactiveGrassEditEntry("update", {
+        objectId: typeof patch.id === "string" ? patch.id : null,
+        index: resolvedPatchIndex,
+        previousSnapshot: previousPatch,
+        nextSnapshot: { ...patch },
+      }));
+    });
+  };
+  const parseReactiveBloomNumericValue = (field, value, patch) => {
+    const rule = REACTIVE_BLOOM_NUMERIC_RULES[field];
+    if (!rule) return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || (rule.integer && !Number.isInteger(parsed))) return null;
+    if (parsed < rule.min || parsed > rule.max) return null;
+    if (field === "heightMin" && parsed > Number(patch?.heightMax)) return null;
+    if (field === "heightMax" && parsed < Number(patch?.heightMin)) return null;
+    return rule.integer ? Math.round(parsed) : parsed;
+  };
+  const updateReactiveBloomPatch = (field, value, options = {}) => {
+    const supportsColor = field === "stemColor" || field === "petalInnerColor" || field === "petalOuterColor" || field === "coreColor";
+    const supportsNumeric = Object.prototype.hasOwnProperty.call(REACTIVE_BLOOM_NUMERIC_RULES, field);
+    if (!supportsColor && !supportsNumeric) return;
+    store.setState((draft) => {
+      const patches = Array.isArray(draft.document.active?.reactiveBloomPatches) ? draft.document.active.reactiveBloomPatches : null;
+      if (!patches?.length) return;
+      const selectedPatchId = typeof options.patchId === "string" && options.patchId.trim() ? options.patchId.trim() : typeof draft.interaction.selectedReactiveBloomPatchId === "string" && draft.interaction.selectedReactiveBloomPatchId.trim() ? draft.interaction.selectedReactiveBloomPatchId.trim() : null;
+      const selectedPatchIndex = Number.isInteger(draft.interaction.selectedReactiveBloomPatchIndex) ? draft.interaction.selectedReactiveBloomPatchIndex : -1;
+      const resolvedPatchIndex = selectedPatchId ? patches.findIndex((patch) => patch?.id === selectedPatchId) : selectedPatchIndex;
+      if (!Number.isInteger(resolvedPatchIndex) || resolvedPatchIndex < 0 || resolvedPatchIndex >= patches.length) return;
+      const patch = patches[resolvedPatchIndex];
+      if (!patch || typeof patch !== "object") return;
+      const previousPatch = { ...patch };
+      if (supportsColor) {
+        const fallback = "#ffffff";
+        const nextColor = normalizeReactiveGrassColor(value, fallback);
+        if (patch[field] === nextColor) return;
+        patch[field] = nextColor;
+      } else {
+        const nextNumber = parseReactiveBloomNumericValue(field, value, patch);
+        if (nextNumber === null || Object.is(Number(patch[field]), nextNumber)) return;
+        patch[field] = nextNumber;
+      }
+      pushHistoryEntry(draft.history, createReactiveBloomEditEntry("update", {
         objectId: typeof patch.id === "string" ? patch.id : null,
         index: resolvedPatchIndex,
         previousSnapshot: previousPatch,
@@ -8861,6 +8916,7 @@ if (event.shiftKey) {
     onDecorUpdate: updateDecor,
     onSoundUpdate: updateSound,
     onReactiveGrassPatchUpdate: updateReactiveGrassPatch,
+    onReactiveBloomPatchUpdate: updateReactiveBloomPatch,
     onScanUpdate: updateScanControl,
   };
   const unbindInspectorPanel = bindInspectorPanel(inspector, store, panelBindingOptions);
@@ -8870,6 +8926,7 @@ if (event.shiftKey) {
     onDecorUpdate: updateDecor,
     onSoundUpdate: updateSound,
     onReactiveGrassPatchUpdate: updateReactiveGrassPatch,
+    onReactiveBloomPatchUpdate: updateReactiveBloomPatch,
     onVolumeUpdate: updateVolume,
     onCanvasTargetChange: setActiveCanvasTarget,
     onLayerChange: setActiveLayerFromPanel,

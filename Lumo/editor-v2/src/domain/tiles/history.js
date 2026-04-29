@@ -48,6 +48,10 @@ function cloneReactiveGrassPatchSnapshot(patch) {
   return patch && typeof patch === "object" ? { ...patch } : null;
 }
 
+function cloneReactiveBloomPatchSnapshot(patch) {
+  return patch && typeof patch === "object" ? { ...patch } : null;
+}
+
 export function createReactiveGrassEditEntry(mode, payload = {}) {
   const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
   const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
@@ -56,6 +60,22 @@ export function createReactiveGrassEditEntry(mode, payload = {}) {
   const nextSnapshot = cloneReactiveGrassPatchSnapshot(payload.nextSnapshot);
   return {
     kind: "reactive-grass",
+    mode: normalizedMode,
+    objectId,
+    index,
+    previousSnapshot,
+    nextSnapshot,
+  };
+}
+
+export function createReactiveBloomEditEntry(mode, payload = {}) {
+  const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
+  const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
+  const index = Number.isInteger(payload.index) ? payload.index : null;
+  const previousSnapshot = cloneReactiveBloomPatchSnapshot(payload.previousSnapshot);
+  const nextSnapshot = cloneReactiveBloomPatchSnapshot(payload.nextSnapshot);
+  return {
+    kind: "reactive-bloom",
     mode: normalizedMode,
     objectId,
     index,
@@ -74,6 +94,7 @@ function getHistoryEntryDomain(entry) {
 
   if (isObjectLayerKind(entry?.kind)) return entry.kind;
   if (entry?.kind === "reactive-grass") return "reactive-grass";
+  if (entry?.kind === "reactive-bloom") return "reactive-bloom";
   if (entry?.kind === "background") return "background";
   if (entry?.kind === "background-sized") return "background";
   return "tile";
@@ -209,6 +230,29 @@ function applyUndoEntry(doc, entry) {
     else patches.splice(authoredIndex, 0, snapshot);
     return true;
   }
+  if (entry.kind === "reactive-bloom") {
+    if (!Array.isArray(doc.reactiveBloomPatches)) doc.reactiveBloomPatches = [];
+    const patches = doc.reactiveBloomPatches;
+    const targetId = typeof entry.objectId === "string" && entry.objectId.trim() ? entry.objectId.trim() : null;
+    const authoredIndex = Number.isInteger(entry.index) ? Math.max(0, Math.min(patches.length, entry.index)) : patches.length;
+    const existingIndex = targetId ? patches.findIndex((patch) => patch?.id === targetId) : -1;
+    if (entry.mode === "create") {
+      if (existingIndex >= 0) patches.splice(existingIndex, 1);
+      return true;
+    }
+    if (entry.mode === "delete") {
+      if (!entry.previousSnapshot) return false;
+      const snapshot = cloneReactiveBloomPatchSnapshot(entry.previousSnapshot);
+      if (existingIndex >= 0) patches[existingIndex] = snapshot;
+      else patches.splice(authoredIndex, 0, snapshot);
+      return true;
+    }
+    if (!entry.previousSnapshot) return false;
+    const snapshot = cloneReactiveBloomPatchSnapshot(entry.previousSnapshot);
+    if (existingIndex >= 0) patches[existingIndex] = snapshot;
+    else patches.splice(authoredIndex, 0, snapshot);
+    return true;
+  }
 
   if (entry.kind === "background") {
     doc.background.base[entry.index] = entry.previousValue ?? null;
@@ -264,6 +308,29 @@ function applyRedoEntry(doc, entry) {
 
     if (!entry.nextSnapshot) return false;
     const snapshot = cloneReactiveGrassPatchSnapshot(entry.nextSnapshot);
+    if (existingIndex >= 0) patches[existingIndex] = snapshot;
+    else patches.splice(authoredIndex, 0, snapshot);
+    return true;
+  }
+  if (entry.kind === "reactive-bloom") {
+    if (!Array.isArray(doc.reactiveBloomPatches)) doc.reactiveBloomPatches = [];
+    const patches = doc.reactiveBloomPatches;
+    const targetId = typeof entry.objectId === "string" && entry.objectId.trim() ? entry.objectId.trim() : null;
+    const authoredIndex = Number.isInteger(entry.index) ? Math.max(0, Math.min(patches.length, entry.index)) : patches.length;
+    const existingIndex = targetId ? patches.findIndex((patch) => patch?.id === targetId) : -1;
+    if (entry.mode === "delete") {
+      if (existingIndex >= 0) patches.splice(existingIndex, 1);
+      return true;
+    }
+    if (entry.mode === "create") {
+      if (!entry.nextSnapshot) return false;
+      const snapshot = cloneReactiveBloomPatchSnapshot(entry.nextSnapshot);
+      if (existingIndex >= 0) patches[existingIndex] = snapshot;
+      else patches.splice(authoredIndex, 0, snapshot);
+      return true;
+    }
+    if (!entry.nextSnapshot) return false;
+    const snapshot = cloneReactiveBloomPatchSnapshot(entry.nextSnapshot);
     if (existingIndex >= 0) patches[existingIndex] = snapshot;
     else patches.splice(authoredIndex, 0, snapshot);
     return true;
