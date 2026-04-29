@@ -2583,9 +2583,18 @@ export function createEditorApp({
     return `${prefix}-${nextNumber}`;
   };
 
+  const getReactiveDecorPlacementType = (interaction) => interaction?.reactiveDecorType === "bloom" ? "bloom" : "grass";
+
   const isReactiveGrassPaintPlacementActive = (interaction) => {
     return interaction?.activeLayer === PANEL_LAYERS.REACTIVE_DECOR
-      && interaction?.activeTool === EDITOR_TOOLS.PAINT;
+      && interaction?.activeTool === EDITOR_TOOLS.PAINT
+      && getReactiveDecorPlacementType(interaction) === "grass";
+  };
+
+  const isReactiveBloomPaintPlacementActive = (interaction) => {
+    return interaction?.activeLayer === PANEL_LAYERS.REACTIVE_DECOR
+      && interaction?.activeTool === EDITOR_TOOLS.PAINT
+      && getReactiveDecorPlacementType(interaction) === "bloom";
   };
 
   const createReactiveGrassPatchFromDrag = (doc, startCell, endCell) => {
@@ -2622,6 +2631,41 @@ export function createEditorApp({
       baseColor: "#2f6f3a",
       topColor: "#7fd66b",
       variant: "lush_default",
+      seed: randomSeed,
+    };
+  };
+
+
+  const createReactiveBloomPatchFromDrag = (doc, startCell, endCell) => {
+    if (!doc || !startCell || !endCell) return null;
+    const tileSize = Number.isFinite(doc?.dimensions?.tileSize) && doc.dimensions.tileSize > 0 ? doc.dimensions.tileSize : 24;
+    const minCellX = Math.max(0, Math.min(startCell.x, endCell.x));
+    const maxCellX = Math.max(0, Math.max(startCell.x, endCell.x));
+    const baselineCellY = Math.max(0, Math.max(startCell.y, endCell.y));
+    const baselineY = (baselineCellY + 1) * tileSize;
+    const patchWidth = Math.max(tileSize, (maxCellX - minCellX + 1) * tileSize);
+    const leftEdgeX = minCellX * tileSize;
+    const centerX = leftEdgeX + patchWidth * 0.5;
+    const randomSeed = Math.floor(100000 + (Math.random() * 900000));
+    return {
+      id: getNextStringId(doc.reactiveBloomPatches || [], "id", "reactive_bloom"),
+      kind: "reactive_bloom",
+      x: centerX,
+      y: baselineY,
+      clusterCount: 5,
+      width: patchWidth,
+      heightMin: 28,
+      heightMax: 86,
+      triggerRadius: 80,
+      auraSensitivity: 1,
+      openSpeed: 1,
+      closeDelayMs: 1000,
+      closeSpeed: 1,
+      stemColor: "#2f6f3a",
+      petalInnerColor: "#ffd6f0",
+      petalOuterColor: "#9f5cff",
+      coreColor: "#fff2a8",
+      variant: "lush_bloom_default",
       seed: randomSeed,
     };
   };
@@ -6462,6 +6506,26 @@ if (event.shiftKey) {
       return;
     }
 
+    if (isReactiveBloomPaintPlacementActive(state.interaction)) {
+      event.preventDefault();
+      store.setState((draft) => {
+        draft.interaction.selectedCell = cell;
+        draft.interaction.hoverCell = cell;
+        draft.interaction.reactiveBloomPlacementDrag = {
+          active: true,
+          startCell: { ...cell },
+          endCell: { ...cell },
+        };
+        clearEntitySelection(draft.interaction);
+        clearDecorSelection(draft.interaction);
+        clearSoundSelection(draft.interaction);
+        draft.interaction.entityDrag = null;
+        draft.interaction.decorDrag = null;
+        draft.interaction.soundDrag = null;
+      });
+      return;
+    }
+
     const drawableTool = activeTool === EDITOR_TOOLS.PAINT || activeTool === EDITOR_TOOLS.ERASE;
     if (!drawableTool) return;
 
@@ -6550,6 +6614,46 @@ if (event.shiftKey) {
         reactiveGrassPlacementDrag.endCell = { ...cell };
         draft.interaction.hoverCell = cell;
         draft.interaction.selectedCell = cell;
+      });
+      return;
+    }
+
+    if (state.interaction.reactiveBloomPlacementDrag?.active) {
+      if ((event.buttons & 1) !== 1) return;
+      const point = getCanvasPointFromMouseEvent(canvas, event);
+      const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+      if (!cell) return;
+      store.setState((draft) => {
+        const reactiveBloomPlacementDrag = draft.interaction.reactiveBloomPlacementDrag;
+        if (!reactiveBloomPlacementDrag?.active) return;
+        reactiveBloomPlacementDrag.endCell = { ...cell };
+        draft.interaction.hoverCell = cell;
+        draft.interaction.selectedCell = cell;
+      });
+      return;
+    }
+
+    if (state.interaction.reactiveBloomPlacementDrag?.active) {
+      store.setState((draft) => {
+        const reactiveBloomPlacementDrag = draft.interaction.reactiveBloomPlacementDrag;
+        if (!reactiveBloomPlacementDrag?.active) return;
+        const createdPatch = createReactiveBloomPatchFromDrag(
+          draft.document.active,
+          reactiveBloomPlacementDrag.startCell,
+          reactiveBloomPlacementDrag.endCell || reactiveBloomPlacementDrag.startCell,
+        );
+        if (createdPatch) {
+          if (!Array.isArray(draft.document.active.reactiveBloomPatches)) draft.document.active.reactiveBloomPatches = [];
+          const createdIndex = draft.document.active.reactiveBloomPatches.length;
+          draft.document.active.reactiveBloomPatches.push(createdPatch);
+          pushHistoryEntry(draft.history, createReactiveBloomEditEntry("create", {
+            objectId: typeof createdPatch.id === "string" ? createdPatch.id : null,
+            index: createdIndex,
+            nextSnapshot: createdPatch,
+          }));
+          setReactiveBloomPatchSelection(draft, createdIndex);
+        }
+        draft.interaction.reactiveBloomPlacementDrag = null;
       });
       return;
     }
@@ -6843,6 +6947,7 @@ if (event.shiftKey) {
           setReactiveGrassPatchSelection(draft, createdIndex);
         }
         draft.interaction.reactiveGrassPlacementDrag = null;
+    draft.interaction.reactiveBloomPlacementDrag = null;
       });
       return;
     }
@@ -7098,6 +7203,7 @@ if (event.shiftKey) {
     draft.history.activeBatch = null;
     draft.interaction.dragPaint = null;
     draft.interaction.reactiveGrassPlacementDrag = null;
+    draft.interaction.reactiveBloomPlacementDrag = null;
     draft.interaction.rectDrag = null;
     draft.interaction.lineDrag = null;
     draft.interaction.boxSelection = null;
