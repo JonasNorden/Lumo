@@ -90,6 +90,7 @@ import { findDecorAtCanvasPoint } from "../render/layers/decorLayer.js";
 import { findSoundAtCanvasPoint, getSoundPlacementPreviewDiagnostic } from "../render/layers/soundLayer.js";
 import { findReactiveGrassPatchAtCanvasPoint } from "../render/layers/reactiveGrassLayer.js";
 import { findReactiveBloomPatchAtCanvasPoint } from "../render/layers/reactiveBloomLayer.js";
+import { findReactiveCrystalPatchAtCanvasPoint } from "../render/layers/reactiveCrystalLayer.js";
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
 import {
   DEFAULT_ENTITY_PRESET_ID,
@@ -1600,6 +1601,11 @@ export function createEditorApp({
     interaction.selectedReactiveBloomPatchId = null;
   };
 
+  const clearReactiveCrystalPatchSelection = (interaction) => {
+    interaction.selectedReactiveCrystalPatchIndex = null;
+    interaction.selectedReactiveCrystalPatchId = null;
+  };
+
   const setReactiveGrassPatchSelection = (draft, patchIndex = null) => {
     const patches = Array.isArray(draft.document.active?.reactiveGrassPatches)
       ? draft.document.active.reactiveGrassPatches
@@ -1612,6 +1618,7 @@ export function createEditorApp({
       ? nextPatch.id.trim()
       : null;
     clearReactiveBloomPatchSelection(draft.interaction);
+    clearReactiveCrystalPatchSelection(draft.interaction);
   };
 
   const setReactiveGrassPatchSelectionById = (draft, patchId = null) => {
@@ -1626,6 +1633,7 @@ export function createEditorApp({
       return;
     }
     clearReactiveGrassPatchSelection(draft.interaction);
+    clearReactiveCrystalPatchSelection(draft.interaction);
   };
 
   const setReactiveBloomPatchSelection = (draft, patchIndex = null) => {
@@ -1640,8 +1648,20 @@ export function createEditorApp({
       ? nextPatch.id.trim()
       : null;
     clearReactiveGrassPatchSelection(draft.interaction);
+    clearReactiveCrystalPatchSelection(draft.interaction);
   };
 
+
+  const setReactiveCrystalPatchSelection = (draft, patchIndex = null) => {
+    const patches = Array.isArray(draft.document.active?.reactiveCrystalPatches)
+      ? draft.document.active.reactiveCrystalPatches
+      : [];
+    const nextPatch = Number.isInteger(patchIndex) && patchIndex >= 0 && patchIndex < patches.length ? patches[patchIndex] : null;
+    draft.interaction.selectedReactiveCrystalPatchIndex = nextPatch ? patchIndex : null;
+    draft.interaction.selectedReactiveCrystalPatchId = typeof nextPatch?.id === "string" && nextPatch.id.trim() ? nextPatch.id.trim() : null;
+    clearReactiveGrassPatchSelection(draft.interaction);
+    clearReactiveBloomPatchSelection(draft.interaction);
+  };
   const getObjectIndicesByIds = (items, ids = []) => {
     const lookup = new Map();
     (Array.isArray(items) ? items : []).forEach((item, index) => {
@@ -6184,6 +6204,7 @@ export function createEditorApp({
     const hitSoundIndex = findSoundAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitReactiveGrassPatchIndex = findReactiveGrassPatchAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitReactiveBloomPatchIndex = findReactiveBloomPatchAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+    const hitReactiveCrystalPatchIndex = findReactiveCrystalPatchAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const activeEntityPresetId = state.interaction.activeEntityPresetId;
     const activeDecorPresetId = state.interaction.activeDecorPresetId;
     const activeSoundPresetId = state.interaction.activeSoundPresetId;
@@ -6347,7 +6368,9 @@ if (event.shiftKey) {
       event.preventDefault();
       store.setState((draft) => {
         draft.interaction.selectedCell = cell;
-        if (hitReactiveBloomPatchIndex >= 0) {
+        if (hitReactiveCrystalPatchIndex >= 0) {
+          setReactiveCrystalPatchSelection(draft, hitReactiveCrystalPatchIndex);
+        } else if (hitReactiveBloomPatchIndex >= 0) {
           setReactiveBloomPatchSelection(draft, hitReactiveBloomPatchIndex);
         } else {
           setReactiveGrassPatchSelection(draft, hitReactiveGrassPatchIndex);

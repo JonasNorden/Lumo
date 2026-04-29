@@ -34,6 +34,28 @@ const DEFAULT_REACTIVE_GRASS_PATCH = Object.freeze({
   reactNear: 36,
 });
 
+
+const DEFAULT_REACTIVE_CRYSTAL_PATCH = Object.freeze({
+  kind: "reactive_crystal",
+  x: 0,
+  y: 0,
+  clusterCount: 12,
+  width: 168,
+  heightMin: 18,
+  heightMax: 92,
+  triggerRadius: 132,
+  auraSensitivity: 1,
+  wakeSpeed: 1,
+  settleDelayMs: 520,
+  settleSpeed: 1,
+  baseColor: "#335c88",
+  glowColor: "#83e6ff",
+  coreColor: "#d4f8ff",
+  edgeColor: "#7d8dff",
+  variant: "default",
+  seed: 12345,
+});
+
 const DEFAULT_REACTIVE_BLOOM_PATCH = Object.freeze({
   kind: "reactive_bloom",
   x: 0,
@@ -84,6 +106,7 @@ function parseFlowerVariant(value) {
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} entities
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, source?: string, params: Record<string, string | number | boolean>}[]} sounds
  * @property {{id: string, kind: string, x: number, y: number, width: number, heightMin: number, heightMax: number, baseColor: string, topColor: string}[]} reactiveGrassPatches
+ * @property {{id: string, kind: string, x: number, y: number, clusterCount: number, width: number, heightMin: number, heightMax: number, triggerRadius: number, auraSensitivity: number, wakeSpeed: number, settleDelayMs: number, settleSpeed: number, baseColor: string, glowColor: string, coreColor: string, edgeColor: string, variant: string, seed: number}[]} reactiveCrystalPatches
  * @property {{notes?: string}} extra
  */
 
@@ -289,6 +312,36 @@ function normalizeReactiveGrassPatch(patch, index) {
   };
 }
 
+function normalizeReactiveCrystalPatch(patch, index) {
+  const sourcePatch = patch && typeof patch === "object" ? patch : {};
+  const rawHeightMin = Number.isFinite(sourcePatch.heightMin) ? Number(sourcePatch.heightMin) : DEFAULT_REACTIVE_CRYSTAL_PATCH.heightMin;
+  const rawHeightMax = Number.isFinite(sourcePatch.heightMax) ? Number(sourcePatch.heightMax) : DEFAULT_REACTIVE_CRYSTAL_PATCH.heightMax;
+  const safeHeightMin = Math.max(1, Math.round(Math.min(rawHeightMin, rawHeightMax)));
+  const safeHeightMax = Math.max(safeHeightMin, Math.round(Math.max(rawHeightMin, rawHeightMax)));
+  return {
+    ...sourcePatch,
+    id: typeof sourcePatch.id === "string" && sourcePatch.id.trim() ? sourcePatch.id.trim() : `reactive_crystal_patch_${index + 1}`,
+    kind: typeof sourcePatch.kind === "string" && sourcePatch.kind.trim() ? sourcePatch.kind.trim() : DEFAULT_REACTIVE_CRYSTAL_PATCH.kind,
+    x: Number.isFinite(sourcePatch.x) ? Number(sourcePatch.x) : DEFAULT_REACTIVE_CRYSTAL_PATCH.x,
+    y: Number.isFinite(sourcePatch.y) ? Number(sourcePatch.y) : DEFAULT_REACTIVE_CRYSTAL_PATCH.y,
+    clusterCount: Number.isFinite(sourcePatch.clusterCount) ? Math.max(1, Math.round(sourcePatch.clusterCount)) : DEFAULT_REACTIVE_CRYSTAL_PATCH.clusterCount,
+    width: Number.isFinite(sourcePatch.width) && sourcePatch.width > 0 ? Number(sourcePatch.width) : DEFAULT_REACTIVE_CRYSTAL_PATCH.width,
+    heightMin: safeHeightMin,
+    heightMax: safeHeightMax,
+    triggerRadius: Number.isFinite(sourcePatch.triggerRadius) && sourcePatch.triggerRadius >= 0 ? Number(sourcePatch.triggerRadius) : DEFAULT_REACTIVE_CRYSTAL_PATCH.triggerRadius,
+    auraSensitivity: Number.isFinite(sourcePatch.auraSensitivity) ? Number(sourcePatch.auraSensitivity) : DEFAULT_REACTIVE_CRYSTAL_PATCH.auraSensitivity,
+    wakeSpeed: Number.isFinite(sourcePatch.wakeSpeed) ? Number(sourcePatch.wakeSpeed) : DEFAULT_REACTIVE_CRYSTAL_PATCH.wakeSpeed,
+    settleDelayMs: Number.isFinite(sourcePatch.settleDelayMs) && sourcePatch.settleDelayMs >= 0 ? Math.round(sourcePatch.settleDelayMs) : DEFAULT_REACTIVE_CRYSTAL_PATCH.settleDelayMs,
+    settleSpeed: Number.isFinite(sourcePatch.settleSpeed) ? Number(sourcePatch.settleSpeed) : DEFAULT_REACTIVE_CRYSTAL_PATCH.settleSpeed,
+    baseColor: typeof sourcePatch.baseColor === "string" && sourcePatch.baseColor.trim() ? sourcePatch.baseColor.trim() : DEFAULT_REACTIVE_CRYSTAL_PATCH.baseColor,
+    glowColor: typeof sourcePatch.glowColor === "string" && sourcePatch.glowColor.trim() ? sourcePatch.glowColor.trim() : DEFAULT_REACTIVE_CRYSTAL_PATCH.glowColor,
+    coreColor: typeof sourcePatch.coreColor === "string" && sourcePatch.coreColor.trim() ? sourcePatch.coreColor.trim() : DEFAULT_REACTIVE_CRYSTAL_PATCH.coreColor,
+    edgeColor: typeof sourcePatch.edgeColor === "string" && sourcePatch.edgeColor.trim() ? sourcePatch.edgeColor.trim() : DEFAULT_REACTIVE_CRYSTAL_PATCH.edgeColor,
+    variant: typeof sourcePatch.variant === "string" && sourcePatch.variant.trim() ? sourcePatch.variant.trim() : DEFAULT_REACTIVE_CRYSTAL_PATCH.variant,
+    seed: Number.isFinite(sourcePatch.seed) ? Math.round(sourcePatch.seed) : DEFAULT_REACTIVE_CRYSTAL_PATCH.seed,
+  };
+}
+
 function normalizeReactiveBloomPatch(patch, index) {
   const sourcePatch = patch && typeof patch === "object" ? patch : {};
   const rawHeightMin = Number.isFinite(sourcePatch.heightMin) ? Number(sourcePatch.heightMin) : DEFAULT_REACTIVE_BLOOM_PATCH.heightMin;
@@ -393,6 +446,8 @@ export function validateLevelDocument(doc) {
   doc.reactiveGrassPatches = rawReactiveGrassPatches.map((patch, index) => normalizeReactiveGrassPatch(patch, index));
   const rawReactiveBloomPatches = Array.isArray(doc.reactiveBloomPatches) ? doc.reactiveBloomPatches : [];
   doc.reactiveBloomPatches = rawReactiveBloomPatches.map((patch, index) => normalizeReactiveBloomPatch(patch, index));
+  const rawReactiveCrystalPatches = Array.isArray(doc.reactiveCrystalPatches) ? doc.reactiveCrystalPatches : [];
+  doc.reactiveCrystalPatches = rawReactiveCrystalPatches.map((patch, index) => normalizeReactiveCrystalPatch(patch, index));
 
   return doc;
 }
