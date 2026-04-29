@@ -4338,6 +4338,12 @@
       loading: false,
       loaded: false,
     };
+    const rechargedReactiveCrystalLevelCache = {
+      levelPath: "",
+      patches: [],
+      loading: false,
+      loaded: false,
+    };
 
     function normalizeReactiveGrassPatch(patch, index) {
       if (!patch || typeof patch !== "object") {
@@ -4539,6 +4545,93 @@
       }
       return Array.isArray(rechargedReactiveBloomLevelCache.patches)
         ? rechargedReactiveBloomLevelCache.patches
+        : [];
+    }
+
+    function normalizeReactiveCrystalPatch(patch, index) {
+      if (!patch || typeof patch !== "object") return null;
+      const kind = typeof patch.kind === "string" ? patch.kind.trim().toLowerCase() : "";
+      if (kind && kind !== "reactive_crystal") return null;
+      const x = Number.isFinite(patch.x) ? patch.x : null;
+      const y = Number.isFinite(patch.y) ? patch.y : null;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      return {
+        id: typeof patch.id === "string" && patch.id.trim() ? patch.id.trim() : `reactive_crystal_${index + 1}`,
+        kind: "reactive_crystal",
+        x,
+        y,
+        clusterCount: Number.isFinite(patch.clusterCount) ? patch.clusterCount : null,
+        width: Number.isFinite(patch.width) ? patch.width : null,
+        heightMin: Number.isFinite(patch.heightMin) ? patch.heightMin : null,
+        heightMax: Number.isFinite(patch.heightMax) ? patch.heightMax : null,
+        triggerRadius: Number.isFinite(patch.triggerRadius) ? patch.triggerRadius : null,
+        auraSensitivity: Number.isFinite(patch.auraSensitivity) ? patch.auraSensitivity : null,
+        wakeSpeed: Number.isFinite(patch.wakeSpeed) ? patch.wakeSpeed : null,
+        settleDelayMs: Number.isFinite(patch.settleDelayMs) ? patch.settleDelayMs : null,
+        settleSpeed: Number.isFinite(patch.settleSpeed) ? patch.settleSpeed : null,
+        baseColor: typeof patch.baseColor === "string" ? patch.baseColor : null,
+        glowColor: typeof patch.glowColor === "string" ? patch.glowColor : null,
+        coreColor: typeof patch.coreColor === "string" ? patch.coreColor : null,
+        edgeColor: typeof patch.edgeColor === "string" ? patch.edgeColor : null,
+        variant: typeof patch.variant === "string" ? patch.variant : null,
+        seed: Number.isFinite(patch.seed) ? patch.seed : null,
+      };
+    }
+
+    function extractReactiveCrystalPatchesFromLevelDocument(document) {
+      if (!document || typeof document !== "object") return [];
+      const authored = Array.isArray(document.reactiveCrystalPatches) ? document.reactiveCrystalPatches : [];
+      return authored.map((patch, index) => normalizeReactiveCrystalPatch(patch, index)).filter(Boolean);
+    }
+
+    function syncReactiveCrystalCacheFromPayload(payload) {
+      const directPatches = Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches : null;
+      if (!directPatches) return;
+      rechargedReactiveCrystalLevelCache.patches = directPatches
+        .map((patch, index) => normalizeReactiveCrystalPatch(patch, index))
+        .filter(Boolean);
+      rechargedReactiveCrystalLevelCache.loaded = true;
+    }
+
+    function beginReactiveCrystalLevelLoad(levelPath) {
+      if (typeof levelPath !== "string" || !levelPath.trim()) return;
+      const normalizedPath = levelPath.trim();
+      if (rechargedReactiveCrystalLevelCache.loading && rechargedReactiveCrystalLevelCache.levelPath === normalizedPath) return;
+      rechargedReactiveCrystalLevelCache.levelPath = normalizedPath;
+      rechargedReactiveCrystalLevelCache.loading = true;
+      rechargedReactiveCrystalLevelCache.loaded = false;
+      rechargedReactiveCrystalLevelCache.patches = [];
+      fetch(normalizedPath, {
+        method: "GET",
+        headers: { Accept: "application/json, text/plain;q=0.8, */*;q=0.1" },
+      })
+        .then((response) => {
+          if (!response?.ok) throw new Error(`Reactive crystal level load failed (${response?.status || "?"}).`);
+          return response.json();
+        })
+        .then((levelDocument) => {
+          rechargedReactiveCrystalLevelCache.patches = extractReactiveCrystalPatchesFromLevelDocument(levelDocument);
+          rechargedReactiveCrystalLevelCache.loaded = true;
+        })
+        .catch((_error) => {
+          rechargedReactiveCrystalLevelCache.patches = [];
+          rechargedReactiveCrystalLevelCache.loaded = true;
+        })
+        .finally(() => {
+          rechargedReactiveCrystalLevelCache.loading = false;
+        });
+    }
+
+    function readRechargedReactiveCrystalPatches(payload) {
+      syncReactiveCrystalCacheFromPayload(payload);
+      const levelPath = typeof payload?.levelPath === "string" && payload.levelPath.trim()
+        ? payload.levelPath.trim()
+        : "";
+      if (levelPath && rechargedReactiveCrystalLevelCache.levelPath !== levelPath) {
+        beginReactiveCrystalLevelLoad(levelPath);
+      }
+      return Array.isArray(rechargedReactiveCrystalLevelCache.patches)
+        ? rechargedReactiveCrystalLevelCache.patches
         : [];
     }
 
@@ -5771,6 +5864,7 @@
         const decorSnapshots = readRechargedDecorSnapshots(payload);
         const reactiveGrassPatches = readRechargedReactiveGrassPatches(payload);
         const reactiveBloomPatches = readRechargedReactiveBloomPatches(payload);
+        const reactiveCrystalPatches = readRechargedReactiveCrystalPatches(payload);
         const previousSnapshot = readRechargedPlayerSnapshot({
           player: state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
             ? state.previousPlayerSnapshot
@@ -6506,7 +6600,7 @@
           playerCenterX,
           playerFootY,
           rechargedDecorTime,
-          { mapper },
+          { mapper, clusters: reactiveCrystalPatches },
         );
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.

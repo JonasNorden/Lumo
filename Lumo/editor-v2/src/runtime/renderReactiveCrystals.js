@@ -4,15 +4,20 @@ const DEFAULT_CRYSTAL_CLUSTER = Object.freeze({
   x: 19.4 * 24,
   y: 18.6 * 24,
   width: 82,
-  shardCount: 8,
+  clusterCount: 8,
+  heightMin: 18,
+  heightMax: 54,
   triggerRadius: 76,
+  auraSensitivity: 1,
   wakeSpeed: 1,
   settleDelayMs: 900,
   settleSpeed: 1,
+  variant: "void_crystal_default",
   seed: 64021,
   baseColor: "#1a1330",
   glowColor: "#6d5bff",
   coreColor: "#63d3ff",
+  edgeColor: "#6d5bff",
 });
 
 const crystalCacheByCluster = new Map();
@@ -45,6 +50,7 @@ function resolveCanvasPoint(mapper, x, y) {
 
 function normalizeCluster(cluster) {
   const source = cluster && typeof cluster === "object" ? cluster : DEFAULT_CRYSTAL_CLUSTER;
+  const authoredCount = Number.isFinite(source.clusterCount) ? source.clusterCount : source.shardCount;
   return {
     ...DEFAULT_CRYSTAL_CLUSTER,
     ...source,
@@ -52,8 +58,11 @@ function normalizeCluster(cluster) {
     x: Number.isFinite(source.x) ? Number(source.x) : DEFAULT_CRYSTAL_CLUSTER.x,
     y: Number.isFinite(source.y) ? Number(source.y) : DEFAULT_CRYSTAL_CLUSTER.y,
     width: Number.isFinite(source.width) ? clamp(source.width, 28, 220) : DEFAULT_CRYSTAL_CLUSTER.width,
-    shardCount: Number.isFinite(source.shardCount) ? clamp(Math.round(source.shardCount), 3, 20) : DEFAULT_CRYSTAL_CLUSTER.shardCount,
+    clusterCount: Number.isFinite(authoredCount) ? clamp(Math.round(authoredCount), 3, 20) : DEFAULT_CRYSTAL_CLUSTER.clusterCount,
+    heightMin: Number.isFinite(source.heightMin) ? clamp(source.heightMin, 8, 120) : DEFAULT_CRYSTAL_CLUSTER.heightMin,
+    heightMax: Number.isFinite(source.heightMax) ? clamp(source.heightMax, 10, 180) : DEFAULT_CRYSTAL_CLUSTER.heightMax,
     triggerRadius: Number.isFinite(source.triggerRadius) ? clamp(source.triggerRadius, 20, 240) : DEFAULT_CRYSTAL_CLUSTER.triggerRadius,
+    auraSensitivity: Number.isFinite(source.auraSensitivity) ? clamp(source.auraSensitivity, 0.1, 3) : DEFAULT_CRYSTAL_CLUSTER.auraSensitivity,
     wakeSpeed: Number.isFinite(source.wakeSpeed) ? clamp(source.wakeSpeed, 0.2, 5) : DEFAULT_CRYSTAL_CLUSTER.wakeSpeed,
     settleDelayMs: Number.isFinite(source.settleDelayMs) ? clamp(source.settleDelayMs, 0, 12000) : DEFAULT_CRYSTAL_CLUSTER.settleDelayMs,
     settleSpeed: Number.isFinite(source.settleSpeed) ? clamp(source.settleSpeed, 0.2, 5) : DEFAULT_CRYSTAL_CLUSTER.settleSpeed,
@@ -61,7 +70,7 @@ function normalizeCluster(cluster) {
 }
 
 function clusterKey(cluster) {
-  return [cluster.id, cluster.seed, cluster.shardCount, cluster.width, cluster.kind].join("|");
+  return [cluster.id, cluster.seed, cluster.clusterCount, cluster.width, cluster.heightMin, cluster.heightMax, cluster.kind, cluster.variant].join("|");
 }
 
 function ensureClusterCache(cluster) {
@@ -70,13 +79,15 @@ function ensureClusterCache(cluster) {
   if (Array.isArray(cached) && cached.length > 0) return { key, shards: cached };
 
   const shards = [];
-  for (let i = 0; i < cluster.shardCount; i += 1) {
-    const u = cluster.shardCount <= 1 ? 0.5 : (i / (cluster.shardCount - 1));
+  const minH = Math.min(cluster.heightMin, cluster.heightMax);
+  const maxH = Math.max(cluster.heightMin, cluster.heightMax);
+  for (let i = 0; i < cluster.clusterCount; i += 1) {
+    const u = cluster.clusterCount <= 1 ? 0.5 : (i / (cluster.clusterCount - 1));
     shards.push({
       u,
       xNoise: (seeded(cluster.seed + i * 4.33) - 0.5) * 10,
       baseHalfWidth: 4 + seeded(cluster.seed + i * 3.17) * 6,
-      height: 18 + seeded(cluster.seed + i * 6.43) * 36,
+      height: minH + seeded(cluster.seed + i * 6.43) * Math.max(1, maxH - minH),
       lean: (seeded(cluster.seed + i * 9.11) - 0.5) * 0.22,
       phase: seeded(cluster.seed + i * 11.09) * Math.PI * 2,
       pulse: 0.7 + seeded(cluster.seed + i * 7.73) * 0.55,
@@ -99,7 +110,7 @@ function auraTouches(cluster, playerX, playerY) {
   if (!Number.isFinite(playerX) || !Number.isFinite(playerY)) return false;
   const dx = playerX - cluster.x;
   const dy = (playerY - cluster.y) * 0.6;
-  const auraRadius = Math.max(28, cluster.triggerRadius * 0.9);
+  const auraRadius = Math.max(28, cluster.triggerRadius * (0.9 + (cluster.auraSensitivity - 1) * 0.18));
   return (dx * dx) + (dy * dy) <= auraRadius * auraRadius;
 }
 
@@ -124,7 +135,7 @@ export function renderReactiveCrystals(ctx, playerX, playerY, time, options = {}
 
     if (auraTouches(cluster, playerX, playerY)) {
       state.hold = cluster.settleDelayMs * 0.001;
-      state.wake = clamp01(state.wake + (dt / Math.max(0.01, 1.05 / cluster.wakeSpeed)));
+      state.wake = clamp01(state.wake + (dt / Math.max(0.01, 1.05 / (cluster.wakeSpeed * cluster.auraSensitivity))));
     } else if (state.hold > 0) {
       state.hold = Math.max(0, state.hold - dt);
     } else {
@@ -138,6 +149,7 @@ export function renderReactiveCrystals(ctx, playerX, playerY, time, options = {}
     const baseColor = parseColorHex(cluster.baseColor, DEFAULT_CRYSTAL_CLUSTER.baseColor);
     const glowColor = parseColorHex(cluster.glowColor, DEFAULT_CRYSTAL_CLUSTER.glowColor);
     const coreColor = parseColorHex(cluster.coreColor, DEFAULT_CRYSTAL_CLUSTER.coreColor);
+    const edgeColor = parseColorHex(cluster.edgeColor, DEFAULT_CRYSTAL_CLUSTER.edgeColor);
 
     for (let i = 0; i < shards.length; i += 1) {
       const shard = shards[i];
@@ -183,7 +195,7 @@ export function renderReactiveCrystals(ctx, playerX, playerY, time, options = {}
       ctx.arc(coreCenter.x, coreCenter.y, coreRadius, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = `rgba(${glowColor.r},${glowColor.g},${glowColor.b},${0.18 + glowLevel * 0.26})`;
+      ctx.strokeStyle = `rgba(${edgeColor.r},${edgeColor.g},${edgeColor.b},${0.18 + glowLevel * 0.26})`;
       ctx.lineWidth = Math.max(0.8, 1 + tierWeight * 0.4);
       ctx.beginPath();
       ctx.moveTo(leftPt.x, leftPt.y);
