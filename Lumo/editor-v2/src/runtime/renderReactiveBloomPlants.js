@@ -20,6 +20,7 @@ const DEFAULT_BLOOM_PATCH = Object.freeze({
 });
 
 const bloomCacheByPatch = new Map();
+const bloomRuntimeStateByPatch = new Map();
 
 function seeded(seed) {
   const value = Math.sin(seed * 12.9898) * 43758.5453;
@@ -62,10 +63,14 @@ function normalizePatch(patch) {
   };
 }
 
+function patchRuntimeKey(patch) {
+  return [patch.id, patch.seed, patch.stems, patch.spread, patch.stemHeightMin, patch.stemHeightMax].join("|");
+}
+
 function ensurePatchCache(patch) {
-  const key = [patch.id, patch.seed, patch.stems, patch.spread, patch.stemHeightMin, patch.stemHeightMax].join("|");
+  const key = patchRuntimeKey(patch);
   const cached = bloomCacheByPatch.get(key);
-  if (Array.isArray(cached) && cached.length > 0) return cached;
+  if (Array.isArray(cached) && cached.length > 0) return { key, stems: cached };
 
   const stems = [];
   for (let i = 0; i < patch.stems; i += 1) {
@@ -82,28 +87,40 @@ function ensurePatchCache(patch) {
       bloomBias: seeded(patch.seed + i * 11.43),
       thickness: 1.4 + seeded(patch.seed + i * 1.37) * 1.4,
       petalCount: 5 + Math.round(seeded(patch.seed + i * 4.77) * 2),
+      bloomDelay: seeded(patch.seed + i * 6.21) * 0.26,
+      openSpeed: 0.74 + seeded(patch.seed + i * 8.93) * 0.38,
+      closeSpeed: 0.46 + seeded(patch.seed + i * 10.97) * 0.3,
+      triggerScale: 0.9 + seeded(patch.seed + i * 12.41) * 0.26,
     });
   }
 
   bloomCacheByPatch.set(key, stems);
-  return stems;
+  return { key, stems };
 }
 
-function proximityFactor(patch, wx, wy, playerX, playerY) {
-  if (!Number.isFinite(playerX) || !Number.isFinite(playerY)) return { near: 0, mid: 0, presenceX: 0 };
+function ensurePatchRuntimeState(key, stemCount) {
+  const cached = bloomRuntimeStateByPatch.get(key);
+  if (cached && Array.isArray(cached.stems) && cached.stems.length === stemCount) return cached;
+
+  const state = {
+    lastTimeMs: null,
+    stems: Array.from({ length: stemCount }, () => ({
+      openProgress: 0,
+      holdTime: 0,
+    })),
+  };
+  bloomRuntimeStateByPatch.set(key, state);
+  return state;
+}
+
+function auraTriggered(patch, wx, wy, playerX, playerY, triggerScale = 1) {
+  if (!Number.isFinite(playerX) || !Number.isFinite(playerY)) return false;
   const dx = playerX - wx;
   const dy = (playerY - wy) * 0.58;
-  const dist = Math.hypot(dx, dy);
-
-  const farT = 1 - clamp01((dist - patch.reactMid) / Math.max(1, patch.reactFar - patch.reactMid));
-  const midT = 1 - clamp01((dist - patch.reactNear) / Math.max(1, patch.reactMid - patch.reactNear));
-  const nearT = 1 - clamp01(dist / Math.max(1, patch.reactNear));
-
-  return {
-    near: clamp01(nearT),
-    mid: clamp01(Math.max(midT, farT * 0.35)),
-    presenceX: clamp(dx / Math.max(1, patch.reactFar), -1, 1),
-  };
+  const auraRadius = Math.max(44, patch.reactNear * 0.95);
+  const triggerRadius = Math.max(12, patch.bloomRadiusMax * 1.8 * triggerScale);
+  const overlapDist = auraRadius + triggerRadius;
+  return (dx * dx) + (dy * dy) <= overlapDist * overlapDist;
 }
 
 export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options = {}) {
@@ -111,8 +128,13 @@ export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options =
 
   const mapper = options && typeof options === "object" ? options.mapper : null;
   const patch = normalizePatch(options?.patch);
-  const stems = ensurePatchCache(patch);
-  const timeSec = (Number.isFinite(time) ? time : 0) * 0.001;
+  const { key, stems } = ensurePatchCache(patch);
+  const timeMs = Number.isFinite(time) ? time : 0;
+  const timeSec = timeMs * 0.001;
+  const patchState = ensurePatchRuntimeState(key, stems.length);
+  const rawDt = patchState.lastTimeMs == null ? (1 / 60) : (timeMs - patchState.lastTimeMs) * 0.001;
+  const dt = clamp(Number.isFinite(rawDt) ? rawDt : (1 / 60), 0, 0.07);
+  patchState.lastTimeMs = timeMs;
 
   const stemBaseColor = parseColorHex(patch.stemBaseColor, DEFAULT_BLOOM_PATCH.stemBaseColor);
   const stemTopColor = parseColorHex(patch.stemTopColor, DEFAULT_BLOOM_PATCH.stemTopColor);
@@ -122,21 +144,31 @@ export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options =
   ctx.save();
   ctx.lineCap = "round";
 
-  for (const stem of stems) {
+  for (let stemIndex = 0; stemIndex < stems.length; stemIndex += 1) {
+    const stem = stems[stemIndex];
+    const stemState = patchState.stems[stemIndex];
     const wx = patch.x - patch.spread * 0.5 + stem.u * patch.spread + stem.xNoise;
     const wy = patch.y;
-    const prox = proximityFactor(patch, wx, wy, playerX, playerY);
 
+    const triggered = auraTriggered(patch, wx, wy, playerX, playerY, stem.triggerScale);
+    if (triggered) {
+      stemState.holdTime = 1 + stem.bloomDelay;
+      stemState.openProgress = clamp01(stemState.openProgress + (dt / Math.max(0.01, stem.openSpeed)));
+    } else if (stemState.holdTime > 0) {
+      stemState.holdTime = Math.max(0, stemState.holdTime - dt);
+    } else {
+      stemState.openProgress = clamp01(stemState.openProgress - (dt / Math.max(0.01, stem.closeSpeed)));
+    }
+
+    const openT = stemState.openProgress;
+    const bloomEase = openT * openT * (3 - 2 * openT);
     const breathe = Math.sin((timeSec * (0.7 + stem.speed * 0.3)) + stem.phase);
-    const idleOpen = 0.11 + (breathe * 0.035);
-    const reactiveOpen = Math.pow(clamp01((prox.mid * 0.4) + (prox.near * 0.82)), 1.1);
-    const bloomOpen = clamp01(idleOpen + reactiveOpen + (stem.bloomBias - 0.5) * 0.04);
-    const bloomEase = bloomOpen * bloomOpen * (3 - 2 * bloomOpen);
+    const idleSway = breathe * 0.32;
 
     const height = lerp(patch.stemHeightMin, patch.stemHeightMax, stem.bloomBias);
     const sway = Math.sin((timeSec * (1.02 + stem.speed * 0.8)) + stem.phase) * stem.swayScale * 2.3;
-    const turn = prox.presenceX * (1.8 + prox.mid * 3.6 + prox.near * 6.4);
-    const lift = prox.mid * 1.8 + prox.near * 3.8;
+    const turn = idleSway * (1.2 + openT * 1.7);
+    const lift = openT * 4.1;
 
     const basePt = resolveCanvasPoint(mapper, wx, wy);
     const tipWorldX = wx + stem.lean + sway + turn;
