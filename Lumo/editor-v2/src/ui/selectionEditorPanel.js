@@ -944,6 +944,30 @@ function renderReactiveBloomPatchInspector(patch) {
   ].join(""));
 }
 
+
+function renderReactiveCrystalPatchInspector(patch) {
+  return renderSelectionCard("Reactive Crystal Patch", "Read-only reactive crystal authoring data", [
+    renderReadOnlyField("id", patch?.id),
+    renderReadOnlyField("kind", patch?.kind),
+    renderReadOnlyField("x", formatNumericDisplay(patch?.x)),
+    renderReadOnlyField("y", formatNumericDisplay(patch?.y)),
+    renderReadOnlyField("clusterCount", formatNumericDisplay(patch?.clusterCount)),
+    renderReadOnlyField("width", formatNumericDisplay(patch?.width)),
+    renderReadOnlyField("heightMin", formatNumericDisplay(patch?.heightMin)),
+    renderReadOnlyField("heightMax", formatNumericDisplay(patch?.heightMax)),
+    renderReadOnlyField("triggerRadius", formatNumericDisplay(patch?.triggerRadius)),
+    renderReadOnlyField("auraSensitivity", formatNumericDisplay(patch?.auraSensitivity)),
+    renderReadOnlyField("wakeSpeed", formatNumericDisplay(patch?.wakeSpeed)),
+    renderReadOnlyField("settleDelayMs", formatNumericDisplay(patch?.settleDelayMs)),
+    renderReadOnlyField("settleSpeed", formatNumericDisplay(patch?.settleSpeed)),
+    renderReadOnlyField("baseColor", patch?.baseColor),
+    renderReadOnlyField("glowColor", patch?.glowColor),
+    renderReadOnlyField("coreColor", patch?.coreColor),
+    renderReadOnlyField("edgeColor", patch?.edgeColor),
+    renderReadOnlyField("variant", patch?.variant),
+    renderReadOnlyField("seed", formatNumericDisplay(patch?.seed)),
+  ].join(""));
+}
 function renderSelectionEditor(state, emptyMessage, options = {}) {
   const { soundMode = "full", hideEntityTypes = [] } = options;
   const active = state.document.active;
@@ -995,6 +1019,9 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   const selectedReactiveBloomPatchId = typeof state?.interaction?.selectedReactiveBloomPatchId === "string" && state.interaction.selectedReactiveBloomPatchId.trim() ? state.interaction.selectedReactiveBloomPatchId.trim() : null;
   const selectedReactiveBloomPatchIndex = Number.isInteger(state?.interaction?.selectedReactiveBloomPatchIndex) ? state.interaction.selectedReactiveBloomPatchIndex : null;
   const selectedReactiveBloomPatch = selectedReactiveBloomPatchId ? (active.reactiveBloomPatches || []).find((patch) => patch?.id === selectedReactiveBloomPatchId) || null : Number.isInteger(selectedReactiveBloomPatchIndex) && selectedReactiveBloomPatchIndex >= 0 ? active.reactiveBloomPatches?.[selectedReactiveBloomPatchIndex] || null : null;
+  const selectedReactiveCrystalPatchId = typeof state?.interaction?.selectedReactiveCrystalPatchId === "string" && state.interaction.selectedReactiveCrystalPatchId.trim() ? state.interaction.selectedReactiveCrystalPatchId.trim() : null;
+  const selectedReactiveCrystalPatchIndex = Number.isInteger(state?.interaction?.selectedReactiveCrystalPatchIndex) ? state.interaction.selectedReactiveCrystalPatchIndex : null;
+  const selectedReactiveCrystalPatch = selectedReactiveCrystalPatchId ? (active.reactiveCrystalPatches || []).find((patch) => patch?.id === selectedReactiveCrystalPatchId) || null : Number.isInteger(selectedReactiveCrystalPatchIndex) && selectedReactiveCrystalPatchIndex >= 0 ? active.reactiveCrystalPatches?.[selectedReactiveCrystalPatchIndex] || null : null;
 
   const selectedReactiveGrassPatch = selectedReactiveGrassPatchId
     ? (active.reactiveGrassPatches || []).find((patch) => patch?.id === selectedReactiveGrassPatchId) || null
@@ -1015,6 +1042,10 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
       return { markup: "", isEmpty: true };
     }
     return { markup: renderBatchSoundEditor(selectedSounds, resolvedSelectedSoundIndex, themeId), isEmpty: false };
+  }
+
+  if (selectedReactiveCrystalPatch) {
+    return { markup: renderReactiveCrystalPatchInspector(selectedReactiveCrystalPatch), isEmpty: false };
   }
 
   if (selectedReactiveBloomPatch) {

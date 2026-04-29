@@ -6,6 +6,7 @@ import { renderEntities } from "./layers/entityLayer.js";
 import { renderDecor } from "./layers/decorLayer.js";
 import { renderReactiveGrassPatches } from "./layers/reactiveGrassLayer.js";
 import { renderReactiveBloomPatches } from "./layers/reactiveBloomLayer.js";
+import { renderReactiveCrystalPatches } from "./layers/reactiveCrystalLayer.js";
 import { renderSounds } from "./layers/soundLayer.js";
 import { renderProximityOverlays } from "./layers/proximityOverlayLayer.js";
 import { renderScanOverlay } from "./layers/scanLayer.js";
@@ -56,6 +57,7 @@ export function renderEditorFrame(ctx, state) {
   renderDecor(worldCtx, doc, state.viewport, state.interaction);
   renderReactiveGrassPatches(worldCtx, doc, state.viewport, state.interaction);
   renderReactiveBloomPatches(worldCtx, doc, state.viewport, state.interaction);
+  renderReactiveCrystalPatches(worldCtx, doc, state.viewport, state.interaction);
   renderTiles(worldCtx, doc, state.viewport);
   renderEntities(worldCtx, doc, state.viewport, state.interaction);
 

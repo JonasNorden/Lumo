@@ -61,6 +61,8 @@ export function createEditorState() {
       selectedReactiveGrassPatchId: null,
       selectedReactiveBloomPatchIndex: null,
       selectedReactiveBloomPatchId: null,
+      selectedReactiveCrystalPatchIndex: null,
+      selectedReactiveCrystalPatchId: null,
       dragPaint: null,
       rectDrag: null,
       lineDrag: null,
