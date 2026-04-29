@@ -34,6 +34,27 @@ const DEFAULT_REACTIVE_GRASS_PATCH = Object.freeze({
   reactNear: 36,
 });
 
+const DEFAULT_REACTIVE_BLOOM_PATCH = Object.freeze({
+  kind: "reactive_bloom",
+  x: 0,
+  y: 0,
+  clusterCount: 18,
+  width: 180,
+  heightMin: 22,
+  heightMax: 110,
+  triggerRadius: 124,
+  auraSensitivity: 1,
+  openSpeed: 1,
+  closeDelayMs: 480,
+  closeSpeed: 1,
+  stemColor: "#2e6a41",
+  petalInnerColor: "#ffd5f4",
+  petalOuterColor: "#b37dff",
+  coreColor: "#ffe88e",
+  variant: "default",
+  seed: 12345,
+});
+
 function parseFlowerVariant(value) {
   if (Number.isFinite(value)) {
     const parsed = Math.round(value);
@@ -268,6 +289,36 @@ function normalizeReactiveGrassPatch(patch, index) {
   };
 }
 
+function normalizeReactiveBloomPatch(patch, index) {
+  const sourcePatch = patch && typeof patch === "object" ? patch : {};
+  const rawHeightMin = Number.isFinite(sourcePatch.heightMin) ? Number(sourcePatch.heightMin) : DEFAULT_REACTIVE_BLOOM_PATCH.heightMin;
+  const rawHeightMax = Number.isFinite(sourcePatch.heightMax) ? Number(sourcePatch.heightMax) : DEFAULT_REACTIVE_BLOOM_PATCH.heightMax;
+  const safeHeightMin = Math.max(1, Math.round(Math.min(rawHeightMin, rawHeightMax)));
+  const safeHeightMax = Math.max(safeHeightMin, Math.round(Math.max(rawHeightMin, rawHeightMax)));
+  return {
+    ...sourcePatch,
+    id: typeof sourcePatch.id === "string" && sourcePatch.id.trim() ? sourcePatch.id.trim() : `reactive_bloom_patch_${index + 1}`,
+    kind: typeof sourcePatch.kind === "string" && sourcePatch.kind.trim() ? sourcePatch.kind.trim() : DEFAULT_REACTIVE_BLOOM_PATCH.kind,
+    x: Number.isFinite(sourcePatch.x) ? Number(sourcePatch.x) : DEFAULT_REACTIVE_BLOOM_PATCH.x,
+    y: Number.isFinite(sourcePatch.y) ? Number(sourcePatch.y) : DEFAULT_REACTIVE_BLOOM_PATCH.y,
+    clusterCount: Number.isFinite(sourcePatch.clusterCount) ? Math.max(1, Math.round(sourcePatch.clusterCount)) : DEFAULT_REACTIVE_BLOOM_PATCH.clusterCount,
+    width: Number.isFinite(sourcePatch.width) && sourcePatch.width > 0 ? Number(sourcePatch.width) : DEFAULT_REACTIVE_BLOOM_PATCH.width,
+    heightMin: safeHeightMin,
+    heightMax: safeHeightMax,
+    triggerRadius: Number.isFinite(sourcePatch.triggerRadius) && sourcePatch.triggerRadius >= 0 ? Number(sourcePatch.triggerRadius) : DEFAULT_REACTIVE_BLOOM_PATCH.triggerRadius,
+    auraSensitivity: Number.isFinite(sourcePatch.auraSensitivity) ? Number(sourcePatch.auraSensitivity) : DEFAULT_REACTIVE_BLOOM_PATCH.auraSensitivity,
+    openSpeed: Number.isFinite(sourcePatch.openSpeed) ? Number(sourcePatch.openSpeed) : DEFAULT_REACTIVE_BLOOM_PATCH.openSpeed,
+    closeDelayMs: Number.isFinite(sourcePatch.closeDelayMs) && sourcePatch.closeDelayMs >= 0 ? Math.round(sourcePatch.closeDelayMs) : DEFAULT_REACTIVE_BLOOM_PATCH.closeDelayMs,
+    closeSpeed: Number.isFinite(sourcePatch.closeSpeed) ? Number(sourcePatch.closeSpeed) : DEFAULT_REACTIVE_BLOOM_PATCH.closeSpeed,
+    stemColor: typeof sourcePatch.stemColor === "string" && sourcePatch.stemColor.trim() ? sourcePatch.stemColor.trim() : DEFAULT_REACTIVE_BLOOM_PATCH.stemColor,
+    petalInnerColor: typeof sourcePatch.petalInnerColor === "string" && sourcePatch.petalInnerColor.trim() ? sourcePatch.petalInnerColor.trim() : DEFAULT_REACTIVE_BLOOM_PATCH.petalInnerColor,
+    petalOuterColor: typeof sourcePatch.petalOuterColor === "string" && sourcePatch.petalOuterColor.trim() ? sourcePatch.petalOuterColor.trim() : DEFAULT_REACTIVE_BLOOM_PATCH.petalOuterColor,
+    coreColor: typeof sourcePatch.coreColor === "string" && sourcePatch.coreColor.trim() ? sourcePatch.coreColor.trim() : DEFAULT_REACTIVE_BLOOM_PATCH.coreColor,
+    variant: typeof sourcePatch.variant === "string" && sourcePatch.variant.trim() ? sourcePatch.variant.trim() : DEFAULT_REACTIVE_BLOOM_PATCH.variant,
+    seed: Number.isFinite(sourcePatch.seed) ? Math.round(sourcePatch.seed) : DEFAULT_REACTIVE_BLOOM_PATCH.seed,
+  };
+}
+
 /**
  * @param {LevelDocument} doc
  * @returns {LevelDocument}
@@ -340,6 +391,8 @@ export function validateLevelDocument(doc) {
   doc.sounds = rawSounds.map((sound, index) => normalizeSound(sound, index));
   const rawReactiveGrassPatches = Array.isArray(doc.reactiveGrassPatches) ? doc.reactiveGrassPatches : [];
   doc.reactiveGrassPatches = rawReactiveGrassPatches.map((patch, index) => normalizeReactiveGrassPatch(patch, index));
+  const rawReactiveBloomPatches = Array.isArray(doc.reactiveBloomPatches) ? doc.reactiveBloomPatches : [];
+  doc.reactiveBloomPatches = rawReactiveBloomPatches.map((patch, index) => normalizeReactiveBloomPatch(patch, index));
 
   return doc;
 }

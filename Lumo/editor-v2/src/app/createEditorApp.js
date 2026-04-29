@@ -88,6 +88,7 @@ import { findEntityAtCanvasPoint } from "../render/layers/entityLayer.js";
 import { findDecorAtCanvasPoint } from "../render/layers/decorLayer.js";
 import { findSoundAtCanvasPoint, getSoundPlacementPreviewDiagnostic } from "../render/layers/soundLayer.js";
 import { findReactiveGrassPatchAtCanvasPoint } from "../render/layers/reactiveGrassLayer.js";
+import { findReactiveBloomPatchAtCanvasPoint } from "../render/layers/reactiveBloomLayer.js";
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
 import {
   DEFAULT_ENTITY_PRESET_ID,
@@ -1593,6 +1594,11 @@ export function createEditorApp({
     interaction.selectedReactiveGrassPatchId = null;
   };
 
+  const clearReactiveBloomPatchSelection = (interaction) => {
+    interaction.selectedReactiveBloomPatchIndex = null;
+    interaction.selectedReactiveBloomPatchId = null;
+  };
+
   const setReactiveGrassPatchSelection = (draft, patchIndex = null) => {
     const patches = Array.isArray(draft.document.active?.reactiveGrassPatches)
       ? draft.document.active.reactiveGrassPatches
@@ -1604,6 +1610,7 @@ export function createEditorApp({
     draft.interaction.selectedReactiveGrassPatchId = typeof nextPatch?.id === "string" && nextPatch.id.trim()
       ? nextPatch.id.trim()
       : null;
+    clearReactiveBloomPatchSelection(draft.interaction);
   };
 
   const setReactiveGrassPatchSelectionById = (draft, patchId = null) => {
@@ -6063,6 +6070,7 @@ export function createEditorApp({
     const hitDecorIndex = findDecorAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitSoundIndex = findSoundAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitReactiveGrassPatchIndex = findReactiveGrassPatchAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+    const hitReactiveBloomPatchIndex = findReactiveBloomPatchAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const activeEntityPresetId = state.interaction.activeEntityPresetId;
     const activeDecorPresetId = state.interaction.activeDecorPresetId;
     const activeSoundPresetId = state.interaction.activeSoundPresetId;
@@ -6109,6 +6117,19 @@ export function createEditorApp({
         resumeObjectPlacementPreviews(draft, "decor placement");
         createDecorAtCell(draft, cell, activeDecorPresetId);
         draft.interaction.hoverCell = cell;
+      });
+      return true;
+    }
+
+    if (activeLayer === PANEL_LAYERS.REACTIVE_DECOR && isMomentaryPlacementTrigger(event) && hitReactiveBloomPatchIndex >= 0) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        const patches = Array.isArray(draft.document.active?.reactiveBloomPatches) ? draft.document.active.reactiveBloomPatches : [];
+        const patch = patches[hitReactiveBloomPatchIndex] || null;
+        draft.interaction.selectedReactiveBloomPatchIndex = patch ? hitReactiveBloomPatchIndex : null;
+        draft.interaction.selectedReactiveBloomPatchId = typeof patch?.id === "string" ? patch.id : null;
+        clearReactiveGrassPatchSelection(draft.interaction);
       });
       return true;
     }
