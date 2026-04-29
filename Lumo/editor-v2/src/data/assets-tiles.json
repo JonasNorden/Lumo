@@ -31869,5 +31869,28 @@
       "variant": "lush_default",
       "seed": 67890
     }
+  ],
+  "reactiveBloomPatches": [
+    {
+      "id": "reactive_bloom_001",
+      "kind": "reactive_bloom",
+      "x": 367,
+      "y": 442,
+      "clusterCount": 6,
+      "width": 102,
+      "heightMin": 30,
+      "heightMax": 56,
+      "triggerRadius": 80,
+      "auraSensitivity": 1,
+      "openSpeed": 1,
+      "closeDelayMs": 1000,
+      "closeSpeed": 1,
+      "stemColor": "#2f6f3a",
+      "petalInnerColor": "#ffd6f0",
+      "petalOuterColor": "#9f5cff",
+      "coreColor": "#fff2a8",
+      "variant": "lush_bloom_default",
+      "seed": 24680
+    }
   ]
 }

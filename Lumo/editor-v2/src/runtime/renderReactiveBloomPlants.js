@@ -1,21 +1,24 @@
 const DEFAULT_BLOOM_PATCH = Object.freeze({
   id: "reactive_bloom_patch_default",
-  kind: "reactive_bloom_plant",
+  kind: "reactive_bloom",
   x: (15.3 * 24),
   y: (18.4 * 24),
-  stems: 6,
-  spread: 96,
-  stemHeightMin: 30,
-  stemHeightMax: 52,
+  clusterCount: 6,
+  width: 96,
+  heightMin: 30,
+  heightMax: 52,
   bloomRadiusMin: 11,
   bloomRadiusMax: 18,
-  reactFar: 222,
-  reactMid: 132,
-  reactNear: 62,
-  stemBaseColor: "#143726",
-  stemTopColor: "#8fe0b4",
+  triggerRadius: 80,
+  auraSensitivity: 1,
+  openSpeed: 1,
+  closeDelayMs: 1000,
+  closeSpeed: 1,
+  stemColor: "#2f6f3a",
   petalInnerColor: "#ffd4f2",
   petalOuterColor: "#a05de2",
+  coreColor: "#fff2a8",
+  variant: "lush_bloom_default",
   seed: 29017,
 });
 
@@ -49,22 +52,42 @@ function resolveCanvasPoint(mapper, x, y) {
 
 function normalizePatch(patch) {
   const source = patch && typeof patch === "object" ? patch : DEFAULT_BLOOM_PATCH;
+  const clusterCount = Number.isFinite(source.clusterCount)
+    ? clamp(Math.round(source.clusterCount), 1, 24)
+    : (Number.isFinite(source.stems) ? clamp(Math.round(source.stems), 1, 24) : DEFAULT_BLOOM_PATCH.clusterCount);
+  const width = Number.isFinite(source.width)
+    ? clamp(source.width, 20, 300)
+    : (Number.isFinite(source.spread) ? clamp(source.spread, 20, 300) : DEFAULT_BLOOM_PATCH.width);
+  const heightMin = Number.isFinite(source.heightMin)
+    ? clamp(source.heightMin, 10, 140)
+    : (Number.isFinite(source.stemHeightMin) ? clamp(source.stemHeightMin, 10, 140) : DEFAULT_BLOOM_PATCH.heightMin);
+  const heightMaxRaw = Number.isFinite(source.heightMax)
+    ? clamp(source.heightMax, 12, 180)
+    : (Number.isFinite(source.stemHeightMax) ? clamp(source.stemHeightMax, 12, 180) : DEFAULT_BLOOM_PATCH.heightMax);
+  const heightMax = Math.max(heightMin + 2, heightMaxRaw);
   return {
     ...DEFAULT_BLOOM_PATCH,
     ...source,
     x: Number.isFinite(source.x) ? Number(source.x) : DEFAULT_BLOOM_PATCH.x,
     y: Number.isFinite(source.y) ? Number(source.y) : DEFAULT_BLOOM_PATCH.y,
-    stems: Number.isFinite(source.stems) ? clamp(Math.round(source.stems), 3, 14) : DEFAULT_BLOOM_PATCH.stems,
-    spread: Number.isFinite(source.spread) ? clamp(source.spread, 22, 160) : DEFAULT_BLOOM_PATCH.spread,
-    stemHeightMin: Number.isFinite(source.stemHeightMin) ? clamp(source.stemHeightMin, 10, 80) : DEFAULT_BLOOM_PATCH.stemHeightMin,
-    stemHeightMax: Number.isFinite(source.stemHeightMax) ? clamp(source.stemHeightMax, 12, 96) : DEFAULT_BLOOM_PATCH.stemHeightMax,
+    id: typeof source.id === "string" && source.id.trim() ? source.id.trim() : DEFAULT_BLOOM_PATCH.id,
+    kind: typeof source.kind === "string" && source.kind.trim() ? source.kind.trim() : DEFAULT_BLOOM_PATCH.kind,
+    clusterCount,
+    width,
+    heightMin,
+    heightMax,
     bloomRadiusMin: Number.isFinite(source.bloomRadiusMin) ? clamp(source.bloomRadiusMin, 4, 20) : DEFAULT_BLOOM_PATCH.bloomRadiusMin,
     bloomRadiusMax: Number.isFinite(source.bloomRadiusMax) ? clamp(source.bloomRadiusMax, 5, 24) : DEFAULT_BLOOM_PATCH.bloomRadiusMax,
+    triggerRadius: Number.isFinite(source.triggerRadius) ? clamp(source.triggerRadius, 12, 260) : DEFAULT_BLOOM_PATCH.triggerRadius,
+    auraSensitivity: Number.isFinite(source.auraSensitivity) ? clamp(source.auraSensitivity, 0.15, 4) : DEFAULT_BLOOM_PATCH.auraSensitivity,
+    openSpeed: Number.isFinite(source.openSpeed) ? clamp(source.openSpeed, 0.15, 6) : DEFAULT_BLOOM_PATCH.openSpeed,
+    closeDelayMs: Number.isFinite(source.closeDelayMs) ? clamp(source.closeDelayMs, 0, 10000) : DEFAULT_BLOOM_PATCH.closeDelayMs,
+    closeSpeed: Number.isFinite(source.closeSpeed) ? clamp(source.closeSpeed, 0.15, 6) : DEFAULT_BLOOM_PATCH.closeSpeed,
   };
 }
 
 function patchRuntimeKey(patch) {
-  return [patch.id, patch.seed, patch.stems, patch.spread, patch.stemHeightMin, patch.stemHeightMax].join("|");
+  return [patch.id, patch.seed, patch.clusterCount, patch.width, patch.heightMin, patch.heightMax, patch.variant].join("|");
 }
 
 function ensurePatchCache(patch) {
@@ -73,8 +96,8 @@ function ensurePatchCache(patch) {
   if (Array.isArray(cached) && cached.length > 0) return { key, stems: cached };
 
   const stems = [];
-  for (let i = 0; i < patch.stems; i += 1) {
-    const u = patch.stems <= 1 ? 0.5 : (i / (patch.stems - 1));
+  for (let i = 0; i < patch.clusterCount; i += 1) {
+    const u = patch.clusterCount <= 1 ? 0.5 : (i / (patch.clusterCount - 1));
     const xNoise = (seeded(patch.seed + i * 5.17) - 0.5) * 12;
     const lean = (seeded(patch.seed + i * 7.33) - 0.5) * 7;
     stems.push({
@@ -117,7 +140,7 @@ function auraTriggered(patch, wx, wy, playerX, playerY, triggerScale = 1) {
   if (!Number.isFinite(playerX) || !Number.isFinite(playerY)) return false;
   const dx = playerX - wx;
   const dy = (playerY - wy) * 0.58;
-  const auraRadius = Math.max(44, patch.reactNear * 0.95);
+  const auraRadius = Math.max(32, patch.triggerRadius * patch.auraSensitivity * 0.9);
   const triggerRadius = Math.max(12, patch.bloomRadiusMax * 1.8 * triggerScale);
   const overlapDist = auraRadius + triggerRadius;
   return (dx * dx) + (dy * dy) <= overlapDist * overlapDist;
@@ -127,37 +150,43 @@ export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options =
   if (!ctx || typeof ctx.save !== "function" || !ctx.canvas) return;
 
   const mapper = options && typeof options === "object" ? options.mapper : null;
-  const patch = normalizePatch(options?.patch);
-  const { key, stems } = ensurePatchCache(patch);
+  const patchesInput = Array.isArray(options?.patches) ? options.patches : [options?.patch];
+  const patches = patchesInput.map((patch) => normalizePatch(patch)).filter(Boolean);
+  if (!patches.length) {
+    patches.push(normalizePatch(DEFAULT_BLOOM_PATCH));
+  }
   const timeMs = Number.isFinite(time) ? time : 0;
   const timeSec = timeMs * 0.001;
-  const patchState = ensurePatchRuntimeState(key, stems.length);
-  const rawDt = patchState.lastTimeMs == null ? (1 / 60) : (timeMs - patchState.lastTimeMs) * 0.001;
-  const dt = clamp(Number.isFinite(rawDt) ? rawDt : (1 / 60), 0, 0.07);
-  patchState.lastTimeMs = timeMs;
-
-  const stemBaseColor = parseColorHex(patch.stemBaseColor, DEFAULT_BLOOM_PATCH.stemBaseColor);
-  const stemTopColor = parseColorHex(patch.stemTopColor, DEFAULT_BLOOM_PATCH.stemTopColor);
-  const petalInnerColor = parseColorHex(patch.petalInnerColor, DEFAULT_BLOOM_PATCH.petalInnerColor);
-  const petalOuterColor = parseColorHex(patch.petalOuterColor, DEFAULT_BLOOM_PATCH.petalOuterColor);
 
   ctx.save();
   ctx.lineCap = "round";
 
+  for (const patch of patches) {
+    const { key, stems } = ensurePatchCache(patch);
+    const patchState = ensurePatchRuntimeState(key, stems.length);
+    const rawDt = patchState.lastTimeMs == null ? (1 / 60) : (timeMs - patchState.lastTimeMs) * 0.001;
+    const dt = clamp(Number.isFinite(rawDt) ? rawDt : (1 / 60), 0, 0.07);
+    patchState.lastTimeMs = timeMs;
+    const stemBaseColor = parseColorHex(patch.stemColor, DEFAULT_BLOOM_PATCH.stemColor);
+    const stemTopColor = parseColorHex(patch.stemColor, DEFAULT_BLOOM_PATCH.stemColor);
+    const petalInnerColor = parseColorHex(patch.petalInnerColor, DEFAULT_BLOOM_PATCH.petalInnerColor);
+    const petalOuterColor = parseColorHex(patch.petalOuterColor, DEFAULT_BLOOM_PATCH.petalOuterColor);
+    const coreColor = parseColorHex(patch.coreColor, DEFAULT_BLOOM_PATCH.coreColor);
+
   for (let stemIndex = 0; stemIndex < stems.length; stemIndex += 1) {
     const stem = stems[stemIndex];
     const stemState = patchState.stems[stemIndex];
-    const wx = patch.x - patch.spread * 0.5 + stem.u * patch.spread + stem.xNoise;
+    const wx = patch.x - patch.width * 0.5 + stem.u * patch.width + stem.xNoise;
     const wy = patch.y;
 
     const triggered = auraTriggered(patch, wx, wy, playerX, playerY, stem.triggerScale);
     if (triggered) {
-      stemState.holdTime = 1 + stem.bloomDelay;
-      stemState.openProgress = clamp01(stemState.openProgress + (dt / Math.max(0.01, stem.openSpeed)));
+      stemState.holdTime = (patch.closeDelayMs * 0.001) + stem.bloomDelay;
+      stemState.openProgress = clamp01(stemState.openProgress + (dt / Math.max(0.01, stem.openSpeed / patch.openSpeed)));
     } else if (stemState.holdTime > 0) {
       stemState.holdTime = Math.max(0, stemState.holdTime - dt);
     } else {
-      stemState.openProgress = clamp01(stemState.openProgress - (dt / Math.max(0.01, stem.closeSpeed)));
+      stemState.openProgress = clamp01(stemState.openProgress - (dt / Math.max(0.01, stem.closeSpeed / patch.closeSpeed)));
     }
 
     const openT = stemState.openProgress;
@@ -165,7 +194,7 @@ export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options =
     const breathe = Math.sin((timeSec * (0.7 + stem.speed * 0.3)) + stem.phase);
     const idleSway = breathe * 0.32;
 
-    const height = lerp(patch.stemHeightMin, patch.stemHeightMax, stem.bloomBias);
+    const height = lerp(patch.heightMin, patch.heightMax, stem.bloomBias);
     const sway = Math.sin((timeSec * (1.02 + stem.speed * 0.8)) + stem.phase) * stem.swayScale * 2.3;
     const turn = idleSway * (1.2 + openT * 1.7);
     const lift = openT * 4.1;
@@ -230,12 +259,13 @@ export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options =
 
     const coreR = 1.35 + bloomEase * 2.65;
     const coreGradient = ctx.createRadialGradient(tipPt.x, tipPt.y, 0, tipPt.x, tipPt.y, coreR * 2.2);
-    coreGradient.addColorStop(0, "rgba(255, 228, 168, 0.9)");
-    coreGradient.addColorStop(1, "rgba(255, 228, 168, 0)");
+    coreGradient.addColorStop(0, `rgba(${coreColor.r},${coreColor.g},${coreColor.b},0.9)`);
+    coreGradient.addColorStop(1, `rgba(${coreColor.r},${coreColor.g},${coreColor.b},0)`);
     ctx.fillStyle = coreGradient;
     ctx.beginPath();
     ctx.arc(tipPt.x, tipPt.y, coreR * 2.2, 0, Math.PI * 2);
     ctx.fill();
+  }
   }
 
   ctx.restore();
