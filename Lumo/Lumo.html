@@ -49,6 +49,7 @@
     import { buildRechargedHudSnapshot } from "./editor-v2/src/runtime/buildRechargedHudSnapshot.js";
     import { renderReactiveGrass } from "./editor-v2/src/runtime/renderReactiveGrass.js";
     import { renderReactiveBloomPlants } from "./editor-v2/src/runtime/renderReactiveBloomPlants.js";
+    import { renderReactiveCrystals } from "./editor-v2/src/runtime/renderReactiveCrystals.js";
     import {
       FIREFLY_AUDIO_PATH,
       createFireflyAudioBridge,
@@ -6498,6 +6499,14 @@
           playerFootY,
           rechargedDecorTime,
           { mapper, patches: reactiveBloomPatches },
+        );
+
+        renderReactiveCrystals(
+          ctx,
+          playerCenterX,
+          playerFootY,
+          rechargedDecorTime,
+          { mapper },
         );
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
