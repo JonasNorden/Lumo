@@ -410,6 +410,19 @@ function renderDecorSettings(state) {
   `;
 }
 
+
+function renderReactiveDecorSettings(state) {
+  const activeType = state?.interaction?.reactiveDecorType === "bloom" ? "bloom" : "grass";
+  return `
+    <label class="fieldRow fieldRowCompact">
+      <span class="label">Type</span>
+      <select data-reactive-decor-type aria-label="Reactive decor type">
+        <option value="grass" ${activeType === "grass" ? "selected" : ""}>Grass</option>
+        <option value="bloom" ${activeType === "bloom" ? "selected" : ""}>Bloom</option>
+      </select>
+    </label>
+  `;
+}
 function renderSoundSection(activePresetId, isOpen) {
   const activePreset = SOUND_PRESETS.find((preset) => preset.id === activePresetId) || null;
 
@@ -475,6 +488,7 @@ export function renderBrushPanel(panel, state) {
     ${state.document.active ? renderSection("decor", "DECOR", panelSections.decor, renderDecorSettings(state)) : ""}
     ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
     ${state.document.active ? renderSection("fogVolumes", "SPECIAL VOLUMES", panelSections.fogVolumes, renderFogVolumeSettings(state)) : ""}
+    ${state.document.active ? renderSection("reactiveDecor", "REACTIVE DECOR", true, renderReactiveDecorSettings(state)) : ""}
     ${state.document.active ? renderSoundSection(state.interaction.activeSoundPresetId, panelSections.sound) : ""}
   `;
 }
@@ -502,6 +516,14 @@ export function bindBrushPanel(panel, store, options = {}) {
       if (typeof target.dataset.entityPresetSelect === "string") {
         onLayerChange?.(PANEL_LAYERS.ENTITIES);
         onEntityUpdate?.(-1, target.value ? "preset" : "clear-preset", target.value || null);
+        return;
+      }
+
+      if (typeof target.dataset.reactiveDecorType === "string") {
+        onLayerChange?.(PANEL_LAYERS.REACTIVE_DECOR);
+        store.setState((draft) => {
+          draft.interaction.reactiveDecorType = target.value === "bloom" ? "bloom" : "grass";
+        });
         return;
       }
 
