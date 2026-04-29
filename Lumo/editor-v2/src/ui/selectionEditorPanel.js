@@ -895,6 +895,36 @@ function renderReactiveGrassPatchInspector(patch) {
   ].join(""));
 }
 
+
+function renderReactiveBloomPatchInspector(patch) {
+  return renderSelectionFields([
+    `<div class="statusCard assetSelectionCard assetSelectionCardCompact">
+      <div class="assetSelectionMeta">
+        <span class="statusCardMeta">Reactive Bloom Patch · Authored data (read-only)</span>
+      </div>
+    </div>`,
+    renderReadOnlyField("id", patch?.id),
+    renderReadOnlyField("kind", patch?.kind),
+    renderReadOnlyField("x", patch?.x),
+    renderReadOnlyField("y", patch?.y),
+    renderReadOnlyField("clusterCount", patch?.clusterCount),
+    renderReadOnlyField("width", patch?.width),
+    renderReadOnlyField("heightMin", patch?.heightMin),
+    renderReadOnlyField("heightMax", patch?.heightMax),
+    renderReadOnlyField("triggerRadius", patch?.triggerRadius),
+    renderReadOnlyField("auraSensitivity", patch?.auraSensitivity),
+    renderReadOnlyField("openSpeed", patch?.openSpeed),
+    renderReadOnlyField("closeDelayMs", patch?.closeDelayMs),
+    renderReadOnlyField("closeSpeed", patch?.closeSpeed),
+    renderReadOnlyField("stemColor", patch?.stemColor),
+    renderReadOnlyField("petalInnerColor", patch?.petalInnerColor),
+    renderReadOnlyField("petalOuterColor", patch?.petalOuterColor),
+    renderReadOnlyField("coreColor", patch?.coreColor),
+    renderReadOnlyField("variant", patch?.variant),
+    renderReadOnlyField("seed", patch?.seed),
+  ].join(""));
+}
+
 function renderSelectionEditor(state, emptyMessage, options = {}) {
   const { soundMode = "full", hideEntityTypes = [] } = options;
   const active = state.document.active;
@@ -943,6 +973,10 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   const selectedReactiveGrassPatchIndex = Number.isInteger(state?.interaction?.selectedReactiveGrassPatchIndex)
     ? state.interaction.selectedReactiveGrassPatchIndex
     : null;
+  const selectedReactiveBloomPatchId = typeof state?.interaction?.selectedReactiveBloomPatchId === "string" && state.interaction.selectedReactiveBloomPatchId.trim() ? state.interaction.selectedReactiveBloomPatchId.trim() : null;
+  const selectedReactiveBloomPatchIndex = Number.isInteger(state?.interaction?.selectedReactiveBloomPatchIndex) ? state.interaction.selectedReactiveBloomPatchIndex : null;
+  const selectedReactiveBloomPatch = selectedReactiveBloomPatchId ? (active.reactiveBloomPatches || []).find((patch) => patch?.id === selectedReactiveBloomPatchId) || null : Number.isInteger(selectedReactiveBloomPatchIndex) && selectedReactiveBloomPatchIndex >= 0 ? active.reactiveBloomPatches?.[selectedReactiveBloomPatchIndex] || null : null;
+
   const selectedReactiveGrassPatch = selectedReactiveGrassPatchId
     ? (active.reactiveGrassPatches || []).find((patch) => patch?.id === selectedReactiveGrassPatchId) || null
     : Number.isInteger(selectedReactiveGrassPatchIndex) && selectedReactiveGrassPatchIndex >= 0
@@ -962,6 +996,10 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
       return { markup: "", isEmpty: true };
     }
     return { markup: renderBatchSoundEditor(selectedSounds, resolvedSelectedSoundIndex, themeId), isEmpty: false };
+  }
+
+  if (selectedReactiveBloomPatch) {
+    return { markup: renderReactiveBloomPatchInspector(selectedReactiveBloomPatch), isEmpty: false };
   }
 
   if (selectedReactiveGrassPatch) {
