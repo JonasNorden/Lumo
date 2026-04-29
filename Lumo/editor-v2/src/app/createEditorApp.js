@@ -6633,31 +6633,6 @@ if (event.shiftKey) {
       return;
     }
 
-    if (state.interaction.reactiveBloomPlacementDrag?.active) {
-      store.setState((draft) => {
-        const reactiveBloomPlacementDrag = draft.interaction.reactiveBloomPlacementDrag;
-        if (!reactiveBloomPlacementDrag?.active) return;
-        const createdPatch = createReactiveBloomPatchFromDrag(
-          draft.document.active,
-          reactiveBloomPlacementDrag.startCell,
-          reactiveBloomPlacementDrag.endCell || reactiveBloomPlacementDrag.startCell,
-        );
-        if (createdPatch) {
-          if (!Array.isArray(draft.document.active.reactiveBloomPatches)) draft.document.active.reactiveBloomPatches = [];
-          const createdIndex = draft.document.active.reactiveBloomPatches.length;
-          draft.document.active.reactiveBloomPatches.push(createdPatch);
-          pushHistoryEntry(draft.history, createReactiveBloomEditEntry("create", {
-            objectId: typeof createdPatch.id === "string" ? createdPatch.id : null,
-            index: createdIndex,
-            nextSnapshot: createdPatch,
-          }));
-          setReactiveBloomPatchSelection(draft, createdIndex);
-        }
-        draft.interaction.reactiveBloomPlacementDrag = null;
-      });
-      return;
-    }
-
     if (state.interaction.decorDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
 
@@ -6947,7 +6922,34 @@ if (event.shiftKey) {
           setReactiveGrassPatchSelection(draft, createdIndex);
         }
         draft.interaction.reactiveGrassPlacementDrag = null;
-    draft.interaction.reactiveBloomPlacementDrag = null;
+        draft.interaction.reactiveBloomPlacementDrag = null;
+      });
+      return;
+    }
+
+    if (state.interaction.reactiveBloomPlacementDrag?.active) {
+      store.setState((draft) => {
+        const reactiveBloomPlacementDrag = draft.interaction.reactiveBloomPlacementDrag;
+        if (!reactiveBloomPlacementDrag?.active) return;
+        const createdPatch = createReactiveBloomPatchFromDrag(
+          draft.document.active,
+          reactiveBloomPlacementDrag.startCell,
+          reactiveBloomPlacementDrag.endCell || reactiveBloomPlacementDrag.startCell,
+        );
+        if (createdPatch) {
+          if (!Array.isArray(draft.document.active.reactiveBloomPatches)) {
+            draft.document.active.reactiveBloomPatches = [];
+          }
+          const createdIndex = draft.document.active.reactiveBloomPatches.length;
+          draft.document.active.reactiveBloomPatches.push(createdPatch);
+          pushHistoryEntry(draft.history, createReactiveBloomEditEntry("create", {
+            objectId: typeof createdPatch.id === "string" ? createdPatch.id : null,
+            index: createdIndex,
+            nextSnapshot: createdPatch,
+          }));
+          setReactiveBloomPatchSelection(draft, createdIndex);
+        }
+        draft.interaction.reactiveBloomPlacementDrag = null;
       });
       return;
     }
