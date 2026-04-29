@@ -48,6 +48,7 @@
     import { loadNextRechargedLevelFromIntermission } from "./editor-v2/src/runtime/rechargedIntermissionNextLevelFlow.js";
     import { buildRechargedHudSnapshot } from "./editor-v2/src/runtime/buildRechargedHudSnapshot.js";
     import { renderReactiveGrass } from "./editor-v2/src/runtime/renderReactiveGrass.js";
+    import { renderReactiveBloomPlants } from "./editor-v2/src/runtime/renderReactiveBloomPlants.js";
     import {
       FIREFLY_AUDIO_PATH,
       createFireflyAudioBridge,
@@ -6384,15 +6385,25 @@
           ctx.restore();
         }
 
+        const rechargedDecorTime = (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now();
+
         renderReactiveGrass(
           ctx,
           playerCenterX,
           playerFootY,
-          (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now(),
+          rechargedDecorTime,
           {
             mapper,
             patches: reactiveGrassPatches,
           },
+        );
+
+        renderReactiveBloomPlants(
+          ctx,
+          playerCenterX,
+          playerFootY,
+          rechargedDecorTime,
+          { mapper },
         );
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
