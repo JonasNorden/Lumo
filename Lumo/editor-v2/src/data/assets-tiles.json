@@ -31963,6 +31963,29 @@
       "seed": 973822
     }
   ],
+  "reactiveCrystalPatches": [
+    {
+      "id": "reactive_crystal_001",
+      "kind": "reactive_crystal",
+      "x": 466,
+      "y": 446.4,
+      "clusterCount": 8,
+      "width": 84,
+      "heightMin": 20,
+      "heightMax": 58,
+      "triggerRadius": 78,
+      "auraSensitivity": 1,
+      "wakeSpeed": 1,
+      "settleDelayMs": 900,
+      "settleSpeed": 1,
+      "baseColor": "#1a1330",
+      "glowColor": "#6d5bff",
+      "coreColor": "#63d3ff",
+      "edgeColor": "#6a4cff",
+      "variant": "void_crystal_default",
+      "seed": 64021
+    }
+  ],
   "layers": {
     "background": [
       {
