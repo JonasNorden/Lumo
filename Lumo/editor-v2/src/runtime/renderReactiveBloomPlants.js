@@ -128,17 +128,19 @@ export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options =
     const prox = proximityFactor(patch, wx, wy, playerX, playerY);
 
     const breathe = Math.sin((timeSec * (0.7 + stem.speed * 0.3)) + stem.phase);
-    const idleOpen = 0.27 + (breathe * 0.08);
-    const reactiveOpen = (prox.mid * 0.44) + (prox.near * 0.56);
-    const bloomOpen = clamp01(idleOpen + reactiveOpen + (stem.bloomBias - 0.5) * 0.05);
+    const idleOpen = 0.11 + (breathe * 0.035);
+    const reactiveOpen = Math.pow(clamp01((prox.mid * 0.4) + (prox.near * 0.82)), 1.1);
+    const bloomOpen = clamp01(idleOpen + reactiveOpen + (stem.bloomBias - 0.5) * 0.04);
+    const bloomEase = bloomOpen * bloomOpen * (3 - 2 * bloomOpen);
 
     const height = lerp(patch.stemHeightMin, patch.stemHeightMax, stem.bloomBias);
     const sway = Math.sin((timeSec * (1.02 + stem.speed * 0.8)) + stem.phase) * stem.swayScale * 2.3;
     const turn = prox.presenceX * (1.8 + prox.mid * 3.6 + prox.near * 6.4);
+    const lift = prox.mid * 1.8 + prox.near * 3.8;
 
     const basePt = resolveCanvasPoint(mapper, wx, wy);
     const tipWorldX = wx + stem.lean + sway + turn;
-    const tipWorldY = wy - (height * (1 - prox.near * 0.08));
+    const tipWorldY = wy - (height * (1 + lift * 0.02));
     const tipPt = resolveCanvasPoint(mapper, tipWorldX, tipWorldY);
 
     const stemGradient = ctx.createLinearGradient(basePt.x, basePt.y, tipPt.x, tipPt.y);
@@ -153,8 +155,9 @@ export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options =
 
     const bloomRadius = lerp(patch.bloomRadiusMin, patch.bloomRadiusMax, 0.45 + stem.bloomBias * 0.55);
     const petalCount = stem.petalCount;
-    const openAngle = lerp(0.11, 1.18, bloomOpen);
-    const openTilt = lerp(0.78, 1.04, bloomOpen);
+    const openAngle = lerp(0.03, 1.22, bloomEase);
+    const openTilt = lerp(0.52, 1.08, bloomEase);
+    const closedUpBias = lerp(0.84, 0.08, bloomEase);
 
     for (let p = 0; p < petalCount; p += 1) {
       const petalT = p / petalCount;
@@ -162,32 +165,38 @@ export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options =
       const jitter = (seeded(patch.seed + p * 17.1 + stem.u * 91.7) - 0.5) * 0.28;
       const petalAngle = baseAngle + jitter;
       const petalLen = bloomRadius * (0.85 + seeded(patch.seed + p * 3.7 + stem.u * 13.5) * 0.45);
-      const spread = openAngle * (0.64 + seeded(patch.seed + p * 7.4 + stem.u * 41.4) * 0.48);
-      const widthScale = 0.36 + bloomOpen * 0.26;
+      const spread = openAngle * (0.56 + seeded(patch.seed + p * 7.4 + stem.u * 41.4) * 0.52);
+      const widthScale = lerp(0.15, 0.43, bloomEase);
+      const openLenScale = lerp(0.66, 1.05, bloomEase);
+      const liftAngle = -Math.PI * 0.5;
+      const foldAngle = (petalAngle * (1 - closedUpBias)) + (liftAngle * closedUpBias);
+      const foldLenScale = 1 - closedUpBias * 0.32;
+      const finalAngle = foldAngle + (jitter * (0.25 + bloomEase * 0.75));
+      const finalLen = petalLen * openLenScale * foldLenScale;
 
-      const ctrlX = tipPt.x + Math.cos(petalAngle) * petalLen * spread;
-      const ctrlY = tipPt.y + Math.sin(petalAngle) * petalLen * spread * openTilt;
-      const edgeX = tipPt.x + Math.cos(petalAngle) * petalLen;
-      const edgeY = tipPt.y + Math.sin(petalAngle) * petalLen * (0.92 + bloomOpen * 0.12);
+      const ctrlX = tipPt.x + Math.cos(finalAngle) * finalLen * spread;
+      const ctrlY = tipPt.y + Math.sin(finalAngle) * finalLen * spread * openTilt;
+      const edgeX = tipPt.x + Math.cos(finalAngle) * finalLen;
+      const edgeY = tipPt.y + Math.sin(finalAngle) * finalLen * (0.84 + bloomEase * 0.26);
 
       const petalGradient = ctx.createLinearGradient(tipPt.x, tipPt.y, edgeX, edgeY);
-      petalGradient.addColorStop(0, `rgba(${petalInnerColor.r},${petalInnerColor.g},${petalInnerColor.b},0.78)`);
-      petalGradient.addColorStop(1, `rgba(${petalOuterColor.r},${petalOuterColor.g},${petalOuterColor.b},0.62)`);
+      petalGradient.addColorStop(0, `rgba(${petalInnerColor.r},${petalInnerColor.g},${petalInnerColor.b},${lerp(0.7, 0.84, bloomEase)})`);
+      petalGradient.addColorStop(1, `rgba(${petalOuterColor.r},${petalOuterColor.g},${petalOuterColor.b},${lerp(0.56, 0.69, bloomEase)})`);
 
       ctx.fillStyle = petalGradient;
       ctx.beginPath();
       ctx.moveTo(tipPt.x, tipPt.y);
       ctx.quadraticCurveTo(ctrlX, ctrlY, edgeX, edgeY);
       ctx.quadraticCurveTo(
-        ctrlX + Math.cos(petalAngle + Math.PI * 0.5) * (petalLen * widthScale),
-        ctrlY + Math.sin(petalAngle + Math.PI * 0.5) * (petalLen * (widthScale * 0.8)),
+        ctrlX + Math.cos(finalAngle + Math.PI * 0.5) * (finalLen * widthScale),
+        ctrlY + Math.sin(finalAngle + Math.PI * 0.5) * (finalLen * (widthScale * 0.82)),
         tipPt.x,
         tipPt.y,
       );
       ctx.fill();
     }
 
-    const coreR = 1.8 + bloomOpen * 2.25;
+    const coreR = 1.35 + bloomEase * 2.65;
     const coreGradient = ctx.createRadialGradient(tipPt.x, tipPt.y, 0, tipPt.x, tipPt.y, coreR * 2.2);
     coreGradient.addColorStop(0, "rgba(255, 228, 168, 0.9)");
     coreGradient.addColorStop(1, "rgba(255, 228, 168, 0)");
