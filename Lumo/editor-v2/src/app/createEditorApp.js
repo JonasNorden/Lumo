@@ -1627,6 +1627,20 @@ export function createEditorApp({
     clearReactiveGrassPatchSelection(draft.interaction);
   };
 
+  const setReactiveBloomPatchSelection = (draft, patchIndex = null) => {
+    const patches = Array.isArray(draft.document.active?.reactiveBloomPatches)
+      ? draft.document.active.reactiveBloomPatches
+      : [];
+    const nextPatch = Number.isInteger(patchIndex) && patchIndex >= 0 && patchIndex < patches.length
+      ? patches[patchIndex]
+      : null;
+    draft.interaction.selectedReactiveBloomPatchIndex = nextPatch ? patchIndex : null;
+    draft.interaction.selectedReactiveBloomPatchId = typeof nextPatch?.id === "string" && nextPatch.id.trim()
+      ? nextPatch.id.trim()
+      : null;
+    clearReactiveGrassPatchSelection(draft.interaction);
+  };
+
   const getObjectIndicesByIds = (items, ids = []) => {
     const lookup = new Map();
     (Array.isArray(items) ? items : []).forEach((item, index) => {
@@ -6121,19 +6135,6 @@ export function createEditorApp({
       return true;
     }
 
-    if (activeLayer === PANEL_LAYERS.REACTIVE_DECOR && isMomentaryPlacementTrigger(event) && hitReactiveBloomPatchIndex >= 0) {
-      interactionState.suppressNextClick = true;
-      event.preventDefault();
-      store.setState((draft) => {
-        const patches = Array.isArray(draft.document.active?.reactiveBloomPatches) ? draft.document.active.reactiveBloomPatches : [];
-        const patch = patches[hitReactiveBloomPatchIndex] || null;
-        draft.interaction.selectedReactiveBloomPatchIndex = patch ? hitReactiveBloomPatchIndex : null;
-        draft.interaction.selectedReactiveBloomPatchId = typeof patch?.id === "string" ? patch.id : null;
-        clearReactiveGrassPatchSelection(draft.interaction);
-      });
-      return true;
-    }
-
     if (activeLayer === PANEL_LAYERS.SOUND && activeSoundPresetId && isMomentaryPlacementTrigger(event)) {
       interactionState.suppressNextClick = true;
       event.preventDefault();
@@ -6247,7 +6248,11 @@ if (event.shiftKey) {
       event.preventDefault();
       store.setState((draft) => {
         draft.interaction.selectedCell = cell;
-        setReactiveGrassPatchSelection(draft, hitReactiveGrassPatchIndex);
+        if (hitReactiveBloomPatchIndex >= 0) {
+          setReactiveBloomPatchSelection(draft, hitReactiveBloomPatchIndex);
+        } else {
+          setReactiveGrassPatchSelection(draft, hitReactiveGrassPatchIndex);
+        }
         clearEntitySelection(draft.interaction);
         clearDecorSelection(draft.interaction);
         clearSoundSelection(draft.interaction);
