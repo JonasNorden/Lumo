@@ -1,21 +1,21 @@
 const DEFAULT_BLOOM_PATCH = Object.freeze({
   id: "reactive_bloom_patch_default",
   kind: "reactive_bloom_plant",
-  x: (13.25 * 24),
-  y: (19 * 24),
-  stems: 7,
-  spread: 84,
-  stemHeightMin: 22,
-  stemHeightMax: 40,
-  bloomRadiusMin: 8,
-  bloomRadiusMax: 13,
-  reactFar: 200,
-  reactMid: 118,
-  reactNear: 54,
-  stemBaseColor: "#1b3d2b",
-  stemTopColor: "#6bb78f",
-  petalInnerColor: "#f2c6ff",
-  petalOuterColor: "#9465bd",
+  x: (15.3 * 24),
+  y: (18.4 * 24),
+  stems: 6,
+  spread: 96,
+  stemHeightMin: 30,
+  stemHeightMax: 52,
+  bloomRadiusMin: 11,
+  bloomRadiusMax: 18,
+  reactFar: 222,
+  reactMid: 132,
+  reactNear: 62,
+  stemBaseColor: "#143726",
+  stemTopColor: "#8fe0b4",
+  petalInnerColor: "#ffd4f2",
+  petalOuterColor: "#a05de2",
   seed: 29017,
 });
 
@@ -80,7 +80,7 @@ function ensurePatchCache(patch) {
       speed: 0.55 + seeded(patch.seed + i * 9.51) * 0.95,
       swayScale: 0.65 + seeded(patch.seed + i * 3.27) * 0.9,
       bloomBias: seeded(patch.seed + i * 11.43),
-      thickness: 1 + seeded(patch.seed + i * 1.37) * 1.1,
+      thickness: 1.4 + seeded(patch.seed + i * 1.37) * 1.4,
       petalCount: 5 + Math.round(seeded(patch.seed + i * 4.77) * 2),
     });
   }
@@ -128,13 +128,13 @@ export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options =
     const prox = proximityFactor(patch, wx, wy, playerX, playerY);
 
     const breathe = Math.sin((timeSec * (0.7 + stem.speed * 0.3)) + stem.phase);
-    const idleOpen = 0.34 + (breathe * 0.07);
-    const reactiveOpen = (prox.mid * 0.25) + (prox.near * 0.47);
+    const idleOpen = 0.27 + (breathe * 0.08);
+    const reactiveOpen = (prox.mid * 0.44) + (prox.near * 0.56);
     const bloomOpen = clamp01(idleOpen + reactiveOpen + (stem.bloomBias - 0.5) * 0.05);
 
     const height = lerp(patch.stemHeightMin, patch.stemHeightMax, stem.bloomBias);
-    const sway = Math.sin((timeSec * (1.15 + stem.speed)) + stem.phase) * stem.swayScale * 2.9;
-    const turn = prox.presenceX * (2.5 + prox.mid * 3.2 + prox.near * 4.7);
+    const sway = Math.sin((timeSec * (1.02 + stem.speed * 0.8)) + stem.phase) * stem.swayScale * 2.3;
+    const turn = prox.presenceX * (1.8 + prox.mid * 3.6 + prox.near * 6.4);
 
     const basePt = resolveCanvasPoint(mapper, wx, wy);
     const tipWorldX = wx + stem.lean + sway + turn;
@@ -151,9 +151,10 @@ export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options =
     ctx.quadraticCurveTo((basePt.x + tipPt.x) * 0.5 + sway * 0.55, (basePt.y + tipPt.y) * 0.45, tipPt.x, tipPt.y);
     ctx.stroke();
 
-    const bloomRadius = lerp(patch.bloomRadiusMin, patch.bloomRadiusMax, 0.4 + stem.bloomBias * 0.6);
+    const bloomRadius = lerp(patch.bloomRadiusMin, patch.bloomRadiusMax, 0.45 + stem.bloomBias * 0.55);
     const petalCount = stem.petalCount;
-    const openAngle = lerp(0.19, 1.0, bloomOpen);
+    const openAngle = lerp(0.11, 1.18, bloomOpen);
+    const openTilt = lerp(0.78, 1.04, bloomOpen);
 
     for (let p = 0; p < petalCount; p += 1) {
       const petalT = p / petalCount;
@@ -161,12 +162,13 @@ export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options =
       const jitter = (seeded(patch.seed + p * 17.1 + stem.u * 91.7) - 0.5) * 0.28;
       const petalAngle = baseAngle + jitter;
       const petalLen = bloomRadius * (0.85 + seeded(patch.seed + p * 3.7 + stem.u * 13.5) * 0.45);
-      const spread = openAngle * (0.55 + seeded(patch.seed + p * 7.4 + stem.u * 41.4) * 0.55);
+      const spread = openAngle * (0.64 + seeded(patch.seed + p * 7.4 + stem.u * 41.4) * 0.48);
+      const widthScale = 0.36 + bloomOpen * 0.26;
 
       const ctrlX = tipPt.x + Math.cos(petalAngle) * petalLen * spread;
-      const ctrlY = tipPt.y + Math.sin(petalAngle) * petalLen * spread * 0.7;
+      const ctrlY = tipPt.y + Math.sin(petalAngle) * petalLen * spread * openTilt;
       const edgeX = tipPt.x + Math.cos(petalAngle) * petalLen;
-      const edgeY = tipPt.y + Math.sin(petalAngle) * petalLen * 0.78;
+      const edgeY = tipPt.y + Math.sin(petalAngle) * petalLen * (0.92 + bloomOpen * 0.12);
 
       const petalGradient = ctx.createLinearGradient(tipPt.x, tipPt.y, edgeX, edgeY);
       petalGradient.addColorStop(0, `rgba(${petalInnerColor.r},${petalInnerColor.g},${petalInnerColor.b},0.78)`);
@@ -176,11 +178,16 @@ export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options =
       ctx.beginPath();
       ctx.moveTo(tipPt.x, tipPt.y);
       ctx.quadraticCurveTo(ctrlX, ctrlY, edgeX, edgeY);
-      ctx.quadraticCurveTo(ctrlX + Math.cos(petalAngle + Math.PI * 0.5) * (petalLen * 0.12), ctrlY + Math.sin(petalAngle + Math.PI * 0.5) * (petalLen * 0.09), tipPt.x, tipPt.y);
+      ctx.quadraticCurveTo(
+        ctrlX + Math.cos(petalAngle + Math.PI * 0.5) * (petalLen * widthScale),
+        ctrlY + Math.sin(petalAngle + Math.PI * 0.5) * (petalLen * (widthScale * 0.8)),
+        tipPt.x,
+        tipPt.y,
+      );
       ctx.fill();
     }
 
-    const coreR = 1.25 + bloomOpen * 1.9;
+    const coreR = 1.8 + bloomOpen * 2.25;
     const coreGradient = ctx.createRadialGradient(tipPt.x, tipPt.y, 0, tipPt.x, tipPt.y, coreR * 2.2);
     coreGradient.addColorStop(0, "rgba(255, 228, 168, 0.9)");
     coreGradient.addColorStop(1, "rgba(255, 228, 168, 0)");
