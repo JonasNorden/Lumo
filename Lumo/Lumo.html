@@ -4331,6 +4331,12 @@
       loading: false,
       loaded: false,
     };
+    const rechargedReactiveBloomLevelCache = {
+      levelPath: "",
+      patches: [],
+      loading: false,
+      loaded: false,
+    };
 
     function normalizeReactiveGrassPatch(patch, index) {
       if (!patch || typeof patch !== "object") {
@@ -4445,6 +4451,93 @@
 
       return Array.isArray(rechargedReactiveGrassLevelCache.patches)
         ? rechargedReactiveGrassLevelCache.patches
+        : [];
+    }
+
+    function normalizeReactiveBloomPatch(patch, index) {
+      if (!patch || typeof patch !== "object") return null;
+      const kind = typeof patch.kind === "string" ? patch.kind.trim().toLowerCase() : "";
+      if (kind && kind !== "reactive_bloom") return null;
+      const x = Number.isFinite(patch.x) ? patch.x : null;
+      const y = Number.isFinite(patch.y) ? patch.y : null;
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+      return {
+        id: typeof patch.id === "string" && patch.id.trim() ? patch.id.trim() : `reactive_bloom_${index + 1}`,
+        kind: "reactive_bloom",
+        x,
+        y,
+        clusterCount: Number.isFinite(patch.clusterCount) ? patch.clusterCount : null,
+        width: Number.isFinite(patch.width) ? patch.width : null,
+        heightMin: Number.isFinite(patch.heightMin) ? patch.heightMin : null,
+        heightMax: Number.isFinite(patch.heightMax) ? patch.heightMax : null,
+        triggerRadius: Number.isFinite(patch.triggerRadius) ? patch.triggerRadius : null,
+        auraSensitivity: Number.isFinite(patch.auraSensitivity) ? patch.auraSensitivity : null,
+        openSpeed: Number.isFinite(patch.openSpeed) ? patch.openSpeed : null,
+        closeDelayMs: Number.isFinite(patch.closeDelayMs) ? patch.closeDelayMs : null,
+        closeSpeed: Number.isFinite(patch.closeSpeed) ? patch.closeSpeed : null,
+        stemColor: typeof patch.stemColor === "string" ? patch.stemColor : null,
+        petalInnerColor: typeof patch.petalInnerColor === "string" ? patch.petalInnerColor : null,
+        petalOuterColor: typeof patch.petalOuterColor === "string" ? patch.petalOuterColor : null,
+        coreColor: typeof patch.coreColor === "string" ? patch.coreColor : null,
+        variant: typeof patch.variant === "string" ? patch.variant : null,
+        seed: Number.isFinite(patch.seed) ? patch.seed : null,
+      };
+    }
+
+    function extractReactiveBloomPatchesFromLevelDocument(document) {
+      if (!document || typeof document !== "object") return [];
+      const authored = Array.isArray(document.reactiveBloomPatches) ? document.reactiveBloomPatches : [];
+      return authored.map((patch, index) => normalizeReactiveBloomPatch(patch, index)).filter(Boolean);
+    }
+
+    function syncReactiveBloomCacheFromPayload(payload) {
+      const directPatches = Array.isArray(payload?.reactiveBloomPatches) ? payload.reactiveBloomPatches : null;
+      if (!directPatches) return;
+      rechargedReactiveBloomLevelCache.patches = directPatches
+        .map((patch, index) => normalizeReactiveBloomPatch(patch, index))
+        .filter(Boolean);
+      rechargedReactiveBloomLevelCache.loaded = true;
+    }
+
+    function beginReactiveBloomLevelLoad(levelPath) {
+      if (typeof levelPath !== "string" || !levelPath.trim()) return;
+      const normalizedPath = levelPath.trim();
+      if (rechargedReactiveBloomLevelCache.loading && rechargedReactiveBloomLevelCache.levelPath === normalizedPath) return;
+      rechargedReactiveBloomLevelCache.levelPath = normalizedPath;
+      rechargedReactiveBloomLevelCache.loading = true;
+      rechargedReactiveBloomLevelCache.loaded = false;
+      rechargedReactiveBloomLevelCache.patches = [];
+      fetch(normalizedPath, {
+        method: "GET",
+        headers: { Accept: "application/json, text/plain;q=0.8, */*;q=0.1" },
+      })
+        .then((response) => {
+          if (!response?.ok) throw new Error(`Reactive bloom level load failed (${response?.status || "?"}).`);
+          return response.json();
+        })
+        .then((levelDocument) => {
+          rechargedReactiveBloomLevelCache.patches = extractReactiveBloomPatchesFromLevelDocument(levelDocument);
+          rechargedReactiveBloomLevelCache.loaded = true;
+        })
+        .catch((_error) => {
+          rechargedReactiveBloomLevelCache.patches = [];
+          rechargedReactiveBloomLevelCache.loaded = true;
+        })
+        .finally(() => {
+          rechargedReactiveBloomLevelCache.loading = false;
+        });
+    }
+
+    function readRechargedReactiveBloomPatches(payload) {
+      syncReactiveBloomCacheFromPayload(payload);
+      const levelPath = typeof payload?.levelPath === "string" && payload.levelPath.trim()
+        ? payload.levelPath.trim()
+        : "";
+      if (levelPath && rechargedReactiveBloomLevelCache.levelPath !== levelPath) {
+        beginReactiveBloomLevelLoad(levelPath);
+      }
+      return Array.isArray(rechargedReactiveBloomLevelCache.patches)
+        ? rechargedReactiveBloomLevelCache.patches
         : [];
     }
 
@@ -5676,6 +5769,7 @@
         const fogVolumes = readRechargedFogSnapshots(payload, state);
         const decorSnapshots = readRechargedDecorSnapshots(payload);
         const reactiveGrassPatches = readRechargedReactiveGrassPatches(payload);
+        const reactiveBloomPatches = readRechargedReactiveBloomPatches(payload);
         const previousSnapshot = readRechargedPlayerSnapshot({
           player: state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
             ? state.previousPlayerSnapshot
@@ -6403,7 +6497,7 @@
           playerCenterX,
           playerFootY,
           rechargedDecorTime,
-          { mapper },
+          { mapper, patches: reactiveBloomPatches },
         );
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
