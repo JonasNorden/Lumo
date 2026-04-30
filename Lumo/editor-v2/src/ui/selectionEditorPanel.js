@@ -42,6 +42,20 @@ const REACTIVE_BLOOM_NUMERIC_FIELD_CONFIG = Object.freeze({
   closeSpeed: { min: 0.1, max: 5, integer: false, inputMode: "decimal" },
   seed: { min: 1, max: 999999999, integer: true, inputMode: "numeric" },
 });
+const REACTIVE_CRYSTAL_NUMERIC_FIELD_CONFIG = Object.freeze({
+  x: { min: -100000, max: 100000, integer: false, inputMode: "decimal" },
+  y: { min: -100000, max: 100000, integer: false, inputMode: "decimal" },
+  clusterCount: { min: 1, max: 32, integer: true, inputMode: "numeric" },
+  width: { min: 8, max: 2000, integer: false, inputMode: "decimal" },
+  heightMin: { min: 1, max: 300, integer: false, inputMode: "decimal" },
+  heightMax: { min: 1, max: 400, integer: false, inputMode: "decimal" },
+  triggerRadius: { min: 0, max: 800, integer: false, inputMode: "decimal" },
+  auraSensitivity: { min: 0.1, max: 5, integer: false, inputMode: "decimal" },
+  wakeSpeed: { min: 0.1, max: 5, integer: false, inputMode: "decimal" },
+  settleDelayMs: { min: 0, max: 10000, integer: true, inputMode: "numeric" },
+  settleSpeed: { min: 0.1, max: 5, integer: false, inputMode: "decimal" },
+  seed: { min: 1, max: 999999999, integer: true, inputMode: "numeric" },
+});
 
 function escapeHtml(value) {
   return String(value)
@@ -849,7 +863,7 @@ function normalizeHexColor(value, fallbackColor) {
 
 function renderReactiveGrassColorField(label, field, value, fallbackColor, patchType = "reactive-grass") {
   const normalizedColor = normalizeHexColor(value, fallbackColor);
-  const fieldAttr = patchType === "reactive-bloom" ? "data-reactive-bloom-field" : "data-reactive-grass-field";
+  const fieldAttr = patchType === "reactive-bloom" ? "data-reactive-bloom-field" : patchType === "reactive-crystal" ? "data-reactive-crystal-field" : "data-reactive-grass-field";
   return `
     <label class="fieldRow fieldRowCompact selectionInlineField selectionReactiveGrassColorField">
       <span class="label">${escapeHtml(label)}</span>
@@ -865,12 +879,12 @@ function renderReactiveGrassColorField(label, field, value, fallbackColor, patch
 }
 
 function renderReactiveGrassNumberField(label, field, value, patchId, patchType = "reactive-grass") {
-  const config = patchType === "reactive-bloom" ? REACTIVE_BLOOM_NUMERIC_FIELD_CONFIG[field] : REACTIVE_GRASS_NUMERIC_FIELD_CONFIG[field];
+  const config = patchType === "reactive-bloom" ? REACTIVE_BLOOM_NUMERIC_FIELD_CONFIG[field] : patchType === "reactive-crystal" ? REACTIVE_CRYSTAL_NUMERIC_FIELD_CONFIG[field] : REACTIVE_GRASS_NUMERIC_FIELD_CONFIG[field];
   if (!config) {
     return renderReadOnlyField(label, value);
   }
   const normalizedValue = Number.isFinite(value) ? String(value) : "";
-  const prefix = patchType === "reactive-bloom" ? "reactive-bloom" : "reactive-grass";
+  const prefix = patchType === "reactive-bloom" ? "reactive-bloom" : patchType === "reactive-crystal" ? "reactive-crystal" : "reactive-grass";
   return `
     <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
       <span class="label">${escapeHtml(label)}</span>
@@ -946,36 +960,37 @@ function renderReactiveBloomPatchInspector(patch) {
 
 
 function renderReactiveCrystalPatchInspector(patch) {
+  const patchId = typeof patch?.id === "string" ? patch.id : "";
   return renderSelectionFields([
     `<div class="statusCard assetSelectionCard assetSelectionCardCompact">
       <div class="assetSelectionMeta">
-        <span class="statusCardMeta">Reactive Crystal · Authored data (read-only)</span>
+        <span class="statusCardMeta">Reactive Crystal · Authored data</span>
       </div>
     </div>`,
     renderReadOnlyField("id", patch?.id),
     renderReadOnlyField("kind", patch?.kind),
-    renderReadOnlyField("x", formatNumericDisplay(patch?.x)),
-    renderReadOnlyField("y", formatNumericDisplay(patch?.y)),
-    renderReadOnlyField("clusterCount", formatNumericDisplay(patch?.clusterCount)),
-    renderReadOnlyField("width", formatNumericDisplay(patch?.width)),
-    renderReadOnlyField("heightMin", formatNumericDisplay(patch?.heightMin)),
-    renderReadOnlyField("heightMax", formatNumericDisplay(patch?.heightMax)),
-    renderReadOnlyField("triggerRadius", formatNumericDisplay(patch?.triggerRadius)),
+    renderReactiveGrassNumberField("x", "x", patch?.x, patchId, "reactive-crystal"),
+    renderReactiveGrassNumberField("y", "y", patch?.y, patchId, "reactive-crystal"),
+    renderReactiveGrassNumberField("clusterCount", "clusterCount", patch?.clusterCount, patchId, "reactive-crystal"),
+    renderReactiveGrassNumberField("width", "width", patch?.width, patchId, "reactive-crystal"),
+    renderReactiveGrassNumberField("heightMin", "heightMin", patch?.heightMin, patchId, "reactive-crystal"),
+    renderReactiveGrassNumberField("heightMax", "heightMax", patch?.heightMax, patchId, "reactive-crystal"),
+    renderReactiveGrassNumberField("triggerRadius", "triggerRadius", patch?.triggerRadius, patchId, "reactive-crystal"),
     renderReadOnlyField("auraRadius", formatNumericDisplay(patch?.auraRadius)),
-    renderReadOnlyField("auraSensitivity", formatNumericDisplay(patch?.auraSensitivity)),
+    renderReactiveGrassNumberField("auraSensitivity", "auraSensitivity", patch?.auraSensitivity, patchId, "reactive-crystal"),
     renderReadOnlyField("idlePulse", formatNumericDisplay(patch?.idlePulse)),
     renderReadOnlyField("wake", formatNumericDisplay(patch?.wake)),
     renderReadOnlyField("hold", formatNumericDisplay(patch?.hold)),
     renderReadOnlyField("settle", formatNumericDisplay(patch?.settle)),
-    renderReadOnlyField("wakeSpeed", formatNumericDisplay(patch?.wakeSpeed)),
-    renderReadOnlyField("settleDelayMs", formatNumericDisplay(patch?.settleDelayMs)),
-    renderReadOnlyField("settleSpeed", formatNumericDisplay(patch?.settleSpeed)),
-    renderReadOnlyField("baseColor", patch?.baseColor),
-    renderReadOnlyField("glowColor", patch?.glowColor),
-    renderReadOnlyField("coreColor", patch?.coreColor),
-    renderReadOnlyField("edgeColor", patch?.edgeColor),
-    renderReadOnlyField("variant", patch?.variant),
-    renderReadOnlyField("seed", formatNumericDisplay(patch?.seed)),
+    renderReactiveGrassNumberField("wakeSpeed", "wakeSpeed", patch?.wakeSpeed, patchId, "reactive-crystal"),
+    renderReactiveGrassNumberField("settleDelayMs", "settleDelayMs", patch?.settleDelayMs, patchId, "reactive-crystal"),
+    renderReactiveGrassNumberField("settleSpeed", "settleSpeed", patch?.settleSpeed, patchId, "reactive-crystal"),
+    renderReactiveGrassColorField("baseColor", "baseColor", patch?.baseColor, FALLBACK_REACTIVE_GRASS_BASE_COLOR, "reactive-crystal"),
+    renderReactiveGrassColorField("glowColor", "glowColor", patch?.glowColor, FALLBACK_REACTIVE_BLOOM_PETAL_OUTER_COLOR, "reactive-crystal"),
+    renderReactiveGrassColorField("coreColor", "coreColor", patch?.coreColor, FALLBACK_REACTIVE_BLOOM_CORE_COLOR, "reactive-crystal"),
+    renderReactiveGrassColorField("edgeColor", "edgeColor", patch?.edgeColor, FALLBACK_REACTIVE_BLOOM_STEM_COLOR, "reactive-crystal"),
+    renderReactiveGrassNumberField("seed", "seed", patch?.seed, patchId, "reactive-crystal"),
+    `<label class="fieldRow fieldRowCompact selectionInlineField"><span class="label">variant</span><input type="text" value="${escapeHtml(typeof patch?.variant === "string" ? patch.variant : "")}" data-reactive-crystal-field="variant" data-reactive-crystal-id="${escapeHtml(patchId)}" aria-label="variant" /></label>`,
   ].join(""));
 }
 function renderSelectionEditor(state, emptyMessage, options = {}) {
@@ -1171,7 +1186,7 @@ export function renderSelectionEditorPanel(panel, state, options = {}) {
 }
 
 export function bindSelectionEditorPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate, onReactiveBloomPatchUpdate } = options;
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate, onReactiveBloomPatchUpdate, onReactiveCrystalPatchUpdate } = options;
   let numberStepperSession = null;
   const getEditorPane = () => panel.querySelector("[data-bottom-panel-editor]");
   const getSelectedReactiveGrassPatch = (patchId) => {
@@ -1200,6 +1215,16 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const selectedPatchId = typeof state?.interaction?.selectedReactiveBloomPatchId === "string" && state.interaction.selectedReactiveBloomPatchId.trim() ? state.interaction.selectedReactiveBloomPatchId.trim() : null;
     if (selectedPatchId) return patches.find((patch) => patch?.id === selectedPatchId) || null;
     const selectedPatchIndex = Number.isInteger(state?.interaction?.selectedReactiveBloomPatchIndex) ? state.interaction.selectedReactiveBloomPatchIndex : -1;
+    return selectedPatchIndex >= 0 ? patches[selectedPatchIndex] || null : null;
+  };
+  const getSelectedReactiveCrystalPatch = (patchId) => {
+    if (typeof store?.getState !== "function") return null;
+    const state = store.getState();
+    const patches = Array.isArray(state?.document?.active?.reactiveCrystalPatches) ? state.document.active.reactiveCrystalPatches : [];
+    if (typeof patchId === "string" && patchId.trim()) return patches.find((patch) => patch?.id === patchId.trim()) || null;
+    const selectedPatchId = typeof state?.interaction?.selectedReactiveCrystalPatchId === "string" && state.interaction.selectedReactiveCrystalPatchId.trim() ? state.interaction.selectedReactiveCrystalPatchId.trim() : null;
+    if (selectedPatchId) return patches.find((patch) => patch?.id === selectedPatchId) || null;
+    const selectedPatchIndex = Number.isInteger(state?.interaction?.selectedReactiveCrystalPatchIndex) ? state.interaction.selectedReactiveCrystalPatchIndex : -1;
     return selectedPatchIndex >= 0 ? patches[selectedPatchIndex] || null : null;
   };
 
@@ -1287,6 +1312,38 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     clearInputDraft(input);
     return true;
   };
+  const parseReactiveCrystalNumericValue = (field, rawValue, patchSnapshot) => {
+    const config = REACTIVE_CRYSTAL_NUMERIC_FIELD_CONFIG[field];
+    if (!config || typeof rawValue !== "string") return null;
+    const trimmed = rawValue.trim();
+    if (!trimmed) return null;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || (config.integer && !Number.isInteger(parsed))) return null;
+    if (parsed < config.min || parsed > config.max) return null;
+    if (field === "heightMin" && parsed > Number(patchSnapshot?.heightMax)) return null;
+    if (field === "heightMax" && parsed < Number(patchSnapshot?.heightMin)) return null;
+    return config.integer ? Math.round(parsed) : parsed;
+  };
+  const commitReactiveCrystalNumericInput = (input) => {
+    if (!isTextInputElement(input) || input.dataset.reactiveCrystalEditable !== "number") return false;
+    const field = input.dataset.reactiveCrystalField;
+    if (!field || !REACTIVE_CRYSTAL_NUMERIC_FIELD_CONFIG[field]) return false;
+    const patchId = typeof input.dataset.reactiveCrystalId === "string" && input.dataset.reactiveCrystalId.trim() ? input.dataset.reactiveCrystalId.trim() : null;
+    const patchSnapshot = getSelectedReactiveCrystalPatch(patchId);
+    if (!patchSnapshot) return false;
+    const previousValue = Number(patchSnapshot[field]);
+    const parsedValue = parseReactiveCrystalNumericValue(field, input.value, patchSnapshot);
+    if (parsedValue === null || Object.is(parsedValue, previousValue)) {
+      input.value = Number.isFinite(previousValue) ? String(previousValue) : "";
+      input.dataset.reactiveCrystalCommittedValue = Number.isFinite(previousValue) ? String(previousValue) : "";
+      clearInputDraft(input);
+      return true;
+    }
+    onReactiveCrystalPatchUpdate?.(field, parsedValue, { patchId });
+    input.dataset.reactiveCrystalCommittedValue = String(parsedValue);
+    clearInputDraft(input);
+    return true;
+  };
 
   const updateInputDraft = (target) => {
     if (!isDraftableInput(target)) return;
@@ -1365,6 +1422,9 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       if (target.dataset.reactiveBloomEditable === "number") {
         if (commitReactiveBloomNumericInput(target)) return;
       }
+      if (target.dataset.reactiveCrystalEditable === "number") {
+        if (commitReactiveCrystalNumericInput(target)) return;
+      }
       const reactiveGrassField = target.dataset.reactiveGrassField;
       if (reactiveGrassField === "baseColor" || reactiveGrassField === "topColor") {
         const patchId = typeof store?.getState === "function"
@@ -1378,6 +1438,13 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       if (reactiveBloomField === "stemColor" || reactiveBloomField === "petalInnerColor" || reactiveBloomField === "petalOuterColor" || reactiveBloomField === "coreColor") {
         const patchId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedReactiveBloomPatchId : null;
         onReactiveBloomPatchUpdate?.(reactiveBloomField, target.value, { patchId });
+        clearInputDraft(target);
+        return;
+      }
+      const reactiveCrystalField = target.dataset.reactiveCrystalField;
+      if (reactiveCrystalField === "baseColor" || reactiveCrystalField === "glowColor" || reactiveCrystalField === "coreColor" || reactiveCrystalField === "edgeColor" || reactiveCrystalField === "variant") {
+        const patchId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedReactiveCrystalPatchId : null;
+        onReactiveCrystalPatchUpdate?.(reactiveCrystalField, target.value, { patchId });
         clearInputDraft(target);
         return;
       }
@@ -1478,6 +1545,22 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       if (event.key === "Escape") {
         event.preventDefault();
         target.value = typeof target.dataset.reactiveBloomCommittedValue === "string" ? target.dataset.reactiveBloomCommittedValue : "";
+        clearInputDraft(target);
+        target.blur();
+        return;
+      }
+      return;
+    }
+    if (target.dataset.reactiveCrystalEditable === "number") {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        commitReactiveCrystalNumericInput(target);
+        target.blur();
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        target.value = typeof target.dataset.reactiveCrystalCommittedValue === "string" ? target.dataset.reactiveCrystalCommittedValue : "";
         clearInputDraft(target);
         target.blur();
         return;
