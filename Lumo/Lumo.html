@@ -4338,6 +4338,16 @@
       loading: false,
       loaded: false,
     };
+    const crystalDebugEnabled = (() => {
+      try {
+        const params = new URLSearchParams(globalThis?.location?.search || "");
+        return params.get("crystalDebug") === "1";
+      } catch (_error) {
+        return false;
+      }
+    })();
+    const crystalDebugState = { payloadCount: null, normalizedCount: null, renderCount: null };
+
     const rechargedReactiveCrystalLevelCache = {
       levelPath: "",
       patches: [],
@@ -4586,6 +4596,13 @@
 
     function syncReactiveCrystalCacheFromPayload(payload) {
       const directPatches = Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches : null;
+      if (crystalDebugEnabled) {
+        const payloadCount = Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches.length : 0;
+        if (crystalDebugState.payloadCount !== payloadCount) {
+          crystalDebugState.payloadCount = payloadCount;
+          console.info("[CrystalDebug] payload reactiveCrystalPatches", payloadCount);
+        }
+      }
       if (!directPatches) return;
       rechargedReactiveCrystalLevelCache.patches = directPatches
         .map((patch, index) => normalizeReactiveCrystalPatch(patch, index))
@@ -4630,9 +4647,14 @@
       if (levelPath && rechargedReactiveCrystalLevelCache.levelPath !== levelPath) {
         beginReactiveCrystalLevelLoad(levelPath);
       }
-      return Array.isArray(rechargedReactiveCrystalLevelCache.patches)
+      const normalizedPatches = Array.isArray(rechargedReactiveCrystalLevelCache.patches)
         ? rechargedReactiveCrystalLevelCache.patches
         : [];
+      if (crystalDebugEnabled && crystalDebugState.normalizedCount !== normalizedPatches.length) {
+        crystalDebugState.normalizedCount = normalizedPatches.length;
+        console.info("[CrystalDebug] normalized reactiveCrystalPatches", normalizedPatches.length);
+      }
+      return normalizedPatches;
     }
 
     function readRechargedDecorSnapshots(payload) {
@@ -6629,6 +6651,11 @@
               reactiveCrystalWakeSources.push({ x: flareWorldX, y: flareWorldY, radius: 170, strength: 0.9 });
             }
           }
+        }
+
+        if (crystalDebugEnabled && crystalDebugState.renderCount !== reactiveCrystalPatches.length) {
+          crystalDebugState.renderCount = reactiveCrystalPatches.length;
+          console.info("[CrystalDebug] render reactiveCrystalPatches", reactiveCrystalPatches.length);
         }
 
         renderReactiveCrystals(
