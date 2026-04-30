@@ -7,6 +7,23 @@ const DEFAULT_AUTOPLAY_STEPS = 4;
 const EDITOR_PLAY_LEVEL_KEY = "lumo.editorPlay.level.v1";
 const PFH_DEBUG_QUERY_KEY = "pfhDebug";
 
+function countReactivePatches(payload) {
+  return {
+    grass: Array.isArray(payload?.reactiveGrassPatches) ? payload.reactiveGrassPatches.length : 0,
+    bloom: Array.isArray(payload?.reactiveBloomPatches) ? payload.reactiveBloomPatches.length : 0,
+    crystal: Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches.length : 0,
+  };
+}
+
+function isRuntimePayloadShape(payload) {
+  if (!payload || typeof payload !== "object") return false;
+  const patchCounts = countReactivePatches(payload);
+  if (patchCounts.grass > 0 || patchCounts.bloom > 0 || patchCounts.crystal > 0) return true;
+  const hasRuntimeWorld = Number.isFinite(payload?.width) || Number.isFinite(payload?.height) || Number.isFinite(payload?.tileSize);
+  const hasRuntimeCollections = Array.isArray(payload?.supportTiles) || Array.isArray(payload?.decorItems) || Array.isArray(payload?.background);
+  return hasRuntimeWorld || hasRuntimeCollections;
+}
+
 function createBaseResult(overrides = {}) {
   return {
     ok: true,
@@ -102,12 +119,15 @@ function readEditorPlayLevelFromSession(sessionStorageRef = globalThis.sessionSt
       return { found: false, levelDocument: null, warning: "" };
     }
     const parsed = JSON.parse(raw);
+    if (isRuntimePayloadShape(parsed)) {
+      return { found: true, levelDocument: parsed, warning: "", sessionCounts: countReactivePatches(parsed) };
+    }
     const normalized = loadRuntimeLevelDocument(parsed);
     if (normalized?.ok !== true || !normalized?.level) {
       const firstError = Array.isArray(normalized?.errors) && normalized.errors[0] ? normalized.errors[0] : "Unknown level format error.";
       return { found: true, levelDocument: null, warning: `invalid session payload: ${firstError}` };
     }
-    return { found: true, levelDocument: normalized.level, warning: "" };
+    return { found: true, levelDocument: normalized.level, warning: "", sessionCounts: countReactivePatches(normalized.level) };
   } catch (error) {
     return { found: true, levelDocument: null, warning: `session payload parse failed: ${error?.message || "unknown error"}` };
   }
@@ -129,6 +149,7 @@ function buildSourceDescriptor(params, options = {}) {
       loadLevelDocument: createSessionLevelDocumentLoader(sessionPayload.levelDocument),
       sessionPayloadFound: true,
       sessionPayloadKey: EDITOR_PLAY_LEVEL_KEY,
+      sessionCounts: sessionPayload.sessionCounts || countReactivePatches(sessionPayload.levelDocument),
     };
   }
 
@@ -293,12 +314,18 @@ export async function bootLumoRechargedFromQuery(options = {}) {
       });
     }
     if (params.get("crystalDebug") === "1") {
-      console.info("[CrystalDebug] boot result counts", {
-        grass: Array.isArray(payload.reactiveGrassPatches) ? payload.reactiveGrassPatches.length : 0,
-        bloom: Array.isArray(payload.reactiveBloomPatches) ? payload.reactiveBloomPatches.length : 0,
-        crystal: Array.isArray(payload.reactiveCrystalPatches) ? payload.reactiveCrystalPatches.length : 0,
-      });
+      console.info("[CrystalDebug] session counts", sourceInfo?.sessionCounts || { grass: 0, bloom: 0, crystal: 0 });
+      console.info("[CrystalDebug] boot/adaptor counts", countReactivePatches(payload));
     }
+    const normalizedCounts = countReactivePatches({
+      reactiveGrassPatches: Array.isArray(payload.reactiveGrassPatches) ? payload.reactiveGrassPatches : [],
+      reactiveBloomPatches: Array.isArray(payload.reactiveBloomPatches) ? payload.reactiveBloomPatches : [],
+      reactiveCrystalPatches: Array.isArray(payload.reactiveCrystalPatches) ? payload.reactiveCrystalPatches : [],
+    });
+    if (params.get("crystalDebug") === "1") {
+      console.info("[CrystalDebug] normalized counts", normalizedCounts);
+    }
+
     return createBaseResult({
       ok: booted,
       enabled: true,
