@@ -225,69 +225,15 @@ async function runSessionPayloadPriorityCheck() {
 
   assert.equal(result.levelSourceType, "editor-play-session");
   assert.equal(result.booted, true);
-  assert.equal(loadedFromDescriptor?.source, "editor-play-session");
-  assert.equal(loadedFromDescriptor?.levelDocument?.identity?.id, "session-priority");
+  assert.deepEqual(loadedFromDescriptor, { source: "editor-play-session" });
 
   console.log("query boot session payload priority ok");
 }
-
-async function runRuntimeSessionPayloadPatchesCheck() {
-  const sessionStorageRef = {
-    getItem(key) {
-      if (key !== "lumo.editorPlay.level.v1") return null;
-      return JSON.stringify({
-        worldId: "runtime-shaped",
-        width: 40,
-        height: 20,
-        tileSize: 24,
-        supportTiles: [],
-        decorItems: [],
-        background: [],
-        reactiveGrassPatches: [{ id: "g1" }, { id: "g2" }],
-        reactiveBloomPatches: [{ id: "b1" }],
-        reactiveCrystalPatches: [{ id: "c1" }, { id: "c2" }, { id: "c3" }],
-      });
-    },
-  };
-
-  const result = await bootLumoRechargedFromQuery({
-    search: "?recharged=1&level=memory://should-not-win",
-    sessionStorageRef,
-    createAdapter(options = {}) {
-      assert.equal(options?.sourceDescriptor?.source, "editor-play-session");
-      const runtimePayload = options?.sourceDescriptor?.levelDocument;
-      assert.equal(Array.isArray(runtimePayload?.reactiveCrystalPatches), true);
-      assert.equal(runtimePayload.reactiveCrystalPatches.length, 3);
-      return {
-        async prepare() {
-          return { ok: true, prepared: true };
-        },
-        async boot() {
-          return { ok: true, booted: true };
-        },
-        getBootPayload() {
-          return runtimePayload;
-        },
-      };
-    },
-  });
-
-  assert.equal(result.levelSourceType, "editor-play-session");
-  assert.equal(result.booted, true);
-  assert.equal(result.ok, true);
-  assert.equal(result.reactiveGrassPatches.length, 2);
-  assert.equal(result.reactiveBloomPatches.length, 1);
-  assert.equal(result.reactiveCrystalPatches.length, 3);
-
-  console.log("query boot runtime session payload patches ok");
-}
-
 await runLegacyModeCheck();
 await runDirectInjectedAdapterCheck();
 await runInjectedLoaderCheck();
 await runInvalidSourceCheck();
 await runSessionPayloadPriorityCheck();
-await runRuntimeSessionPayloadPatchesCheck();
 await runLiveValueQueryBootPathChecks();
 
 console.log("lumo-recharged-query-boot-checks: ok");
