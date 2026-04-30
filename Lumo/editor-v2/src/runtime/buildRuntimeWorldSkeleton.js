@@ -50,15 +50,21 @@ export function buildRuntimeWorldSkeleton(level) {
     decor: Array.isArray(level?.layers?.decor) ? level.layers.decor : [],
     entities: Array.isArray(level?.layers?.entities) ? level.layers.entities : [],
     audio: Array.isArray(level?.layers?.audio) ? level.layers.audio : [],
-    reactiveGrassPatches: Array.isArray(level?.layers?.reactiveGrassPatches)
-      ? [...level.layers.reactiveGrassPatches]
-      : [],
-    reactiveBloomPatches: Array.isArray(level?.layers?.reactiveBloomPatches)
-      ? [...level.layers.reactiveBloomPatches]
-      : [],
-    reactiveCrystalPatches: Array.isArray(level?.layers?.reactiveCrystalPatches)
-      ? [...level.layers.reactiveCrystalPatches]
-      : [],
+    reactiveGrassPatches: Array.isArray(level?.reactiveGrassPatches)
+      ? [...level.reactiveGrassPatches]
+      : Array.isArray(level?.layers?.reactiveGrassPatches)
+        ? [...level.layers.reactiveGrassPatches]
+        : [],
+    reactiveBloomPatches: Array.isArray(level?.reactiveBloomPatches)
+      ? [...level.reactiveBloomPatches]
+      : Array.isArray(level?.layers?.reactiveBloomPatches)
+        ? [...level.layers.reactiveBloomPatches]
+        : [],
+    reactiveCrystalPatches: Array.isArray(level?.reactiveCrystalPatches)
+      ? [...level.reactiveCrystalPatches]
+      : Array.isArray(level?.layers?.reactiveCrystalPatches)
+        ? [...level.layers.reactiveCrystalPatches]
+        : [],
   };
 
   return {
