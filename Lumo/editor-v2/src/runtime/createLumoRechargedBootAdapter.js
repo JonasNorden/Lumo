@@ -407,6 +407,14 @@ function isViableSourceDescriptor(sourceDescriptor) {
   }
 }
 
+function reactiveCountSummary(source) {
+  return {
+    reactiveGrassPatches: Array.isArray(source?.reactiveGrassPatches) ? source.reactiveGrassPatches.length : 0,
+    reactiveBloomPatches: Array.isArray(source?.reactiveBloomPatches) ? source.reactiveBloomPatches.length : 0,
+    reactiveCrystalPatches: Array.isArray(source?.reactiveCrystalPatches) ? source.reactiveCrystalPatches.length : 0,
+  };
+}
+
 // Creates the first controlled Lumo.html-facing handoff adapter on top of the orchestrator.
 export function createLumoRechargedBootAdapter(options = {}) {
   try {
@@ -745,7 +753,7 @@ export function createLumoRechargedBootAdapter(options = {}) {
       const world = getWorldSnapshot();
       const hud = buildRechargedHudSnapshot({ player });
 
-      return {
+      const payload = {
         ok: state.ok === true,
         prepared: state.prepared === true,
         booted: state.booted === true,
@@ -787,6 +795,15 @@ export function createLumoRechargedBootAdapter(options = {}) {
         lastExitId: typeof player.lastExitId === "string" ? player.lastExitId : null,
         ...(typeof hud?.statusText === "string" ? { statusText: hud.statusText } : {}),
       };
+
+      try {
+        console.info("[LUMO_REACTIVE_PIPELINE_TRACE] createLumoRechargedBootAdapter.getBootPayload before return", {
+          worldReactiveCounts: reactiveCountSummary(world),
+          payloadReactiveCounts: reactiveCountSummary(payload),
+        });
+      } catch (_error) {}
+
+      return payload;
     }
 
     return {
