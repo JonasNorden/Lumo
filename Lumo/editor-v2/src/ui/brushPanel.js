@@ -412,13 +412,15 @@ function renderDecorSettings(state) {
 
 
 function renderReactiveDecorSettings(state) {
-  const activeType = state?.interaction?.reactiveDecorType === "bloom" ? "bloom" : "grass";
+  const rawType = state?.interaction?.reactiveDecorType;
+  const activeType = rawType === "bloom" || rawType === "crystal" ? rawType : "grass";
   return `
     <label class="fieldRow fieldRowCompact">
       <span class="label">Type</span>
       <select data-reactive-decor-type aria-label="Reactive decor type">
         <option value="grass" ${activeType === "grass" ? "selected" : ""}>Grass</option>
         <option value="bloom" ${activeType === "bloom" ? "selected" : ""}>Bloom</option>
+        <option value="crystal" ${activeType === "crystal" ? "selected" : ""}>Crystal</option>
       </select>
     </label>
   `;
@@ -522,7 +524,7 @@ export function bindBrushPanel(panel, store, options = {}) {
       if (typeof target.dataset.reactiveDecorType === "string") {
         onLayerChange?.(PANEL_LAYERS.REACTIVE_DECOR);
         store.setState((draft) => {
-          draft.interaction.reactiveDecorType = target.value === "bloom" ? "bloom" : "grass";
+          draft.interaction.reactiveDecorType = target.value === "bloom" || target.value === "crystal" ? target.value : "grass";
         });
         return;
       }

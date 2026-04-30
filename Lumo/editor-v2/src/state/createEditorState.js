@@ -73,6 +73,7 @@ export function createEditorState() {
       reactiveDecorType: "grass",
       reactiveGrassPlacementDrag: null,
       reactiveBloomPlacementDrag: null,
+      reactiveCrystalPlacementDrag: null,
       scanDrag: null,
       decorScatterDrag: null,
       spacePanActive: false,

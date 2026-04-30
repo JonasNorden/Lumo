@@ -51,6 +51,9 @@ function cloneReactiveGrassPatchSnapshot(patch) {
 function cloneReactiveBloomPatchSnapshot(patch) {
   return patch && typeof patch === "object" ? { ...patch } : null;
 }
+function cloneReactiveCrystalPatchSnapshot(patch) {
+  return patch && typeof patch === "object" ? { ...patch } : null;
+}
 
 export function createReactiveGrassEditEntry(mode, payload = {}) {
   const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
@@ -84,6 +87,22 @@ export function createReactiveBloomEditEntry(mode, payload = {}) {
   };
 }
 
+export function createReactiveCrystalEditEntry(mode, payload = {}) {
+  const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
+  const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
+  const index = Number.isInteger(payload.index) ? payload.index : null;
+  const previousSnapshot = cloneReactiveCrystalPatchSnapshot(payload.previousSnapshot);
+  const nextSnapshot = cloneReactiveCrystalPatchSnapshot(payload.nextSnapshot);
+  return {
+    kind: "reactive-crystal",
+    mode: normalizedMode,
+    objectId,
+    index,
+    previousSnapshot,
+    nextSnapshot,
+  };
+}
+
 
 function getHistoryEntryDomain(entry) {
   if (entry?.type === "batch") {
@@ -95,6 +114,7 @@ function getHistoryEntryDomain(entry) {
   if (isObjectLayerKind(entry?.kind)) return entry.kind;
   if (entry?.kind === "reactive-grass") return "reactive-grass";
   if (entry?.kind === "reactive-bloom") return "reactive-bloom";
+  if (entry?.kind === "reactive-crystal") return "reactive-crystal";
   if (entry?.kind === "background") return "background";
   if (entry?.kind === "background-sized") return "background";
   return "tile";
@@ -111,7 +131,9 @@ function recordHistoryTimelineEntry(history, entry) {
   const domain = getHistoryEntryDomain(entry);
   return recordGlobalHistoryAction(history.globalTimeline, {
     domain,
-    actionType: entry?.mode || entry?.type || entry?.kind || domain,
+    actionType: entry?.kind === "reactive-crystal" && entry?.mode === "create"
+      ? "reactive-crystal-create"
+      : entry?.mode || entry?.type || entry?.kind || domain,
     route: {
       lane: "document-history",
       domain,
@@ -253,6 +275,29 @@ function applyUndoEntry(doc, entry) {
     else patches.splice(authoredIndex, 0, snapshot);
     return true;
   }
+  if (entry.kind === "reactive-crystal") {
+    if (!Array.isArray(doc.reactiveCrystalPatches)) doc.reactiveCrystalPatches = [];
+    const patches = doc.reactiveCrystalPatches;
+    const targetId = typeof entry.objectId === "string" && entry.objectId.trim() ? entry.objectId.trim() : null;
+    const authoredIndex = Number.isInteger(entry.index) ? Math.max(0, Math.min(patches.length, entry.index)) : patches.length;
+    const existingIndex = targetId ? patches.findIndex((patch) => patch?.id === targetId) : -1;
+    if (entry.mode === "create") {
+      if (existingIndex >= 0) patches.splice(existingIndex, 1);
+      return true;
+    }
+    if (entry.mode === "delete") {
+      if (!entry.previousSnapshot) return false;
+      const snapshot = cloneReactiveCrystalPatchSnapshot(entry.previousSnapshot);
+      if (existingIndex >= 0) patches[existingIndex] = snapshot;
+      else patches.splice(authoredIndex, 0, snapshot);
+      return true;
+    }
+    if (!entry.previousSnapshot) return false;
+    const snapshot = cloneReactiveCrystalPatchSnapshot(entry.previousSnapshot);
+    if (existingIndex >= 0) patches[existingIndex] = snapshot;
+    else patches.splice(authoredIndex, 0, snapshot);
+    return true;
+  }
 
   if (entry.kind === "background") {
     doc.background.base[entry.index] = entry.previousValue ?? null;
@@ -331,6 +376,29 @@ function applyRedoEntry(doc, entry) {
     }
     if (!entry.nextSnapshot) return false;
     const snapshot = cloneReactiveBloomPatchSnapshot(entry.nextSnapshot);
+    if (existingIndex >= 0) patches[existingIndex] = snapshot;
+    else patches.splice(authoredIndex, 0, snapshot);
+    return true;
+  }
+  if (entry.kind === "reactive-crystal") {
+    if (!Array.isArray(doc.reactiveCrystalPatches)) doc.reactiveCrystalPatches = [];
+    const patches = doc.reactiveCrystalPatches;
+    const targetId = typeof entry.objectId === "string" && entry.objectId.trim() ? entry.objectId.trim() : null;
+    const authoredIndex = Number.isInteger(entry.index) ? Math.max(0, Math.min(patches.length, entry.index)) : patches.length;
+    const existingIndex = targetId ? patches.findIndex((patch) => patch?.id === targetId) : -1;
+    if (entry.mode === "delete") {
+      if (existingIndex >= 0) patches.splice(existingIndex, 1);
+      return true;
+    }
+    if (entry.mode === "create") {
+      if (!entry.nextSnapshot) return false;
+      const snapshot = cloneReactiveCrystalPatchSnapshot(entry.nextSnapshot);
+      if (existingIndex >= 0) patches[existingIndex] = snapshot;
+      else patches.splice(authoredIndex, 0, snapshot);
+      return true;
+    }
+    if (!entry.nextSnapshot) return false;
+    const snapshot = cloneReactiveCrystalPatchSnapshot(entry.nextSnapshot);
     if (existingIndex >= 0) patches[existingIndex] = snapshot;
     else patches.splice(authoredIndex, 0, snapshot);
     return true;
