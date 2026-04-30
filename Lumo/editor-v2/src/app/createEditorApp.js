@@ -282,7 +282,11 @@ function renderCellHud(cellHud, state) {
       : activeLayer === PANEL_LAYERS.ENTITIES
         ? getSelectedEntityIndices(state.interaction).length
         : activeLayer === PANEL_LAYERS.REACTIVE_DECOR
-          ? (state.interaction.selectedReactiveGrassPatchId ? 1 : 0)
+          ? (
+            (state.interaction.selectedReactiveGrassPatchId ? 1 : 0)
+            || (state.interaction.selectedReactiveBloomPatchId ? 1 : 0)
+            || (state.interaction.selectedReactiveCrystalPatchId ? 1 : 0)
+          )
         : activeLayer === PANEL_LAYERS.SOUND
           ? getSelectedSoundIndices(state.interaction).length
           : 0;
@@ -2773,7 +2777,11 @@ export function createEditorApp({
       : activeLayer === PANEL_LAYERS.ENTITIES
         ? getSelectedEntityIndices(state.interaction).length
         : activeLayer === PANEL_LAYERS.REACTIVE_DECOR
-          ? (state.interaction.selectedReactiveGrassPatchId ? 1 : 0)
+          ? (
+            (state.interaction.selectedReactiveGrassPatchId ? 1 : 0)
+            || (state.interaction.selectedReactiveBloomPatchId ? 1 : 0)
+            || (state.interaction.selectedReactiveCrystalPatchId ? 1 : 0)
+          )
         : activeLayer === PANEL_LAYERS.SOUND
           ? getSelectedSoundIndices(state.interaction).length
           : 0;
