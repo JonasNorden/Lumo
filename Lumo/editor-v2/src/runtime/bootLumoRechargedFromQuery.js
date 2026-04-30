@@ -191,6 +191,17 @@ function toLevelDocumentPayload(raw) {
   return { levelDocument: raw };
 }
 
+
+function summarizeReactiveCounts(level) {
+  const topLevelKeys = ["reactiveGrassPatches", "reactiveBloomPatches", "reactiveCrystalPatches"];
+  const levelKeys = level && typeof level === "object" ? Object.keys(level) : [];
+  const summary = {};
+  for (const key of topLevelKeys) {
+    summary[key] = Array.isArray(level?.[key]) ? level[key].length : 0;
+  }
+  return { summary, levelKeys };
+}
+
 async function defaultBrowserLoadLevelDocument(sourceDescriptor = {}) {
   const rawUrl = typeof sourceDescriptor?.url === "string"
     ? sourceDescriptor.url
@@ -220,6 +231,10 @@ async function defaultBrowserLoadLevelDocument(sourceDescriptor = {}) {
   }
 
   const normalized = loadRuntimeLevelDocument(payload.levelDocument);
+  try {
+    const reactiveSummary = summarizeReactiveCounts(normalized?.level);
+    console.info("[LUMO_REACTIVE_PIPELINE_TRACE] defaultBrowserLoadLevelDocument normalized assets-tiles.json", reactiveSummary);
+  } catch (_error) {}
   if (normalized?.ok !== true || !normalized?.level) {
     const firstError = Array.isArray(normalized?.errors) && normalized.errors[0] ? normalized.errors[0] : "Unknown level format error.";
     throw new Error(`Invalid level document at ${rawUrl}: ${firstError}`);
