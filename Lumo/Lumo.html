@@ -4567,8 +4567,15 @@
 
     function normalizeReactiveCrystalPatch(patch, index) {
       if (!patch || typeof patch !== "object") return null;
-      const kind = typeof patch.kind === "string" ? patch.kind.trim().toLowerCase() : "";
-      if (kind && kind !== "reactive_crystal") return null;
+      const rawKind = typeof patch.kind === "string" ? patch.kind.trim() : "";
+      const normalizedKind = rawKind
+        ? rawKind.replace(/[_\-\s]+/g, "").toLowerCase()
+        : "";
+      const acceptedKind = normalizedKind === ""
+        || normalizedKind === "reactivecrystal"
+        || normalizedKind === "crystal"
+        || normalizedKind === "reactivecrystalpatch";
+      if (!acceptedKind) return null;
       const x = Number.isFinite(patch.x) ? patch.x : null;
       const y = Number.isFinite(patch.y) ? patch.y : null;
       if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
