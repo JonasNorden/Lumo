@@ -141,6 +141,7 @@ export function renderPlacementPreviewOverlay(ctx, doc, viewport, interaction, p
   renderBubblingLiquidVolumePlacementPreview(ctx, doc, viewport, interaction);
   renderReactiveGrassPlacementPreview(ctx, doc, viewport, interaction);
   renderReactiveBloomPlacementPreview(ctx, doc, viewport, interaction);
+  renderReactiveCrystalPlacementPreview(ctx, doc, viewport, interaction);
   renderDecorPlacementPreview(ctx, doc, viewport, interaction, presets?.decor || null);
   renderEntityPlacementPreview(ctx, doc, viewport, interaction, presets?.entity || null);
   renderSoundPlacementPreview(ctx, doc, viewport, interaction, presets?.sound || null);
@@ -219,6 +220,40 @@ export function renderReactiveBloomPlacementPreview(ctx, doc, viewport, interact
   ctx.setLineDash([]);
   const baselineY = viewport.offsetY + (worldY * zoom);
   ctx.strokeStyle = "rgba(255, 242, 168, 0.85)";
+  ctx.beginPath();
+  ctx.moveTo(screenX, baselineY + 0.5);
+  ctx.lineTo(screenX + screenWidth, baselineY + 0.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+export function renderReactiveCrystalPlacementPreview(ctx, doc, viewport, interaction) {
+  const drag = interaction?.reactiveCrystalPlacementDrag;
+  if (!drag?.active || !drag.startCell || !drag.endCell) return;
+  if (interaction?.activeLayer !== "reactive-decor" || interaction?.activeTool !== EDITOR_TOOLS.PAINT) return;
+  const tileSize = Number.isFinite(doc?.dimensions?.tileSize) && doc.dimensions.tileSize > 0 ? doc.dimensions.tileSize : 24;
+  const minX = Math.min(drag.startCell.x, drag.endCell.x);
+  const maxX = Math.max(drag.startCell.x, drag.endCell.x);
+  const baselineCellY = Math.max(drag.startCell.y, drag.endCell.y);
+  const heightPx = 92;
+  const worldX = minX * tileSize;
+  const worldY = (baselineCellY + 1) * tileSize;
+  const worldWidth = Math.max(tileSize, (maxX - minX + 1) * tileSize);
+  const zoom = viewport?.zoom || 1;
+  const screenX = viewport.offsetX + (worldX * zoom);
+  const screenY = viewport.offsetY + ((worldY - heightPx) * zoom);
+  const screenWidth = worldWidth * zoom;
+  const screenHeight = heightPx * zoom;
+  ctx.save();
+  ctx.fillStyle = "rgba(131, 230, 255, 0.2)";
+  ctx.fillRect(screenX, screenY, screenWidth, screenHeight);
+  ctx.strokeStyle = "rgba(212, 248, 255, 0.95)";
+  ctx.lineWidth = Math.max(1, 1.1 * (1 / Math.max(0.35, zoom)));
+  ctx.setLineDash([Math.max(6, 8 * zoom), Math.max(4, 5 * zoom)]);
+  ctx.strokeRect(screenX, screenY, screenWidth, screenHeight);
+  ctx.setLineDash([]);
+  const baselineY = viewport.offsetY + (worldY * zoom);
+  ctx.strokeStyle = "rgba(125, 141, 255, 0.85)";
   ctx.beginPath();
   ctx.moveTo(screenX, baselineY + 0.5);
   ctx.lineTo(screenX + screenWidth, baselineY + 0.5);
