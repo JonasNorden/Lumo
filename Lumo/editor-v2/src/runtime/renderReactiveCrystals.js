@@ -1,209 +1,55 @@
-const DEFAULT_CRYSTAL_CLUSTER = Object.freeze({
-  id: "reactive_crystal_cluster_default",
-  kind: "reactive_crystal",
-  x: 19.4 * 24,
-  y: 18.6 * 24,
-  width: 82,
-  clusterCount: 8,
-  heightMin: 18,
-  heightMax: 54,
-  triggerRadius: 76,
-  auraSensitivity: 1,
-  wakeSpeed: 1,
-  settleDelayMs: 900,
-  settleSpeed: 1,
-  variant: "void_crystal_default",
-  seed: 64021,
-  baseColor: "#1a1330",
-  glowColor: "#6d5bff",
-  coreColor: "#63d3ff",
-  edgeColor: "#6d5bff",
-});
+import { buildCrystalClusters, clamp, clamp01, lerp, parseColorHex } from "../render/shared/proceduralReactiveCrystal.js";
 
+const DEFAULT_CRYSTAL_CLUSTER = Object.freeze({
+  id: "reactive_crystal_cluster_default", kind: "reactive_crystal", x: 19.4 * 24, y: 18.6 * 24, width: 82, clusterCount: 8,
+  heightMin: 18, heightMax: 54, triggerRadius: 76, auraSensitivity: 1, wakeSpeed: 1, settleDelayMs: 900, settleSpeed: 1,
+  variant: "void_crystal_default", seed: 64021, baseColor: "#1a1330", glowColor: "#6d5bff", coreColor: "#63d3ff", edgeColor: "#6d5bff",
+});
 const crystalCacheByCluster = new Map();
 const crystalStateByCluster = new Map();
 
-function seeded(seed) {
-  const value = Math.sin(seed * 12.9898) * 43758.5453;
-  return value - Math.floor(value);
-}
-
-function clamp01(v) { return Math.max(0, Math.min(1, v)); }
-function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-function lerp(a, b, t) { return a + ((b - a) * t); }
-
-function parseColorHex(value, fallback) {
-  const source = typeof value === "string" ? value.trim() : "";
-  const normalized = /^#[0-9a-fA-F]{6}$/.test(source) ? source : fallback;
-  return {
-    r: parseInt(normalized.slice(1, 3), 16),
-    g: parseInt(normalized.slice(3, 5), 16),
-    b: parseInt(normalized.slice(5, 7), 16),
-  };
-}
-
-function resolveCanvasPoint(mapper, x, y) {
-  if (!mapper || typeof mapper.worldToCanvasRect !== "function") return { x, y };
-  const rect = mapper.worldToCanvasRect(x, y, 1, 1);
-  return { x: rect.x + rect.w * 0.5, y: rect.y + rect.h * 0.5 };
-}
-
-function normalizeCluster(cluster) {
-  const source = cluster && typeof cluster === "object" ? cluster : DEFAULT_CRYSTAL_CLUSTER;
-  const authoredCount = Number.isFinite(source.clusterCount) ? source.clusterCount : source.shardCount;
-  return {
-    ...DEFAULT_CRYSTAL_CLUSTER,
-    ...source,
-    id: typeof source.id === "string" && source.id.trim() ? source.id.trim() : DEFAULT_CRYSTAL_CLUSTER.id,
-    x: Number.isFinite(source.x) ? Number(source.x) : DEFAULT_CRYSTAL_CLUSTER.x,
-    y: Number.isFinite(source.y) ? Number(source.y) : DEFAULT_CRYSTAL_CLUSTER.y,
-    width: Number.isFinite(source.width) ? clamp(source.width, 28, 220) : DEFAULT_CRYSTAL_CLUSTER.width,
-    clusterCount: Number.isFinite(authoredCount) ? clamp(Math.round(authoredCount), 3, 20) : DEFAULT_CRYSTAL_CLUSTER.clusterCount,
-    heightMin: Number.isFinite(source.heightMin) ? clamp(source.heightMin, 8, 120) : DEFAULT_CRYSTAL_CLUSTER.heightMin,
-    heightMax: Number.isFinite(source.heightMax) ? clamp(source.heightMax, 10, 180) : DEFAULT_CRYSTAL_CLUSTER.heightMax,
-    triggerRadius: Number.isFinite(source.triggerRadius) ? clamp(source.triggerRadius, 20, 240) : DEFAULT_CRYSTAL_CLUSTER.triggerRadius,
-    auraSensitivity: Number.isFinite(source.auraSensitivity) ? clamp(source.auraSensitivity, 0.1, 3) : DEFAULT_CRYSTAL_CLUSTER.auraSensitivity,
-    wakeSpeed: Number.isFinite(source.wakeSpeed) ? clamp(source.wakeSpeed, 0.2, 5) : DEFAULT_CRYSTAL_CLUSTER.wakeSpeed,
-    settleDelayMs: Number.isFinite(source.settleDelayMs) ? clamp(source.settleDelayMs, 0, 12000) : DEFAULT_CRYSTAL_CLUSTER.settleDelayMs,
-    settleSpeed: Number.isFinite(source.settleSpeed) ? clamp(source.settleSpeed, 0.2, 5) : DEFAULT_CRYSTAL_CLUSTER.settleSpeed,
-  };
-}
-
-function clusterKey(cluster) {
-  return [cluster.id, cluster.seed, cluster.clusterCount, cluster.width, cluster.heightMin, cluster.heightMax, cluster.kind, cluster.variant].join("|");
-}
-
-function ensureClusterCache(cluster) {
-  const key = clusterKey(cluster);
-  const cached = crystalCacheByCluster.get(key);
-  if (Array.isArray(cached) && cached.length > 0) return { key, shards: cached };
-
-  const shards = [];
-  const minH = Math.min(cluster.heightMin, cluster.heightMax);
-  const maxH = Math.max(cluster.heightMin, cluster.heightMax);
-  for (let i = 0; i < cluster.clusterCount; i += 1) {
-    const u = cluster.clusterCount <= 1 ? 0.5 : (i / (cluster.clusterCount - 1));
-    shards.push({
-      u,
-      xNoise: (seeded(cluster.seed + i * 4.33) - 0.5) * 10,
-      baseHalfWidth: 4 + seeded(cluster.seed + i * 3.17) * 6,
-      height: minH + seeded(cluster.seed + i * 6.43) * Math.max(1, maxH - minH),
-      lean: (seeded(cluster.seed + i * 9.11) - 0.5) * 0.22,
-      phase: seeded(cluster.seed + i * 11.09) * Math.PI * 2,
-      pulse: 0.7 + seeded(cluster.seed + i * 7.73) * 0.55,
-      tier: seeded(cluster.seed + i * 13.91),
-    });
-  }
-  crystalCacheByCluster.set(key, shards);
-  return { key, shards };
-}
-
-function ensureClusterState(key) {
-  const cached = crystalStateByCluster.get(key);
-  if (cached) return cached;
-  const state = { wake: 0, hold: 0, lastTimeMs: null };
-  crystalStateByCluster.set(key, state);
-  return state;
-}
-
-function auraTouches(cluster, playerX, playerY) {
-  if (!Number.isFinite(playerX) || !Number.isFinite(playerY)) return false;
-  const dx = playerX - cluster.x;
-  const dy = (playerY - cluster.y) * 0.6;
-  const auraRadius = Math.max(28, cluster.triggerRadius * (0.9 + (cluster.auraSensitivity - 1) * 0.18));
-  return (dx * dx) + (dy * dy) <= auraRadius * auraRadius;
-}
+function resolveCanvasPoint(mapper, x, y) { if (!mapper || typeof mapper.worldToCanvasRect !== "function") return { x, y }; const r = mapper.worldToCanvasRect(x, y, 1, 1); return { x: r.x + r.w * 0.5, y: r.y + r.h * 0.5 }; }
+function normalizeCluster(cluster) { const s = cluster && typeof cluster === "object" ? cluster : DEFAULT_CRYSTAL_CLUSTER; const c = Number.isFinite(s.clusterCount) ? s.clusterCount : s.shardCount; return { ...DEFAULT_CRYSTAL_CLUSTER, ...s, id: typeof s.id === "string" && s.id.trim() ? s.id.trim() : DEFAULT_CRYSTAL_CLUSTER.id, x: Number.isFinite(s.x) ? Number(s.x) : DEFAULT_CRYSTAL_CLUSTER.x, y: Number.isFinite(s.y) ? Number(s.y) : DEFAULT_CRYSTAL_CLUSTER.y, width: Number.isFinite(s.width) ? clamp(s.width, 28, 280) : DEFAULT_CRYSTAL_CLUSTER.width, clusterCount: Number.isFinite(c) ? clamp(Math.round(c), 3, 20) : DEFAULT_CRYSTAL_CLUSTER.clusterCount, heightMin: Number.isFinite(s.heightMin) ? clamp(s.heightMin, 8, 120) : DEFAULT_CRYSTAL_CLUSTER.heightMin, heightMax: Number.isFinite(s.heightMax) ? clamp(s.heightMax, 10, 180) : DEFAULT_CRYSTAL_CLUSTER.heightMax, triggerRadius: Number.isFinite(s.triggerRadius) ? clamp(s.triggerRadius, 20, 300) : DEFAULT_CRYSTAL_CLUSTER.triggerRadius, auraSensitivity: Number.isFinite(s.auraSensitivity) ? clamp(s.auraSensitivity, 0.1, 3) : DEFAULT_CRYSTAL_CLUSTER.auraSensitivity, wakeSpeed: Number.isFinite(s.wakeSpeed) ? clamp(s.wakeSpeed, 0.2, 5) : DEFAULT_CRYSTAL_CLUSTER.wakeSpeed, settleDelayMs: Number.isFinite(s.settleDelayMs) ? clamp(s.settleDelayMs, 0, 12000) : DEFAULT_CRYSTAL_CLUSTER.settleDelayMs, settleSpeed: Number.isFinite(s.settleSpeed) ? clamp(s.settleSpeed, 0.2, 5) : DEFAULT_CRYSTAL_CLUSTER.settleSpeed }; }
+function clusterKey(c){return [c.id,c.seed,c.clusterCount,c.width,c.heightMin,c.heightMax,c.kind,c.variant].join('|');}
+function ensureClusterCache(c){const k=clusterKey(c);const v=crystalCacheByCluster.get(k);if(v)return {key:k,localClusters:v};const localClusters=buildCrystalClusters(c);crystalCacheByCluster.set(k,localClusters);return {key:k,localClusters};}
+function ensureState(key){if(!crystalStateByCluster.has(key)) crystalStateByCluster.set(key,{wake:0,hold:0,lastTimeMs:null}); return crystalStateByCluster.get(key);}
+function distWake(localCluster, sources, radius){let best=0; for(const s of sources){if(!Number.isFinite(s?.x)||!Number.isFinite(s?.y)) continue; const dx=s.x-localCluster.x; const dy=(s.y-localCluster.y)*0.62; const d=Math.sqrt(dx*dx+dy*dy); best=Math.max(best, clamp01(1-d/Math.max(16,radius)));} return best;}
 
 export function renderReactiveCrystals(ctx, playerX, playerY, time, options = {}) {
   if (!ctx || typeof ctx.save !== "function" || !ctx.canvas) return;
-
   const mapper = options && typeof options === "object" ? options.mapper : null;
   const clustersInput = Array.isArray(options?.clusters) ? options.clusters : [options?.cluster];
-  const clusters = clustersInput.map((cluster) => normalizeCluster(cluster)).filter(Boolean);
-  if (!clusters.length) clusters.push(normalizeCluster(DEFAULT_CRYSTAL_CLUSTER));
-
-  const timeMs = Number.isFinite(time) ? time : 0;
-  const timeSec = timeMs * 0.001;
-
+  const clusters = clustersInput.map((cluster) => normalizeCluster(cluster)).filter(Boolean); if (!clusters.length) clusters.push(normalizeCluster(DEFAULT_CRYSTAL_CLUSTER));
+  const extraSources = Array.isArray(options?.wakeSources) ? options.wakeSources : [];
+  const baseSources = [{ x: playerX, y: playerY }, ...extraSources];
+  const timeMs = Number.isFinite(time) ? time : 0; const timeSec = timeMs * 0.001;
   ctx.save();
   for (const cluster of clusters) {
-    const { key, shards } = ensureClusterCache(cluster);
-    const state = ensureClusterState(key);
-    const rawDt = state.lastTimeMs == null ? (1 / 60) : (timeMs - state.lastTimeMs) * 0.001;
-    const dt = clamp(Number.isFinite(rawDt) ? rawDt : (1 / 60), 0, 0.07);
-    state.lastTimeMs = timeMs;
-
-    if (auraTouches(cluster, playerX, playerY)) {
-      state.hold = cluster.settleDelayMs * 0.001;
-      state.wake = clamp01(state.wake + (dt / Math.max(0.01, 1.05 / (cluster.wakeSpeed * cluster.auraSensitivity))));
-    } else if (state.hold > 0) {
-      state.hold = Math.max(0, state.hold - dt);
-    } else {
-      state.wake = clamp01(state.wake - (dt / Math.max(0.01, 1.25 / cluster.settleSpeed)));
-    }
-
-    const wakeEase = state.wake * state.wake * (3 - 2 * state.wake);
-    const idlePulse = 0.5 + Math.sin(timeSec * 1.6 + cluster.seed * 0.0019) * 0.5;
-    const glowLevel = lerp(0.18, 0.88, clamp01((idlePulse * 0.35) + wakeEase * 0.75));
-
+    const { key, localClusters } = ensureClusterCache(cluster);
     const baseColor = parseColorHex(cluster.baseColor, DEFAULT_CRYSTAL_CLUSTER.baseColor);
     const glowColor = parseColorHex(cluster.glowColor, DEFAULT_CRYSTAL_CLUSTER.glowColor);
     const coreColor = parseColorHex(cluster.coreColor, DEFAULT_CRYSTAL_CLUSTER.coreColor);
     const edgeColor = parseColorHex(cluster.edgeColor, DEFAULT_CRYSTAL_CLUSTER.edgeColor);
-
-    for (let i = 0; i < shards.length; i += 1) {
-      const shard = shards[i];
-      const wx = cluster.x - cluster.width * 0.5 + shard.u * cluster.width + shard.xNoise;
-      const wy = cluster.y;
-      const pulse = Math.sin((timeSec * shard.pulse) + shard.phase);
-      const tierWeight = 0.72 + shard.tier * 0.38;
-      const expand = wakeEase * (1.8 + shard.tier * 3.8);
-      const lean = shard.lean + (wakeEase * 0.12 * (shard.u - 0.5));
-      const height = shard.height * (1 + wakeEase * 0.08) * (0.96 + pulse * 0.035);
-      const halfW = (shard.baseHalfWidth + expand) * (0.9 + shard.tier * 0.3);
-
-      const basePt = resolveCanvasPoint(mapper, wx, wy);
-      const tipPt = resolveCanvasPoint(mapper, wx + lean * height, wy - height);
-      const leftPt = resolveCanvasPoint(mapper, wx - halfW, wy);
-      const rightPt = resolveCanvasPoint(mapper, wx + halfW, wy);
-
-      const shardGradient = ctx.createLinearGradient(basePt.x, basePt.y, tipPt.x, tipPt.y);
-      shardGradient.addColorStop(0, `rgba(${baseColor.r},${baseColor.g},${baseColor.b},${0.46 + glowLevel * 0.24})`);
-      shardGradient.addColorStop(1, `rgba(${glowColor.r},${glowColor.g},${glowColor.b},${0.24 + glowLevel * 0.44})`);
-
-      ctx.fillStyle = shardGradient;
-      ctx.beginPath();
-      ctx.moveTo(leftPt.x, leftPt.y);
-      ctx.lineTo(tipPt.x, tipPt.y);
-      ctx.lineTo(rightPt.x, rightPt.y);
-      ctx.closePath();
-      ctx.fill();
-
-      const corePulse = 0.3 + glowLevel * 0.7 + pulse * 0.08;
-      const coreRadius = Math.max(1.2, (1.6 + shard.tier * 1.9) * (0.7 + wakeEase * 0.55));
-      const coreCenter = resolveCanvasPoint(mapper, wx + lean * height * 0.42, wy - height * 0.54);
-      const coreGlow = ctx.createRadialGradient(coreCenter.x, coreCenter.y, 0, coreCenter.x, coreCenter.y, coreRadius * 3.6);
-      coreGlow.addColorStop(0, `rgba(${coreColor.r},${coreColor.g},${coreColor.b},${0.55 * corePulse})`);
-      coreGlow.addColorStop(1, `rgba(${coreColor.r},${coreColor.g},${coreColor.b},0)`);
-      ctx.fillStyle = coreGlow;
-      ctx.beginPath();
-      ctx.arc(coreCenter.x, coreCenter.y, coreRadius * 3.6, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = `rgba(${coreColor.r},${coreColor.g},${coreColor.b},${0.42 + glowLevel * 0.34})`;
-      ctx.beginPath();
-      ctx.arc(coreCenter.x, coreCenter.y, coreRadius, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.strokeStyle = `rgba(${edgeColor.r},${edgeColor.g},${edgeColor.b},${0.18 + glowLevel * 0.26})`;
-      ctx.lineWidth = Math.max(0.8, 1 + tierWeight * 0.4);
-      ctx.beginPath();
-      ctx.moveTo(leftPt.x, leftPt.y);
-      ctx.lineTo(tipPt.x, tipPt.y);
-      ctx.lineTo(rightPt.x, rightPt.y);
-      ctx.stroke();
+    for (let i=0;i<localClusters.length;i+=1){
+      const local = localClusters[i]; const state = ensureState(`${key}|${i}`);
+      const rawDt = state.lastTimeMs == null ? (1 / 60) : (timeMs - state.lastTimeMs) * 0.001; const dt = clamp(Number.isFinite(rawDt) ? rawDt : (1/60),0,0.07); state.lastTimeMs=timeMs;
+      const localWake = distWake(local, baseSources, cluster.triggerRadius * (0.9 + (cluster.auraSensitivity - 1) * 0.2));
+      if (localWake > 0.02) { state.hold = cluster.settleDelayMs * 0.001; state.wake = clamp01(state.wake + (dt / Math.max(0.01, 1.05 / (cluster.wakeSpeed * cluster.auraSensitivity))) * localWake); }
+      else if (state.hold > 0) state.hold = Math.max(0, state.hold - dt); else state.wake = clamp01(state.wake - (dt / Math.max(0.01, 1.25 / cluster.settleSpeed)));
+      const wakeEase = state.wake * state.wake * (3 - 2 * state.wake);
+      const idlePulse = 0.5 + Math.sin(timeSec * 1.6 + cluster.seed * 0.0019 + local.phase) * 0.5;
+      const glowLevel = lerp(0.12, 0.92, clamp01(idlePulse * 0.25 + wakeEase * 0.95));
+      const basePt = resolveCanvasPoint(mapper, local.x, local.y);
+      const groundGlow = ctx.createRadialGradient(basePt.x, basePt.y, 1, basePt.x, basePt.y, local.baseRadius * (3.2 + wakeEase));
+      groundGlow.addColorStop(0, `rgba(${glowColor.r},${glowColor.g},${glowColor.b},${0.12 + glowLevel * 0.18})`); groundGlow.addColorStop(1, `rgba(${glowColor.r},${glowColor.g},${glowColor.b},0)`);
+      ctx.fillStyle = groundGlow; ctx.beginPath(); ctx.arc(basePt.x, basePt.y, local.baseRadius * (3.2 + wakeEase), 0, Math.PI * 2); ctx.fill();
+      for (const shard of local.shards){ const pulse=Math.sin(timeSec*1.2+shard.phase)*0.06; const h=shard.height*(1+wakeEase*0.12+pulse); const lx=local.x+shard.sideJitter; const lean=shard.lean+wakeEase*0.08; const left=resolveCanvasPoint(mapper,lx-shard.halfW,local.y); const right=resolveCanvasPoint(mapper,lx+shard.halfW,local.y); const tip=resolveCanvasPoint(mapper,lx+lean*h,local.y-h);
+        const g=ctx.createLinearGradient(left.x,left.y,tip.x,tip.y); g.addColorStop(0,`rgba(${baseColor.r},${baseColor.g},${baseColor.b},${0.52+glowLevel*0.2})`); g.addColorStop(0.7,`rgba(${glowColor.r},${glowColor.g},${glowColor.b},${0.24+glowLevel*0.2})`); g.addColorStop(1,`rgba(${baseColor.r},${baseColor.g},${baseColor.b},${0.84})`);
+        ctx.fillStyle=g; ctx.beginPath(); ctx.moveTo(left.x,left.y); ctx.lineTo(tip.x,tip.y); ctx.lineTo(right.x,right.y); ctx.lineTo((left.x+right.x)*0.5,left.y-shard.halfW*0.22); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle=`rgba(${edgeColor.r},${edgeColor.g},${edgeColor.b},${0.18+glowLevel*0.35})`; ctx.lineWidth=1.1; ctx.stroke();
+        const core=resolveCanvasPoint(mapper,lx+lean*h*0.35,local.y-h*0.5); ctx.fillStyle=`rgba(${coreColor.r},${coreColor.g},${coreColor.b},${0.18+glowLevel*0.24})`; ctx.beginPath(); ctx.arc(core.x,core.y,Math.max(1.3,1.6+shard.facet*1.6),0,Math.PI*2); ctx.fill();
+      }
     }
   }
-
   ctx.restore();
 }

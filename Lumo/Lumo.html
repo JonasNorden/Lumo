@@ -6595,12 +6595,27 @@
           { mapper, patches: reactiveBloomPatches },
         );
 
+        const reactiveCrystalWakeSources = [];
+        if (Array.isArray(entitySnapshots)) {
+          for (const entity of entitySnapshots) {
+            if (!entity || (entity.kind !== "lantern" && entity.kind !== "firefly")) continue;
+            if (Number.isFinite(entity.x) && Number.isFinite(entity.y)) {
+              reactiveCrystalWakeSources.push({ x: entity.x, y: entity.y });
+            }
+          }
+        }
+        if (Array.isArray(flareSnapshots)) {
+          for (const flare of flareSnapshots) {
+            if (Number.isFinite(flare?.x) && Number.isFinite(flare?.y)) reactiveCrystalWakeSources.push({ x: flare.x, y: flare.y });
+          }
+        }
+
         renderReactiveCrystals(
           ctx,
           playerCenterX,
           playerFootY,
           rechargedDecorTime,
-          { mapper, clusters: reactiveCrystalPatches },
+          { mapper, clusters: reactiveCrystalPatches, wakeSources: reactiveCrystalWakeSources },
         );
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
