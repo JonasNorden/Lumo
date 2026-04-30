@@ -6010,10 +6010,18 @@
         const tileSize = Number.isFinite(payload?.tileSize) && payload.tileSize > 0 ? payload.tileSize : 24;
         const worldWidthRaw = Number.isFinite(payload?.worldWidth)
           ? payload.worldWidth
-          : (Number.isFinite(payload?.cols) ? payload.cols : Math.max(1, Math.round(canvas.width / tileSize)));
+          : (Number.isFinite(payload?.cols)
+              ? payload.cols
+              : (Number.isFinite(payload?.dimensions?.width)
+                  ? payload.dimensions.width
+                  : Math.max(1, Math.round(canvas.width / tileSize))));
         const worldHeightRaw = Number.isFinite(payload?.worldHeight)
           ? payload.worldHeight
-          : (Number.isFinite(payload?.rows) ? payload.rows : Math.max(1, Math.round(canvas.height / tileSize)));
+          : (Number.isFinite(payload?.rows)
+              ? payload.rows
+              : (Number.isFinite(payload?.dimensions?.height)
+                  ? payload.dimensions.height
+                  : Math.max(1, Math.round(canvas.height / tileSize))));
         const supportTiles = Array.isArray(payload?.supportTiles) ? payload.supportTiles : [];
         const maxSupportTileSpan = supportTiles.reduce((maxSpan, tile) => {
           const spanW = Number.isFinite(tile?.w) ? tile.w : 0;
@@ -6025,7 +6033,11 @@
           (Number.isFinite(player.y) && player.y > worldHeightRaw + tileSize) ||
           (maxSupportTileSpan > 0 && maxSupportTileSpan <= 4)
         );
-        const worldUnitsToPx = coordinatesLookTileBased ? tileSize : 1;
+        const payloadLooksEditorV2TileDimensions = (
+          Number.isFinite(payload?.dimensions?.width)
+          && Number.isFinite(payload?.dimensions?.height)
+        );
+        const worldUnitsToPx = (coordinatesLookTileBased || payloadLooksEditorV2TileDimensions) ? tileSize : 1;
         const worldWidthPx = Math.max(tileSize, Math.round(worldWidthRaw * worldUnitsToPx));
         const worldHeightPx = Math.max(tileSize, Math.round(worldHeightRaw * worldUnitsToPx));
         const hudGameplayViewport = getRechargedHudV2GameplayViewport(canvas);
