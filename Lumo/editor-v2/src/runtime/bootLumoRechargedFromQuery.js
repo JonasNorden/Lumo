@@ -4,6 +4,8 @@ import { loadLevelDocument as loadRuntimeLevelDocument } from "./loadLevelDocume
 const DEFAULT_LEVEL_URL = "editor-v2/src/data/testLevelDocument.v1.json";
 const VALID_LEVEL_QUERY_PROTOCOLS = new Set(["http:", "https:", "blob:", ""]);
 const DEFAULT_AUTOPLAY_STEPS = 4;
+const EDITOR_PLAY_LEVEL_KEY = "lumo.editorPlay.level.v1";
+const PFH_DEBUG_QUERY_KEY = "pfhDebug";
 
 function createBaseResult(overrides = {}) {
   return {
@@ -86,7 +88,47 @@ function normalizeLevelQueryPath(level) {
   return resolved;
 }
 
-function buildSourceDescriptor(params) {
+function readEditorPlayLevelFromSession(sessionStorageRef = globalThis.sessionStorage) {
+  if (!sessionStorageRef || typeof sessionStorageRef.getItem !== "function") {
+    return { found: false, levelDocument: null, warning: "sessionStorage unavailable" };
+  }
+
+  try {
+    const raw = sessionStorageRef.getItem(EDITOR_PLAY_LEVEL_KEY);
+    if (typeof raw !== "string" || raw.trim().length === 0) {
+      return { found: false, levelDocument: null, warning: "" };
+    }
+    const parsed = JSON.parse(raw);
+    const normalized = loadRuntimeLevelDocument(parsed);
+    if (normalized?.ok !== true || !normalized?.level) {
+      const firstError = Array.isArray(normalized?.errors) && normalized.errors[0] ? normalized.errors[0] : "Unknown level format error.";
+      return { found: true, levelDocument: null, warning: `invalid session payload: ${firstError}` };
+    }
+    return { found: true, levelDocument: normalized.level, warning: "" };
+  } catch (error) {
+    return { found: true, levelDocument: null, warning: `session payload parse failed: ${error?.message || "unknown error"}` };
+  }
+}
+
+function createSessionLevelDocumentLoader(levelDocument) {
+  return async function loadFromSessionPayload() {
+    return { levelDocument };
+  };
+}
+
+function buildSourceDescriptor(params, options = {}) {
+  const sessionPayload = readEditorPlayLevelFromSession(options?.sessionStorageRef);
+  if (sessionPayload.levelDocument) {
+    return {
+      descriptor: { source: "editor-play-session" },
+      levelSourceType: "editor-play-session",
+      warning: sessionPayload.warning || "",
+      loadLevelDocument: createSessionLevelDocumentLoader(sessionPayload.levelDocument),
+      sessionPayloadFound: true,
+      sessionPayloadKey: EDITOR_PLAY_LEVEL_KEY,
+    };
+  }
+
   const rawLevel = params.get("level");
   const level = normalizeLevelQueryPath(rawLevel);
 
@@ -94,14 +136,18 @@ function buildSourceDescriptor(params) {
     return {
       descriptor: { url: level },
       levelSourceType: "url",
-      warning: "",
+      warning: sessionPayload.warning || "",
+      sessionPayloadFound: sessionPayload.found === true,
+      sessionPayloadKey: EDITOR_PLAY_LEVEL_KEY,
     };
   }
 
   return {
     descriptor: { url: DEFAULT_LEVEL_URL },
     levelSourceType: "default-url",
-    warning: "No level query provided; using fallback debug level document.",
+    warning: sessionPayload.warning || "No level query provided; using fallback debug level document.",
+    sessionPayloadFound: sessionPayload.found === true,
+    sessionPayloadKey: EDITOR_PLAY_LEVEL_KEY,
   };
 }
 
@@ -168,6 +214,7 @@ async function defaultBrowserLoadLevelDocument(sourceDescriptor = {}) {
 export async function bootLumoRechargedFromQuery(options = {}) {
   const params = normalizeSearchParams(options?.search ?? "");
   const enabled = params.get("recharged") === "1";
+  const pfhDebugEnabled = params.get(PFH_DEBUG_QUERY_KEY) === "1";
 
   if (!enabled) {
     return createBaseResult();
@@ -180,7 +227,7 @@ export async function bootLumoRechargedFromQuery(options = {}) {
   if (typeof rawLevel === "string" && rawLevel.trim().length > 0 && normalizeLevelQueryPath(rawLevel).length === 0) {
     warnings.push("Invalid level query path; using fallback debug level document.");
   }
-  const sourceInfo = buildSourceDescriptor(params);
+  const sourceInfo = buildSourceDescriptor(params, { sessionStorageRef: options?.sessionStorageRef });
   if (sourceInfo.warning) {
     warnings.push(sourceInfo.warning);
   }
@@ -189,9 +236,11 @@ export async function bootLumoRechargedFromQuery(options = {}) {
     const createAdapter = typeof options?.createAdapter === "function"
       ? options.createAdapter
       : createLumoRechargedBootAdapter;
-    const loadLevelDocument = typeof options?.loadLevelDocument === "function"
-      ? options.loadLevelDocument
-      : defaultBrowserLoadLevelDocument;
+    const loadLevelDocument = typeof sourceInfo?.loadLevelDocument === "function"
+      ? sourceInfo.loadLevelDocument
+      : (typeof options?.loadLevelDocument === "function"
+        ? options.loadLevelDocument
+        : defaultBrowserLoadLevelDocument);
 
     const adapter = createAdapter({
       sourceDescriptor: sourceInfo.descriptor,
@@ -232,6 +281,14 @@ export async function bootLumoRechargedFromQuery(options = {}) {
     }
 
     const payload = adapter.getBootPayload?.() || {};
+    if (pfhDebugEnabled) {
+      console.info("[Lumo Recharged][PFH] source selection", {
+        sessionPayloadFound: sourceInfo?.sessionPayloadFound === true,
+        sessionPayloadKey: sourceInfo?.sessionPayloadKey || EDITOR_PLAY_LEVEL_KEY,
+        chosenLevelSource: sourceInfo?.levelSourceType || "none",
+        levelPath: typeof sourceInfo?.descriptor?.url === "string" ? sourceInfo.descriptor.url : "",
+      });
+    }
     return createBaseResult({
       ok: booted,
       enabled: true,
