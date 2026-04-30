@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Lumo Crystal Sandbox — code-only procedural test</title>
+<style>
+  :root{
+    --bg:#070b14;
+    --panel:#0b1220;
+    --line:#25324b;
+    --text:#f4d681;
+    --muted:#91a0b8;
+    --cyan:#58e7ff;
+    --violet:#8b4cff;
+  }
+  html,body{margin:0;height:100%;background:#050812;color:var(--text);font-family:system-ui,Segoe UI,Arial,sans-serif;overflow:hidden}
+  .wrap{height:100%;display:grid;grid-template-rows:auto 1fr;gap:10px;padding:12px;box-sizing:border-box}
+  header{display:flex;align-items:center;gap:14px;background:linear-gradient(180deg,#101827,#070b13);border:1px solid #2a3349;border-radius:10px;padding:10px 12px;box-shadow:0 0 30px rgba(0,0,0,.35)}
+  h1{font-size:18px;margin:0;letter-spacing:.04em}
+  .hint{color:var(--muted);font-size:13px}
+  button,label{font:inherit}
+  button{
+    border:1px solid #5c4a88;background:#1a1530;color:#f7e4ad;border-radius:8px;padding:8px 12px;cursor:pointer;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.04),0 0 16px rgba(103,61,255,.12)
+  }
+  button:hover{background:#241947}
+  .controls{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .controls small{color:var(--muted)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;min-height:0}
+  .panel{position:relative;background:radial-gradient(circle at 50% 80%,#101a2c,#050812 70%);border:1px solid #263149;border-radius:12px;overflow:hidden}
+  .panel h2{position:absolute;left:12px;top:8px;margin:0;font-size:14px;z-index:3;color:#f7dc8b;text-shadow:0 2px 4px #000}
+  canvas{display:block;width:100%;height:100%}
+  .badge{position:absolute;right:10px;bottom:10px;color:#9faec9;font-size:12px;background:rgba(4,8,16,.65);border:1px solid #263149;border-radius:999px;padding:6px 10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Lumo Crystal Sandbox</h1>
+    <div class="hint">Rita en sträcka i vänstra rutan. Släpp musen. Klicka Rendera. Varje ny zone får ny seed/randomness men är stabil efteråt.</div>
+    <div class="controls">
+      <button id="renderBtn">Rendera</button>
+      <button id="newSeedBtn">Ny randomness</button>
+      <button id="clearBtn">Rensa</button>
+      <small id="info">Ingen zone ritad än</small>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="panel">
+      <h2>1. Rita crystal-zone</h2>
+      <canvas id="draw"></canvas>
+      <div class="badge">dragga horisontellt ungefär där kristallerna ska växa</div>
+    </section>
+    <section class="panel">
+      <h2>2. Renderat kod-resultat</h2>
+      <canvas id="render"></canvas>
+      <div class="badge">Canvas 2D: polygoner + gradienter + glow + partiklar</div>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const drawCanvas = document.getElementById('draw');
+  const renderCanvas = document.getElementById('render');
+  const dctx = drawCanvas.getContext('2d');
+  const rctx = renderCanvas.getContext('2d');
+  const info = document.getElementById('info');
+
+  let zone = null;
+  let dragStart = null;
+  let pointer = null;
+  let seed = Math.floor(Math.random()*1e9);
+  let crystalCache = null;
+  let t0 = performance.now();
+
+  function resize(){
+    for (const c of [drawCanvas, renderCanvas]){
+      const rect = c.getBoundingClientRect();
+      c.width = Math.max(1, Math.floor(rect.width * devicePixelRatio));
+      c.height = Math.max(1, Math.floor(rect.height * devicePixelRatio));
+      const ctx = c.getContext('2d');
+      ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+    }
+    drawGuide();
+    crystalCache = null;
+  }
+  addEventListener('resize', resize);
+
+  function randFactory(seed){
+    let s = seed >>> 0;
+    return function(){
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 4294967296;
+    };
+  }
+
+  function bg(ctx, w, h){
+    ctx.clearRect(0,0,w,h);
+    const g = ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,'#07101f');
+    g.addColorStop(0.7,'#050812');
+    g.addColorStop(1,'#080604');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,w,h);
+
+    ctx.globalAlpha = 0.16;
+    ctx.strokeStyle = '#26344f';
+    ctx.lineWidth = 1;
+    for(let x=0;x<w;x+=32){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
+    for(let y=0;y<h;y+=32){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+    ctx.globalAlpha = 1;
+
+    const gy = Math.floor(h*0.72);
+    ctx.fillStyle = '#1a1109';
+    ctx.fillRect(0,gy,w,h-gy);
+    ctx.fillStyle = '#6b4b24';
+    ctx.fillRect(0,gy,w,8);
+    ctx.fillStyle = '#243915';
+    for(let x=0;x<w;x+=7){
+      const hh = 5 + ((x*17)%13);
+      ctx.fillRect(x, gy-hh, 2, hh);
+    }
+  }
+
+  function drawLumo(ctx, x, y, s=1){
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.scale(s,s);
+    ctx.shadowColor = 'rgba(255,197,68,.6)';
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = '#c69338';
+    roundRect(ctx,-12,-26,24,30,8); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#e0b956';
+    roundRect(ctx,-10,-24,20,16,7); ctx.fill();
+    ctx.fillStyle = '#241a12';
+    ctx.beginPath(); ctx.arc(-5,-17,2.5,0,Math.PI*2); ctx.arc(5,-17,2.5,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle = '#5c3b15'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(-12,-4); ctx.lineTo(12,-4); ctx.stroke();
+    ctx.restore();
+  }
+
+  function roundRect(ctx,x,y,w,h,r){
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r);
+  }
+
+  function drawGuide(){
+    const w = drawCanvas.clientWidth, h = drawCanvas.clientHeight;
+    bg(dctx,w,h);
+    drawLumo(dctx, w*0.14, h*0.72, 1.1);
+    if(zone) drawZone(dctx, zone, false);
+    if(dragStart && pointer){
+      const z = makeZoneFromPoints(dragStart, pointer);
+      drawZone(dctx, z, true);
+    }
+  }
+
+  function drawZone(ctx,z,preview){
+    ctx.save();
+    ctx.strokeStyle = preview ? '#f7c64d' : '#69e8ff';
+    ctx.fillStyle = preview ? 'rgba(247,198,77,.10)' : 'rgba(88,231,255,.10)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash(preview ? [8,6] : [4,4]);
+    ctx.fillRect(z.x, z.y-z.heightMax, z.width, z.heightMax);
+    ctx.strokeRect(z.x, z.y-z.heightMax, z.width, z.heightMax);
+    ctx.setLineDash([]);
+    ctx.fillStyle = preview ? '#f7c64d' : '#69e8ff';
+    ctx.font = '12px system-ui';
+    ctx.fillText(preview ? 'preview crystal zone' : 'reactiveCrystalPatch', z.x+8, z.y-z.heightMax-8);
+    ctx.restore();
+  }
+
+  function makeZoneFromPoints(a,b){
+    const x1 = Math.min(a.x,b.x), x2 = Math.max(a.x,b.x);
+    const y = Math.max(a.y,b.y);
+    const width = Math.max(40, x2-x1);
+    const heightMax = Math.max(45, Math.min(160, Math.abs(b.y-a.y) + 80));
+    return {x:x1, y, width, heightMax, seed};
+  }
+
+  function makeCrystalCluster(z, canvasW, canvasH, seed){
+    const rnd = randFactory(seed);
+    const shardCount = Math.max(5, Math.min(14, Math.round(z.width/34) + Math.floor(rnd()*4)));
+    const shards = [];
+    for(let i=0;i<shardCount;i++){
+      const px = z.x + rnd()*z.width;
+      const baseW = 10 + rnd()*22;
+      const h = z.heightMax*(0.22 + rnd()*0.78);
+      const lean = (rnd()-.5)*28;
+      const jag = (rnd()-.5)*8;
+      const layer = rnd();
+      shards.push({
+        x:px, y:z.y, w:baseW, h, lean, jag,
+        alpha:0.62 + rnd()*0.34,
+        hue:rnd(),
+        core:rnd() > .55,
+        layer
+      });
+    }
+    shards.sort((a,b)=>a.layer-b.layer || a.h-b.h);
+    const chips = Array.from({length:Math.floor(8+rnd()*18)},()=>({
+      x:z.x+rnd()*z.width, y:z.y-rnd()*14, w:2+rnd()*8, h:2+rnd()*5, a:rnd()*Math.PI
+    }));
+    const sparks = Array.from({length:Math.floor(8+rnd()*16)},()=>({
+      x:z.x+rnd()*z.width, y:z.y-z.heightMax*rnd(), r:0.8+rnd()*1.8, phase:rnd()*10
+    }));
+    return {shards,chips,sparks};
+  }
+
+  function drawShard(ctx, s, time, wake){
+    const pulse = 1 + Math.sin(time*1.4 + s.x*.07)*0.015*wake;
+    const x=s.x, y=s.y, w=s.w*pulse, h=s.h*pulse, lean=s.lean;
+    const topX = x + lean;
+    const p = [
+      {x:x-w*.55, y:y},
+      {x:x-w*.42+s.jag, y:y-h*.58},
+      {x:topX, y:y-h},
+      {x:x+w*.46-s.jag*.4, y:y-h*.52},
+      {x:x+w*.55, y:y}
+    ];
+
+    ctx.save();
+    ctx.globalAlpha = s.alpha;
+    ctx.beginPath();
+    ctx.moveTo(p[0].x,p[0].y);
+    for(let i=1;i<p.length;i++)ctx.lineTo(p[i].x,p[i].y);
+    ctx.closePath();
+
+    const grad = ctx.createLinearGradient(x,y,x+lean,y-h);
+    grad.addColorStop(0,'rgba(35,10,88,.95)');
+    grad.addColorStop(.42,'rgba(92,40,205,.88)');
+    grad.addColorStop(.75,'rgba(129,72,255,.72)');
+    grad.addColorStop(1,'rgba(218,185,255,.85)');
+    ctx.fillStyle=grad;
+    ctx.shadowColor=`rgba(124,56,255,${0.25+0.35*wake})`;
+    ctx.shadowBlur=10+18*wake;
+    ctx.fill();
+
+    ctx.shadowBlur=0;
+    ctx.lineWidth=1;
+    ctx.strokeStyle='rgba(218,190,255,.55)';
+    ctx.stroke();
+
+    // cheap facet planes
+    ctx.globalAlpha = .23 + .16*wake;
+    ctx.fillStyle='rgba(112,231,255,.75)';
+    ctx.beginPath();
+    ctx.moveTo(topX, y-h);
+    ctx.lineTo(x, y-h*.45);
+    ctx.lineTo(x+w*.35, y);
+    ctx.lineTo(x+w*.46-s.jag*.4, y-h*.52);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.globalAlpha = .18;
+    ctx.fillStyle='rgba(10,5,40,.8)';
+    ctx.beginPath();
+    ctx.moveTo(topX, y-h);
+    ctx.lineTo(x-w*.42+s.jag, y-h*.58);
+    ctx.lineTo(x-w*.55, y);
+    ctx.lineTo(x, y-h*.45);
+    ctx.closePath();
+    ctx.fill();
+
+    if(s.core){
+      const cg = ctx.createRadialGradient(x, y-h*.35, 0, x, y-h*.35, Math.max(w,h)*.38);
+      cg.addColorStop(0,`rgba(88,231,255,${0.32+0.35*wake})`);
+      cg.addColorStop(.35,`rgba(88,231,255,${0.13+0.2*wake})`);
+      cg.addColorStop(1,'rgba(88,231,255,0)');
+      ctx.globalCompositeOperation='lighter';
+      ctx.globalAlpha=1;
+      ctx.fillStyle=cg;
+      ctx.beginPath();
+      ctx.ellipse(x,y-h*.28,w*.55,h*.35,0,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function renderResult(){
+    const w = renderCanvas.clientWidth, h = renderCanvas.clientHeight;
+    const time = (performance.now()-t0)/1000;
+    bg(rctx,w,h);
+    drawLumo(rctx, w*0.18, h*0.72, 1.1);
+    if(!zone){
+      rctx.fillStyle='#91a0b8';
+      rctx.font='16px system-ui';
+      rctx.fillText('Rita först en crystal-zone i vänstra rutan.', 32, 72);
+      return;
+    }
+    const scaleX = w / drawCanvas.clientWidth;
+    const scaleY = h / drawCanvas.clientHeight;
+    const z = {x:zone.x*scaleX,y:zone.y*scaleY,width:zone.width*scaleX,heightMax:zone.heightMax*scaleY};
+    if(!crystalCache) crystalCache = makeCrystalCluster(z,w,h,seed);
+
+    // aura / wake demonstration
+    const lx = w*0.18, ly = h*0.72-20;
+    const cx = z.x+z.width/2, cy = z.y-z.heightMax/2;
+    const dist = Math.hypot(cx-lx,cy-ly);
+    const wake = Math.max(0, Math.min(1, 1 - dist/340));
+
+    // ground glow
+    rctx.save();
+    rctx.globalCompositeOperation='lighter';
+    const glow = rctx.createRadialGradient(z.x+z.width/2,z.y,0,z.x+z.width/2,z.y,z.width*.9);
+    glow.addColorStop(0,`rgba(116,49,255,${0.16+0.25*wake})`);
+    glow.addColorStop(.38,`rgba(88,231,255,${0.05+0.12*wake})`);
+    glow.addColorStop(1,'rgba(116,49,255,0)');
+    rctx.fillStyle=glow;
+    rctx.fillRect(z.x-z.width*.4,z.y-z.heightMax*.45,z.width*1.8,z.heightMax*.7);
+    rctx.restore();
+
+    for(const c of crystalCache.chips){
+      rctx.save();
+      rctx.translate(c.x,c.y); rctx.rotate(c.a);
+      rctx.fillStyle='rgba(124,65,230,.55)';
+      rctx.fillRect(-c.w/2,-c.h/2,c.w,c.h);
+      rctx.restore();
+    }
+
+    for(const s of crystalCache.shards) drawShard(rctx,s,time,wake);
+
+    // sparkles
+    rctx.save();
+    rctx.globalCompositeOperation='lighter';
+    for(const sp of crystalCache.sparks){
+      const blink = .25 + .75*Math.max(0, Math.sin(time*1.7 + sp.phase));
+      rctx.globalAlpha = blink*(.25+.55*wake);
+      rctx.fillStyle = sp.phase%2 > 1 ? '#d99cff' : '#58e7ff';
+      rctx.beginPath();
+      rctx.arc(sp.x, sp.y + Math.sin(time+sp.phase)*2, sp.r, 0, Math.PI*2);
+      rctx.fill();
+    }
+    rctx.restore();
+
+    // show zone frame faintly
+    rctx.save();
+    rctx.strokeStyle='rgba(105,232,255,.18)';
+    rctx.setLineDash([5,6]);
+    rctx.strokeRect(z.x,z.y-z.heightMax,z.width,z.heightMax);
+    rctx.restore();
+  }
+
+  drawCanvas.addEventListener('pointerdown', e => {
+    const r = drawCanvas.getBoundingClientRect();
+    dragStart = {x:e.clientX-r.left, y:e.clientY-r.top};
+    pointer = {...dragStart};
+    drawCanvas.setPointerCapture(e.pointerId);
+    drawGuide();
+  });
+  drawCanvas.addEventListener('pointermove', e => {
+    if(!dragStart) return;
+    const r = drawCanvas.getBoundingClientRect();
+    pointer = {x:e.clientX-r.left, y:e.clientY-r.top};
+    drawGuide();
+  });
+  drawCanvas.addEventListener('pointerup', e => {
+    if(!dragStart) return;
+    const r = drawCanvas.getBoundingClientRect();
+    pointer = {x:e.clientX-r.left, y:e.clientY-r.top};
+    zone = makeZoneFromPoints(dragStart, pointer);
+    seed = Math.floor(Math.random()*1e9);
+    zone.seed = seed;
+    crystalCache = null;
+    dragStart = null; pointer = null;
+    info.textContent = `Zone: ${Math.round(zone.width)}px bred, ${Math.round(zone.heightMax)}px hög, seed ${seed}`;
+    drawGuide();
+    renderResult();
+  });
+
+  document.getElementById('renderBtn').onclick = () => { crystalCache = null; renderResult(); };
+  document.getElementById('newSeedBtn').onclick = () => {
+    if(!zone) return;
+    seed = Math.floor(Math.random()*1e9);
+    zone.seed = seed;
+    crystalCache = null;
+    info.textContent = `Ny seed: ${seed}`;
+    renderResult();
+  };
+  document.getElementById('clearBtn').onclick = () => {
+    zone=null; crystalCache=null; info.textContent='Ingen zone ritad än'; drawGuide(); renderResult();
+  };
+
+  function loop(){
+    renderResult();
+    requestAnimationFrame(loop);
+  }
+
+  resize();
+  loop();
+})();
+</script>
+</body>
+</html>
