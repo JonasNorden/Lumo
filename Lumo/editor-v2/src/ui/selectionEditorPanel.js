@@ -946,7 +946,7 @@ function renderReactiveBloomPatchInspector(patch) {
 
 
 function renderReactiveCrystalPatchInspector(patch) {
-  return renderSelectionCard("Reactive Crystal Patch", "Read-only reactive crystal authoring data", [
+  return renderSelectionCard("Reactive Crystal", "Read-only reactive crystal authoring data", [
     renderReadOnlyField("id", patch?.id),
     renderReadOnlyField("kind", patch?.kind),
     renderReadOnlyField("x", formatNumericDisplay(patch?.x)),
