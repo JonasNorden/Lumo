@@ -1,4 +1,6 @@
 export function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+export function lerp(from, to, t) { return from + ((to - from) * t); }
+
 export function clamp01(v) { return clamp(v, 0, 1); }
 
 export function parseColorHex(value, fallback) {
