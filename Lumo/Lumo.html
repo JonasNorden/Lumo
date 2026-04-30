@@ -6598,15 +6598,33 @@
         const reactiveCrystalWakeSources = [];
         if (Array.isArray(entitySnapshots)) {
           for (const entity of entitySnapshots) {
-            if (!entity || (entity.kind !== "lantern" && entity.kind !== "firefly")) continue;
-            if (Number.isFinite(entity.x) && Number.isFinite(entity.y)) {
-              reactiveCrystalWakeSources.push({ x: entity.x, y: entity.y });
+            const entityType = typeof entity?.type === "string" ? entity.type : "";
+            if (entityType !== "lantern_01" && entityType !== "lantern" && entityType !== "firefly_01" && entityType !== "firefly") {
+              continue;
             }
+            const entityWorldX = Number.isFinite(entity?.x) ? entity.x : null;
+            const entityWorldY = Number.isFinite(entity?.y) ? entity.y : null;
+            const entityWorldW = Number.isFinite(entity?.w) && entity.w > 0 ? entity.w : 1;
+            const entityWorldH = Number.isFinite(entity?.h) && entity.h > 0 ? entity.h : 1;
+            if (!Number.isFinite(entityWorldX) || !Number.isFinite(entityWorldY)) continue;
+            reactiveCrystalWakeSources.push({
+              x: entityWorldX + (entityWorldW * 0.5),
+              y: entityWorldY + (entityWorldH * 0.5),
+            });
           }
         }
         if (Array.isArray(flareSnapshots)) {
           for (const flare of flareSnapshots) {
-            if (Number.isFinite(flare?.x) && Number.isFinite(flare?.y)) reactiveCrystalWakeSources.push({ x: flare.x, y: flare.y });
+            const flareLooksTileBased = coordinatesLookTileBased
+              && Number.isFinite(flare?.x)
+              && Number.isFinite(flare?.y)
+              && flare.x <= worldWidthRaw + tileSize
+              && flare.y <= worldHeightRaw + tileSize;
+            const flareWorldX = flareLooksTileBased ? flare.x * worldUnitsToPx : flare.x;
+            const flareWorldY = flareLooksTileBased ? flare.y * worldUnitsToPx : flare.y;
+            if (Number.isFinite(flareWorldX) && Number.isFinite(flareWorldY)) {
+              reactiveCrystalWakeSources.push({ x: flareWorldX, y: flareWorldY });
+            }
           }
         }
 
