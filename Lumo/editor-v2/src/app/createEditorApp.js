@@ -1595,6 +1595,10 @@ export function createEditorApp({
   const clearReactiveGrassPatchSelection = (interaction) => {
     interaction.selectedReactiveGrassPatchIndex = null;
     interaction.selectedReactiveGrassPatchId = null;
+    interaction.selectedReactiveBloomPatchIndex = null;
+    interaction.selectedReactiveBloomPatchId = null;
+    interaction.selectedReactiveCrystalPatchIndex = null;
+    interaction.selectedReactiveCrystalPatchId = null;
   };
 
   const clearReactiveBloomPatchSelection = (interaction) => {
@@ -1658,10 +1662,12 @@ export function createEditorApp({
       ? draft.document.active.reactiveCrystalPatches
       : [];
     const nextPatch = Number.isInteger(patchIndex) && patchIndex >= 0 && patchIndex < patches.length ? patches[patchIndex] : null;
+    clearReactiveGrassPatchSelection(draft.interaction);
+    clearEntitySelection(draft.interaction);
+    clearDecorSelection(draft.interaction);
+    clearSoundSelection(draft.interaction);
     draft.interaction.selectedReactiveCrystalPatchIndex = nextPatch ? patchIndex : null;
     draft.interaction.selectedReactiveCrystalPatchId = typeof nextPatch?.id === "string" && nextPatch.id.trim() ? nextPatch.id.trim() : null;
-    clearReactiveGrassPatchSelection(draft.interaction);
-    clearReactiveBloomPatchSelection(draft.interaction);
   };
   const getObjectIndicesByIds = (items, ids = []) => {
     const lookup = new Map();
