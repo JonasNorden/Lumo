@@ -143,7 +143,7 @@ function buildSourceDescriptor(params, options = {}) {
   const sessionPayload = readEditorPlayLevelFromSession(options?.sessionStorageRef);
   if (sessionPayload.levelDocument) {
     return {
-      descriptor: { source: "editor-play-session" },
+      descriptor: { levelDocument: sessionPayload.levelDocument, source: "editor-play-session" },
       levelSourceType: "editor-play-session",
       warning: sessionPayload.warning || "",
       loadLevelDocument: createSessionLevelDocumentLoader(sessionPayload.levelDocument),
