@@ -4407,6 +4407,13 @@
       const directPatches = Array.isArray(payload?.reactiveGrassPatches)
         ? payload.reactiveGrassPatches
         : null;
+      if (crystalDebugEnabled) {
+        console.info("[CrystalDebug] payload reactive patch counts", {
+          grass: Array.isArray(payload?.reactiveGrassPatches) ? payload.reactiveGrassPatches.length : 0,
+          bloom: Array.isArray(payload?.reactiveBloomPatches) ? payload.reactiveBloomPatches.length : 0,
+          crystal: Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches.length : 0,
+        });
+      }
 
       if (directPatches) {
         rechargedReactiveGrassLevelCache.patches = directPatches
@@ -4650,9 +4657,23 @@
       const normalizedPatches = Array.isArray(rechargedReactiveCrystalLevelCache.patches)
         ? rechargedReactiveCrystalLevelCache.patches
         : [];
-      if (crystalDebugEnabled && crystalDebugState.normalizedCount !== normalizedPatches.length) {
-        crystalDebugState.normalizedCount = normalizedPatches.length;
-        console.info("[CrystalDebug] normalized reactiveCrystalPatches", normalizedPatches.length);
+      if (crystalDebugEnabled) {
+        const grassCount = Array.isArray(rechargedReactiveGrassLevelCache.patches) ? rechargedReactiveGrassLevelCache.patches.length : 0;
+        const bloomCount = Array.isArray(rechargedReactiveBloomLevelCache.patches) ? rechargedReactiveBloomLevelCache.patches.length : 0;
+        if (
+          crystalDebugState.normalizedCount !== normalizedPatches.length
+          || crystalDebugState.normalizedGrassCount !== grassCount
+          || crystalDebugState.normalizedBloomCount !== bloomCount
+        ) {
+          crystalDebugState.normalizedCount = normalizedPatches.length;
+          crystalDebugState.normalizedGrassCount = grassCount;
+          crystalDebugState.normalizedBloomCount = bloomCount;
+          console.info("[CrystalDebug] normalized reactive patch counts", {
+            grass: grassCount,
+            bloom: bloomCount,
+            crystal: normalizedPatches.length,
+          });
+        }
       }
       return normalizedPatches;
     }
@@ -6653,9 +6674,22 @@
           }
         }
 
-        if (crystalDebugEnabled && crystalDebugState.renderCount !== reactiveCrystalPatches.length) {
+        if (
+          crystalDebugEnabled
+          && (
+            crystalDebugState.renderCount !== reactiveCrystalPatches.length
+            || crystalDebugState.renderGrassCount !== reactiveGrassPatches.length
+            || crystalDebugState.renderBloomCount !== reactiveBloomPatches.length
+          )
+        ) {
           crystalDebugState.renderCount = reactiveCrystalPatches.length;
-          console.info("[CrystalDebug] render reactiveCrystalPatches", reactiveCrystalPatches.length);
+          crystalDebugState.renderGrassCount = reactiveGrassPatches.length;
+          crystalDebugState.renderBloomCount = reactiveBloomPatches.length;
+          console.info("[CrystalDebug] render reactive patch counts", {
+            grass: reactiveGrassPatches.length,
+            bloom: reactiveBloomPatches.length,
+            crystal: reactiveCrystalPatches.length,
+          });
         }
 
         renderReactiveCrystals(
