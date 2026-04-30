@@ -292,6 +292,13 @@ export async function bootLumoRechargedFromQuery(options = {}) {
         levelPath: typeof sourceInfo?.descriptor?.url === "string" ? sourceInfo.descriptor.url : "",
       });
     }
+    if (params.get("crystalDebug") === "1") {
+      console.info("[CrystalDebug] boot result counts", {
+        grass: Array.isArray(payload.reactiveGrassPatches) ? payload.reactiveGrassPatches.length : 0,
+        bloom: Array.isArray(payload.reactiveBloomPatches) ? payload.reactiveBloomPatches.length : 0,
+        crystal: Array.isArray(payload.reactiveCrystalPatches) ? payload.reactiveCrystalPatches.length : 0,
+      });
+    }
     return createBaseResult({
       ok: booted,
       enabled: true,

@@ -484,6 +484,9 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
   }
 
   const runtimeBackgroundVisualOverrides = buildRuntimeBackgroundVisualOverrides(levelDocument);
+  const reactiveGrassPatches = Array.isArray(levelDocument?.reactiveGrassPatches) ? levelDocument.reactiveGrassPatches.map((patch) => structuredClone(patch)) : [];
+  const reactiveBloomPatches = Array.isArray(levelDocument?.reactiveBloomPatches) ? levelDocument.reactiveBloomPatches.map((patch) => structuredClone(patch)) : [];
+  const reactiveCrystalPatches = Array.isArray(levelDocument?.reactiveCrystalPatches) ? levelDocument.reactiveCrystalPatches.map((patch) => structuredClone(patch)) : [];
   const runtimeLevel = {
     meta: {
       id: String(levelDocument?.meta?.id || ""),
@@ -504,7 +507,18 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
       bg: runtimeBackgroundBase.slice(0),
       bgVisualOverrides: { ...runtimeBackgroundVisualOverrides },
     },
+    reactiveGrassPatches,
+    reactiveBloomPatches,
+    reactiveCrystalPatches,
   };
+  const crystalDebugEnabled = new URLSearchParams(globalThis?.location?.search || "").get("crystalDebug") === "1";
+  if (crystalDebugEnabled) {
+    console.info("[CrystalDebug] editor PFH payload creation counts", {
+      grass: reactiveGrassPatches.length,
+      bloom: reactiveBloomPatches.length,
+      crystal: reactiveCrystalPatches.length,
+    });
+  }
 
   const authoredEntities = Array.isArray(levelDocument.entities) ? levelDocument.entities : [];
   const authoredLiquidTypeCounts = {
