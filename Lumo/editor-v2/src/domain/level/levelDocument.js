@@ -56,6 +56,10 @@ const DEFAULT_REACTIVE_CRYSTAL_PATCH = Object.freeze({
   seed: 12345,
 });
 
+export function getDefaultReactiveCrystalPatch() {
+  return { ...DEFAULT_REACTIVE_CRYSTAL_PATCH };
+}
+
 const DEFAULT_REACTIVE_BLOOM_PATCH = Object.freeze({
   kind: "reactive_bloom",
   x: 0,

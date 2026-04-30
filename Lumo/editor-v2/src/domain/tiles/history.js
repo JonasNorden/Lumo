@@ -131,8 +131,8 @@ function recordHistoryTimelineEntry(history, entry) {
   const domain = getHistoryEntryDomain(entry);
   return recordGlobalHistoryAction(history.globalTimeline, {
     domain,
-    actionType: entry?.kind === "reactive-crystal" && entry?.mode === "create"
-      ? "reactive-crystal-create"
+    actionType: entry?.kind === "reactive-crystal"
+      ? `reactive-crystal-${entry?.mode || "update"}`
       : entry?.mode || entry?.type || entry?.kind || domain,
     route: {
       lane: "document-history",

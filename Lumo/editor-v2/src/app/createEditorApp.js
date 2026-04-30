@@ -80,7 +80,7 @@ import {
   canUndo,
   canRedo,
 } from "../domain/tiles/history.js";
-import { createDefaultBackgroundLayer, getTileIndex } from "../domain/level/levelDocument.js";
+import { createDefaultBackgroundLayer, getDefaultReactiveCrystalPatch, getTileIndex } from "../domain/level/levelDocument.js";
 import { DEFAULT_BACKGROUND_MATERIAL_ID, isBackgroundMaterialIdTaken, registerBackgroundMaterialOption } from "../domain/background/materialCatalog.js";
 import { DEFAULT_THEME_ID, getThemeById, getThemeCatalog, normalizeThemeId } from "../domain/theme/themeCatalog.js";
 import { normalizeThemeIds } from "../domain/theme/themeTagging.js";
@@ -2720,13 +2720,26 @@ export function createEditorApp({
     const leftEdgeX = minCellX * tileSize;
     const centerX = leftEdgeX + patchWidth * 0.5;
     const randomSeed = Math.floor(100000 + (Math.random() * 900000));
+    const crystalDefaults = getDefaultReactiveCrystalPatch();
     return {
       id: getNextStringId(doc.reactiveCrystalPatches || [], "id", "reactive_crystal"),
-      kind: "reactive_crystal",
+      kind: crystalDefaults.kind,
       x: centerX,
       y: baselineY,
+      clusterCount: crystalDefaults.clusterCount,
       width: patchWidth,
-      heightMax: 92,
+      heightMin: crystalDefaults.heightMin,
+      heightMax: crystalDefaults.heightMax,
+      triggerRadius: crystalDefaults.triggerRadius,
+      auraSensitivity: crystalDefaults.auraSensitivity,
+      wakeSpeed: crystalDefaults.wakeSpeed,
+      settleDelayMs: crystalDefaults.settleDelayMs,
+      settleSpeed: crystalDefaults.settleSpeed,
+      baseColor: crystalDefaults.baseColor,
+      glowColor: crystalDefaults.glowColor,
+      coreColor: crystalDefaults.coreColor,
+      edgeColor: crystalDefaults.edgeColor,
+      variant: crystalDefaults.variant,
       seed: randomSeed,
     };
   };
@@ -5607,6 +5620,20 @@ export function createEditorApp({
     closeSpeed: { min: 0.1, max: 5, integer: false },
     seed: { min: 1, max: 999999999, integer: true },
   });
+  const REACTIVE_CRYSTAL_NUMERIC_RULES = Object.freeze({
+    x: { min: -100000, max: 100000, integer: false },
+    y: { min: -100000, max: 100000, integer: false },
+    clusterCount: { min: 1, max: 32, integer: true },
+    width: { min: 8, max: 2000, integer: false },
+    heightMin: { min: 1, max: 300, integer: false },
+    heightMax: { min: 1, max: 400, integer: false },
+    triggerRadius: { min: 0, max: 800, integer: false },
+    auraSensitivity: { min: 0.1, max: 5, integer: false },
+    wakeSpeed: { min: 0.1, max: 5, integer: false },
+    settleDelayMs: { min: 0, max: 10000, integer: true },
+    settleSpeed: { min: 0.1, max: 5, integer: false },
+    seed: { min: 1, max: 999999999, integer: true },
+  });
 
   const normalizeReactiveGrassColor = (colorValue, fallbackColor) => {
     if (isHexColor(colorValue)) return colorValue.trim().toLowerCase();
@@ -5718,6 +5745,54 @@ export function createEditorApp({
         previousSnapshot: previousPatch,
         nextSnapshot: { ...patch },
       }));
+    });
+  };
+  const parseReactiveCrystalNumericValue = (field, value, patch) => {
+    const rule = REACTIVE_CRYSTAL_NUMERIC_RULES[field];
+    if (!rule) return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || (rule.integer && !Number.isInteger(parsed))) return null;
+    if (parsed < rule.min || parsed > rule.max) return null;
+    if (field === "heightMin" && parsed > Number(patch?.heightMax)) return null;
+    if (field === "heightMax" && parsed < Number(patch?.heightMin)) return null;
+    return rule.integer ? Math.round(parsed) : parsed;
+  };
+  const updateReactiveCrystalPatch = (field, value, options = {}) => {
+    const supportsColor = field === "baseColor" || field === "glowColor" || field === "coreColor" || field === "edgeColor";
+    const supportsText = field === "variant";
+    const supportsNumeric = Object.prototype.hasOwnProperty.call(REACTIVE_CRYSTAL_NUMERIC_RULES, field);
+    if (!supportsColor && !supportsText && !supportsNumeric) return;
+    store.setState((draft) => {
+      const patches = Array.isArray(draft.document.active?.reactiveCrystalPatches) ? draft.document.active.reactiveCrystalPatches : null;
+      if (!patches?.length) return;
+      const selectedPatchId = typeof options.patchId === "string" && options.patchId.trim() ? options.patchId.trim() : typeof draft.interaction.selectedReactiveCrystalPatchId === "string" && draft.interaction.selectedReactiveCrystalPatchId.trim() ? draft.interaction.selectedReactiveCrystalPatchId.trim() : null;
+      const selectedPatchIndex = Number.isInteger(draft.interaction.selectedReactiveCrystalPatchIndex) ? draft.interaction.selectedReactiveCrystalPatchIndex : -1;
+      const resolvedPatchIndex = selectedPatchId ? patches.findIndex((patch) => patch?.id === selectedPatchId) : selectedPatchIndex;
+      if (!Number.isInteger(resolvedPatchIndex) || resolvedPatchIndex < 0 || resolvedPatchIndex >= patches.length) return;
+      const patch = patches[resolvedPatchIndex];
+      const previousPatch = patch && typeof patch === "object" ? { ...patch } : null;
+      if (!previousPatch) return;
+      if (supportsColor) {
+        const nextColor = normalizeReactiveGrassColor(value, "#ffffff");
+        if (patch[field] === nextColor) return;
+        patch[field] = nextColor;
+      } else if (supportsText) {
+        if (typeof value !== "string" || !value.trim()) return;
+        const trimmed = value.trim();
+        if (patch.variant === trimmed) return;
+        patch.variant = trimmed;
+      } else {
+        const nextNumber = parseReactiveCrystalNumericValue(field, value, patch);
+        if (nextNumber === null || Object.is(Number(patch[field]), nextNumber)) return;
+        patch[field] = nextNumber;
+      }
+      pushHistoryEntry(draft.history, createReactiveCrystalEditEntry("update", {
+        objectId: typeof patch.id === "string" ? patch.id : null,
+        index: resolvedPatchIndex,
+        previousSnapshot: previousPatch,
+        nextSnapshot: { ...patch },
+      }));
+      setReactiveCrystalPatchSelection(draft, resolvedPatchIndex);
     });
   };
 
@@ -9155,6 +9230,7 @@ if (event.shiftKey) {
     onSoundUpdate: updateSound,
     onReactiveGrassPatchUpdate: updateReactiveGrassPatch,
     onReactiveBloomPatchUpdate: updateReactiveBloomPatch,
+    onReactiveCrystalPatchUpdate: updateReactiveCrystalPatch,
     onScanUpdate: updateScanControl,
   };
   const unbindInspectorPanel = bindInspectorPanel(inspector, store, panelBindingOptions);
@@ -9165,6 +9241,7 @@ if (event.shiftKey) {
     onSoundUpdate: updateSound,
     onReactiveGrassPatchUpdate: updateReactiveGrassPatch,
     onReactiveBloomPatchUpdate: updateReactiveBloomPatch,
+    onReactiveCrystalPatchUpdate: updateReactiveCrystalPatch,
     onVolumeUpdate: updateVolume,
     onCanvasTargetChange: setActiveCanvasTarget,
     onLayerChange: setActiveLayerFromPanel,
