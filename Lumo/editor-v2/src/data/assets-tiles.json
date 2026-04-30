@@ -31900,7 +31900,11 @@
       "baseColor": "#05380d",
       "topColor": "#bdf07f",
       "variant": "lush_default",
-      "seed": 11808453
+      "seed": 11808453,
+      "windAmp": 13.5,
+      "reactFar": 176,
+      "reactMid": 94,
+      "reactNear": 36
     },
     {
       "id": "reactive_grass-4",
@@ -31916,7 +31920,11 @@
       "baseColor": "#615505",
       "topColor": "#fbf53c",
       "variant": "lush_default",
-      "seed": 30572238
+      "seed": 30572238,
+      "windAmp": 13.5,
+      "reactFar": 176,
+      "reactMid": 94,
+      "reactNear": 36
     }
   ],
   "reactiveBloomPatches": [
@@ -31984,6 +31992,27 @@
       "edgeColor": "#6a4cff",
       "variant": "void_crystal_default",
       "seed": 64021
+    },
+    {
+      "id": "reactive_crystal-2",
+      "kind": "reactive_crystal",
+      "x": 2016,
+      "y": 360,
+      "clusterCount": 12,
+      "width": 576,
+      "heightMin": 18,
+      "heightMax": 92,
+      "triggerRadius": 132,
+      "auraSensitivity": 1,
+      "wakeSpeed": 1,
+      "settleDelayMs": 520,
+      "settleSpeed": 1,
+      "baseColor": "#335c88",
+      "glowColor": "#83e6ff",
+      "coreColor": "#d4f8ff",
+      "edgeColor": "#7d8dff",
+      "variant": "default",
+      "seed": 196989
     }
   ],
   "layers": {
