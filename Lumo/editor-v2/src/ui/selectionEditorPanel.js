@@ -946,7 +946,12 @@ function renderReactiveBloomPatchInspector(patch) {
 
 
 function renderReactiveCrystalPatchInspector(patch) {
-  return renderSelectionCard("Reactive Crystal", "Read-only reactive crystal authoring data", [
+  return renderSelectionFields([
+    `<div class="statusCard assetSelectionCard assetSelectionCardCompact">
+      <div class="assetSelectionMeta">
+        <span class="statusCardMeta">Reactive Crystal · Authored data (read-only)</span>
+      </div>
+    </div>`,
     renderReadOnlyField("id", patch?.id),
     renderReadOnlyField("kind", patch?.kind),
     renderReadOnlyField("x", formatNumericDisplay(patch?.x)),
@@ -956,7 +961,12 @@ function renderReactiveCrystalPatchInspector(patch) {
     renderReadOnlyField("heightMin", formatNumericDisplay(patch?.heightMin)),
     renderReadOnlyField("heightMax", formatNumericDisplay(patch?.heightMax)),
     renderReadOnlyField("triggerRadius", formatNumericDisplay(patch?.triggerRadius)),
+    renderReadOnlyField("auraRadius", formatNumericDisplay(patch?.auraRadius)),
     renderReadOnlyField("auraSensitivity", formatNumericDisplay(patch?.auraSensitivity)),
+    renderReadOnlyField("idlePulse", formatNumericDisplay(patch?.idlePulse)),
+    renderReadOnlyField("wake", formatNumericDisplay(patch?.wake)),
+    renderReadOnlyField("hold", formatNumericDisplay(patch?.hold)),
+    renderReadOnlyField("settle", formatNumericDisplay(patch?.settle)),
     renderReadOnlyField("wakeSpeed", formatNumericDisplay(patch?.wakeSpeed)),
     renderReadOnlyField("settleDelayMs", formatNumericDisplay(patch?.settleDelayMs)),
     renderReadOnlyField("settleSpeed", formatNumericDisplay(patch?.settleSpeed)),
