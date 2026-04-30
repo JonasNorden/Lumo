@@ -3113,14 +3113,39 @@
           if (state?.input) {
             state.input.continuePressed = false;
           }
-          window.__LumoRechargedBoot = {
-            ...(payload && typeof payload === "object" ? payload : {}),
+          const previousPayload = payload && typeof payload === "object" ? payload : {};
+          const nextIsBootstrapShell = (
+            nextPayload?.booted !== true
+            && !Number.isFinite(nextPayload?.worldWidth)
+            && !Number.isFinite(nextPayload?.worldHeight)
+            && !Number.isFinite(nextPayload?.tileSize)
+          );
+          const keepPreviousReactivePatches = nextIsBootstrapShell
+            && (
+              (Array.isArray(nextPayload?.reactiveGrassPatches) && nextPayload.reactiveGrassPatches.length === 0 && Array.isArray(previousPayload?.reactiveGrassPatches) && previousPayload.reactiveGrassPatches.length > 0)
+              || (Array.isArray(nextPayload?.reactiveBloomPatches) && nextPayload.reactiveBloomPatches.length === 0 && Array.isArray(previousPayload?.reactiveBloomPatches) && previousPayload.reactiveBloomPatches.length > 0)
+              || (Array.isArray(nextPayload?.reactiveCrystalPatches) && nextPayload.reactiveCrystalPatches.length === 0 && Array.isArray(previousPayload?.reactiveCrystalPatches) && previousPayload.reactiveCrystalPatches.length > 0)
+            );
+          const mergedPayload = {
+            ...previousPayload,
             ...nextPayload,
             player: nextPlayerSnapshot && typeof nextPlayerSnapshot === "object"
               ? nextPlayerSnapshot
               : (payload?.player && typeof payload.player === "object" ? payload.player : null),
             adapter,
           };
+          if (keepPreviousReactivePatches) {
+            mergedPayload.reactiveGrassPatches = Array.isArray(previousPayload?.reactiveGrassPatches)
+              ? previousPayload.reactiveGrassPatches
+              : mergedPayload.reactiveGrassPatches;
+            mergedPayload.reactiveBloomPatches = Array.isArray(previousPayload?.reactiveBloomPatches)
+              ? previousPayload.reactiveBloomPatches
+              : mergedPayload.reactiveBloomPatches;
+            mergedPayload.reactiveCrystalPatches = Array.isArray(previousPayload?.reactiveCrystalPatches)
+              ? previousPayload.reactiveCrystalPatches
+              : mergedPayload.reactiveCrystalPatches;
+          }
+          window.__LumoRechargedBoot = mergedPayload;
         }
 
         const livePayload = readLatestRechargedBootPayload();
