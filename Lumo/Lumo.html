@@ -6607,9 +6607,12 @@
             const entityWorldW = Number.isFinite(entity?.w) && entity.w > 0 ? entity.w : 1;
             const entityWorldH = Number.isFinite(entity?.h) && entity.h > 0 ? entity.h : 1;
             if (!Number.isFinite(entityWorldX) || !Number.isFinite(entityWorldY)) continue;
+            const isLantern = entityType === "lantern_01" || entityType === "lantern";
             reactiveCrystalWakeSources.push({
               x: entityWorldX + (entityWorldW * 0.5),
               y: entityWorldY + (entityWorldH * 0.5),
+              radius: isLantern ? 210 : 150,
+              strength: isLantern ? 1 : 0.8,
             });
           }
         }
@@ -6623,7 +6626,7 @@
             const flareWorldX = flareLooksTileBased ? flare.x * worldUnitsToPx : flare.x;
             const flareWorldY = flareLooksTileBased ? flare.y * worldUnitsToPx : flare.y;
             if (Number.isFinite(flareWorldX) && Number.isFinite(flareWorldY)) {
-              reactiveCrystalWakeSources.push({ x: flareWorldX, y: flareWorldY });
+              reactiveCrystalWakeSources.push({ x: flareWorldX, y: flareWorldY, radius: 170, strength: 0.9 });
             }
           }
         }
@@ -6633,7 +6636,7 @@
           playerCenterX,
           playerFootY,
           rechargedDecorTime,
-          { mapper, clusters: reactiveCrystalPatches, wakeSources: reactiveCrystalWakeSources },
+          { mapper, clusters: reactiveCrystalPatches, wakeSources: reactiveCrystalWakeSources, debug: true },
         );
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
