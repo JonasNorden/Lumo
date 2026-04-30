@@ -3,7 +3,17 @@ const DEFAULT_IDENTITY = { id: "", name: "", formatVersion: "", themeId: "" };
 const DEFAULT_META = { title: "", author: "", difficulty: "", tags: [] };
 const DEFAULT_WORLD = { width: 0, height: 0, tileSize: 0 };
 const DEFAULT_SPAWN = { x: 0, y: 0 };
-const DEFAULT_LAYERS = { tiles: [], background: [], bg: [], decor: [], entities: [], audio: [] };
+const DEFAULT_LAYERS = {
+  tiles: [],
+  background: [],
+  bg: [],
+  decor: [],
+  entities: [],
+  audio: [],
+  reactiveGrassPatches: [],
+  reactiveBloomPatches: [],
+  reactiveCrystalPatches: [],
+};
 const DEFAULT_TILE_BOUNDS = { count: 0, minX: 0, minY: 0, maxX: 0, maxY: 0 };
 const DEFAULT_TILE_MAP = { count: 0, keys: [], byKey: {} };
 
@@ -66,6 +76,15 @@ export function buildRuntimeWorldPacket(parts) {
     audio: Array.isArray(skeleton?.layers?.audio)
       ? [...skeleton.layers.audio]
       : [...DEFAULT_LAYERS.audio],
+    reactiveGrassPatches: Array.isArray(skeleton?.layers?.reactiveGrassPatches)
+      ? [...skeleton.layers.reactiveGrassPatches]
+      : [...DEFAULT_LAYERS.reactiveGrassPatches],
+    reactiveBloomPatches: Array.isArray(skeleton?.layers?.reactiveBloomPatches)
+      ? [...skeleton.layers.reactiveBloomPatches]
+      : [...DEFAULT_LAYERS.reactiveBloomPatches],
+    reactiveCrystalPatches: Array.isArray(skeleton?.layers?.reactiveCrystalPatches)
+      ? [...skeleton.layers.reactiveCrystalPatches]
+      : [...DEFAULT_LAYERS.reactiveCrystalPatches],
   };
 
   // Keep tileBounds/tileMap sourced directly from runtime part outputs.
