@@ -7356,16 +7356,6 @@
       if (queryBootResult && typeof queryBootResult === "object" && liveAdapter && typeof liveAdapter === "object") {
         queryBootResult.adapter = liveAdapter;
       }
-      try {
-        const queryBootReactiveCounts = {
-          reactiveGrassPatches: Array.isArray(queryBootResult?.reactiveGrassPatches) ? queryBootResult.reactiveGrassPatches.length : 0,
-          reactiveBloomPatches: Array.isArray(queryBootResult?.reactiveBloomPatches) ? queryBootResult.reactiveBloomPatches.length : 0,
-          reactiveCrystalPatches: Array.isArray(queryBootResult?.reactiveCrystalPatches) ? queryBootResult.reactiveCrystalPatches.length : 0,
-        };
-        console.info("[LUMO_REACTIVE_PIPELINE_TRACE] Lumo.html before window.__LumoRechargedBoot assignment", {
-          queryBootReactiveCounts,
-        });
-      } catch (_error) {}
       window.__LumoRechargedBoot = queryBootResult;
       try {
         const canvas = document.getElementById("game");

@@ -13,14 +13,6 @@ function cloneBgLayer(bg) {
   return [];
 }
 
-function reactiveCountSummary(source) {
-  return {
-    reactiveGrassPatches: Array.isArray(source?.reactiveGrassPatches) ? source.reactiveGrassPatches.length : 0,
-    reactiveBloomPatches: Array.isArray(source?.reactiveBloomPatches) ? source.reactiveBloomPatches.length : 0,
-    reactiveCrystalPatches: Array.isArray(source?.reactiveCrystalPatches) ? source.reactiveCrystalPatches.length : 0,
-  };
-}
-
 // Builds a minimal runtime world shape from an already validated level.
 export function buildRuntimeWorldSkeleton(level) {
   // Keep identity explicit so the next pipeline step can track level ownership/version quickly.
@@ -74,14 +66,6 @@ export function buildRuntimeWorldSkeleton(level) {
         ? [...level.layers.reactiveCrystalPatches]
         : [],
   };
-
-  try {
-    console.info("[LUMO_REACTIVE_PIPELINE_TRACE] buildRuntimeWorldSkeleton before return", {
-      inputLevelTop: reactiveCountSummary(level),
-      inputLevelLayers: reactiveCountSummary(level?.layers),
-      outputSkeletonLayers: reactiveCountSummary(layers),
-    });
-  } catch (_error) {}
 
   return {
     identity,

@@ -32,14 +32,6 @@ function cloneBgLayer(bg) {
   return [...DEFAULT_LAYERS.bg];
 }
 
-function reactiveCountSummary(source) {
-  return {
-    reactiveGrassPatches: Array.isArray(source?.reactiveGrassPatches) ? source.reactiveGrassPatches.length : 0,
-    reactiveBloomPatches: Array.isArray(source?.reactiveBloomPatches) ? source.reactiveBloomPatches.length : 0,
-    reactiveCrystalPatches: Array.isArray(source?.reactiveCrystalPatches) ? source.reactiveCrystalPatches.length : 0,
-  };
-}
-
 // Builds a single runtime world packet from already computed runtime pieces.
 export function buildRuntimeWorldPacket(parts) {
   const skeleton = parts?.skeleton ?? {};
@@ -111,13 +103,6 @@ export function buildRuntimeWorldPacket(parts) {
         ? { ...parts.tileMap.byKey }
         : { ...DEFAULT_TILE_MAP.byKey },
   };
-
-  try {
-    console.info("[LUMO_REACTIVE_PIPELINE_TRACE] buildRuntimeWorldPacket before return", {
-      inputSkeletonLayers: reactiveCountSummary(skeleton?.layers),
-      outputPacketLayers: reactiveCountSummary(layers),
-    });
-  } catch (_error) {}
 
   return {
     identity,
