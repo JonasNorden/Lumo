@@ -4348,6 +4348,32 @@
     })();
     const crystalDebugState = { payloadCount: null, normalizedCount: null, renderCount: null };
 
+    const lumoReactiveDecorDiagState = {};
+
+    function logReactiveDecorDiagCheckpoint(label, samples) {
+      const grass = Array.isArray(samples?.grass) ? samples.grass : [];
+      const bloom = Array.isArray(samples?.bloom) ? samples.bloom : [];
+      const crystal = Array.isArray(samples?.crystal) ? samples.crystal : [];
+      const total = grass.length + bloom.length + crystal.length;
+      const firstCrystal = crystal.length > 0 ? crystal[0] : null;
+      const signature = `${label}|${grass.length}|${bloom.length}|${crystal.length}`;
+      if (lumoReactiveDecorDiagState[label] === signature) {
+        return;
+      }
+      lumoReactiveDecorDiagState[label] = signature;
+      console.info("[LUMO_REACTIVE_DECOR_DIAG]", label, {
+        totalReactiveDecorCount: total,
+        grassCount: grass.length,
+        bloomCount: bloom.length,
+        crystalCount: crystal.length,
+        firstCrystalSample: firstCrystal,
+      });
+      if (!firstCrystal) {
+        console.info("[LUMO_REACTIVE_DECOR_DIAG]", label, "crystal missing here");
+      }
+    }
+
+
     const rechargedReactiveCrystalLevelCache = {
       levelPath: "",
       patches: [],
@@ -4407,6 +4433,11 @@
       const directPatches = Array.isArray(payload?.reactiveGrassPatches)
         ? payload.reactiveGrassPatches
         : null;
+      logReactiveDecorDiagCheckpoint("checkpoint3_payload_runtime_packet", {
+        grass: Array.isArray(payload?.reactiveGrassPatches) ? payload.reactiveGrassPatches : [],
+        bloom: Array.isArray(payload?.reactiveBloomPatches) ? payload.reactiveBloomPatches : [],
+        crystal: Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches : [],
+      });
       if (crystalDebugEnabled) {
         console.info("[CrystalDebug] payload reactive patch counts", {
           grass: Array.isArray(payload?.reactiveGrassPatches) ? payload.reactiveGrassPatches.length : 0,
@@ -4420,6 +4451,11 @@
           .map((patch, index) => normalizeReactiveGrassPatch(patch, index))
           .filter(Boolean);
         rechargedReactiveGrassLevelCache.loaded = true;
+          logReactiveDecorDiagCheckpoint("checkpoint2_after_normalization", {
+            grass: rechargedReactiveGrassLevelCache.patches,
+            bloom: rechargedReactiveBloomLevelCache.patches,
+            crystal: rechargedReactiveCrystalLevelCache.patches,
+          });
       }
     }
 
@@ -4451,6 +4487,11 @@
           return response.json();
         })
         .then((levelDocument) => {
+          logReactiveDecorDiagCheckpoint("checkpoint1_raw_authored_after_load", {
+            grass: Array.isArray(levelDocument?.reactiveGrassPatches) ? levelDocument.reactiveGrassPatches : [],
+            bloom: Array.isArray(levelDocument?.reactiveBloomPatches) ? levelDocument.reactiveBloomPatches : [],
+            crystal: Array.isArray(levelDocument?.reactiveCrystalPatches) ? levelDocument.reactiveCrystalPatches : [],
+          });
           rechargedReactiveGrassLevelCache.patches = extractReactiveGrassPatchesFromLevelDocument(levelDocument);
           rechargedReactiveGrassLevelCache.loaded = true;
         })
@@ -4682,6 +4723,11 @@
           });
         }
       }
+      logReactiveDecorDiagCheckpoint("checkpoint4_runtime_reactive_decor_collection", {
+        grass: rechargedReactiveGrassLevelCache.patches,
+        bloom: rechargedReactiveBloomLevelCache.patches,
+        crystal: normalizedPatches,
+      });
       return normalizedPatches;
     }
 
@@ -6698,6 +6744,12 @@
             crystal: reactiveCrystalPatches.length,
           });
         }
+
+        logReactiveDecorDiagCheckpoint("checkpoint5_render_dispatch_input", {
+          grass: reactiveGrassPatches,
+          bloom: reactiveBloomPatches,
+          crystal: reactiveCrystalPatches,
+        });
 
         renderReactiveCrystals(
           ctx,
