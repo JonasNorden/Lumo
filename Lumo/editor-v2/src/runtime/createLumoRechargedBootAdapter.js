@@ -356,6 +356,9 @@ function buildWorldSnapshot(snapshot) {
     supportTiles,
     decorItems,
     audioItems,
+    reactiveGrassPatches: Array.isArray(source.reactiveGrassPatches) ? source.reactiveGrassPatches.map((patch) => clonePlainData(patch)) : [],
+    reactiveBloomPatches: Array.isArray(source.reactiveBloomPatches) ? source.reactiveBloomPatches.map((patch) => clonePlainData(patch)) : [],
+    reactiveCrystalPatches: Array.isArray(source.reactiveCrystalPatches) ? source.reactiveCrystalPatches.map((patch) => clonePlainData(patch)) : [],
   };
 }
 
@@ -760,6 +763,9 @@ export function createLumoRechargedBootAdapter(options = {}) {
         bg: world.bg,
         decorItems: world.decorItems,
         audioItems: world.audioItems,
+        reactiveGrassPatches: world.reactiveGrassPatches,
+        reactiveBloomPatches: world.reactiveBloomPatches,
+        reactiveCrystalPatches: world.reactiveCrystalPatches,
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,
