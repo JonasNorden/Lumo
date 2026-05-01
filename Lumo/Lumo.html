@@ -4349,6 +4349,22 @@
     const crystalDebugState = { payloadCount: null, normalizedCount: null, renderCount: null };
 
     const lumoReactiveDecorDiagState = {};
+    const lumoCrystalTraceState = {
+      beginLoadKey: "",
+      beginFetchKey: "",
+      beginJsonCountKey: "",
+      beginExtractCountKey: "",
+      beginErrorKey: "",
+      readCacheKey: "",
+      renderInputKey: "",
+    };
+
+    function logLumoCrystalTrace(key, ...parts) {
+      const signature = parts.join("|");
+      if (lumoCrystalTraceState[key] === signature) return;
+      lumoCrystalTraceState[key] = signature;
+      console.info("[LUMO_CRYSTAL_TRACE]", ...parts);
+    }
 
     function logReactiveDecorDiagCheckpoint(label, samples) {
       const grass = Array.isArray(samples?.grass) ? samples.grass : [];
@@ -4668,11 +4684,13 @@
     function beginReactiveCrystalLevelLoad(levelPath) {
       if (typeof levelPath !== "string" || !levelPath.trim()) return;
       const normalizedPath = levelPath.trim();
+      logLumoCrystalTrace("beginLoadKey", "beginReactiveCrystalLevelLoad", `levelPath=${normalizedPath}`);
       if (rechargedReactiveCrystalLevelCache.loading && rechargedReactiveCrystalLevelCache.levelPath === normalizedPath) return;
       rechargedReactiveCrystalLevelCache.levelPath = normalizedPath;
       rechargedReactiveCrystalLevelCache.loading = true;
       rechargedReactiveCrystalLevelCache.loaded = false;
       rechargedReactiveCrystalLevelCache.patches = [];
+      logLumoCrystalTrace("beginFetchKey", "beginReactiveCrystalLevelLoad", `fetchStart levelPath=${normalizedPath}`);
       fetch(normalizedPath, {
         method: "GET",
         headers: { Accept: "application/json, text/plain;q=0.8, */*;q=0.1" },
@@ -4682,10 +4700,31 @@
           return response.json();
         })
         .then((levelDocument) => {
+          const authoredCount = Array.isArray(levelDocument?.reactiveCrystalPatches)
+            ? levelDocument.reactiveCrystalPatches.length
+            : 0;
+          logLumoCrystalTrace(
+            "beginJsonCountKey",
+            "beginReactiveCrystalLevelLoad",
+            `afterJsonLoad levelPath=${normalizedPath}`,
+            `document.reactiveCrystalPatches.count=${authoredCount}`,
+          );
           rechargedReactiveCrystalLevelCache.patches = extractReactiveCrystalPatchesFromLevelDocument(levelDocument);
+          logLumoCrystalTrace(
+            "beginExtractCountKey",
+            "beginReactiveCrystalLevelLoad",
+            `afterExtract levelPath=${normalizedPath}`,
+            `extractReactiveCrystalPatchesFromLevelDocument.count=${rechargedReactiveCrystalLevelCache.patches.length}`,
+          );
           rechargedReactiveCrystalLevelCache.loaded = true;
         })
         .catch((_error) => {
+          logLumoCrystalTrace(
+            "beginErrorKey",
+            "beginReactiveCrystalLevelLoad",
+            `fetchFailed levelPath=${normalizedPath}`,
+            `error=${_error?.message || String(_error)}`,
+          );
           rechargedReactiveCrystalLevelCache.patches = [];
           rechargedReactiveCrystalLevelCache.loaded = true;
         })
@@ -4705,6 +4744,14 @@
       const normalizedPatches = Array.isArray(rechargedReactiveCrystalLevelCache.patches)
         ? rechargedReactiveCrystalLevelCache.patches
         : [];
+      logLumoCrystalTrace(
+        "readCacheKey",
+        "readRechargedReactiveCrystalPatches",
+        `levelPath=${levelPath || ""}`,
+        `cache.loaded=${rechargedReactiveCrystalLevelCache.loaded}`,
+        `cache.loading=${rechargedReactiveCrystalLevelCache.loading}`,
+        `cache.patches.length=${normalizedPatches.length}`,
+      );
       if (crystalDebugEnabled) {
         const grassCount = Array.isArray(rechargedReactiveGrassLevelCache.patches) ? rechargedReactiveGrassLevelCache.patches.length : 0;
         const bloomCount = Array.isArray(rechargedReactiveBloomLevelCache.patches) ? rechargedReactiveBloomLevelCache.patches.length : 0;
@@ -6762,6 +6809,12 @@
           bloom: reactiveBloomPatches,
           crystal: reactiveCrystalPatches,
         });
+
+        logLumoCrystalTrace(
+          "renderInputKey",
+          "beforeRenderReactiveCrystals",
+          `reactiveCrystalPatches.length=${reactiveCrystalPatches.length}`,
+        );
 
         renderReactiveCrystals(
           ctx,
