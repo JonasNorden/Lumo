@@ -260,17 +260,18 @@ export function renderReactiveCrystals(ctx, playerX, playerY, time, options = {}
         Math.max(20, cluster.width * 0.9)
       );
 
-      glow.addColorStop(0, rgba(colors.glow, 0.16 + 0.25 * wake));
-      glow.addColorStop(0.38, rgba(colors.core, 0.05 + 0.12 * wake));
-      glow.addColorStop(1, rgba(colors.glow, 0));
+glow.addColorStop(0, rgba(colors.glow, 0));
+glow.addColorStop(0.25, rgba(colors.core, 0));
+glow.addColorStop(0.6, rgba(colors.glow, 0));
+glow.addColorStop(1, rgba(colors.glow, 0));
 
       ctx.fillStyle = glow;
       ctx.beginPath();
       ctx.ellipse(
         center.x,
         center.y - cluster.heightMax * 0.1,
-        cluster.width * 0.9,
-        cluster.heightMax * 0.55,
+cluster.width * 1.4,
+cluster.heightMax * 0.85,
         0,
         0,
         Math.PI * 2
