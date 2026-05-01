@@ -52,17 +52,21 @@ export function renderReactiveCrystals(ctx, playerX, playerY, time, options = {}
       const wake = state.wake * state.wake * (3 - 2 * state.wake);
 
       const center = resolveCanvasPoint(mapper, cluster.x, cluster.y);
+      const baseColor = parseColorHex(cluster.baseColor, DEFAULT_CRYSTAL_CLUSTER.baseColor);
+      const glowColor = parseColorHex(cluster.glowColor, DEFAULT_CRYSTAL_CLUSTER.glowColor);
+      const coreColor = parseColorHex(cluster.coreColor, DEFAULT_CRYSTAL_CLUSTER.coreColor);
+      const edgeColor = parseColorHex(cluster.edgeColor, DEFAULT_CRYSTAL_CLUSTER.edgeColor);
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       const g = ctx.createRadialGradient(center.x, center.y, 0, center.x, center.y, cluster.width * 0.9);
-      g.addColorStop(0, `rgba(116,49,255,${0.16 + 0.25 * wake})`);
-      g.addColorStop(0.38, `rgba(88,231,255,${0.05 + 0.12 * wake})`);
-      g.addColorStop(1, 'rgba(116,49,255,0)');
+      g.addColorStop(0, `rgba(${glowColor.r},${glowColor.g},${glowColor.b},${0.14 + 0.24 * wake})`);
+      g.addColorStop(0.38, `rgba(${coreColor.r},${coreColor.g},${coreColor.b},${0.05 + 0.12 * wake})`);
+      g.addColorStop(1, `rgba(${glowColor.r},${glowColor.g},${glowColor.b},0)`);
       ctx.fillStyle = g;
       ctx.fillRect(center.x - cluster.width * 0.9, center.y - cluster.heightMax * 0.45, cluster.width * 1.8, cluster.heightMax * 0.7);
       ctx.restore();
 
-      for (const c of crystal.chips) { ctx.save(); const pt = resolveCanvasPoint(mapper, c.x, c.y); ctx.translate(pt.x, pt.y); ctx.rotate(c.a); ctx.fillStyle = 'rgba(124,65,230,.55)'; ctx.fillRect(-c.w / 2, -c.h / 2, c.w, c.h); ctx.restore(); }
+      for (const c of crystal.chips) { ctx.save(); const pt = resolveCanvasPoint(mapper, c.x, c.y); ctx.translate(pt.x, pt.y); ctx.rotate(c.a); ctx.fillStyle = `rgba(${baseColor.r},${baseColor.g},${baseColor.b},0.55)`; ctx.fillRect(-c.w / 2, -c.h / 2, c.w, c.h); ctx.restore(); }
 
       for (const shard of crystal.shards) {
         const pulse = 1 + Math.sin(timeSec * 1.4 + shard.x * 0.07) * 0.015 * wake;
@@ -71,15 +75,15 @@ export function renderReactiveCrystals(ctx, playerX, playerY, time, options = {}
         const base = resolveCanvasPoint(mapper, x, y);
         ctx.save(); ctx.globalAlpha = shard.alpha;
         ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.lineTo(p3.x, p3.y); ctx.lineTo(p4.x, p4.y); ctx.closePath();
-        const grad = ctx.createLinearGradient(base.x, base.y, p2.x, p2.y); grad.addColorStop(0, 'rgba(35,10,88,.95)'); grad.addColorStop(.42, 'rgba(92,40,205,.88)'); grad.addColorStop(.75, 'rgba(129,72,255,.72)'); grad.addColorStop(1, 'rgba(218,185,255,.85)');
-        ctx.fillStyle = grad; ctx.shadowColor = `rgba(124,56,255,${0.25 + 0.35 * wake})`; ctx.shadowBlur = 10 + 18 * wake; ctx.fill();
-        ctx.shadowBlur = 0; ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(218,190,255,.55)'; ctx.stroke();
-        ctx.globalAlpha = .23 + .16 * wake; ctx.fillStyle = 'rgba(112,231,255,.75)'; ctx.beginPath(); ctx.moveTo(p2.x, p2.y); ctx.lineTo(base.x, resolveCanvasPoint(mapper,0,y-h*.45).y); ctx.lineTo(resolveCanvasPoint(mapper,x+w*.35,y).x,p4.y); ctx.lineTo(p3.x,p3.y); ctx.closePath(); ctx.fill();
-        if (shard.core) { const cp = resolveCanvasPoint(mapper, x, y - h * 0.35); const cg = ctx.createRadialGradient(cp.x, cp.y, 0, cp.x, cp.y, Math.max(w, h) * 0.38); cg.addColorStop(0, `rgba(88,231,255,${0.32 + 0.35 * wake})`); cg.addColorStop(.35, `rgba(88,231,255,${0.13 + 0.2 * wake})`); cg.addColorStop(1, 'rgba(88,231,255,0)'); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 1; ctx.fillStyle = cg; ctx.beginPath(); ctx.ellipse(resolveCanvasPoint(mapper,x,y-h*.28).x, resolveCanvasPoint(mapper,x,y-h*.28).y, w * .55, h * .35, 0, 0, Math.PI * 2); ctx.fill(); }
+        const grad = ctx.createLinearGradient(base.x, base.y, p2.x, p2.y); grad.addColorStop(0, `rgba(${baseColor.r},${baseColor.g},${baseColor.b},0.95)`); grad.addColorStop(.42, `rgba(${glowColor.r},${glowColor.g},${glowColor.b},0.88)`); grad.addColorStop(.75, `rgba(${edgeColor.r},${edgeColor.g},${edgeColor.b},0.72)`); grad.addColorStop(1, `rgba(${coreColor.r},${coreColor.g},${coreColor.b},0.85)`);
+        ctx.fillStyle = grad; ctx.shadowColor = `rgba(${glowColor.r},${glowColor.g},${glowColor.b},${0.22 + 0.33 * wake})`; ctx.shadowBlur = 10 + 18 * wake; ctx.fill();
+        ctx.shadowBlur = 0; ctx.lineWidth = 1; ctx.strokeStyle = `rgba(${edgeColor.r},${edgeColor.g},${edgeColor.b},0.55)`; ctx.stroke();
+        ctx.globalAlpha = .22 + .16 * wake; ctx.fillStyle = `rgba(${coreColor.r},${coreColor.g},${coreColor.b},0.75)`; ctx.beginPath(); ctx.moveTo(p2.x, p2.y); ctx.lineTo(base.x, resolveCanvasPoint(mapper,0,y-h*.45).y); ctx.lineTo(resolveCanvasPoint(mapper,x+w*.35,y).x,p4.y); ctx.lineTo(p3.x,p3.y); ctx.closePath(); ctx.fill();
+        if (shard.core) { const cp = resolveCanvasPoint(mapper, x, y - h * 0.35); const cg = ctx.createRadialGradient(cp.x, cp.y, 0, cp.x, cp.y, Math.max(w, h) * 0.38); cg.addColorStop(0, `rgba(${coreColor.r},${coreColor.g},${coreColor.b},${0.28 + 0.35 * wake})`); cg.addColorStop(.35, `rgba(${coreColor.r},${coreColor.g},${coreColor.b},${0.12 + 0.2 * wake})`); cg.addColorStop(1, `rgba(${coreColor.r},${coreColor.g},${coreColor.b},0)`); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 1; ctx.fillStyle = cg; ctx.beginPath(); ctx.ellipse(resolveCanvasPoint(mapper,x,y-h*.28).x, resolveCanvasPoint(mapper,x,y-h*.28).y, w * .55, h * .35, 0, 0, Math.PI * 2); ctx.fill(); }
         ctx.restore();
       }
       ctx.save(); ctx.globalCompositeOperation = 'lighter';
-      for (const sp of crystal.sparks) { const blink = 0.25 + 0.75 * Math.max(0, Math.sin(timeSec * 1.7 + sp.phase)); ctx.globalAlpha = blink * (.25 + .55 * wake); ctx.fillStyle = sp.phase % 2 > 1 ? '#d99cff' : '#58e7ff'; const pt = resolveCanvasPoint(mapper, sp.x, sp.y + Math.sin(timeSec + sp.phase) * 2); ctx.beginPath(); ctx.arc(pt.x, pt.y, sp.r, 0, Math.PI * 2); ctx.fill(); }
+      for (const sp of crystal.sparks) { const blink = 0.25 + 0.75 * Math.max(0, Math.sin(timeSec * 1.7 + sp.phase)); ctx.globalAlpha = blink * (0.22 + 0.55 * wake); ctx.fillStyle = sp.phase % 2 > 1 ? `rgb(${edgeColor.r},${edgeColor.g},${edgeColor.b})` : `rgb(${coreColor.r},${coreColor.g},${coreColor.b})`; const pt = resolveCanvasPoint(mapper, sp.x, sp.y + Math.sin(timeSec + sp.phase) * 2); ctx.beginPath(); ctx.arc(pt.x, pt.y, sp.r, 0, Math.PI * 2); ctx.fill(); }
       ctx.restore();
     }
   }
