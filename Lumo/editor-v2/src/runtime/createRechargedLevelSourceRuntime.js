@@ -128,6 +128,9 @@ function buildWorldSnapshot(snapshot) {
     supportTiles,
     decorItems,
     audioItems,
+    reactiveCrystalPatches: Array.isArray(source.reactiveCrystalPatches)
+      ? source.reactiveCrystalPatches.map((patch) => clonePlainData(patch))
+      : [],
   };
 }
 

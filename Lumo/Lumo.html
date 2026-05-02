@@ -4338,6 +4338,58 @@
       loading: false,
       loaded: false,
     };
+    const crystalDebugEnabled = (() => {
+      try {
+        const params = new URLSearchParams(globalThis?.location?.search || "");
+        return params.get("crystalDebug") === "1";
+      } catch (_error) {
+        return false;
+      }
+    })();
+    const crystalDebugState = { payloadCount: null, normalizedCount: null, renderCount: null };
+
+    const lumoReactiveDecorDiagState = {};
+    const lumoCrystalTraceState = {
+      beginLoadKey: "",
+      beginFetchKey: "",
+      beginJsonCountKey: "",
+      beginExtractCountKey: "",
+      beginErrorKey: "",
+      readCacheKey: "",
+      renderInputKey: "",
+    };
+
+    function logLumoCrystalTrace(key, ...parts) {
+      const signature = parts.join("|");
+      if (lumoCrystalTraceState[key] === signature) return;
+      lumoCrystalTraceState[key] = signature;
+      console.info("[LUMO_CRYSTAL_TRACE]", ...parts);
+    }
+
+    function logReactiveDecorDiagCheckpoint(label, samples) {
+      const grass = Array.isArray(samples?.grass) ? samples.grass : [];
+      const bloom = Array.isArray(samples?.bloom) ? samples.bloom : [];
+      const crystal = Array.isArray(samples?.crystal) ? samples.crystal : [];
+      const total = grass.length + bloom.length + crystal.length;
+      const firstCrystal = crystal.length > 0 ? crystal[0] : null;
+      const signature = `${label}|${grass.length}|${bloom.length}|${crystal.length}`;
+      if (lumoReactiveDecorDiagState[label] === signature) {
+        return;
+      }
+      lumoReactiveDecorDiagState[label] = signature;
+      console.info("[LUMO_REACTIVE_DECOR_DIAG]", label, {
+        totalReactiveDecorCount: total,
+        grassCount: grass.length,
+        bloomCount: bloom.length,
+        crystalCount: crystal.length,
+        firstCrystalSample: firstCrystal,
+      });
+      if (!firstCrystal) {
+        console.info("[LUMO_REACTIVE_DECOR_DIAG]", label, "crystal missing here");
+      }
+    }
+
+
     const rechargedReactiveCrystalLevelCache = {
       levelPath: "",
       patches: [],
@@ -4397,12 +4449,29 @@
       const directPatches = Array.isArray(payload?.reactiveGrassPatches)
         ? payload.reactiveGrassPatches
         : null;
+      logReactiveDecorDiagCheckpoint("checkpoint3_payload_runtime_packet", {
+        grass: Array.isArray(payload?.reactiveGrassPatches) ? payload.reactiveGrassPatches : [],
+        bloom: Array.isArray(payload?.reactiveBloomPatches) ? payload.reactiveBloomPatches : [],
+        crystal: Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches : [],
+      });
+      if (crystalDebugEnabled) {
+        console.info("[CrystalDebug] payload reactive patch counts", {
+          grass: Array.isArray(payload?.reactiveGrassPatches) ? payload.reactiveGrassPatches.length : 0,
+          bloom: Array.isArray(payload?.reactiveBloomPatches) ? payload.reactiveBloomPatches.length : 0,
+          crystal: Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches.length : 0,
+        });
+      }
 
       if (directPatches) {
         rechargedReactiveGrassLevelCache.patches = directPatches
           .map((patch, index) => normalizeReactiveGrassPatch(patch, index))
           .filter(Boolean);
         rechargedReactiveGrassLevelCache.loaded = true;
+          logReactiveDecorDiagCheckpoint("checkpoint2_after_normalization", {
+            grass: rechargedReactiveGrassLevelCache.patches,
+            bloom: rechargedReactiveBloomLevelCache.patches,
+            crystal: rechargedReactiveCrystalLevelCache.patches,
+          });
       }
     }
 
@@ -4434,6 +4503,11 @@
           return response.json();
         })
         .then((levelDocument) => {
+          logReactiveDecorDiagCheckpoint("checkpoint1_raw_authored_after_load", {
+            grass: Array.isArray(levelDocument?.reactiveGrassPatches) ? levelDocument.reactiveGrassPatches : [],
+            bloom: Array.isArray(levelDocument?.reactiveBloomPatches) ? levelDocument.reactiveBloomPatches : [],
+            crystal: Array.isArray(levelDocument?.reactiveCrystalPatches) ? levelDocument.reactiveCrystalPatches : [],
+          });
           rechargedReactiveGrassLevelCache.patches = extractReactiveGrassPatchesFromLevelDocument(levelDocument);
           rechargedReactiveGrassLevelCache.loaded = true;
         })
@@ -4550,8 +4624,15 @@
 
     function normalizeReactiveCrystalPatch(patch, index) {
       if (!patch || typeof patch !== "object") return null;
-      const kind = typeof patch.kind === "string" ? patch.kind.trim().toLowerCase() : "";
-      if (kind && kind !== "reactive_crystal") return null;
+      const rawKind = typeof patch.kind === "string" ? patch.kind.trim() : "";
+      const normalizedKind = rawKind
+        ? rawKind.replace(/[_\-\s]+/g, "").toLowerCase()
+        : "";
+      const acceptedKind = normalizedKind === ""
+        || normalizedKind === "reactivecrystal"
+        || normalizedKind === "crystal"
+        || normalizedKind === "reactivecrystalpatch";
+      if (!acceptedKind) return null;
       const x = Number.isFinite(patch.x) ? patch.x : null;
       const y = Number.isFinite(patch.y) ? patch.y : null;
       if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
@@ -4586,6 +4667,13 @@
 
     function syncReactiveCrystalCacheFromPayload(payload) {
       const directPatches = Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches : null;
+      if (crystalDebugEnabled) {
+        const payloadCount = Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches.length : 0;
+        if (crystalDebugState.payloadCount !== payloadCount) {
+          crystalDebugState.payloadCount = payloadCount;
+          console.info("[CrystalDebug] payload reactiveCrystalPatches", payloadCount);
+        }
+      }
       if (!directPatches) return;
       rechargedReactiveCrystalLevelCache.patches = directPatches
         .map((patch, index) => normalizeReactiveCrystalPatch(patch, index))
@@ -4596,11 +4684,13 @@
     function beginReactiveCrystalLevelLoad(levelPath) {
       if (typeof levelPath !== "string" || !levelPath.trim()) return;
       const normalizedPath = levelPath.trim();
+      logLumoCrystalTrace("beginLoadKey", "beginReactiveCrystalLevelLoad", `levelPath=${normalizedPath}`);
       if (rechargedReactiveCrystalLevelCache.loading && rechargedReactiveCrystalLevelCache.levelPath === normalizedPath) return;
       rechargedReactiveCrystalLevelCache.levelPath = normalizedPath;
       rechargedReactiveCrystalLevelCache.loading = true;
       rechargedReactiveCrystalLevelCache.loaded = false;
       rechargedReactiveCrystalLevelCache.patches = [];
+      logLumoCrystalTrace("beginFetchKey", "beginReactiveCrystalLevelLoad", `fetchStart levelPath=${normalizedPath}`);
       fetch(normalizedPath, {
         method: "GET",
         headers: { Accept: "application/json, text/plain;q=0.8, */*;q=0.1" },
@@ -4610,10 +4700,31 @@
           return response.json();
         })
         .then((levelDocument) => {
+          const authoredCount = Array.isArray(levelDocument?.reactiveCrystalPatches)
+            ? levelDocument.reactiveCrystalPatches.length
+            : 0;
+          logLumoCrystalTrace(
+            "beginJsonCountKey",
+            "beginReactiveCrystalLevelLoad",
+            `afterJsonLoad levelPath=${normalizedPath}`,
+            `document.reactiveCrystalPatches.count=${authoredCount}`,
+          );
           rechargedReactiveCrystalLevelCache.patches = extractReactiveCrystalPatchesFromLevelDocument(levelDocument);
+          logLumoCrystalTrace(
+            "beginExtractCountKey",
+            "beginReactiveCrystalLevelLoad",
+            `afterExtract levelPath=${normalizedPath}`,
+            `extractReactiveCrystalPatchesFromLevelDocument.count=${rechargedReactiveCrystalLevelCache.patches.length}`,
+          );
           rechargedReactiveCrystalLevelCache.loaded = true;
         })
         .catch((_error) => {
+          logLumoCrystalTrace(
+            "beginErrorKey",
+            "beginReactiveCrystalLevelLoad",
+            `fetchFailed levelPath=${normalizedPath}`,
+            `error=${_error?.message || String(_error)}`,
+          );
           rechargedReactiveCrystalLevelCache.patches = [];
           rechargedReactiveCrystalLevelCache.loaded = true;
         })
@@ -4630,9 +4741,41 @@
       if (levelPath && rechargedReactiveCrystalLevelCache.levelPath !== levelPath) {
         beginReactiveCrystalLevelLoad(levelPath);
       }
-      return Array.isArray(rechargedReactiveCrystalLevelCache.patches)
+      const normalizedPatches = Array.isArray(rechargedReactiveCrystalLevelCache.patches)
         ? rechargedReactiveCrystalLevelCache.patches
         : [];
+      logLumoCrystalTrace(
+        "readCacheKey",
+        "readRechargedReactiveCrystalPatches",
+        `levelPath=${levelPath || ""}`,
+        `cache.loaded=${rechargedReactiveCrystalLevelCache.loaded}`,
+        `cache.loading=${rechargedReactiveCrystalLevelCache.loading}`,
+        `cache.patches.length=${normalizedPatches.length}`,
+      );
+      if (crystalDebugEnabled) {
+        const grassCount = Array.isArray(rechargedReactiveGrassLevelCache.patches) ? rechargedReactiveGrassLevelCache.patches.length : 0;
+        const bloomCount = Array.isArray(rechargedReactiveBloomLevelCache.patches) ? rechargedReactiveBloomLevelCache.patches.length : 0;
+        if (
+          crystalDebugState.normalizedCount !== normalizedPatches.length
+          || crystalDebugState.normalizedGrassCount !== grassCount
+          || crystalDebugState.normalizedBloomCount !== bloomCount
+        ) {
+          crystalDebugState.normalizedCount = normalizedPatches.length;
+          crystalDebugState.normalizedGrassCount = grassCount;
+          crystalDebugState.normalizedBloomCount = bloomCount;
+          console.info("[CrystalDebug] normalized reactive patch counts", {
+            grass: grassCount,
+            bloom: bloomCount,
+            crystal: normalizedPatches.length,
+          });
+        }
+      }
+      logReactiveDecorDiagCheckpoint("checkpoint4_runtime_reactive_decor_collection", {
+        grass: rechargedReactiveGrassLevelCache.patches,
+        bloom: rechargedReactiveBloomLevelCache.patches,
+        crystal: normalizedPatches,
+      });
+      return normalizedPatches;
     }
 
     function readRechargedDecorSnapshots(payload) {
@@ -5852,6 +5995,18 @@
         }
 
         const payload = readLatestRechargedBootPayload() || {};
+        const perfNow = (typeof performance !== "undefined" && typeof performance.now === "function")
+          ? () => performance.now()
+          : () => Date.now();
+        const isPFH = typeof payload?.levelPath === "string" && payload.levelPath.startsWith("blob:");
+        const perfFrameStartMs = perfNow();
+        const perfTimings = {
+          grassMs: 0,
+          bloomMs: 0,
+          crystalMs: 0,
+          darkMs: 0,
+          hudMs: 0,
+        };
         const statusText = typeof payload?.statusText === "string" ? payload.statusText : "";
         const livePlayer = resolveRechargedLivePlayerSnapshot(payload, state);
         const player = readRechargedPlayerSnapshot(payload);
@@ -5914,10 +6069,18 @@
         const tileSize = Number.isFinite(payload?.tileSize) && payload.tileSize > 0 ? payload.tileSize : 24;
         const worldWidthRaw = Number.isFinite(payload?.worldWidth)
           ? payload.worldWidth
-          : (Number.isFinite(payload?.cols) ? payload.cols : Math.max(1, Math.round(canvas.width / tileSize)));
+          : (Number.isFinite(payload?.cols)
+              ? payload.cols
+              : (Number.isFinite(payload?.dimensions?.width)
+                  ? payload.dimensions.width
+                  : Math.max(1, Math.round(canvas.width / tileSize))));
         const worldHeightRaw = Number.isFinite(payload?.worldHeight)
           ? payload.worldHeight
-          : (Number.isFinite(payload?.rows) ? payload.rows : Math.max(1, Math.round(canvas.height / tileSize)));
+          : (Number.isFinite(payload?.rows)
+              ? payload.rows
+              : (Number.isFinite(payload?.dimensions?.height)
+                  ? payload.dimensions.height
+                  : Math.max(1, Math.round(canvas.height / tileSize))));
         const supportTiles = Array.isArray(payload?.supportTiles) ? payload.supportTiles : [];
         const maxSupportTileSpan = supportTiles.reduce((maxSpan, tile) => {
           const spanW = Number.isFinite(tile?.w) ? tile.w : 0;
@@ -5929,7 +6092,11 @@
           (Number.isFinite(player.y) && player.y > worldHeightRaw + tileSize) ||
           (maxSupportTileSpan > 0 && maxSupportTileSpan <= 4)
         );
-        const worldUnitsToPx = coordinatesLookTileBased ? tileSize : 1;
+        const payloadLooksEditorV2TileDimensions = (
+          Number.isFinite(payload?.dimensions?.width)
+          && Number.isFinite(payload?.dimensions?.height)
+        );
+        const worldUnitsToPx = (coordinatesLookTileBased || payloadLooksEditorV2TileDimensions) ? tileSize : 1;
         const worldWidthPx = Math.max(tileSize, Math.round(worldWidthRaw * worldUnitsToPx));
         const worldHeightPx = Math.max(tileSize, Math.round(worldHeightRaw * worldUnitsToPx));
         const hudGameplayViewport = getRechargedHudV2GameplayViewport(canvas);
@@ -6576,6 +6743,7 @@
 
         const rechargedDecorTime = (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now();
 
+        const perfGrassStartMs = perfNow();
         renderReactiveGrass(
           ctx,
           playerCenterX,
@@ -6586,7 +6754,9 @@
             patches: reactiveGrassPatches,
           },
         );
+        perfTimings.grassMs = perfNow() - perfGrassStartMs;
 
+        const perfBloomStartMs = perfNow();
         renderReactiveBloomPlants(
           ctx,
           playerCenterX,
@@ -6594,6 +6764,7 @@
           rechargedDecorTime,
           { mapper, patches: reactiveBloomPatches },
         );
+        perfTimings.bloomMs = perfNow() - perfBloomStartMs;
 
         const reactiveCrystalWakeSources = [];
         if (Array.isArray(entitySnapshots)) {
@@ -6631,6 +6802,37 @@
           }
         }
 
+        if (
+          crystalDebugEnabled
+          && (
+            crystalDebugState.renderCount !== reactiveCrystalPatches.length
+            || crystalDebugState.renderGrassCount !== reactiveGrassPatches.length
+            || crystalDebugState.renderBloomCount !== reactiveBloomPatches.length
+          )
+        ) {
+          crystalDebugState.renderCount = reactiveCrystalPatches.length;
+          crystalDebugState.renderGrassCount = reactiveGrassPatches.length;
+          crystalDebugState.renderBloomCount = reactiveBloomPatches.length;
+          console.info("[CrystalDebug] render reactive patch counts", {
+            grass: reactiveGrassPatches.length,
+            bloom: reactiveBloomPatches.length,
+            crystal: reactiveCrystalPatches.length,
+          });
+        }
+
+        logReactiveDecorDiagCheckpoint("checkpoint5_render_dispatch_input", {
+          grass: reactiveGrassPatches,
+          bloom: reactiveBloomPatches,
+          crystal: reactiveCrystalPatches,
+        });
+
+        logLumoCrystalTrace(
+          "renderInputKey",
+          "beforeRenderReactiveCrystals",
+          `reactiveCrystalPatches.length=${reactiveCrystalPatches.length}`,
+        );
+
+        const perfCrystalStartMs = perfNow();
         renderReactiveCrystals(
           ctx,
           playerCenterX,
@@ -6638,6 +6840,7 @@
           rechargedDecorTime,
           { mapper, clusters: reactiveCrystalPatches, wakeSources: reactiveCrystalWakeSources, debug: true },
         );
+        perfTimings.crystalMs = perfNow() - perfCrystalStartMs;
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
         if (player.hidden !== true) {
@@ -6670,6 +6873,7 @@
           worldHeightRaw,
           tileSize,
         });
+        const perfDarkStartMs = perfNow();
         drawRechargedDarkness(ctx, canvas, state, darknessLights, {
           mapper,
           occlusionLookup,
@@ -6677,6 +6881,7 @@
           frame: Number.isFinite(payload?.tick) ? payload.tick : null,
           nowMs,
         });
+        perfTimings.darkMs = perfNow() - perfDarkStartMs;
         const playerLight = darknessLights.find((light) => light?.kind === "player");
         const playerEnergy = Number.isFinite(playerLight?.energy)
           ? playerLight.energy
@@ -6854,7 +7059,9 @@
 
         ctx.restore();
 
+        const perfHudStartMs = perfNow();
         drawRechargedHudReplica(canvas, state);
+        perfTimings.hudMs = perfNow() - perfHudStartMs;
 
         let overlayDrawn = false;
         try {
@@ -6867,6 +7074,89 @@
           }
         } catch (_error) {
           overlayDrawn = false;
+        }
+
+        const perfFrameEndMs = perfNow();
+        const perfFrameMs = Math.max(0, perfFrameEndMs - perfFrameStartMs);
+        const perfFps = perfFrameMs > 0 ? (1000 / perfFrameMs) : 0;
+        const perfSections = [
+          { label: "Grass", ms: perfTimings.grassMs },
+          { label: "Bloom", ms: perfTimings.bloomMs },
+          { label: "Crystal", ms: perfTimings.crystalMs },
+          { label: "Dark", ms: perfTimings.darkMs },
+          { label: "HUD", ms: perfTimings.hudMs },
+        ];
+        const perfTopSection = perfSections.reduce((best, section) => {
+          if (!best || section.ms > best.ms) return section;
+          return best;
+        }, null);
+        const perfLoadRatio = Math.max(0, Math.min(1, perfFrameMs / (1000 / 60)));
+        const perfLoadSegments = 20;
+        const perfLoadFilled = Math.max(0, Math.min(perfLoadSegments, Math.round(perfLoadRatio * perfLoadSegments)));
+        const perfLoadBar = `${"#".repeat(perfLoadFilled)}${"-".repeat(perfLoadSegments - perfLoadFilled)}`;
+        const perfLoadGrade = perfFrameMs <= 16.7
+          ? "GOOD"
+          : (perfFrameMs <= 22
+              ? "OK"
+              : (perfFrameMs <= 33
+                  ? "BAD"
+                  : (perfFrameMs <= 50 ? "VERY BAD" : "PANIC")));
+        const perfGrassDensityTotal = Array.isArray(reactiveGrassPatches)
+          ? reactiveGrassPatches.reduce((sum, patch) => sum + (Number.isFinite(patch?.density) ? patch.density : 0), 0)
+          : 0;
+
+        if (!isPFH) {
+          window.__LUMO_PFH_PERF__ = null;
+        }
+
+        if (isPFH) {
+          window.__LUMO_PFH_PERF__ = {
+            fps: perfFps,
+            frameMs: perfFrameMs,
+            loadBar: perfLoadBar,
+            loadGrade: perfLoadGrade,
+            top: perfTopSection ? { label: perfTopSection.label, ms: perfTopSection.ms } : null,
+            grassMs: perfTimings.grassMs,
+            grassPatchCount: reactiveGrassPatches.length,
+            grassDensityTotal: perfGrassDensityTotal,
+            bloomMs: perfTimings.bloomMs,
+            crystalMs: perfTimings.crystalMs,
+            darkMs: perfTimings.darkMs,
+            hudMs: perfTimings.hudMs,
+            frame: Number.isFinite(payload?.tick) ? payload.tick : null,
+          };
+          const perfLines = [
+            "PFH PERF v3",
+            `FPS: ${perfFps.toFixed(1)}`,
+            `Frame ms: ${perfFrameMs.toFixed(2)}`,
+            `LOAD: ${perfLoadBar} ${perfLoadGrade}`,
+            `TOP: ${perfTopSection ? `${perfTopSection.label} ${perfTopSection.ms.toFixed(2)} ms` : "n/a"}`,
+            `Grass: ${perfTimings.grassMs.toFixed(2)} ms p${reactiveGrassPatches.length} d${perfGrassDensityTotal.toFixed(1)}`,
+            `Bloom: ${perfTimings.bloomMs.toFixed(2)} ms`,
+            `Crystal: ${perfTimings.crystalMs.toFixed(2)} ms`,
+            `Dark: ${perfTimings.darkMs.toFixed(2)} ms`,
+            `HUD: ${perfTimings.hudMs.toFixed(2)} ms`,
+          ];
+          const panelX = 12;
+          const panelY = 12;
+          const lineHeight = 16;
+          const panelWidth = 330;
+          const panelHeight = 10 + (perfLines.length * lineHeight) + 8;
+          ctx.save();
+          ctx.fillStyle = "rgba(0,0,0,0.68)";
+          ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
+          ctx.strokeStyle = "rgba(255,255,255,0.35)";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(panelX + 0.5, panelY + 0.5, panelWidth - 1, panelHeight - 1);
+          ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+          for (let i = 0; i < perfLines.length; i += 1) {
+            const line = perfLines[i];
+            ctx.fillStyle = i === 0 ? "#fef08a" : "#e5e7eb";
+            ctx.fillText(line, panelX + 10, panelY + 8 + (i * lineHeight));
+          }
+          ctx.restore();
         }
 
         if (overlayDrawn !== true && statusText.length > 0) {

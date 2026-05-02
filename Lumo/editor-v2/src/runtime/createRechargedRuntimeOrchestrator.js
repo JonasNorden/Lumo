@@ -122,6 +122,9 @@ function buildWorldSnapshot(snapshot) {
     supportTiles,
     decorItems,
     audioItems,
+    reactiveGrassPatches: Array.isArray(source.reactiveGrassPatches) ? source.reactiveGrassPatches.map((patch) => clonePlainData(patch)) : [],
+    reactiveBloomPatches: Array.isArray(source.reactiveBloomPatches) ? source.reactiveBloomPatches.map((patch) => clonePlainData(patch)) : [],
+    reactiveCrystalPatches: Array.isArray(source.reactiveCrystalPatches) ? source.reactiveCrystalPatches.map((patch) => clonePlainData(patch)) : [],
   };
 }
 
