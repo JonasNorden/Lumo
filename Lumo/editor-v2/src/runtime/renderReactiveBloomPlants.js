@@ -150,11 +150,9 @@ export function renderReactiveBloomPlants(ctx, playerX, playerY, time, options =
   if (!ctx || typeof ctx.save !== "function" || !ctx.canvas) return;
 
   const mapper = options && typeof options === "object" ? options.mapper : null;
-  const patchesInput = Array.isArray(options?.patches) ? options.patches : [options?.patch];
-  const patches = patchesInput.map((patch) => normalizePatch(patch)).filter(Boolean);
-  if (!patches.length) {
-    patches.push(normalizePatch(DEFAULT_BLOOM_PATCH));
-  }
+  if (!Array.isArray(options?.patches)) return;
+  const patches = options.patches.map((patch) => normalizePatch(patch)).filter(Boolean);
+  if (!patches.length) return;
   const timeMs = Number.isFinite(time) ? time : 0;
   const timeSec = timeMs * 0.001;
 
