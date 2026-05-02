@@ -108,6 +108,9 @@ function convertEditorV2ToRecharged(editorLevel, warnings) {
     systems: {
       sourceFormat: "editor-v2",
     },
+    reactiveGrassPatches: Array.isArray(editorLevel?.reactiveGrassPatches) ? [...editorLevel.reactiveGrassPatches] : [],
+    reactiveBloomPatches: Array.isArray(editorLevel?.reactiveBloomPatches) ? [...editorLevel.reactiveBloomPatches] : [],
+    reactiveCrystalPatches: Array.isArray(editorLevel?.reactiveCrystalPatches) ? [...editorLevel.reactiveCrystalPatches] : [],
   };
 }
 
