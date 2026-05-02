@@ -5998,7 +5998,7 @@
         const perfNow = (typeof performance !== "undefined" && typeof performance.now === "function")
           ? () => performance.now()
           : () => Date.now();
-        const isPfhPerfRun = typeof payload?.levelPath === "string" && payload.levelPath.startsWith("blob:");
+        const isPFH = typeof payload?.levelPath === "string" && payload.levelPath.startsWith("blob:");
         const perfFrameStartMs = perfNow();
         const perfTimings = {
           grassMs: 0,
@@ -7094,22 +7094,48 @@
         const perfLoadSegments = 20;
         const perfLoadFilled = Math.max(0, Math.min(perfLoadSegments, Math.round(perfLoadRatio * perfLoadSegments)));
         const perfLoadBar = `${"#".repeat(perfLoadFilled)}${"-".repeat(perfLoadSegments - perfLoadFilled)}`;
+        const perfLoadGrade = perfFrameMs <= 16.7
+          ? "GOOD"
+          : (perfFrameMs <= 22
+              ? "OK"
+              : (perfFrameMs <= 33
+                  ? "BAD"
+                  : (perfFrameMs <= 50 ? "VERY BAD" : "PANIC")));
         const perfGrassDensityTotal = Array.isArray(reactiveGrassPatches)
           ? reactiveGrassPatches.reduce((sum, patch) => sum + (Number.isFinite(patch?.density) ? patch.density : 0), 0)
           : 0;
 
-        if (isPfhPerfRun) {
+        if (!isPFH) {
+          window.__LUMO_PFH_PERF__ = null;
+        }
+
+        if (isPFH) {
+          window.__LUMO_PFH_PERF__ = {
+            fps: perfFps,
+            frameMs: perfFrameMs,
+            loadBar: perfLoadBar,
+            loadGrade: perfLoadGrade,
+            top: perfTopSection ? { label: perfTopSection.label, ms: perfTopSection.ms } : null,
+            grassMs: perfTimings.grassMs,
+            grassPatchCount: reactiveGrassPatches.length,
+            grassDensityTotal: perfGrassDensityTotal,
+            bloomMs: perfTimings.bloomMs,
+            crystalMs: perfTimings.crystalMs,
+            darkMs: perfTimings.darkMs,
+            hudMs: perfTimings.hudMs,
+            frame: Number.isFinite(payload?.tick) ? payload.tick : null,
+          };
           const perfLines = [
             "PFH PERF v3",
-            `FPS ${perfFps.toFixed(1)}`,
-            `Frame ${perfFrameMs.toFixed(2)} ms`,
-            `LOAD ${perfLoadBar}`,
-            `TOP ${perfTopSection ? `${perfTopSection.label} ${perfTopSection.ms.toFixed(2)} ms` : "n/a"}`,
-            `Grass ${perfTimings.grassMs.toFixed(2)} ms p${reactiveGrassPatches.length} d${perfGrassDensityTotal.toFixed(1)}`,
-            `Bloom ${perfTimings.bloomMs.toFixed(2)} ms`,
-            `Crystal ${perfTimings.crystalMs.toFixed(2)} ms`,
-            `Dark ${perfTimings.darkMs.toFixed(2)} ms`,
-            `HUD ${perfTimings.hudMs.toFixed(2)} ms`,
+            `FPS: ${perfFps.toFixed(1)}`,
+            `Frame ms: ${perfFrameMs.toFixed(2)}`,
+            `LOAD: ${perfLoadBar} ${perfLoadGrade}`,
+            `TOP: ${perfTopSection ? `${perfTopSection.label} ${perfTopSection.ms.toFixed(2)} ms` : "n/a"}`,
+            `Grass: ${perfTimings.grassMs.toFixed(2)} ms p${reactiveGrassPatches.length} d${perfGrassDensityTotal.toFixed(1)}`,
+            `Bloom: ${perfTimings.bloomMs.toFixed(2)} ms`,
+            `Crystal: ${perfTimings.crystalMs.toFixed(2)} ms`,
+            `Dark: ${perfTimings.darkMs.toFixed(2)} ms`,
+            `HUD: ${perfTimings.hudMs.toFixed(2)} ms`,
           ];
           const panelX = 12;
           const panelY = 12;
