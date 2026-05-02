@@ -4347,6 +4347,14 @@
       }
     })();
     const crystalDebugState = { payloadCount: null, normalizedCount: null, renderCount: null };
+    const occlusionDebugEnabled = (() => {
+      try {
+        const params = new URLSearchParams(globalThis?.location?.search || "");
+        return params.get("occlusionDebug") === "1";
+      } catch (_error) {
+        return false;
+      }
+    })();
 
     const lumoReactiveDecorDiagState = {};
     const lumoCrystalTraceState = {
@@ -5583,6 +5591,37 @@
 
     function ensureRechargedOcclusionLookup(state, { supportTiles, worldUnitsToPx, tileSize }) {
       const cache = state && typeof state === "object" ? state.rechargedOcclusionLookupCache : null;
+      let diag = null;
+      let frame = 0;
+      let supportTilesRefChanged = false;
+      let worldUnitsToPxChanged = false;
+      let tileSizeChanged = false;
+      if (occlusionDebugEnabled) {
+        if (!window.__LumoOcclusionDiag || typeof window.__LumoOcclusionDiag !== "object") {
+          window.__LumoOcclusionDiag = {
+            hits: 0,
+            misses: 0,
+            rebuilds: 0,
+            lastMissReason: "none",
+            lastSupportTilesLength: 0,
+            lastWorldUnitsToPx: null,
+            lastTileSize: null,
+            lastBuildMs: 0,
+            totalBuildMs: 0,
+            recentEvents: [],
+            frame: 0,
+          };
+        }
+        diag = window.__LumoOcclusionDiag;
+        diag.frame = (Number.isFinite(diag.frame) ? diag.frame : 0) + 1;
+        frame = diag.frame;
+        diag.lastSupportTilesLength = Array.isArray(supportTiles) ? supportTiles.length : 0;
+        diag.lastWorldUnitsToPx = Number.isFinite(worldUnitsToPx) ? worldUnitsToPx : null;
+        diag.lastTileSize = Number.isFinite(tileSize) ? tileSize : null;
+        supportTilesRefChanged = !!cache && cache.supportTilesRef !== supportTiles;
+        worldUnitsToPxChanged = !!cache && cache.worldUnitsToPx !== worldUnitsToPx;
+        tileSizeChanged = !!cache && cache.tileSize !== tileSize;
+      }
       if (
         cache
         && cache.supportTilesRef === supportTiles
@@ -5590,9 +5629,36 @@
         && cache.tileSize === tileSize
         && cache.lookup
       ) {
+        if (diag) {
+          diag.hits += 1;
+          const shouldLog = frame % 60 === 0;
+          if (shouldLog) {
+            console.info("[LUMO_OCCLUSION_DIAG]", {
+              frame,
+              hits: diag.hits,
+              misses: diag.misses,
+              rebuilds: diag.rebuilds,
+              supportTilesLength: diag.lastSupportTilesLength,
+              worldUnitsToPx: diag.lastWorldUnitsToPx,
+              tileSize: diag.lastTileSize,
+              supportTilesRefEqualPrevious: true,
+              lastMissReason: diag.lastMissReason,
+              lastBuildMs: diag.lastBuildMs,
+              totalBuildMs: diag.totalBuildMs,
+            });
+          }
+        }
         return cache.lookup;
       }
+      let missReason = "no previous cache";
+      if (cache) {
+        if (supportTilesRefChanged) missReason = "supportTilesRef changed";
+        else if (worldUnitsToPxChanged) missReason = "worldUnitsToPx changed";
+        else if (tileSizeChanged) missReason = "tileSize changed";
+      }
+      const buildStartMs = diag ? performance.now() : 0;
       const lookup = buildRechargedOcclusionLookup({ supportTiles, worldUnitsToPx, tileSize });
+      const buildMs = diag ? (performance.now() - buildStartMs) : 0;
       if (state && typeof state === "object") {
         state.rechargedOcclusionLookupCache = {
           supportTilesRef: supportTiles,
@@ -5600,6 +5666,44 @@
           tileSize,
           lookup,
         };
+      }
+      if (diag) {
+        diag.misses += 1;
+        diag.rebuilds += 1;
+        diag.lastMissReason = missReason;
+        diag.lastBuildMs = buildMs;
+        diag.totalBuildMs += buildMs;
+        const event = {
+          frame,
+          missReason,
+          supportTilesLength: diag.lastSupportTilesLength,
+          worldUnitsToPx: diag.lastWorldUnitsToPx,
+          tileSize: diag.lastTileSize,
+          supportTilesRefEqualPrevious: !supportTilesRefChanged,
+          buildMs,
+        };
+        diag.recentEvents.push(event);
+        if (diag.recentEvents.length > 20) {
+          diag.recentEvents.splice(0, diag.recentEvents.length - 20);
+        }
+        const shouldLog = frame % 60 === 0 || frame > 5;
+        if (shouldLog) {
+          console.info("[LUMO_OCCLUSION_DIAG]", {
+            frame,
+            hits: diag.hits,
+            misses: diag.misses,
+            rebuilds: diag.rebuilds,
+            missReason,
+            supportTilesLength: diag.lastSupportTilesLength,
+            worldUnitsToPx: diag.lastWorldUnitsToPx,
+            tileSize: diag.lastTileSize,
+            supportTilesRefEqualPrevious: !supportTilesRefChanged,
+            worldUnitsToPxChanged,
+            tileSizeChanged,
+            buildMs,
+            totalBuildMs: diag.totalBuildMs,
+          });
+        }
       }
       return lookup;
     }
