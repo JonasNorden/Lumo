@@ -5995,6 +5995,18 @@
         }
 
         const payload = readLatestRechargedBootPayload() || {};
+        const perfNow = (typeof performance !== "undefined" && typeof performance.now === "function")
+          ? () => performance.now()
+          : () => Date.now();
+        const isPfhPerfRun = typeof payload?.levelPath === "string" && payload.levelPath.startsWith("blob:");
+        const perfFrameStartMs = perfNow();
+        const perfTimings = {
+          grassMs: 0,
+          bloomMs: 0,
+          crystalMs: 0,
+          darkMs: 0,
+          hudMs: 0,
+        };
         const statusText = typeof payload?.statusText === "string" ? payload.statusText : "";
         const livePlayer = resolveRechargedLivePlayerSnapshot(payload, state);
         const player = readRechargedPlayerSnapshot(payload);
@@ -6731,6 +6743,7 @@
 
         const rechargedDecorTime = (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now();
 
+        const perfGrassStartMs = perfNow();
         renderReactiveGrass(
           ctx,
           playerCenterX,
@@ -6741,7 +6754,9 @@
             patches: reactiveGrassPatches,
           },
         );
+        perfTimings.grassMs = perfNow() - perfGrassStartMs;
 
+        const perfBloomStartMs = perfNow();
         renderReactiveBloomPlants(
           ctx,
           playerCenterX,
@@ -6749,6 +6764,7 @@
           rechargedDecorTime,
           { mapper, patches: reactiveBloomPatches },
         );
+        perfTimings.bloomMs = perfNow() - perfBloomStartMs;
 
         const reactiveCrystalWakeSources = [];
         if (Array.isArray(entitySnapshots)) {
@@ -6816,6 +6832,7 @@
           `reactiveCrystalPatches.length=${reactiveCrystalPatches.length}`,
         );
 
+        const perfCrystalStartMs = perfNow();
         renderReactiveCrystals(
           ctx,
           playerCenterX,
@@ -6823,6 +6840,7 @@
           rechargedDecorTime,
           { mapper, clusters: reactiveCrystalPatches, wakeSources: reactiveCrystalWakeSources, debug: true },
         );
+        perfTimings.crystalMs = perfNow() - perfCrystalStartMs;
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
         if (player.hidden !== true) {
@@ -6855,6 +6873,7 @@
           worldHeightRaw,
           tileSize,
         });
+        const perfDarkStartMs = perfNow();
         drawRechargedDarkness(ctx, canvas, state, darknessLights, {
           mapper,
           occlusionLookup,
@@ -6862,6 +6881,7 @@
           frame: Number.isFinite(payload?.tick) ? payload.tick : null,
           nowMs,
         });
+        perfTimings.darkMs = perfNow() - perfDarkStartMs;
         const playerLight = darknessLights.find((light) => light?.kind === "player");
         const playerEnergy = Number.isFinite(playerLight?.energy)
           ? playerLight.energy
@@ -7039,7 +7059,9 @@
 
         ctx.restore();
 
+        const perfHudStartMs = perfNow();
         drawRechargedHudReplica(canvas, state);
+        perfTimings.hudMs = perfNow() - perfHudStartMs;
 
         let overlayDrawn = false;
         try {
@@ -7052,6 +7074,63 @@
           }
         } catch (_error) {
           overlayDrawn = false;
+        }
+
+        const perfFrameEndMs = perfNow();
+        const perfFrameMs = Math.max(0, perfFrameEndMs - perfFrameStartMs);
+        const perfFps = perfFrameMs > 0 ? (1000 / perfFrameMs) : 0;
+        const perfSections = [
+          { label: "Grass", ms: perfTimings.grassMs },
+          { label: "Bloom", ms: perfTimings.bloomMs },
+          { label: "Crystal", ms: perfTimings.crystalMs },
+          { label: "Dark", ms: perfTimings.darkMs },
+          { label: "HUD", ms: perfTimings.hudMs },
+        ];
+        const perfTopSection = perfSections.reduce((best, section) => {
+          if (!best || section.ms > best.ms) return section;
+          return best;
+        }, null);
+        const perfLoadRatio = Math.max(0, Math.min(1, perfFrameMs / (1000 / 60)));
+        const perfLoadSegments = 20;
+        const perfLoadFilled = Math.max(0, Math.min(perfLoadSegments, Math.round(perfLoadRatio * perfLoadSegments)));
+        const perfLoadBar = `${"#".repeat(perfLoadFilled)}${"-".repeat(perfLoadSegments - perfLoadFilled)}`;
+        const perfGrassDensityTotal = Array.isArray(reactiveGrassPatches)
+          ? reactiveGrassPatches.reduce((sum, patch) => sum + (Number.isFinite(patch?.density) ? patch.density : 0), 0)
+          : 0;
+
+        if (isPfhPerfRun) {
+          const perfLines = [
+            "PFH PERF v3",
+            `FPS ${perfFps.toFixed(1)}`,
+            `Frame ${perfFrameMs.toFixed(2)} ms`,
+            `LOAD ${perfLoadBar}`,
+            `TOP ${perfTopSection ? `${perfTopSection.label} ${perfTopSection.ms.toFixed(2)} ms` : "n/a"}`,
+            `Grass ${perfTimings.grassMs.toFixed(2)} ms p${reactiveGrassPatches.length} d${perfGrassDensityTotal.toFixed(1)}`,
+            `Bloom ${perfTimings.bloomMs.toFixed(2)} ms`,
+            `Crystal ${perfTimings.crystalMs.toFixed(2)} ms`,
+            `Dark ${perfTimings.darkMs.toFixed(2)} ms`,
+            `HUD ${perfTimings.hudMs.toFixed(2)} ms`,
+          ];
+          const panelX = 12;
+          const panelY = 12;
+          const lineHeight = 16;
+          const panelWidth = 330;
+          const panelHeight = 10 + (perfLines.length * lineHeight) + 8;
+          ctx.save();
+          ctx.fillStyle = "rgba(0,0,0,0.68)";
+          ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
+          ctx.strokeStyle = "rgba(255,255,255,0.35)";
+          ctx.lineWidth = 1;
+          ctx.strokeRect(panelX + 0.5, panelY + 0.5, panelWidth - 1, panelHeight - 1);
+          ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+          for (let i = 0; i < perfLines.length; i += 1) {
+            const line = perfLines[i];
+            ctx.fillStyle = i === 0 ? "#fef08a" : "#e5e7eb";
+            ctx.fillText(line, panelX + 10, panelY + 8 + (i * lineHeight));
+          }
+          ctx.restore();
         }
 
         if (overlayDrawn !== true && statusText.length > 0) {
