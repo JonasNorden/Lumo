@@ -203,12 +203,18 @@ export function renderReactiveCrystals(ctx, playerX, playerY, time, options = {}
   if (!ctx || typeof ctx.save !== "function" || !ctx.canvas) return;
 
   const mapper = options && typeof options === "object" ? options.mapper : null;
-  const clustersInput = Array.isArray(options?.clusters) ? options.clusters : [options?.cluster];
-  const clusters = clustersInput.map((cluster) => normalizeCluster(cluster)).filter(Boolean);
+  const clustersInput = Array.isArray(options?.clusters)
+    ? options.clusters
+    : (options?.cluster && typeof options.cluster === "object" ? [options.cluster] : []);
+  const clusters = [];
 
-  if (!clusters.length) {
-    clusters.push(normalizeCluster(DEFAULT_CRYSTAL_CLUSTER));
+  for (const cluster of clustersInput) {
+    if (cluster && typeof cluster === "object") {
+      clusters.push(normalizeCluster(cluster));
+    }
   }
+
+  if (!clusters.length) return;
 
   const extraSources = Array.isArray(options?.wakeSources) ? options.wakeSources : [];
   const baseSources = [{ x: playerX, y: playerY, radius: 180, strength: 1 }, ...extraSources];
