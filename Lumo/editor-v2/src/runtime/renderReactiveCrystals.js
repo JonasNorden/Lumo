@@ -30,9 +30,9 @@ function distWake(localCluster, sources, fallbackRadius){let best=0; for(const s
 export function renderReactiveCrystals(ctx, playerX, playerY, time, options = {}) {
   if (!ctx || typeof ctx.save !== "function" || !ctx.canvas) return;
   const mapper = options && typeof options === "object" ? options.mapper : null;
-  const clustersInput = Array.isArray(options?.clusters) ? options.clusters : [options?.cluster];
-  const clusters = clustersInput.map((cluster) => normalizeCluster(cluster)).filter(Boolean);
-  if (!clusters.length) clusters.push(normalizeCluster(DEFAULT_CRYSTAL_CLUSTER));
+  if (!Array.isArray(options?.clusters)) return;
+  const clusters = options.clusters.map((cluster) => normalizeCluster(cluster)).filter(Boolean);
+  if (!clusters.length) return;
   const extraSources = Array.isArray(options?.wakeSources) ? options.wakeSources : [];
   const baseSources = [{ x: playerX, y: playerY, radius: 180, strength: 1 }, ...extraSources];
   const timeMs = Number.isFinite(time) ? time : 0;
