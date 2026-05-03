@@ -5553,6 +5553,61 @@
       return pts;
     }
 
+
+    function buildRechargedPlayerOcclusionCacheKey({ light, radius, mapper, occlusionLookup, options }) {
+      const opt = options && typeof options === "object" ? options : RECHARGED_OCCLUSION_DEFAULTS;
+      const lookupRects = Array.isArray(occlusionLookup?.rects) ? occlusionLookup.rects : null;
+      const gridRef = occlusionLookup?.grid instanceof Map ? occlusionLookup.grid : null;
+      return [
+        Number.isFinite(light?.x) ? light.x : "n",
+        Number.isFinite(light?.y) ? light.y : "n",
+        Number.isFinite(radius) ? radius : "n",
+        Math.max(24, opt.rays | 0),
+        Math.max(1, opt.stepPx | 0),
+        Math.max(0, opt.featherPx | 0),
+        Number.isFinite(opt.penumbra) ? opt.penumbra : "n",
+        Number.isFinite(mapper?.cameraX) ? mapper.cameraX : "n",
+        Number.isFinite(mapper?.cameraY) ? mapper.cameraY : "n",
+        Number.isFinite(mapper?.offsetX) ? mapper.offsetX : "n",
+        Number.isFinite(mapper?.offsetY) ? mapper.offsetY : "n",
+        Number.isFinite(mapper?.viewportWorldWidth) ? mapper.viewportWorldWidth : "n",
+        Number.isFinite(mapper?.viewportWorldHeight) ? mapper.viewportWorldHeight : "n",
+        lookupRects ? lookupRects.length : -1,
+        Number.isFinite(occlusionLookup?.cellSize) ? occlusionLookup.cellSize : "n",
+        Number.isFinite(occlusionLookup?.gridCellCount) ? occlusionLookup.gridCellCount : "n",
+        lookupRects,
+        gridRef,
+      ].join("|");
+    }
+
+    function buildRechargedFeatherPolysForPlayerLight({ pts, lightX, lightY, feather, passes }) {
+      if (!Array.isArray(pts) || pts.length <= 0 || feather <= 0 || passes <= 0) {
+        return [];
+      }
+      const downFeather = 0.0;
+      const featherPolys = new Array(passes);
+      for (let passIndex = 0; passIndex < passes; passIndex += 1) {
+        const t = passIndex / (passes - 1);
+        const extra = feather * (1.15 - 1.05 * t);
+        const alpha = (0.030 + 0.170 * (1 - t));
+        const poly = new Array(pts.length);
+        for (let i = 0; i < pts.length; i += 1) {
+          const px = pts[i][0];
+          const py = pts[i][1];
+          let vx = px - lightX;
+          let vy = py - lightY;
+          const norm = Math.hypot(vx, vy) || 1;
+          vx /= norm;
+          vy /= norm;
+          const down = Math.max(0, vy);
+          const expand = extra * (1 - down * (1 - downFeather));
+          poly[i] = [px + vx * expand, py + vy * expand];
+        }
+        featherPolys[passIndex] = { alpha, poly };
+      }
+      return featherPolys;
+    }
+
     function clamp01(value) {
       return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
     }
@@ -5757,7 +5812,18 @@
           && Array.isArray(occlusionRects)
           && occlusionRects.length > 0;
         if (shouldUsePlayerOcclusion) {
-          const pts = buildRechargedPlayerLightOcclusionPolyScreen({
+          const cacheKey = buildRechargedPlayerOcclusionCacheKey({
+            light,
+            radius,
+            mapper,
+            occlusionLookup,
+            options: occOptions,
+          });
+          const cached = state.rechargedPlayerOcclusionGeometryCache
+            && state.rechargedPlayerOcclusionGeometryCache.key === cacheKey
+            ? state.rechargedPlayerOcclusionGeometryCache
+            : null;
+          const pts = cached?.pts || buildRechargedPlayerLightOcclusionPolyScreen({
             sx: light.x,
             sy: light.y,
             radius,
@@ -5769,6 +5835,17 @@
             const punch = Math.max(0, Math.min(1, strength * RECHARGED_PLAYER_PUNCH_INTENSITY));
             const corePunch = Math.max(0, Math.min(1, punch * 0.10));
             const feather = Math.max(0, occOptions.featherPx | 0);
+            const featherPasses = 10;
+            const featherPolys = cached?.featherPolys || buildRechargedFeatherPolysForPlayerLight({
+              pts,
+              lightX: light.x,
+              lightY: light.y,
+              feather,
+              passes: featherPasses,
+            });
+            if (!cached && state && typeof state === "object") {
+              state.rechargedPlayerOcclusionGeometryCache = { key: cacheKey, pts, featherPolys };
+            }
             darknessCtx.save();
             darknessCtx.beginPath();
             darknessCtx.moveTo(pts[0][0], pts[0][1]);
@@ -5782,31 +5859,17 @@
             darknessCtx.fill();
 
             if (feather > 0) {
-              const passes = 10;
-              const downFeather = 0.0;
-              for (let passIndex = 0; passIndex < passes; passIndex += 1) {
-                const t = passIndex / (passes - 1);
-                const extra = feather * (1.15 - 1.05 * t);
-                const a0 = 0.030 + 0.170 * (1 - t);
-                const alpha = a0 * punch;
+              for (let passIndex = 0; passIndex < featherPolys.length; passIndex += 1) {
+                const pass = featherPolys[passIndex];
+                const poly = Array.isArray(pass?.poly) ? pass.poly : null;
+                if (!poly || poly.length <= 0) continue;
                 darknessCtx.beginPath();
-                for (let i = 0; i < pts.length; i += 1) {
-                  const px = pts[i][0];
-                  const py = pts[i][1];
-                  let vx = px - light.x;
-                  let vy = py - light.y;
-                  const norm = Math.hypot(vx, vy) || 1;
-                  vx /= norm;
-                  vy /= norm;
-                  const down = Math.max(0, vy);
-                  const expand = extra * (1 - down * (1 - downFeather));
-                  const ex = px + vx * expand;
-                  const ey = py + vy * expand;
-                  if (i === 0) darknessCtx.moveTo(ex, ey);
-                  else darknessCtx.lineTo(ex, ey);
+                darknessCtx.moveTo(poly[0][0], poly[0][1]);
+                for (let i = 1; i < poly.length; i += 1) {
+                  darknessCtx.lineTo(poly[i][0], poly[i][1]);
                 }
                 darknessCtx.closePath();
-                darknessCtx.fillStyle = `rgba(0,0,0,${alpha.toFixed(3)})`;
+                darknessCtx.fillStyle = `rgba(0,0,0,${(pass.alpha * punch).toFixed(3)})`;
                 darknessCtx.fill();
               }
             }
