@@ -5701,17 +5701,11 @@
       const pts = new Array(rays);
       const TAU = Math.PI * 2;
       const worldOrigin = mapper.canvasToWorldPoint(sx, sy);
-      const worldRadius = Number.isFinite(mapper.worldUnitsToPx) && mapper.worldUnitsToPx > 0
-        ? (radius / mapper.worldUnitsToPx)
+      const worldScale = Number.isFinite(mapper.worldUnitsToPx) && mapper.worldUnitsToPx > 0
+        ? mapper.worldUnitsToPx
         : null;
       const lookupAnalysis = analyzeRechargedOcclusionLookup(occlusionLookup);
-      const hasGridLookup = (
-        Number.isFinite(worldOrigin?.x)
-        && Number.isFinite(worldOrigin?.y)
-        && Number.isFinite(worldRadius)
-        && worldRadius > 0
-        && lookupAnalysis.valid
-      );
+      const shouldUseDda = lookupAnalysis.valid === true;
       if (breakdown) {
         breakdown.counters.ddaLookupShapeRects = lookupAnalysis.rects;
         breakdown.counters.ddaLookupShapeGrid = lookupAnalysis.grid;
@@ -5720,13 +5714,13 @@
         breakdown.counters.ddaLookupValid = lookupAnalysis.valid;
         breakdown.counters.ddaLookupInvalidReason = lookupAnalysis.reason;
       }
-      if (breakdown && !hasGridLookup) {
+      if (breakdown && !shouldUseDda) {
         breakdown.counters.playerSteppedFallbackRebuilds += 1;
         if (!rechargedOcclusionFallbackWarned && RECHARGED_DARKNESS_BREAKDOWN_ENABLED === true) {
           rechargedOcclusionFallbackWarned = true;
           console.warn("[LUMO_DARKNESS_BREAKDOWN] player occlusion stepped fallback used due to invalid occlusion lookup");
         }
-      } else if (breakdown && hasGridLookup) {
+      } else if (breakdown && shouldUseDda) {
         breakdown.counters.playerFastDdaRebuilds += 1;
       }
 
@@ -5736,18 +5730,25 @@
         const dy = Math.sin(ang);
         const down = Math.max(0, dy);
         const rayRadius = radius * (1 - down * (1 - RECHARGED_PLAYER_DOWNLIGHT));
-        if (hasGridLookup) {
-          const rayWorldRadius = rayRadius / mapper.worldUnitsToPx;
+        if (shouldUseDda) {
+          const rayWorldRadius = Number.isFinite(worldScale) && worldScale > 0
+            ? (rayRadius / worldScale)
+            : rayRadius;
+          const ddaOx = Number.isFinite(worldOrigin?.x) ? worldOrigin.x : sx;
+          const ddaOy = Number.isFinite(worldOrigin?.y) ? worldOrigin.y : sy;
+          const ddaMaxDist = Number.isFinite(rayWorldRadius) && rayWorldRadius > 0 ? rayWorldRadius : rayRadius;
           const hit = castRechargedOcclusionRayGridDDA({
-            ox: worldOrigin.x,
-            oy: worldOrigin.y,
+            ox: ddaOx,
+            oy: ddaOy,
             dx,
             dy,
-            maxDist: rayWorldRadius,
+            maxDist: ddaMaxDist,
             occlusionLookup,
             breakdownCounters: breakdown ? breakdown.counters : null,
           });
-          const hitDist = Number.isFinite(hit?.dist) ? (hit.dist * mapper.worldUnitsToPx) : rayRadius;
+          const hitDist = Number.isFinite(hit?.dist)
+            ? (Number.isFinite(worldScale) && worldScale > 0 ? (hit.dist * worldScale) : hit.dist)
+            : rayRadius;
           pts[i] = [sx + dx * hitDist, sy + dy * hitDist];
           continue;
         }
