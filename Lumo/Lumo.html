@@ -4338,83 +4338,6 @@
       loading: false,
       loaded: false,
     };
-    const crystalDebugEnabled = (() => {
-      try {
-        const params = new URLSearchParams(globalThis?.location?.search || "");
-        return params.get("crystalDebug") === "1";
-      } catch (_error) {
-        return false;
-      }
-    })();
-    const crystalDebugState = { payloadCount: null, normalizedCount: null, renderCount: null };
-    const occlusionDebugEnabled = (() => {
-      try {
-        const params = new URLSearchParams(globalThis?.location?.search || "");
-        return params.get("occlusionDebug") === "1";
-      } catch (_error) {
-        return false;
-      }
-    })();
-
-    const reactiveDecorDebugEnabled = (() => {
-      try {
-        const params = new URLSearchParams(globalThis?.location?.search || "");
-        return params.get("reactiveDecorDebug") === "1";
-      } catch (_error) {
-        return false;
-      }
-    })();
-    if (reactiveDecorDebugEnabled) {
-      console.info("[LUMO_REACTIVE_DECOR_DIAG] enabled");
-    }
-    const lumoReactiveDecorDiagState = {
-      frame: 0,
-      payloadReactiveGrassCount: 0,
-      payloadReactiveBloomCount: 0,
-      payloadReactiveCrystalCount: 0,
-      readGrassCount: 0,
-      readBloomCount: 0,
-      readCrystalCount: 0,
-      cacheGrassCount: 0,
-      cacheBloomCount: 0,
-      cacheCrystalCount: 0,
-      dispatchGrassCount: 0,
-      dispatchBloomCount: 0,
-      dispatchCrystalCount: 0,
-      firstGrassSample: null,
-      firstBloomSample: null,
-      firstCrystalSample: null,
-      payloadKeys: [],
-      renderReactiveGrassCalled: false,
-      renderReactiveBloomPlantsCalled: false,
-      renderReactiveCrystalsCalled: false,
-      levelPath: "",
-      recharged: false,
-    };
-    const lumoCrystalTraceState = {
-      beginLoadKey: "",
-      beginFetchKey: "",
-      beginJsonCountKey: "",
-      beginExtractCountKey: "",
-      beginErrorKey: "",
-      readCacheKey: "",
-      renderInputKey: "",
-    };
-
-    function logLumoCrystalTrace(key, ...parts) {
-      const signature = parts.join("|");
-      if (lumoCrystalTraceState[key] === signature) return;
-      lumoCrystalTraceState[key] = signature;
-      console.info("[LUMO_CRYSTAL_TRACE]", ...parts);
-    }
-
-    function updateReactiveDecorDiag(updates) {
-      if (!reactiveDecorDebugEnabled) return;
-      Object.assign(lumoReactiveDecorDiagState, updates);
-      window.__LumoReactiveDecorDiag = lumoReactiveDecorDiagState;
-    }
-
-
     const rechargedReactiveCrystalLevelCache = {
       levelPath: "",
       patches: [],
@@ -4474,28 +4397,12 @@
       const directPatches = Array.isArray(payload?.reactiveGrassPatches)
         ? payload.reactiveGrassPatches
         : null;
-      updateReactiveDecorDiag({
-        payloadReactiveGrassCount: Array.isArray(payload?.reactiveGrassPatches) ? payload.reactiveGrassPatches.length : 0,
-        payloadReactiveBloomCount: Array.isArray(payload?.reactiveBloomPatches) ? payload.reactiveBloomPatches.length : 0,
-        payloadReactiveCrystalCount: Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches.length : 0,
-        payloadKeys: payload && typeof payload === "object" ? Object.keys(payload).filter((k) => k.toLowerCase().includes("reactive")) : [],
-      });
-      if (crystalDebugEnabled) {
-        console.info("[CrystalDebug] payload reactive patch counts", {
-          grass: Array.isArray(payload?.reactiveGrassPatches) ? payload.reactiveGrassPatches.length : 0,
-          bloom: Array.isArray(payload?.reactiveBloomPatches) ? payload.reactiveBloomPatches.length : 0,
-          crystal: Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches.length : 0,
-        });
-      }
 
       if (directPatches) {
         rechargedReactiveGrassLevelCache.patches = directPatches
           .map((patch, index) => normalizeReactiveGrassPatch(patch, index))
           .filter(Boolean);
         rechargedReactiveGrassLevelCache.loaded = true;
-          updateReactiveDecorDiag({
-            cacheGrassCount: rechargedReactiveGrassLevelCache.patches.length,
-          });
       }
     }
 
@@ -4682,13 +4589,6 @@
 
     function syncReactiveCrystalCacheFromPayload(payload) {
       const directPatches = Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches : null;
-      if (crystalDebugEnabled) {
-        const payloadCount = Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches.length : 0;
-        if (crystalDebugState.payloadCount !== payloadCount) {
-          crystalDebugState.payloadCount = payloadCount;
-          console.info("[CrystalDebug] payload reactiveCrystalPatches", payloadCount);
-        }
-      }
       if (!directPatches) return;
       rechargedReactiveCrystalLevelCache.patches = directPatches
         .map((patch, index) => normalizeReactiveCrystalPatch(patch, index))
@@ -4699,12 +4599,10 @@
     function beginReactiveCrystalLevelLoad(levelPath) {
       if (typeof levelPath !== "string" || !levelPath.trim()) return;
       const normalizedPath = levelPath.trim();
-      logLumoCrystalTrace("beginLoadKey", "beginReactiveCrystalLevelLoad", `levelPath=${normalizedPath}`);
       if (rechargedReactiveCrystalLevelCache.loading && rechargedReactiveCrystalLevelCache.levelPath === normalizedPath) return;
       rechargedReactiveCrystalLevelCache.levelPath = normalizedPath;
       rechargedReactiveCrystalLevelCache.loading = true;
       rechargedReactiveCrystalLevelCache.loaded = false;
-      logLumoCrystalTrace("beginFetchKey", "beginReactiveCrystalLevelLoad", `fetchStart levelPath=${normalizedPath}`);
       fetch(normalizedPath, {
         method: "GET",
         headers: { Accept: "application/json, text/plain;q=0.8, */*;q=0.1" },
@@ -4717,28 +4615,10 @@
           const authoredCount = Array.isArray(levelDocument?.reactiveCrystalPatches)
             ? levelDocument.reactiveCrystalPatches.length
             : 0;
-          logLumoCrystalTrace(
-            "beginJsonCountKey",
-            "beginReactiveCrystalLevelLoad",
-            `afterJsonLoad levelPath=${normalizedPath}`,
-            `document.reactiveCrystalPatches.count=${authoredCount}`,
-          );
           rechargedReactiveCrystalLevelCache.patches = extractReactiveCrystalPatchesFromLevelDocument(levelDocument);
-          logLumoCrystalTrace(
-            "beginExtractCountKey",
-            "beginReactiveCrystalLevelLoad",
-            `afterExtract levelPath=${normalizedPath}`,
-            `extractReactiveCrystalPatchesFromLevelDocument.count=${rechargedReactiveCrystalLevelCache.patches.length}`,
-          );
           rechargedReactiveCrystalLevelCache.loaded = true;
         })
         .catch((_error) => {
-          logLumoCrystalTrace(
-            "beginErrorKey",
-            "beginReactiveCrystalLevelLoad",
-            `fetchFailed levelPath=${normalizedPath}`,
-            `error=${_error?.message || String(_error)}`,
-          );
           rechargedReactiveCrystalLevelCache.loaded = true;
         })
         .finally(() => {
@@ -4757,40 +4637,6 @@
       const normalizedPatches = Array.isArray(rechargedReactiveCrystalLevelCache.patches)
         ? rechargedReactiveCrystalLevelCache.patches
         : [];
-      updateReactiveDecorDiag({
-        cacheCrystalCount: normalizedPatches.length,
-      });
-      logLumoCrystalTrace(
-        "readCacheKey",
-        "readRechargedReactiveCrystalPatches",
-        `levelPath=${levelPath || ""}`,
-        `cache.loaded=${rechargedReactiveCrystalLevelCache.loaded}`,
-        `cache.loading=${rechargedReactiveCrystalLevelCache.loading}`,
-        `cache.patches.length=${normalizedPatches.length}`,
-      );
-      if (crystalDebugEnabled) {
-        const grassCount = Array.isArray(rechargedReactiveGrassLevelCache.patches) ? rechargedReactiveGrassLevelCache.patches.length : 0;
-        const bloomCount = Array.isArray(rechargedReactiveBloomLevelCache.patches) ? rechargedReactiveBloomLevelCache.patches.length : 0;
-        if (
-          crystalDebugState.normalizedCount !== normalizedPatches.length
-          || crystalDebugState.normalizedGrassCount !== grassCount
-          || crystalDebugState.normalizedBloomCount !== bloomCount
-        ) {
-          crystalDebugState.normalizedCount = normalizedPatches.length;
-          crystalDebugState.normalizedGrassCount = grassCount;
-          crystalDebugState.normalizedBloomCount = bloomCount;
-          console.info("[CrystalDebug] normalized reactive patch counts", {
-            grass: grassCount,
-            bloom: bloomCount,
-            crystal: normalizedPatches.length,
-          });
-        }
-      }
-      logReactiveDecorDiagCheckpoint("checkpoint4_runtime_reactive_decor_collection", {
-        grass: rechargedReactiveGrassLevelCache.patches,
-        bloom: rechargedReactiveBloomLevelCache.patches,
-        crystal: normalizedPatches,
-      });
       return normalizedPatches;
     }
 
@@ -5599,37 +5445,6 @@
 
     function ensureRechargedOcclusionLookup(state, { supportTiles, worldUnitsToPx, tileSize }) {
       const cache = state && typeof state === "object" ? state.rechargedOcclusionLookupCache : null;
-      let diag = null;
-      let frame = 0;
-      let supportTilesRefChanged = false;
-      let worldUnitsToPxChanged = false;
-      let tileSizeChanged = false;
-      if (occlusionDebugEnabled) {
-        if (!window.__LumoOcclusionDiag || typeof window.__LumoOcclusionDiag !== "object") {
-          window.__LumoOcclusionDiag = {
-            hits: 0,
-            misses: 0,
-            rebuilds: 0,
-            lastMissReason: "none",
-            lastSupportTilesLength: 0,
-            lastWorldUnitsToPx: null,
-            lastTileSize: null,
-            lastBuildMs: 0,
-            totalBuildMs: 0,
-            recentEvents: [],
-            frame: 0,
-          };
-        }
-        diag = window.__LumoOcclusionDiag;
-        diag.frame = (Number.isFinite(diag.frame) ? diag.frame : 0) + 1;
-        frame = diag.frame;
-        diag.lastSupportTilesLength = Array.isArray(supportTiles) ? supportTiles.length : 0;
-        diag.lastWorldUnitsToPx = Number.isFinite(worldUnitsToPx) ? worldUnitsToPx : null;
-        diag.lastTileSize = Number.isFinite(tileSize) ? tileSize : null;
-        supportTilesRefChanged = !!cache && cache.supportTilesRef !== supportTiles;
-        worldUnitsToPxChanged = !!cache && cache.worldUnitsToPx !== worldUnitsToPx;
-        tileSizeChanged = !!cache && cache.tileSize !== tileSize;
-      }
       if (
         cache
         && cache.supportTilesRef === supportTiles
@@ -5637,36 +5452,9 @@
         && cache.tileSize === tileSize
         && cache.lookup
       ) {
-        if (diag) {
-          diag.hits += 1;
-          const shouldLog = frame % 60 === 0;
-          if (shouldLog) {
-            console.info("[LUMO_OCCLUSION_DIAG]", {
-              frame,
-              hits: diag.hits,
-              misses: diag.misses,
-              rebuilds: diag.rebuilds,
-              supportTilesLength: diag.lastSupportTilesLength,
-              worldUnitsToPx: diag.lastWorldUnitsToPx,
-              tileSize: diag.lastTileSize,
-              supportTilesRefEqualPrevious: true,
-              lastMissReason: diag.lastMissReason,
-              lastBuildMs: diag.lastBuildMs,
-              totalBuildMs: diag.totalBuildMs,
-            });
-          }
-        }
         return cache.lookup;
       }
-      let missReason = "no previous cache";
-      if (cache) {
-        if (supportTilesRefChanged) missReason = "supportTilesRef changed";
-        else if (worldUnitsToPxChanged) missReason = "worldUnitsToPx changed";
-        else if (tileSizeChanged) missReason = "tileSize changed";
-      }
-      const buildStartMs = diag ? performance.now() : 0;
       const lookup = buildRechargedOcclusionLookup({ supportTiles, worldUnitsToPx, tileSize });
-      const buildMs = diag ? (performance.now() - buildStartMs) : 0;
       if (state && typeof state === "object") {
         state.rechargedOcclusionLookupCache = {
           supportTilesRef: supportTiles,
@@ -5674,44 +5462,6 @@
           tileSize,
           lookup,
         };
-      }
-      if (diag) {
-        diag.misses += 1;
-        diag.rebuilds += 1;
-        diag.lastMissReason = missReason;
-        diag.lastBuildMs = buildMs;
-        diag.totalBuildMs += buildMs;
-        const event = {
-          frame,
-          missReason,
-          supportTilesLength: diag.lastSupportTilesLength,
-          worldUnitsToPx: diag.lastWorldUnitsToPx,
-          tileSize: diag.lastTileSize,
-          supportTilesRefEqualPrevious: !supportTilesRefChanged,
-          buildMs,
-        };
-        diag.recentEvents.push(event);
-        if (diag.recentEvents.length > 20) {
-          diag.recentEvents.splice(0, diag.recentEvents.length - 20);
-        }
-        const shouldLog = frame % 60 === 0 || frame > 5;
-        if (shouldLog) {
-          console.info("[LUMO_OCCLUSION_DIAG]", {
-            frame,
-            hits: diag.hits,
-            misses: diag.misses,
-            rebuilds: diag.rebuilds,
-            missReason,
-            supportTilesLength: diag.lastSupportTilesLength,
-            worldUnitsToPx: diag.lastWorldUnitsToPx,
-            tileSize: diag.lastTileSize,
-            supportTilesRefEqualPrevious: !supportTilesRefChanged,
-            worldUnitsToPxChanged,
-            tileSizeChanged,
-            buildMs,
-            totalBuildMs: diag.totalBuildMs,
-          });
-        }
       }
       return lookup;
     }
@@ -6107,20 +5857,6 @@
         }
 
         const payload = readLatestRechargedBootPayload() || {};
-        updateReactiveDecorDiag({
-          frame: (lumoReactiveDecorDiagState.frame | 0) + 1,
-          levelPath: typeof payload?.levelPath === "string" ? payload.levelPath : "",
-          recharged: (() => {
-            try {
-              return new URLSearchParams(globalThis?.location?.search || "").get("recharged") === "1";
-            } catch (_error) {
-              return false;
-            }
-          })(),
-          renderReactiveGrassCalled: false,
-          renderReactiveBloomPlantsCalled: false,
-          renderReactiveCrystalsCalled: false,
-        });
         const perfNow = (typeof performance !== "undefined" && typeof performance.now === "function")
           ? () => performance.now()
           : () => Date.now();
@@ -6146,17 +5882,6 @@
         const reactiveGrassPatches = readRechargedReactiveGrassPatches(payload);
         const reactiveBloomPatches = readRechargedReactiveBloomPatches(payload);
         const reactiveCrystalPatches = readRechargedReactiveCrystalPatches(payload);
-        updateReactiveDecorDiag({
-          readGrassCount: reactiveGrassPatches.length,
-          readBloomCount: reactiveBloomPatches.length,
-          readCrystalCount: reactiveCrystalPatches.length,
-          cacheGrassCount: Array.isArray(rechargedReactiveGrassLevelCache.patches) ? rechargedReactiveGrassLevelCache.patches.length : 0,
-          cacheBloomCount: Array.isArray(rechargedReactiveBloomLevelCache.patches) ? rechargedReactiveBloomLevelCache.patches.length : 0,
-          cacheCrystalCount: Array.isArray(rechargedReactiveCrystalLevelCache.patches) ? rechargedReactiveCrystalLevelCache.patches.length : 0,
-          firstGrassSample: reactiveGrassPatches[0] || null,
-          firstBloomSample: reactiveBloomPatches[0] || null,
-          firstCrystalSample: reactiveCrystalPatches[0] || null,
-        });
         const previousSnapshot = readRechargedPlayerSnapshot({
           player: state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
             ? state.previousPlayerSnapshot
@@ -6891,10 +6616,6 @@
             patches: reactiveGrassPatches,
           },
         );
-        updateReactiveDecorDiag({
-          renderReactiveGrassCalled: true,
-          dispatchGrassCount: reactiveGrassPatches.length,
-        });
         perfTimings.grassMs = perfNow() - perfGrassStartMs;
 
         const perfBloomStartMs = perfNow();
@@ -6905,10 +6626,6 @@
           rechargedDecorTime,
           { mapper, patches: reactiveBloomPatches },
         );
-        updateReactiveDecorDiag({
-          renderReactiveBloomPlantsCalled: true,
-          dispatchBloomCount: reactiveBloomPatches.length,
-        });
         perfTimings.bloomMs = perfNow() - perfBloomStartMs;
 
         const reactiveCrystalWakeSources = [];
@@ -6945,32 +6662,8 @@
               reactiveCrystalWakeSources.push({ x: flareWorldX, y: flareWorldY, radius: 170, strength: 0.9 });
             }
           }
+        });
         }
-
-        if (
-          crystalDebugEnabled
-          && (
-            crystalDebugState.renderCount !== reactiveCrystalPatches.length
-            || crystalDebugState.renderGrassCount !== reactiveGrassPatches.length
-            || crystalDebugState.renderBloomCount !== reactiveBloomPatches.length
-          )
-        ) {
-          crystalDebugState.renderCount = reactiveCrystalPatches.length;
-          crystalDebugState.renderGrassCount = reactiveGrassPatches.length;
-          crystalDebugState.renderBloomCount = reactiveBloomPatches.length;
-          console.info("[CrystalDebug] render reactive patch counts", {
-            grass: reactiveGrassPatches.length,
-            bloom: reactiveBloomPatches.length,
-            crystal: reactiveCrystalPatches.length,
-          });
-        }
-
-
-        logLumoCrystalTrace(
-          "renderInputKey",
-          "beforeRenderReactiveCrystals",
-          `reactiveCrystalPatches.length=${reactiveCrystalPatches.length}`,
-        );
 
         const perfCrystalStartMs = perfNow();
         renderReactiveCrystals(
@@ -6980,10 +6673,6 @@
           rechargedDecorTime,
           { mapper, clusters: reactiveCrystalPatches, wakeSources: reactiveCrystalWakeSources, debug: true },
         );
-        updateReactiveDecorDiag({
-          renderReactiveCrystalsCalled: true,
-          dispatchCrystalCount: reactiveCrystalPatches.length,
-        });
         perfTimings.crystalMs = perfNow() - perfCrystalStartMs;
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
