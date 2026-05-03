@@ -5375,124 +5375,6 @@
       };
     }
 
-    const RECHARGED_DARKNESS_PROFILE_ENABLED = (() => {
-      try {
-        const search = typeof window !== "undefined" && typeof window?.location?.search === "string" ? window.location.search : "";
-        return search ? (new URLSearchParams(search)).get("darknessProfile") === "1" : false;
-      } catch (_error) {
-        return false;
-      }
-    })();
-    function rechargedDarknessNowMs() {
-      return (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now();
-    }
-    const RECHARGED_DARKNESS_BREAKDOWN_ENABLED = (() => {
-      try {
-        const search = typeof window !== "undefined" && typeof window?.location?.search === "string" ? window.location.search : "";
-        return search ? (new URLSearchParams(search)).get("darknessBreakdown") === "1" : false;
-      } catch (_error) {
-        return false;
-      }
-    })();
-    function createRechargedDarknessBreakdownProfiler() {
-      if (RECHARGED_DARKNESS_BREAKDOWN_ENABLED !== true) return null;
-      const buckets = ["totalDarkness", "stateAcquire", "canvasSizeGuard", "canvasResize", "contextReset", "canvasClear", "baseOverlayFill", "playerCacheKeyBuild", "playerCacheHitDraw", "playerCacheMissRebuild", "raymarchBuild", "featherBuild", "playerMainCutoutDraw", "playerFeatherDraw", "nonPlayerLightDraw", "flareLightDraw", "vignetteDraw", "noiseDraw", "polishDrawTotal", "finalUpscaleDrawImage", "stateRestore"];
-      const totals = Object.create(null); const maxes = Object.create(null); const counts = Object.create(null);
-      for (const bucket of buckets) { totals[bucket] = 0; maxes[bucket] = 0; counts[bucket] = 0; }
-      return {
-        enabled: true, finished: false, targetFrames: 180, frames: 0,
-        counters: { canvasWidth: 0, canvasHeight: 0, dpr: 1, darknessCanvasWidth: 0, darknessCanvasHeight: 0, darknessRenderScale: 0, playerRadius: 0, playerRays: 0, playerFeatherPassCount: 0, playerCacheHits: 0, playerCacheMisses: 0, raymarchRebuilds: 0, featherRebuilds: 0, nonPlayerLightCount: 0, playerFastDdaRebuilds: 0, playerSteppedFallbackRebuilds: 0, ddaVisitedCells: 0, ddaRectTests: 0, ddaDuplicateRectSkips: 0, ddaNearestHits: 0, maxDdaVisitedCellsPerRay: 0, maxDdaRectTestsPerRay: 0, canvasResizeHappened: false, canvasResizeEvents: 0, maxTotalDarkness: 0, hottestWorstBucket: "none", hottestWorstBucketMs: 0, ddaLookupShapeRects: "unknown", ddaLookupShapeGrid: "unknown", ddaLookupShapeCellSize: "unknown", ddaLookupShapeSampleCell: "unknown", ddaLookupValid: false, ddaLookupInvalidReason: "not-checked" },
-        add(name, ms) { if (!this.finished && totals[name] !== undefined && Number.isFinite(ms)) { totals[name] += ms; counts[name] += 1; if (ms > maxes[name]) maxes[name] = ms; } },
-        endFrame(meta = {}) {
-          if (this.finished) return;
-          this.frames += 1;
-          if (meta.frameBucketMax && meta.frameTotalDarkness > this.counters.maxTotalDarkness) {
-            this.counters.maxTotalDarkness = meta.frameTotalDarkness;
-            this.counters.hottestWorstBucket = meta.frameBucketMax.name;
-            this.counters.hottestWorstBucketMs = meta.frameBucketMax.value;
-          }
-          if (this.frames < this.targetFrames) return;
-          this.finished = true;
-          const fmt = (value) => Number.isFinite(value) ? value.toFixed(2) : "0.00";
-          const avg = buckets.map((name) => ({ name, value: counts[name] > 0 ? totals[name] / counts[name] : 0 })).sort((a, b) => b.value - a.value);
-          const max = buckets.map((name) => ({ name, value: maxes[name] || 0 })).sort((a, b) => b.value - a.value);
-          const lines = [
-            "[LUMO_DARKNESS_BREAKDOWN]",
-            `frames=${this.frames}`,
-            `canvas=${this.counters.canvasWidth}x${this.counters.canvasHeight} dpr=${this.counters.dpr}`,
-            `darknessCanvas=${this.counters.darknessCanvasWidth}x${this.counters.darknessCanvasHeight} renderScale=${fmt(this.counters.darknessRenderScale)}`,
-            "counters:",
-            `  playerRadius=${fmt(this.counters.playerRadius)} playerRays=${this.counters.playerRays} playerFeatherPassCount=${this.counters.playerFeatherPassCount}`,
-            `  playerCacheHits=${this.counters.playerCacheHits} playerCacheMisses=${this.counters.playerCacheMisses}`,
-            `  raymarchRebuilds=${this.counters.raymarchRebuilds} featherRebuilds=${this.counters.featherRebuilds} nonPlayerLightCount=${this.counters.nonPlayerLightCount}`,
-            `  playerFastDdaRebuilds=${this.counters.playerFastDdaRebuilds} playerSteppedFallbackRebuilds=${this.counters.playerSteppedFallbackRebuilds}`,
-            `  ddaVisitedCells=${this.counters.ddaVisitedCells} ddaRectTests=${this.counters.ddaRectTests} ddaDuplicateRectSkips=${this.counters.ddaDuplicateRectSkips} ddaNearestHits=${this.counters.ddaNearestHits}`,
-            `  maxDdaVisitedCellsPerRay=${this.counters.maxDdaVisitedCellsPerRay} maxDdaRectTestsPerRay=${this.counters.maxDdaRectTestsPerRay}`,
-            "  lookupShape:",
-            `    rects=${this.counters.ddaLookupShapeRects}`,
-            `    grid=${this.counters.ddaLookupShapeGrid}`,
-            `    cellSize=${this.counters.ddaLookupShapeCellSize}`,
-            `    sampleCell=${this.counters.ddaLookupShapeSampleCell}`,
-            `    ddaValid=${this.counters.ddaLookupValid}`,
-            `    ddaInvalidReason=${this.counters.ddaLookupInvalidReason}`,
-            `  canvasResizeHappened=${this.counters.canvasResizeHappened} canvasResizeEvents=${this.counters.canvasResizeEvents}`,
-            "avgMs:",
-          ];
-          for (const pair of avg) lines.push(`  ${pair.name}=${fmt(pair.value)}`);
-          lines.push("maxMs:");
-          for (const pair of max) lines.push(`  ${pair.name}=${fmt(pair.value)}`);
-          lines.push("topAvg:");
-          for (let i = 0; i < Math.min(5, avg.length); i += 1) lines.push(`  ${i + 1} ${avg[i].name}=${fmt(avg[i].value)}`);
-          lines.push("topMax:");
-          for (let i = 0; i < Math.min(5, max.length); i += 1) lines.push(`  ${i + 1} ${max[i].name}=${fmt(max[i].value)}`);
-          lines.push("worstFrame:");
-          lines.push(`  totalDarkness=${fmt(this.counters.maxTotalDarkness)}`);
-          lines.push(`  hottestBucket=${this.counters.hottestWorstBucket} ${fmt(this.counters.hottestWorstBucketMs)}`);
-          lines.push("finding:");
-          lines.push(`  measured hottest internal darkness bucket appears to be ${avg[0] ? avg[0].name : "unknown"}`);
-          console.log(lines.join("\n"));
-        },
-      };
-    }
-    function createRechargedDarknessProfiler() {
-      if (RECHARGED_DARKNESS_PROFILE_ENABLED !== true) return null;
-      const names = ["total", "canvasPrep", "buildLights", "ensureLookup", "cacheKeyBuild", "cacheHitPath", "cacheMissPath", "raymarchBuild", "featherBuild", "playerComposite", "nonPlayerComposite", "featherComposite", "vignettePass", "noisePass", "finalComposite"];
-      const sums = Object.create(null); const max = Object.create(null); const counts = Object.create(null);
-      for (const n of names) { sums[n] = 0; max[n] = 0; counts[n] = 0; }
-      const keyChangeCounts = { playerX: 0, playerY: 0, radius: 0, mapperFields: 0, occlusionLookup: 0, rayStepFeatherPenumbra: 0 };
-      return {
-        enabled: true, every: 120, frames: 0, hasLogged: false,
-        counters: { cacheHits: 0, cacheMisses: 0, raymarchRebuilds: 0, featherRebuilds: 0, lights: 0, occlusionRects: 0, gridCells: 0, playerRadius: 0, playerRays: 0, featherPasses: 0 },
-        add(name, dt) { if (Number.isFinite(dt) && sums[name] !== undefined) { sums[name] += dt; counts[name] += 1; if (dt > max[name]) max[name] = dt; } },
-        end(meta) {
-          this.frames += 1; this.counters.lights += meta.lights; this.counters.occlusionRects += meta.occlusionRects; this.counters.gridCells += meta.gridCells; this.counters.playerRadius += meta.playerRadius; this.counters.playerRays += meta.playerRays; this.counters.featherPasses += meta.featherPasses;
-          if (this.hasLogged === true || this.frames < this.every) return;
-          const avg = (n) => counts[n] > 0 ? sums[n] / counts[n] : 0;
-          const top3 = Object.keys(sums).map((n) => ({ n, v: avg(n) })).sort((a, b) => b.v - a.v).slice(0, 3);
-          const hm = this.counters.cacheHits + this.counters.cacheMisses;
-          const avgMs = Object.fromEntries(Object.keys(sums).map((n) => [n, Number(avg(n).toFixed(3))]));
-          const maxMs = Object.fromEntries(Object.keys(max).map((n) => [n, Number(max[n].toFixed(3))]));
-          const countsSummary = { framesProfiled: this.frames, playerCacheHits: this.counters.cacheHits, playerCacheMisses: this.counters.cacheMisses, cacheHitMissRatio: hm > 0 ? `${this.counters.cacheHits}/${this.counters.cacheMisses}` : "0/0", raymarchRebuildCount: this.counters.raymarchRebuilds, featherRebuildCount: this.counters.featherRebuilds, avgLightsPerFrame: Number((this.counters.lights / this.every).toFixed(2)), avgOcclusionRects: Number((this.counters.occlusionRects / this.every).toFixed(2)), avgOcclusionGridCells: Number((this.counters.gridCells / this.every).toFixed(2)), darknessCanvas: meta.darknessCanvas, mainCanvas: meta.mainCanvas, devicePixelRatio: meta.devicePixelRatio, darknessRenderScale: meta.darknessRenderScale, avgPlayerLightRadius: Number((this.counters.playerRadius / this.every).toFixed(2)), avgPlayerLightRays: Number((this.counters.playerRays / this.every).toFixed(2)), avgFeatherPassCount: Number((this.counters.featherPasses / this.every).toFixed(2)), keyChangeCounts };
-          const top3Summary = top3.map((t) => `${t.n}:${t.v.toFixed(3)}ms`).join(", ");
-          const lines = [
-            "[LUMO_DARKNESS_PROFILE]",
-            `framesProfiled=${countsSummary.framesProfiled} dpr=${countsSummary.devicePixelRatio} mainCanvas=${countsSummary.mainCanvas.width}x${countsSummary.mainCanvas.height} darknessCanvas=${countsSummary.darknessCanvas.width}x${countsSummary.darknessCanvas.height} darknessRenderScale=${countsSummary.darknessRenderScale}`,
-            `cache hits/misses=${countsSummary.cacheHitMissRatio} raymarchRebuildCount=${countsSummary.raymarchRebuildCount} featherRebuildCount=${countsSummary.featherRebuildCount}`,
-            `avg lights=${countsSummary.avgLightsPerFrame} occlusionRects=${countsSummary.avgOcclusionRects} occlusionGridCells=${countsSummary.avgOcclusionGridCells} playerRadius=${countsSummary.avgPlayerLightRadius} playerRays=${countsSummary.avgPlayerLightRays} featherPassCount=${countsSummary.avgFeatherPassCount}`,
-            `top3AvgMs=${top3Summary || "n/a"}`,
-            `hottestBucket=${top3[0] ? top3[0].n : "none"}`,
-            `avgMs=${JSON.stringify(avgMs)}`,
-            `maxMs=${JSON.stringify(maxMs)}`,
-            `keyChangeCounts=${JSON.stringify(keyChangeCounts)}`,
-          ];
-          console.log(lines.join("\n"));
-          this.hasLogged = true;
-          for (const n of Object.keys(sums)) { sums[n] = 0; max[n] = 0; counts[n] = 0; }
-          this.counters = { cacheHits: 0, cacheMisses: 0, raymarchRebuilds: 0, featherRebuilds: 0, lights: 0, occlusionRects: 0, gridCells: 0, playerRadius: 0, playerRays: 0, featherPasses: 0 };
-        },
-        keyChangeCounts,
-      };
-    }
     const RECHARGED_ENABLE_PLAYER_LIGHT_OCCLUSION = true;
     const RECHARGED_PLAYER_PUNCH_INTENSITY = 0.55;
     const RECHARGED_PLAYER_DOWNLIGHT = 0.20;
@@ -5635,55 +5517,7 @@
       }
       return false;
     }
-
-    let rechargedOcclusionFallbackWarned = false;
-    function analyzeRechargedOcclusionLookup(lookup) {
-      const result = {
-        valid: false,
-        reason: "none",
-        rects: "missing",
-        grid: "missing",
-        cellSize: "missing",
-        sampleCell: "none",
-      };
-      if (!lookup || typeof lookup !== "object") {
-        result.reason = "lookup-not-object";
-        return result;
-      }
-      const rects = Array.isArray(lookup.rects) ? lookup.rects : null;
-      result.rects = rects ? `array(${rects.length})` : typeof lookup.rects;
-      const grid = lookup.grid;
-      if (grid instanceof Map) {
-        result.grid = `Map(${grid.size})`;
-      } else if (Array.isArray(grid)) {
-        result.grid = `array(${grid.length})`;
-      } else {
-        result.grid = typeof grid;
-      }
-      const cellSize = Number.isFinite(lookup.cellSize) ? lookup.cellSize : NaN;
-      result.cellSize = Number.isFinite(cellSize) ? `${cellSize}` : "non-finite";
-      if (!rects || rects.length <= 0) {
-        result.reason = "rects-empty-or-invalid";
-        return result;
-      }
-      if (!(grid instanceof Map) || grid.size <= 0) {
-        result.reason = "grid-not-map-or-empty";
-        return result;
-      }
-      if (!Number.isFinite(cellSize) || cellSize <= 0) {
-        result.reason = "cellSize-invalid";
-        return result;
-      }
-      const firstEntry = grid.entries().next();
-      if (!firstEntry.done) {
-        const [key, value] = firstEntry.value;
-        result.sampleCell = `${typeof key}:${Array.isArray(value) ? `array(${value.length})` : typeof value}`;
-      }
-      result.valid = true;
-      return result;
-    }
-
-    function buildRechargedPlayerLightOcclusionPolyScreen({ sx, sy, radius, mapper, occlusionLookup, options, breakdown }) {
+    function buildRechargedPlayerLightOcclusionPolyScreen({ sx, sy, radius, mapper, occlusionLookup, options }) {
       if (!Number.isFinite(sx) || !Number.isFinite(sy) || !Number.isFinite(radius) || radius <= 0) {
         return null;
       }
@@ -5704,25 +5538,10 @@
       const worldScale = Number.isFinite(mapper.worldUnitsToPx) && mapper.worldUnitsToPx > 0
         ? mapper.worldUnitsToPx
         : null;
-      const lookupAnalysis = analyzeRechargedOcclusionLookup(occlusionLookup);
-      const shouldUseDda = lookupAnalysis.valid === true;
-      if (breakdown) {
-        breakdown.counters.ddaLookupShapeRects = lookupAnalysis.rects;
-        breakdown.counters.ddaLookupShapeGrid = lookupAnalysis.grid;
-        breakdown.counters.ddaLookupShapeCellSize = lookupAnalysis.cellSize;
-        breakdown.counters.ddaLookupShapeSampleCell = lookupAnalysis.sampleCell;
-        breakdown.counters.ddaLookupValid = lookupAnalysis.valid;
-        breakdown.counters.ddaLookupInvalidReason = lookupAnalysis.reason;
-      }
-      if (breakdown && !shouldUseDda) {
-        breakdown.counters.playerSteppedFallbackRebuilds += 1;
-        if (!rechargedOcclusionFallbackWarned && RECHARGED_DARKNESS_BREAKDOWN_ENABLED === true) {
-          rechargedOcclusionFallbackWarned = true;
-          console.warn("[LUMO_DARKNESS_BREAKDOWN] player occlusion stepped fallback used due to invalid occlusion lookup");
-        }
-      } else if (breakdown && shouldUseDda) {
-        breakdown.counters.playerFastDdaRebuilds += 1;
-      }
+      const shouldUseDda = occlusionLookup?.grid instanceof Map
+        && Array.isArray(occlusionLookup?.rects)
+        && Number.isFinite(occlusionLookup?.cellSize)
+        && occlusionLookup.cellSize > 0;
 
       for (let i = 0; i < rays; i += 1) {
         const ang = (i / rays) * TAU;
@@ -5744,7 +5563,6 @@
             dy,
             maxDist: ddaMaxDist,
             occlusionLookup,
-            breakdownCounters: breakdown ? breakdown.counters : null,
           });
           const hitDist = Number.isFinite(hit?.dist)
             ? (Number.isFinite(worldScale) && worldScale > 0 ? (hit.dist * worldScale) : hit.dist)
@@ -5816,7 +5634,7 @@
       return tMin;
     }
 
-    function castRechargedOcclusionRayGridDDA({ ox, oy, dx, dy, maxDist, occlusionLookup, breakdownCounters }) {
+    function castRechargedOcclusionRayGridDDA({ ox, oy, dx, dy, maxDist, occlusionLookup }) {
       const grid = occlusionLookup?.grid instanceof Map ? occlusionLookup.grid : null;
       const rects = Array.isArray(occlusionLookup?.rects) ? occlusionLookup.rects : null;
       const cellSize = Number.isFinite(occlusionLookup?.cellSize) && occlusionLookup.cellSize > 0 ? occlusionLookup.cellSize : 0;
@@ -5859,10 +5677,7 @@
           for (let i = 0; i < indices.length; i += 1) {
             const rectIndex = indices[i];
             if (!Number.isInteger(rectIndex) || rectIndex < 0 || rectIndex >= rectCount) continue;
-            if (activeStamp[rectIndex] === rayId) {
-              if (breakdownCounters) breakdownCounters.ddaDuplicateRectSkips += 1;
-              continue;
-            }
+            if (activeStamp[rectIndex] === rayId) continue;
             activeStamp[rectIndex] = rayId;
             rectTests += 1;
             const hitT = intersectRechargedRayAABB(ox, oy, dx, dy, nearestHit, rects[rectIndex]);
@@ -5880,13 +5695,6 @@
           tMaxY += tDeltaY;
           travel = nextTravel;
         }
-      }
-      if (breakdownCounters) {
-        breakdownCounters.ddaVisitedCells += visitedCells;
-        breakdownCounters.ddaRectTests += rectTests;
-        if (nearestHit < maxDist) breakdownCounters.ddaNearestHits += 1;
-        if (visitedCells > breakdownCounters.maxDdaVisitedCellsPerRay) breakdownCounters.maxDdaVisitedCellsPerRay = visitedCells;
-        if (rectTests > breakdownCounters.maxDdaRectTestsPerRay) breakdownCounters.maxDdaRectTestsPerRay = rectTests;
       }
       return { dist: nearestHit };
     }
@@ -6114,16 +5922,6 @@
     }
 
     function drawRechargedDarkness(ctx, canvas, state, lights, options) {
-      const profile = state?.rechargedDarknessProfile || null;
-      const breakdown = state?.rechargedDarknessBreakdownProfile || null;
-      const breakdownFrame = breakdown && breakdown.enabled === true && breakdown.finished !== true ? Object.create(null) : null;
-      const bAdd = (name, ms) => {
-        if (!breakdownFrame || !Number.isFinite(ms)) return;
-        breakdown.add(name, ms);
-        breakdownFrame[name] = (breakdownFrame[name] || 0) + ms;
-      };
-      const totalStart = profile ? rechargedDarknessNowMs() : 0;
-      const breakdownTotalStart = breakdownFrame ? rechargedDarknessNowMs() : 0;
       if (!ctx || !canvas || !state) {
         return false;
       }
@@ -6135,42 +5933,24 @@
       const occOptions = options?.occlusionOptions && typeof options.occlusionOptions === "object"
         ? options.occlusionOptions
         : RECHARGED_OCCLUSION_DEFAULTS;
-      const stateAcquireStart = breakdownFrame ? rechargedDarknessNowMs() : 0;
-      const prevDarknessCanvasWidth = Number.isFinite(state?.rechargedDarknessState?.canvas?.width) ? state.rechargedDarknessState.canvas.width : null;
-      const prevDarknessCanvasHeight = Number.isFinite(state?.rechargedDarknessState?.canvas?.height) ? state.rechargedDarknessState.canvas.height : null;
       const expectedInternalWidth = Math.max(1, Math.round(canvas.width * (Number.isFinite(DARKNESS_RENDER_SCALE) && DARKNESS_RENDER_SCALE > 0 ? DARKNESS_RENDER_SCALE : 1)));
       const expectedInternalHeight = Math.max(1, Math.round(canvas.height * (Number.isFinite(DARKNESS_RENDER_SCALE) && DARKNESS_RENDER_SCALE > 0 ? DARKNESS_RENDER_SCALE : 1)));
       const darknessState = ensureRechargedDarknessState(state, canvas);
-      bAdd("stateAcquire", (breakdownFrame ? rechargedDarknessNowMs() : 0) - stateAcquireStart);
       if (!darknessState?.ctx || !darknessState?.canvas) {
         return false;
       }
       const darknessCtx = darknessState.ctx;
       const darknessCanvas = darknessState.canvas;
-      bAdd("canvasSizeGuard", 0);
-      if (breakdownFrame && (prevDarknessCanvasWidth !== darknessCanvas.width || prevDarknessCanvasHeight !== darknessCanvas.height)) {
-        bAdd("canvasResize", 0);
-        breakdown.counters.canvasResizeHappened = true;
-        breakdown.counters.canvasResizeEvents += 1;
-      }
-      const prepStart = profile ? rechargedDarknessNowMs() : 0;
       const mainWidth = Number.isFinite(darknessState.mainWidth) ? darknessState.mainWidth : canvas.width;
       const mainHeight = Number.isFinite(darknessState.mainHeight) ? darknessState.mainHeight : canvas.height;
       const renderScale = Number.isFinite(darknessState.renderScale) && darknessState.renderScale > 0 ? darknessState.renderScale : 1;
-      const resetStart = breakdownFrame ? rechargedDarknessNowMs() : 0;
       darknessCtx.setTransform(1, 0, 0, 1, 0, 0);
-      bAdd("contextReset", (breakdownFrame ? rechargedDarknessNowMs() : 0) - resetStart);
-      const clearStart = breakdownFrame ? rechargedDarknessNowMs() : 0;
       darknessCtx.clearRect(0, 0, darknessCanvas.width, darknessCanvas.height);
-      bAdd("canvasClear", (breakdownFrame ? rechargedDarknessNowMs() : 0) - clearStart);
       darknessCtx.scale(renderScale, renderScale);
       darknessCtx.globalCompositeOperation = "source-over";
       darknessCtx.fillStyle = "rgba(0,0,0,0.93)";
-      const baseFillStart = breakdownFrame ? rechargedDarknessNowMs() : 0;
       darknessCtx.fillRect(0, 0, mainWidth, mainHeight);
-      bAdd("baseOverlayFill", (breakdownFrame ? rechargedDarknessNowMs() : 0) - baseFillStart);
       darknessCtx.globalCompositeOperation = "destination-out";
-      if (profile) profile.add("canvasPrep", rechargedDarknessNowMs() - prepStart);
 
       for (const light of (Array.isArray(lights) ? lights : [])) {
         if (!Number.isFinite(light?.x) || !Number.isFinite(light?.y)) {
@@ -6185,7 +5965,6 @@
           && Array.isArray(occlusionRects)
           && occlusionRects.length > 0;
         if (shouldUsePlayerOcclusion) {
-          const keyStart = profile ? rechargedDarknessNowMs() : 0;
           const cacheKey = buildRechargedPlayerOcclusionCacheKey({
             light,
             radius,
@@ -6198,13 +5977,7 @@
             ? state.rechargedPlayerOcclusionGeometryCache
             : null;
           if (profile) {
-            profile.add("cacheKeyBuild", rechargedDarknessNowMs() - keyStart);
-            if (cached) { profile.counters.cacheHits += 1; } else { profile.counters.cacheMisses += 1; }
           }
-          bAdd("playerCacheKeyBuild", (breakdownFrame ? rechargedDarknessNowMs() : 0) - keyStart);
-          if (breakdownFrame) { if (cached) breakdown.counters.playerCacheHits += 1; else breakdown.counters.playerCacheMisses += 1; }
-          const missStart = (!cached && profile) ? rechargedDarknessNowMs() : 0;
-          const missStartBreakdown = (!cached && breakdownFrame) ? rechargedDarknessNowMs() : 0;
           const pts = cached?.pts || buildRechargedPlayerLightOcclusionPolyScreen({
             sx: light.x,
             sy: light.y,
@@ -6212,21 +5985,12 @@
             mapper,
             occlusionLookup,
             options: occOptions,
-            breakdown: breakdownFrame ? breakdown : null,
           });
           if (Array.isArray(pts) && pts.length > 0) {
-            if (profile && !cached) { profile.counters.raymarchRebuilds += 1; profile.add("raymarchBuild", rechargedDarknessNowMs() - missStart); profile.add("cacheMissPath", rechargedDarknessNowMs() - missStart); }
-            if (breakdownFrame && !cached) { breakdown.counters.raymarchRebuilds += 1; bAdd("raymarchBuild", rechargedDarknessNowMs() - missStartBreakdown); }
-            if (breakdownFrame && cached) bAdd("playerCacheHitDraw", 0);
-            if (profile && cached) profile.add("cacheHitPath", 0);
             const punch = Math.max(0, Math.min(1, strength * RECHARGED_PLAYER_PUNCH_INTENSITY));
             const corePunch = Math.max(0, Math.min(1, punch * 0.10));
             const feather = Math.max(0, occOptions.featherPx | 0);
             const featherPasses = 10;
-            if (profile) { profile.counters.playerRays += Math.max(24, occOptions.rays | 0); profile.counters.featherPasses += featherPasses; }
-            if (breakdownFrame) { breakdown.counters.playerRays += Math.max(24, occOptions.rays | 0); breakdown.counters.playerFeatherPassCount += featherPasses; breakdown.counters.playerRadius = radius; }
-            const featherStart = (!cached && profile) ? rechargedDarknessNowMs() : 0;
-            const featherStartBreakdown = (!cached && breakdownFrame) ? rechargedDarknessNowMs() : 0;
             const featherPolys = cached?.featherPolys || buildRechargedFeatherPolysForPlayerLight({
               pts,
               lightX: light.x,
@@ -6235,12 +5999,8 @@
               passes: featherPasses,
             });
             if (!cached && state && typeof state === "object") {
-              if (profile) { profile.counters.featherRebuilds += 1; profile.add("featherBuild", rechargedDarknessNowMs() - featherStart); }
-              if (breakdownFrame) { breakdown.counters.featherRebuilds += 1; bAdd("featherBuild", rechargedDarknessNowMs() - featherStartBreakdown); bAdd("playerCacheMissRebuild", rechargedDarknessNowMs() - missStartBreakdown); }
               state.rechargedPlayerOcclusionGeometryCache = { key: cacheKey, pts, featherPolys };
             }
-            const playerCompStart = profile ? rechargedDarknessNowMs() : 0;
-            const mainCutoutStart = breakdownFrame ? rechargedDarknessNowMs() : 0;
             darknessCtx.save();
             darknessCtx.beginPath();
             darknessCtx.moveTo(pts[0][0], pts[0][1]);
@@ -6252,10 +6012,8 @@
             darknessCtx.shadowBlur = feather;
             darknessCtx.fillStyle = `rgba(0,0,0,${Math.max(0.05, Math.min(1, corePunch)).toFixed(3)})`;
             darknessCtx.fill();
-            bAdd("playerMainCutoutDraw", (breakdownFrame ? rechargedDarknessNowMs() : 0) - mainCutoutStart);
 
             if (feather > 0) {
-              const featherDrawStart = breakdownFrame ? rechargedDarknessNowMs() : 0;
               for (let passIndex = 0; passIndex < featherPolys.length; passIndex += 1) {
                 const pass = featherPolys[passIndex];
                 const poly = Array.isArray(pass?.poly) ? pass.poly : null;
@@ -6269,7 +6027,6 @@
                 darknessCtx.fillStyle = `rgba(0,0,0,${(pass.alpha * punch).toFixed(3)})`;
                 darknessCtx.fill();
               }
-              bAdd("playerFeatherDraw", (breakdownFrame ? rechargedDarknessNowMs() : 0) - featherDrawStart);
             }
             const penumbra = Number.isFinite(occOptions.penumbra) ? occOptions.penumbra : 1;
             if (penumbra > 1.01) {
@@ -6278,13 +6035,11 @@
               darknessCtx.fill();
             }
             darknessCtx.restore();
-            if (profile) profile.add("playerComposite", rechargedDarknessNowMs() - playerCompStart);
             continue;
           }
         }
 
         const gradient = darknessCtx.createRadialGradient(light.x, light.y, 0, light.x, light.y, radius);
-        const lightDrawStart = breakdownFrame ? rechargedDarknessNowMs() : 0;
         gradient.addColorStop(0, `rgba(0,0,0,${strength.toFixed(3)})`);
         gradient.addColorStop(0.55, `rgba(0,0,0,${(strength * 0.85).toFixed(3)})`);
         gradient.addColorStop(1, "rgba(0,0,0,0)");
@@ -6292,30 +6047,13 @@
         darknessCtx.beginPath();
         darknessCtx.arc(light.x, light.y, radius, 0, Math.PI * 2);
         darknessCtx.fill();
-        bAdd(light?.kind === "flare" ? "flareLightDraw" : "nonPlayerLightDraw", (breakdownFrame ? rechargedDarknessNowMs() : 0) - lightDrawStart);
-        if (breakdownFrame) breakdown.counters.nonPlayerLightCount += 1;
-        if (profile) profile.add("nonPlayerComposite", 0);
       }
 
-      const polishStart = profile ? rechargedDarknessNowMs() : 0;
       drawRechargedLivingDarknessPolish(darknessCtx, darknessCanvas, state, {
         frame: Number.isFinite(options?.frame) ? options.frame : null,
         nowMs: Number.isFinite(options?.nowMs) ? options.nowMs : undefined,
       });
-      if (profile) {
-        const polish = rechargedDarknessNowMs() - polishStart;
-        profile.add("noisePass", polish * 0.5);
-        profile.add("vignettePass", polish * 0.5);
-      }
-      if (breakdownFrame) {
-        const polish = rechargedDarknessNowMs() - polishStart;
-        bAdd("polishDrawTotal", polish);
-        bAdd("noiseDraw", polish * 0.5);
-        bAdd("vignetteDraw", polish * 0.5);
-      }
       ctx.globalCompositeOperation = "source-over";
-      const finalStart = profile ? rechargedDarknessNowMs() : 0;
-      const finalStartBreakdown = breakdownFrame ? rechargedDarknessNowMs() : 0;
       const prevSmoothing = "imageSmoothingEnabled" in ctx ? ctx.imageSmoothingEnabled : null;
       if ("imageSmoothingEnabled" in ctx) {
         ctx.imageSmoothingEnabled = true;
@@ -6324,89 +6062,7 @@
       if ("imageSmoothingEnabled" in ctx && prevSmoothing !== null) {
         ctx.imageSmoothingEnabled = prevSmoothing;
       }
-      bAdd("finalUpscaleDrawImage", (breakdownFrame ? rechargedDarknessNowMs() : 0) - finalStartBreakdown);
-      bAdd("stateRestore", 0);
-      if (profile) {
-        profile.add("finalComposite", rechargedDarknessNowMs() - finalStart);
-        profile.add("total", rechargedDarknessNowMs() - totalStart);
-      }
-      if (breakdownFrame) {
-        const totalDarkness = rechargedDarknessNowMs() - breakdownTotalStart;
-        bAdd("totalDarkness", totalDarkness);
-        breakdown.counters.canvasWidth = canvas.width;
-        breakdown.counters.canvasHeight = canvas.height;
-        breakdown.counters.dpr = (typeof window !== "undefined" && Number.isFinite(window.devicePixelRatio)) ? window.devicePixelRatio : 1;
-        breakdown.counters.darknessCanvasWidth = darknessCanvas.width;
-        breakdown.counters.darknessCanvasHeight = darknessCanvas.height;
-        breakdown.counters.darknessRenderScale = renderScale;
-        const bucketList = Object.keys(breakdownFrame).filter((name) => name !== "totalDarkness");
-        let frameBucketMax = { name: "none", value: 0 };
-        for (const name of bucketList) if (breakdownFrame[name] > frameBucketMax.value) frameBucketMax = { name, value: breakdownFrame[name] };
-        breakdown.endFrame({ frameTotalDarkness: totalDarkness, frameBucketMax });
-      }
       return true;
-    }
-
-    const RECHARGED_FRAME_PROFILE_ENABLED = (() => {
-      try {
-        const query = (typeof window !== "undefined" && window.location && typeof window.location.search === "string")
-          ? window.location.search
-          : "";
-        return new URLSearchParams(query).get("frameProfile") === "1";
-      } catch (_error) {
-        return false;
-      }
-    })();
-
-    function createRechargedFrameProfiler() {
-      const now = () => ((typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now());
-      return {
-        enabled: RECHARGED_FRAME_PROFILE_ENABLED === true,
-        finished: false,
-        targetFrames: 180,
-        frameCount: 0,
-        totals: {},
-        maxes: {},
-        counters: {
-          canvasWidth: 0, canvasHeight: 0, dpr: 1, tileCount: 0, supportTileCount: 0, decorCount: 0,
-          reactiveGrassCount: 0, reactiveBloomCount: 0, reactiveCrystalCount: 0, entityCount: 0,
-          activeLightCount: 0, particleEffectCount: 0, playerEnergy: 0, playerAuraRadius: 0,
-          darknessEnabled: false, darknessRenderScale: 0, darknessCanvasW: 0, darknessCanvasH: 0,
-        },
-        now,
-        add(bucket, ms) {
-          if (!bucket || !Number.isFinite(ms)) return;
-          this.totals[bucket] = (this.totals[bucket] || 0) + ms;
-          this.maxes[bucket] = Math.max(this.maxes[bucket] || 0, ms);
-        },
-        flushIfDone() {
-          if (this.finished || this.frameCount < this.targetFrames) return;
-          this.finished = true;
-          const fmt = (value) => Number.isFinite(value) ? value.toFixed(2) : "0.00";
-          const names = Object.keys(this.totals);
-          const avg = names.map((name) => ({ name, value: this.totals[name] / Math.max(1, this.frameCount) })).sort((a, b) => b.value - a.value);
-          const max = names.map((name) => ({ name, value: this.maxes[name] || 0 })).sort((a, b) => b.value - a.value);
-          const lines = [
-            "[LUMO_FRAME_PROFILE]",
-            `frames=${this.frameCount}`,
-            `canvas=${this.counters.canvasWidth}x${this.counters.canvasHeight} dpr=${this.counters.dpr}`,
-            `counters: tiles=${this.counters.tileCount} supportTiles=${this.counters.supportTileCount} decor=${this.counters.decorCount} reactiveGrass=${this.counters.reactiveGrassCount} reactiveBloom=${this.counters.reactiveBloomCount} reactiveCrystal=${this.counters.reactiveCrystalCount} entities=${this.counters.entityCount} lights=${this.counters.activeLightCount} particlesEffects=${this.counters.particleEffectCount}`,
-            `player: energy=${fmt(this.counters.playerEnergy)} auraRadius=${fmt(this.counters.playerAuraRadius)}`,
-            `darkness: enabled=${this.counters.darknessEnabled} renderScale=${fmt(this.counters.darknessRenderScale)} canvas=${this.counters.darknessCanvasW}x${this.counters.darknessCanvasH}`,
-            "avgMs:",
-          ];
-          for (const pair of avg) lines.push(`  ${pair.name}=${fmt(pair.value)}`);
-          lines.push("maxMs:");
-          for (const pair of max) lines.push(`  ${pair.name}=${fmt(pair.value)}`);
-          lines.push("topAvg:");
-          for (let index = 0; index < Math.min(5, avg.length); index += 1) lines.push(`  ${index + 1} ${avg[index].name}=${fmt(avg[index].value)}`);
-          lines.push("topMax:");
-          for (let index = 0; index < Math.min(5, max.length); index += 1) lines.push(`  ${index + 1} ${max[index].name}=${fmt(max[index].value)}`);
-          lines.push("finding:");
-          lines.push(`  hottest avg bucket appears to be ${avg[0] ? avg[0].name : "unknown"}`);
-          console.log(lines.join("\n"));
-        },
-      };
     }
 
     function renderRechargedCanvasFrame(canvas, state) {
@@ -6420,14 +6076,6 @@
           return false;
         }
 
-        if (RECHARGED_FRAME_PROFILE_ENABLED === true && state && typeof state === "object" && !state.rechargedFrameProfiler) {
-          state.rechargedFrameProfiler = createRechargedFrameProfiler();
-        }
-        const frameProfiler = state?.rechargedFrameProfiler;
-        const fpOn = frameProfiler?.enabled === true && frameProfiler.finished !== true;
-        const fpNow = () => frameProfiler.now();
-        const fpTotalStart = fpOn ? fpNow() : 0;
-        const fpBootStart = fpOn ? fpNow() : 0;
         const payload = readLatestRechargedBootPayload() || {};
         const statusText = typeof payload?.statusText === "string" ? payload.statusText : "";
         const livePlayer = resolveRechargedLivePlayerSnapshot(payload, state);
@@ -6466,7 +6114,6 @@
           ? lerp(previousSnapshot.y, currentSnapshot.y, alpha)
           : (Number.isFinite(player.y) ? player.y : null);
         const fogVisualState = ensureRechargedFogVisualState(state);
-        if (fpOn) frameProfiler.add("bootState", fpNow() - fpBootStart);
         const nowMs = (typeof performance !== "undefined" && typeof performance.now === "function")
           ? performance.now()
           : Date.now();
@@ -6522,11 +6169,7 @@
           targetX: Number.isFinite(playerCenterX) ? playerCenterX : worldWidthPx * 0.5,
           targetY: Number.isFinite(playerFootY) ? playerFootY : worldHeightPx - 1,
         });
-        if (RECHARGED_DARKNESS_PROFILE_ENABLED === true && !state.rechargedDarknessProfile) state.rechargedDarknessProfile = createRechargedDarknessProfiler();
-        if (RECHARGED_DARKNESS_BREAKDOWN_ENABLED === true && !state.rechargedDarknessBreakdownProfile) state.rechargedDarknessBreakdownProfile = createRechargedDarknessBreakdownProfiler();
-        const ensureLookupStart = state?.rechargedDarknessProfile ? rechargedDarknessNowMs() : 0;
         const occlusionLookup = ensureRechargedOcclusionLookup(state, { supportTiles, worldUnitsToPx, tileSize });
-        if (state?.rechargedDarknessProfile) state.rechargedDarknessProfile.add("ensureLookup", rechargedDarknessNowMs() - ensureLookupStart);
         const occlusionRects = Array.isArray(occlusionLookup?.rects) ? occlusionLookup.rects : [];
         stepRechargedFogVolumes(fogVolumes, {
           dt: fogStepDt,
@@ -6538,7 +6181,6 @@
           fogVisualState.lastStepAtMs = nowMs;
         }
 
-        const fpCanvasStart = fpOn ? fpNow() : 0;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -6547,9 +6189,7 @@
         ctx.rect(hudGameplayViewport.x, hudGameplayViewport.y, hudGameplayViewport.w, hudGameplayViewport.h);
         ctx.clip();
         ctx.translate(hudGameplayViewport.x, hudGameplayViewport.y);
-        if (fpOn) frameProfiler.add("canvasSetup", fpNow() - fpCanvasStart);
 
-        const fpBackgroundStart = fpOn ? fpNow() : 0;
         const backdropGradient = ctx.createLinearGradient(0, 0, 0, worldRenderCanvas.height);
         backdropGradient.addColorStop(0, "#0b1220");
         backdropGradient.addColorStop(1, "#111b31");
@@ -6559,7 +6199,6 @@
         const playfieldRect = mapper.worldToCanvasRect(0, 0, worldWidthPx, worldHeightPx);
         ctx.fillStyle = "rgba(15, 23, 42, 0.52)";
         ctx.fillRect(playfieldRect.x, playfieldRect.y, playfieldRect.w, playfieldRect.h);
-        if (fpOn) frameProfiler.add("background", fpNow() - fpBackgroundStart);
 
         // Recharged canvas lane order: backdrop -> bg tilemap -> support tiles -> liquids -> decor -> entities -> player -> HUD.
         const bg = payload?.bg;
@@ -6660,7 +6299,6 @@
           }
         }
 
-        const fpTilesStart = fpOn ? fpNow() : 0;
         // Draw support tiles with V1 tile assets/placement rules first.
         for (const supportTile of supportTiles) {
           const tileX = Number.isFinite(supportTile?.x) ? supportTile.x : null;
@@ -6692,7 +6330,6 @@
         }
 
         drawRechargedLiquidVolumes(ctx, mapper, liquidVolumes);
-        if (fpOn) frameProfiler.add("tilesAndLiquids", fpNow() - fpTilesStart);
         if (state && state.rechargedLiquidSummaryLogged !== true) {
           const byType = liquidVolumes.reduce((acc, liquid) => {
             const key = typeof liquid?.type === "string" ? liquid.type : "unknown";
@@ -6713,14 +6350,11 @@
           decorWorldLane.push(decor);
         }
 
-        const fpDecorStart = fpOn ? fpNow() : 0;
         // Decor stays above tiles and below gameplay actors to avoid blocking entities/player.
         for (const decor of decorWorldLane) {
           drawRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw);
         }
-        if (fpOn) frameProfiler.add("decor", fpNow() - fpDecorStart);
 
-        const fpEntitiesStart = fpOn ? fpNow() : 0;
         const liquidEntityTypes = new Set(["water_volume", "lava_volume", "bubbling_liquid_volume"]);
         const hoverEyesAfterDarkness = [];
         const movingPlatformDebugNow = [];
@@ -7133,7 +6767,6 @@
           playerOnPlatformId: typeof player?.onPlatformId === "string" ? player.onPlatformId : null,
           platforms: movingPlatformDebugNow,
         };
-        if (fpOn) frameProfiler.add("entities", fpNow() - fpEntitiesStart);
 
         // V1 layering parity: rear fog may be before Lumo when render.lumoBehindFog is false.
         drawRechargedFogOverDarkness(ctx, mapper, fogVolumes, {
@@ -7166,7 +6799,6 @@
           ctx.restore();
         }
 
-        const fpReactiveStart = fpOn ? fpNow() : 0;
         const rechargedDecorTime = (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now();
 
         renderReactiveGrass(
@@ -7231,14 +6863,11 @@
           rechargedDecorTime,
           { mapper, clusters: reactiveCrystalPatches, wakeSources: reactiveCrystalWakeSources, debug: true },
         );
-        if (fpOn) frameProfiler.add("reactiveDecor", fpNow() - fpReactiveStart);
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
-        const fpPlayerStart = fpOn ? fpNow() : 0;
         if (player.hidden !== true) {
           drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, currentSnapshot);
         }
-        if (fpOn) frameProfiler.add("player", fpNow() - fpPlayerStart);
 
         // V1 layering parity: rear fog for render.lumoBehindFog=true + front veil always after Lumo.
         drawRechargedFogOverDarkness(ctx, mapper, fogVolumes, {
@@ -7252,8 +6881,6 @@
           playerFacingSign: Number.isFinite(player?.vx) && player.vx < 0 ? -1 : 1,
         });
 
-        const fpDarknessStart = fpOn ? fpNow() : 0;
-        const buildLightsStart = state?.rechargedDarknessProfile ? rechargedDarknessNowMs() : 0;
         const darknessLights = buildRechargedDarknessLights({
           player,
           playerCenterX,
@@ -7268,7 +6895,6 @@
           worldHeightRaw,
           tileSize,
         });
-        if (state?.rechargedDarknessProfile) state.rechargedDarknessProfile.add("buildLights", rechargedDarknessNowMs() - buildLightsStart);
         drawRechargedDarkness(ctx, canvas, state, darknessLights, {
           mapper,
           occlusionLookup,
@@ -7293,20 +6919,6 @@
           source: livePlayer.source,
           frame: Number.isFinite(payload?.tick) ? payload.tick : null,
         };
-        if (state?.rechargedDarknessProfile) {
-          state.rechargedDarknessProfile.end({
-            lights: Array.isArray(darknessLights) ? darknessLights.length : 0,
-            occlusionRects: Array.isArray(occlusionRects) ? occlusionRects.length : 0,
-            gridCells: Number.isFinite(occlusionLookup?.gridCellCount) ? occlusionLookup.gridCellCount : 0,
-            playerRadius: Number.isFinite(playerRenderLightRadius) ? playerRenderLightRadius : 0,
-            playerRays: Math.max(24, RECHARGED_OCCLUSION_DEFAULTS.rays | 0),
-            featherPasses: 10,
-            darknessCanvas: { width: state?.rechargedDarknessState?.canvas?.width || 0, height: state?.rechargedDarknessState?.canvas?.height || 0 },
-            darknessRenderScale: state?.rechargedDarknessState?.renderScale || DARKNESS_RENDER_SCALE,
-            mainCanvas: { width: canvas.width, height: canvas.height },
-            devicePixelRatio: (typeof window !== "undefined" && Number.isFinite(window.devicePixelRatio)) ? window.devicePixelRatio : null,
-          });
-        }
         if (state.rechargedDarknessSummaryLogged !== true) {
           const kinds = {};
           for (const light of darknessLights) {
@@ -7332,7 +6944,6 @@
           });
           state.rechargedDarknessSummaryLogged = true;
         }
-        if (fpOn) frameProfiler.add("darkness", fpNow() - fpDarknessStart);
 
         // V1 parity: eyes are a dedicated post-darkness style pass (kept procedural and never sprite-based).
         for (const eyeDraw of hoverEyesAfterDarkness) {
@@ -7378,7 +6989,6 @@
           ctx.stroke();
         }
 
-        const fpEffectsStart = fpOn ? fpNow() : 0;
         const entityVisualState = ensureRechargedEntityVisualState(state);
         const flareSprite = entityVisualState?.flareThrown || entityVisualState?.flarePickup || null;
         let visibleFlares = 0;
@@ -7466,11 +7076,9 @@
           },
           frame: Number.isFinite(payload?.tick) ? payload.tick : null,
         };
-        if (fpOn) frameProfiler.add("effectsAndFlares", fpNow() - fpEffectsStart);
 
         ctx.restore();
 
-        const fpHudStart = fpOn ? fpNow() : 0;
         drawRechargedHudReplica(canvas, state);
 
         let overlayDrawn = false;
@@ -7501,30 +7109,6 @@
           ctx.shadowOffsetY = 2;
           ctx.fillText(statusText, centerX, centerY);
           ctx.restore();
-        }
-        if (fpOn) {
-          frameProfiler.add("hudAndOverlays", fpNow() - fpHudStart);
-          frameProfiler.add("total", fpNow() - fpTotalStart);
-          frameProfiler.frameCount += 1;
-          frameProfiler.counters.canvasWidth = canvas.width;
-          frameProfiler.counters.canvasHeight = canvas.height;
-          frameProfiler.counters.dpr = (typeof window !== "undefined" && Number.isFinite(window.devicePixelRatio)) ? window.devicePixelRatio : 1;
-          frameProfiler.counters.tileCount = Number.isFinite(worldWidthRaw) && Number.isFinite(worldHeightRaw) ? (worldWidthRaw * worldHeightRaw) : 0;
-          frameProfiler.counters.supportTileCount = supportTiles.length;
-          frameProfiler.counters.decorCount = decorWorldLane.length;
-          frameProfiler.counters.reactiveGrassCount = reactiveGrassPatches.length;
-          frameProfiler.counters.reactiveBloomCount = reactiveBloomPatches.length;
-          frameProfiler.counters.reactiveCrystalCount = reactiveCrystalPatches.length;
-          frameProfiler.counters.entityCount = entitySnapshots.length;
-          frameProfiler.counters.activeLightCount = Array.isArray(darknessLights) ? darknessLights.length : 0;
-          frameProfiler.counters.particleEffectCount = flareSnapshots.length + (pulseSnapshot?.active === true ? 1 : 0);
-          frameProfiler.counters.playerEnergy = playerEnergy;
-          frameProfiler.counters.playerAuraRadius = playerRenderLightRadius;
-          frameProfiler.counters.darknessEnabled = true;
-          frameProfiler.counters.darknessRenderScale = state?.rechargedDarknessState?.renderScale || DARKNESS_RENDER_SCALE;
-          frameProfiler.counters.darknessCanvasW = state?.rechargedDarknessState?.canvas?.width || 0;
-          frameProfiler.counters.darknessCanvasH = state?.rechargedDarknessState?.canvas?.height || 0;
-          frameProfiler.flushIfDone();
         }
 
         if (state && typeof state === "object") {
