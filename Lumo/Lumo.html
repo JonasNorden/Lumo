@@ -5641,9 +5641,21 @@
       }
       const opt = options && typeof options === "object" ? options : RECHARGED_OCCLUSION_DEFAULTS;
       const rays = Math.max(24, opt.rays | 0);
-      const step = Math.max(1, opt.stepPx | 0);
       const pts = new Array(rays);
       const TAU = Math.PI * 2;
+      const worldOrigin = mapper.canvasToWorldPoint(sx, sy);
+      const worldRadius = Number.isFinite(mapper.worldUnitsToPx) && mapper.worldUnitsToPx > 0
+        ? (radius / mapper.worldUnitsToPx)
+        : null;
+      const hasGridLookup = (
+        Number.isFinite(worldOrigin?.x)
+        && Number.isFinite(worldOrigin?.y)
+        && Number.isFinite(worldRadius)
+        && worldRadius > 0
+        && occlusionLookup?.grid instanceof Map
+        && Number.isFinite(occlusionLookup?.cellSize)
+        && occlusionLookup.cellSize > 0
+      );
 
       for (let i = 0; i < rays; i += 1) {
         const ang = (i / rays) * TAU;
@@ -5651,8 +5663,23 @@
         const dy = Math.sin(ang);
         const down = Math.max(0, dy);
         const rayRadius = radius * (1 - down * (1 - RECHARGED_PLAYER_DOWNLIGHT));
-        let hitDist = rayRadius;
+        if (hasGridLookup) {
+          const rayWorldRadius = rayRadius / mapper.worldUnitsToPx;
+          const hit = castRechargedOcclusionRayGridDDA({
+            ox: worldOrigin.x,
+            oy: worldOrigin.y,
+            dx,
+            dy,
+            maxDist: rayWorldRadius,
+            occlusionLookup,
+          });
+          const hitDist = Number.isFinite(hit?.dist) ? (hit.dist * mapper.worldUnitsToPx) : rayRadius;
+          pts[i] = [sx + dx * hitDist, sy + dy * hitDist];
+          continue;
+        }
 
+        const step = Math.max(1, opt.stepPx | 0);
+        let hitDist = rayRadius;
         for (let d = 0; d <= rayRadius; d += step) {
           const sampleX = sx + dx * d;
           const sampleY = sy + dy * d;
@@ -5666,6 +5693,98 @@
       }
 
       return pts;
+    }
+
+    function intersectRechargedRayAABB(ox, oy, dx, dy, maxDist, rect) {
+      const rx = Number.isFinite(rect?.x) ? rect.x : NaN;
+      const ry = Number.isFinite(rect?.y) ? rect.y : NaN;
+      const rw = Number.isFinite(rect?.w) ? rect.w : NaN;
+      const rh = Number.isFinite(rect?.h) ? rect.h : NaN;
+      if (!Number.isFinite(rx) || !Number.isFinite(ry) || !Number.isFinite(rw) || !Number.isFinite(rh) || rw <= 0 || rh <= 0) {
+        return null;
+      }
+      const minX = rx;
+      const minY = ry;
+      const maxX = rx + rw;
+      const maxY = ry + rh;
+      const EPS = 1e-9;
+      let tMin = 0;
+      let tMax = maxDist;
+
+      if (Math.abs(dx) < EPS) {
+        if (ox < minX || ox > maxX) return null;
+      } else {
+        const invDx = 1 / dx;
+        let tx1 = (minX - ox) * invDx;
+        let tx2 = (maxX - ox) * invDx;
+        if (tx1 > tx2) { const tmp = tx1; tx1 = tx2; tx2 = tmp; }
+        if (tx1 > tMin) tMin = tx1;
+        if (tx2 < tMax) tMax = tx2;
+        if (tMin > tMax) return null;
+      }
+
+      if (Math.abs(dy) < EPS) {
+        if (oy < minY || oy > maxY) return null;
+      } else {
+        const invDy = 1 / dy;
+        let ty1 = (minY - oy) * invDy;
+        let ty2 = (maxY - oy) * invDy;
+        if (ty1 > ty2) { const tmp = ty1; ty1 = ty2; ty2 = tmp; }
+        if (ty1 > tMin) tMin = ty1;
+        if (ty2 < tMax) tMax = ty2;
+        if (tMin > tMax) return null;
+      }
+
+      if (tMax < 0) return null;
+      if (tMin < 0) tMin = 0;
+      if (tMin > maxDist) return null;
+      return tMin;
+    }
+
+    function castRechargedOcclusionRayGridDDA({ ox, oy, dx, dy, maxDist, occlusionLookup }) {
+      const grid = occlusionLookup?.grid instanceof Map ? occlusionLookup.grid : null;
+      const rects = Array.isArray(occlusionLookup?.rects) ? occlusionLookup.rects : null;
+      const cellSize = Number.isFinite(occlusionLookup?.cellSize) && occlusionLookup.cellSize > 0 ? occlusionLookup.cellSize : 0;
+      if (!grid || !rects || cellSize <= 0 || !Number.isFinite(maxDist) || maxDist <= 0) {
+        return { dist: maxDist };
+      }
+      const EPS = 1e-9;
+      const invDx = Math.abs(dx) < EPS ? 0 : (1 / dx);
+      const invDy = Math.abs(dy) < EPS ? 0 : (1 / dy);
+      let cellX = Math.floor(ox / cellSize);
+      let cellY = Math.floor(oy / cellSize);
+      const stepX = dx > EPS ? 1 : (dx < -EPS ? -1 : 0);
+      const stepY = dy > EPS ? 1 : (dy < -EPS ? -1 : 0);
+      const nextCellBoundaryX = stepX > 0 ? ((cellX + 1) * cellSize) : (cellX * cellSize);
+      const nextCellBoundaryY = stepY > 0 ? ((cellY + 1) * cellSize) : (cellY * cellSize);
+      let tMaxX = stepX === 0 ? Number.POSITIVE_INFINITY : ((nextCellBoundaryX - ox) * invDx);
+      let tMaxY = stepY === 0 ? Number.POSITIVE_INFINITY : ((nextCellBoundaryY - oy) * invDy);
+      const tDeltaX = stepX === 0 ? Number.POSITIVE_INFINITY : Math.abs(cellSize * invDx);
+      const tDeltaY = stepY === 0 ? Number.POSITIVE_INFINITY : Math.abs(cellSize * invDy);
+      let travel = 0;
+      let nearestHit = maxDist;
+
+      while (travel <= maxDist) {
+        const indices = grid.get(`${cellX},${cellY}`);
+        if (Array.isArray(indices) && indices.length > 0) {
+          for (let i = 0; i < indices.length; i += 1) {
+            const hitT = intersectRechargedRayAABB(ox, oy, dx, dy, nearestHit, rects[indices[i]]);
+            if (hitT !== null && hitT < nearestHit) nearestHit = hitT;
+          }
+        }
+        const nextTravel = tMaxX < tMaxY ? tMaxX : tMaxY;
+        if (nextTravel >= nearestHit || nextTravel > maxDist) break;
+        if (tMaxX < tMaxY) {
+          cellX += stepX;
+          tMaxX += tDeltaX;
+          travel = nextTravel;
+        } else {
+          cellY += stepY;
+          tMaxY += tDeltaY;
+          travel = nextTravel;
+        }
+      }
+      return { dist: nearestHit };
     }
 
 
