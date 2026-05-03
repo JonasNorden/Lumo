@@ -21,6 +21,72 @@ const DEFAULT_PATCH = Object.freeze({
 
 const bladeCacheByPatch = new Map();
 
+const activeGrassGusts = [];
+let lastGrassGustTimeSec = null;
+
+function spawnOrganicGrassGust(patch, timeSec) {
+  const dir = seeded(patch.seed + timeSec * 3.17) < 0.5 ? -1 : 1;
+  const gustSeed = patch.seed + timeSec * 19.91 + activeGrassGusts.length * 7.13;
+
+  activeGrassGusts.push({
+    patchId: patch.id,
+    dir,
+    t: 0,
+    life: 2.2 + seeded(gustSeed + 1.1) * 1.8,
+    speed: 90 + seeded(gustSeed + 2.2) * 120,
+    width: 130 + seeded(gustSeed + 3.3) * 190,
+    strength: (0.45 + seeded(gustSeed + 4.4) * 0.75) * dir,
+    startX: dir > 0
+      ? patch.x - patch.width * 0.5 - 160 - seeded(gustSeed + 5.5) * 130
+      : patch.x + patch.width * 0.5 + 160 + seeded(gustSeed + 5.5) * 130,
+    wobble: seeded(gustSeed + 6.6) * Math.PI * 2,
+  });
+}
+
+function updateOrganicGrassGusts(patches, timeSec) {
+  const dt = lastGrassGustTimeSec == null ? 1 / 60 : clamp(timeSec - lastGrassGustTimeSec, 0, 0.07);
+  lastGrassGustTimeSec = timeSec;
+
+  const chance = 0.012 + 0.006 * Math.sin(timeSec * 0.17);
+
+  for (const patch of patches) {
+    if (seeded(patch.seed + Math.floor(timeSec * 60) * 0.37) < chance) {
+      spawnOrganicGrassGust(patch, timeSec);
+    }
+  }
+
+  for (const gust of activeGrassGusts) {
+    gust.t += dt;
+  }
+
+  for (let i = activeGrassGusts.length - 1; i >= 0; i -= 1) {
+    if (activeGrassGusts[i].t > activeGrassGusts[i].life) {
+      activeGrassGusts.splice(i, 1);
+    }
+  }
+}
+
+function organicGrassGustAt(patch, bx, bladeIndex, timeSec) {
+  let force = 0;
+
+  for (const gust of activeGrassGusts) {
+    if (gust.patchId !== patch.id) continue;
+
+    const waveX = gust.startX + gust.dir * gust.speed * gust.t;
+    const distance = Math.abs(bx - waveX);
+    const local = clamp01(1 - distance / gust.width);
+
+    if (local <= 0) continue;
+
+    const envelope = Math.sin(clamp01(gust.t / gust.life) * Math.PI);
+    const micro = 0.72 + 0.38 * Math.sin(timeSec * 1.1 + bladeIndex * 0.27 + gust.wobble);
+
+    force += gust.strength * local * local * envelope * micro;
+  }
+
+  return force;
+}
+
 function seeded(seed) {
   const value = Math.sin(seed * 12.9898) * 43758.5453;
   return value - Math.floor(value);
@@ -192,6 +258,8 @@ export function renderReactiveGrass(ctx, playerX, playerY, time, options = {}) {
   const normalizedPatches = (authoredPatches.length > 0 ? authoredPatches : [DEFAULT_PATCH])
     .map((patch, index) => normalizePatch(patch, index, options));
 
+  updateOrganicGrassGusts(normalizedPatches, timeSec);
+
   ctx.save();
   ctx.lineCap = "round";
 
@@ -212,25 +280,15 @@ export function renderReactiveGrass(ctx, playerX, playerY, time, options = {}) {
         const heightMix = clamp01((blade.heightMix * 0.78) + (blade.layer * 0.22));
         const height = lerp(minHeight, maxHeight, heightMix);
 
-        const travelA = (timeSec * (1.63 * blade.speed)) - (blade.u * 11.6) + blade.waveOffset;
-        const travelB = (timeSec * (2.28 * blade.waveScale)) + (blade.u * 16.1) + blade.phase * 0.47;
-        const travelC = (timeSec * 0.86) - (blade.u * 8.4) + blade.phase;
-        const waveA = Math.sin(travelA);
-        const waveB = Math.sin(travelB);
-        const waveC = Math.sin(travelC);
-        const waveEnvelope = 0.7 + (Math.sin((timeSec * 0.37) + blade.phase * 0.35) * 0.24);
+        const idleSpeed = 0.68 * lerp(0.72, 1.34, seeded(index * 4.1 + patch.seed));
+        const idleScale = lerp(0.55, 1.35, seeded(index * 1.91 + patch.seed));
+        const idleA = Math.sin(timeSec * idleSpeed + blade.phase) * patch.windAmp * 0.34 * idleScale;
+        const idleB = Math.sin(timeSec * idleSpeed * 0.47 + blade.waveOffset + blade.u * 5.2) * patch.windAmp * 0.16;
+        const idleC = Math.sin(timeSec * idleSpeed * 1.31 + blade.phase * 0.42 + blade.u * 9.7) * patch.windAmp * 0.08;
 
-        const gustSignalA = Math.sin((timeSec * 0.079) + 0.91);
-        const gustSignalB = Math.sin((timeSec * 0.121) + 1.73);
-        const gustSignalC = Math.sin((timeSec * 0.051) + blade.phase * 0.45 + 0.27);
-        const gustSignal = (gustSignalA * 0.44) + (gustSignalB * 0.37) + (gustSignalC * 0.19);
-        const gustRaw = smoothstep(0.46, 0.92, gustSignal);
-        const gustEnvelope = gustRaw * (1 - smoothstep(0.84, 1.0, gustRaw));
-        const gustTravel = Math.sin((timeSec * 3.22) - (blade.u * 22.7) + blade.waveOffset + blade.phase * 0.58);
-        const gustBend = gustTravel * patch.windAmp * 0.95 * blade.swayScale * blade.waveScale * gustEnvelope;
+        const gustBend = organicGrassGustAt(patch, bx, index, timeSec) * 24;
 
-        const windBend = ((waveA * 0.54 + waveB * 0.31 + waveC * 0.15) * patch.windAmp * blade.swayScale * waveEnvelope) + gustBend;
-
+        const windBend = idleA + idleB + idleC + gustBend;
         const reaction = resolveReaction(patch, bx, by, playerX, playerY);
         const midBend = reaction.bend * 18;
         const nearStraighten = reaction.avoid * 0.82;

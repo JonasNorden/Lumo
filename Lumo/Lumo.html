@@ -4419,6 +4419,7 @@
       rechargedReactiveGrassLevelCache.levelPath = normalizedPath;
       rechargedReactiveGrassLevelCache.loading = true;
       rechargedReactiveGrassLevelCache.loaded = false;
+      rechargedReactiveGrassLevelCache.patches = [];
 
       fetch(normalizedPath, {
         method: "GET",
@@ -4437,6 +4438,7 @@
           rechargedReactiveGrassLevelCache.loaded = true;
         })
         .catch((_error) => {
+          rechargedReactiveGrassLevelCache.patches = [];
           rechargedReactiveGrassLevelCache.loaded = true;
         })
         .finally(() => {
@@ -4511,6 +4513,7 @@
       rechargedReactiveBloomLevelCache.levelPath = normalizedPath;
       rechargedReactiveBloomLevelCache.loading = true;
       rechargedReactiveBloomLevelCache.loaded = false;
+      rechargedReactiveBloomLevelCache.patches = [];
       fetch(normalizedPath, {
         method: "GET",
         headers: { Accept: "application/json, text/plain;q=0.8, */*;q=0.1" },
@@ -4524,6 +4527,7 @@
           rechargedReactiveBloomLevelCache.loaded = true;
         })
         .catch((_error) => {
+          rechargedReactiveBloomLevelCache.patches = [];
           rechargedReactiveBloomLevelCache.loaded = true;
         })
         .finally(() => {
@@ -4546,15 +4550,8 @@
 
     function normalizeReactiveCrystalPatch(patch, index) {
       if (!patch || typeof patch !== "object") return null;
-      const rawKind = typeof patch.kind === "string" ? patch.kind.trim() : "";
-      const normalizedKind = rawKind
-        ? rawKind.replace(/[_\-\s]+/g, "").toLowerCase()
-        : "";
-      const acceptedKind = normalizedKind === ""
-        || normalizedKind === "reactivecrystal"
-        || normalizedKind === "crystal"
-        || normalizedKind === "reactivecrystalpatch";
-      if (!acceptedKind) return null;
+      const kind = typeof patch.kind === "string" ? patch.kind.trim().toLowerCase() : "";
+      if (kind && kind !== "reactive_crystal") return null;
       const x = Number.isFinite(patch.x) ? patch.x : null;
       const y = Number.isFinite(patch.y) ? patch.y : null;
       if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
@@ -4603,6 +4600,7 @@
       rechargedReactiveCrystalLevelCache.levelPath = normalizedPath;
       rechargedReactiveCrystalLevelCache.loading = true;
       rechargedReactiveCrystalLevelCache.loaded = false;
+      rechargedReactiveCrystalLevelCache.patches = [];
       fetch(normalizedPath, {
         method: "GET",
         headers: { Accept: "application/json, text/plain;q=0.8, */*;q=0.1" },
@@ -4612,13 +4610,11 @@
           return response.json();
         })
         .then((levelDocument) => {
-          const authoredCount = Array.isArray(levelDocument?.reactiveCrystalPatches)
-            ? levelDocument.reactiveCrystalPatches.length
-            : 0;
           rechargedReactiveCrystalLevelCache.patches = extractReactiveCrystalPatchesFromLevelDocument(levelDocument);
           rechargedReactiveCrystalLevelCache.loaded = true;
         })
         .catch((_error) => {
+          rechargedReactiveCrystalLevelCache.patches = [];
           rechargedReactiveCrystalLevelCache.loaded = true;
         })
         .finally(() => {
@@ -4634,10 +4630,9 @@
       if (levelPath && rechargedReactiveCrystalLevelCache.levelPath !== levelPath) {
         beginReactiveCrystalLevelLoad(levelPath);
       }
-      const normalizedPatches = Array.isArray(rechargedReactiveCrystalLevelCache.patches)
+      return Array.isArray(rechargedReactiveCrystalLevelCache.patches)
         ? rechargedReactiveCrystalLevelCache.patches
         : [];
-      return normalizedPatches;
     }
 
     function readRechargedDecorSnapshots(payload) {
@@ -5857,18 +5852,6 @@
         }
 
         const payload = readLatestRechargedBootPayload() || {};
-        const perfNow = (typeof performance !== "undefined" && typeof performance.now === "function")
-          ? () => performance.now()
-          : () => Date.now();
-        const isPFH = typeof payload?.levelPath === "string" && payload.levelPath.startsWith("blob:");
-        const perfFrameStartMs = perfNow();
-        const perfTimings = {
-          grassMs: 0,
-          bloomMs: 0,
-          crystalMs: 0,
-          darkMs: 0,
-          hudMs: 0,
-        };
         const statusText = typeof payload?.statusText === "string" ? payload.statusText : "";
         const livePlayer = resolveRechargedLivePlayerSnapshot(payload, state);
         const player = readRechargedPlayerSnapshot(payload);
@@ -5931,18 +5914,10 @@
         const tileSize = Number.isFinite(payload?.tileSize) && payload.tileSize > 0 ? payload.tileSize : 24;
         const worldWidthRaw = Number.isFinite(payload?.worldWidth)
           ? payload.worldWidth
-          : (Number.isFinite(payload?.cols)
-              ? payload.cols
-              : (Number.isFinite(payload?.dimensions?.width)
-                  ? payload.dimensions.width
-                  : Math.max(1, Math.round(canvas.width / tileSize))));
+          : (Number.isFinite(payload?.cols) ? payload.cols : Math.max(1, Math.round(canvas.width / tileSize)));
         const worldHeightRaw = Number.isFinite(payload?.worldHeight)
           ? payload.worldHeight
-          : (Number.isFinite(payload?.rows)
-              ? payload.rows
-              : (Number.isFinite(payload?.dimensions?.height)
-                  ? payload.dimensions.height
-                  : Math.max(1, Math.round(canvas.height / tileSize))));
+          : (Number.isFinite(payload?.rows) ? payload.rows : Math.max(1, Math.round(canvas.height / tileSize)));
         const supportTiles = Array.isArray(payload?.supportTiles) ? payload.supportTiles : [];
         const maxSupportTileSpan = supportTiles.reduce((maxSpan, tile) => {
           const spanW = Number.isFinite(tile?.w) ? tile.w : 0;
@@ -5954,11 +5929,7 @@
           (Number.isFinite(player.y) && player.y > worldHeightRaw + tileSize) ||
           (maxSupportTileSpan > 0 && maxSupportTileSpan <= 4)
         );
-        const payloadLooksEditorV2TileDimensions = (
-          Number.isFinite(payload?.dimensions?.width)
-          && Number.isFinite(payload?.dimensions?.height)
-        );
-        const worldUnitsToPx = (coordinatesLookTileBased || payloadLooksEditorV2TileDimensions) ? tileSize : 1;
+        const worldUnitsToPx = coordinatesLookTileBased ? tileSize : 1;
         const worldWidthPx = Math.max(tileSize, Math.round(worldWidthRaw * worldUnitsToPx));
         const worldHeightPx = Math.max(tileSize, Math.round(worldHeightRaw * worldUnitsToPx));
         const hudGameplayViewport = getRechargedHudV2GameplayViewport(canvas);
@@ -6605,7 +6576,6 @@
 
         const rechargedDecorTime = (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now();
 
-        const perfGrassStartMs = perfNow();
         renderReactiveGrass(
           ctx,
           playerCenterX,
@@ -6616,9 +6586,7 @@
             patches: reactiveGrassPatches,
           },
         );
-        perfTimings.grassMs = perfNow() - perfGrassStartMs;
 
-        const perfBloomStartMs = perfNow();
         renderReactiveBloomPlants(
           ctx,
           playerCenterX,
@@ -6626,7 +6594,6 @@
           rechargedDecorTime,
           { mapper, patches: reactiveBloomPatches },
         );
-        perfTimings.bloomMs = perfNow() - perfBloomStartMs;
 
         const reactiveCrystalWakeSources = [];
         if (Array.isArray(entitySnapshots)) {
@@ -6663,9 +6630,7 @@
             }
           }
         }
-        }
 
-        const perfCrystalStartMs = perfNow();
         renderReactiveCrystals(
           ctx,
           playerCenterX,
@@ -6673,7 +6638,6 @@
           rechargedDecorTime,
           { mapper, clusters: reactiveCrystalPatches, wakeSources: reactiveCrystalWakeSources, debug: true },
         );
-        perfTimings.crystalMs = perfNow() - perfCrystalStartMs;
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
         if (player.hidden !== true) {
@@ -6706,7 +6670,6 @@
           worldHeightRaw,
           tileSize,
         });
-        const perfDarkStartMs = perfNow();
         drawRechargedDarkness(ctx, canvas, state, darknessLights, {
           mapper,
           occlusionLookup,
@@ -6714,7 +6677,6 @@
           frame: Number.isFinite(payload?.tick) ? payload.tick : null,
           nowMs,
         });
-        perfTimings.darkMs = perfNow() - perfDarkStartMs;
         const playerLight = darknessLights.find((light) => light?.kind === "player");
         const playerEnergy = Number.isFinite(playerLight?.energy)
           ? playerLight.energy
@@ -6892,9 +6854,7 @@
 
         ctx.restore();
 
-        const perfHudStartMs = perfNow();
         drawRechargedHudReplica(canvas, state);
-        perfTimings.hudMs = perfNow() - perfHudStartMs;
 
         let overlayDrawn = false;
         try {
@@ -6907,89 +6867,6 @@
           }
         } catch (_error) {
           overlayDrawn = false;
-        }
-
-        const perfFrameEndMs = perfNow();
-        const perfFrameMs = Math.max(0, perfFrameEndMs - perfFrameStartMs);
-        const perfFps = perfFrameMs > 0 ? (1000 / perfFrameMs) : 0;
-        const perfSections = [
-          { label: "Grass", ms: perfTimings.grassMs },
-          { label: "Bloom", ms: perfTimings.bloomMs },
-          { label: "Crystal", ms: perfTimings.crystalMs },
-          { label: "Dark", ms: perfTimings.darkMs },
-          { label: "HUD", ms: perfTimings.hudMs },
-        ];
-        const perfTopSection = perfSections.reduce((best, section) => {
-          if (!best || section.ms > best.ms) return section;
-          return best;
-        }, null);
-        const perfLoadRatio = Math.max(0, Math.min(1, perfFrameMs / (1000 / 60)));
-        const perfLoadSegments = 20;
-        const perfLoadFilled = Math.max(0, Math.min(perfLoadSegments, Math.round(perfLoadRatio * perfLoadSegments)));
-        const perfLoadBar = `${"#".repeat(perfLoadFilled)}${"-".repeat(perfLoadSegments - perfLoadFilled)}`;
-        const perfLoadGrade = perfFrameMs <= 16.7
-          ? "GOOD"
-          : (perfFrameMs <= 22
-              ? "OK"
-              : (perfFrameMs <= 33
-                  ? "BAD"
-                  : (perfFrameMs <= 50 ? "VERY BAD" : "PANIC")));
-        const perfGrassDensityTotal = Array.isArray(reactiveGrassPatches)
-          ? reactiveGrassPatches.reduce((sum, patch) => sum + (Number.isFinite(patch?.density) ? patch.density : 0), 0)
-          : 0;
-
-        if (!isPFH) {
-          window.__LUMO_PFH_PERF__ = null;
-        }
-
-        if (isPFH) {
-          window.__LUMO_PFH_PERF__ = {
-            fps: perfFps,
-            frameMs: perfFrameMs,
-            loadBar: perfLoadBar,
-            loadGrade: perfLoadGrade,
-            top: perfTopSection ? { label: perfTopSection.label, ms: perfTopSection.ms } : null,
-            grassMs: perfTimings.grassMs,
-            grassPatchCount: reactiveGrassPatches.length,
-            grassDensityTotal: perfGrassDensityTotal,
-            bloomMs: perfTimings.bloomMs,
-            crystalMs: perfTimings.crystalMs,
-            darkMs: perfTimings.darkMs,
-            hudMs: perfTimings.hudMs,
-            frame: Number.isFinite(payload?.tick) ? payload.tick : null,
-          };
-          const perfLines = [
-            "PFH PERF v3",
-            `FPS: ${perfFps.toFixed(1)}`,
-            `Frame ms: ${perfFrameMs.toFixed(2)}`,
-            `LOAD: ${perfLoadBar} ${perfLoadGrade}`,
-            `TOP: ${perfTopSection ? `${perfTopSection.label} ${perfTopSection.ms.toFixed(2)} ms` : "n/a"}`,
-            `Grass: ${perfTimings.grassMs.toFixed(2)} ms p${reactiveGrassPatches.length} d${perfGrassDensityTotal.toFixed(1)}`,
-            `Bloom: ${perfTimings.bloomMs.toFixed(2)} ms`,
-            `Crystal: ${perfTimings.crystalMs.toFixed(2)} ms`,
-            `Dark: ${perfTimings.darkMs.toFixed(2)} ms`,
-            `HUD: ${perfTimings.hudMs.toFixed(2)} ms`,
-          ];
-          const panelX = 12;
-          const panelY = 12;
-          const lineHeight = 16;
-          const panelWidth = 330;
-          const panelHeight = 10 + (perfLines.length * lineHeight) + 8;
-          ctx.save();
-          ctx.fillStyle = "rgba(0,0,0,0.68)";
-          ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
-          ctx.strokeStyle = "rgba(255,255,255,0.35)";
-          ctx.lineWidth = 1;
-          ctx.strokeRect(panelX + 0.5, panelY + 0.5, panelWidth - 1, panelHeight - 1);
-          ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-          ctx.textAlign = "left";
-          ctx.textBaseline = "top";
-          for (let i = 0; i < perfLines.length; i += 1) {
-            const line = perfLines[i];
-            ctx.fillStyle = i === 0 ? "#fef08a" : "#e5e7eb";
-            ctx.fillText(line, panelX + 10, panelY + 8 + (i * lineHeight));
-          }
-          ctx.restore();
         }
 
         if (overlayDrawn !== true && statusText.length > 0) {
