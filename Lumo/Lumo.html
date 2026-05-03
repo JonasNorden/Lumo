@@ -4496,7 +4496,6 @@
       rechargedReactiveGrassLevelCache.levelPath = normalizedPath;
       rechargedReactiveGrassLevelCache.loading = true;
       rechargedReactiveGrassLevelCache.loaded = false;
-      rechargedReactiveGrassLevelCache.patches = [];
 
       fetch(normalizedPath, {
         method: "GET",
@@ -4520,7 +4519,6 @@
           rechargedReactiveGrassLevelCache.loaded = true;
         })
         .catch((_error) => {
-          rechargedReactiveGrassLevelCache.patches = [];
           rechargedReactiveGrassLevelCache.loaded = true;
         })
         .finally(() => {
@@ -4595,7 +4593,6 @@
       rechargedReactiveBloomLevelCache.levelPath = normalizedPath;
       rechargedReactiveBloomLevelCache.loading = true;
       rechargedReactiveBloomLevelCache.loaded = false;
-      rechargedReactiveBloomLevelCache.patches = [];
       fetch(normalizedPath, {
         method: "GET",
         headers: { Accept: "application/json, text/plain;q=0.8, */*;q=0.1" },
@@ -4609,7 +4606,6 @@
           rechargedReactiveBloomLevelCache.loaded = true;
         })
         .catch((_error) => {
-          rechargedReactiveBloomLevelCache.patches = [];
           rechargedReactiveBloomLevelCache.loaded = true;
         })
         .finally(() => {
@@ -4697,7 +4693,6 @@
       rechargedReactiveCrystalLevelCache.levelPath = normalizedPath;
       rechargedReactiveCrystalLevelCache.loading = true;
       rechargedReactiveCrystalLevelCache.loaded = false;
-      rechargedReactiveCrystalLevelCache.patches = [];
       logLumoCrystalTrace("beginFetchKey", "beginReactiveCrystalLevelLoad", `fetchStart levelPath=${normalizedPath}`);
       fetch(normalizedPath, {
         method: "GET",
@@ -4733,7 +4728,6 @@
             `fetchFailed levelPath=${normalizedPath}`,
             `error=${_error?.message || String(_error)}`,
           );
-          rechargedReactiveCrystalLevelCache.patches = [];
           rechargedReactiveCrystalLevelCache.loaded = true;
         })
         .finally(() => {
