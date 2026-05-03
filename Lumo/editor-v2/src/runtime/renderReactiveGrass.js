@@ -189,13 +189,8 @@ export function renderReactiveGrass(ctx, playerX, playerY, time, options = {}) {
   const authoredPatches = Array.isArray(options?.patches)
     ? options.patches.filter((patch) => patch && typeof patch === "object")
     : [];
-  if (!Array.isArray(options?.patches)) {
-    return;
-  }
-  if (authoredPatches.length === 0) {
-    return;
-  }
-  const normalizedPatches = authoredPatches.map((patch, index) => normalizePatch(patch, index, options));
+  const normalizedPatches = (authoredPatches.length > 0 ? authoredPatches : [DEFAULT_PATCH])
+    .map((patch, index) => normalizePatch(patch, index, options));
 
   ctx.save();
   ctx.lineCap = "round";

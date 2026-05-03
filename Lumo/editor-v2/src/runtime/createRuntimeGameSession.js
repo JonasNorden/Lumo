@@ -383,23 +383,14 @@ function buildWorldSnapshot(worldState) {
       }))
       .filter((audio) => audio.x !== null && audio.y !== null)
     : [];
-  const reactiveGrassPatchesSource = Array.isArray(worldState?.reactiveGrassPatches)
-    ? worldState.reactiveGrassPatches
-    : worldState?.layers?.reactiveGrassPatches;
-  const reactiveBloomPatchesSource = Array.isArray(worldState?.reactiveBloomPatches)
-    ? worldState.reactiveBloomPatches
-    : worldState?.layers?.reactiveBloomPatches;
-  const reactiveCrystalPatchesSource = Array.isArray(worldState?.reactiveCrystalPatches)
-    ? worldState.reactiveCrystalPatches
-    : worldState?.layers?.reactiveCrystalPatches;
-  const reactiveGrassPatches = Array.isArray(reactiveGrassPatchesSource)
-    ? reactiveGrassPatchesSource.map((patch) => (patch && typeof patch === "object" ? { ...patch } : patch))
+  const reactiveGrassPatches = Array.isArray(worldState?.layers?.reactiveGrassPatches)
+    ? worldState.layers.reactiveGrassPatches.map((patch) => (patch && typeof patch === "object" ? { ...patch } : patch))
     : [];
-  const reactiveBloomPatches = Array.isArray(reactiveBloomPatchesSource)
-    ? reactiveBloomPatchesSource.map((patch) => (patch && typeof patch === "object" ? { ...patch } : patch))
+  const reactiveBloomPatches = Array.isArray(worldState?.layers?.reactiveBloomPatches)
+    ? worldState.layers.reactiveBloomPatches.map((patch) => (patch && typeof patch === "object" ? { ...patch } : patch))
     : [];
-  const reactiveCrystalPatches = Array.isArray(reactiveCrystalPatchesSource)
-    ? reactiveCrystalPatchesSource.map((patch) => (patch && typeof patch === "object" ? { ...patch } : patch))
+  const reactiveCrystalPatches = Array.isArray(worldState?.layers?.reactiveCrystalPatches)
+    ? worldState.layers.reactiveCrystalPatches.map((patch) => (patch && typeof patch === "object" ? { ...patch } : patch))
     : [];
 
   return {
