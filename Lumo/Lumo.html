@@ -5401,7 +5401,7 @@
       for (const bucket of buckets) { totals[bucket] = 0; maxes[bucket] = 0; counts[bucket] = 0; }
       return {
         enabled: true, finished: false, targetFrames: 180, frames: 0,
-        counters: { canvasWidth: 0, canvasHeight: 0, dpr: 1, darknessCanvasWidth: 0, darknessCanvasHeight: 0, darknessRenderScale: 0, playerRadius: 0, playerRays: 0, playerFeatherPassCount: 0, playerCacheHits: 0, playerCacheMisses: 0, raymarchRebuilds: 0, featherRebuilds: 0, nonPlayerLightCount: 0, canvasResizeHappened: false, canvasResizeEvents: 0, maxTotalDarkness: 0, hottestWorstBucket: "none", hottestWorstBucketMs: 0 },
+        counters: { canvasWidth: 0, canvasHeight: 0, dpr: 1, darknessCanvasWidth: 0, darknessCanvasHeight: 0, darknessRenderScale: 0, playerRadius: 0, playerRays: 0, playerFeatherPassCount: 0, playerCacheHits: 0, playerCacheMisses: 0, raymarchRebuilds: 0, featherRebuilds: 0, nonPlayerLightCount: 0, playerFastDdaRebuilds: 0, playerSteppedFallbackRebuilds: 0, ddaVisitedCells: 0, ddaRectTests: 0, ddaDuplicateRectSkips: 0, ddaNearestHits: 0, maxDdaVisitedCellsPerRay: 0, maxDdaRectTestsPerRay: 0, canvasResizeHappened: false, canvasResizeEvents: 0, maxTotalDarkness: 0, hottestWorstBucket: "none", hottestWorstBucketMs: 0 },
         add(name, ms) { if (!this.finished && totals[name] !== undefined && Number.isFinite(ms)) { totals[name] += ms; counts[name] += 1; if (ms > maxes[name]) maxes[name] = ms; } },
         endFrame(meta = {}) {
           if (this.finished) return;
@@ -5425,6 +5425,9 @@
             `  playerRadius=${fmt(this.counters.playerRadius)} playerRays=${this.counters.playerRays} playerFeatherPassCount=${this.counters.playerFeatherPassCount}`,
             `  playerCacheHits=${this.counters.playerCacheHits} playerCacheMisses=${this.counters.playerCacheMisses}`,
             `  raymarchRebuilds=${this.counters.raymarchRebuilds} featherRebuilds=${this.counters.featherRebuilds} nonPlayerLightCount=${this.counters.nonPlayerLightCount}`,
+            `  playerFastDdaRebuilds=${this.counters.playerFastDdaRebuilds} playerSteppedFallbackRebuilds=${this.counters.playerSteppedFallbackRebuilds}`,
+            `  ddaVisitedCells=${this.counters.ddaVisitedCells} ddaRectTests=${this.counters.ddaRectTests} ddaDuplicateRectSkips=${this.counters.ddaDuplicateRectSkips} ddaNearestHits=${this.counters.ddaNearestHits}`,
+            `  maxDdaVisitedCellsPerRay=${this.counters.maxDdaVisitedCellsPerRay} maxDdaRectTestsPerRay=${this.counters.maxDdaRectTestsPerRay}`,
             `  canvasResizeHappened=${this.counters.canvasResizeHappened} canvasResizeEvents=${this.counters.canvasResizeEvents}`,
             "avgMs:",
           ];
@@ -5626,7 +5629,16 @@
       return false;
     }
 
-    function buildRechargedPlayerLightOcclusionPolyScreen({ sx, sy, radius, mapper, occlusionLookup, options }) {
+    let rechargedOcclusionFallbackWarned = false;
+    function isValidRechargedOcclusionGridLookup(lookup) {
+      if (!lookup || typeof lookup !== "object") return false;
+      if (!Array.isArray(lookup.rects) || lookup.rects.length <= 0) return false;
+      if (!(lookup.grid instanceof Map) || lookup.grid.size <= 0) return false;
+      if (!Number.isFinite(lookup.cellSize) || lookup.cellSize <= 0) return false;
+      return true;
+    }
+
+    function buildRechargedPlayerLightOcclusionPolyScreen({ sx, sy, radius, mapper, occlusionLookup, options, breakdown }) {
       if (!Number.isFinite(sx) || !Number.isFinite(sy) || !Number.isFinite(radius) || radius <= 0) {
         return null;
       }
@@ -5652,10 +5664,17 @@
         && Number.isFinite(worldOrigin?.y)
         && Number.isFinite(worldRadius)
         && worldRadius > 0
-        && occlusionLookup?.grid instanceof Map
-        && Number.isFinite(occlusionLookup?.cellSize)
-        && occlusionLookup.cellSize > 0
+        && isValidRechargedOcclusionGridLookup(occlusionLookup)
       );
+      if (breakdown && !hasGridLookup) {
+        breakdown.counters.playerSteppedFallbackRebuilds += 1;
+        if (!rechargedOcclusionFallbackWarned && RECHARGED_DARKNESS_BREAKDOWN_ENABLED === true) {
+          rechargedOcclusionFallbackWarned = true;
+          console.warn("[LUMO_DARKNESS_BREAKDOWN] player occlusion stepped fallback used due to invalid occlusion lookup");
+        }
+      } else if (breakdown && hasGridLookup) {
+        breakdown.counters.playerFastDdaRebuilds += 1;
+      }
 
       for (let i = 0; i < rays; i += 1) {
         const ang = (i / rays) * TAU;
@@ -5672,6 +5691,7 @@
             dy,
             maxDist: rayWorldRadius,
             occlusionLookup,
+            breakdownCounters: breakdown ? breakdown.counters : null,
           });
           const hitDist = Number.isFinite(hit?.dist) ? (hit.dist * mapper.worldUnitsToPx) : rayRadius;
           pts[i] = [sx + dx * hitDist, sy + dy * hitDist];
@@ -5741,7 +5761,7 @@
       return tMin;
     }
 
-    function castRechargedOcclusionRayGridDDA({ ox, oy, dx, dy, maxDist, occlusionLookup }) {
+    function castRechargedOcclusionRayGridDDA({ ox, oy, dx, dy, maxDist, occlusionLookup, breakdownCounters }) {
       const grid = occlusionLookup?.grid instanceof Map ? occlusionLookup.grid : null;
       const rects = Array.isArray(occlusionLookup?.rects) ? occlusionLookup.rects : null;
       const cellSize = Number.isFinite(occlusionLookup?.cellSize) && occlusionLookup.cellSize > 0 ? occlusionLookup.cellSize : 0;
@@ -5763,12 +5783,33 @@
       const tDeltaY = stepY === 0 ? Number.POSITIVE_INFINITY : Math.abs(cellSize * invDy);
       let travel = 0;
       let nearestHit = maxDist;
+      let visitedCells = 0;
+      let rectTests = 0;
+      const rectCount = rects.length;
+      const dedupeStamp = castRechargedOcclusionRayGridDDA.__dedupeStamp || (castRechargedOcclusionRayGridDDA.__dedupeStamp = new Uint32Array(rectCount));
+      if (dedupeStamp.length < rectCount) {
+        castRechargedOcclusionRayGridDDA.__dedupeStamp = new Uint32Array(rectCount);
+      }
+      const activeStamp = castRechargedOcclusionRayGridDDA.__dedupeStamp;
+      const nextRayId = ((castRechargedOcclusionRayGridDDA.__rayId || 0) + 1) >>> 0;
+      castRechargedOcclusionRayGridDDA.__rayId = nextRayId === 0 ? 1 : nextRayId;
+      const rayId = castRechargedOcclusionRayGridDDA.__rayId;
+      if (rayId === 1) activeStamp.fill(0);
 
       while (travel <= maxDist) {
+        visitedCells += 1;
         const indices = grid.get(`${cellX},${cellY}`);
         if (Array.isArray(indices) && indices.length > 0) {
           for (let i = 0; i < indices.length; i += 1) {
-            const hitT = intersectRechargedRayAABB(ox, oy, dx, dy, nearestHit, rects[indices[i]]);
+            const rectIndex = indices[i];
+            if (!Number.isInteger(rectIndex) || rectIndex < 0 || rectIndex >= rectCount) continue;
+            if (activeStamp[rectIndex] === rayId) {
+              if (breakdownCounters) breakdownCounters.ddaDuplicateRectSkips += 1;
+              continue;
+            }
+            activeStamp[rectIndex] = rayId;
+            rectTests += 1;
+            const hitT = intersectRechargedRayAABB(ox, oy, dx, dy, nearestHit, rects[rectIndex]);
             if (hitT !== null && hitT < nearestHit) nearestHit = hitT;
           }
         }
@@ -5783,6 +5824,13 @@
           tMaxY += tDeltaY;
           travel = nextTravel;
         }
+      }
+      if (breakdownCounters) {
+        breakdownCounters.ddaVisitedCells += visitedCells;
+        breakdownCounters.ddaRectTests += rectTests;
+        if (nearestHit < maxDist) breakdownCounters.ddaNearestHits += 1;
+        if (visitedCells > breakdownCounters.maxDdaVisitedCellsPerRay) breakdownCounters.maxDdaVisitedCellsPerRay = visitedCells;
+        if (rectTests > breakdownCounters.maxDdaRectTestsPerRay) breakdownCounters.maxDdaRectTestsPerRay = rectTests;
       }
       return { dist: nearestHit };
     }
@@ -6108,6 +6156,7 @@
             mapper,
             occlusionLookup,
             options: occOptions,
+            breakdown: breakdownFrame ? breakdown : null,
           });
           if (Array.isArray(pts) && pts.length > 0) {
             if (profile && !cached) { profile.counters.raymarchRebuilds += 1; profile.add("raymarchBuild", rechargedDarknessNowMs() - missStart); profile.add("cacheMissPath", rechargedDarknessNowMs() - missStart); }
