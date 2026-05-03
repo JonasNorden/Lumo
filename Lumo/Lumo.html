@@ -5401,7 +5401,7 @@
       for (const bucket of buckets) { totals[bucket] = 0; maxes[bucket] = 0; counts[bucket] = 0; }
       return {
         enabled: true, finished: false, targetFrames: 180, frames: 0,
-        counters: { canvasWidth: 0, canvasHeight: 0, dpr: 1, darknessCanvasWidth: 0, darknessCanvasHeight: 0, darknessRenderScale: 0, playerRadius: 0, playerRays: 0, playerFeatherPassCount: 0, playerCacheHits: 0, playerCacheMisses: 0, raymarchRebuilds: 0, featherRebuilds: 0, nonPlayerLightCount: 0, playerFastDdaRebuilds: 0, playerSteppedFallbackRebuilds: 0, ddaVisitedCells: 0, ddaRectTests: 0, ddaDuplicateRectSkips: 0, ddaNearestHits: 0, maxDdaVisitedCellsPerRay: 0, maxDdaRectTestsPerRay: 0, canvasResizeHappened: false, canvasResizeEvents: 0, maxTotalDarkness: 0, hottestWorstBucket: "none", hottestWorstBucketMs: 0 },
+        counters: { canvasWidth: 0, canvasHeight: 0, dpr: 1, darknessCanvasWidth: 0, darknessCanvasHeight: 0, darknessRenderScale: 0, playerRadius: 0, playerRays: 0, playerFeatherPassCount: 0, playerCacheHits: 0, playerCacheMisses: 0, raymarchRebuilds: 0, featherRebuilds: 0, nonPlayerLightCount: 0, playerFastDdaRebuilds: 0, playerSteppedFallbackRebuilds: 0, ddaVisitedCells: 0, ddaRectTests: 0, ddaDuplicateRectSkips: 0, ddaNearestHits: 0, maxDdaVisitedCellsPerRay: 0, maxDdaRectTestsPerRay: 0, canvasResizeHappened: false, canvasResizeEvents: 0, maxTotalDarkness: 0, hottestWorstBucket: "none", hottestWorstBucketMs: 0, ddaLookupShapeRects: "unknown", ddaLookupShapeGrid: "unknown", ddaLookupShapeCellSize: "unknown", ddaLookupShapeSampleCell: "unknown", ddaLookupValid: false, ddaLookupInvalidReason: "not-checked" },
         add(name, ms) { if (!this.finished && totals[name] !== undefined && Number.isFinite(ms)) { totals[name] += ms; counts[name] += 1; if (ms > maxes[name]) maxes[name] = ms; } },
         endFrame(meta = {}) {
           if (this.finished) return;
@@ -5428,6 +5428,13 @@
             `  playerFastDdaRebuilds=${this.counters.playerFastDdaRebuilds} playerSteppedFallbackRebuilds=${this.counters.playerSteppedFallbackRebuilds}`,
             `  ddaVisitedCells=${this.counters.ddaVisitedCells} ddaRectTests=${this.counters.ddaRectTests} ddaDuplicateRectSkips=${this.counters.ddaDuplicateRectSkips} ddaNearestHits=${this.counters.ddaNearestHits}`,
             `  maxDdaVisitedCellsPerRay=${this.counters.maxDdaVisitedCellsPerRay} maxDdaRectTestsPerRay=${this.counters.maxDdaRectTestsPerRay}`,
+            "  lookupShape:",
+            `    rects=${this.counters.ddaLookupShapeRects}`,
+            `    grid=${this.counters.ddaLookupShapeGrid}`,
+            `    cellSize=${this.counters.ddaLookupShapeCellSize}`,
+            `    sampleCell=${this.counters.ddaLookupShapeSampleCell}`,
+            `    ddaValid=${this.counters.ddaLookupValid}`,
+            `    ddaInvalidReason=${this.counters.ddaLookupInvalidReason}`,
             `  canvasResizeHappened=${this.counters.canvasResizeHappened} canvasResizeEvents=${this.counters.canvasResizeEvents}`,
             "avgMs:",
           ];
@@ -5630,12 +5637,50 @@
     }
 
     let rechargedOcclusionFallbackWarned = false;
-    function isValidRechargedOcclusionGridLookup(lookup) {
-      if (!lookup || typeof lookup !== "object") return false;
-      if (!Array.isArray(lookup.rects) || lookup.rects.length <= 0) return false;
-      if (!(lookup.grid instanceof Map) || lookup.grid.size <= 0) return false;
-      if (!Number.isFinite(lookup.cellSize) || lookup.cellSize <= 0) return false;
-      return true;
+    function analyzeRechargedOcclusionLookup(lookup) {
+      const result = {
+        valid: false,
+        reason: "none",
+        rects: "missing",
+        grid: "missing",
+        cellSize: "missing",
+        sampleCell: "none",
+      };
+      if (!lookup || typeof lookup !== "object") {
+        result.reason = "lookup-not-object";
+        return result;
+      }
+      const rects = Array.isArray(lookup.rects) ? lookup.rects : null;
+      result.rects = rects ? `array(${rects.length})` : typeof lookup.rects;
+      const grid = lookup.grid;
+      if (grid instanceof Map) {
+        result.grid = `Map(${grid.size})`;
+      } else if (Array.isArray(grid)) {
+        result.grid = `array(${grid.length})`;
+      } else {
+        result.grid = typeof grid;
+      }
+      const cellSize = Number.isFinite(lookup.cellSize) ? lookup.cellSize : NaN;
+      result.cellSize = Number.isFinite(cellSize) ? `${cellSize}` : "non-finite";
+      if (!rects || rects.length <= 0) {
+        result.reason = "rects-empty-or-invalid";
+        return result;
+      }
+      if (!(grid instanceof Map) || grid.size <= 0) {
+        result.reason = "grid-not-map-or-empty";
+        return result;
+      }
+      if (!Number.isFinite(cellSize) || cellSize <= 0) {
+        result.reason = "cellSize-invalid";
+        return result;
+      }
+      const firstEntry = grid.entries().next();
+      if (!firstEntry.done) {
+        const [key, value] = firstEntry.value;
+        result.sampleCell = `${typeof key}:${Array.isArray(value) ? `array(${value.length})` : typeof value}`;
+      }
+      result.valid = true;
+      return result;
     }
 
     function buildRechargedPlayerLightOcclusionPolyScreen({ sx, sy, radius, mapper, occlusionLookup, options, breakdown }) {
@@ -5659,13 +5704,22 @@
       const worldRadius = Number.isFinite(mapper.worldUnitsToPx) && mapper.worldUnitsToPx > 0
         ? (radius / mapper.worldUnitsToPx)
         : null;
+      const lookupAnalysis = analyzeRechargedOcclusionLookup(occlusionLookup);
       const hasGridLookup = (
         Number.isFinite(worldOrigin?.x)
         && Number.isFinite(worldOrigin?.y)
         && Number.isFinite(worldRadius)
         && worldRadius > 0
-        && isValidRechargedOcclusionGridLookup(occlusionLookup)
+        && lookupAnalysis.valid
       );
+      if (breakdown) {
+        breakdown.counters.ddaLookupShapeRects = lookupAnalysis.rects;
+        breakdown.counters.ddaLookupShapeGrid = lookupAnalysis.grid;
+        breakdown.counters.ddaLookupShapeCellSize = lookupAnalysis.cellSize;
+        breakdown.counters.ddaLookupShapeSampleCell = lookupAnalysis.sampleCell;
+        breakdown.counters.ddaLookupValid = lookupAnalysis.valid;
+        breakdown.counters.ddaLookupInvalidReason = lookupAnalysis.reason;
+      }
       if (breakdown && !hasGridLookup) {
         breakdown.counters.playerSteppedFallbackRebuilds += 1;
         if (!rechargedOcclusionFallbackWarned && RECHARGED_DARKNESS_BREAKDOWN_ENABLED === true) {
@@ -5798,8 +5852,9 @@
 
       while (travel <= maxDist) {
         visitedCells += 1;
-        const indices = grid.get(`${cellX},${cellY}`);
-        if (Array.isArray(indices) && indices.length > 0) {
+        const cellValue = grid.get(`${cellX},${cellY}`);
+        const indices = Array.isArray(cellValue) ? cellValue : null;
+        if (indices && indices.length > 0) {
           for (let i = 0; i < indices.length; i += 1) {
             const rectIndex = indices[i];
             if (!Number.isInteger(rectIndex) || rectIndex < 0 || rectIndex >= rectCount) continue;
