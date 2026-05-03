@@ -5368,6 +5368,46 @@
       };
     }
 
+    const RECHARGED_DARKNESS_PROFILE_ENABLED = (() => {
+      try {
+        const search = typeof window !== "undefined" && typeof window?.location?.search === "string" ? window.location.search : "";
+        return search ? (new URLSearchParams(search)).get("darknessProfile") === "1" : false;
+      } catch (_error) {
+        return false;
+      }
+    })();
+    function rechargedDarknessNowMs() {
+      return (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now();
+    }
+    function createRechargedDarknessProfiler() {
+      if (RECHARGED_DARKNESS_PROFILE_ENABLED !== true) return null;
+      const names = ["total", "canvasPrep", "buildLights", "ensureLookup", "cacheKeyBuild", "cacheHitPath", "cacheMissPath", "raymarchBuild", "featherBuild", "playerComposite", "nonPlayerComposite", "featherComposite", "vignettePass", "noisePass", "finalComposite"];
+      const sums = Object.create(null); const max = Object.create(null); const counts = Object.create(null);
+      for (const n of names) { sums[n] = 0; max[n] = 0; counts[n] = 0; }
+      const keyChangeCounts = { playerX: 0, playerY: 0, radius: 0, mapperFields: 0, occlusionLookup: 0, rayStepFeatherPenumbra: 0 };
+      return {
+        enabled: true, every: 60, frames: 0,
+        counters: { cacheHits: 0, cacheMisses: 0, raymarchRebuilds: 0, featherRebuilds: 0, lights: 0, occlusionRects: 0, gridCells: 0, playerRadius: 0, playerRays: 0, featherPasses: 0 },
+        add(name, dt) { if (Number.isFinite(dt) && sums[name] !== undefined) { sums[name] += dt; counts[name] += 1; if (dt > max[name]) max[name] = dt; } },
+        end(meta) {
+          this.frames += 1; this.counters.lights += meta.lights; this.counters.occlusionRects += meta.occlusionRects; this.counters.gridCells += meta.gridCells; this.counters.playerRadius += meta.playerRadius; this.counters.playerRays += meta.playerRays; this.counters.featherPasses += meta.featherPasses;
+          if (this.frames % this.every !== 0) return;
+          const avg = (n) => counts[n] > 0 ? sums[n] / counts[n] : 0;
+          const top3 = Object.keys(sums).map((n) => ({ n, v: avg(n) })).sort((a, b) => b.v - a.v).slice(0, 3);
+          const hm = this.counters.cacheHits + this.counters.cacheMisses;
+          console.groupCollapsed("[LUMO_DARKNESS_PROFILE]");
+          console.log("avgMs", Object.fromEntries(Object.keys(sums).map((n) => [n, Number(avg(n).toFixed(3))])));
+          console.log("maxMs", Object.fromEntries(Object.keys(max).map((n) => [n, Number(max[n].toFixed(3))])));
+          console.log("counts", { framesProfiled: this.frames, playerCacheHits: this.counters.cacheHits, playerCacheMisses: this.counters.cacheMisses, cacheHitMissRatio: hm > 0 ? `${this.counters.cacheHits}/${this.counters.cacheMisses}` : "0/0", raymarchRebuildCount: this.counters.raymarchRebuilds, featherRebuildCount: this.counters.featherRebuilds, avgLightsPerFrame: Number((this.counters.lights / this.every).toFixed(2)), avgOcclusionRects: Number((this.counters.occlusionRects / this.every).toFixed(2)), avgOcclusionGridCells: Number((this.counters.gridCells / this.every).toFixed(2)), darknessCanvas: meta.darknessCanvas, mainCanvas: meta.mainCanvas, devicePixelRatio: meta.devicePixelRatio, avgPlayerLightRadius: Number((this.counters.playerRadius / this.every).toFixed(2)), avgPlayerLightRays: Number((this.counters.playerRays / this.every).toFixed(2)), avgFeatherPassCount: Number((this.counters.featherPasses / this.every).toFixed(2)), keyChangeCounts });
+          console.log("top3AvgMs", top3.map((t) => `${t.n}:${t.v.toFixed(3)}ms`));
+          console.log("finding", top3[0] ? `Likely hottest bucket: ${top3[0].n}` : "No finding.");
+          console.groupEnd();
+          for (const n of Object.keys(sums)) { sums[n] = 0; max[n] = 0; counts[n] = 0; }
+          this.counters = { cacheHits: 0, cacheMisses: 0, raymarchRebuilds: 0, featherRebuilds: 0, lights: 0, occlusionRects: 0, gridCells: 0, playerRadius: 0, playerRays: 0, featherPasses: 0 };
+        },
+        keyChangeCounts,
+      };
+    }
     const RECHARGED_ENABLE_PLAYER_LIGHT_OCCLUSION = true;
     const RECHARGED_PLAYER_PUNCH_INTENSITY = 0.55;
     const RECHARGED_PLAYER_DOWNLIGHT = 0.20;
@@ -5776,6 +5816,8 @@
     }
 
     function drawRechargedDarkness(ctx, canvas, state, lights, options) {
+      const profile = state?.rechargedDarknessProfile || null;
+      const totalStart = profile ? rechargedDarknessNowMs() : 0;
       if (!ctx || !canvas || !state) {
         return false;
       }
@@ -5793,11 +5835,13 @@
       }
       const darknessCtx = darknessState.ctx;
       const darknessCanvas = darknessState.canvas;
+      const prepStart = profile ? rechargedDarknessNowMs() : 0;
       darknessCtx.clearRect(0, 0, darknessCanvas.width, darknessCanvas.height);
       darknessCtx.globalCompositeOperation = "source-over";
       darknessCtx.fillStyle = "rgba(0,0,0,0.93)";
       darknessCtx.fillRect(0, 0, darknessCanvas.width, darknessCanvas.height);
       darknessCtx.globalCompositeOperation = "destination-out";
+      if (profile) profile.add("canvasPrep", rechargedDarknessNowMs() - prepStart);
 
       for (const light of (Array.isArray(lights) ? lights : [])) {
         if (!Number.isFinite(light?.x) || !Number.isFinite(light?.y)) {
@@ -5812,6 +5856,7 @@
           && Array.isArray(occlusionRects)
           && occlusionRects.length > 0;
         if (shouldUsePlayerOcclusion) {
+          const keyStart = profile ? rechargedDarknessNowMs() : 0;
           const cacheKey = buildRechargedPlayerOcclusionCacheKey({
             light,
             radius,
@@ -5823,6 +5868,11 @@
             && state.rechargedPlayerOcclusionGeometryCache.key === cacheKey
             ? state.rechargedPlayerOcclusionGeometryCache
             : null;
+          if (profile) {
+            profile.add("cacheKeyBuild", rechargedDarknessNowMs() - keyStart);
+            if (cached) { profile.counters.cacheHits += 1; } else { profile.counters.cacheMisses += 1; }
+          }
+          const missStart = (!cached && profile) ? rechargedDarknessNowMs() : 0;
           const pts = cached?.pts || buildRechargedPlayerLightOcclusionPolyScreen({
             sx: light.x,
             sy: light.y,
@@ -5832,10 +5882,14 @@
             options: occOptions,
           });
           if (Array.isArray(pts) && pts.length > 0) {
+            if (profile && !cached) { profile.counters.raymarchRebuilds += 1; profile.add("raymarchBuild", rechargedDarknessNowMs() - missStart); profile.add("cacheMissPath", rechargedDarknessNowMs() - missStart); }
+            if (profile && cached) profile.add("cacheHitPath", 0);
             const punch = Math.max(0, Math.min(1, strength * RECHARGED_PLAYER_PUNCH_INTENSITY));
             const corePunch = Math.max(0, Math.min(1, punch * 0.10));
             const feather = Math.max(0, occOptions.featherPx | 0);
             const featherPasses = 10;
+            if (profile) { profile.counters.playerRays += Math.max(24, occOptions.rays | 0); profile.counters.featherPasses += featherPasses; }
+            const featherStart = (!cached && profile) ? rechargedDarknessNowMs() : 0;
             const featherPolys = cached?.featherPolys || buildRechargedFeatherPolysForPlayerLight({
               pts,
               lightX: light.x,
@@ -5844,8 +5898,10 @@
               passes: featherPasses,
             });
             if (!cached && state && typeof state === "object") {
+              if (profile) { profile.counters.featherRebuilds += 1; profile.add("featherBuild", rechargedDarknessNowMs() - featherStart); }
               state.rechargedPlayerOcclusionGeometryCache = { key: cacheKey, pts, featherPolys };
             }
+            const playerCompStart = profile ? rechargedDarknessNowMs() : 0;
             darknessCtx.save();
             darknessCtx.beginPath();
             darknessCtx.moveTo(pts[0][0], pts[0][1]);
@@ -5880,6 +5936,7 @@
               darknessCtx.fill();
             }
             darknessCtx.restore();
+            if (profile) profile.add("playerComposite", rechargedDarknessNowMs() - playerCompStart);
             continue;
           }
         }
@@ -5892,14 +5949,26 @@
         darknessCtx.beginPath();
         darknessCtx.arc(light.x, light.y, radius, 0, Math.PI * 2);
         darknessCtx.fill();
+        if (profile) profile.add("nonPlayerComposite", 0);
       }
 
+      const polishStart = profile ? rechargedDarknessNowMs() : 0;
       drawRechargedLivingDarknessPolish(darknessCtx, darknessCanvas, state, {
         frame: Number.isFinite(options?.frame) ? options.frame : null,
         nowMs: Number.isFinite(options?.nowMs) ? options.nowMs : undefined,
       });
+      if (profile) {
+        const polish = rechargedDarknessNowMs() - polishStart;
+        profile.add("noisePass", polish * 0.5);
+        profile.add("vignettePass", polish * 0.5);
+      }
       ctx.globalCompositeOperation = "source-over";
+      const finalStart = profile ? rechargedDarknessNowMs() : 0;
       ctx.drawImage(darknessCanvas, 0, 0);
+      if (profile) {
+        profile.add("finalComposite", rechargedDarknessNowMs() - finalStart);
+        profile.add("total", rechargedDarknessNowMs() - totalStart);
+      }
       return true;
     }
 
@@ -6007,7 +6076,10 @@
           targetX: Number.isFinite(playerCenterX) ? playerCenterX : worldWidthPx * 0.5,
           targetY: Number.isFinite(playerFootY) ? playerFootY : worldHeightPx - 1,
         });
+        if (RECHARGED_DARKNESS_PROFILE_ENABLED === true && !state.rechargedDarknessProfile) state.rechargedDarknessProfile = createRechargedDarknessProfiler();
+        const ensureLookupStart = state?.rechargedDarknessProfile ? rechargedDarknessNowMs() : 0;
         const occlusionLookup = ensureRechargedOcclusionLookup(state, { supportTiles, worldUnitsToPx, tileSize });
+        if (state?.rechargedDarknessProfile) state.rechargedDarknessProfile.add("ensureLookup", rechargedDarknessNowMs() - ensureLookupStart);
         const occlusionRects = Array.isArray(occlusionLookup?.rects) ? occlusionLookup.rects : [];
         stepRechargedFogVolumes(fogVolumes, {
           dt: fogStepDt,
@@ -6719,6 +6791,7 @@
           playerFacingSign: Number.isFinite(player?.vx) && player.vx < 0 ? -1 : 1,
         });
 
+        const buildLightsStart = state?.rechargedDarknessProfile ? rechargedDarknessNowMs() : 0;
         const darknessLights = buildRechargedDarknessLights({
           player,
           playerCenterX,
@@ -6733,6 +6806,7 @@
           worldHeightRaw,
           tileSize,
         });
+        if (state?.rechargedDarknessProfile) state.rechargedDarknessProfile.add("buildLights", rechargedDarknessNowMs() - buildLightsStart);
         drawRechargedDarkness(ctx, canvas, state, darknessLights, {
           mapper,
           occlusionLookup,
@@ -6757,6 +6831,19 @@
           source: livePlayer.source,
           frame: Number.isFinite(payload?.tick) ? payload.tick : null,
         };
+        if (state?.rechargedDarknessProfile) {
+          state.rechargedDarknessProfile.end({
+            lights: Array.isArray(darknessLights) ? darknessLights.length : 0,
+            occlusionRects: Array.isArray(occlusionRects) ? occlusionRects.length : 0,
+            gridCells: Number.isFinite(occlusionLookup?.gridCellCount) ? occlusionLookup.gridCellCount : 0,
+            playerRadius: Number.isFinite(playerRenderLightRadius) ? playerRenderLightRadius : 0,
+            playerRays: Math.max(24, RECHARGED_OCCLUSION_DEFAULTS.rays | 0),
+            featherPasses: 10,
+            darknessCanvas: { width: state?.rechargedDarknessCanvas?.width || 0, height: state?.rechargedDarknessCanvas?.height || 0 },
+            mainCanvas: { width: canvas.width, height: canvas.height },
+            devicePixelRatio: (typeof window !== "undefined" && Number.isFinite(window.devicePixelRatio)) ? window.devicePixelRatio : null,
+          });
+        }
         if (state.rechargedDarknessSummaryLogged !== true) {
           const kinds = {};
           for (const light of darknessLights) {
