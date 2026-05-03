@@ -383,15 +383,6 @@ function buildWorldSnapshot(worldState) {
       }))
       .filter((audio) => audio.x !== null && audio.y !== null)
     : [];
-  const reactiveGrassPatches = Array.isArray(worldState?.layers?.reactiveGrassPatches)
-    ? worldState.layers.reactiveGrassPatches.map((patch) => (patch && typeof patch === "object" ? { ...patch } : patch))
-    : [];
-  const reactiveBloomPatches = Array.isArray(worldState?.layers?.reactiveBloomPatches)
-    ? worldState.layers.reactiveBloomPatches.map((patch) => (patch && typeof patch === "object" ? { ...patch } : patch))
-    : [];
-  const reactiveCrystalPatches = Array.isArray(worldState?.layers?.reactiveCrystalPatches)
-    ? worldState.layers.reactiveCrystalPatches.map((patch) => (patch && typeof patch === "object" ? { ...patch } : patch))
-    : [];
 
   return {
     ok: worldState && typeof worldState === "object",
@@ -405,9 +396,6 @@ function buildWorldSnapshot(worldState) {
     supportTiles,
     decorItems,
     audioItems,
-    reactiveGrassPatches,
-    reactiveBloomPatches,
-    reactiveCrystalPatches,
   };
 }
 

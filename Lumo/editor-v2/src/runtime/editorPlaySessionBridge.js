@@ -71,14 +71,6 @@ export function writeEditorPlaySessionPayload({ runtimeLevel, spawnOverride = nu
   }
 
   sessionStorageRef.setItem(EDITOR_PLAY_LEVEL_KEY, JSON.stringify(runtimeLevel));
-  const crystalDebugEnabled = new URLSearchParams(globalThis?.location?.search || "").get("crystalDebug") === "1";
-  if (crystalDebugEnabled) {
-    console.info("[CrystalDebug] session payload counts", {
-      grass: Array.isArray(runtimeLevel?.reactiveGrassPatches) ? runtimeLevel.reactiveGrassPatches.length : 0,
-      bloom: Array.isArray(runtimeLevel?.reactiveBloomPatches) ? runtimeLevel.reactiveBloomPatches.length : 0,
-      crystal: Array.isArray(runtimeLevel?.reactiveCrystalPatches) ? runtimeLevel.reactiveCrystalPatches.length : 0,
-    });
-  }
 
   const x = Number(spawnOverride?.x);
   const y = Number(spawnOverride?.y);
