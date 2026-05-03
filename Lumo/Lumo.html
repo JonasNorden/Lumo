@@ -5206,6 +5206,8 @@
       }
     }
 
+    const DARKNESS_RENDER_SCALE = 0.5;
+
     function ensureRechargedDarknessState(state, canvas) {
       if (!state || typeof state !== "object" || !canvas) {
         return null;
@@ -5216,6 +5218,11 @@
         if (width <= 0 || height <= 0) {
           return null;
         }
+        const renderScale = Number.isFinite(DARKNESS_RENDER_SCALE) && DARKNESS_RENDER_SCALE > 0
+          ? DARKNESS_RENDER_SCALE
+          : 1;
+        const internalWidth = Math.max(1, Math.ceil(width * renderScale));
+        const internalHeight = Math.max(1, Math.ceil(height * renderScale));
         if (!state.rechargedDarknessState || typeof state.rechargedDarknessState !== "object") {
           const darknessCanvas = document.createElement("canvas");
           state.rechargedDarknessState = {
@@ -5233,13 +5240,13 @@
         if (!darknessState.ctx) {
           return null;
         }
-        if (darknessState.canvas.width !== width || darknessState.canvas.height !== height) {
-          darknessState.canvas.width = width;
-          darknessState.canvas.height = height;
+        if (darknessState.canvas.width !== internalWidth || darknessState.canvas.height !== internalHeight) {
+          darknessState.canvas.width = internalWidth;
+          darknessState.canvas.height = internalHeight;
         }
-        if ("imageSmoothingEnabled" in darknessState.ctx) {
-          darknessState.ctx.imageSmoothingEnabled = false;
-        }
+        darknessState.mainWidth = width;
+        darknessState.mainHeight = height;
+        darknessState.renderScale = renderScale;
         return darknessState;
       } catch (_error) {
         return null;
@@ -5386,22 +5393,32 @@
       for (const n of names) { sums[n] = 0; max[n] = 0; counts[n] = 0; }
       const keyChangeCounts = { playerX: 0, playerY: 0, radius: 0, mapperFields: 0, occlusionLookup: 0, rayStepFeatherPenumbra: 0 };
       return {
-        enabled: true, every: 60, frames: 0,
+        enabled: true, every: 120, frames: 0, hasLogged: false,
         counters: { cacheHits: 0, cacheMisses: 0, raymarchRebuilds: 0, featherRebuilds: 0, lights: 0, occlusionRects: 0, gridCells: 0, playerRadius: 0, playerRays: 0, featherPasses: 0 },
         add(name, dt) { if (Number.isFinite(dt) && sums[name] !== undefined) { sums[name] += dt; counts[name] += 1; if (dt > max[name]) max[name] = dt; } },
         end(meta) {
           this.frames += 1; this.counters.lights += meta.lights; this.counters.occlusionRects += meta.occlusionRects; this.counters.gridCells += meta.gridCells; this.counters.playerRadius += meta.playerRadius; this.counters.playerRays += meta.playerRays; this.counters.featherPasses += meta.featherPasses;
-          if (this.frames % this.every !== 0) return;
+          if (this.hasLogged === true || this.frames < this.every) return;
           const avg = (n) => counts[n] > 0 ? sums[n] / counts[n] : 0;
           const top3 = Object.keys(sums).map((n) => ({ n, v: avg(n) })).sort((a, b) => b.v - a.v).slice(0, 3);
           const hm = this.counters.cacheHits + this.counters.cacheMisses;
-          console.groupCollapsed("[LUMO_DARKNESS_PROFILE]");
-          console.log("avgMs", Object.fromEntries(Object.keys(sums).map((n) => [n, Number(avg(n).toFixed(3))])));
-          console.log("maxMs", Object.fromEntries(Object.keys(max).map((n) => [n, Number(max[n].toFixed(3))])));
-          console.log("counts", { framesProfiled: this.frames, playerCacheHits: this.counters.cacheHits, playerCacheMisses: this.counters.cacheMisses, cacheHitMissRatio: hm > 0 ? `${this.counters.cacheHits}/${this.counters.cacheMisses}` : "0/0", raymarchRebuildCount: this.counters.raymarchRebuilds, featherRebuildCount: this.counters.featherRebuilds, avgLightsPerFrame: Number((this.counters.lights / this.every).toFixed(2)), avgOcclusionRects: Number((this.counters.occlusionRects / this.every).toFixed(2)), avgOcclusionGridCells: Number((this.counters.gridCells / this.every).toFixed(2)), darknessCanvas: meta.darknessCanvas, mainCanvas: meta.mainCanvas, devicePixelRatio: meta.devicePixelRatio, avgPlayerLightRadius: Number((this.counters.playerRadius / this.every).toFixed(2)), avgPlayerLightRays: Number((this.counters.playerRays / this.every).toFixed(2)), avgFeatherPassCount: Number((this.counters.featherPasses / this.every).toFixed(2)), keyChangeCounts });
-          console.log("top3AvgMs", top3.map((t) => `${t.n}:${t.v.toFixed(3)}ms`));
-          console.log("finding", top3[0] ? `Likely hottest bucket: ${top3[0].n}` : "No finding.");
-          console.groupEnd();
+          const avgMs = Object.fromEntries(Object.keys(sums).map((n) => [n, Number(avg(n).toFixed(3))]));
+          const maxMs = Object.fromEntries(Object.keys(max).map((n) => [n, Number(max[n].toFixed(3))]));
+          const countsSummary = { framesProfiled: this.frames, playerCacheHits: this.counters.cacheHits, playerCacheMisses: this.counters.cacheMisses, cacheHitMissRatio: hm > 0 ? `${this.counters.cacheHits}/${this.counters.cacheMisses}` : "0/0", raymarchRebuildCount: this.counters.raymarchRebuilds, featherRebuildCount: this.counters.featherRebuilds, avgLightsPerFrame: Number((this.counters.lights / this.every).toFixed(2)), avgOcclusionRects: Number((this.counters.occlusionRects / this.every).toFixed(2)), avgOcclusionGridCells: Number((this.counters.gridCells / this.every).toFixed(2)), darknessCanvas: meta.darknessCanvas, mainCanvas: meta.mainCanvas, devicePixelRatio: meta.devicePixelRatio, darknessRenderScale: meta.darknessRenderScale, avgPlayerLightRadius: Number((this.counters.playerRadius / this.every).toFixed(2)), avgPlayerLightRays: Number((this.counters.playerRays / this.every).toFixed(2)), avgFeatherPassCount: Number((this.counters.featherPasses / this.every).toFixed(2)), keyChangeCounts };
+          const top3Summary = top3.map((t) => `${t.n}:${t.v.toFixed(3)}ms`).join(", ");
+          const lines = [
+            "[LUMO_DARKNESS_PROFILE]",
+            `framesProfiled=${countsSummary.framesProfiled} dpr=${countsSummary.devicePixelRatio} mainCanvas=${countsSummary.mainCanvas.width}x${countsSummary.mainCanvas.height} darknessCanvas=${countsSummary.darknessCanvas.width}x${countsSummary.darknessCanvas.height} darknessRenderScale=${countsSummary.darknessRenderScale}`,
+            `cache hits/misses=${countsSummary.cacheHitMissRatio} raymarchRebuildCount=${countsSummary.raymarchRebuildCount} featherRebuildCount=${countsSummary.featherRebuildCount}`,
+            `avg lights=${countsSummary.avgLightsPerFrame} occlusionRects=${countsSummary.avgOcclusionRects} occlusionGridCells=${countsSummary.avgOcclusionGridCells} playerRadius=${countsSummary.avgPlayerLightRadius} playerRays=${countsSummary.avgPlayerLightRays} featherPassCount=${countsSummary.avgFeatherPassCount}`,
+            `top3AvgMs=${top3Summary || "n/a"}`,
+            `hottestBucket=${top3[0] ? top3[0].n : "none"}`,
+            `avgMs=${JSON.stringify(avgMs)}`,
+            `maxMs=${JSON.stringify(maxMs)}`,
+            `keyChangeCounts=${JSON.stringify(keyChangeCounts)}`,
+          ];
+          console.log(lines.join("\n"));
+          this.hasLogged = true;
           for (const n of Object.keys(sums)) { sums[n] = 0; max[n] = 0; counts[n] = 0; }
           this.counters = { cacheHits: 0, cacheMisses: 0, raymarchRebuilds: 0, featherRebuilds: 0, lights: 0, occlusionRects: 0, gridCells: 0, playerRadius: 0, playerRays: 0, featherPasses: 0 };
         },
@@ -5836,10 +5853,15 @@
       const darknessCtx = darknessState.ctx;
       const darknessCanvas = darknessState.canvas;
       const prepStart = profile ? rechargedDarknessNowMs() : 0;
+      const mainWidth = Number.isFinite(darknessState.mainWidth) ? darknessState.mainWidth : canvas.width;
+      const mainHeight = Number.isFinite(darknessState.mainHeight) ? darknessState.mainHeight : canvas.height;
+      const renderScale = Number.isFinite(darknessState.renderScale) && darknessState.renderScale > 0 ? darknessState.renderScale : 1;
+      darknessCtx.setTransform(1, 0, 0, 1, 0, 0);
       darknessCtx.clearRect(0, 0, darknessCanvas.width, darknessCanvas.height);
+      darknessCtx.scale(renderScale, renderScale);
       darknessCtx.globalCompositeOperation = "source-over";
       darknessCtx.fillStyle = "rgba(0,0,0,0.93)";
-      darknessCtx.fillRect(0, 0, darknessCanvas.width, darknessCanvas.height);
+      darknessCtx.fillRect(0, 0, mainWidth, mainHeight);
       darknessCtx.globalCompositeOperation = "destination-out";
       if (profile) profile.add("canvasPrep", rechargedDarknessNowMs() - prepStart);
 
@@ -5964,7 +5986,14 @@
       }
       ctx.globalCompositeOperation = "source-over";
       const finalStart = profile ? rechargedDarknessNowMs() : 0;
-      ctx.drawImage(darknessCanvas, 0, 0);
+      const prevSmoothing = "imageSmoothingEnabled" in ctx ? ctx.imageSmoothingEnabled : null;
+      if ("imageSmoothingEnabled" in ctx) {
+        ctx.imageSmoothingEnabled = true;
+      }
+      ctx.drawImage(darknessCanvas, 0, 0, darknessCanvas.width, darknessCanvas.height, 0, 0, mainWidth, mainHeight);
+      if ("imageSmoothingEnabled" in ctx && prevSmoothing !== null) {
+        ctx.imageSmoothingEnabled = prevSmoothing;
+      }
       if (profile) {
         profile.add("finalComposite", rechargedDarknessNowMs() - finalStart);
         profile.add("total", rechargedDarknessNowMs() - totalStart);
@@ -6839,7 +6868,8 @@
             playerRadius: Number.isFinite(playerRenderLightRadius) ? playerRenderLightRadius : 0,
             playerRays: Math.max(24, RECHARGED_OCCLUSION_DEFAULTS.rays | 0),
             featherPasses: 10,
-            darknessCanvas: { width: state?.rechargedDarknessCanvas?.width || 0, height: state?.rechargedDarknessCanvas?.height || 0 },
+            darknessCanvas: { width: state?.rechargedDarknessState?.canvas?.width || 0, height: state?.rechargedDarknessState?.canvas?.height || 0 },
+            darknessRenderScale: state?.rechargedDarknessState?.renderScale || DARKNESS_RENDER_SCALE,
             mainCanvas: { width: canvas.width, height: canvas.height },
             devicePixelRatio: (typeof window !== "undefined" && Number.isFinite(window.devicePixelRatio)) ? window.devicePixelRatio : null,
           });
