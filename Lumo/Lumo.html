@@ -4398,12 +4398,22 @@
         ? payload.reactiveGrassPatches
         : null;
 
-      if (directPatches) {
-        rechargedReactiveGrassLevelCache.patches = directPatches
-          .map((patch, index) => normalizeReactiveGrassPatch(patch, index))
-          .filter(Boolean);
-        rechargedReactiveGrassLevelCache.loaded = true;
+      if (!directPatches) {
+        return;
       }
+
+      const hasIncomingPatches = directPatches.length > 0;
+      const hasCachedPatches = Array.isArray(rechargedReactiveGrassLevelCache.patches)
+        && rechargedReactiveGrassLevelCache.patches.length > 0;
+
+      if (!hasIncomingPatches && hasCachedPatches) {
+        return;
+      }
+
+      rechargedReactiveGrassLevelCache.patches = directPatches
+        .map((patch, index) => normalizeReactiveGrassPatch(patch, index))
+        .filter(Boolean);
+      rechargedReactiveGrassLevelCache.loaded = true;
     }
 
     function beginReactiveGrassLevelLoad(levelPath) {
@@ -4498,6 +4508,10 @@
     function syncReactiveBloomCacheFromPayload(payload) {
       const directPatches = Array.isArray(payload?.reactiveBloomPatches) ? payload.reactiveBloomPatches : null;
       if (!directPatches) return;
+      const hasIncomingPatches = directPatches.length > 0;
+      const hasCachedPatches = Array.isArray(rechargedReactiveBloomLevelCache.patches)
+        && rechargedReactiveBloomLevelCache.patches.length > 0;
+      if (!hasIncomingPatches && hasCachedPatches) return;
       rechargedReactiveBloomLevelCache.patches = directPatches
         .map((patch, index) => normalizeReactiveBloomPatch(patch, index))
         .filter(Boolean);
@@ -4590,6 +4604,10 @@
     function syncReactiveCrystalCacheFromPayload(payload) {
       const directPatches = Array.isArray(payload?.reactiveCrystalPatches) ? payload.reactiveCrystalPatches : null;
       if (!directPatches) return;
+      const hasIncomingPatches = directPatches.length > 0;
+      const hasCachedPatches = Array.isArray(rechargedReactiveCrystalLevelCache.patches)
+        && rechargedReactiveCrystalLevelCache.patches.length > 0;
+      if (!hasIncomingPatches && hasCachedPatches) return;
       rechargedReactiveCrystalLevelCache.patches = directPatches
         .map((patch, index) => normalizeReactiveCrystalPatch(patch, index))
         .filter(Boolean);
