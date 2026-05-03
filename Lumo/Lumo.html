@@ -6001,6 +6001,68 @@
       return true;
     }
 
+    const RECHARGED_FRAME_PROFILE_ENABLED = (() => {
+      try {
+        const query = (typeof window !== "undefined" && window.location && typeof window.location.search === "string")
+          ? window.location.search
+          : "";
+        return new URLSearchParams(query).get("frameProfile") === "1";
+      } catch (_error) {
+        return false;
+      }
+    })();
+
+    function createRechargedFrameProfiler() {
+      const now = () => ((typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now());
+      return {
+        enabled: RECHARGED_FRAME_PROFILE_ENABLED === true,
+        finished: false,
+        targetFrames: 180,
+        frameCount: 0,
+        totals: {},
+        maxes: {},
+        counters: {
+          canvasWidth: 0, canvasHeight: 0, dpr: 1, tileCount: 0, supportTileCount: 0, decorCount: 0,
+          reactiveGrassCount: 0, reactiveBloomCount: 0, reactiveCrystalCount: 0, entityCount: 0,
+          activeLightCount: 0, particleEffectCount: 0, playerEnergy: 0, playerAuraRadius: 0,
+          darknessEnabled: false, darknessRenderScale: 0, darknessCanvasW: 0, darknessCanvasH: 0,
+        },
+        now,
+        add(bucket, ms) {
+          if (!bucket || !Number.isFinite(ms)) return;
+          this.totals[bucket] = (this.totals[bucket] || 0) + ms;
+          this.maxes[bucket] = Math.max(this.maxes[bucket] || 0, ms);
+        },
+        flushIfDone() {
+          if (this.finished || this.frameCount < this.targetFrames) return;
+          this.finished = true;
+          const fmt = (value) => Number.isFinite(value) ? value.toFixed(2) : "0.00";
+          const names = Object.keys(this.totals);
+          const avg = names.map((name) => ({ name, value: this.totals[name] / Math.max(1, this.frameCount) })).sort((a, b) => b.value - a.value);
+          const max = names.map((name) => ({ name, value: this.maxes[name] || 0 })).sort((a, b) => b.value - a.value);
+          const lines = [
+            "[LUMO_FRAME_PROFILE]",
+            `frames=${this.frameCount}`,
+            `canvas=${this.counters.canvasWidth}x${this.counters.canvasHeight} dpr=${this.counters.dpr}`,
+            `counters: tiles=${this.counters.tileCount} supportTiles=${this.counters.supportTileCount} decor=${this.counters.decorCount} reactiveGrass=${this.counters.reactiveGrassCount} reactiveBloom=${this.counters.reactiveBloomCount} reactiveCrystal=${this.counters.reactiveCrystalCount} entities=${this.counters.entityCount} lights=${this.counters.activeLightCount} particlesEffects=${this.counters.particleEffectCount}`,
+            `player: energy=${fmt(this.counters.playerEnergy)} auraRadius=${fmt(this.counters.playerAuraRadius)}`,
+            `darkness: enabled=${this.counters.darknessEnabled} renderScale=${fmt(this.counters.darknessRenderScale)} canvas=${this.counters.darknessCanvasW}x${this.counters.darknessCanvasH}`,
+            "avgMs:",
+          ];
+          for (const pair of avg) lines.push(`  ${pair.name}=${fmt(pair.value)}`);
+          lines.push("maxMs:");
+          for (const pair of max) lines.push(`  ${pair.name}=${fmt(pair.value)}`);
+          lines.push("topAvg:");
+          for (let index = 0; index < Math.min(5, avg.length); index += 1) lines.push(`  ${index + 1} ${avg[index].name}=${fmt(avg[index].value)}`);
+          lines.push("topMax:");
+          for (let index = 0; index < Math.min(5, max.length); index += 1) lines.push(`  ${index + 1} ${max[index].name}=${fmt(max[index].value)}`);
+          lines.push("finding:");
+          lines.push(`  hottest avg bucket appears to be ${avg[0] ? avg[0].name : "unknown"}`);
+          console.log(lines.join("\n"));
+        },
+      };
+    }
+
     function renderRechargedCanvasFrame(canvas, state) {
       if (!canvas || typeof canvas.getContext !== "function") {
         return false;
@@ -6012,6 +6074,14 @@
           return false;
         }
 
+        if (RECHARGED_FRAME_PROFILE_ENABLED === true && state && typeof state === "object" && !state.rechargedFrameProfiler) {
+          state.rechargedFrameProfiler = createRechargedFrameProfiler();
+        }
+        const frameProfiler = state?.rechargedFrameProfiler;
+        const fpOn = frameProfiler?.enabled === true && frameProfiler.finished !== true;
+        const fpNow = () => frameProfiler.now();
+        const fpTotalStart = fpOn ? fpNow() : 0;
+        const fpBootStart = fpOn ? fpNow() : 0;
         const payload = readLatestRechargedBootPayload() || {};
         const statusText = typeof payload?.statusText === "string" ? payload.statusText : "";
         const livePlayer = resolveRechargedLivePlayerSnapshot(payload, state);
@@ -6050,6 +6120,7 @@
           ? lerp(previousSnapshot.y, currentSnapshot.y, alpha)
           : (Number.isFinite(player.y) ? player.y : null);
         const fogVisualState = ensureRechargedFogVisualState(state);
+        if (fpOn) frameProfiler.add("bootState", fpNow() - fpBootStart);
         const nowMs = (typeof performance !== "undefined" && typeof performance.now === "function")
           ? performance.now()
           : Date.now();
@@ -6120,6 +6191,7 @@
           fogVisualState.lastStepAtMs = nowMs;
         }
 
+        const fpCanvasStart = fpOn ? fpNow() : 0;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#000";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -6128,7 +6200,9 @@
         ctx.rect(hudGameplayViewport.x, hudGameplayViewport.y, hudGameplayViewport.w, hudGameplayViewport.h);
         ctx.clip();
         ctx.translate(hudGameplayViewport.x, hudGameplayViewport.y);
+        if (fpOn) frameProfiler.add("canvasSetup", fpNow() - fpCanvasStart);
 
+        const fpBackgroundStart = fpOn ? fpNow() : 0;
         const backdropGradient = ctx.createLinearGradient(0, 0, 0, worldRenderCanvas.height);
         backdropGradient.addColorStop(0, "#0b1220");
         backdropGradient.addColorStop(1, "#111b31");
@@ -6138,6 +6212,7 @@
         const playfieldRect = mapper.worldToCanvasRect(0, 0, worldWidthPx, worldHeightPx);
         ctx.fillStyle = "rgba(15, 23, 42, 0.52)";
         ctx.fillRect(playfieldRect.x, playfieldRect.y, playfieldRect.w, playfieldRect.h);
+        if (fpOn) frameProfiler.add("background", fpNow() - fpBackgroundStart);
 
         // Recharged canvas lane order: backdrop -> bg tilemap -> support tiles -> liquids -> decor -> entities -> player -> HUD.
         const bg = payload?.bg;
@@ -6238,6 +6313,7 @@
           }
         }
 
+        const fpTilesStart = fpOn ? fpNow() : 0;
         // Draw support tiles with V1 tile assets/placement rules first.
         for (const supportTile of supportTiles) {
           const tileX = Number.isFinite(supportTile?.x) ? supportTile.x : null;
@@ -6269,6 +6345,7 @@
         }
 
         drawRechargedLiquidVolumes(ctx, mapper, liquidVolumes);
+        if (fpOn) frameProfiler.add("tilesAndLiquids", fpNow() - fpTilesStart);
         if (state && state.rechargedLiquidSummaryLogged !== true) {
           const byType = liquidVolumes.reduce((acc, liquid) => {
             const key = typeof liquid?.type === "string" ? liquid.type : "unknown";
@@ -6289,11 +6366,14 @@
           decorWorldLane.push(decor);
         }
 
+        const fpDecorStart = fpOn ? fpNow() : 0;
         // Decor stays above tiles and below gameplay actors to avoid blocking entities/player.
         for (const decor of decorWorldLane) {
           drawRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw);
         }
+        if (fpOn) frameProfiler.add("decor", fpNow() - fpDecorStart);
 
+        const fpEntitiesStart = fpOn ? fpNow() : 0;
         const liquidEntityTypes = new Set(["water_volume", "lava_volume", "bubbling_liquid_volume"]);
         const hoverEyesAfterDarkness = [];
         const movingPlatformDebugNow = [];
@@ -6706,6 +6786,7 @@
           playerOnPlatformId: typeof player?.onPlatformId === "string" ? player.onPlatformId : null,
           platforms: movingPlatformDebugNow,
         };
+        if (fpOn) frameProfiler.add("entities", fpNow() - fpEntitiesStart);
 
         // V1 layering parity: rear fog may be before Lumo when render.lumoBehindFog is false.
         drawRechargedFogOverDarkness(ctx, mapper, fogVolumes, {
@@ -6738,6 +6819,7 @@
           ctx.restore();
         }
 
+        const fpReactiveStart = fpOn ? fpNow() : 0;
         const rechargedDecorTime = (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now();
 
         renderReactiveGrass(
@@ -6802,11 +6884,14 @@
           rechargedDecorTime,
           { mapper, clusters: reactiveCrystalPatches, wakeSources: reactiveCrystalWakeSources, debug: true },
         );
+        if (fpOn) frameProfiler.add("reactiveDecor", fpNow() - fpReactiveStart);
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
+        const fpPlayerStart = fpOn ? fpNow() : 0;
         if (player.hidden !== true) {
           drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, currentSnapshot);
         }
+        if (fpOn) frameProfiler.add("player", fpNow() - fpPlayerStart);
 
         // V1 layering parity: rear fog for render.lumoBehindFog=true + front veil always after Lumo.
         drawRechargedFogOverDarkness(ctx, mapper, fogVolumes, {
@@ -6820,6 +6905,7 @@
           playerFacingSign: Number.isFinite(player?.vx) && player.vx < 0 ? -1 : 1,
         });
 
+        const fpDarknessStart = fpOn ? fpNow() : 0;
         const buildLightsStart = state?.rechargedDarknessProfile ? rechargedDarknessNowMs() : 0;
         const darknessLights = buildRechargedDarknessLights({
           player,
@@ -6899,6 +6985,7 @@
           });
           state.rechargedDarknessSummaryLogged = true;
         }
+        if (fpOn) frameProfiler.add("darkness", fpNow() - fpDarknessStart);
 
         // V1 parity: eyes are a dedicated post-darkness style pass (kept procedural and never sprite-based).
         for (const eyeDraw of hoverEyesAfterDarkness) {
@@ -6944,6 +7031,7 @@
           ctx.stroke();
         }
 
+        const fpEffectsStart = fpOn ? fpNow() : 0;
         const entityVisualState = ensureRechargedEntityVisualState(state);
         const flareSprite = entityVisualState?.flareThrown || entityVisualState?.flarePickup || null;
         let visibleFlares = 0;
@@ -7031,9 +7119,11 @@
           },
           frame: Number.isFinite(payload?.tick) ? payload.tick : null,
         };
+        if (fpOn) frameProfiler.add("effectsAndFlares", fpNow() - fpEffectsStart);
 
         ctx.restore();
 
+        const fpHudStart = fpOn ? fpNow() : 0;
         drawRechargedHudReplica(canvas, state);
 
         let overlayDrawn = false;
@@ -7064,6 +7154,30 @@
           ctx.shadowOffsetY = 2;
           ctx.fillText(statusText, centerX, centerY);
           ctx.restore();
+        }
+        if (fpOn) {
+          frameProfiler.add("hudAndOverlays", fpNow() - fpHudStart);
+          frameProfiler.add("total", fpNow() - fpTotalStart);
+          frameProfiler.frameCount += 1;
+          frameProfiler.counters.canvasWidth = canvas.width;
+          frameProfiler.counters.canvasHeight = canvas.height;
+          frameProfiler.counters.dpr = (typeof window !== "undefined" && Number.isFinite(window.devicePixelRatio)) ? window.devicePixelRatio : 1;
+          frameProfiler.counters.tileCount = Number.isFinite(worldWidthRaw) && Number.isFinite(worldHeightRaw) ? (worldWidthRaw * worldHeightRaw) : 0;
+          frameProfiler.counters.supportTileCount = supportTiles.length;
+          frameProfiler.counters.decorCount = decorWorldLane.length;
+          frameProfiler.counters.reactiveGrassCount = reactiveGrassPatches.length;
+          frameProfiler.counters.reactiveBloomCount = reactiveBloomPatches.length;
+          frameProfiler.counters.reactiveCrystalCount = reactiveCrystalPatches.length;
+          frameProfiler.counters.entityCount = entitySnapshots.length;
+          frameProfiler.counters.activeLightCount = Array.isArray(darknessLights) ? darknessLights.length : 0;
+          frameProfiler.counters.particleEffectCount = flareSnapshots.length + (pulseSnapshot?.active === true ? 1 : 0);
+          frameProfiler.counters.playerEnergy = playerEnergy;
+          frameProfiler.counters.playerAuraRadius = playerRenderLightRadius;
+          frameProfiler.counters.darknessEnabled = true;
+          frameProfiler.counters.darknessRenderScale = state?.rechargedDarknessState?.renderScale || DARKNESS_RENDER_SCALE;
+          frameProfiler.counters.darknessCanvasW = state?.rechargedDarknessState?.canvas?.width || 0;
+          frameProfiler.counters.darknessCanvasH = state?.rechargedDarknessState?.canvas?.height || 0;
+          frameProfiler.flushIfDone();
         }
 
         if (state && typeof state === "object") {
