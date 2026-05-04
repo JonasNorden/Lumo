@@ -5933,8 +5933,6 @@
       const occOptions = options?.occlusionOptions && typeof options.occlusionOptions === "object"
         ? options.occlusionOptions
         : RECHARGED_OCCLUSION_DEFAULTS;
-      const expectedInternalWidth = Math.max(1, Math.round(canvas.width * (Number.isFinite(DARKNESS_RENDER_SCALE) && DARKNESS_RENDER_SCALE > 0 ? DARKNESS_RENDER_SCALE : 1)));
-      const expectedInternalHeight = Math.max(1, Math.round(canvas.height * (Number.isFinite(DARKNESS_RENDER_SCALE) && DARKNESS_RENDER_SCALE > 0 ? DARKNESS_RENDER_SCALE : 1)));
       const darknessState = ensureRechargedDarknessState(state, canvas);
       if (!darknessState?.ctx || !darknessState?.canvas) {
         return false;
@@ -5944,6 +5942,8 @@
       const mainWidth = Number.isFinite(darknessState.mainWidth) ? darknessState.mainWidth : canvas.width;
       const mainHeight = Number.isFinite(darknessState.mainHeight) ? darknessState.mainHeight : canvas.height;
       const renderScale = Number.isFinite(darknessState.renderScale) && darknessState.renderScale > 0 ? darknessState.renderScale : 1;
+      ctx.save();
+      darknessCtx.save();
       darknessCtx.setTransform(1, 0, 0, 1, 0, 0);
       darknessCtx.clearRect(0, 0, darknessCanvas.width, darknessCanvas.height);
       darknessCtx.scale(renderScale, renderScale);
@@ -5976,8 +5976,6 @@
             && state.rechargedPlayerOcclusionGeometryCache.key === cacheKey
             ? state.rechargedPlayerOcclusionGeometryCache
             : null;
-          if (profile) {
-          }
           const pts = cached?.pts || buildRechargedPlayerLightOcclusionPolyScreen({
             sx: light.x,
             sy: light.y,
@@ -6062,6 +6060,8 @@
       if ("imageSmoothingEnabled" in ctx && prevSmoothing !== null) {
         ctx.imageSmoothingEnabled = prevSmoothing;
       }
+      darknessCtx.restore();
+      ctx.restore();
       return true;
     }
 
