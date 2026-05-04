@@ -107,6 +107,57 @@ export function renderMinimap(ctx, state) {
     ctx.strokeStyle = FRAME_COLOR;
     ctx.strokeRect(Math.floor(originX) + 0.5, Math.floor(originY) + 0.5, Math.round(contentWidth), Math.round(contentHeight));
 
+
+    const viewport = state.viewport;
+    const zoom = Math.max(0.0001, Number(viewport?.zoom) || 0);
+    const editorCanvas = document.getElementById("editorCanvas");
+    const canvasWidth = editorCanvas?.clientWidth || editorCanvas?.width || 0;
+    const canvasHeight = editorCanvas?.clientHeight || editorCanvas?.height || 0;
+
+    if (zoom > 0 && canvasWidth > 0 && canvasHeight > 0) {
+      const visibleWorldLeft = -(Number(viewport?.offsetX) || 0) / zoom;
+      const visibleWorldTop = -(Number(viewport?.offsetY) || 0) / zoom;
+      const visibleWorldWidth = canvasWidth / zoom;
+      const visibleWorldHeight = canvasHeight / zoom;
+
+      const worldPixelWidth = width * tileSize;
+      const worldPixelHeight = height * tileSize;
+
+      if (worldPixelWidth > 0 && worldPixelHeight > 0) {
+        const contentScaleX = contentWidth / worldPixelWidth;
+        const contentScaleY = contentHeight / worldPixelHeight;
+
+        const viewportMiniX = originX + visibleWorldLeft * contentScaleX;
+        const viewportMiniY = originY + visibleWorldTop * contentScaleY;
+        const viewportMiniW = visibleWorldWidth * contentScaleX;
+        const viewportMiniH = visibleWorldHeight * contentScaleY;
+
+        const boundsLeft = originX;
+        const boundsTop = originY;
+        const boundsRight = originX + contentWidth;
+        const boundsBottom = originY + contentHeight;
+
+        const clampedLeft = Math.max(boundsLeft, viewportMiniX);
+        const clampedTop = Math.max(boundsTop, viewportMiniY);
+        const clampedRight = Math.min(boundsRight, viewportMiniX + viewportMiniW);
+        const clampedBottom = Math.min(boundsBottom, viewportMiniY + viewportMiniH);
+        const clampedWidth = clampedRight - clampedLeft;
+        const clampedHeight = clampedBottom - clampedTop;
+
+        if (clampedWidth > 0 && clampedHeight > 0) {
+          ctx.save();
+          ctx.globalAlpha = 1;
+          ctx.globalCompositeOperation = "source-over";
+          ctx.fillStyle = "rgba(64, 224, 255, 0.22)";
+          ctx.strokeStyle = "rgba(170, 247, 255, 0.98)";
+          ctx.lineWidth = 2;
+          ctx.fillRect(clampedLeft, clampedTop, clampedWidth, clampedHeight);
+          ctx.strokeRect(clampedLeft + 0.5, clampedTop + 0.5, Math.max(0, clampedWidth - 1), Math.max(0, clampedHeight - 1));
+          ctx.restore();
+        }
+      }
+    }
+
     return {
       originX,
       originY,
