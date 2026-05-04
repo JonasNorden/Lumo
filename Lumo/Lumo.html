@@ -4756,9 +4756,9 @@
       const sEye = hoverVoidEyeBaselineBody / 16;
       const largeR = 2.8 * sEye * 0.75;
       const smallR = 1.9 * sEye * 0.75;
-      const largeX = centerX - (7 * sEye) * facingX + (1.5 * facingX);
+      const largeX = centerX - (7 * sEye) * facingX + (4.0 * facingX);
       const largeY = centerY - (6 * sEye);
-      const smallX = centerX + (6 * sEye) * facingX - (1.5 * facingX);
+      const smallX = centerX + (6 * sEye) * facingX - (4.0 * facingX);
       const smallY = centerY - (4 * sEye);
       const eyeAlpha = Math.max(0, Math.min(1, eyeBlend * Math.max(0, Math.min(1, alphaMul))));
       if (eyeAlpha <= 0.001) {
