@@ -4,8 +4,8 @@ import { getEntityVisual } from "../domain/entities/entityVisuals.js";
 import { getSoundVisual } from "../domain/sound/soundVisuals.js";
 
 const EMPTY_CELL_COLOR = "rgba(17, 24, 40, 0.45)";
-const VIEWPORT_STROKE_COLOR = "#d8e6ff";
-const VIEWPORT_FILL_COLOR = "rgba(123, 171, 255, 0.12)";
+const VIEWPORT_STROKE_COLOR = "#7fd0ff";
+const VIEWPORT_FILL_COLOR = "rgba(64, 190, 255, 0.24)";
 const FRAME_COLOR = "rgba(55, 75, 118, 0.8)";
 
 function getEditorViewportSize(minimapCanvas) {
@@ -118,23 +118,44 @@ export function renderMinimap(ctx, state) {
   ctx.strokeStyle = FRAME_COLOR;
   ctx.strokeRect(Math.floor(originX) + 0.5, Math.floor(originY) + 0.5, Math.round(contentWidth), Math.round(contentHeight));
 
-  const viewportCellSize = tileSize * state.viewport.zoom;
-  const viewportWorldX = -state.viewport.offsetX;
-  const viewportWorldY = -state.viewport.offsetY;
+  const zoom = Math.max(0.0001, Number(state.viewport.zoom) || 1);
   const editorViewport = getEditorViewportSize(canvas);
-  const viewportWorldWidth = editorViewport.width / viewportCellSize;
-  const viewportWorldHeight = editorViewport.height / viewportCellSize;
 
-  const viewportRectX = originX + (viewportWorldX / tileSize) * contentScale;
-  const viewportRectY = originY + (viewportWorldY / tileSize) * contentScale;
-  const viewportRectWidth = (viewportWorldWidth / tileSize) * contentScale;
-  const viewportRectHeight = (viewportWorldHeight / tileSize) * contentScale;
+  const visibleWorldLeft = -state.viewport.offsetX / zoom;
+  const visibleWorldTop = -state.viewport.offsetY / zoom;
+  const visibleWorldWidth = editorViewport.width / zoom;
+  const visibleWorldHeight = editorViewport.height / zoom;
+
+  const worldWidthPx = width * tileSize;
+  const worldHeightPx = height * tileSize;
+  const minimapScaleX = contentWidth / worldWidthPx;
+  const minimapScaleY = contentHeight / worldHeightPx;
+
+  const rawRectX = originX + visibleWorldLeft * minimapScaleX;
+  const rawRectY = originY + visibleWorldTop * minimapScaleY;
+  const rawRectRight = originX + (visibleWorldLeft + visibleWorldWidth) * minimapScaleX;
+  const rawRectBottom = originY + (visibleWorldTop + visibleWorldHeight) * minimapScaleY;
+
+  const boundsLeft = originX;
+  const boundsTop = originY;
+  const boundsRight = originX + contentWidth;
+  const boundsBottom = originY + contentHeight;
+
+  const clampedLeft = Math.max(boundsLeft, Math.min(rawRectX, boundsRight));
+  const clampedTop = Math.max(boundsTop, Math.min(rawRectY, boundsBottom));
+  const clampedRight = Math.max(boundsLeft, Math.min(rawRectRight, boundsRight));
+  const clampedBottom = Math.max(boundsTop, Math.min(rawRectBottom, boundsBottom));
+
+  const viewportRectX = Math.min(clampedLeft, clampedRight);
+  const viewportRectY = Math.min(clampedTop, clampedBottom);
+  const viewportRectWidth = Math.max(2, Math.abs(clampedRight - clampedLeft));
+  const viewportRectHeight = Math.max(2, Math.abs(clampedBottom - clampedTop));
 
   ctx.fillStyle = VIEWPORT_FILL_COLOR;
   ctx.fillRect(viewportRectX, viewportRectY, viewportRectWidth, viewportRectHeight);
   ctx.strokeStyle = VIEWPORT_STROKE_COLOR;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(viewportRectX + 0.5, viewportRectY + 0.5, Math.max(0, viewportRectWidth - 1), Math.max(0, viewportRectHeight - 1));
+  ctx.lineWidth = 2;
+  ctx.strokeRect(viewportRectX, viewportRectY, viewportRectWidth, viewportRectHeight);
 
   return {
     originX,
