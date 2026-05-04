@@ -4,9 +4,20 @@ import { getEntityVisual } from "../domain/entities/entityVisuals.js";
 import { getSoundVisual } from "../domain/sound/soundVisuals.js";
 
 const EMPTY_CELL_COLOR = "rgba(17, 24, 40, 0.45)";
-const VIEWPORT_STROKE_COLOR = "#b2c7ff";
-const VIEWPORT_FILL_COLOR = "rgba(93, 125, 214, 0.2)";
+const VIEWPORT_STROKE_COLOR = "#d8e6ff";
+const VIEWPORT_FILL_COLOR = "rgba(123, 171, 255, 0.12)";
 const FRAME_COLOR = "rgba(55, 75, 118, 0.8)";
+
+function getEditorViewportSize(minimapCanvas) {
+  const editorCanvas = minimapCanvas?.ownerDocument?.getElementById("editorCanvas");
+  if (!editorCanvas) return { width: minimapCanvas.width, height: minimapCanvas.height };
+
+  const editorRect = editorCanvas.getBoundingClientRect();
+  return {
+    width: Math.max(1, editorRect.width || editorCanvas.width || 1),
+    height: Math.max(1, editorRect.height || editorCanvas.height || 1),
+  };
+}
 
 export function renderMinimap(ctx, state) {
   const canvas = ctx.canvas;
@@ -110,8 +121,9 @@ export function renderMinimap(ctx, state) {
   const viewportCellSize = tileSize * state.viewport.zoom;
   const viewportWorldX = -state.viewport.offsetX;
   const viewportWorldY = -state.viewport.offsetY;
-  const viewportWorldWidth = viewWidth / viewportCellSize;
-  const viewportWorldHeight = viewHeight / viewportCellSize;
+  const editorViewport = getEditorViewportSize(canvas);
+  const viewportWorldWidth = editorViewport.width / viewportCellSize;
+  const viewportWorldHeight = editorViewport.height / viewportCellSize;
 
   const viewportRectX = originX + (viewportWorldX / tileSize) * contentScale;
   const viewportRectY = originY + (viewportWorldY / tileSize) * contentScale;
