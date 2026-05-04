@@ -6340,7 +6340,72 @@
           state.rechargedLiquidSummaryLogged = true;
         }
 
-        // Render lanes are explicit: tiles -> decor(world) -> entities -> player -> HUD.
+        const rechargedDecorTime = (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now();
+
+        renderReactiveGrass(
+          ctx,
+          playerCenterX,
+          playerFootY,
+          rechargedDecorTime,
+          {
+            mapper,
+            patches: reactiveGrassPatches,
+          },
+        );
+
+        renderReactiveBloomPlants(
+          ctx,
+          playerCenterX,
+          playerFootY,
+          rechargedDecorTime,
+          { mapper, patches: reactiveBloomPatches },
+        );
+
+        const reactiveCrystalWakeSources = [];
+        if (Array.isArray(entitySnapshots)) {
+          for (const entity of entitySnapshots) {
+            const entityType = typeof entity?.type === "string" ? entity.type : "";
+            if (entityType !== "lantern_01" && entityType !== "lantern" && entityType !== "firefly_01" && entityType !== "firefly") {
+              continue;
+            }
+            const entityWorldX = Number.isFinite(entity?.x) ? entity.x : null;
+            const entityWorldY = Number.isFinite(entity?.y) ? entity.y : null;
+            const entityWorldW = Number.isFinite(entity?.w) && entity.w > 0 ? entity.w : 1;
+            const entityWorldH = Number.isFinite(entity?.h) && entity.h > 0 ? entity.h : 1;
+            if (!Number.isFinite(entityWorldX) || !Number.isFinite(entityWorldY)) continue;
+            const isLantern = entityType === "lantern_01" || entityType === "lantern";
+            reactiveCrystalWakeSources.push({
+              x: entityWorldX + (entityWorldW * 0.5),
+              y: entityWorldY + (entityWorldH * 0.5),
+              radius: isLantern ? 210 : 150,
+              strength: isLantern ? 1 : 0.8,
+            });
+          }
+        }
+        if (Array.isArray(flareSnapshots)) {
+          for (const flare of flareSnapshots) {
+            const flareLooksTileBased = coordinatesLookTileBased
+              && Number.isFinite(flare?.x)
+              && Number.isFinite(flare?.y)
+              && flare.x <= worldWidthRaw + tileSize
+              && flare.y <= worldHeightRaw + tileSize;
+            const flareWorldX = flareLooksTileBased ? flare.x * worldUnitsToPx : flare.x;
+            const flareWorldY = flareLooksTileBased ? flare.y * worldUnitsToPx : flare.y;
+            if (Number.isFinite(flareWorldX) && Number.isFinite(flareWorldY)) {
+              reactiveCrystalWakeSources.push({ x: flareWorldX, y: flareWorldY, radius: 170, strength: 0.9 });
+            }
+          }
+        }
+
+        renderReactiveCrystals(
+          ctx,
+          playerCenterX,
+          playerFootY,
+          rechargedDecorTime,
+          { mapper, clusters: reactiveCrystalPatches, wakeSources: reactiveCrystalWakeSources, debug: true },
+        );
+
+        // Render lanes are explicit: tiles -> reactive decor -> decor(world) -> entities -> player -> HUD.
         // Background decor lane is parsed for future support but intentionally not drawn yet.
         const decorWorldLane = [];
         for (const decor of decorSnapshots) {
@@ -6798,71 +6863,6 @@
           ctx.fill();
           ctx.restore();
         }
-
-        const rechargedDecorTime = (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now();
-
-        renderReactiveGrass(
-          ctx,
-          playerCenterX,
-          playerFootY,
-          rechargedDecorTime,
-          {
-            mapper,
-            patches: reactiveGrassPatches,
-          },
-        );
-
-        renderReactiveBloomPlants(
-          ctx,
-          playerCenterX,
-          playerFootY,
-          rechargedDecorTime,
-          { mapper, patches: reactiveBloomPatches },
-        );
-
-        const reactiveCrystalWakeSources = [];
-        if (Array.isArray(entitySnapshots)) {
-          for (const entity of entitySnapshots) {
-            const entityType = typeof entity?.type === "string" ? entity.type : "";
-            if (entityType !== "lantern_01" && entityType !== "lantern" && entityType !== "firefly_01" && entityType !== "firefly") {
-              continue;
-            }
-            const entityWorldX = Number.isFinite(entity?.x) ? entity.x : null;
-            const entityWorldY = Number.isFinite(entity?.y) ? entity.y : null;
-            const entityWorldW = Number.isFinite(entity?.w) && entity.w > 0 ? entity.w : 1;
-            const entityWorldH = Number.isFinite(entity?.h) && entity.h > 0 ? entity.h : 1;
-            if (!Number.isFinite(entityWorldX) || !Number.isFinite(entityWorldY)) continue;
-            const isLantern = entityType === "lantern_01" || entityType === "lantern";
-            reactiveCrystalWakeSources.push({
-              x: entityWorldX + (entityWorldW * 0.5),
-              y: entityWorldY + (entityWorldH * 0.5),
-              radius: isLantern ? 210 : 150,
-              strength: isLantern ? 1 : 0.8,
-            });
-          }
-        }
-        if (Array.isArray(flareSnapshots)) {
-          for (const flare of flareSnapshots) {
-            const flareLooksTileBased = coordinatesLookTileBased
-              && Number.isFinite(flare?.x)
-              && Number.isFinite(flare?.y)
-              && flare.x <= worldWidthRaw + tileSize
-              && flare.y <= worldHeightRaw + tileSize;
-            const flareWorldX = flareLooksTileBased ? flare.x * worldUnitsToPx : flare.x;
-            const flareWorldY = flareLooksTileBased ? flare.y * worldUnitsToPx : flare.y;
-            if (Number.isFinite(flareWorldX) && Number.isFinite(flareWorldY)) {
-              reactiveCrystalWakeSources.push({ x: flareWorldX, y: flareWorldY, radius: 170, strength: 0.9 });
-            }
-          }
-        }
-
-        renderReactiveCrystals(
-          ctx,
-          playerCenterX,
-          playerFootY,
-          rechargedDecorTime,
-          { mapper, clusters: reactiveCrystalPatches, wakeSources: reactiveCrystalWakeSources, debug: true },
-        );
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
         if (player.hidden !== true) {

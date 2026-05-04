@@ -54,10 +54,10 @@ export function renderEditorFrame(ctx, state) {
   worldCtx.fillStyle = state.ui.workspaceBackground || "#0a0f1d";
   worldCtx.fillRect(0, 0, canvas.width, canvas.height);
   renderBackground(worldCtx, doc, state.viewport);
-  renderDecor(worldCtx, doc, state.viewport, state.interaction);
   renderReactiveGrassPatches(worldCtx, doc, state.viewport, state.interaction);
   renderReactiveBloomPatches(worldCtx, doc, state.viewport, state.interaction);
   renderReactiveCrystalPatches(worldCtx, doc, state.viewport, state.interaction);
+  renderDecor(worldCtx, doc, state.viewport, state.interaction);
   renderTiles(worldCtx, doc, state.viewport);
   renderEntities(worldCtx, doc, state.viewport, state.interaction);
 
