@@ -21,6 +21,17 @@ export const OVERLAY_RENDER_ORDER = Object.freeze(["proximity", "sound", "grid",
 
 let darknessRenderTarget = null;
 
+function resetSurfaceForFrame(ctx, width, height, background) {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, width, height);
+  ctx.restore();
+}
+
 function ensureDarknessRenderTarget(width, height) {
   if (typeof document === "undefined") return null;
   if (!darknessRenderTarget) {
@@ -38,10 +49,9 @@ function ensureDarknessRenderTarget(width, height) {
 
 export function renderEditorFrame(ctx, state) {
   const canvas = ctx.canvas;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const background = state.ui.workspaceBackground || "#0a0f1d";
 
-  ctx.fillStyle = state.ui.workspaceBackground || "#0a0f1d";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  resetSurfaceForFrame(ctx, canvas.width, canvas.height, background);
 
   const doc = state.document.active;
   if (!doc) return;
@@ -50,9 +60,11 @@ export function renderEditorFrame(ctx, state) {
   const renderTarget = darknessPreviewEnabled ? ensureDarknessRenderTarget(canvas.width, canvas.height) : null;
   const worldCtx = renderTarget?.ctx || ctx;
 
-  worldCtx.clearRect(0, 0, canvas.width, canvas.height);
-  worldCtx.fillStyle = state.ui.workspaceBackground || "#0a0f1d";
-  worldCtx.fillRect(0, 0, canvas.width, canvas.height);
+  resetSurfaceForFrame(worldCtx, canvas.width, canvas.height, background);
+
+  worldCtx.save();
+  worldCtx.globalAlpha = 1;
+  worldCtx.globalCompositeOperation = "source-over";
   renderBackground(worldCtx, doc, state.viewport);
   renderReactiveGrassPatches(worldCtx, doc, state.viewport, state.interaction);
   renderReactiveBloomPatches(worldCtx, doc, state.viewport, state.interaction);
@@ -60,12 +72,21 @@ export function renderEditorFrame(ctx, state) {
   renderDecor(worldCtx, doc, state.viewport, state.interaction);
   renderTiles(worldCtx, doc, state.viewport);
   renderEntities(worldCtx, doc, state.viewport, state.interaction);
+  worldCtx.restore();
 
   if (renderTarget) {
     renderDarknessPreview(worldCtx, doc, state.viewport);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
     ctx.drawImage(renderTarget.canvas, 0, 0);
+    ctx.restore();
   }
 
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
   renderProximityOverlays(ctx, doc, state.viewport, state.ui);
   renderSounds(ctx, doc, state.viewport, state.interaction, state.scan);
   renderGrid(ctx, doc, state.viewport);
@@ -77,4 +98,5 @@ export function renderEditorFrame(ctx, state) {
   });
   renderBrushPreviewOverlay(ctx, doc, state.viewport, state.interaction, state.brush.activeDraft);
   renderSelectionOverlay(ctx, doc, state.viewport, state.interaction);
+  ctx.restore();
 }
