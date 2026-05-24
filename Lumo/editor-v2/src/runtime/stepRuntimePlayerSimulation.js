@@ -1462,6 +1462,22 @@ function normalizeDarkProjectiles(playerState = {}) {
     .filter((projectile) => projectile.x != null && projectile.y != null && projectile.maxAge > 0);
 }
 
+function normalizeDarkSpellHazards(playerState = {}) {
+  if (!Array.isArray(playerState?.darkSpellHazards)) {
+    return [];
+  }
+  return playerState.darkSpellHazards
+    .map((hazard, index) => ({
+      id: Number.isFinite(hazard?.id) ? Math.floor(hazard.id) : index + 1,
+      x: Number.isFinite(hazard?.x) ? hazard.x : null,
+      y: Number.isFinite(hazard?.y) ? hazard.y : null,
+      age: Number.isFinite(hazard?.age) ? hazard.age : 0,
+      life: Number.isFinite(hazard?.life) ? hazard.life : 5.0,
+      fadeStart: Number.isFinite(hazard?.fadeStart) ? hazard.fadeStart : 3.9,
+    }))
+    .filter((hazard) => hazard.x != null && hazard.y != null && hazard.life > 0);
+}
+
 function applyDarkCreatureDamageToPlayer(playerState, sourceCenterX, knockbackX, knockbackY, energyLoss) {
   const sourceX = Number.isFinite(sourceCenterX) ? sourceCenterX : (Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0);
   const playerCenterX = Number.isFinite(playerState?.position?.x) ? playerState.position.x : 0;
@@ -1769,9 +1785,13 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
   const playerCenter = { x: playerBounds.x + playerBounds.w * 0.5, y: playerBounds.y + playerBounds.h * 0.5 };
   let nextPlayer = { ...playerState };
   const darkProjectiles = normalizeDarkProjectiles(playerState);
+  const darkSpellHazards = normalizeDarkSpellHazards(playerState);
   const spawnedProjectiles = [];
+  const spawnedHazards = [];
+  const steppedHazards = [];
   const steppedProjectiles = [];
   let nextProjectileId = Number.isFinite(playerState?.nextDarkProjectileId) ? Math.max(1, Math.floor(playerState.nextDarkProjectileId)) : 1;
+  let nextDarkSpellHazardId = Number.isFinite(playerState?.nextDarkSpellHazardId) ? Math.max(1, Math.floor(playerState.nextDarkSpellHazardId)) : 1;
 
   for (const entity of entities) {
     if (!isDarkCreatureEntityType(entity?.type) || entity?.active !== true) {
@@ -1894,17 +1914,26 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
   // Step dark spell projectiles and apply direct-hit damage.
   const worldWidthPx = resolveWorldDimensionPx(worldPacket?.world?.width, tileSize);
   const worldHeightPx = resolveWorldDimensionPx(worldPacket?.world?.height, tileSize);
+  const spawnDarkSpellHazardAt = (centerX, centerY) => {
+    if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) {
+      return;
+    }
+    spawnedHazards.push({
+      id: nextDarkSpellHazardId,
+      x: centerX - 12,
+      y: centerY - 12,
+      age: 0,
+      life: 5.0,
+      fadeStart: 3.9,
+    });
+    nextDarkSpellHazardId += 1;
+  };
   for (const projectile of darkProjectiles) {
     const nextProjectile = { ...projectile };
-    const impacted = nextProjectile.impacted === true;
-    if (!impacted) {
+    if (nextProjectile.impacted !== true) {
       nextProjectile.vy += nextProjectile.gravity * dt;
       nextProjectile.x += nextProjectile.vx * dt;
       nextProjectile.y += nextProjectile.vy * dt;
-    } else {
-      nextProjectile.vx = 0;
-      nextProjectile.vy = 0;
-      nextProjectile.gravity = 0;
     }
     nextProjectile.age += dt;
     const spawnedThisTick = (Number.isFinite(projectile?.age) ? projectile.age : 0) <= 0;
@@ -1925,13 +1954,12 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
       : false;
     const expired = nextProjectile.age >= Math.max(0.001, nextProjectile.maxAge);
     if (outsideWorld || expired) {
+      spawnDarkSpellHazardAt(nextProjectile.x + projectileSize * 0.5, nextProjectile.y + projectileSize * 0.5);
       continue;
     }
-    if (!impacted && doesAabbOverlapSolidTile(worldPacket, tileSize, projectileBounds)) {
-      nextProjectile.impacted = true;
-      nextProjectile.vx = 0;
-      nextProjectile.vy = 0;
-      nextProjectile.gravity = 0;
+    if (doesAabbOverlapSolidTile(worldPacket, tileSize, projectileBounds)) {
+      spawnDarkSpellHazardAt(nextProjectile.x + projectileSize * 0.5, nextProjectile.y + projectileSize * 0.5);
+      continue;
     }
     if (isAabbOverlap(projectileBounds, playerBounds)) {
       nextPlayer = applyDarkCreatureDamageToPlayer(
@@ -1941,14 +1969,26 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
         nextProjectile.knockbackY,
         nextProjectile.energyLoss,
       );
+      spawnDarkSpellHazardAt(nextProjectile.x + projectileSize * 0.5, nextProjectile.y + projectileSize * 0.5);
       continue;
     }
     steppedProjectiles.push(nextProjectile);
   }
 
+  for (const hazard of darkSpellHazards) {
+    const nextHazard = { ...hazard, age: (Number.isFinite(hazard?.age) ? hazard.age : 0) + dt };
+    if (nextHazard.age < Math.max(0.001, Number.isFinite(nextHazard?.life) ? nextHazard.life : 5.0)) {
+      steppedHazards.push(nextHazard);
+    }
+  }
+
   const persistedProjectiles = [
     ...steppedProjectiles,
     ...spawnedProjectiles.map((spawnedProjectile) => ({ ...spawnedProjectile })),
+  ];
+  const persistedHazards = [
+    ...steppedHazards,
+    ...spawnedHazards.map((hazard) => ({ ...hazard })),
   ];
 
   return {
@@ -1956,6 +1996,8 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
     player: nextPlayer,
     darkProjectiles: persistedProjectiles,
     nextDarkProjectileId: nextProjectileId,
+    darkSpellHazards: persistedHazards,
+    nextDarkSpellHazardId,
   };
 }
 
@@ -3445,6 +3487,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       ok: true,
       darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
       nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
+      darkSpellHazards: Array.isArray(playerState?.darkSpellHazards) ? playerState.darkSpellHazards : [],
+      nextDarkSpellHazardId: Number.isFinite(playerState?.nextDarkSpellHazardId) ? playerState.nextDarkSpellHazardId : 1,
       player: applyPlayerLightParity(buildGameOverPlayerState(playerState)),
       collisions: {
         moveX: 0,
@@ -3480,6 +3524,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       ok: true,
       darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
       nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
+      darkSpellHazards: Array.isArray(playerState?.darkSpellHazards) ? playerState.darkSpellHazards : [],
+      nextDarkSpellHazardId: Number.isFinite(playerState?.nextDarkSpellHazardId) ? playerState.nextDarkSpellHazardId : 1,
       player: applyPlayerLightParity({
         ...playerState,
         levelComplete: true,
@@ -3545,6 +3591,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
         ok: true,
         darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
         nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
+        darkSpellHazards: Array.isArray(playerState?.darkSpellHazards) ? playerState.darkSpellHazards : [],
+        nextDarkSpellHazardId: Number.isFinite(playerState?.nextDarkSpellHazardId) ? playerState.nextDarkSpellHazardId : 1,
         player: applyPlayerLightParity({
           ...playerState,
           ...pending.player,
@@ -3601,6 +3649,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       ok: true,
       darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
       nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
+      darkSpellHazards: Array.isArray(playerState?.darkSpellHazards) ? playerState.darkSpellHazards : [],
+      nextDarkSpellHazardId: Number.isFinite(playerState?.nextDarkSpellHazardId) ? playerState.nextDarkSpellHazardId : 1,
         player: applyPlayerLightParity({
           ...playerState,
           position: { x: spawnX, y: spawnY },
@@ -3862,6 +3912,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       ok: true,
       darkProjectiles: Array.isArray(playerState?.darkProjectiles) ? playerState.darkProjectiles : [],
       nextDarkProjectileId: Number.isFinite(playerState?.nextDarkProjectileId) ? playerState.nextDarkProjectileId : 1,
+      darkSpellHazards: Array.isArray(playerState?.darkSpellHazards) ? playerState.darkSpellHazards : [],
+      nextDarkSpellHazardId: Number.isFinite(playerState?.nextDarkSpellHazardId) ? playerState.nextDarkSpellHazardId : 1,
       player: gameOverPlayer,
       collisions: {
         moveX: 0,
@@ -3967,6 +4019,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       energy: nextEnergy,
       darkProjectiles: playerState?.darkProjectiles,
       nextDarkProjectileId: playerState?.nextDarkProjectileId,
+      darkSpellHazards: playerState?.darkSpellHazards,
+      nextDarkSpellHazardId: playerState?.nextDarkSpellHazardId,
     },
     entityStep.entities,
     options,
@@ -3974,6 +4028,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const darkProjectiles = Array.isArray(darkCreatureStep?.darkProjectiles)
     ? normalizeDarkProjectiles({ darkProjectiles: darkCreatureStep.darkProjectiles })
     : normalizeDarkProjectiles({ darkProjectiles: playerState?.darkProjectiles });
+  const darkSpellHazards = Array.isArray(darkCreatureStep?.darkSpellHazards)
+    ? normalizeDarkSpellHazards({ darkSpellHazards: darkCreatureStep.darkSpellHazards })
+    : normalizeDarkSpellHazards({ darkSpellHazards: playerState?.darkSpellHazards });
   const hoverVoidStep = stepHoverVoidRuntime(
     worldPacket,
     darkCreatureStep?.player ?? {
@@ -3999,6 +4056,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const nextDarkProjectileId = Number.isFinite(darkCreatureStep?.nextDarkProjectileId)
     ? Math.max(1, Math.floor(darkCreatureStep.nextDarkProjectileId))
     : (Number.isFinite(playerState?.nextDarkProjectileId) ? Math.max(1, Math.floor(playerState.nextDarkProjectileId)) : 1);
+  const nextDarkSpellHazardId = Number.isFinite(darkCreatureStep?.nextDarkSpellHazardId)
+    ? Math.max(1, Math.floor(darkCreatureStep.nextDarkSpellHazardId))
+    : (Number.isFinite(playerState?.nextDarkSpellHazardId) ? Math.max(1, Math.floor(playerState.nextDarkSpellHazardId)) : 1);
   const finalVelocity = hoverVoidStep?.player?.velocity && typeof hoverVoidStep.player.velocity === "object"
     ? hoverVoidStep.player.velocity
     : darkCreatureStep?.player?.velocity && typeof darkCreatureStep.player.velocity === "object"
@@ -4058,6 +4118,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
     // FIX: propagate dark projectiles from darkCreatureRuntime to runner
     darkProjectiles: darkCreatureStep.darkProjectiles,
     nextDarkProjectileId: darkCreatureStep.nextDarkProjectileId,
+    darkSpellHazards: darkCreatureStep.darkSpellHazards,
+    nextDarkSpellHazardId: darkCreatureStep.nextDarkSpellHazardId,
     player: applyPlayerLightParity({
       position: resolvedPlayerStep.position,
       velocity: finalVelocity,
@@ -4103,6 +4165,8 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
       runtimeLights: fireflyStep.lights,
       darkProjectiles,
       nextDarkProjectileId,
+      darkSpellHazards,
+      nextDarkSpellHazardId,
       _hoverVoidAttackGlobalCd: Number.isFinite(hoverVoidStep?.player?._hoverVoidAttackGlobalCd)
         ? hoverVoidStep.player._hoverVoidAttackGlobalCd
         : Math.max(0, Number.isFinite(playerState?._hoverVoidAttackGlobalCd) ? playerState._hoverVoidAttackGlobalCd : 0),
