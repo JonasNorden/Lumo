@@ -4116,10 +4116,10 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   return {
     ok: true,
     // FIX: propagate dark projectiles from darkCreatureRuntime to runner
-    darkProjectiles: darkCreatureStep.darkProjectiles,
-    nextDarkProjectileId: darkCreatureStep.nextDarkProjectileId,
-    darkSpellHazards: darkCreatureStep.darkSpellHazards,
-    nextDarkSpellHazardId: darkCreatureStep.nextDarkSpellHazardId,
+    darkProjectiles,
+    nextDarkProjectileId,
+    darkSpellHazards,
+    nextDarkSpellHazardId,
     player: applyPlayerLightParity({
       position: resolvedPlayerStep.position,
       velocity: finalVelocity,
