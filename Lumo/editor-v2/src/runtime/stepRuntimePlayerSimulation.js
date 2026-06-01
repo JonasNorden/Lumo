@@ -154,6 +154,14 @@ const MOVING_PLATFORM_DEFAULT_LOOP = "pingpong";
 const MOVING_PLATFORM_LANDING_EPSILON_PX = 4;
 const FLARE_DARKNESS_RADIUS_MAX_PX = 150;
 const FLARE_VISUAL_GLOW_RADIUS_MAX_PX = 75;
+const DC_HAZARD_TRACE_LABEL = "[LUMO dcHazardTrace]";
+
+function isDarkCreatureHazardTraceEnabled() {
+  const search = typeof globalThis !== "undefined" && typeof globalThis?.location?.search === "string"
+    ? globalThis.location.search
+    : "";
+  return typeof URLSearchParams === "function" && new URLSearchParams(search).get("dcHazardTrace") === "1";
+}
 
 function clampPlayerEnergy(energy) {
   return Number.isFinite(energy) ? Math.max(0, Math.min(1, energy)) : 1;
@@ -1790,6 +1798,7 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
   const spawnedHazards = [];
   const steppedHazards = [];
   const steppedProjectiles = [];
+  const dcHazardTraceEvents = isDarkCreatureHazardTraceEnabled() ? [] : null;
   let nextProjectileId = Number.isFinite(playerState?.nextDarkProjectileId) ? Math.max(1, Math.floor(playerState.nextDarkProjectileId)) : 1;
   let nextDarkSpellHazardId = Number.isFinite(playerState?.nextDarkSpellHazardId) ? Math.max(1, Math.floor(playerState.nextDarkSpellHazardId)) : 1;
 
@@ -1916,17 +1925,34 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
   const worldHeightPx = resolveWorldDimensionPx(worldPacket?.world?.height, tileSize);
   const spawnDarkSpellHazardAt = (centerX, centerY) => {
     if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) {
-      return;
+      return null;
     }
-    spawnedHazards.push({
+    const hazard = {
       id: nextDarkSpellHazardId,
       x: centerX - 12,
       y: centerY - 12,
       age: 0,
       life: 5.0,
       fadeStart: 3.9,
-    });
+    };
+    spawnedHazards.push(hazard);
     nextDarkSpellHazardId += 1;
+    return hazard;
+  };
+  const traceDarkProjectileTerminal = (projectile, reason, spawnedHazard, energyBefore = null, energyAfter = null) => {
+    if (!dcHazardTraceEvents) {
+      return;
+    }
+    dcHazardTraceEvents.push({
+      projectileId: Number.isFinite(projectile?.id) ? projectile.id : null,
+      reason,
+      spawnDarkSpellHazardAtCalled: spawnedHazard != null,
+      spawnedHazard: spawnedHazard
+        ? { id: spawnedHazard.id, x: spawnedHazard.x, y: spawnedHazard.y }
+        : null,
+      playerEnergyBefore: reason === "player" ? energyBefore : null,
+      playerEnergyAfter: reason === "player" ? energyAfter : null,
+    });
   };
   for (const projectile of darkProjectiles) {
     const nextProjectile = { ...projectile };
@@ -1954,14 +1980,17 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
       : false;
     const expired = nextProjectile.age >= Math.max(0.001, nextProjectile.maxAge);
     if (outsideWorld || expired) {
-      spawnDarkSpellHazardAt(nextProjectile.x + projectileSize * 0.5, nextProjectile.y + projectileSize * 0.5);
+      const spawnedHazard = spawnDarkSpellHazardAt(nextProjectile.x + projectileSize * 0.5, nextProjectile.y + projectileSize * 0.5);
+      traceDarkProjectileTerminal(nextProjectile, outsideWorld ? "outsideWorld" : "expired", spawnedHazard);
       continue;
     }
     if (doesAabbOverlapSolidTile(worldPacket, tileSize, projectileBounds)) {
-      spawnDarkSpellHazardAt(nextProjectile.x + projectileSize * 0.5, nextProjectile.y + projectileSize * 0.5);
+      const spawnedHazard = spawnDarkSpellHazardAt(nextProjectile.x + projectileSize * 0.5, nextProjectile.y + projectileSize * 0.5);
+      traceDarkProjectileTerminal(nextProjectile, "solid", spawnedHazard);
       continue;
     }
     if (isAabbOverlap(projectileBounds, playerBounds)) {
+      const playerEnergyBefore = Number.isFinite(nextPlayer?.energy) ? nextPlayer.energy : null;
       nextPlayer = applyDarkCreatureDamageToPlayer(
         nextPlayer,
         nextProjectile.x + projectileSize * 0.5,
@@ -1969,7 +1998,9 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
         nextProjectile.knockbackY,
         nextProjectile.energyLoss,
       );
-      spawnDarkSpellHazardAt(nextProjectile.x + projectileSize * 0.5, nextProjectile.y + projectileSize * 0.5);
+      const playerEnergyAfter = Number.isFinite(nextPlayer?.energy) ? nextPlayer.energy : null;
+      const spawnedHazard = spawnDarkSpellHazardAt(nextProjectile.x + projectileSize * 0.5, nextProjectile.y + projectileSize * 0.5);
+      traceDarkProjectileTerminal(nextProjectile, "player", spawnedHazard, playerEnergyBefore, playerEnergyAfter);
       continue;
     }
     steppedProjectiles.push(nextProjectile);
@@ -1990,6 +2021,16 @@ function stepDarkCreatureRuntime(worldPacket, playerState, sourceEntities, optio
     ...steppedHazards,
     ...spawnedHazards.map((hazard) => ({ ...hazard })),
   ];
+
+  if (dcHazardTraceEvents?.length > 0 && typeof console !== "undefined" && typeof console.info === "function") {
+    for (const event of dcHazardTraceEvents) {
+      console.info(DC_HAZARD_TRACE_LABEL, {
+        ...event,
+        returnedDarkProjectilesCount: persistedProjectiles.length,
+        returnedDarkSpellHazardsCount: persistedHazards.length,
+      });
+    }
+  }
 
   return {
     entities,
