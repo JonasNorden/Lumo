@@ -91,6 +91,12 @@ function cloneState(state) {
           nextDarkProjectileId: Number.isFinite(state?.playerState?.nextDarkProjectileId)
             ? state.playerState.nextDarkProjectileId
             : 1,
+          darkSpellHazards: Array.isArray(state?.playerState?.darkSpellHazards)
+            ? state.playerState.darkSpellHazards.map((hazard) => ({ ...hazard }))
+            : [],
+          nextDarkSpellHazardId: Number.isFinite(state?.playerState?.nextDarkSpellHazardId)
+            ? state.playerState.nextDarkSpellHazardId
+            : 1,
           flareStash: Number.isFinite(state?.playerState?.flareStash) ? state.playerState.flareStash : 1,
           entities: Array.isArray(state?.playerState?.entities)
             ? state.playerState.entities.map((entity) => ({ ...entity }))
@@ -179,6 +185,8 @@ export function createRuntimeRunner(options = {}) {
       },
       darkProjectiles: [],
       nextDarkProjectileId: 1,
+      darkSpellHazards: [],
+      nextDarkSpellHazardId: 1,
       entities: runtimeState.entities.map((entity) => ({ ...entity })),
       checkpoint: null,
     };
@@ -247,6 +255,12 @@ export function createRuntimeRunner(options = {}) {
         runtimeState.playerState.nextDarkProjectileId = Number.isFinite(result.nextDarkProjectileId)
           ? Math.max(1, Math.floor(result.nextDarkProjectileId))
           : runtimeState.playerState.nextDarkProjectileId;
+        runtimeState.playerState.darkSpellHazards = Array.isArray(result.darkSpellHazards)
+          ? result.darkSpellHazards.map((hazard) => ({ ...hazard }))
+          : runtimeState.playerState.darkSpellHazards;
+        runtimeState.playerState.nextDarkSpellHazardId = Number.isFinite(result.nextDarkSpellHazardId)
+          ? Math.max(1, Math.floor(result.nextDarkSpellHazardId))
+          : runtimeState.playerState.nextDarkSpellHazardId;
         runtimeState.entities = Array.isArray(result?.entities)
           ? result.entities.map((entity) => ({ ...entity }))
           : runtimeState.entities;
@@ -340,6 +354,8 @@ export function createRuntimeRunner(options = {}) {
           nextFlareId: 1,
           darkProjectiles: [],
           nextDarkProjectileId: 1,
+          darkSpellHazards: [],
+          nextDarkSpellHazardId: 1,
           entities: next.entities.map((entity) => ({ ...entity })),
         };
         next.warnings = uniqueMessages(lastBuild.warnings);
