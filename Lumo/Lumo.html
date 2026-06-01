@@ -3317,7 +3317,55 @@
           || (payload?.player && typeof payload.player === "object" ? payload.player : null)
           || bootPlayerSnapshot
         );
-        return Array.isArray(playerSnapshot?.entities) ? playerSnapshot.entities : [];
+        const liveEntities = Array.isArray(playerSnapshot?.entities) ? playerSnapshot.entities : [];
+        const darkSpellHazards = Array.isArray(playerSnapshot?.darkSpellHazards)
+          ? playerSnapshot.darkSpellHazards
+          : [];
+        if (darkSpellHazards.length <= 0) {
+          return liveEntities;
+        }
+
+        const readFinite = (value, fallback) => (Number.isFinite(value) ? value : fallback);
+        const clamp01 = (value) => Math.max(0, Math.min(1, value));
+        const readHazardAlpha = (hazard, age) => {
+          if (Number.isFinite(hazard?.alpha)) {
+            return hazard.alpha;
+          }
+          const life = readFinite(hazard?.life, 5.0);
+          const fadeStart = readFinite(hazard?.fadeStart, 3.9);
+          if (age <= fadeStart) {
+            return 1;
+          }
+          if (life <= fadeStart) {
+            return age < life ? 1 : 0;
+          }
+          return clamp01(1 - ((age - fadeStart) / (life - fadeStart)));
+        };
+        const transientHazards = darkSpellHazards
+          .map((hazard, index) => {
+            if (!hazard || typeof hazard !== "object" || !Number.isFinite(hazard.x) || !Number.isFinite(hazard.y)) {
+              return null;
+            }
+            const age = Number.isFinite(hazard.age) ? hazard.age : readFinite(hazard.t, 0);
+            const id = hazard.id !== undefined && hazard.id !== null
+              ? `darkSpellHazard-${String(hazard.id)}`
+              : `darkSpellHazard-runtime-${index}`;
+            return {
+              type: "darkSpellHazard",
+              id,
+              x: hazard.x,
+              y: hazard.y,
+              size: readFinite(hazard.size, 24),
+              t: age,
+              alpha: readHazardAlpha(hazard, age),
+              active: hazard.active !== false,
+              alive: hazard.alive !== false,
+              state: "active",
+            };
+          })
+          .filter((hazard) => hazard !== null);
+
+        return liveEntities.concat(transientHazards);
       } catch (_error) {
         return [];
       }
