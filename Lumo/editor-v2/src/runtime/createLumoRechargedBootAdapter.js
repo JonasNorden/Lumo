@@ -166,6 +166,20 @@ function buildPlayerSnapshot(snapshot) {
       }
     : null;
   const darkProjectiles = Array.isArray(source.darkProjectiles) ? source.darkProjectiles.map((projectile) => ({ ...projectile })) : [];
+  const darkSpellHazards = Array.isArray(source.darkSpellHazards)
+    ? source.darkSpellHazards
+      .map((hazard) => ({
+        id: Number.isFinite(hazard?.id) || typeof hazard?.id === "string" ? hazard.id : null,
+        x: Number.isFinite(hazard?.x) ? hazard.x : null,
+        y: Number.isFinite(hazard?.y) ? hazard.y : null,
+        age: Number.isFinite(hazard?.age) ? hazard.age : 0,
+        life: Number.isFinite(hazard?.life) ? hazard.life : null,
+        fadeStart: Number.isFinite(hazard?.fadeStart) ? hazard.fadeStart : null,
+        active: hazard?.active !== false,
+        alive: hazard?.alive !== false,
+      }))
+      .filter((hazard) => hazard.x !== null && hazard.y !== null)
+    : [];
   const entities = Array.isArray(source.entities) ? source.entities.map((entity) => cloneSnapshotEntity(entity)) : [];
   const hasRenderableDarkProjectileEntity = entities.some((entity) => (
     entity.type === "darkSpellProjectile" || entity.type === "dark_spell_projectile"
@@ -240,6 +254,7 @@ function buildPlayerSnapshot(snapshot) {
       : null,
     flares: Array.isArray(source.flares) ? source.flares.map((flare) => ({ ...flare })) : [],
     darkProjectiles,
+    darkSpellHazards,
     runtimeLights: Array.isArray(source.runtimeLights)
       ? source.runtimeLights
         .map((light) => ({

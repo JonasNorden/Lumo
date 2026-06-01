@@ -49,6 +49,20 @@ function buildPlayerSnapshot(playerState) {
       }))
       .filter((projectile) => projectile.x !== null && projectile.y !== null)
     : [];
+  const normalizedDarkSpellHazards = Array.isArray(playerState?.darkSpellHazards)
+    ? playerState.darkSpellHazards
+      .map((hazard) => ({
+        id: Number.isFinite(hazard?.id) || typeof hazard?.id === "string" ? hazard.id : null,
+        x: Number.isFinite(hazard?.x) ? hazard.x : null,
+        y: Number.isFinite(hazard?.y) ? hazard.y : null,
+        age: Number.isFinite(hazard?.age) ? hazard.age : 0,
+        life: Number.isFinite(hazard?.life) ? hazard.life : null,
+        fadeStart: Number.isFinite(hazard?.fadeStart) ? hazard.fadeStart : null,
+        active: hazard?.active !== false,
+        alive: hazard?.alive !== false,
+      }))
+      .filter((hazard) => hazard.x !== null && hazard.y !== null)
+    : [];
   const normalizedEntities = Array.isArray(playerState?.entities)
     ? playerState.entities
       .map((entity) => {
@@ -268,6 +282,7 @@ function buildPlayerSnapshot(playerState) {
       : [],
     entities: normalizedEntities.concat(transientDarkProjectileEntities),
     darkProjectiles: normalizedDarkProjectiles,
+    darkSpellHazards: normalizedDarkSpellHazards,
     runtimeLights: Array.isArray(playerState?.runtimeLights)
       ? playerState.runtimeLights
         .map((light) => ({
