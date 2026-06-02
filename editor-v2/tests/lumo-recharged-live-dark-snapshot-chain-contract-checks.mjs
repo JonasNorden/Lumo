@@ -83,15 +83,14 @@ async function runLiveDarkSnapshotChainChecks() {
     isFollowing: hover._isFollowing,
   };
 
-  let firstSpawnedProjectile = Array.isArray(snapshot.darkProjectiles) && snapshot.darkProjectiles.length > 0
-    ? snapshot.darkProjectiles[0]
+  const findAuthoritativeProjectile = (projectiles) => Array.isArray(projectiles)
+    ? projectiles.find((projectile) => projectile?._adapterCastSnapshotOnly !== true) ?? null
     : null;
+  let firstSpawnedProjectile = findAuthoritativeProjectile(snapshot.darkProjectiles);
   for (let i = 0; i < 80 && !firstSpawnedProjectile; i += 1) {
     adapter.tick({});
     snapshot = adapter.getPlayerSnapshot();
-    if (Array.isArray(snapshot.darkProjectiles) && snapshot.darkProjectiles.length > 0) {
-      firstSpawnedProjectile = snapshot.darkProjectiles[0];
-    }
+    firstSpawnedProjectile = findAuthoritativeProjectile(snapshot.darkProjectiles);
   }
 
   assert.ok(firstSpawnedProjectile, "expected darkProjectiles list to survive through live adapter snapshot chain");
