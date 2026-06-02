@@ -362,6 +362,39 @@
       }
     }
 
+
+    const DC_HAZARD_TRACE_LABEL = "[LUMO dcHazardTrace]";
+
+    function isDarkCreatureHazardTraceEnabled() {
+      const search = typeof window !== "undefined" && typeof window.location?.search === "string"
+        ? window.location.search
+        : "";
+      return typeof URLSearchParams === "function" && new URLSearchParams(search).get("dcHazardTrace") === "1";
+    }
+
+    function summarizeDarkSpellHazardsForTrace(hazards) {
+      return Array.isArray(hazards)
+        ? hazards.map((hazard) => ({
+            id: hazard?.id ?? null,
+            x: Number.isFinite(hazard?.x) ? hazard.x : null,
+            y: Number.isFinite(hazard?.y) ? hazard.y : null,
+          }))
+        : [];
+    }
+
+    function traceDarkSpellHazards(stage, hazards, extra = {}) {
+      if (!isDarkCreatureHazardTraceEnabled() || typeof console === "undefined" || typeof console.info !== "function") {
+        return;
+      }
+      const summarized = summarizeDarkSpellHazardsForTrace(hazards);
+      console.info(DC_HAZARD_TRACE_LABEL, {
+        stage,
+        count: summarized.length,
+        hazards: summarized,
+        ...extra,
+      });
+    }
+
     function readLatestRechargedBootPayload() {
       try {
         const payload = window.__LumoRechargedBoot;
@@ -3321,6 +3354,17 @@
         const darkSpellHazards = Array.isArray(playerSnapshot?.darkSpellHazards)
           ? playerSnapshot.darkSpellHazards
           : [];
+        traceDarkSpellHazards("visible to Lumo.html before render conversion", darkSpellHazards, {
+          source: playerSnapshot === adapterPlayerSnapshot
+            ? "adapterPlayerSnapshot"
+            : playerSnapshot === state?.currentPlayerSnapshot
+              ? "state.currentPlayerSnapshot"
+              : playerSnapshot === payload?.player
+                ? "payload.player"
+                : playerSnapshot === bootPlayerSnapshot
+                  ? "window.__LumoRechargedBoot.player"
+                  : "unknown",
+        });
         if (darkSpellHazards.length <= 0) {
           return liveEntities;
         }
@@ -3364,6 +3408,9 @@
             };
           })
           .filter((hazard) => hazard !== null);
+        traceDarkSpellHazards("converted into hazardEntities", transientHazards, {
+          sourceCount: darkSpellHazards.length,
+        });
 
         return liveEntities.concat(transientHazards);
       } catch (_error) {
