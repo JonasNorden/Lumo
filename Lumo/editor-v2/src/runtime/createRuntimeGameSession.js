@@ -3,6 +3,38 @@ import { resolveAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 
 const DEFAULT_STATUS = "idle";
 
+const DC_HAZARD_TRACE_LABEL = "[LUMO dcHazardTrace]";
+
+function isDarkCreatureHazardTraceEnabled() {
+  const search = typeof globalThis !== "undefined" && typeof globalThis?.location?.search === "string"
+    ? globalThis.location.search
+    : "";
+  return typeof URLSearchParams === "function" && new URLSearchParams(search).get("dcHazardTrace") === "1";
+}
+
+function summarizeDarkSpellHazards(hazards) {
+  return Array.isArray(hazards)
+    ? hazards.map((hazard) => ({
+        id: hazard?.id ?? null,
+        x: Number.isFinite(hazard?.x) ? hazard.x : null,
+        y: Number.isFinite(hazard?.y) ? hazard.y : null,
+      }))
+    : [];
+}
+
+function traceDarkSpellHazards(stage, hazards, extra = {}) {
+  if (!isDarkCreatureHazardTraceEnabled() || typeof console === "undefined" || typeof console.info !== "function") {
+    return;
+  }
+  const summarized = summarizeDarkSpellHazards(hazards);
+  console.info(DC_HAZARD_TRACE_LABEL, {
+    stage,
+    count: summarized.length,
+    hazards: summarized,
+    ...extra,
+  });
+}
+
 // Clones plain JSON-like values so snapshots never share mutable params references.
 function clonePlainData(value) {
   if (Array.isArray(value)) {
@@ -63,6 +95,7 @@ function buildPlayerSnapshot(playerState) {
       }))
       .filter((hazard) => hazard.x !== null && hazard.y !== null)
     : [];
+  traceDarkSpellHazards("included in runtime game session player snapshot", normalizedDarkSpellHazards);
   const normalizedEntities = Array.isArray(playerState?.entities)
     ? playerState.entities
       .map((entity) => {
@@ -568,6 +601,9 @@ export function createRuntimeGameSession(options = {}) {
       try {
         const tickResult = runner.step({ input: inputIntent });
         syncSessionFromRunner(sessionState, tickResult?.state ?? runner.getState?.());
+        traceDarkSpellHazards("persisted into runtime game session state", tickResult?.state?.playerState?.darkSpellHazards, {
+          tick: sessionState.tick,
+        });
 
         if (tickResult?.ok !== true || tickResult?.stepped !== true) {
           sessionState.ok = false;

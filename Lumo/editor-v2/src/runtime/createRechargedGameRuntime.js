@@ -1,6 +1,38 @@
 import { createRuntimeGameSession } from "./createRuntimeGameSession.js";
 import { resolveAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 
+const DC_HAZARD_TRACE_LABEL = "[LUMO dcHazardTrace]";
+
+function isDarkCreatureHazardTraceEnabled() {
+  const search = typeof globalThis !== "undefined" && typeof globalThis?.location?.search === "string"
+    ? globalThis.location.search
+    : "";
+  return typeof URLSearchParams === "function" && new URLSearchParams(search).get("dcHazardTrace") === "1";
+}
+
+function summarizeDarkSpellHazards(hazards) {
+  return Array.isArray(hazards)
+    ? hazards.map((hazard) => ({
+        id: hazard?.id ?? null,
+        x: Number.isFinite(hazard?.x) ? hazard.x : null,
+        y: Number.isFinite(hazard?.y) ? hazard.y : null,
+      }))
+    : [];
+}
+
+function traceDarkSpellHazards(stage, hazards, extra = {}) {
+  if (!isDarkCreatureHazardTraceEnabled() || typeof console === "undefined" || typeof console.info !== "function") {
+    return;
+  }
+  const summarized = summarizeDarkSpellHazards(hazards);
+  console.info(DC_HAZARD_TRACE_LABEL, {
+    stage,
+    count: summarized.length,
+    hazards: summarized,
+    ...extra,
+  });
+}
+
 const DEFAULT_STATUS = "idle";
 
 // Clones plain JSON-like values so snapshots never share mutable params references.
@@ -64,7 +96,10 @@ function buildPlayerSnapshot(player) {
       }
     : null;
 
-  return {
+  const sourceDarkSpellHazards = Array.isArray(source.darkSpellHazards) ? source.darkSpellHazards : [];
+  traceDarkSpellHazards("visible to recharged runtime player snapshot source", sourceDarkSpellHazards);
+
+  const snapshot = {
     x: Number.isFinite(source.x) ? source.x : null,
     y: Number.isFinite(source.y) ? source.y : null,
     velocity: {
@@ -117,6 +152,11 @@ function buildPlayerSnapshot(player) {
     liquidDeath,
     renderAlpha: Number.isFinite(source?.renderAlpha) ? Math.max(0, Math.min(1, source.renderAlpha)) : 1,
   };
+
+  traceDarkSpellHazards("included in recharged runtime exported player snapshot", snapshot.darkSpellHazards, {
+    sourceCount: sourceDarkSpellHazards.length,
+  });
+  return snapshot;
 }
 
 // Returns a compact world snapshot with a stable shape.

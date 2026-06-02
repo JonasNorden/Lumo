@@ -6,6 +6,39 @@ import { buildRuntimeWorldPacket } from "./buildRuntimeWorldPacket.js";
 import { buildRuntimeInitializationPacket } from "./buildRuntimeInitializationPacket.js";
 import { stepRuntimePlayerSimulation } from "./stepRuntimePlayerSimulation.js";
 
+
+const DC_HAZARD_TRACE_LABEL = "[LUMO dcHazardTrace]";
+
+function isDarkCreatureHazardTraceEnabled() {
+  const search = typeof globalThis !== "undefined" && typeof globalThis?.location?.search === "string"
+    ? globalThis.location.search
+    : "";
+  return typeof URLSearchParams === "function" && new URLSearchParams(search).get("dcHazardTrace") === "1";
+}
+
+function summarizeDarkSpellHazards(hazards) {
+  return Array.isArray(hazards)
+    ? hazards.map((hazard) => ({
+        id: hazard?.id ?? null,
+        x: Number.isFinite(hazard?.x) ? hazard.x : null,
+        y: Number.isFinite(hazard?.y) ? hazard.y : null,
+      }))
+    : [];
+}
+
+function traceDarkSpellHazards(stage, hazards, extra = {}) {
+  if (!isDarkCreatureHazardTraceEnabled() || typeof console === "undefined" || typeof console.info !== "function") {
+    return;
+  }
+  const summarized = summarizeDarkSpellHazards(hazards);
+  console.info(DC_HAZARD_TRACE_LABEL, {
+    stage,
+    count: summarized.length,
+    hazards: summarized,
+    ...extra,
+  });
+}
+
 function uniqueMessages(messages) {
   if (!Array.isArray(messages)) {
     return [];
@@ -234,6 +267,10 @@ export function createRuntimeRunner(options = {}) {
           entities: runtimeState.entities,
         });
         runtimeState.lastStep = result ?? null;
+        traceDarkSpellHazards("stepRuntimePlayerSimulation returned to runtime runner", result?.darkSpellHazards, {
+          tick: runtimeState.tick,
+          ok: result?.ok === true,
+        });
 
         if (result?.ok !== true || !result?.player) {
           runtimeState.ok = false;
@@ -258,6 +295,9 @@ export function createRuntimeRunner(options = {}) {
         runtimeState.playerState.darkSpellHazards = Array.isArray(result.darkSpellHazards)
           ? result.darkSpellHazards.map((hazard) => ({ ...hazard }))
           : runtimeState.playerState.darkSpellHazards;
+        traceDarkSpellHazards("persisted into runtime runner playerState", runtimeState.playerState.darkSpellHazards, {
+          tick: runtimeState.tick,
+        });
         runtimeState.playerState.nextDarkSpellHazardId = Number.isFinite(result.nextDarkSpellHazardId)
           ? Math.max(1, Math.floor(result.nextDarkSpellHazardId))
           : runtimeState.playerState.nextDarkSpellHazardId;

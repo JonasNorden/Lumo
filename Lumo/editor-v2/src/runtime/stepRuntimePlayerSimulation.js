@@ -163,6 +163,30 @@ function isDarkCreatureHazardTraceEnabled() {
   return typeof URLSearchParams === "function" && new URLSearchParams(search).get("dcHazardTrace") === "1";
 }
 
+
+function summarizeDarkSpellHazardsForTrace(hazards) {
+  return Array.isArray(hazards)
+    ? hazards.map((hazard) => ({
+        id: hazard?.id ?? null,
+        x: Number.isFinite(hazard?.x) ? hazard.x : null,
+        y: Number.isFinite(hazard?.y) ? hazard.y : null,
+      }))
+    : [];
+}
+
+function traceDarkSpellHazards(stage, hazards, extra = {}) {
+  if (!isDarkCreatureHazardTraceEnabled() || typeof console === "undefined" || typeof console.info !== "function") {
+    return;
+  }
+  const summarized = summarizeDarkSpellHazardsForTrace(hazards);
+  console.info(DC_HAZARD_TRACE_LABEL, {
+    stage,
+    count: summarized.length,
+    hazards: summarized,
+    ...extra,
+  });
+}
+
 function clampPlayerEnergy(energy) {
   return Number.isFinite(energy) ? Math.max(0, Math.min(1, energy)) : 1;
 }
@@ -4072,6 +4096,9 @@ export function stepRuntimePlayerSimulation(worldPacket, playerState, options = 
   const darkSpellHazards = Array.isArray(darkCreatureStep?.darkSpellHazards)
     ? normalizeDarkSpellHazards({ darkSpellHazards: darkCreatureStep.darkSpellHazards })
     : normalizeDarkSpellHazards({ darkSpellHazards: playerState?.darkSpellHazards });
+  traceDarkSpellHazards("returned from stepRuntimePlayerSimulation", darkSpellHazards, {
+    source: Array.isArray(darkCreatureStep?.darkSpellHazards) ? "darkCreatureStep" : "playerState",
+  });
   const hoverVoidStep = stepHoverVoidRuntime(
     worldPacket,
     darkCreatureStep?.player ?? {
