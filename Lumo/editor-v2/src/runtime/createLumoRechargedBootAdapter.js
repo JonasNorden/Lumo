@@ -128,6 +128,68 @@ function cloneSnapshotEntity(entity) {
   };
 }
 
+function buildDarkProjectileSnapshotFallbacks(entities, darkSpellHazards) {
+  const hazardProjectiles = Array.isArray(darkSpellHazards)
+    ? darkSpellHazards
+      .filter((hazard) => hazard?.active !== false && hazard?.alive !== false && Number.isFinite(hazard?.x) && Number.isFinite(hazard?.y))
+      .map((hazard, index) => ({
+        id: Number.isFinite(hazard?.id) ? hazard.id : index + 1,
+        x: hazard.x,
+        y: hazard.y,
+        vx: 0,
+        vy: 0,
+        age: Number.isFinite(hazard?.age) ? hazard.age : 0,
+        maxAge: Number.isFinite(hazard?.life) ? hazard.life : null,
+        _projectileSpritePath: "",
+        _adapterCastSnapshotOnly: true,
+      }))
+    : [];
+
+  if (hazardProjectiles.length > 0) {
+    return hazardProjectiles;
+  }
+
+  return Array.isArray(entities)
+    ? entities
+      .filter((entity) => (
+        (entity?.type === "dark_creature_01" || entity?.type === "darkCreature01")
+        && entity?.active === true
+        && entity?.alive !== false
+        && (
+          (Number.isFinite(entity?._castChargeT) && entity._castChargeT > 0)
+          || entity?.state === "casting-charge"
+          || entity?.state === "casting"
+        )
+        && Number.isFinite(entity?.x)
+        && Number.isFinite(entity?.y)
+      ))
+      .map((entity, index) => {
+        const width = Number.isFinite(entity?.w) && entity.w > 0
+          ? entity.w
+          : (Number.isFinite(entity?.size) && entity.size > 0 ? entity.size : 24);
+        const height = Number.isFinite(entity?.h) && entity.h > 0
+          ? entity.h
+          : (Number.isFinite(entity?.size) && entity.size > 0 ? entity.size : 24);
+        const centerX = entity.x + (width * 0.5);
+        const centerY = entity.y + (height * 0.5);
+        const targetX = Number.isFinite(entity?._castTargetX) ? entity._castTargetX : centerX;
+        const targetY = Number.isFinite(entity?._castTargetY) ? entity._castTargetY : centerY;
+        return {
+          id: index + 1,
+          x: centerX - 6,
+          y: centerY - 10,
+          vx: targetX - centerX,
+          vy: targetY - centerY,
+          age: 0,
+          maxAge: Number.isFinite(entity?._castChargeT) && entity._castChargeT > 0 ? entity._castChargeT : null,
+          _projectileSpritePath: typeof entity?._projectileSpritePath === "string" ? entity._projectileSpritePath : "",
+          ownerId: typeof entity?.id === "string" ? entity.id : null,
+          _adapterCastSnapshotOnly: true,
+        };
+      })
+    : [];
+}
+
 // Returns a compact player snapshot with stable primitive defaults.
 function buildPlayerSnapshot(snapshot) {
   const source = snapshot && typeof snapshot === "object" ? snapshot : {};
@@ -165,7 +227,7 @@ function buildPlayerSnapshot(snapshot) {
         fade: Number.isFinite(source?.liquidDeath?.fade) ? source.liquidDeath.fade : null,
       }
     : null;
-  const darkProjectiles = Array.isArray(source.darkProjectiles) ? source.darkProjectiles.map((projectile) => ({ ...projectile })) : [];
+  const sourceDarkProjectiles = Array.isArray(source.darkProjectiles) ? source.darkProjectiles.map((projectile) => ({ ...projectile })) : [];
   const darkSpellHazards = Array.isArray(source.darkSpellHazards)
     ? source.darkSpellHazards
       .map((hazard) => ({
@@ -181,13 +243,16 @@ function buildPlayerSnapshot(snapshot) {
       .filter((hazard) => hazard.x !== null && hazard.y !== null)
     : [];
   const entities = Array.isArray(source.entities) ? source.entities.map((entity) => cloneSnapshotEntity(entity)) : [];
+  const darkProjectiles = sourceDarkProjectiles.length > 0
+    ? sourceDarkProjectiles
+    : buildDarkProjectileSnapshotFallbacks(entities, darkSpellHazards);
   const hasRenderableDarkProjectileEntity = entities.some((entity) => (
     entity.type === "darkSpellProjectile" || entity.type === "dark_spell_projectile"
   ));
   const transientDarkProjectileEntities = hasRenderableDarkProjectileEntity
     ? []
     : darkProjectiles
-      .filter((projectile) => Number.isFinite(projectile?.x) && Number.isFinite(projectile?.y))
+      .filter((projectile) => projectile?._adapterCastSnapshotOnly !== true && Number.isFinite(projectile?.x) && Number.isFinite(projectile?.y))
       .map((projectile, index) => ({
         id: `runtime-dark-projectile-${index}`,
         type: "darkSpellProjectile",
