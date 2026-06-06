@@ -9,6 +9,7 @@ import {
   getStoneVisualContactOffsetY,
   getStoneVisualGeometry,
   getStoneVisualWorldBottomY,
+  getStoneVisualWorldTopY,
   normalizeStoneAreaForEditor,
   updateStoneAreaField,
 } from "../src/domain/worldAreas.js";
@@ -45,6 +46,8 @@ const baseDoc = {
   assert.equal(created.width, 96);
   assert.equal(created.height, 96);
   assert.equal(created.density, 0.35);
+  assert.equal(created.minStoneHeight, 24);
+  assert.equal(created.maxStoneHeight, 96);
 }
 
 {
@@ -52,6 +55,18 @@ const baseDoc = {
   assert.equal(area.sizeVariation, 1);
   assert.equal(area.rotationVariation, 0);
   assert.equal(area.clusterStrength, 0.75);
+  assert.equal(area.minStoneHeight, 24);
+  assert.equal(area.maxStoneHeight, 80);
+  const clampedHeights = normalizeStoneAreaForEditor({ id: "clamp", width: 120, height: 80, minStoneHeight: -5, maxStoneHeight: 120 });
+  assert.equal(clampedHeights.minStoneHeight, 24, "missing/invalid minimum stone height uses the authored default");
+  assert.equal(clampedHeights.maxStoneHeight, 80, "maximum stone height cannot exceed the authored footprint height");
+  const raisedMin = updateStoneAreaField(area, "minStoneHeight", 88);
+  assert.equal(raisedMin.minStoneHeight, 80, "minimum stone height clamps inside the authored footprint");
+  assert.equal(raisedMin.maxStoneHeight, 80, "maximum stone height remains at least the clamped minimum");
+  const loweredMax = updateStoneAreaField(area, "maxStoneHeight", 12);
+  assert.equal(loweredMax.maxStoneHeight, area.minStoneHeight, "maximum stone height cannot fall below the minimum");
+  const resized = updateStoneAreaField({ ...area, maxStoneHeight: 80 }, "height", 48);
+  assert.equal(resized.maxStoneHeight, 48, "changing area height clamps maxStoneHeight immediately");
   assert.equal(updateStoneAreaField(area, "density", 0).density, 0);
   assert.equal(updateStoneAreaField(area, "density", 2).density, 1);
 }
@@ -69,6 +84,40 @@ const baseDoc = {
   assert.deepEqual(generateStoneAreaLayout({ ...area, density: 0 }), [], "empty density renders nothing");
 }
 
+function getGeneratedVisualHeight(stone) {
+  return getStoneVisualWorldBottomY(stone) - getStoneVisualWorldTopY(stone);
+}
+
+{
+  const largeArea = normalizeStoneAreaForEditor({
+    id: "large-size-range",
+    x: 0,
+    y: 0,
+    width: 240,
+    height: 240,
+    minStoneHeight: 24,
+    maxStoneHeight: 240,
+    density: 0.8,
+    sizeVariation: 1,
+    rotationVariation: 0.5,
+    clusterStrength: 0.4,
+    seed: 0x51524,
+  });
+  const stones = generateStoneAreaLayout(largeArea);
+  assert.ok(stones.length > 0, "large Stone Area should generate stones");
+  const heights = stones.map(getGeneratedVisualHeight);
+  const widths = stones.map((stone) => stone.radiusX * 2);
+  assert.ok(heights.every((height) => height >= largeArea.minStoneHeight - 0.75 && height <= largeArea.maxStoneHeight + 0.75), "generated stone heights stay within authored min/max");
+  assert.ok(Math.max(...heights) >= largeArea.maxStoneHeight * 0.9, "large Stone Areas can generate stones close to maxStoneHeight");
+  assert.ok(Math.min(...heights) <= largeArea.minStoneHeight + ((largeArea.maxStoneHeight - largeArea.minStoneHeight) * 0.35), "high variation includes smaller stones near the lower range");
+  assert.ok(widths[heights.indexOf(Math.max(...heights))] > widths[heights.indexOf(Math.min(...heights))], "width scales proportionally with generated height");
+  const lowVariationHeights = generateStoneAreaLayout({ ...largeArea, id: "low-spread", sizeVariation: 0 }).map(getGeneratedVisualHeight);
+  assert.ok((Math.max(...heights) - Math.min(...heights)) > (Math.max(...lowVariationHeights) - Math.min(...lowVariationHeights)) + 80, "sizeVariation controls spread across min/max");
+  for (const stone of stones) {
+    assert.equal(Math.round(getStoneVisualWorldBottomY(stone) * 100) / 100, largeArea.y + largeArea.height, "flat-bottom baseline remains exact for scaled stones");
+    assert.ok(getStoneVisualWorldTopY(stone) >= largeArea.y - 0.01, "scaled stone tops remain inside the authored footprint");
+  }
+}
 
 {
   const area = normalizeStoneAreaForEditor({ id: "visual-style", x: 24, y: 48, width: 144, height: 96, density: 0.5, sizeVariation: 0.6, rotationVariation: 0.8, clusterStrength: 0.7 });
@@ -127,13 +176,17 @@ const baseDoc = {
 {
   const normalized = validateLevelDocument({
     ...baseDoc,
-    stoneAreas: [{ id: "save-me", x: 24, y: 48, width: 120, height: 72, density: 0.4, sizeVariation: 0.5, rotationVariation: 0.25, clusterStrength: 0.8 }],
+    stoneAreas: [{ id: "save-me", x: 24, y: 48, width: 120, height: 72, minStoneHeight: 18, maxStoneHeight: 60, density: 0.4, sizeVariation: 0.5, rotationVariation: 0.25, clusterStrength: 0.8 }],
   });
   assert.equal(normalized.stoneAreas.length, 1, "Stone Area saves in the Editor V2 document");
   assert.equal(normalized.stoneAreas[0].id, "save-me");
+  assert.equal(normalized.stoneAreas[0].minStoneHeight, 18);
+  assert.equal(normalized.stoneAreas[0].maxStoneHeight, 60);
 
   const { runtimeLevel } = v2ToRuntimeLevelObject(normalized);
   assert.equal(runtimeLevel.stoneAreas.length, 1, "Stone Area exports to the runtime level object");
+  assert.equal(runtimeLevel.stoneAreas[0].minStoneHeight, 18, "runtime export preserves minStoneHeight");
+  assert.equal(runtimeLevel.stoneAreas[0].maxStoneHeight, 60, "runtime export preserves maxStoneHeight");
   assert.equal(Array.isArray(runtimeLevel.layers.ents), true, "Stone Area must not export as gameplay entity");
 
   const loaded = loadLevelDocument({
@@ -149,6 +202,8 @@ const baseDoc = {
   const skeleton = buildRuntimeWorldSkeleton(loaded.level);
   const packet = buildRuntimeWorldPacket({ skeleton });
   assert.equal(packet.stoneAreas.length, 1, "runtime world packet carries Stone Areas");
+  assert.equal(packet.stoneAreas[0].minStoneHeight, 18, "runtime world packet carries minStoneHeight");
+  assert.equal(packet.stoneAreas[0].maxStoneHeight, 60, "runtime world packet carries maxStoneHeight");
 }
 
 console.log("stone area contracts passed");

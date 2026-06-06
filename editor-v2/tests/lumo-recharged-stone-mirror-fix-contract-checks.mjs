@@ -41,6 +41,8 @@ const testArea = {
   y: 96,
   width: 240,
   height: 72,
+  minStoneHeight: 18,
+  maxStoneHeight: 72,
   density: 0.8,
   sizeVariation: 0.55,
   rotationVariation: 0.75,
@@ -59,9 +61,9 @@ for (const stone of stones) {
   assert.ok(getStoneVisualWorldTopY(stone) >= testArea.y - 0.01, `stone ${stone.id} top must stay inside authored area height`);
 }
 
-const twoTileArea = { ...testArea, id: "stone_area_two_tiles", height: 48, seed: 0x51524 };
-const fourTileArea = { ...testArea, id: "stone_area_four_tiles", height: 96, seed: 0x51524 };
-const eightTileArea = { ...testArea, id: "stone_area_eight_tiles", height: 192, seed: 0x51524 };
+const twoTileArea = { ...testArea, id: "stone_area_two_tiles", height: 48, maxStoneHeight: 48, seed: 0x51524 };
+const fourTileArea = { ...testArea, id: "stone_area_four_tiles", height: 96, maxStoneHeight: 96, seed: 0x51524 };
+const eightTileArea = { ...testArea, id: "stone_area_eight_tiles", height: 192, maxStoneHeight: 192, seed: 0x51524 };
 const lowStats = getStoneHeightStats(twoTileArea);
 const midStats = getStoneHeightStats(fourTileArea);
 const tallStats = getStoneHeightStats(eightTileArea);
@@ -100,8 +102,9 @@ assert.doesNotMatch(stoneLayerSource, /ctx\.ellipse\([^\n]+stone\.radiusX[^\n]+s
 
 assert.match(runtimeSource, /kind: "stonelab-grounded-faceted-polygon"/, "runtime uses the same grounded StoneLab geometry kind as editor");
 assert.match(runtimeSource, /getRechargedStoneVisualContactOffsetY/, "runtime grounds stones by visual contact point");
-assert.match(runtimeSource, /resolveRechargedStoneAreaVisualSize/, "runtime uses the same area-height-based stone size resolver as Editor V2");
-assert.match(runtimeSource, /const availableHeight = Math\.max\(1, Number\(area\?\.height\) \|\| 0\)/, "runtime stone size maximum derives from authored area height");
+assert.match(runtimeSource, /resolveRechargedStoneAreaVisualSize/, "runtime uses the same min-max stone size resolver as Editor V2");
+assert.match(runtimeSource, /maxStoneHeight/, "runtime stone size maximum uses authored maxStoneHeight clamped to area height");
+assert.match(runtimeSource, /minStoneHeight/, "runtime stone size minimum uses authored minStoneHeight");
 assert.match(runtimeSource, /getRechargedStoneVisualHeightRange/, "runtime clamps scaled stone bodies to authored area height");
 assert.match(runtimeSource, /buildRechargedMirrorStoneReflectionCandidates/, "runtime prepares cheap cached Stone Area reflection candidates");
 assert.match(runtimeSource, /drawRechargedStoneMirrorReflections/, "runtime draws clipped local Stone Area reflections");

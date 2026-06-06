@@ -5978,7 +5978,7 @@ export function createEditorApp({
 
 
   const updateStoneArea = (field, value, options = {}) => {
-    const supportedFields = new Set(["x", "y", "width", "height", "density", "sizeVariation", "rotationVariation", "clusterStrength", "enabled", "visible"]);
+    const supportedFields = new Set(["x", "y", "width", "height", "minStoneHeight", "maxStoneHeight", "density", "sizeVariation", "rotationVariation", "clusterStrength", "enabled", "visible"]);
     if (!supportedFields.has(field)) return;
     store.setState((draft) => {
       const areas = Array.isArray(draft.document.active?.stoneAreas) ? draft.document.active.stoneAreas : null;
