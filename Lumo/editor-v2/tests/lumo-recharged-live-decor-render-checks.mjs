@@ -77,7 +77,7 @@ async function runDecorRuntimeChainChecks() {
 function runLiveRenderLaneContractChecks() {
   const html = fs.readFileSync(path.resolve(repoRoot, "Lumo.html"), "utf8");
   const decorLaneIndex = html.indexOf("for (const decor of decorWorldLane)");
-  const entityLaneIndex = html.indexOf("for (const entity of entitySnapshots)");
+  const entityLaneIndex = html.indexOf("for (const entity of entitySnapshots)", decorLaneIndex);
   assert.equal(decorLaneIndex > 0, true, "live render path must have a dedicated decor lane loop");
   assert.equal(entityLaneIndex > 0, true, "live render path must have an entity lane loop");
   assert.equal(
@@ -96,9 +96,14 @@ function runLiveRenderLaneContractChecks() {
     "decor lane should resolve authored decor art sources before drawing",
   );
   assert.equal(
-    html.includes("if (!resolvedImage) {\n        return;\n      }"),
+    html.includes("if (!resolvedImage) {\n        return null;\n      }"),
     true,
     "decor renderer should skip safely when art cannot be resolved",
+  );
+  assert.equal(
+    html.includes("function resolveRechargedDecorVisual"),
+    true,
+    "decor renderer should expose one resolved visual path for real decor and mirror reflection reuse",
   );
 }
 
