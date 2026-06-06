@@ -12,6 +12,7 @@ import {
 } from "../domain/sound/audioAssetCatalog.js";
 import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 import { getThemeDefaultAmbientAssetPath, rankSoundAssetOptionsForTheme } from "../domain/theme/themeProfiles.js";
+import { normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
 import { stopNativeInputKeyboardPropagation } from "./nativeInputGuards.js";
 
 const MIXED_FIELD_VALUE = "__mixed__";
@@ -151,6 +152,9 @@ function buildTrackedDataset(target) {
     "mirrorSurfaceAreaField",
     "mirrorSurfaceAreaId",
     "mirrorSurfaceAreaEditable",
+    "stoneAreaField",
+    "stoneAreaId",
+    "stoneAreaEditable",
   ];
 
   const dataset = {};
@@ -1219,7 +1223,8 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   }
 
   if (selectedStoneArea) {
-    return { markup: renderStoneAreaInspector(selectedStoneArea), isEmpty: false };
+    const normalizedSelectedStoneArea = normalizeStoneAreaForEditor(selectedStoneArea, selectedStoneAreaIndex ?? 0);
+    return { markup: renderStoneAreaInspector(normalizedSelectedStoneArea), isEmpty: false };
   }
 
   if (selectedReactiveCrystalPatch) {
