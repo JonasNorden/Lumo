@@ -34115,24 +34115,6 @@
   ],
   "entities": [
     {
-      "id": "entity-spawn",
-      "name": "Player Spawn",
-      "type": "player-spawn",
-      "x": 2,
-      "y": 17,
-      "visible": true,
-      "params": {}
-    },
-    {
-      "id": "entity-exit",
-      "name": "Exit",
-      "type": "player-exit",
-      "x": 497,
-      "y": 17,
-      "visible": true,
-      "params": {}
-    },
-    {
       "id": "entity-3",
       "name": "Liquid Acid / Swamp",
       "type": "bubbling_liquid_volume",
@@ -34159,6 +34141,24 @@
           "instantDeath": true
         }
       }
+    },
+    {
+      "id": "entity-spawn",
+      "name": "Player Spawn",
+      "type": "player-spawn",
+      "x": 2,
+      "y": 17,
+      "visible": true,
+      "params": {}
+    },
+    {
+      "id": "entity-exit",
+      "name": "Exit",
+      "type": "player-exit",
+      "x": 497,
+      "y": 17,
+      "visible": true,
+      "params": {}
     }
   ],
   "sounds": [],
@@ -34245,6 +34245,38 @@
       "reactFar": 176,
       "reactMid": 94,
       "reactNear": 36
+    },
+    {
+      "id": "reactive_grass-2",
+      "kind": "reactive_grass",
+      "x": 1668,
+      "y": 432,
+      "width": 264,
+      "density": 416,
+      "heightMin": 12,
+      "heightMax": 20,
+      "heightProfile": "organic_wave",
+      "heightVariation": 1,
+      "baseColor": "#2f6f3a",
+      "topColor": "#7fd66b",
+      "variant": "lush_default",
+      "seed": 708531580
+    },
+    {
+      "id": "reactive_grass-3",
+      "kind": "reactive_grass",
+      "x": 2064,
+      "y": 432,
+      "width": 96,
+      "density": 416,
+      "heightMin": 12,
+      "heightMax": 16,
+      "heightProfile": "organic_wave",
+      "heightVariation": 1,
+      "baseColor": "#2f6f3a",
+      "topColor": "#7fd66b",
+      "variant": "lush_default",
+      "seed": 87213841
     }
   ],
   "reactiveBloomPatches": [
@@ -45317,9 +45349,9 @@
       "x": 1560,
       "y": 384,
       "width": 624,
-      "height": 48,
-      "density": 0.35,
-      "sizeVariation": 0.45,
+      "height": 50,
+      "density": 0.15,
+      "sizeVariation": 0.71,
       "rotationVariation": 0.65,
       "clusterStrength": 0.5,
       "enabled": true,
@@ -45332,7 +45364,7 @@
       "width": 600,
       "height": 48,
       "density": 0.35,
-      "sizeVariation": 0.45,
+      "sizeVariation": 0.62,
       "rotationVariation": 0.65,
       "clusterStrength": 0.5,
       "enabled": true,
