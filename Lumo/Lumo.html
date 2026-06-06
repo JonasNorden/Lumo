@@ -51,6 +51,7 @@
     import { renderReactiveGrass } from "./editor-v2/src/runtime/renderReactiveGrass.js";
     import { renderReactiveBloomPlants } from "./editor-v2/src/runtime/renderReactiveBloomPlants.js";
     import { renderReactiveCrystals } from "./editor-v2/src/runtime/renderReactiveCrystals.js";
+    import { drawReactiveDecorMirrorReflections } from "./editor-v2/src/runtime/mirrorReactiveDecorReflection.js";
     import {
       FIREFLY_AUDIO_PATH,
       createFireflyAudioBridge,
@@ -6562,6 +6563,13 @@
           boostSnapshot,
           playerSnapshot: currentSnapshot,
           decorSnapshots: decorWorldLane,
+          reactiveDecor: {
+            grassPatches: reactiveGrassPatches,
+            bloomPatches: reactiveBloomPatches,
+            crystalPatches: reactiveCrystalPatches,
+          },
+          reactiveDecorTime: rechargedDecorTime,
+          reactiveCrystalWakeSources,
           worldUnitsToPx,
           worldWidthRaw,
           worldHeightRaw,
@@ -7508,6 +7516,15 @@
           sheen.addColorStop(1, `rgba(140, 190, 230, ${0.12 * surfaceStrength})`);
           ctx.fillStyle = sheen;
           ctx.fillRect(surfaceRect.x, surfaceRect.y, surfaceRect.w, surfaceRect.h);
+        }
+
+        if (drawReactiveDecorMirrorReflections(ctx, mapper, area, options.reactiveDecor, {
+          playerCenterX,
+          playerFootY,
+          time: options.reactiveDecorTime,
+          crystalWakeSources: options.reactiveCrystalWakeSources,
+        })) {
+          drewAnyReflection = true;
         }
 
         for (const decorVisual of decorReflectionCandidates) {
