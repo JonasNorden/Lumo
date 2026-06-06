@@ -59,6 +59,10 @@ function cloneMirrorSurfaceAreaSnapshot(area) {
   return area && typeof area === "object" ? { ...area } : null;
 }
 
+function cloneStoneAreaSnapshot(area) {
+  return area && typeof area === "object" ? { ...area } : null;
+}
+
 export function createReactiveGrassEditEntry(mode, payload = {}) {
   const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
   const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
@@ -122,6 +126,20 @@ export function createMirrorSurfaceAreaEditEntry(mode, payload = {}) {
   };
 }
 
+export function createStoneAreaEditEntry(mode, payload = {}) {
+  const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
+  const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
+  const index = Number.isInteger(payload.index) ? payload.index : null;
+  return {
+    kind: "stone-area",
+    mode: normalizedMode,
+    objectId,
+    index,
+    previousSnapshot: cloneStoneAreaSnapshot(payload.previousSnapshot),
+    nextSnapshot: cloneStoneAreaSnapshot(payload.nextSnapshot),
+  };
+}
+
 function applyArrayObjectUndo(doc, entry, field, cloneSnapshot) {
   if (!Array.isArray(doc[field])) doc[field] = [];
   const items = doc[field];
@@ -168,6 +186,7 @@ function getHistoryEntryDomain(entry) {
   if (entry?.kind === "reactive-bloom") return "reactive-bloom";
   if (entry?.kind === "reactive-crystal") return "reactive-crystal";
   if (entry?.kind === "mirror-surface-area") return "mirror-surface-area";
+  if (entry?.kind === "stone-area") return "stone-area";
   if (entry?.kind === "background") return "background";
   if (entry?.kind === "background-sized") return "background";
   return "tile";
@@ -282,6 +301,9 @@ function applyUndoEntry(doc, entry) {
   if (entry.kind === "mirror-surface-area") {
     return applyArrayObjectUndo(doc, entry, "mirrorSurfaceAreas", cloneMirrorSurfaceAreaSnapshot);
   }
+  if (entry.kind === "stone-area") {
+    return applyArrayObjectUndo(doc, entry, "stoneAreas", cloneStoneAreaSnapshot);
+  }
   if (entry.kind === "reactive-grass") {
     if (!Array.isArray(doc.reactiveGrassPatches)) doc.reactiveGrassPatches = [];
     const patches = doc.reactiveGrassPatches;
@@ -389,6 +411,9 @@ function applyRedoEntry(doc, entry) {
   }
   if (entry.kind === "mirror-surface-area") {
     return applyArrayObjectRedo(doc, entry, "mirrorSurfaceAreas", cloneMirrorSurfaceAreaSnapshot);
+  }
+  if (entry.kind === "stone-area") {
+    return applyArrayObjectRedo(doc, entry, "stoneAreas", cloneStoneAreaSnapshot);
   }
   if (entry.kind === "reactive-grass") {
     if (!Array.isArray(doc.reactiveGrassPatches)) doc.reactiveGrassPatches = [];

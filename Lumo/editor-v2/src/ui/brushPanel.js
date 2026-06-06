@@ -430,21 +430,34 @@ function renderReactiveDecorSettings(state) {
 }
 
 function renderWorldAreasSettings(state) {
-  const armed = state?.interaction?.activeLayer === PANEL_LAYERS.WORLD_AREAS
-    && state?.interaction?.activeWorldAreaType === "mirror_surface";
-  const count = Array.isArray(state?.document?.active?.mirrorSurfaceAreas) ? state.document.active.mirrorSurfaceAreas.length : 0;
+  const activeWorldAreaType = state?.interaction?.activeLayer === PANEL_LAYERS.WORLD_AREAS
+    ? state?.interaction?.activeWorldAreaType
+    : null;
+  const mirrorArmed = activeWorldAreaType === "mirror_surface";
+  const stoneArmed = activeWorldAreaType === "stone_area";
+  const mirrorCount = Array.isArray(state?.document?.active?.mirrorSurfaceAreas) ? state.document.active.mirrorSurfaceAreas.length : 0;
+  const stoneCount = Array.isArray(state?.document?.active?.stoneAreas) ? state.document.active.stoneAreas.length : 0;
   return `
     <div class="statusRow compactStatusRow">
       <span class="label">Mirror Surface</span>
-      <span class="value">${count} authored</span>
+      <span class="value">${mirrorCount} authored</span>
     </div>
     <div class="compactActionRow compactActionRowSingle">
-      <button type="button" class="toolButton ${armed ? "isActive" : ""}" data-world-area-action="arm-mirror-surface">
-        ${armed ? "Mirror placement armed" : "Create Mirror Surface"}
+      <button type="button" class="toolButton ${mirrorArmed ? "isActive" : ""}" data-world-area-action="arm-mirror-surface">
+        ${mirrorArmed ? "Mirror placement armed" : "Create Mirror Surface"}
       </button>
     </div>
     <div class="statusRow compactStatusRow">
-      <span class="value">Click-drag over 24×24 tile surfaces, then use Inspect to select, move, resize, or delete.</span>
+      <span class="label">Stone Area</span>
+      <span class="value">${stoneCount} authored</span>
+    </div>
+    <div class="compactActionRow compactActionRowSingle">
+      <button type="button" class="toolButton ${stoneArmed ? "isActive" : ""}" data-world-area-action="arm-stone-area">
+        ${stoneArmed ? "Stone placement armed" : "Create Stone Area"}
+      </button>
+    </div>
+    <div class="statusRow compactStatusRow">
+      <span class="value">Click-drag over 24×24 tile surfaces, then use Inspect to select, move, resize, tune, or delete.</span>
     </div>
   `;
 }

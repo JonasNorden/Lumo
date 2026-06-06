@@ -1,6 +1,7 @@
 import { resolveLegacyBehaviorByTileId } from "./runtimeTileBehavior.js";
 import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 import { getAuthoredSoundSource, resolveSoundCatalogSource } from "../domain/sound/sourceReference.js";
+import { normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
 
 // Recharged level loader v1.
 // This module validates and normalizes the new level document shape without
@@ -27,6 +28,7 @@ export function loadLevelDocument(data) {
   const world = validateWorld(normalizedInput.world, errors);
   const layers = normalizeLayers(normalizedInput.layers, errors, warnings);
   const mirrorSurfaceAreas = normalizeMirrorSurfaceAreas(normalizedInput.mirrorSurfaceAreas);
+  const stoneAreas = normalizeStoneAreas(normalizedInput.stoneAreas);
 
   if (errors.length > 0) {
     return buildResult({ level: null, errors, warnings });
@@ -39,6 +41,7 @@ export function loadLevelDocument(data) {
     world,
     layers,
     mirrorSurfaceAreas,
+    stoneAreas,
     systems: isPlainObject(normalizedInput.systems) ? { ...normalizedInput.systems } : null,
   };
 
@@ -108,6 +111,7 @@ function convertEditorV2ToRecharged(editorLevel, warnings) {
       audio: convertEditorAudio(editorLevel),
     },
     mirrorSurfaceAreas: convertEditorMirrorSurfaceAreas(editorLevel),
+    stoneAreas: convertEditorStoneAreas(editorLevel),
     systems: {
       sourceFormat: "editor-v2",
     },
@@ -541,6 +545,16 @@ export function normalizeLayers(layersInput, errors, warnings) {
     entities: normalizeEntities(levelLayers.entities, errors),
     audio: normalizeAudio(levelLayers.audio, errors),
   };
+}
+
+function normalizeStoneAreas(areas) {
+  if (!Array.isArray(areas)) return [];
+  return areas.map((area, index) => isPlainObject(area) ? normalizeStoneAreaForEditor(area, index) : null).filter(Boolean);
+}
+
+function convertEditorStoneAreas(editorLevel) {
+  const areas = Array.isArray(editorLevel?.stoneAreas) ? editorLevel.stoneAreas : [];
+  return normalizeStoneAreas(areas);
 }
 
 function normalizeMirrorSurfaceAreas(areas) {

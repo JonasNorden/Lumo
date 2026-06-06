@@ -9,7 +9,7 @@ import { BACKGROUND_MATERIAL_OPTIONS, DEFAULT_BACKGROUND_MATERIAL_ID, normalizeB
 import { normalizeSizedPlacements } from "../tiles/sizedPlacements.js";
 import { normalizeSpawnAndExitEntities } from "../entities/spawnExitRules.js";
 import { normalizeThemeId } from "../theme/themeCatalog.js";
-import { MIRROR_SURFACE_DEFAULTS } from "../worldAreas.js";
+import { MIRROR_SURFACE_DEFAULTS, STONE_AREA_DEFAULTS } from "../worldAreas.js";
 
 const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
 const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
@@ -112,6 +112,7 @@ function parseFlowerVariant(value) {
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, source?: string, params: Record<string, string | number | boolean>}[]} sounds
  * @property {{id: string, kind: string, x: number, y: number, width: number, heightMin: number, heightMax: number, baseColor: string, topColor: string}[]} reactiveGrassPatches
  * @property {{id: string, x: number, y: number, width: number, height: number, yOffset: number, reflectionHeight: number, reflectionStrength: number, distortion: number, surfaceStrength: number, fade: number, enabled: boolean, visible: boolean}[]} mirrorSurfaceAreas
+ * @property {{id: string, x: number, y: number, width: number, height: number, density: number, sizeVariation: number, rotationVariation: number, clusterStrength: number, enabled: boolean, visible: boolean}[]} stoneAreas
  * @property {{id: string, kind: string, x: number, y: number, clusterCount: number, width: number, heightMin: number, heightMax: number, triggerRadius: number, auraSensitivity: number, wakeSpeed: number, settleDelayMs: number, settleSpeed: number, baseColor: string, glowColor: string, coreColor: string, edgeColor: string, variant: string, seed: number}[]} reactiveCrystalPatches
  * @property {{notes?: string}} extra
  */
@@ -302,6 +303,25 @@ function normalizeMirrorSurfaceArea(area, index) {
   };
 }
 
+function normalizeStoneArea(area, index) {
+  const sourceArea = area && typeof area === "object" ? area : {};
+  const width = Number.isFinite(sourceArea.width) && sourceArea.width > 0 ? Number(sourceArea.width) : 24;
+  const height = Number.isFinite(sourceArea.height) && sourceArea.height > 0 ? Number(sourceArea.height) : 24;
+  return {
+    id: typeof sourceArea.id === "string" && sourceArea.id.trim() ? sourceArea.id.trim() : `stone_area_${index + 1}`,
+    x: Number.isFinite(sourceArea.x) ? Number(sourceArea.x) : 0,
+    y: Number.isFinite(sourceArea.y) ? Number(sourceArea.y) : 0,
+    width,
+    height,
+    density: clampMirrorSurfaceUnit(sourceArea.density, STONE_AREA_DEFAULTS.density),
+    sizeVariation: clampMirrorSurfaceUnit(sourceArea.sizeVariation, STONE_AREA_DEFAULTS.sizeVariation),
+    rotationVariation: clampMirrorSurfaceUnit(sourceArea.rotationVariation, STONE_AREA_DEFAULTS.rotationVariation),
+    clusterStrength: clampMirrorSurfaceUnit(sourceArea.clusterStrength, STONE_AREA_DEFAULTS.clusterStrength),
+    enabled: typeof sourceArea.enabled === "boolean" ? sourceArea.enabled : true,
+    visible: typeof sourceArea.visible === "boolean" ? sourceArea.visible : true,
+  };
+}
+
 function normalizeReactiveGrassPatch(patch, index) {
   const sourcePatch = patch && typeof patch === "object" ? patch : {};
   const rawHeightMin = Number.isFinite(sourcePatch.heightMin)
@@ -485,6 +505,8 @@ export function validateLevelDocument(doc) {
   doc.reactiveGrassPatches = rawReactiveGrassPatches.map((patch, index) => normalizeReactiveGrassPatch(patch, index));
   const rawMirrorSurfaceAreas = Array.isArray(doc.mirrorSurfaceAreas) ? doc.mirrorSurfaceAreas : [];
   doc.mirrorSurfaceAreas = rawMirrorSurfaceAreas.map((area, index) => normalizeMirrorSurfaceArea(area, index));
+  const rawStoneAreas = Array.isArray(doc.stoneAreas) ? doc.stoneAreas : [];
+  doc.stoneAreas = rawStoneAreas.map((area, index) => normalizeStoneArea(area, index));
   const rawReactiveBloomPatches = Array.isArray(doc.reactiveBloomPatches) ? doc.reactiveBloomPatches : [];
   doc.reactiveBloomPatches = rawReactiveBloomPatches.map((patch, index) => normalizeReactiveBloomPatch(patch, index));
   const rawReactiveCrystalPatches = Array.isArray(doc.reactiveCrystalPatches) ? doc.reactiveCrystalPatches : [];

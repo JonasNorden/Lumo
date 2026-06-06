@@ -343,6 +343,26 @@ function buildPlayerSnapshot(snapshot) {
 
 // Returns a compact world snapshot with stable primitive defaults.
 
+function normalizeStoneAreas(sourceAreas) {
+  return Array.isArray(sourceAreas)
+    ? sourceAreas
+      .map((area, index) => ({
+        id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `stone_area_${index + 1}`,
+        x: Number.isFinite(area?.x) ? area.x : null,
+        y: Number.isFinite(area?.y) ? area.y : null,
+        width: Number.isFinite(area?.width) && area.width > 0 ? area.width : null,
+        height: Number.isFinite(area?.height) && area.height > 0 ? area.height : null,
+        density: Number.isFinite(area?.density) ? Math.max(0, Math.min(1, Number(area.density))) : 0.35,
+        sizeVariation: Number.isFinite(area?.sizeVariation) ? Math.max(0, Math.min(1, Number(area.sizeVariation))) : 0.45,
+        rotationVariation: Number.isFinite(area?.rotationVariation) ? Math.max(0, Math.min(1, Number(area.rotationVariation))) : 0.65,
+        clusterStrength: Number.isFinite(area?.clusterStrength) ? Math.max(0, Math.min(1, Number(area.clusterStrength))) : 0.5,
+        enabled: area?.enabled !== false,
+        visible: area?.visible !== false,
+      }))
+      .filter((area) => area.x !== null && area.y !== null && area.width !== null && area.height !== null)
+    : [];
+}
+
 function normalizeMirrorSurfaceAreas(sourceAreas) {
   return Array.isArray(sourceAreas)
     ? sourceAreas
@@ -449,6 +469,7 @@ function buildWorldSnapshot(snapshot) {
     : [];
 
   const mirrorSurfaceAreas = normalizeMirrorSurfaceAreas(source.mirrorSurfaceAreas);
+  const stoneAreas = normalizeStoneAreas(source.stoneAreas);
 
   return {
     worldId: typeof source.worldId === "string" ? source.worldId : "",
@@ -462,6 +483,7 @@ function buildWorldSnapshot(snapshot) {
     decorItems,
     audioItems,
     mirrorSurfaceAreas,
+    stoneAreas,
   };
 }
 
@@ -867,6 +889,7 @@ export function createLumoRechargedBootAdapter(options = {}) {
         decorItems: world.decorItems,
         audioItems: world.audioItems,
         mirrorSurfaceAreas: world.mirrorSurfaceAreas,
+        stoneAreas: world.stoneAreas,
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,
@@ -1001,6 +1024,7 @@ export function createLumoRechargedBootAdapter(options = {}) {
           decorItems: world.decorItems,
           audioItems: world.audioItems,
           mirrorSurfaceAreas: world.mirrorSurfaceAreas,
+        stoneAreas: world.stoneAreas,
           playerStatus: player.locomotion,
           playerX: player.x,
           playerY: player.y,
