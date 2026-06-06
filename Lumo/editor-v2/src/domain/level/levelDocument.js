@@ -110,6 +110,7 @@ function parseFlowerVariant(value) {
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} entities
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, source?: string, params: Record<string, string | number | boolean>}[]} sounds
  * @property {{id: string, kind: string, x: number, y: number, width: number, heightMin: number, heightMax: number, baseColor: string, topColor: string}[]} reactiveGrassPatches
+ * @property {{id: string, x: number, y: number, width: number, height: number, yOffset: number, enabled: boolean, visible: boolean}[]} mirrorSurfaceAreas
  * @property {{id: string, kind: string, x: number, y: number, clusterCount: number, width: number, heightMin: number, heightMax: number, triggerRadius: number, auraSensitivity: number, wakeSpeed: number, settleDelayMs: number, settleSpeed: number, baseColor: string, glowColor: string, coreColor: string, edgeColor: string, variant: string, seed: number}[]} reactiveCrystalPatches
  * @property {{notes?: string}} extra
  */
@@ -264,6 +265,30 @@ function normalizeSound(sound, index) {
     visible: nextVisible,
     ...(nextSource ? { source: nextSource } : {}),
     params: nextParams,
+  };
+}
+
+
+function normalizeMirrorSurfaceArea(area, index) {
+  const sourceArea = area && typeof area === "object" ? area : {};
+  const width = Number.isFinite(sourceArea.width) && sourceArea.width > 0
+    ? Number(sourceArea.width)
+    : 24;
+  const height = Number.isFinite(sourceArea.height) && sourceArea.height > 0
+    ? Number(sourceArea.height)
+    : 12;
+
+  return {
+    id: typeof sourceArea.id === "string" && sourceArea.id.trim()
+      ? sourceArea.id.trim()
+      : `mirror_surface_${index + 1}`,
+    x: Number.isFinite(sourceArea.x) ? Number(sourceArea.x) : 0,
+    y: Number.isFinite(sourceArea.y) ? Number(sourceArea.y) : 0,
+    width,
+    height,
+    yOffset: Number.isFinite(sourceArea.yOffset) ? Number(sourceArea.yOffset) : 0,
+    enabled: typeof sourceArea.enabled === "boolean" ? sourceArea.enabled : true,
+    visible: typeof sourceArea.visible === "boolean" ? sourceArea.visible : true,
   };
 }
 
@@ -448,6 +473,8 @@ export function validateLevelDocument(doc) {
   doc.sounds = rawSounds.map((sound, index) => normalizeSound(sound, index));
   const rawReactiveGrassPatches = Array.isArray(doc.reactiveGrassPatches) ? doc.reactiveGrassPatches : [];
   doc.reactiveGrassPatches = rawReactiveGrassPatches.map((patch, index) => normalizeReactiveGrassPatch(patch, index));
+  const rawMirrorSurfaceAreas = Array.isArray(doc.mirrorSurfaceAreas) ? doc.mirrorSurfaceAreas : [];
+  doc.mirrorSurfaceAreas = rawMirrorSurfaceAreas.map((area, index) => normalizeMirrorSurfaceArea(area, index));
   const rawReactiveBloomPatches = Array.isArray(doc.reactiveBloomPatches) ? doc.reactiveBloomPatches : [];
   doc.reactiveBloomPatches = rawReactiveBloomPatches.map((patch, index) => normalizeReactiveBloomPatch(patch, index));
   const rawReactiveCrystalPatches = Array.isArray(doc.reactiveCrystalPatches) ? doc.reactiveCrystalPatches : [];

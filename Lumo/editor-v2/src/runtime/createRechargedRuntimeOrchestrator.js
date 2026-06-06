@@ -28,6 +28,24 @@ function clonePlainData(value) {
 }
 
 // Builds a compact world snapshot with non-undefined values.
+
+function normalizeMirrorSurfaceAreas(sourceAreas) {
+  return Array.isArray(sourceAreas)
+    ? sourceAreas
+      .map((area, index) => ({
+        id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `mirror_surface_${index + 1}`,
+        x: Number.isFinite(area?.x) ? area.x : null,
+        y: Number.isFinite(area?.y) ? area.y : null,
+        width: Number.isFinite(area?.width) && area.width > 0 ? area.width : null,
+        height: Number.isFinite(area?.height) && area.height > 0 ? area.height : null,
+        yOffset: Number.isFinite(area?.yOffset) ? area.yOffset : 0,
+        enabled: area?.enabled !== false,
+        visible: area?.visible !== false,
+      }))
+      .filter((area) => area.x !== null && area.y !== null && area.width !== null && area.height !== null)
+    : [];
+}
+
 function buildWorldSnapshot(snapshot) {
   const source = snapshot && typeof snapshot === "object" ? snapshot : {};
   const supportTiles = Array.isArray(source.supportTiles)
@@ -111,6 +129,8 @@ function buildWorldSnapshot(snapshot) {
       .filter((audio) => audio.x !== null && audio.y !== null)
     : [];
 
+  const mirrorSurfaceAreas = normalizeMirrorSurfaceAreas(source.mirrorSurfaceAreas);
+
   return {
     worldId: typeof source.worldId === "string" ? source.worldId : "",
     themeId: typeof source.themeId === "string" ? source.themeId : "",
@@ -122,6 +142,7 @@ function buildWorldSnapshot(snapshot) {
     supportTiles,
     decorItems,
     audioItems,
+    mirrorSurfaceAreas,
   };
 }
 
@@ -658,6 +679,7 @@ export function createRechargedRuntimeOrchestrator(options = {}) {
         background: world.background,
         bg: world.bg,
         decorItems: world.decorItems,
+        mirrorSurfaceAreas: world.mirrorSurfaceAreas,
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,

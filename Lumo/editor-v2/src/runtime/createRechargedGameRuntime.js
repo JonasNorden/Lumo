@@ -160,6 +160,24 @@ function buildPlayerSnapshot(player) {
 }
 
 // Returns a compact world snapshot with a stable shape.
+
+function normalizeMirrorSurfaceAreas(sourceAreas) {
+  return Array.isArray(sourceAreas)
+    ? sourceAreas
+      .map((area, index) => ({
+        id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `mirror_surface_${index + 1}`,
+        x: Number.isFinite(area?.x) ? area.x : null,
+        y: Number.isFinite(area?.y) ? area.y : null,
+        width: Number.isFinite(area?.width) && area.width > 0 ? area.width : null,
+        height: Number.isFinite(area?.height) && area.height > 0 ? area.height : null,
+        yOffset: Number.isFinite(area?.yOffset) ? area.yOffset : 0,
+        enabled: area?.enabled !== false,
+        visible: area?.visible !== false,
+      }))
+      .filter((area) => area.x !== null && area.y !== null && area.width !== null && area.height !== null)
+    : [];
+}
+
 function buildWorldSnapshot(world) {
   const source = world && typeof world === "object" ? world : {};
   const supportTiles = Array.isArray(source.supportTiles)
@@ -242,6 +260,8 @@ function buildWorldSnapshot(world) {
       .filter((audio) => audio.x !== null && audio.y !== null)
     : [];
 
+  const mirrorSurfaceAreas = normalizeMirrorSurfaceAreas(source.mirrorSurfaceAreas);
+
   return {
     worldId: typeof source.worldId === "string" ? source.worldId : "",
     themeId: typeof source.themeId === "string" ? source.themeId : "",
@@ -253,6 +273,7 @@ function buildWorldSnapshot(world) {
     supportTiles,
     decorItems,
     audioItems,
+    mirrorSurfaceAreas,
   };
 }
 

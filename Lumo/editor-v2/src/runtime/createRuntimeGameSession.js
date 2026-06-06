@@ -338,6 +338,24 @@ function buildPlayerSnapshot(playerState) {
 }
 
 // Builds a stable world snapshot shape from any runtime state input.
+
+function normalizeMirrorSurfaceAreas(sourceAreas) {
+  return Array.isArray(sourceAreas)
+    ? sourceAreas
+      .map((area, index) => ({
+        id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `mirror_surface_${index + 1}`,
+        x: Number.isFinite(area?.x) ? area.x : null,
+        y: Number.isFinite(area?.y) ? area.y : null,
+        width: Number.isFinite(area?.width) && area.width > 0 ? area.width : null,
+        height: Number.isFinite(area?.height) && area.height > 0 ? area.height : null,
+        yOffset: Number.isFinite(area?.yOffset) ? area.yOffset : 0,
+        enabled: area?.enabled !== false,
+        visible: area?.visible !== false,
+      }))
+      .filter((area) => area.x !== null && area.y !== null && area.width !== null && area.height !== null)
+    : [];
+}
+
 function buildWorldSnapshot(worldState) {
   function cloneBgPayload(bgPayload) {
     if (Array.isArray(bgPayload)) {
@@ -432,6 +450,8 @@ function buildWorldSnapshot(worldState) {
       .filter((audio) => audio.x !== null && audio.y !== null)
     : [];
 
+  const mirrorSurfaceAreas = normalizeMirrorSurfaceAreas(worldState?.layers?.mirrorSurfaceAreas);
+
   return {
     ok: worldState && typeof worldState === "object",
     worldId: typeof worldState?.identity?.id === "string" ? worldState.identity.id : "",
@@ -444,6 +464,7 @@ function buildWorldSnapshot(worldState) {
     supportTiles,
     decorItems,
     audioItems,
+    mirrorSurfaceAreas,
   };
 }
 

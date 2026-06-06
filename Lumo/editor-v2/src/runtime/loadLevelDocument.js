@@ -104,6 +104,7 @@ function convertEditorV2ToRecharged(editorLevel, warnings) {
       decor: convertEditorDecor(editorLevel),
       entities: convertEditorEntities(editorLevel),
       audio: convertEditorAudio(editorLevel),
+      mirrorSurfaceAreas: convertEditorMirrorSurfaceAreas(editorLevel),
     },
     systems: {
       sourceFormat: "editor-v2",
@@ -384,6 +385,31 @@ function convertEditorEntities(editorLevel) {
   });
 }
 
+function convertEditorMirrorSurfaceAreas(editorLevel) {
+  const areas = Array.isArray(editorLevel?.mirrorSurfaceAreas) ? editorLevel.mirrorSurfaceAreas : [];
+  return areas
+    .map((area, index) => {
+      if (!isPlainObject(area)) return null;
+      const x = Number.isFinite(area.x) ? Number(area.x) : null;
+      const y = Number.isFinite(area.y) ? Number(area.y) : null;
+      const width = Number.isFinite(area.width) && area.width > 0 ? Number(area.width) : null;
+      const height = Number.isFinite(area.height) && area.height > 0 ? Number(area.height) : null;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) return null;
+      return {
+        id: typeof area.id === "string" && area.id.trim() ? area.id.trim() : `mirror_surface_${index + 1}`,
+        x,
+        y,
+        width,
+        height,
+        yOffset: Number.isFinite(area.yOffset) ? Number(area.yOffset) : 0,
+        enabled: area.enabled !== false,
+        visible: area.visible !== false,
+        coordinateSpace: "world",
+      };
+    })
+    .filter(Boolean);
+}
+
 function convertEditorAudio(editorLevel) {
   const sounds = Array.isArray(editorLevel?.sounds) ? editorLevel.sounds : [];
   return sounds.map((entry, index) => {
@@ -507,7 +533,33 @@ export function normalizeLayers(layersInput, errors, warnings) {
     decor: normalizeDecor(levelLayers.decor, errors, warnings),
     entities: normalizeEntities(levelLayers.entities, errors),
     audio: normalizeAudio(levelLayers.audio, errors),
+    mirrorSurfaceAreas: normalizeMirrorSurfaceAreas(layersInput.mirrorSurfaceAreas),
   };
+}
+
+function normalizeMirrorSurfaceAreas(areas) {
+  if (!Array.isArray(areas)) return [];
+  return areas
+    .map((area, index) => {
+      if (!isPlainObject(area)) return null;
+      const x = Number.isFinite(area.x) ? Number(area.x) : null;
+      const y = Number.isFinite(area.y) ? Number(area.y) : null;
+      const width = Number.isFinite(area.width) && area.width > 0 ? Number(area.width) : null;
+      const height = Number.isFinite(area.height) && area.height > 0 ? Number(area.height) : null;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) return null;
+      return {
+        id: typeof area.id === "string" && area.id.trim() ? area.id.trim() : `mirror_surface_${index + 1}`,
+        x,
+        y,
+        width,
+        height,
+        yOffset: Number.isFinite(area.yOffset) ? Number(area.yOffset) : 0,
+        enabled: area.enabled !== false,
+        visible: area.visible !== false,
+        coordinateSpace: typeof area.coordinateSpace === "string" ? area.coordinateSpace : "world",
+      };
+    })
+    .filter(Boolean);
 }
 
 function normalizeBg(bgInput, errors) {
@@ -708,6 +760,7 @@ function createEmptyLayers() {
     decor: [],
     entities: [],
     audio: [],
+    mirrorSurfaceAreas: [],
   };
 }
 
