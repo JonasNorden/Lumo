@@ -44,6 +44,22 @@ function withMirrorArea(source) {
   };
 }
 
+
+function withStaticMirrorDecor(source) {
+  return {
+    ...source,
+    decor: [
+      { id: "flower-mirror-candidate", type: "decor_flower_01", x: 3, y: 4, order: 1 },
+      { id: "icecream-mirror-candidate", type: "decor_icecream_01", x: 4, y: 4, order: 2 },
+      { id: "raspberry-mirror-candidate", type: "decor_raspberry_01", x: 5, y: 4, order: 3 },
+    ],
+    entities: [
+      { id: "ghost-no-reflect", type: "ghost", x: 4, y: 4, params: {} },
+    ],
+    reactiveGrassPatches: [{ id: "reactive-no-reflect", kind: "reactive_grass", x: 72, y: 96, width: 48 }],
+  };
+}
+
 function assertCanonicalMirrorPath(holder, label, expectedLength = 1) {
   assert.equal(Array.isArray(holder?.mirrorSurfaceAreas), true, `${label} must expose top-level mirrorSurfaceAreas`);
   assert.equal(holder.mirrorSurfaceAreas.length, expectedLength, `${label} top-level mirrorSurfaceAreas length`);
@@ -201,6 +217,42 @@ function runEditorPanelVisualFieldCheck() {
   console.log("mirror surface editor panel visual fields ok");
 }
 
+
+async function runStaticDecorReflectionPayloadCheck() {
+  const loaded = loadLevelDocument(withMirrorArea(withStaticMirrorDecor(loadFixture())));
+  assert.equal(loaded.ok, true);
+  const adapter = createLumoRechargedBootAdapter({ sourceDescriptor: loaded.level });
+  assert.equal((await adapter.prepare()).ok, true);
+  assert.equal((await adapter.boot()).ok, true);
+  const bootPayload = adapter.getBootPayload();
+  assertCanonicalMirrorPath(bootPayload, "Static decor mirror boot payload");
+  assert.equal(Array.isArray(bootPayload.decorItems), true, "boot payload must include static decor reflection candidates from layers.decor");
+  assert.deepEqual(
+    bootPayload.decorItems.map((decor) => decor.decorId),
+    ["flower-mirror-candidate", "icecream-mirror-candidate", "raspberry-mirror-candidate"],
+    "only static decor items should enter the mirror decor reflection candidate source",
+  );
+  assert.equal(
+    bootPayload.decorItems.some((decor) => /ghost|reactive/i.test(`${decor.decorId} ${decor.decorType}`)),
+    false,
+    "ghost/reactive/non-static objects must not enter this static decor reflection step",
+  );
+  console.log("mirror surface static decor payload candidates ok");
+}
+
+async function runEmptyDecorNoOpCheck() {
+  const source = loadFixture();
+  const loaded = loadLevelDocument(withMirrorArea({ ...source, decor: [] }));
+  assert.equal(loaded.ok, true);
+  const adapter = createLumoRechargedBootAdapter({ sourceDescriptor: loaded.level });
+  await adapter.prepare();
+  await adapter.boot();
+  const bootPayload = adapter.getBootPayload();
+  assertCanonicalMirrorPath(bootPayload, "Empty decor mirror boot payload");
+  assert.deepEqual(bootPayload.decorItems, [], "empty decor remains a no-op for mirror decor reflections");
+  console.log("mirror surface empty decor no-op path ok");
+}
+
 function runLumoRenderContractCheck() {
   const html = fs.readFileSync(lumoHtmlPath, "utf8");
   assert.equal(html.includes("function readRechargedMirrorSurfaceAreas"), true);
@@ -209,6 +261,10 @@ function runLumoRenderContractCheck() {
   assert.doesNotMatch(html, /const sourceAreas = Array\.isArray\(payload\?\.layers\?\.mirrorSurfaceAreas\)/, "Lumo.html must not render from layers.mirrorSurfaceAreas");
   assert.match(html, /const mirrorSurfaceAreas = readRechargedMirrorSurfaceAreas\(payload\);/, "non-empty authored mirrorSurfaceAreas must enter the final render path");
   assert.match(html, /drawRechargedMirrorSurfaceAreas\(ctx, mapper, state, mirrorSurfaceAreas, \{/, "final render must consume the normalized mirrorSurfaceAreas array");
+  assert.match(html, /decorSnapshots: decorWorldLane,/, "mirror render contract must receive static world decor reflection candidates");
+  assert.equal(html.includes("function buildRechargedMirrorDecorReflectionCandidates"), true, "mirror renderer must build local static decor reflection candidates");
+  assert.match(html, /decor\.anchorLayer === "background" \|\| decor\.reactive === true \|\| decor\.static === false/, "ghost/reactive/non-static objects must be excluded from static decor reflection candidates");
+  assert.match(html, /const decorReflectionCandidates = buildRechargedMirrorDecorReflectionCandidates/, "mirror areas must compute local reflected static decor candidates");
   assert.match(html, /reflectionHeight: Number\.isFinite\(area\?\.reflectionHeight\)/, "Lumo.html must read reflectionHeight");
   assert.match(html, /reflectionStrength: Number\.isFinite\(area\?\.reflectionStrength\)/, "Lumo.html must read reflectionStrength");
   assert.match(html, /distortion: Number\.isFinite\(area\?\.distortion\)/, "Lumo.html must read distortion");
@@ -216,6 +272,7 @@ function runLumoRenderContractCheck() {
   assert.match(html, /fade: Number\.isFinite\(area\?\.fade\)/, "Lumo.html must read fade");
   assert.match(html, /const clipRect = mapper\.worldToCanvasRect\(surfaceX, surfaceY, surfaceW, reflectionHeight\);/, "reflectionHeight must drive reflection clipping depth");
   assert.match(html, /ctx\.globalAlpha = reflectionStrength \* fadeByDistance;/, "reflectionStrength must drive reflected Lumo alpha");
+  assert.match(html, /const subtleAlpha = reflectionStrength \* fadeByDistance \* 0\.62;/, "reflectionStrength and fade must drive subtle reflected static decor alpha");
   assert.match(html, /const shimmerOffsetX = distortion > 0/, "distortion must drive shimmer and support zero distortion");
   assert.match(html, /if \(surfaceStrength > 0\)/, "surfaceStrength must allow disabling surface sheen and line");
   assert.match(html, /const fadeByDistance = 1 - \(fadeProgress \* fade\);/, "fade must drive downward reflection fade");
@@ -230,5 +287,7 @@ runEditorExportCheck();
 runRuntimeLevelObjectCheck();
 await runRechargedPipelineCheck();
 await runEmptyNoOpCheck();
+await runStaticDecorReflectionPayloadCheck();
+await runEmptyDecorNoOpCheck();
 await runQueryBootPathCheck();
 runLumoRenderContractCheck();

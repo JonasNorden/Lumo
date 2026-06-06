@@ -5269,14 +5269,19 @@
       return { drewVisual: false, drewFallback: true, worldRect, canvasRect: movingPlatformRect, visualRect: null, fallbackWorldDrawRect };
     }
 
-    // Draws one decor entry as a visual-only layer; never contributes collision or gameplay geometry.
-    function drawRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw) {
+    function resolveRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw) {
+      if (!ctx || !mapper || !state || !decor || typeof decor !== "object") {
+        return null;
+      }
       const looksTileBased = Number.isFinite(decor?.x)
         && Number.isFinite(decor?.y)
         && decor.x <= worldWidthRaw + tileSize
         && decor.y <= worldHeightRaw + tileSize;
       const worldX = looksTileBased ? decor.x * worldUnitsToPx : decor.x;
       const worldY = looksTileBased ? decor.y * worldUnitsToPx : decor.y;
+      if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) {
+        return null;
+      }
       const drawW = Number.isFinite(decor?.drawW) && decor.drawW > 0 ? decor.drawW : tileSize;
       const drawH = Number.isFinite(decor?.drawH) && decor.drawH > 0 ? decor.drawH : tileSize;
       const drawOffX = Number.isFinite(decor?.drawOffX) ? decor.drawOffX : 0;
@@ -5286,7 +5291,8 @@
       const worldDrawY = drawAnchor === "BL"
         ? (worldY + worldUnitsToPx) - drawH + drawOffY
         : worldY + drawOffY;
-      const drawRect = mapper.worldToCanvasRect(worldDrawX, worldDrawY, Math.max(1, drawW), Math.max(1, drawH));
+      const worldRect = { x: worldDrawX, y: worldDrawY, w: Math.max(1, drawW), h: Math.max(1, drawH) };
+      const drawRect = mapper.worldToCanvasRect(worldRect.x, worldRect.y, worldRect.w, worldRect.h);
       const visualState = ensureRechargedDecorVisualState(state);
       const imageCandidates = buildRechargedDecorImageCandidates(decor?.img);
       let resolvedImage = null;
@@ -5309,18 +5315,28 @@
       }
       // Missing/invalid art is skipped safely in the live lane to avoid noisy fake placeholders.
       if (!resolvedImage) {
-        return;
+        return null;
+      }
+      return { img: resolvedImage, worldRect, drawRect, flipX: decor?.flipX === true, decor };
+    }
+
+    // Draws one decor entry as a visual-only layer; never contributes collision or gameplay geometry.
+    function drawRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw) {
+      const visual = resolveRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw);
+      if (!visual) {
+        return null;
       }
 
-      if (decor?.flipX === true) {
+      if (visual.flipX === true) {
         ctx.save();
-        ctx.translate(drawRect.x + drawRect.w, drawRect.y);
+        ctx.translate(visual.drawRect.x + visual.drawRect.w, visual.drawRect.y);
         ctx.scale(-1, 1);
-        ctx.drawImage(resolvedImage, 0, 0, drawRect.w, drawRect.h);
+        ctx.drawImage(visual.img, 0, 0, visual.drawRect.w, visual.drawRect.h);
         ctx.restore();
       } else {
-        ctx.drawImage(resolvedImage, drawRect.x, drawRect.y, drawRect.w, drawRect.h);
+        ctx.drawImage(visual.img, visual.drawRect.x, visual.drawRect.y, visual.drawRect.w, visual.drawRect.h);
       }
+      return visual;
     }
 
     const DARKNESS_RENDER_SCALE = 0.5;
@@ -6545,6 +6561,10 @@
           tileSize,
           boostSnapshot,
           playerSnapshot: currentSnapshot,
+          decorSnapshots: decorWorldLane,
+          worldUnitsToPx,
+          worldWidthRaw,
+          worldHeightRaw,
         });
 
         const liquidEntityTypes = new Set(["water_volume", "lava_volume", "bubbling_liquid_volume"]);
@@ -7398,6 +7418,45 @@
       }
     }
 
+    function buildRechargedMirrorDecorReflectionCandidates(ctx, mapper, state, mirrorArea, decorSnapshots, options = {}) {
+      if (!ctx || !mapper || !state || !mirrorArea || !Array.isArray(decorSnapshots) || decorSnapshots.length === 0) {
+        return [];
+      }
+      const surfaceX = mirrorArea.x;
+      const surfaceY = mirrorArea.y + (Number.isFinite(mirrorArea.yOffset) ? mirrorArea.yOffset : 0);
+      const surfaceW = mirrorArea.width;
+      const surfaceH = mirrorArea.height;
+      const reflectionHeight = Math.max(0, Number.isFinite(mirrorArea.reflectionHeight) ? Number(mirrorArea.reflectionHeight) : 72);
+      if (!Number.isFinite(surfaceX) || !Number.isFinite(surfaceY) || !Number.isFinite(surfaceW) || !Number.isFinite(surfaceH) || surfaceW <= 0 || surfaceH <= 0 || reflectionHeight <= 0) {
+        return [];
+      }
+
+      const worldUnitsToPx = Number.isFinite(options.worldUnitsToPx) && options.worldUnitsToPx > 0 ? options.worldUnitsToPx : 1;
+      const tileSize = Number.isFinite(options.tileSize) && options.tileSize > 0 ? options.tileSize : worldUnitsToPx;
+      const worldWidthRaw = Number.isFinite(options.worldWidthRaw) ? options.worldWidthRaw : 0;
+      const worldHeightRaw = Number.isFinite(options.worldHeightRaw) ? options.worldHeightRaw : 0;
+      const horizontalPad = Math.max(tileSize * 0.5, surfaceH * 0.5, 4);
+      const verticalReach = Math.max(reflectionHeight, tileSize, 1);
+      const candidates = [];
+
+      for (const decor of decorSnapshots) {
+        if (!decor || typeof decor !== "object") continue;
+        if (decor.anchorLayer === "background" || decor.reactive === true || decor.static === false) continue;
+        const visual = resolveRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw);
+        if (!visual) continue;
+        const decorLeft = visual.worldRect.x;
+        const decorRight = visual.worldRect.x + visual.worldRect.w;
+        const decorBottom = visual.worldRect.y + visual.worldRect.h;
+        const intersectsHorizontally = decorRight >= surfaceX - horizontalPad && decorLeft <= surfaceX + surfaceW + horizontalPad;
+        const distanceToSurface = surfaceY - decorBottom;
+        const isCloseAbove = distanceToSurface >= -surfaceH && distanceToSurface <= verticalReach;
+        if (!intersectsHorizontally || !isCloseAbove) continue;
+        candidates.push({ ...visual, distanceToSurface, verticalReach });
+      }
+
+      return candidates;
+    }
+
     function drawRechargedMirrorSurfaceAreas(ctx, mapper, state, mirrorSurfaceAreas, options = {}) {
       if (!ctx || !mapper || !state || !Array.isArray(mirrorSurfaceAreas) || mirrorSurfaceAreas.length === 0) {
         return false;
@@ -7405,9 +7464,8 @@
 
       const playerCenterX = options.playerCenterX;
       const playerFootY = options.playerFootY;
-      if (!Number.isFinite(playerCenterX) || !Number.isFinite(playerFootY)) {
-        return false;
-      }
+      const hasPlayerReflectionAnchor = Number.isFinite(playerCenterX) && Number.isFinite(playerFootY);
+      const decorSnapshots = Array.isArray(options.decorSnapshots) ? options.decorSnapshots : [];
 
       let drewAnyReflection = false;
       for (const area of mirrorSurfaceAreas) {
@@ -7426,10 +7484,11 @@
         const fade = Math.max(0, Math.min(1, Number.isFinite(area.fade) ? Number(area.fade) : 0.65));
         const horizontalPad = Math.max(RECHARGED_PLAYER_HITBOX_WIDTH * 0.75, surfaceH * 0.5, 8);
         const verticalReach = Math.max(RECHARGED_PLAYER_HITBOX_HEIGHT * 1.25, reflectionHeight, 1);
-        const isHorizontallyNear = playerCenterX >= surfaceX - horizontalPad && playerCenterX <= surfaceX + surfaceW + horizontalPad;
-        const distanceToSurface = surfaceY - playerFootY;
-        const isVerticallyNear = reflectionHeight > 0 && distanceToSurface >= -surfaceH && distanceToSurface <= verticalReach;
-        if (!isHorizontallyNear || !isVerticallyNear) {
+        const distanceToSurface = hasPlayerReflectionAnchor ? surfaceY - playerFootY : Number.POSITIVE_INFINITY;
+        const isPlayerHorizontallyNear = hasPlayerReflectionAnchor && playerCenterX >= surfaceX - horizontalPad && playerCenterX <= surfaceX + surfaceW + horizontalPad;
+        const isPlayerVerticallyNear = hasPlayerReflectionAnchor && reflectionHeight > 0 && distanceToSurface >= -surfaceH && distanceToSurface <= verticalReach;
+        const decorReflectionCandidates = buildRechargedMirrorDecorReflectionCandidates(ctx, mapper, state, area, decorSnapshots, options);
+        if ((!isPlayerHorizontallyNear || !isPlayerVerticallyNear) && decorReflectionCandidates.length === 0) {
           continue;
         }
 
@@ -7451,9 +7510,29 @@
           ctx.fillRect(surfaceRect.x, surfaceRect.y, surfaceRect.w, surfaceRect.h);
         }
 
-        const spriteCache = ensureRechargedPlayerSpriteCache(state);
+        for (const decorVisual of decorReflectionCandidates) {
+          const decorSurfaceDistance = Math.max(0, decorVisual.distanceToSurface);
+          const fadeProgress = Math.max(0, Math.min(1, decorSurfaceDistance / Math.max(1, decorVisual.verticalReach)));
+          const fadeByDistance = 1 - (fadeProgress * fade);
+          const surfaceCanvasY = mapper.worldToCanvasRect(surfaceX, surfaceY, 1, 1).y;
+          const decorBottomCanvasY = decorVisual.drawRect.y + decorVisual.drawRect.h;
+          const reflectedBottomY = surfaceCanvasY + (surfaceCanvasY - decorBottomCanvasY);
+          const subtleAlpha = reflectionStrength * fadeByDistance * 0.62;
+          if (subtleAlpha <= 0.003) continue;
+          const shimmerPhase = ((typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 260) + (surfaceX * 0.031) + (decorVisual.worldRect.x * 0.017);
+          const shimmerOffsetX = distortion > 0 ? Math.sin(shimmerPhase + fadeProgress * Math.PI) * distortion * Math.max(1, decorVisual.drawRect.w * 0.12) : 0;
+          ctx.save();
+          ctx.globalAlpha = subtleAlpha;
+          ctx.translate(decorVisual.drawRect.x + decorVisual.drawRect.w * 0.5 + shimmerOffsetX, reflectedBottomY);
+          ctx.scale(decorVisual.flipX === true ? -1 : 1, -1);
+          ctx.drawImage(decorVisual.img, -decorVisual.drawRect.w * 0.5, -decorVisual.drawRect.h, decorVisual.drawRect.w, decorVisual.drawRect.h);
+          ctx.restore();
+          drewAnyReflection = true;
+        }
+
+        const spriteCache = hasPlayerReflectionAnchor ? ensureRechargedPlayerSpriteCache(state) : null;
         const sprite = spriteCache?.idle?.complete === true ? spriteCache.idle : null;
-        if (sprite) {
+        if (sprite && isPlayerHorizontallyNear && isPlayerVerticallyNear) {
           const anchorRect = mapper.worldToCanvasRect(
             playerCenterX - (RECHARGED_PLAYER_HITBOX_WIDTH * 0.5),
             playerFootY + 1 - RECHARGED_PLAYER_HITBOX_HEIGHT,
