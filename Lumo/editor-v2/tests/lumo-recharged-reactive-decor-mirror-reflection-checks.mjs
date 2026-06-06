@@ -61,12 +61,25 @@ try {
   }, { playerCenterX: 150, playerFootY: 196, time: 1000, crystalWakeSources: [{ x: 120, y: 180, radius: 80, strength: 1 }] });
 
   assert.equal(drew, true, "draw should report reflected reactive decor");
-  assert.deepEqual(renderCalls.map((call) => call.type), ["grass", "bloom", "crystal"], "draw should reuse existing reactive renderers");
-  assert.equal(renderCalls[0].options.disableGustUpdate, true, "grass reflection should not spawn independent gust updates");
-  assert.equal(renderCalls[2].options.wakeSources.length, 1, "crystal reflection should reuse current wake sources");
+  assert.deepEqual([...new Set(renderCalls.map((call) => call.type))], ["grass", "bloom", "crystal"], "draw should reuse existing reactive renderers");
+  assert.ok(renderCalls.length > 3, "distorted reactive reflections should be redrawn through multiple clipped shimmer bands");
+  assert.equal(renderCalls.find((call) => call.type === "grass").options.disableGustUpdate, true, "grass reflection should not spawn independent gust updates");
+  assert.equal(renderCalls.find((call) => call.type === "crystal").options.wakeSources.length, 1, "crystal reflection should reuse current wake sources");
   assert.ok(ctxOps.some((op) => op[0] === "rect" && op[4] === mirror.reflectionHeight), "reflection should clip to authored reflectionHeight");
   assert.ok(renderCalls.every((call) => call.alpha > 0 && call.alpha <= mirror.reflectionStrength), "reflectionStrength and fade should affect reflected alpha");
-  assert.ok(ctxOps.some((op) => op[0] === "translate" && Math.abs(op[1]) > 0), "authored distortion should apply a cheap shimmer translation");
+  const shimmerTranslations = ctxOps.filter((op) => op[0] === "translate" && Math.abs(op[1]) > 0);
+  assert.ok(shimmerTranslations.length > 3, "authored distortion should use multiple local shimmer band offsets");
+  assert.ok(new Set(shimmerTranslations.map((op) => op[1].toFixed(4))).size > 1, "local shimmer bands should not move a long reflection as one synchronized chunk");
+  assert.ok(shimmerTranslations.every((op) => Math.abs(op[1]) <= mirror.distortion * 3.01), "distortion offsets should stay subtle and local instead of scaling with subject width");
+
+  ctxOps.length = 0;
+  renderCalls.length = 0;
+  const stableDrew = drawReactiveDecorMirrorReflections(ctx, mapper, { ...mirror, distortion: 0 }, {
+    grassPatches: [grassPatch],
+  }, { playerCenterX: 150, playerFootY: 196, time: 1000 });
+  assert.equal(stableDrew, true, "distortion 0 should still draw reactive decor reflections");
+  assert.ok(renderCalls.length > 0, "distortion 0 should keep reactive decor reflection rendering enabled");
+  assert.equal(ctxOps.some((op) => op[0] === "translate" && Math.abs(op[1]) > 0), false, "distortion 0 should keep the reflection horizontally stable");
 
   const lumoHtml = await readFile(resolve(repoRoot, "Lumo/Lumo.html"), "utf8");
   assert.match(lumoHtml, /drawReactiveDecorMirrorReflections\(ctx, mapper, area, options\.reactiveDecor/, "Lumo.html should draw reactive decor through the mirror surface pass");

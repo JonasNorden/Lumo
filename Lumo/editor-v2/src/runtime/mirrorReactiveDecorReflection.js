@@ -106,6 +106,40 @@ export function buildReactiveDecorMirrorReflectionCandidates(mirrorArea, reactiv
   return candidates;
 }
 
+function mirrorBandOffsetX(surface, bandIndex, bandCenterY, subjectSeed, time) {
+  if (!surface || surface.distortion <= 0) return 0;
+  const phase = (time * 0.0017) + (surface.x * 0.031) + (subjectSeed * 0.017) + (bandCenterY * 0.073) + (bandIndex * 1.618);
+  const localWave = (Math.sin(phase) * 0.72) + (Math.sin((phase * 1.91) + 0.83) * 0.28);
+  const maxOffset = surface.distortion * 3;
+  return localWave * maxOffset;
+}
+
+function drawWithMirrorShimmerBands(ctx, clipRect, surface, subjectSeed, time, drawSubject) {
+  if (surface.distortion <= 0) {
+    drawSubject();
+    return;
+  }
+
+  const bandHeight = Math.max(4, Math.min(9, clipRect.h / 7));
+  const bandCount = Math.max(3, Math.ceil(clipRect.h / bandHeight));
+  for (let bandIndex = 0; bandIndex < bandCount; bandIndex += 1) {
+    const bandY = clipRect.y + (bandIndex * bandHeight);
+    const bandBottom = Math.min(clipRect.y + clipRect.h, bandY + bandHeight + 0.75);
+    const bandH = bandBottom - bandY;
+    if (bandH <= 0) continue;
+
+    const bandCenterY = bandY + (bandH * 0.5);
+    const offsetX = mirrorBandOffsetX(surface, bandIndex, bandCenterY, subjectSeed, time);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(clipRect.x, bandY, clipRect.w, bandH);
+    ctx.clip();
+    if (offsetX !== 0) ctx.translate(offsetX, 0);
+    drawSubject();
+    ctx.restore();
+  }
+}
+
 function createReflectedMapper(mapper, surfaceCanvasY) {
   return {
     worldToCanvasRect(x, y, w, h) {
@@ -147,34 +181,28 @@ export function drawReactiveDecorMirrorReflections(ctx, mapper, mirrorArea, reac
     const alpha = surface.reflectionStrength * fadeByDistance * 0.72;
     if (alpha <= 0.003) continue;
 
-    const phase = (time * 0.001) + (surface.x * 0.031) + (candidate.worldBounds.x * 0.017);
-    const shimmerOffsetX = surface.distortion > 0
-      ? Math.sin(phase + fadeProgress * Math.PI) * surface.distortion * Math.max(1, candidate.worldBounds.w * 0.12)
-      : 0;
-
     ctx.save();
     ctx.globalAlpha = alpha;
-    if (shimmerOffsetX) ctx.translate(shimmerOffsetX, 0);
-
-    if (candidate.type === "grass") {
-      renderReactiveGrass(ctx, playerX, playerY, time, {
-        mapper: reflectedMapper,
-        patches: [candidate.patch],
-        disableGustUpdate: true,
-      });
-    } else if (candidate.type === "bloom") {
-      renderReactiveBloomPlants(ctx, playerX, playerY, time, {
-        mapper: reflectedMapper,
-        patches: [candidate.patch],
-      });
-    } else if (candidate.type === "crystal") {
-      renderReactiveCrystals(ctx, playerX, playerY, time, {
-        mapper: reflectedMapper,
-        clusters: [candidate.patch],
-        wakeSources: Array.isArray(options.crystalWakeSources) ? options.crystalWakeSources : [],
-      });
-    }
-
+    drawWithMirrorShimmerBands(ctx, clipRect, surface, candidate.worldBounds.x + candidate.worldBounds.w * 0.5, time, () => {
+      if (candidate.type === "grass") {
+        renderReactiveGrass(ctx, playerX, playerY, time, {
+          mapper: reflectedMapper,
+          patches: [candidate.patch],
+          disableGustUpdate: true,
+        });
+      } else if (candidate.type === "bloom") {
+        renderReactiveBloomPlants(ctx, playerX, playerY, time, {
+          mapper: reflectedMapper,
+          patches: [candidate.patch],
+        });
+      } else if (candidate.type === "crystal") {
+        renderReactiveCrystals(ctx, playerX, playerY, time, {
+          mapper: reflectedMapper,
+          clusters: [candidate.patch],
+          wakeSources: Array.isArray(options.crystalWakeSources) ? options.crystalWakeSources : [],
+        });
+      }
+    });
     ctx.restore();
     drewAny = true;
   }

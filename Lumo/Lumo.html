@@ -7465,6 +7465,39 @@
       return candidates;
     }
 
+    function computeRechargedMirrorBandOffsetX(distortion, surfaceX, bandIndex, bandCenterY, subjectSeed, time) {
+      if (!(distortion > 0)) return 0;
+      const phase = (time * 0.0017) + (surfaceX * 0.031) + (subjectSeed * 0.017) + (bandCenterY * 0.073) + (bandIndex * 1.618);
+      const localWave = (Math.sin(phase) * 0.72) + (Math.sin((phase * 1.91) + 0.83) * 0.28);
+      return localWave * distortion * 3;
+    }
+
+    function drawRechargedMirrorSubjectWithLocalShimmer(ctx, clipRect, distortion, surfaceX, subjectSeed, time, drawSubject) {
+      if (!(distortion > 0)) {
+        drawSubject();
+        return;
+      }
+
+      const bandHeight = Math.max(4, Math.min(9, clipRect.h / 7));
+      const bandCount = Math.max(3, Math.ceil(clipRect.h / bandHeight));
+      for (let bandIndex = 0; bandIndex < bandCount; bandIndex += 1) {
+        const bandY = clipRect.y + (bandIndex * bandHeight);
+        const bandBottom = Math.min(clipRect.y + clipRect.h, bandY + bandHeight + 0.75);
+        const bandH = bandBottom - bandY;
+        if (bandH <= 0) continue;
+
+        const bandCenterY = bandY + (bandH * 0.5);
+        const offsetX = computeRechargedMirrorBandOffsetX(distortion, surfaceX, bandIndex, bandCenterY, subjectSeed, time);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(clipRect.x, bandY, clipRect.w, bandH);
+        ctx.clip();
+        if (offsetX !== 0) ctx.translate(offsetX, 0);
+        drawSubject();
+        ctx.restore();
+      }
+    }
+
     function drawRechargedMirrorSurfaceAreas(ctx, mapper, state, mirrorSurfaceAreas, options = {}) {
       if (!ctx || !mapper || !state || !Array.isArray(mirrorSurfaceAreas) || mirrorSurfaceAreas.length === 0) {
         return false;
@@ -7536,13 +7569,16 @@
           const reflectedBottomY = surfaceCanvasY + (surfaceCanvasY - decorBottomCanvasY);
           const subtleAlpha = reflectionStrength * fadeByDistance * 0.62;
           if (subtleAlpha <= 0.003) continue;
-          const shimmerPhase = ((typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 260) + (surfaceX * 0.031) + (decorVisual.worldRect.x * 0.017);
-          const shimmerOffsetX = distortion > 0 ? Math.sin(shimmerPhase + fadeProgress * Math.PI) * distortion * Math.max(1, decorVisual.drawRect.w * 0.12) : 0;
+          const shimmerTime = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
           ctx.save();
           ctx.globalAlpha = subtleAlpha;
-          ctx.translate(decorVisual.drawRect.x + decorVisual.drawRect.w * 0.5 + shimmerOffsetX, reflectedBottomY);
-          ctx.scale(decorVisual.flipX === true ? -1 : 1, -1);
-          ctx.drawImage(decorVisual.img, -decorVisual.drawRect.w * 0.5, -decorVisual.drawRect.h, decorVisual.drawRect.w, decorVisual.drawRect.h);
+          drawRechargedMirrorSubjectWithLocalShimmer(ctx, clipRect, distortion, surfaceX, decorVisual.worldRect.x + decorVisual.worldRect.w * 0.5, shimmerTime, () => {
+            ctx.save();
+            ctx.translate(decorVisual.drawRect.x + decorVisual.drawRect.w * 0.5, reflectedBottomY);
+            ctx.scale(decorVisual.flipX === true ? -1 : 1, -1);
+            ctx.drawImage(decorVisual.img, -decorVisual.drawRect.w * 0.5, -decorVisual.drawRect.h, decorVisual.drawRect.w, decorVisual.drawRect.h);
+            ctx.restore();
+          });
           ctx.restore();
           drewAnyReflection = true;
         }
@@ -7565,13 +7601,16 @@
           const drawY = reflectedFootY;
           const fadeProgress = Math.max(0, Math.min(1, distanceToSurface / verticalReach));
           const fadeByDistance = 1 - (fadeProgress * fade);
-          const shimmerPhase = ((typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 240) + (surfaceX * 0.031);
-          const shimmerOffsetX = distortion > 0 ? Math.sin(shimmerPhase + fadeProgress * Math.PI) * distortion * Math.max(1, anchorRect.w * 0.18) : 0;
+          const shimmerTime = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
           ctx.save();
           ctx.globalAlpha = reflectionStrength * fadeByDistance;
-          ctx.translate(drawX + spriteW * 0.5 + shimmerOffsetX, drawY);
-          ctx.scale(1, -1);
-          ctx.drawImage(sprite, -spriteW * 0.5, -spriteH, spriteW, spriteH);
+          drawRechargedMirrorSubjectWithLocalShimmer(ctx, clipRect, distortion, surfaceX, playerCenterX, shimmerTime, () => {
+            ctx.save();
+            ctx.translate(drawX + spriteW * 0.5, drawY);
+            ctx.scale(1, -1);
+            ctx.drawImage(sprite, -spriteW * 0.5, -spriteH, spriteW, spriteH);
+            ctx.restore();
+          });
           ctx.restore();
           drewAnyReflection = true;
         }
