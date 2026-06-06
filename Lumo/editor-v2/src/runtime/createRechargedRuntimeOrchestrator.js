@@ -29,22 +29,37 @@ function clonePlainData(value) {
 
 // Builds a compact world snapshot with non-undefined values.
 
+function normalizeStoneAreaHeightRange(area, height) {
+  const heightLimit = Number.isFinite(height) && height > 0 ? Number(height) : 24;
+  const rawMin = Number.isFinite(area?.minStoneHeight) && area.minStoneHeight > 0 ? Number(area.minStoneHeight) : 24;
+  const minStoneHeight = Math.max(1, Math.min(heightLimit, rawMin));
+  const rawMax = Number.isFinite(area?.maxStoneHeight) && area.maxStoneHeight > 0 ? Number(area.maxStoneHeight) : heightLimit;
+  const maxStoneHeight = Math.max(minStoneHeight, Math.min(heightLimit, rawMax));
+  return { minStoneHeight, maxStoneHeight };
+}
+
 function normalizeStoneAreas(sourceAreas) {
   return Array.isArray(sourceAreas)
     ? sourceAreas
-      .map((area, index) => ({
-        id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `stone_area_${index + 1}`,
-        x: Number.isFinite(area?.x) ? area.x : null,
-        y: Number.isFinite(area?.y) ? area.y : null,
-        width: Number.isFinite(area?.width) && area.width > 0 ? area.width : null,
-        height: Number.isFinite(area?.height) && area.height > 0 ? area.height : null,
-        density: Number.isFinite(area?.density) ? Math.max(0, Math.min(1, Number(area.density))) : 0.35,
-        sizeVariation: Number.isFinite(area?.sizeVariation) ? Math.max(0, Math.min(1, Number(area.sizeVariation))) : 0.45,
-        rotationVariation: Number.isFinite(area?.rotationVariation) ? Math.max(0, Math.min(1, Number(area.rotationVariation))) : 0.65,
-        clusterStrength: Number.isFinite(area?.clusterStrength) ? Math.max(0, Math.min(1, Number(area.clusterStrength))) : 0.5,
-        enabled: area?.enabled !== false,
-        visible: area?.visible !== false,
-      }))
+      .map((area, index) => {
+        const height = Number.isFinite(area?.height) && area.height > 0 ? Number(area.height) : null;
+        const stoneHeightRange = normalizeStoneAreaHeightRange(area, height);
+        return {
+          id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `stone_area_${index + 1}`,
+          x: Number.isFinite(area?.x) ? area.x : null,
+          y: Number.isFinite(area?.y) ? area.y : null,
+          width: Number.isFinite(area?.width) && area.width > 0 ? area.width : null,
+          height,
+          minStoneHeight: stoneHeightRange.minStoneHeight,
+          maxStoneHeight: stoneHeightRange.maxStoneHeight,
+          density: Number.isFinite(area?.density) ? Math.max(0, Math.min(1, Number(area.density))) : 0.35,
+          sizeVariation: Number.isFinite(area?.sizeVariation) ? Math.max(0, Math.min(1, Number(area.sizeVariation))) : 0.45,
+          rotationVariation: Number.isFinite(area?.rotationVariation) ? Math.max(0, Math.min(1, Number(area.rotationVariation))) : 0.65,
+          clusterStrength: Number.isFinite(area?.clusterStrength) ? Math.max(0, Math.min(1, Number(area.clusterStrength))) : 0.5,
+          enabled: area?.enabled !== false,
+          visible: area?.visible !== false,
+        };
+      })
       .filter((area) => area.x !== null && area.y !== null && area.width !== null && area.height !== null)
     : [];
 }
