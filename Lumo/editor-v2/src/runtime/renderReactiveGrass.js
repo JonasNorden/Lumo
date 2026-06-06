@@ -258,7 +258,9 @@ export function renderReactiveGrass(ctx, playerX, playerY, time, options = {}) {
   const normalizedPatches = (authoredPatches.length > 0 ? authoredPatches : [DEFAULT_PATCH])
     .map((patch, index) => normalizePatch(patch, index, options));
 
-  updateOrganicGrassGusts(normalizedPatches, timeSec);
+  if (options?.disableGustUpdate !== true) {
+    updateOrganicGrassGusts(normalizedPatches, timeSec);
+  }
 
   ctx.save();
   ctx.lineCap = "round";
