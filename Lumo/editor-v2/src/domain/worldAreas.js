@@ -215,10 +215,17 @@ export function moveStoneArea(area, deltaX = 0, deltaY = 0) {
 export function resizeStoneArea(area, width, height) {
   const normalized = normalizeStoneAreaForEditor(area);
   const nextHeight = Math.max(STONE_AREA_MIN_SIZE, toPositiveNumber(height, normalized.height));
+  const rawMaxStoneHeight = Number(area?.maxStoneHeight);
+  const hadAuthoredMaxStoneHeight = Number.isFinite(rawMaxStoneHeight) && rawMaxStoneHeight > 0;
+  const maxWasFollowingAreaHeight = !hadAuthoredMaxStoneHeight || Math.abs(normalized.maxStoneHeight - normalized.height) < 0.0001;
+  const nextMaxStoneHeight = maxWasFollowingAreaHeight
+    ? nextHeight
+    : Math.min(normalized.maxStoneHeight, nextHeight);
   return normalizeStoneAreaForEditor({
     ...normalized,
     width: Math.max(STONE_AREA_MIN_SIZE, toPositiveNumber(width, normalized.width)),
     height: nextHeight,
+    maxStoneHeight: nextMaxStoneHeight,
   });
 }
 

@@ -18,11 +18,14 @@ import { v2ToRuntimeLevelObject } from "../src/runtime/v2ToRuntimeLevelObject.js
 import { loadLevelDocument } from "../src/runtime/loadLevelDocument.js";
 import { buildRuntimeWorldSkeleton } from "../src/runtime/buildRuntimeWorldSkeleton.js";
 import { buildRuntimeWorldPacket } from "../src/runtime/buildRuntimeWorldPacket.js";
+import { getSelectionEditorPanelContent } from "../src/ui/selectionEditorPanel.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const lumoHtmlPath = path.resolve(__dirname, "../../Lumo.html");
 const editorStoneLayerPath = path.resolve(__dirname, "../src/render/layers/stoneAreaLayer.js");
 const editorRendererPath = path.resolve(__dirname, "../src/render/renderer.js");
+const selectionEditorPanelPath = path.resolve(__dirname, "../src/ui/selectionEditorPanel.js");
+const createEditorAppPath = path.resolve(__dirname, "../src/app/createEditorApp.js");
 
 const baseDoc = {
   meta: { id: "stone-area-test", name: "Stone Area Test", version: "2.0.0" },
@@ -67,8 +70,48 @@ const baseDoc = {
   assert.equal(loweredMax.maxStoneHeight, area.minStoneHeight, "maximum stone height cannot fall below the minimum");
   const resized = updateStoneAreaField({ ...area, maxStoneHeight: 80 }, "height", 48);
   assert.equal(resized.maxStoneHeight, 48, "changing area height clamps maxStoneHeight immediately");
+  const grownImplicitMax = updateStoneAreaField({ ...area, height: 80, maxStoneHeight: 80 }, "height", 240);
+  assert.equal(grownImplicitMax.maxStoneHeight, 240, "growing an area whose max followed area height keeps maxStoneHeight useful for taller stones");
+  const grownMissingMax = updateStoneAreaField({ id: "old-missing-max", width: 120, height: 80, minStoneHeight: 24 }, "height", 240);
+  assert.equal(grownMissingMax.maxStoneHeight, 240, "old areas without authored maxStoneHeight keep maxStoneHeight following resized area height");
+  const grownExplicitMax = updateStoneAreaField({ ...area, height: 80, maxStoneHeight: 48 }, "height", 240);
+  assert.equal(grownExplicitMax.maxStoneHeight, 48, "growing an area with an explicit lower maxStoneHeight preserves the authored cap");
+  assert.equal(updateStoneAreaField(area, "minStoneHeight", 30).minStoneHeight, 30, "editing minStoneHeight updates the selected Stone Area data");
+  assert.equal(updateStoneAreaField(area, "maxStoneHeight", 64).maxStoneHeight, 64, "editing maxStoneHeight updates the selected Stone Area data");
   assert.equal(updateStoneAreaField(area, "density", 0).density, 0);
   assert.equal(updateStoneAreaField(area, "density", 2).density, 1);
+}
+
+
+{
+  const oldStoneAreaState = {
+    document: {
+      status: "ready",
+      error: null,
+      active: {
+        ...baseDoc,
+        stoneAreas: [{ id: "legacy-stone-area", x: 0, y: 0, width: 240, height: 240, density: 0.8, sizeVariation: 1, enabled: true, visible: true }],
+      },
+    },
+    interaction: { selectedStoneAreaId: "legacy-stone-area", selectedStoneAreaIndex: 0 },
+  };
+  const { markup } = getSelectionEditorPanelContent(oldStoneAreaState, { emptyMessage: "No selection" });
+  assert.match(markup, />Stone Area · World Phenomena \/ Areas</, "selected Stone Areas render the Stone Area inspector path");
+  assert.match(markup, />Min stone height</, "Stone Area inspector renders the Min stone height field label");
+  assert.match(markup, />Max stone height</, "Stone Area inspector renders the Max stone height field label");
+  assert.match(markup, /data-stone-area-field="minStoneHeight"/, "Min stone height is wired to stoneArea.minStoneHeight");
+  assert.match(markup, /data-stone-area-field="maxStoneHeight"/, "Max stone height is wired to stoneArea.maxStoneHeight");
+  assert.match(markup, /aria-label="Min stone height"/, "Min stone height is exposed as an editable numeric input");
+  assert.match(markup, /aria-label="Max stone height"/, "Max stone height is exposed as an editable numeric input");
+  assert.match(markup, /data-stone-area-field="minStoneHeight"[\s\S]*?value="24"/, "old Stone Areas render normalized minStoneHeight value in the inspector");
+  assert.match(markup, /data-stone-area-field="maxStoneHeight"[\s\S]*?value="240"/, "old Stone Areas render normalized maxStoneHeight value in the inspector");
+
+  const selectionEditorPanelSource = fs.readFileSync(selectionEditorPanelPath, "utf8");
+  assert.match(selectionEditorPanelSource, /"stoneAreaField"/, "Stone Area inputs participate in bottom-panel draft/focus tracking");
+  assert.match(selectionEditorPanelSource, /onStoneAreaUpdate\?\.\(field, parsedValue, \{ areaId \}\)/, "Stone Area numeric inputs dispatch parsed edits through onStoneAreaUpdate");
+
+  const createEditorAppSource = fs.readFileSync(createEditorAppPath, "utf8");
+  assert.match(createEditorAppSource, /"minStoneHeight", "maxStoneHeight"/, "createEditorApp accepts minStoneHeight and maxStoneHeight update dispatch fields");
 }
 
 {
