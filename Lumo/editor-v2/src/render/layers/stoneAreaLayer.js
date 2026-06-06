@@ -26,7 +26,7 @@ function getStoneTonePalette(stone) {
   ];
 }
 
-function drawStone(ctx, viewport, stone, alpha = 1) {
+export function drawStone(ctx, viewport, stone, alpha = 1) {
   const zoom = viewport?.zoom || 1;
   const center = worldToCanvas(viewport, stone.x, stone.y);
   const radiusX = Math.max(0.5, stone.radiusX * zoom);
@@ -114,6 +114,7 @@ export function renderStoneAreas(ctx, doc, viewport, interaction = null) {
     const bounds = getStoneAreaBounds(preview, areas.length);
     const topLeft = worldToCanvas(viewport, bounds.x, bounds.y);
     const bottomRight = worldToCanvas(viewport, bounds.right, bounds.bottom);
+    for (const stone of generateStoneAreaLayout(preview, areas.length)) drawStone(ctx, viewport, stone, 0.76);
     ctx.save();
     ctx.fillStyle = "rgba(170, 150, 112, 0.14)";
     ctx.strokeStyle = "rgba(235, 217, 174, 0.92)";
