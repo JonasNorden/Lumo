@@ -249,6 +249,30 @@ function buildRuntimeBackgroundVisualOverrides(levelDocument) {
   return overrides;
 }
 
+
+function normalizeRuntimeMirrorSurfaceAreas(levelDocument) {
+  const areas = Array.isArray(levelDocument?.mirrorSurfaceAreas) ? levelDocument.mirrorSurfaceAreas : [];
+  return areas
+    .map((area, index) => {
+      const x = Number.isFinite(area?.x) ? Number(area.x) : null;
+      const y = Number.isFinite(area?.y) ? Number(area.y) : null;
+      const width = Number.isFinite(area?.width) && area.width > 0 ? Number(area.width) : null;
+      const height = Number.isFinite(area?.height) && area.height > 0 ? Number(area.height) : null;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) return null;
+      return {
+        id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `mirror_surface_${index + 1}`,
+        x,
+        y,
+        width,
+        height,
+        yOffset: Number.isFinite(area?.yOffset) ? Number(area.yOffset) : 0,
+        enabled: area?.enabled !== false,
+        visible: area?.visible !== false,
+      };
+    })
+    .filter(Boolean);
+}
+
 function normalizeRuntimeEntityType(type) {
   const normalized = String(type || "").trim().toLowerCase();
   if (!normalized) return null;
@@ -499,10 +523,12 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
       bgVisualOverrides: runtimeBackgroundVisualOverrides,
       tileVisualOverrides: buildRuntimeTileVisualOverrides(levelDocument, tileSize),
       ents: [],
+      mirrorSurfaceAreas: normalizeRuntimeMirrorSurfaceAreas(levelDocument),
     },
     editor: {
       bg: runtimeBackgroundBase.slice(0),
       bgVisualOverrides: { ...runtimeBackgroundVisualOverrides },
+      mirrorSurfaceAreas: normalizeRuntimeMirrorSurfaceAreas(levelDocument),
     },
   };
 

@@ -3,7 +3,7 @@ const DEFAULT_IDENTITY = { id: "", name: "", formatVersion: "", themeId: "" };
 const DEFAULT_META = { title: "", author: "", difficulty: "", tags: [] };
 const DEFAULT_WORLD = { width: 0, height: 0, tileSize: 0 };
 const DEFAULT_SPAWN = { x: 0, y: 0 };
-const DEFAULT_LAYERS = { tiles: [], background: [], bg: [], decor: [], entities: [], audio: [] };
+const DEFAULT_LAYERS = { tiles: [], background: [], bg: [], decor: [], entities: [], audio: [], mirrorSurfaceAreas: [] };
 const DEFAULT_TILE_BOUNDS = { count: 0, minX: 0, minY: 0, maxX: 0, maxY: 0 };
 const DEFAULT_TILE_MAP = { count: 0, keys: [], byKey: {} };
 
@@ -66,6 +66,9 @@ export function buildRuntimeWorldPacket(parts) {
     audio: Array.isArray(skeleton?.layers?.audio)
       ? [...skeleton.layers.audio]
       : [...DEFAULT_LAYERS.audio],
+    mirrorSurfaceAreas: Array.isArray(skeleton?.layers?.mirrorSurfaceAreas)
+      ? [...skeleton.layers.mirrorSurfaceAreas]
+      : [...DEFAULT_LAYERS.mirrorSurfaceAreas],
   };
 
   // Keep tileBounds/tileMap sourced directly from runtime part outputs.
