@@ -34260,7 +34260,11 @@
       "baseColor": "#2f6f3a",
       "topColor": "#7fd66b",
       "variant": "lush_default",
-      "seed": 708531580
+      "seed": 708531580,
+      "windAmp": 13.5,
+      "reactFar": 176,
+      "reactMid": 94,
+      "reactNear": 36
     },
     {
       "id": "reactive_grass-3",
@@ -34276,7 +34280,11 @@
       "baseColor": "#2f6f3a",
       "topColor": "#7fd66b",
       "variant": "lush_default",
-      "seed": 87213841
+      "seed": 87213841,
+      "windAmp": 13.5,
+      "reactFar": 176,
+      "reactMid": 94,
+      "reactNear": 36
     }
   ],
   "reactiveBloomPatches": [
@@ -45350,7 +45358,9 @@
       "y": 384,
       "width": 800,
       "height": 48,
-      "density": 0.35,
+      "minStoneHeight": 8,
+      "maxStoneHeight": 36,
+      "density": 0.08,
       "sizeVariation": 0.62,
       "rotationVariation": 0.65,
       "clusterStrength": 0.5,
@@ -45360,10 +45370,12 @@
     {
       "id": "stone_area-3",
       "x": 1488,
-      "y": 312,
+      "y": 384,
       "width": 696,
-      "height": 120,
-      "density": 0.35,
+      "height": 48,
+      "minStoneHeight": 12,
+      "maxStoneHeight": 48,
+      "density": 0.1,
       "sizeVariation": 0.66,
       "rotationVariation": 0.3,
       "clusterStrength": 0.2,
