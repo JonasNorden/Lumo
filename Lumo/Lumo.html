@@ -4833,46 +4833,50 @@
 
     function createRechargedStoneVisualGeometry(stone = {}) {
       const random = createRechargedStoneRandom(hashRechargedStoneString(getRechargedStoneVisualGeometryCacheKey(stone)));
-      const pointCount = 7 + Math.floor(random() * 3);
-      const points = [];
-      for (let pointIndex = 0; pointIndex < pointCount; pointIndex += 1) {
-        const angle = (-Math.PI * 0.92) + (pointIndex / pointCount) * Math.PI * 2 + (random() - 0.5) * 0.16;
-        const leftBias = Math.cos(angle) < -0.25 ? 0.08 : 0;
-        const topBias = Math.sin(angle) < -0.35 ? 0.06 : 0;
-        const bottomFlatten = Math.sin(angle) > 0.45 ? 0.14 : 0;
-        const radius = 0.82 + random() * 0.22 + leftBias + topBias - bottomFlatten;
+      const upperPointCount = 5 + Math.floor(random() * 3);
+      const leftBaseX = roundRechargedStoneValue(-0.86 - random() * 0.1, 1000);
+      const rightBaseX = roundRechargedStoneValue(0.86 + random() * 0.1, 1000);
+      const points = [{ x: leftBaseX, y: 1 }];
+      for (let pointIndex = 0; pointIndex < upperPointCount; pointIndex += 1) {
+        const t = upperPointCount === 1 ? 0.5 : pointIndex / (upperPointCount - 1);
+        const arc = Math.sin(t * Math.PI);
+        const shoulder = Math.sin(t * Math.PI * 0.72);
+        const x = leftBaseX + (rightBaseX - leftBaseX) * t + (random() - 0.5) * (0.08 + arc * 0.1);
+        const y = 0.76 - (arc * (1.48 + random() * 0.18)) - (shoulder * 0.1) + (random() - 0.5) * 0.12;
         points.push({
-          x: roundRechargedStoneValue(Math.cos(angle) * radius, 1000),
-          y: roundRechargedStoneValue(Math.sin(angle) * Math.min(0.96, radius + bottomFlatten * 0.45), 1000),
+          x: roundRechargedStoneValue(Math.max(leftBaseX + 0.04, Math.min(rightBaseX - 0.04, x)), 1000),
+          y: roundRechargedStoneValue(Math.max(-0.94, Math.min(0.82, y)), 1000),
         });
       }
-      points.sort((a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x));
-      const findClosestIndex = (targetX, targetY) => {
-        let bestIndex = 0;
-        let bestDistance = Infinity;
-        for (let i = 0; i < points.length; i += 1) {
-          const dx = points[i].x - targetX;
-          const dy = points[i].y - targetY;
-          const distance = dx * dx + dy * dy;
-          if (distance < bestDistance) {
-            bestDistance = distance;
-            bestIndex = i;
-          }
-        }
-        return bestIndex;
-      };
-      const p = (targetX, targetY) => points[findClosestIndex(targetX, targetY)];
-      const center = { x: roundRechargedStoneValue((random() - 0.5) * 0.08, 1000), y: roundRechargedStoneValue(-0.02 + (random() - 0.5) * 0.08, 1000) };
-      const upperKnee = { x: roundRechargedStoneValue(-0.08 + (random() - 0.5) * 0.16, 1000), y: roundRechargedStoneValue(-0.42 + (random() - 0.5) * 0.12, 1000) };
-      const lowerKnee = { x: roundRechargedStoneValue(0.08 + (random() - 0.5) * 0.14, 1000), y: roundRechargedStoneValue(0.34 + (random() - 0.5) * 0.12, 1000) };
+      points.push({ x: rightBaseX, y: 1 });
+      const p = (targetIndex) => points[Math.max(0, Math.min(points.length - 1, targetIndex))];
+      const topIndex = 1 + Math.floor((upperPointCount - 1) * (0.42 + random() * 0.18));
+      const leftShoulder = p(1 + Math.floor(upperPointCount * 0.22));
+      const top = p(topIndex);
+      const rightShoulder = p(1 + Math.ceil(upperPointCount * 0.72));
+      const rightWall = p(points.length - 2);
+      const leftWall = p(1);
+      const center = { x: roundRechargedStoneValue((random() - 0.5) * 0.08, 1000), y: roundRechargedStoneValue(0.02 + (random() - 0.5) * 0.1, 1000) };
+      const lowerKnee = { x: roundRechargedStoneValue(0.08 + (random() - 0.5) * 0.18, 1000), y: roundRechargedStoneValue(0.52 + random() * 0.14, 1000) };
+      const leftKnee = { x: roundRechargedStoneValue(-0.42 + (random() - 0.5) * 0.16, 1000), y: roundRechargedStoneValue(0.34 + random() * 0.16, 1000) };
+      const rightKnee = { x: roundRechargedStoneValue(0.5 + (random() - 0.5) * 0.14, 1000), y: roundRechargedStoneValue(0.24 + random() * 0.18, 1000) };
       return {
-        kind: "stylized-faceted-polygon",
+        kind: "stonelab-grounded-faceted-polygon",
+        bottomY: 1,
+        baselineY: 1,
         points,
         facets: [
-          { tone: 0, points: [p(-0.82, -0.42), p(-0.2, -0.9), p(0.36, -0.72), upperKnee, center] },
-          { tone: 1, points: [p(-0.96, 0), p(-0.82, -0.42), center, lowerKnee, p(-0.38, 0.72)] },
-          { tone: 2, points: [upperKnee, p(0.36, -0.72), p(0.88, -0.12), p(0.72, 0.42), lowerKnee, center] },
-          { tone: 3, points: [p(-0.38, 0.72), lowerKnee, p(0.72, 0.42), p(0.18, 0.86), p(-0.72, 0.48)] },
+          { tone: 0, points: [leftWall, leftShoulder, top, center, leftKnee] },
+          { tone: 1, points: [{ x: leftBaseX, y: 1 }, leftWall, leftKnee, lowerKnee, { x: roundRechargedStoneValue(leftBaseX + 0.24, 1000), y: 1 }] },
+          { tone: 2, points: [top, rightShoulder, rightKnee, lowerKnee, center] },
+          { tone: 3, points: [rightKnee, rightWall, { x: rightBaseX, y: 1 }, { x: roundRechargedStoneValue(leftBaseX + 0.24, 1000), y: 1 }, lowerKnee] },
+          { tone: 1, points: [leftKnee, center, lowerKnee] },
+        ],
+        topHighlight: [
+          { x: roundRechargedStoneValue(leftShoulder.x * 0.78 + top.x * 0.22, 1000), y: roundRechargedStoneValue(leftShoulder.y * 0.78 + top.y * 0.22 + 0.06, 1000) },
+          { x: roundRechargedStoneValue(top.x * 0.82 + rightShoulder.x * 0.18, 1000), y: roundRechargedStoneValue(top.y * 0.82 + rightShoulder.y * 0.18 + 0.06, 1000) },
+          { x: roundRechargedStoneValue(top.x * 0.56 + rightShoulder.x * 0.44, 1000), y: roundRechargedStoneValue(top.y * 0.56 + rightShoulder.y * 0.44 + 0.16, 1000) },
+          { x: roundRechargedStoneValue(leftShoulder.x * 0.48 + top.x * 0.52, 1000), y: roundRechargedStoneValue(leftShoulder.y * 0.48 + top.y * 0.52 + 0.17, 1000) },
         ],
       };
     }
@@ -4885,19 +4889,10 @@
 
     function getRechargedStoneVisualContactOffsetY(stone = {}) {
       const visual = stone.visual || getRechargedStoneVisualGeometry(stone);
-      const radiusX = Math.max(0, Number(stone.radiusX) || 0);
       const radiusY = Math.max(0, Number(stone.radiusY) || 0);
-      const rotation = Number.isFinite(stone.rotation) ? stone.rotation : 0;
-      const sin = Math.sin(rotation);
-      const cos = Math.cos(rotation);
-      let maxY = 0;
       const points = Array.isArray(visual?.points) ? visual.points : [];
-      for (const point of points) {
-        const localX = (Number(point?.x) || 0) * radiusX;
-        const localY = (Number(point?.y) || 0) * radiusY;
-        maxY = Math.max(maxY, (localX * sin) + (localY * cos));
-      }
-      return maxY;
+      const bottomY = points.reduce((maxY, point) => Math.max(maxY, Number(point?.y) || 0), Number.isFinite(visual?.bottomY) ? visual.bottomY : 1);
+      return bottomY * radiusY;
     }
 
     function getRechargedStoneVisualWorldBottomY(stone = {}) {
@@ -4950,8 +4945,7 @@
         stone.visual = getRechargedStoneVisualGeometry(stone);
         const baselineY = area.y + area.height;
         const contactOffsetY = getRechargedStoneVisualContactOffsetY(stone);
-        const groundedJitter = Math.min(1.2, Math.max(0, radiusY * 0.08)) * random();
-        stone.y = baselineY - contactOffsetY - groundedJitter;
+        stone.y = baselineY - contactOffsetY;
         stones.push(stone);
       }
       rechargedStoneLayoutCache.set(cacheKey, stones);
@@ -4969,14 +4963,74 @@
 
     function getRechargedStoneTonePalette(stone) {
       const shade = Math.max(0, Math.min(1, Number.isFinite(stone.shade) ? stone.shade : 0.82));
-      const warmth = Math.round(10 + shade * 10);
-      const base = Math.round(86 * shade);
+      const mix = (hex, target, amount) => {
+        const parse = (value) => [1, 3, 5].map((offset) => Number.parseInt(value.slice(offset, offset + 2), 16));
+        const source = parse(hex);
+        const dest = parse(target);
+        return `rgb(${source.map((channel, index) => Math.round(channel + ((dest[index] - channel) * amount))).join(", ")})`;
+      };
+      const lift = (shade - 0.82) * 0.24;
       return [
-        `rgb(${base + 78 + warmth}, ${base + 70 + warmth}, ${base + 58})`,
-        `rgb(${base + 50 + warmth}, ${base + 45 + warmth}, ${base + 36})`,
-        `rgb(${base + 28 + warmth}, ${base + 26 + warmth}, ${base + 23})`,
-        `rgb(${base + 12 + warmth}, ${base + 11 + warmth}, ${base + 12})`,
+        mix("#d7c5aa", "#ffffff", Math.max(0, lift)),
+        mix("#8d8476", "#d7c5aa", Math.max(0, lift * 0.75)),
+        mix("#4e5250", "#8d8476", Math.max(0, lift * 0.45)),
+        mix("#121918", "#4e5250", Math.max(0, lift * 0.35)),
       ];
+    }
+
+    function drawRechargedStoneVisual(ctx, stone, rect, options = {}) {
+      const visual = stone.visual || getRechargedStoneVisualGeometry(stone);
+      const tones = getRechargedStoneTonePalette(stone);
+      const reflected = options.reflected === true;
+      ctx.save();
+      ctx.translate(rect.x + rect.w * 0.5, rect.y + rect.h * 0.5);
+      if (reflected) ctx.scale(1, -1);
+      ctx.scale(Math.max(0.5, rect.w * 0.5), Math.max(0.5, rect.h * 0.5));
+      if (!reflected) {
+        ctx.fillStyle = "rgba(18, 25, 24, 0.18)";
+        ctx.beginPath();
+        ctx.ellipse(0.04, 1.04, 0.82, 0.14, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (traceRechargedStonePolygon(ctx, visual.points)) {
+        const bodyGradient = ctx.createLinearGradient(-0.78, -0.86, 0.72, 1);
+        bodyGradient.addColorStop(0, tones[0]);
+        bodyGradient.addColorStop(0.46, tones[1]);
+        bodyGradient.addColorStop(1, tones[2]);
+        ctx.fillStyle = bodyGradient;
+        ctx.fill();
+      }
+      ctx.save();
+      if (traceRechargedStonePolygon(ctx, visual.points)) ctx.clip();
+      for (const facet of visual.facets) {
+        if (!traceRechargedStonePolygon(ctx, facet.points)) continue;
+        ctx.fillStyle = tones[Math.max(0, Math.min(tones.length - 1, facet.tone || 0))];
+        ctx.globalAlpha *= facet.tone === 0 ? 0.72 : 0.6;
+        ctx.fill();
+        ctx.globalAlpha /= facet.tone === 0 ? 0.72 : 0.6;
+      }
+      if (Array.isArray(visual.topHighlight) && traceRechargedStonePolygon(ctx, visual.topHighlight)) {
+        ctx.fillStyle = "rgba(255, 244, 214, 0.18)";
+        ctx.fill();
+      }
+      ctx.restore();
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(-1.2, -1.2, 2.4, 2.2);
+      ctx.clip();
+      if (traceRechargedStonePolygon(ctx, visual.points)) {
+        ctx.strokeStyle = reflected ? "rgba(18, 25, 24, 0.2)" : "rgba(18, 25, 24, 0.34)";
+        ctx.lineWidth = Math.max(0.035, 1.05 / Math.max(rect.w * 0.5, rect.h * 0.5));
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.beginPath();
+      ctx.moveTo((visual.points?.[0]?.x ?? -0.9), 0.985);
+      ctx.lineTo((visual.points?.[visual.points.length - 1]?.x ?? 0.9), 0.985);
+      ctx.strokeStyle = reflected ? "rgba(18, 25, 24, 0.14)" : "rgba(18, 25, 24, 0.42)";
+      ctx.lineWidth = Math.max(0.04, 1.25 / Math.max(rect.w * 0.5, rect.h * 0.5));
+      ctx.stroke();
+      ctx.restore();
     }
 
     function drawRechargedStoneAreas(ctx, mapper, stoneAreas, options = {}) {
@@ -4988,38 +5042,7 @@
         for (const stone of stones) {
           const rect = mapper.worldToCanvasRect(stone.x - stone.radiusX, stone.y - stone.radiusY, stone.radiusX * 2, stone.radiusY * 2);
           if (rect.w <= 0 || rect.h <= 0) continue;
-          const visual = stone.visual || getRechargedStoneVisualGeometry(stone);
-          const tones = getRechargedStoneTonePalette(stone);
-          ctx.save();
-          ctx.translate(rect.x + rect.w * 0.5, rect.y + rect.h * 0.5);
-          ctx.save();
-          ctx.rotate(stone.rotation || 0);
-          ctx.scale(Math.max(0.5, rect.w * 0.5), Math.max(0.5, rect.h * 0.5));
-          ctx.fillStyle = "rgba(18, 15, 12, 0.16)";
-          ctx.beginPath();
-          ctx.ellipse(0.06, 0.72, 0.78, 0.18, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-          ctx.rotate(stone.rotation || 0);
-          ctx.scale(Math.max(0.5, rect.w * 0.5), Math.max(0.5, rect.h * 0.5));
-          if (traceRechargedStonePolygon(ctx, visual.points)) {
-            ctx.fillStyle = tones[2];
-            ctx.fill();
-          }
-          ctx.save();
-          if (traceRechargedStonePolygon(ctx, visual.points)) ctx.clip();
-          for (const facet of visual.facets) {
-            if (!traceRechargedStonePolygon(ctx, facet.points)) continue;
-            ctx.fillStyle = tones[Math.max(0, Math.min(tones.length - 1, facet.tone || 0))];
-            ctx.fill();
-          }
-          ctx.restore();
-          if (traceRechargedStonePolygon(ctx, visual.points)) {
-            ctx.strokeStyle = "rgba(45, 37, 29, 0.28)";
-            ctx.lineWidth = Math.max(0.035, 1.1 / Math.max(rect.w * 0.5, rect.h * 0.5));
-            ctx.stroke();
-          }
-          ctx.restore();
+          drawRechargedStoneVisual(ctx, stone, rect);
           drewAny = true;
         }
       }
@@ -7857,34 +7880,11 @@
         const centerX = rect.x + rect.w * 0.5;
         const centerY = rect.y + rect.h * 0.5;
         const reflectedCenterY = surfaceCanvasY + (surfaceCanvasY - centerY);
-        const visual = stone.visual || getRechargedStoneVisualGeometry(stone);
-        const tones = getRechargedStoneTonePalette(stone);
+        const reflectedRect = { x: rect.x, y: reflectedCenterY - rect.h * 0.5, w: rect.w, h: rect.h };
         ctx.save();
         ctx.globalAlpha = alpha;
         drawRechargedMirrorSubjectWithLocalShimmer(ctx, clipRect, distortion, surfaceX, stone.x, shimmerTime, () => {
-          ctx.save();
-          ctx.translate(centerX, reflectedCenterY);
-          ctx.scale(1, -1);
-          ctx.rotate(stone.rotation || 0);
-          ctx.scale(Math.max(0.5, rect.w * 0.5), Math.max(0.5, rect.h * 0.5));
-          if (traceRechargedStonePolygon(ctx, visual.points)) {
-            ctx.fillStyle = tones[2];
-            ctx.fill();
-          }
-          ctx.save();
-          if (traceRechargedStonePolygon(ctx, visual.points)) ctx.clip();
-          for (const facet of visual.facets) {
-            if (!traceRechargedStonePolygon(ctx, facet.points)) continue;
-            ctx.fillStyle = tones[Math.max(0, Math.min(tones.length - 1, facet.tone || 0))];
-            ctx.fill();
-          }
-          ctx.restore();
-          if (traceRechargedStonePolygon(ctx, visual.points)) {
-            ctx.strokeStyle = "rgba(45, 37, 29, 0.22)";
-            ctx.lineWidth = Math.max(0.035, 1.1 / Math.max(rect.w * 0.5, rect.h * 0.5));
-            ctx.stroke();
-          }
-          ctx.restore();
+          drawRechargedStoneVisual(ctx, stone, reflectedRect, { reflected: true });
         });
         ctx.restore();
         drewAny = true;

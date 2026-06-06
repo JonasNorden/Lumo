@@ -16,41 +16,50 @@ function tracePolygon(ctx, points) {
 
 function getStoneTonePalette(stone) {
   const shade = Math.max(0, Math.min(1, Number.isFinite(stone.shade) ? stone.shade : 0.82));
-  const warmth = Math.round(10 + shade * 10);
-  const base = Math.round(86 * shade);
+  const mix = (hex, target, amount) => {
+    const parse = (value) => [1, 3, 5].map((offset) => Number.parseInt(value.slice(offset, offset + 2), 16));
+    const source = parse(hex);
+    const dest = parse(target);
+    return `rgb(${source.map((channel, index) => Math.round(channel + ((dest[index] - channel) * amount))).join(", ")})`;
+  };
+  const lift = (shade - 0.82) * 0.24;
   return [
-    `rgb(${base + 78 + warmth}, ${base + 70 + warmth}, ${base + 58})`,
-    `rgb(${base + 50 + warmth}, ${base + 45 + warmth}, ${base + 36})`,
-    `rgb(${base + 28 + warmth}, ${base + 26 + warmth}, ${base + 23})`,
-    `rgb(${base + 12 + warmth}, ${base + 11 + warmth}, ${base + 12})`,
+    mix("#d7c5aa", "#ffffff", Math.max(0, lift)),
+    mix("#8d8476", "#d7c5aa", Math.max(0, lift * 0.75)),
+    mix("#4e5250", "#8d8476", Math.max(0, lift * 0.45)),
+    mix("#121918", "#4e5250", Math.max(0, lift * 0.35)),
   ];
 }
 
-export function drawStone(ctx, viewport, stone, alpha = 1) {
+export function drawStone(ctx, viewport, stone, alpha = 1, options = {}) {
   const zoom = viewport?.zoom || 1;
   const center = worldToCanvas(viewport, stone.x, stone.y);
   const radiusX = Math.max(0.5, stone.radiusX * zoom);
   const radiusY = Math.max(0.5, stone.radiusY * zoom);
   const visual = stone.visual || getStoneVisualGeometry(stone);
   const tones = getStoneTonePalette(stone);
+  const reflected = options.reflected === true;
 
   ctx.save();
   ctx.globalAlpha *= alpha;
   ctx.translate(center.x, center.y);
-
-  ctx.save();
-  ctx.rotate(stone.rotation || 0);
   ctx.scale(radiusX, radiusY);
-  ctx.fillStyle = "rgba(18, 15, 12, 0.16)";
-  ctx.beginPath();
-  ctx.ellipse(0.06, 0.72, 0.78, 0.18, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
 
-  ctx.rotate(stone.rotation || 0);
-  ctx.scale(radiusX, radiusY);
+  if (!reflected) {
+    ctx.save();
+    ctx.fillStyle = "rgba(18, 25, 24, 0.18)";
+    ctx.beginPath();
+    ctx.ellipse(0.04, 1.04, 0.82, 0.14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   if (tracePolygon(ctx, visual.points)) {
-    ctx.fillStyle = tones[2];
+    const bodyGradient = ctx.createLinearGradient(-0.78, -0.86, 0.72, 1);
+    bodyGradient.addColorStop(0, tones[0]);
+    bodyGradient.addColorStop(0.46, tones[1]);
+    bodyGradient.addColorStop(1, tones[2]);
+    ctx.fillStyle = bodyGradient;
     ctx.fill();
   }
   ctx.save();
@@ -58,14 +67,31 @@ export function drawStone(ctx, viewport, stone, alpha = 1) {
   for (const facet of visual.facets) {
     if (!tracePolygon(ctx, facet.points)) continue;
     ctx.fillStyle = tones[Math.max(0, Math.min(tones.length - 1, facet.tone || 0))];
+    ctx.globalAlpha *= facet.tone === 0 ? 0.72 : 0.6;
+    ctx.fill();
+    ctx.globalAlpha /= facet.tone === 0 ? 0.72 : 0.6;
+  }
+  if (Array.isArray(visual.topHighlight) && tracePolygon(ctx, visual.topHighlight)) {
+    ctx.fillStyle = "rgba(255, 244, 214, 0.18)";
     ctx.fill();
   }
   ctx.restore();
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-1.2, -1.2, 2.4, 2.2);
+  ctx.clip();
   if (tracePolygon(ctx, visual.points)) {
-    ctx.strokeStyle = "rgba(45, 37, 29, 0.28)";
-    ctx.lineWidth = Math.max(0.035, 1.1 / Math.max(radiusX, radiusY));
+    ctx.strokeStyle = reflected ? "rgba(18, 25, 24, 0.2)" : "rgba(18, 25, 24, 0.34)";
+    ctx.lineWidth = Math.max(0.035, 1.05 / Math.max(radiusX, radiusY));
     ctx.stroke();
   }
+  ctx.restore();
+  ctx.beginPath();
+  ctx.moveTo((visual.points?.[0]?.x ?? -0.9), 0.985);
+  ctx.lineTo((visual.points?.[visual.points.length - 1]?.x ?? 0.9), 0.985);
+  ctx.strokeStyle = reflected ? "rgba(18, 25, 24, 0.14)" : "rgba(18, 25, 24, 0.42)";
+  ctx.lineWidth = Math.max(0.04, 1.25 / Math.max(radiusX, radiusY));
+  ctx.stroke();
   ctx.restore();
 }
 

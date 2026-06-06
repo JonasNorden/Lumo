@@ -255,50 +255,56 @@ function getStoneVisualGeometryCacheKey(stone = {}) {
 
 function createStoneVisualGeometry(stone = {}) {
   const random = mulberry32(hashStringToUint32(getStoneVisualGeometryCacheKey(stone)));
-  const pointCount = 7 + Math.floor(random() * 3);
-  const points = [];
-  for (let pointIndex = 0; pointIndex < pointCount; pointIndex += 1) {
-    const angle = (-Math.PI * 0.92) + (pointIndex / pointCount) * Math.PI * 2 + (random() - 0.5) * 0.16;
-    const leftBias = Math.cos(angle) < -0.25 ? 0.08 : 0;
-    const topBias = Math.sin(angle) < -0.35 ? 0.06 : 0;
-    const bottomFlatten = Math.sin(angle) > 0.45 ? 0.14 : 0;
-    const radius = 0.82 + random() * 0.22 + leftBias + topBias - bottomFlatten;
-    const x = roundTo(Math.cos(angle) * radius, 1000);
-    const y = roundTo(Math.sin(angle) * Math.min(0.96, radius + bottomFlatten * 0.45), 1000);
-    points.push({ x, y });
+  const upperPointCount = 5 + Math.floor(random() * 3);
+  const leftBaseX = roundTo(-0.86 - random() * 0.1, 1000);
+  const rightBaseX = roundTo(0.86 + random() * 0.1, 1000);
+  const points = [{ x: leftBaseX, y: 1 }];
+  for (let pointIndex = 0; pointIndex < upperPointCount; pointIndex += 1) {
+    const t = upperPointCount === 1 ? 0.5 : pointIndex / (upperPointCount - 1);
+    const arc = Math.sin(t * Math.PI);
+    const shoulder = Math.sin(t * Math.PI * 0.72);
+    const x = leftBaseX + (rightBaseX - leftBaseX) * t + (random() - 0.5) * (0.08 + arc * 0.1);
+    const y = 0.76 - (arc * (1.48 + random() * 0.18)) - (shoulder * 0.1) + (random() - 0.5) * 0.12;
+    points.push({
+      x: roundTo(Math.max(leftBaseX + 0.04, Math.min(rightBaseX - 0.04, x)), 1000),
+      y: roundTo(Math.max(-0.94, Math.min(0.82, y)), 1000),
+    });
   }
-  points.sort((a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x));
+  points.push({ x: rightBaseX, y: 1 });
 
-  const findClosestIndex = (targetX, targetY) => {
-    let bestIndex = 0;
-    let bestDistance = Infinity;
-    for (let i = 0; i < points.length; i += 1) {
-      const dx = points[i].x - targetX;
-      const dy = points[i].y - targetY;
-      const distance = dx * dx + dy * dy;
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        bestIndex = i;
-      }
-    }
-    return bestIndex;
-  };
-  const p = (targetX, targetY) => points[findClosestIndex(targetX, targetY)];
-  const center = { x: roundTo((random() - 0.5) * 0.08, 1000), y: roundTo(-0.02 + (random() - 0.5) * 0.08, 1000) };
-  const upperKnee = { x: roundTo(-0.08 + (random() - 0.5) * 0.16, 1000), y: roundTo(-0.42 + (random() - 0.5) * 0.12, 1000) };
-  const lowerKnee = { x: roundTo(0.08 + (random() - 0.5) * 0.14, 1000), y: roundTo(0.34 + (random() - 0.5) * 0.12, 1000) };
+  const p = (targetIndex) => points[Math.max(0, Math.min(points.length - 1, targetIndex))];
+  const topIndex = 1 + Math.floor((upperPointCount - 1) * (0.42 + random() * 0.18));
+  const leftShoulder = p(1 + Math.floor(upperPointCount * 0.22));
+  const top = p(topIndex);
+  const rightShoulder = p(1 + Math.ceil(upperPointCount * 0.72));
+  const rightWall = p(points.length - 2);
+  const leftWall = p(1);
+  const center = { x: roundTo((random() - 0.5) * 0.08, 1000), y: roundTo(0.02 + (random() - 0.5) * 0.1, 1000) };
+  const lowerKnee = { x: roundTo(0.08 + (random() - 0.5) * 0.18, 1000), y: roundTo(0.52 + random() * 0.14, 1000) };
+  const leftKnee = { x: roundTo(-0.42 + (random() - 0.5) * 0.16, 1000), y: roundTo(0.34 + random() * 0.16, 1000) };
+  const rightKnee = { x: roundTo(0.5 + (random() - 0.5) * 0.14, 1000), y: roundTo(0.24 + random() * 0.18, 1000) };
 
   const facets = [
-    { tone: 0, points: [p(-0.82, -0.42), p(-0.2, -0.9), p(0.36, -0.72), upperKnee, center] },
-    { tone: 1, points: [p(-0.96, 0), p(-0.82, -0.42), center, lowerKnee, p(-0.38, 0.72)] },
-    { tone: 2, points: [upperKnee, p(0.36, -0.72), p(0.88, -0.12), p(0.72, 0.42), lowerKnee, center] },
-    { tone: 3, points: [p(-0.38, 0.72), lowerKnee, p(0.72, 0.42), p(0.18, 0.86), p(-0.72, 0.48)] },
+    { tone: 0, points: [leftWall, leftShoulder, top, center, leftKnee] },
+    { tone: 1, points: [{ x: leftBaseX, y: 1 }, leftWall, leftKnee, lowerKnee, { x: roundTo(leftBaseX + 0.24, 1000), y: 1 }] },
+    { tone: 2, points: [top, rightShoulder, rightKnee, lowerKnee, center] },
+    { tone: 3, points: [rightKnee, rightWall, { x: rightBaseX, y: 1 }, { x: roundTo(leftBaseX + 0.24, 1000), y: 1 }, lowerKnee] },
+    { tone: 1, points: [leftKnee, center, lowerKnee] },
+  ];
+  const topHighlight = [
+    { x: roundTo(leftShoulder.x * 0.78 + top.x * 0.22, 1000), y: roundTo(leftShoulder.y * 0.78 + top.y * 0.22 + 0.06, 1000) },
+    { x: roundTo(top.x * 0.82 + rightShoulder.x * 0.18, 1000), y: roundTo(top.y * 0.82 + rightShoulder.y * 0.18 + 0.06, 1000) },
+    { x: roundTo(top.x * 0.56 + rightShoulder.x * 0.44, 1000), y: roundTo(top.y * 0.56 + rightShoulder.y * 0.44 + 0.16, 1000) },
+    { x: roundTo(leftShoulder.x * 0.48 + top.x * 0.52, 1000), y: roundTo(leftShoulder.y * 0.48 + top.y * 0.52 + 0.17, 1000) },
   ];
 
   return Object.freeze({
-    kind: "stylized-faceted-polygon",
+    kind: "stonelab-grounded-faceted-polygon",
+    bottomY: 1,
+    baselineY: 1,
     points: Object.freeze(points.map((point) => Object.freeze(point))),
     facets: Object.freeze(facets.map((facet) => Object.freeze({ ...facet, points: Object.freeze(facet.points.map((point) => Object.freeze({ x: point.x, y: point.y }))) }))),
+    topHighlight: Object.freeze(topHighlight.map((point) => Object.freeze(point))),
   });
 }
 
@@ -311,19 +317,15 @@ export function getStoneVisualGeometry(stone = {}) {
 
 export function getStoneVisualContactOffsetY(stone = {}) {
   const visual = stone.visual || getStoneVisualGeometry(stone);
-  const radiusX = Math.max(0, Number(stone.radiusX) || 0);
   const radiusY = Math.max(0, Number(stone.radiusY) || 0);
-  const rotation = Number.isFinite(stone.rotation) ? stone.rotation : 0;
-  const sin = Math.sin(rotation);
-  const cos = Math.cos(rotation);
-  let maxY = 0;
   const points = Array.isArray(visual?.points) ? visual.points : [];
-  for (const point of points) {
-    const localX = (Number(point?.x) || 0) * radiusX;
-    const localY = (Number(point?.y) || 0) * radiusY;
-    maxY = Math.max(maxY, (localX * sin) + (localY * cos));
-  }
-  return maxY;
+  const bottomY = points.reduce((maxY, point) => Math.max(maxY, Number(point?.y) || 0), Number.isFinite(visual?.bottomY) ? visual.bottomY : 1);
+  return bottomY * radiusY;
+}
+
+export function getStoneVisualWorldBottomY(stone = {}) {
+  const centerY = Number.isFinite(stone.y) ? stone.y : 0;
+  return centerY + getStoneVisualContactOffsetY(stone);
 }
 
 export function getStoneAreaSeed(area = {}, index = 0) {
@@ -374,8 +376,7 @@ export function generateStoneAreaLayout(area = {}, index = 0) {
     stone.visual = getStoneVisualGeometry(stone);
     const contactOffsetY = getStoneVisualContactOffsetY(stone);
     const baselineY = normalized.y + normalized.height;
-    const groundedJitter = Math.min(1.2, Math.max(0, radiusY * 0.08)) * random();
-    stone.y = Math.round((baselineY - contactOffsetY - groundedJitter) * 100) / 100;
+    stone.y = Math.round((baselineY - contactOffsetY) * 100) / 100;
     stones.push(stone);
   }
   return stones;
