@@ -6,7 +6,9 @@ import { fileURLToPath } from "node:url";
 import {
   createStoneAreaFromDrag,
   generateStoneAreaLayout,
+  getStoneVisualContactOffsetY,
   getStoneVisualGeometry,
+  getStoneVisualWorldBottomY,
   normalizeStoneAreaForEditor,
   updateStoneAreaField,
 } from "../src/domain/worldAreas.js";
@@ -73,19 +75,36 @@ const baseDoc = {
   const stones = generateStoneAreaLayout(area);
   assert.ok(stones.length > 0, "visual test area should generate stones");
   const firstVisual = stones[0].visual;
-  assert.equal(firstVisual.kind, "stylized-faceted-polygon", "stones use the StoneLab faceted polygon visual model");
-  assert.ok(firstVisual.points.length >= 7, "stone silhouette should be an irregular polygon, not a single ellipse");
-  assert.ok(firstVisual.facets.length >= 3 && firstVisual.facets.length <= 5, "stone visual should expose 3-5 large shaded facets");
+  assert.equal(firstVisual.kind, "stonelab-grounded-faceted-polygon", "stones use the StoneLab grounded faceted polygon visual model");
+  assert.ok(firstVisual.points.length >= 7 && firstVisual.points.length <= 9, "stone silhouette should use the StoneLab 7-9 point contract");
+  assert.equal(firstVisual.points[0].y, 1, "stone silhouette starts with a flat left baseline point");
+  assert.equal(firstVisual.points.at(-1).y, 1, "stone silhouette ends with a flat right baseline point");
+  assert.ok(firstVisual.points.slice(1, -1).some((point) => point.y < -0.45), "stone silhouette should keep an irregular dome-like upper profile");
+  assert.ok(firstVisual.points.every((point) => point.y <= 1), "no stone silhouette geometry may extend below the normalized baseline");
+  assert.ok(firstVisual.facets.length >= 5, "stone visual should expose multiple large shaded StoneLab facet patches");
+  assert.ok(firstVisual.facets.every((facet) => facet.points.every((point) => point.y <= 1)), "internal facets must remain clipped above the flat baseline");
+  assert.ok(Array.isArray(firstVisual.topHighlight) && firstVisual.topHighlight.length >= 3, "stone visual should expose the StoneLab top highlight pass");
+  const baselineY = area.y + area.height;
+  for (const stone of stones) {
+    assert.equal(Math.round(getStoneVisualWorldBottomY(stone) * 100) / 100, baselineY, "every generated stone must rest exactly on the Stone Area baseline");
+    assert.ok(stone.visual.points.every((point) => point.y <= stone.visual.baselineY), "no generated stone geometry should sit below the baseline");
+    assert.equal(getStoneVisualContactOffsetY(stone), stone.radiusY, "flat bottom contact offset remains exactly one radiusY");
+  }
   assert.equal(getStoneVisualGeometry(stones[0]), firstVisual, "stone visual geometry should be cached and reusable for the same stone");
   assert.deepEqual(generateStoneAreaLayout(area)[0].visual, firstVisual, "generated stone visual geometry should be deterministic");
 
   const editorStoneLayerSource = fs.readFileSync(editorStoneLayerPath, "utf8");
   assert.equal(editorStoneLayerSource.includes("ctx.ellipse(0, 0, 1, 1"), false, "Editor V2 Stone Area preview should not use the old plain ellipse as the primary stone visual");
   assert.equal(editorStoneLayerSource.includes("tracePolygon"), true, "Editor V2 Stone Area preview should draw polygon silhouettes/facets");
+  assert.equal(editorStoneLayerSource.includes("ctx.rotate(stone.rotation"), false, "Editor V2 Stone Area preview must not rotate the grounded flat baseline");
+  assert.equal(editorStoneLayerSource.includes("createLinearGradient(-0.78, -0.86, 0.72, 1)"), true, "Editor V2 Stone Area preview should use the StoneLab upper-left gradient body fill");
 
   const lumoHtmlSource = fs.readFileSync(lumoHtmlPath, "utf8");
   assert.equal(lumoHtmlSource.includes("createRadialGradient(-rect.w * 0.18"), false, "runtime should not use the old gradient ellipse stone renderer");
   assert.equal(lumoHtmlSource.includes("traceRechargedStonePolygon"), true, "runtime should draw stylized polygon stone silhouettes/facets");
+  assert.equal(lumoHtmlSource.includes("ctx.rotate(stone.rotation"), false, "runtime Stone Area rendering must not rotate the grounded flat baseline");
+  assert.equal(lumoHtmlSource.includes("reflected: true"), true, "runtime mirror Stone Area path should use the reflected stone renderer treatment");
+  assert.equal(lumoHtmlSource.includes("if (!reflected)"), true, "reflected Stone Area rendering should suppress the contact shadow");
   assert.ok(
     lumoHtmlSource.indexOf("drawRechargedStoneAreas(ctx, mapper, stoneAreas, { tileSize });") < lumoHtmlSource.indexOf("renderReactiveGrass("),
     "runtime Stone Areas must render before reactive grass so grass appears in front",
