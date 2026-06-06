@@ -328,6 +328,36 @@ export function getStoneVisualWorldBottomY(stone = {}) {
   return centerY + getStoneVisualContactOffsetY(stone);
 }
 
+function getStoneVisualHeightRange(stone = {}) {
+  const visual = stone.visual || getStoneVisualGeometry(stone);
+  const points = Array.isArray(visual?.points) ? visual.points : [];
+  const bottomY = points.reduce((maxY, point) => Math.max(maxY, Number(point?.y) || 0), Number.isFinite(visual?.bottomY) ? visual.bottomY : 1);
+  const topY = points.reduce((minY, point) => Math.min(minY, Number(point?.y) || 0), bottomY);
+  return Math.max(0, bottomY - topY);
+}
+
+export function getStoneVisualWorldTopY(stone = {}) {
+  const visual = stone.visual || getStoneVisualGeometry(stone);
+  const points = Array.isArray(visual?.points) ? visual.points : [];
+  const topY = points.reduce((minY, point) => Math.min(minY, Number(point?.y) || 0), Number.isFinite(visual?.baselineY) ? visual.baselineY : 0);
+  const centerY = Number.isFinite(stone.y) ? stone.y : 0;
+  const radiusY = Math.max(0, Number(stone.radiusY) || 0);
+  return centerY + (topY * radiusY);
+}
+
+function resolveStoneAreaVisualSize(area, random, baseTile) {
+  const availableHeight = Math.max(1, Number(area?.height) || 0);
+  const sizeVariation = Math.max(0, Math.min(1, Number.isFinite(area?.sizeVariation) ? area.sizeVariation : STONE_AREA_DEFAULTS.sizeVariation));
+  const minVisualHeight = Math.min(availableHeight, Math.max(baseTile * 0.55, availableHeight * 0.18));
+  const maxVisualHeight = Math.max(minVisualHeight, availableHeight);
+  const heightRoll = Math.pow(random(), 1.45);
+  const heightFactor = (0.56 * (1 - sizeVariation)) + (heightRoll * sizeVariation);
+  const targetVisualHeight = minVisualHeight + ((maxVisualHeight - minVisualHeight) * heightFactor);
+  const radiusY = targetVisualHeight / 1.94;
+  const radiusX = radiusY * (1.32 + random() * 0.56);
+  return { radiusX, radiusY };
+}
+
 export function getStoneAreaSeed(area = {}, index = 0) {
   if (Number.isInteger(area?.seed)) return area.seed >>> 0;
   const normalized = normalizeStoneAreaForEditor(area, index);
@@ -360,10 +390,9 @@ export function generateStoneAreaLayout(area = {}, index = 0) {
     const rawX = useCluster ? cluster.x + Math.cos(angle) * distance : normalized.x + random() * normalized.width;
     const rawY = useCluster ? cluster.y + Math.sin(angle) * distance : normalized.y + random() * normalized.height;
     if (rawX < normalized.x || rawX > normalized.x + normalized.width || rawY < normalized.y || rawY > normalized.y + normalized.height) continue;
-    const baseSize = 8 + random() * 8;
-    const size = baseSize * (1 - normalized.sizeVariation * 0.45 + random() * normalized.sizeVariation * 0.9);
-    const radiusX = Math.round(size * (0.75 + random() * 0.5) * 100) / 100;
-    const radiusY = Math.round(size * (0.45 + random() * 0.35) * 100) / 100;
+    const visualSize = resolveStoneAreaVisualSize(normalized, random, DEFAULT_TILE_SIZE);
+    let radiusX = Math.round(visualSize.radiusX * 100) / 100;
+    let radiusY = Math.round(visualSize.radiusY * 100) / 100;
     const stone = {
       id: `${normalized.id}-stone-${stones.length + 1}`,
       x: Math.round(rawX * 100) / 100,
@@ -374,6 +403,15 @@ export function generateStoneAreaLayout(area = {}, index = 0) {
       shade: Math.round((0.72 + random() * 0.24) * 1000) / 1000,
     };
     stone.visual = getStoneVisualGeometry(stone);
+    const visualRange = getStoneVisualHeightRange(stone);
+    if (visualRange * radiusY > normalized.height) {
+      const scale = normalized.height / Math.max(1, visualRange * radiusY);
+      radiusX = Math.round(radiusX * scale * 100) / 100;
+      radiusY = Math.round(radiusY * scale * 100) / 100;
+      stone.radiusX = radiusX;
+      stone.radiusY = radiusY;
+      stone.visual = getStoneVisualGeometry(stone);
+    }
     const contactOffsetY = getStoneVisualContactOffsetY(stone);
     const baselineY = normalized.y + normalized.height;
     stone.y = Math.round((baselineY - contactOffsetY) * 100) / 100;

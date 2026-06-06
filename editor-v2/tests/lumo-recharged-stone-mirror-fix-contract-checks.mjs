@@ -7,12 +7,33 @@ import {
   generateStoneAreaLayout,
   getStoneVisualContactOffsetY,
   getStoneVisualGeometry,
+  getStoneVisualWorldTopY,
 } from "../../Lumo/editor-v2/src/domain/worldAreas.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "..", "..");
 const stoneLayerSource = readFileSync(resolve(repoRoot, "Lumo", "editor-v2", "src", "render", "layers", "stoneAreaLayer.js"), "utf8");
 const runtimeSource = readFileSync(resolve(repoRoot, "Lumo", "Lumo.html"), "utf8");
+
+function getGeneratedVisualHeight(stone) {
+  const bottomY = stone.y + getStoneVisualContactOffsetY(stone);
+  return bottomY - getStoneVisualWorldTopY(stone);
+}
+
+function getStoneHeightStats(area) {
+  const layout = generateStoneAreaLayout(area, 0);
+  assert.ok(layout.length > 0, `expected ${area.id} to generate stones`);
+  const heights = layout.map(getGeneratedVisualHeight);
+  const widths = layout.map((stone) => stone.radiusX * 2);
+  return {
+    layout,
+    maxHeight: Math.max(...heights),
+    minHeight: Math.min(...heights),
+    heightSpread: Math.max(...heights) - Math.min(...heights),
+    maxWidth: Math.max(...widths),
+    minWidth: Math.min(...widths),
+  };
+}
 
 const testArea = {
   id: "stone_area_contract",
@@ -35,7 +56,28 @@ for (const stone of stones) {
   const bottomY = stone.y + getStoneVisualContactOffsetY(stone);
   assert.equal(Math.round(bottomY * 100) / 100, baselineY, `stone ${stone.id} bottom must sit exactly on baseline`);
   assert.ok(stone.visual.points.every((point) => point.y <= 1), `stone ${stone.id} geometry must not pass below baseline`);
+  assert.ok(getStoneVisualWorldTopY(stone) >= testArea.y - 0.01, `stone ${stone.id} top must stay inside authored area height`);
 }
+
+const twoTileArea = { ...testArea, id: "stone_area_two_tiles", height: 48, seed: 0x51524 };
+const fourTileArea = { ...testArea, id: "stone_area_four_tiles", height: 96, seed: 0x51524 };
+const eightTileArea = { ...testArea, id: "stone_area_eight_tiles", height: 192, seed: 0x51524 };
+const lowStats = getStoneHeightStats(twoTileArea);
+const midStats = getStoneHeightStats(fourTileArea);
+const tallStats = getStoneHeightStats(eightTileArea);
+assert.ok(midStats.maxHeight > lowStats.maxHeight, "4-tile Stone Areas can generate taller stones than 2-tile Stone Areas");
+assert.ok(tallStats.maxHeight > midStats.maxHeight, "8-tile Stone Areas can generate taller stones than 4-tile Stone Areas");
+assert.ok(tallStats.maxHeight <= eightTileArea.height + 0.01, "tall Stone Area bodies stay within authored height");
+assert.ok(lowStats.maxHeight <= twoTileArea.height + 0.01, "short Stone Area bodies stay within authored height");
+assert.ok(tallStats.maxWidth > lowStats.maxWidth, "stone width scales up proportionally with generated height");
+for (const stone of tallStats.layout) {
+  const bottomY = stone.y + getStoneVisualContactOffsetY(stone);
+  assert.equal(Math.round(bottomY * 100) / 100, eightTileArea.y + eightTileArea.height, `scaled stone ${stone.id} bottom remains on baseline`);
+  assert.ok(getStoneVisualWorldTopY(stone) >= eightTileArea.y - 0.01, `scaled stone ${stone.id} top remains inside area`);
+}
+const noVariationStats = getStoneHeightStats({ ...eightTileArea, id: "stone_area_no_variation", sizeVariation: 0 });
+const fullVariationStats = getStoneHeightStats({ ...eightTileArea, id: "stone_area_full_variation", sizeVariation: 1 });
+assert.ok(fullVariationStats.heightSpread > noVariationStats.heightSpread + 8, "sizeVariation increases generated stone size spread");
 
 assert.deepEqual(generateStoneAreaLayout({ ...testArea, enabled: false }, 0), [], "disabled stone areas remain no-op");
 assert.deepEqual(generateStoneAreaLayout({ ...testArea, visible: false }, 0), [], "hidden stone areas remain no-op");
@@ -58,8 +100,12 @@ assert.doesNotMatch(stoneLayerSource, /ctx\.ellipse\([^\n]+stone\.radiusX[^\n]+s
 
 assert.match(runtimeSource, /kind: "stonelab-grounded-faceted-polygon"/, "runtime uses the same grounded StoneLab geometry kind as editor");
 assert.match(runtimeSource, /getRechargedStoneVisualContactOffsetY/, "runtime grounds stones by visual contact point");
+assert.match(runtimeSource, /resolveRechargedStoneAreaVisualSize/, "runtime uses the same area-height-based stone size resolver as Editor V2");
+assert.match(runtimeSource, /const availableHeight = Math\.max\(1, Number\(area\?\.height\) \|\| 0\)/, "runtime stone size maximum derives from authored area height");
+assert.match(runtimeSource, /getRechargedStoneVisualHeightRange/, "runtime clamps scaled stone bodies to authored area height");
 assert.match(runtimeSource, /buildRechargedMirrorStoneReflectionCandidates/, "runtime prepares cheap cached Stone Area reflection candidates");
 assert.match(runtimeSource, /drawRechargedStoneMirrorReflections/, "runtime draws clipped local Stone Area reflections");
+assert.match(runtimeSource, /const drawRect = mapper\.worldToCanvasRect\(stone\.x - radiusX, stone\.y - radiusY, radiusX \* 2, radiusY \* 2\)/, "runtime mirror candidates reflect scaled stone dimensions");
 assert.match(runtimeSource, /reflected: true/, "runtime mirror reflection path uses the reflected stone renderer without contact shadows");
 assert.match(runtimeSource, /stoneAreas,/, "Mirror Surface receives Stone Area layouts for reflection without a full-canvas pass");
 

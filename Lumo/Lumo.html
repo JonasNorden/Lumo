@@ -4900,6 +4900,36 @@
       return centerY + getRechargedStoneVisualContactOffsetY(stone);
     }
 
+    function getRechargedStoneVisualHeightRange(stone = {}) {
+      const visual = stone.visual || getRechargedStoneVisualGeometry(stone);
+      const points = Array.isArray(visual?.points) ? visual.points : [];
+      const bottomY = points.reduce((maxY, point) => Math.max(maxY, Number(point?.y) || 0), Number.isFinite(visual?.bottomY) ? visual.bottomY : 1);
+      const topY = points.reduce((minY, point) => Math.min(minY, Number(point?.y) || 0), bottomY);
+      return Math.max(0, bottomY - topY);
+    }
+
+    function getRechargedStoneVisualWorldTopY(stone = {}) {
+      const visual = stone.visual || getRechargedStoneVisualGeometry(stone);
+      const points = Array.isArray(visual?.points) ? visual.points : [];
+      const topY = points.reduce((minY, point) => Math.min(minY, Number(point?.y) || 0), Number.isFinite(visual?.baselineY) ? visual.baselineY : 0);
+      const centerY = Number.isFinite(stone.y) ? stone.y : 0;
+      const radiusY = Math.max(0, Number(stone.radiusY) || 0);
+      return centerY + (topY * radiusY);
+    }
+
+    function resolveRechargedStoneAreaVisualSize(area, random, baseTile) {
+      const availableHeight = Math.max(1, Number(area?.height) || 0);
+      const sizeVariation = Math.max(0, Math.min(1, Number.isFinite(area?.sizeVariation) ? area.sizeVariation : 0.45));
+      const minVisualHeight = Math.min(availableHeight, Math.max(baseTile * 0.55, availableHeight * 0.18));
+      const maxVisualHeight = Math.max(minVisualHeight, availableHeight);
+      const heightRoll = Math.pow(random(), 1.45);
+      const heightFactor = (0.56 * (1 - sizeVariation)) + (heightRoll * sizeVariation);
+      const targetVisualHeight = minVisualHeight + ((maxVisualHeight - minVisualHeight) * heightFactor);
+      const radiusY = targetVisualHeight / 1.94;
+      const radiusX = radiusY * (1.32 + random() * 0.56);
+      return { radiusX, radiusY };
+    }
+
     const rechargedStoneLayoutCache = new Map();
     function buildRechargedStoneLayout(area, index, tileSize) {
       if (!area || area.density <= 0 || area.width <= 0 || area.height <= 0) return [];
@@ -4929,10 +4959,9 @@
         const rawX = useCluster ? cluster.x + Math.cos(angle) * distance : area.x + random() * area.width;
         const rawY = useCluster ? cluster.y + Math.sin(angle) * distance : area.y + random() * area.height;
         if (rawX < area.x || rawX > area.x + area.width || rawY < area.y || rawY > area.y + area.height) continue;
-        const baseSize = 8 + random() * 8;
-        const size = baseSize * (1 - area.sizeVariation * 0.45 + random() * area.sizeVariation * 0.9);
-        const radiusX = size * (0.75 + random() * 0.5);
-        const radiusY = size * (0.45 + random() * 0.35);
+        const visualSize = resolveRechargedStoneAreaVisualSize(area, random, baseTile);
+        let radiusX = visualSize.radiusX;
+        let radiusY = visualSize.radiusY;
         const stone = {
           id: `${area.id}-stone-${stones.length + 1}`,
           x: rawX,
@@ -4943,6 +4972,15 @@
           shade: 0.72 + random() * 0.24,
         };
         stone.visual = getRechargedStoneVisualGeometry(stone);
+        const visualRange = getRechargedStoneVisualHeightRange(stone);
+        if (visualRange * radiusY > area.height) {
+          const scale = area.height / Math.max(1, visualRange * radiusY);
+          radiusX *= scale;
+          radiusY *= scale;
+          stone.radiusX = radiusX;
+          stone.radiusY = radiusY;
+          stone.visual = getRechargedStoneVisualGeometry(stone);
+        }
         const baselineY = area.y + area.height;
         const contactOffsetY = getRechargedStoneVisualContactOffsetY(stone);
         stone.y = baselineY - contactOffsetY;
