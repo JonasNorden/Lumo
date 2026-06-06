@@ -1,27 +1,71 @@
-import { createStoneAreaFromDrag, generateStoneAreaLayout, getStoneAreaBounds, moveStoneArea, normalizeStoneAreaForEditor } from "../../domain/worldAreas.js";
+import { createStoneAreaFromDrag, generateStoneAreaLayout, getStoneAreaBounds, getStoneVisualGeometry, moveStoneArea, normalizeStoneAreaForEditor } from "../../domain/worldAreas.js";
 
 function worldToCanvas(viewport, x, y) {
   const zoom = viewport?.zoom || 1;
   return { x: (viewport?.offsetX || 0) + (x * zoom), y: (viewport?.offsetY || 0) + (y * zoom) };
 }
 
+function tracePolygon(ctx, points) {
+  if (!Array.isArray(points) || points.length === 0) return false;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
+  ctx.closePath();
+  return true;
+}
+
+function getStoneTonePalette(stone) {
+  const shade = Math.max(0, Math.min(1, Number.isFinite(stone.shade) ? stone.shade : 0.82));
+  const warmth = Math.round(10 + shade * 10);
+  const base = Math.round(86 * shade);
+  return [
+    `rgb(${base + 78 + warmth}, ${base + 70 + warmth}, ${base + 58})`,
+    `rgb(${base + 50 + warmth}, ${base + 45 + warmth}, ${base + 36})`,
+    `rgb(${base + 28 + warmth}, ${base + 26 + warmth}, ${base + 23})`,
+    `rgb(${base + 12 + warmth}, ${base + 11 + warmth}, ${base + 12})`,
+  ];
+}
+
 function drawStone(ctx, viewport, stone, alpha = 1) {
   const zoom = viewport?.zoom || 1;
   const center = worldToCanvas(viewport, stone.x, stone.y);
+  const radiusX = Math.max(0.5, stone.radiusX * zoom);
+  const radiusY = Math.max(0.5, stone.radiusY * zoom);
+  const visual = stone.visual || getStoneVisualGeometry(stone);
+  const tones = getStoneTonePalette(stone);
+
   ctx.save();
   ctx.globalAlpha *= alpha;
   ctx.translate(center.x, center.y);
+
+  ctx.save();
   ctx.rotate(stone.rotation || 0);
-  ctx.scale(Math.max(0.5, stone.radiusX * zoom), Math.max(0.5, stone.radiusY * zoom));
-  const shade = Math.max(0, Math.min(1, Number.isFinite(stone.shade) ? stone.shade : 0.82));
-  const base = Math.round(90 * shade);
-  ctx.fillStyle = `rgb(${base + 28}, ${base + 24}, ${base + 18})`;
-  ctx.strokeStyle = `rgba(${base + 55}, ${base + 50}, ${base + 42}, 0.72)`;
-  ctx.lineWidth = 1 / Math.max(0.5, zoom);
+  ctx.scale(radiusX, radiusY);
+  ctx.fillStyle = "rgba(18, 15, 12, 0.16)";
   ctx.beginPath();
-  ctx.ellipse(0, 0, 1, 1, 0, 0, Math.PI * 2);
+  ctx.ellipse(0.06, 0.72, 0.78, 0.18, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.stroke();
+  ctx.restore();
+
+  ctx.rotate(stone.rotation || 0);
+  ctx.scale(radiusX, radiusY);
+  if (tracePolygon(ctx, visual.points)) {
+    ctx.fillStyle = tones[2];
+    ctx.fill();
+  }
+  ctx.save();
+  if (tracePolygon(ctx, visual.points)) ctx.clip();
+  for (const facet of visual.facets) {
+    if (!tracePolygon(ctx, facet.points)) continue;
+    ctx.fillStyle = tones[Math.max(0, Math.min(tones.length - 1, facet.tone || 0))];
+    ctx.fill();
+  }
+  ctx.restore();
+  if (tracePolygon(ctx, visual.points)) {
+    ctx.strokeStyle = "rgba(45, 37, 29, 0.28)";
+    ctx.lineWidth = Math.max(0.035, 1.1 / Math.max(radiusX, radiusY));
+    ctx.stroke();
+  }
   ctx.restore();
 }
 
