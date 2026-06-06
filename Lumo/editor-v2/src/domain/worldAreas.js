@@ -236,6 +236,78 @@ function mulberry32(seed) {
   };
 }
 
+
+function roundTo(value, precision = 100) {
+  return Math.round(value * precision) / precision;
+}
+
+const stoneVisualGeometryCache = new Map();
+
+function getStoneVisualGeometryCacheKey(stone = {}) {
+  return [
+    stone.id || "stone",
+    roundTo(Number(stone.radiusX) || 0, 100),
+    roundTo(Number(stone.radiusY) || 0, 100),
+    roundTo(Number(stone.rotation) || 0, 1000),
+    roundTo(Number(stone.shade) || 0, 1000),
+  ].join("|");
+}
+
+function createStoneVisualGeometry(stone = {}) {
+  const random = mulberry32(hashStringToUint32(getStoneVisualGeometryCacheKey(stone)));
+  const pointCount = 7 + Math.floor(random() * 3);
+  const points = [];
+  for (let pointIndex = 0; pointIndex < pointCount; pointIndex += 1) {
+    const angle = (-Math.PI * 0.92) + (pointIndex / pointCount) * Math.PI * 2 + (random() - 0.5) * 0.16;
+    const leftBias = Math.cos(angle) < -0.25 ? 0.08 : 0;
+    const topBias = Math.sin(angle) < -0.35 ? 0.06 : 0;
+    const bottomFlatten = Math.sin(angle) > 0.45 ? 0.14 : 0;
+    const radius = 0.82 + random() * 0.22 + leftBias + topBias - bottomFlatten;
+    const x = roundTo(Math.cos(angle) * radius, 1000);
+    const y = roundTo(Math.sin(angle) * Math.min(0.96, radius + bottomFlatten * 0.45), 1000);
+    points.push({ x, y });
+  }
+  points.sort((a, b) => Math.atan2(a.y, a.x) - Math.atan2(b.y, b.x));
+
+  const findClosestIndex = (targetX, targetY) => {
+    let bestIndex = 0;
+    let bestDistance = Infinity;
+    for (let i = 0; i < points.length; i += 1) {
+      const dx = points[i].x - targetX;
+      const dy = points[i].y - targetY;
+      const distance = dx * dx + dy * dy;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestIndex = i;
+      }
+    }
+    return bestIndex;
+  };
+  const p = (targetX, targetY) => points[findClosestIndex(targetX, targetY)];
+  const center = { x: roundTo((random() - 0.5) * 0.08, 1000), y: roundTo(-0.02 + (random() - 0.5) * 0.08, 1000) };
+  const upperKnee = { x: roundTo(-0.08 + (random() - 0.5) * 0.16, 1000), y: roundTo(-0.42 + (random() - 0.5) * 0.12, 1000) };
+  const lowerKnee = { x: roundTo(0.08 + (random() - 0.5) * 0.14, 1000), y: roundTo(0.34 + (random() - 0.5) * 0.12, 1000) };
+
+  const facets = [
+    { tone: 0, points: [p(-0.82, -0.42), p(-0.2, -0.9), p(0.36, -0.72), upperKnee, center] },
+    { tone: 1, points: [p(-0.96, 0), p(-0.82, -0.42), center, lowerKnee, p(-0.38, 0.72)] },
+    { tone: 2, points: [upperKnee, p(0.36, -0.72), p(0.88, -0.12), p(0.72, 0.42), lowerKnee, center] },
+    { tone: 3, points: [p(-0.38, 0.72), lowerKnee, p(0.72, 0.42), p(0.18, 0.86), p(-0.72, 0.48)] },
+  ];
+
+  return Object.freeze({
+    kind: "stylized-faceted-polygon",
+    points: Object.freeze(points.map((point) => Object.freeze(point))),
+    facets: Object.freeze(facets.map((facet) => Object.freeze({ ...facet, points: Object.freeze(facet.points.map((point) => Object.freeze({ x: point.x, y: point.y }))) }))),
+  });
+}
+
+export function getStoneVisualGeometry(stone = {}) {
+  const cacheKey = getStoneVisualGeometryCacheKey(stone);
+  if (!stoneVisualGeometryCache.has(cacheKey)) stoneVisualGeometryCache.set(cacheKey, createStoneVisualGeometry(stone));
+  return stoneVisualGeometryCache.get(cacheKey);
+}
+
 export function getStoneAreaSeed(area = {}, index = 0) {
   if (Number.isInteger(area?.seed)) return area.seed >>> 0;
   const normalized = normalizeStoneAreaForEditor(area, index);
@@ -270,7 +342,7 @@ export function generateStoneAreaLayout(area = {}, index = 0) {
     if (rawX < normalized.x || rawX > normalized.x + normalized.width || rawY < normalized.y || rawY > normalized.y + normalized.height) continue;
     const baseSize = 8 + random() * 8;
     const size = baseSize * (1 - normalized.sizeVariation * 0.45 + random() * normalized.sizeVariation * 0.9);
-    stones.push({
+    const stone = {
       id: `${normalized.id}-stone-${stones.length + 1}`,
       x: Math.round(rawX * 100) / 100,
       y: Math.round(rawY * 100) / 100,
@@ -278,7 +350,9 @@ export function generateStoneAreaLayout(area = {}, index = 0) {
       radiusY: Math.round(size * (0.45 + random() * 0.35) * 100) / 100,
       rotation: Math.round(((random() - 0.5) * Math.PI * normalized.rotationVariation) * 1000) / 1000,
       shade: Math.round((0.72 + random() * 0.24) * 1000) / 1000,
-    });
+    };
+    stone.visual = getStoneVisualGeometry(stone);
+    stones.push(stone);
   }
   return stones;
 }

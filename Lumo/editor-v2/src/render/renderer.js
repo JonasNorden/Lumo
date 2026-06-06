@@ -68,11 +68,11 @@ export function renderEditorFrame(ctx, state) {
   worldCtx.globalAlpha = 1;
   worldCtx.globalCompositeOperation = "source-over";
   renderBackground(worldCtx, doc, state.viewport);
+  renderStoneAreas(worldCtx, doc, state.viewport, state.interaction);
   renderReactiveGrassPatches(worldCtx, doc, state.viewport, state.interaction);
   renderReactiveBloomPatches(worldCtx, doc, state.viewport, state.interaction);
   renderReactiveCrystalPatches(worldCtx, doc, state.viewport, state.interaction);
   renderDecor(worldCtx, doc, state.viewport, state.interaction);
-  renderStoneAreas(worldCtx, doc, state.viewport, state.interaction);
   renderTiles(worldCtx, doc, state.viewport);
   renderMirrorSurfaceAreas(worldCtx, doc, state.viewport, state.interaction);
   renderEntities(worldCtx, doc, state.viewport, state.interaction);
