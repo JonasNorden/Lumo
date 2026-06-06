@@ -273,7 +273,12 @@ function runLumoRenderContractCheck() {
   assert.match(html, /const clipRect = mapper\.worldToCanvasRect\(surfaceX, surfaceY, surfaceW, reflectionHeight\);/, "reflectionHeight must drive reflection clipping depth");
   assert.match(html, /ctx\.globalAlpha = reflectionStrength \* fadeByDistance;/, "reflectionStrength must drive reflected Lumo alpha");
   assert.match(html, /const subtleAlpha = reflectionStrength \* fadeByDistance \* 0\.62;/, "reflectionStrength and fade must drive subtle reflected static decor alpha");
-  assert.match(html, /const shimmerOffsetX = distortion > 0/, "distortion must drive shimmer and support zero distortion");
+  assert.match(html, /function drawRechargedMirrorSubjectWithLocalShimmer/, "distortion must use a local banded shimmer helper");
+  assert.match(html, /const bandCount = Math\.max\(3, Math\.ceil\(clipRect\.h \/ bandHeight\)\);/, "distortion shimmer must be split into multiple anchored bands");
+  assert.match(html, /if \(!\(distortion > 0\)\) \{[\s\S]*?drawSubject\(\);[\s\S]*?return;/, "distortion 0 must render a stable subject without shimmer bands");
+  assert.match(html, /drawRechargedMirrorSubjectWithLocalShimmer\(ctx, clipRect, distortion, surfaceX, decorVisual\.worldRect\.x \+ decorVisual\.worldRect\.w \* 0\.5/, "static decor reflection should use anchored local shimmer");
+  assert.match(html, /drawRechargedMirrorSubjectWithLocalShimmer\(ctx, clipRect, distortion, surfaceX, playerCenterX/, "Lumo reflection should use anchored local shimmer");
+  assert.doesNotMatch(html, /const shimmerOffsetX = distortion > 0/, "distortion must not apply one whole-subject horizontal offset");
   assert.match(html, /if \(surfaceStrength > 0\)/, "surfaceStrength must allow disabling surface sheen and line");
   assert.match(html, /const fadeByDistance = 1 - \(fadeProgress \* fade\);/, "fade must drive downward reflection fade");
   assert.match(html, /if \(!ctx \|\| !mapper \|\| !state \|\| !Array\.isArray\(mirrorSurfaceAreas\) \|\| mirrorSurfaceAreas\.length === 0\) \{\n\s*return false;/, "empty arrays must remain a draw no-op");
