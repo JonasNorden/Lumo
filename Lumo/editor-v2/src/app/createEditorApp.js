@@ -5902,7 +5902,7 @@ export function createEditorApp({
   };
 
   const updateMirrorSurfaceArea = (field, value, options = {}) => {
-    const supportedFields = new Set(["x", "y", "width", "height", "yOffset", "enabled", "visible"]);
+    const supportedFields = new Set(["x", "y", "width", "height", "yOffset", "reflectionHeight", "reflectionStrength", "distortion", "surfaceStrength", "fade", "enabled", "visible"]);
     if (!supportedFields.has(field)) return;
     store.setState((draft) => {
       const areas = Array.isArray(draft.document.active?.mirrorSurfaceAreas) ? draft.document.active.mirrorSurfaceAreas : null;

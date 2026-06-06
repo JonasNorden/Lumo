@@ -4741,6 +4741,11 @@
           width: Number.isFinite(area?.width) && area.width > 0 ? area.width : null,
           height: Number.isFinite(area?.height) && area.height > 0 ? area.height : null,
           yOffset: Number.isFinite(area?.yOffset) ? area.yOffset : 0,
+          reflectionHeight: Number.isFinite(area?.reflectionHeight) && area.reflectionHeight >= 0 ? Number(area.reflectionHeight) : 72,
+          reflectionStrength: Number.isFinite(area?.reflectionStrength) ? Math.max(0, Math.min(1, Number(area.reflectionStrength))) : 0.35,
+          distortion: Number.isFinite(area?.distortion) ? Math.max(0, Math.min(1, Number(area.distortion))) : 0.12,
+          surfaceStrength: Number.isFinite(area?.surfaceStrength) ? Math.max(0, Math.min(1, Number(area.surfaceStrength))) : 0.25,
+          fade: Number.isFinite(area?.fade) ? Math.max(0, Math.min(1, Number(area.fade))) : 0.65,
           enabled: area?.enabled !== false,
           visible: area?.visible !== false,
         }))
@@ -7414,29 +7419,37 @@
           continue;
         }
 
+        const reflectionHeight = Math.max(0, Number.isFinite(area.reflectionHeight) ? Number(area.reflectionHeight) : 72);
+        const reflectionStrength = Math.max(0, Math.min(1, Number.isFinite(area.reflectionStrength) ? Number(area.reflectionStrength) : 0.35));
+        const distortion = Math.max(0, Math.min(1, Number.isFinite(area.distortion) ? Number(area.distortion) : 0.12));
+        const surfaceStrength = Math.max(0, Math.min(1, Number.isFinite(area.surfaceStrength) ? Number(area.surfaceStrength) : 0.25));
+        const fade = Math.max(0, Math.min(1, Number.isFinite(area.fade) ? Number(area.fade) : 0.65));
         const horizontalPad = Math.max(RECHARGED_PLAYER_HITBOX_WIDTH * 0.75, surfaceH * 0.5, 8);
-        const verticalReach = Math.max(RECHARGED_PLAYER_HITBOX_HEIGHT * 1.25, surfaceH * 4, 48);
+        const verticalReach = Math.max(RECHARGED_PLAYER_HITBOX_HEIGHT * 1.25, reflectionHeight, 1);
         const isHorizontallyNear = playerCenterX >= surfaceX - horizontalPad && playerCenterX <= surfaceX + surfaceW + horizontalPad;
         const distanceToSurface = surfaceY - playerFootY;
-        const isVerticallyNear = distanceToSurface >= -surfaceH && distanceToSurface <= verticalReach;
+        const isVerticallyNear = reflectionHeight > 0 && distanceToSurface >= -surfaceH && distanceToSurface <= verticalReach;
         if (!isHorizontallyNear || !isVerticallyNear) {
           continue;
         }
 
-        const clipRect = mapper.worldToCanvasRect(surfaceX, surfaceY, surfaceW, surfaceH);
-        if (clipRect.w <= 0 || clipRect.h <= 0) continue;
+        const clipRect = mapper.worldToCanvasRect(surfaceX, surfaceY, surfaceW, reflectionHeight);
+        const surfaceRect = mapper.worldToCanvasRect(surfaceX, surfaceY, surfaceW, surfaceH);
+        if (clipRect.w <= 0 || clipRect.h <= 0 || surfaceRect.w <= 0 || surfaceRect.h <= 0) continue;
 
         ctx.save();
         ctx.beginPath();
         ctx.rect(clipRect.x, clipRect.y, clipRect.w, clipRect.h);
         ctx.clip();
 
-        const sheen = ctx.createLinearGradient(clipRect.x, clipRect.y, clipRect.x + clipRect.w, clipRect.y + clipRect.h);
-        sheen.addColorStop(0, "rgba(160, 220, 255, 0.04)");
-        sheen.addColorStop(0.5, "rgba(210, 245, 255, 0.08)");
-        sheen.addColorStop(1, "rgba(140, 190, 230, 0.03)");
-        ctx.fillStyle = sheen;
-        ctx.fillRect(clipRect.x, clipRect.y, clipRect.w, clipRect.h);
+        if (surfaceStrength > 0) {
+          const sheen = ctx.createLinearGradient(surfaceRect.x, surfaceRect.y, surfaceRect.x + surfaceRect.w, surfaceRect.y + surfaceRect.h);
+          sheen.addColorStop(0, `rgba(160, 220, 255, ${0.16 * surfaceStrength})`);
+          sheen.addColorStop(0.5, `rgba(210, 245, 255, ${0.32 * surfaceStrength})`);
+          sheen.addColorStop(1, `rgba(140, 190, 230, ${0.12 * surfaceStrength})`);
+          ctx.fillStyle = sheen;
+          ctx.fillRect(surfaceRect.x, surfaceRect.y, surfaceRect.w, surfaceRect.h);
+        }
 
         const spriteCache = ensureRechargedPlayerSpriteCache(state);
         const sprite = spriteCache?.idle?.complete === true ? spriteCache.idle : null;
@@ -7454,22 +7467,27 @@
           const reflectedFootY = surfaceCanvasY + (surfaceCanvasY - playerFootCanvasY);
           const drawX = anchorRect.x + (anchorRect.w - spriteW) * 0.5;
           const drawY = reflectedFootY;
-          const fadeByDistance = 1 - Math.max(0, Math.min(1, distanceToSurface / verticalReach));
+          const fadeProgress = Math.max(0, Math.min(1, distanceToSurface / verticalReach));
+          const fadeByDistance = 1 - (fadeProgress * fade);
+          const shimmerPhase = ((typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 240) + (surfaceX * 0.031);
+          const shimmerOffsetX = distortion > 0 ? Math.sin(shimmerPhase + fadeProgress * Math.PI) * distortion * Math.max(1, anchorRect.w * 0.18) : 0;
           ctx.save();
-          ctx.globalAlpha = 0.24 * fadeByDistance;
-          ctx.translate(drawX + spriteW * 0.5, drawY);
+          ctx.globalAlpha = reflectionStrength * fadeByDistance;
+          ctx.translate(drawX + spriteW * 0.5 + shimmerOffsetX, drawY);
           ctx.scale(1, -1);
           ctx.drawImage(sprite, -spriteW * 0.5, -spriteH, spriteW, spriteH);
           ctx.restore();
           drewAnyReflection = true;
         }
 
-        ctx.strokeStyle = "rgba(205, 245, 255, 0.16)";
-        ctx.lineWidth = Math.max(1, Math.min(2, clipRect.h * 0.08));
-        ctx.beginPath();
-        ctx.moveTo(clipRect.x, clipRect.y + Math.max(1, clipRect.h * 0.18));
-        ctx.lineTo(clipRect.x + clipRect.w, clipRect.y + Math.max(1, clipRect.h * 0.18));
-        ctx.stroke();
+        if (surfaceStrength > 0) {
+          ctx.strokeStyle = `rgba(205, 245, 255, ${0.64 * surfaceStrength})`;
+          ctx.lineWidth = Math.max(1, Math.min(2, surfaceRect.h * 0.08));
+          ctx.beginPath();
+          ctx.moveTo(surfaceRect.x, surfaceRect.y + Math.max(1, surfaceRect.h * 0.18));
+          ctx.lineTo(surfaceRect.x + surfaceRect.w, surfaceRect.y + Math.max(1, surfaceRect.h * 0.18));
+          ctx.stroke();
+        }
         ctx.restore();
       }
 

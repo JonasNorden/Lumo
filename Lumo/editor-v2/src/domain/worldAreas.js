@@ -1,5 +1,23 @@
 const DEFAULT_TILE_SIZE = 24;
 const MIRROR_AREA_MIN_SIZE = 1;
+export const MIRROR_SURFACE_DEFAULTS = Object.freeze({
+  reflectionHeight: 72,
+  reflectionStrength: 0.35,
+  distortion: 0.12,
+  surfaceStrength: 0.25,
+  fade: 0.65,
+});
+
+function clamp01(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(0, Math.min(1, number));
+}
+
+function toNonNegativeNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : fallback;
+}
 
 function toFiniteNumber(value, fallback = 0) {
   const number = Number(value);
@@ -30,6 +48,11 @@ export function normalizeMirrorSurfaceAreaForEditor(area = {}, index = 0) {
     width: Math.max(MIRROR_AREA_MIN_SIZE, toPositiveNumber(area?.width, DEFAULT_TILE_SIZE)),
     height: Math.max(MIRROR_AREA_MIN_SIZE, toPositiveNumber(area?.height, DEFAULT_TILE_SIZE)),
     yOffset: toFiniteNumber(area?.yOffset, 0),
+    reflectionHeight: toNonNegativeNumber(area?.reflectionHeight, MIRROR_SURFACE_DEFAULTS.reflectionHeight),
+    reflectionStrength: clamp01(area?.reflectionStrength, MIRROR_SURFACE_DEFAULTS.reflectionStrength),
+    distortion: clamp01(area?.distortion, MIRROR_SURFACE_DEFAULTS.distortion),
+    surfaceStrength: clamp01(area?.surfaceStrength, MIRROR_SURFACE_DEFAULTS.surfaceStrength),
+    fade: clamp01(area?.fade, MIRROR_SURFACE_DEFAULTS.fade),
     enabled: area?.enabled !== false,
     visible: area?.visible !== false,
   };
@@ -51,6 +74,7 @@ export function createMirrorSurfaceAreaFromDrag(doc, startCell, endCell) {
     width,
     height,
     yOffset: 0,
+    ...MIRROR_SURFACE_DEFAULTS,
     enabled: true,
     visible: true,
   };
@@ -93,6 +117,10 @@ export function updateMirrorSurfaceAreaField(area, field, value) {
   if (field === "x" || field === "y") return { ...normalized, [field]: Math.max(0, toFiniteNumber(value, normalized[field])) };
   if (field === "width" || field === "height") return resizeMirrorSurfaceArea(normalized, field === "width" ? value : normalized.width, field === "height" ? value : normalized.height);
   if (field === "yOffset") return { ...normalized, yOffset: toFiniteNumber(value, normalized.yOffset) };
+  if (field === "reflectionHeight") return { ...normalized, reflectionHeight: toNonNegativeNumber(value, normalized.reflectionHeight) };
+  if (field === "reflectionStrength" || field === "distortion" || field === "surfaceStrength" || field === "fade") {
+    return { ...normalized, [field]: clamp01(value, normalized[field]) };
+  }
   return normalized;
 }
 

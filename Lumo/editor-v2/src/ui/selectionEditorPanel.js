@@ -48,6 +48,11 @@ const MIRROR_SURFACE_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
   width: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
   height: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
   yOffset: { min: -1000, max: 1000, integer: false, inputMode: "decimal" },
+  reflectionHeight: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
+  reflectionStrength: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+  distortion: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+  surfaceStrength: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+  fade: { min: 0, max: 1, integer: false, inputMode: "decimal" },
 });
 
 const REACTIVE_CRYSTAL_NUMERIC_FIELD_CONFIG = Object.freeze({
@@ -1015,6 +1020,11 @@ function renderMirrorSurfaceAreaInspector(area) {
     renderMirrorSurfaceAreaNumberField("width", "width", area?.width, areaId),
     renderMirrorSurfaceAreaNumberField("height", "height", area?.height, areaId),
     renderMirrorSurfaceAreaNumberField("yOffset", "yOffset", area?.yOffset, areaId),
+    renderMirrorSurfaceAreaNumberField("Reflection height", "reflectionHeight", area?.reflectionHeight, areaId),
+    renderMirrorSurfaceAreaNumberField("Reflection strength", "reflectionStrength", area?.reflectionStrength, areaId),
+    renderMirrorSurfaceAreaNumberField("Distortion", "distortion", area?.distortion, areaId),
+    renderMirrorSurfaceAreaNumberField("Surface strength", "surfaceStrength", area?.surfaceStrength, areaId),
+    renderMirrorSurfaceAreaNumberField("Fade", "fade", area?.fade, areaId),
     renderMirrorSurfaceAreaCheckboxField("enabled", "enabled", area?.enabled, areaId),
     renderMirrorSurfaceAreaCheckboxField("visible", "visible", area?.visible, areaId),
   ].join(""));

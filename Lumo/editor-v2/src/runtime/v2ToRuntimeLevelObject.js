@@ -266,6 +266,11 @@ function normalizeRuntimeMirrorSurfaceAreas(levelDocument) {
         width,
         height,
         yOffset: Number.isFinite(area?.yOffset) ? Number(area.yOffset) : 0,
+        reflectionHeight: Number.isFinite(area?.reflectionHeight) && area.reflectionHeight >= 0 ? Number(area.reflectionHeight) : 72,
+        reflectionStrength: Number.isFinite(area?.reflectionStrength) ? Math.max(0, Math.min(1, Number(area.reflectionStrength))) : 0.35,
+        distortion: Number.isFinite(area?.distortion) ? Math.max(0, Math.min(1, Number(area.distortion))) : 0.12,
+        surfaceStrength: Number.isFinite(area?.surfaceStrength) ? Math.max(0, Math.min(1, Number(area.surfaceStrength))) : 0.25,
+        fade: Number.isFinite(area?.fade) ? Math.max(0, Math.min(1, Number(area.fade))) : 0.65,
         enabled: area?.enabled !== false,
         visible: area?.visible !== false,
       };

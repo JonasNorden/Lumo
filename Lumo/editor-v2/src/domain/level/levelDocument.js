@@ -9,6 +9,7 @@ import { BACKGROUND_MATERIAL_OPTIONS, DEFAULT_BACKGROUND_MATERIAL_ID, normalizeB
 import { normalizeSizedPlacements } from "../tiles/sizedPlacements.js";
 import { normalizeSpawnAndExitEntities } from "../entities/spawnExitRules.js";
 import { normalizeThemeId } from "../theme/themeCatalog.js";
+import { MIRROR_SURFACE_DEFAULTS } from "../worldAreas.js";
 
 const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
 const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
@@ -110,7 +111,7 @@ function parseFlowerVariant(value) {
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, params: Record<string, string | number | boolean>}[]} entities
  * @property {{id: string, name: string, type: string, x: number, y: number, visible: boolean, source?: string, params: Record<string, string | number | boolean>}[]} sounds
  * @property {{id: string, kind: string, x: number, y: number, width: number, heightMin: number, heightMax: number, baseColor: string, topColor: string}[]} reactiveGrassPatches
- * @property {{id: string, x: number, y: number, width: number, height: number, yOffset: number, enabled: boolean, visible: boolean}[]} mirrorSurfaceAreas
+ * @property {{id: string, x: number, y: number, width: number, height: number, yOffset: number, reflectionHeight: number, reflectionStrength: number, distortion: number, surfaceStrength: number, fade: number, enabled: boolean, visible: boolean}[]} mirrorSurfaceAreas
  * @property {{id: string, kind: string, x: number, y: number, clusterCount: number, width: number, heightMin: number, heightMax: number, triggerRadius: number, auraSensitivity: number, wakeSpeed: number, settleDelayMs: number, settleSpeed: number, baseColor: string, glowColor: string, coreColor: string, edgeColor: string, variant: string, seed: number}[]} reactiveCrystalPatches
  * @property {{notes?: string}} extra
  */
@@ -269,6 +270,10 @@ function normalizeSound(sound, index) {
 }
 
 
+function clampMirrorSurfaceUnit(value, fallback) {
+  return Number.isFinite(value) ? Math.max(0, Math.min(1, Number(value))) : fallback;
+}
+
 function normalizeMirrorSurfaceArea(area, index) {
   const sourceArea = area && typeof area === "object" ? area : {};
   const width = Number.isFinite(sourceArea.width) && sourceArea.width > 0
@@ -287,6 +292,11 @@ function normalizeMirrorSurfaceArea(area, index) {
     width,
     height,
     yOffset: Number.isFinite(sourceArea.yOffset) ? Number(sourceArea.yOffset) : 0,
+    reflectionHeight: Number.isFinite(sourceArea.reflectionHeight) && sourceArea.reflectionHeight >= 0 ? Number(sourceArea.reflectionHeight) : MIRROR_SURFACE_DEFAULTS.reflectionHeight,
+    reflectionStrength: clampMirrorSurfaceUnit(sourceArea.reflectionStrength, MIRROR_SURFACE_DEFAULTS.reflectionStrength),
+    distortion: clampMirrorSurfaceUnit(sourceArea.distortion, MIRROR_SURFACE_DEFAULTS.distortion),
+    surfaceStrength: clampMirrorSurfaceUnit(sourceArea.surfaceStrength, MIRROR_SURFACE_DEFAULTS.surfaceStrength),
+    fade: clampMirrorSurfaceUnit(sourceArea.fade, MIRROR_SURFACE_DEFAULTS.fade),
     enabled: typeof sourceArea.enabled === "boolean" ? sourceArea.enabled : true,
     visible: typeof sourceArea.visible === "boolean" ? sourceArea.visible : true,
   };
