@@ -68,6 +68,7 @@ import {
   createDecorEditEntry,
   createReactiveBloomEditEntry,
   createReactiveCrystalEditEntry,
+  createMirrorSurfaceAreaEditEntry,
   createReactiveGrassEditEntry,
   createSizedPlacementEditEntry,
   createTileEditEntry,
@@ -81,6 +82,11 @@ import {
   canRedo,
 } from "../domain/tiles/history.js";
 import { createDefaultBackgroundLayer, getDefaultReactiveCrystalPatch, getTileIndex } from "../domain/level/levelDocument.js";
+import {
+  createMirrorSurfaceAreaFromDrag,
+  moveMirrorSurfaceArea,
+  updateMirrorSurfaceAreaField,
+} from "../domain/worldAreas.js";
 import { DEFAULT_BACKGROUND_MATERIAL_ID, isBackgroundMaterialIdTaken, registerBackgroundMaterialOption } from "../domain/background/materialCatalog.js";
 import { DEFAULT_THEME_ID, getThemeById, getThemeCatalog, normalizeThemeId } from "../domain/theme/themeCatalog.js";
 import { normalizeThemeIds } from "../domain/theme/themeTagging.js";
@@ -92,6 +98,7 @@ import { findSoundAtCanvasPoint, getSoundPlacementPreviewDiagnostic } from "../r
 import { findReactiveGrassPatchAtCanvasPoint } from "../render/layers/reactiveGrassLayer.js";
 import { findReactiveBloomPatchAtCanvasPoint } from "../render/layers/reactiveBloomLayer.js";
 import { findReactiveCrystalPatchAtCanvasPoint } from "../render/layers/reactiveCrystalLayer.js";
+import { findMirrorSurfaceAreaAtCanvasPoint } from "../render/layers/mirrorSurfaceAreaLayer.js";
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
 import {
   DEFAULT_ENTITY_PRESET_ID,
@@ -275,7 +282,7 @@ function renderCellHud(cellHud, state) {
 
   const inspectedCell = getInspectedCell(state);
   const activeLayer = getActiveLayer(state.interaction);
-  const activeTargetLabel = activeLayer === PANEL_LAYERS.BACKGROUND ? "Background" : activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.REACTIVE_DECOR ? "Reactive Decor" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : "Tiles";
+  const activeTargetLabel = activeLayer === PANEL_LAYERS.BACKGROUND ? "Background" : activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.REACTIVE_DECOR ? "Reactive Decor" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : activeLayer === PANEL_LAYERS.WORLD_AREAS ? "World Areas" : "Tiles";
   const targetSelectionCount =
     activeLayer === PANEL_LAYERS.DECOR
       ? getSelectedDecorIndices(state.interaction, state.document.active?.decor || []).length
@@ -289,6 +296,8 @@ function renderCellHud(cellHud, state) {
           )
         : activeLayer === PANEL_LAYERS.SOUND
           ? getSelectedSoundIndices(state.interaction).length
+          : activeLayer === PANEL_LAYERS.WORLD_AREAS
+            ? (state.interaction.selectedMirrorSurfaceAreaId ? 1 : 0)
           : 0;
   const targetSelectionLabel = activeLayer === PANEL_LAYERS.TILES || activeLayer === PANEL_LAYERS.BACKGROUND
     ? "Tile editing"
@@ -368,6 +377,7 @@ const PANEL_LAYERS = {
   DECOR: "decor",
   REACTIVE_DECOR: "reactive-decor",
   SOUND: "sound",
+  WORLD_AREAS: "world-areas",
 };
 
 function getActiveLayer(interaction) {
@@ -376,6 +386,7 @@ function getActiveLayer(interaction) {
   if (interaction.activeLayer === PANEL_LAYERS.ENTITIES) return PANEL_LAYERS.ENTITIES;
   if (interaction.activeLayer === PANEL_LAYERS.REACTIVE_DECOR) return PANEL_LAYERS.REACTIVE_DECOR;
   if (interaction.activeLayer === PANEL_LAYERS.SOUND) return PANEL_LAYERS.SOUND;
+  if (interaction.activeLayer === PANEL_LAYERS.WORLD_AREAS) return PANEL_LAYERS.WORLD_AREAS;
   return PANEL_LAYERS.TILES;
 }
 
@@ -383,6 +394,7 @@ function getSelectionMode(interaction) {
   if (interaction.canvasSelectionMode === "decor") return "decor";
   if (interaction.canvasSelectionMode === "reactiveDecor") return "reactiveDecor";
   if (interaction.canvasSelectionMode === "sound") return "sound";
+  if (interaction.canvasSelectionMode === "worldAreas") return "worldAreas";
   return "entity";
 }
 
@@ -1603,6 +1615,8 @@ export function createEditorApp({
     interaction.selectedReactiveBloomPatchId = null;
     interaction.selectedReactiveCrystalPatchIndex = null;
     interaction.selectedReactiveCrystalPatchId = null;
+    interaction.selectedMirrorSurfaceAreaIndex = null;
+    interaction.selectedMirrorSurfaceAreaId = null;
   };
 
   const clearReactiveBloomPatchSelection = (interaction) => {
@@ -1613,6 +1627,25 @@ export function createEditorApp({
   const clearReactiveCrystalPatchSelection = (interaction) => {
     interaction.selectedReactiveCrystalPatchIndex = null;
     interaction.selectedReactiveCrystalPatchId = null;
+    interaction.selectedMirrorSurfaceAreaIndex = null;
+    interaction.selectedMirrorSurfaceAreaId = null;
+  };
+
+  const clearMirrorSurfaceAreaSelection = (interaction) => {
+    interaction.selectedMirrorSurfaceAreaIndex = null;
+    interaction.selectedMirrorSurfaceAreaId = null;
+  };
+
+  const setMirrorSurfaceAreaSelection = (draft, areaIndex = null) => {
+    const areas = Array.isArray(draft.document.active?.mirrorSurfaceAreas) ? draft.document.active.mirrorSurfaceAreas : [];
+    const nextArea = Number.isInteger(areaIndex) && areaIndex >= 0 && areaIndex < areas.length ? areas[areaIndex] : null;
+    clearReactiveGrassPatchSelection(draft.interaction);
+    clearEntitySelection(draft.interaction);
+    clearDecorSelection(draft.interaction);
+    clearSoundSelection(draft.interaction);
+    draft.interaction.selectedMirrorSurfaceAreaIndex = nextArea ? areaIndex : null;
+    draft.interaction.selectedMirrorSurfaceAreaId = typeof nextArea?.id === "string" && nextArea.id.trim() ? nextArea.id.trim() : null;
+    draft.interaction.selectedCell = nextArea ? { x: Math.floor(Number(nextArea.x || 0) / Math.max(1, Number(draft.document.active?.dimensions?.tileSize) || 24)), y: Math.floor(Number(nextArea.y || 0) / Math.max(1, Number(draft.document.active?.dimensions?.tileSize) || 24)) } : null;
   };
 
   const setReactiveGrassPatchSelection = (draft, patchIndex = null) => {
@@ -1628,6 +1661,7 @@ export function createEditorApp({
       : null;
     clearReactiveBloomPatchSelection(draft.interaction);
     clearReactiveCrystalPatchSelection(draft.interaction);
+    clearMirrorSurfaceAreaSelection(draft.interaction);
   };
 
   const setReactiveGrassPatchSelectionById = (draft, patchId = null) => {
@@ -1672,6 +1706,7 @@ export function createEditorApp({
     clearSoundSelection(draft.interaction);
     draft.interaction.selectedReactiveCrystalPatchIndex = nextPatch ? patchIndex : null;
     draft.interaction.selectedReactiveCrystalPatchId = typeof nextPatch?.id === "string" && nextPatch.id.trim() ? nextPatch.id.trim() : null;
+    clearMirrorSurfaceAreaSelection(draft.interaction);
   };
   const getObjectIndicesByIds = (items, ids = []) => {
     const lookup = new Map();
@@ -2755,6 +2790,8 @@ export function createEditorApp({
         ? "sound"
         : mode === "reactiveDecor"
           ? "reactiveDecor"
+          : mode === "worldAreas"
+            ? "worldAreas"
           : "entity";
   };
 
@@ -2765,6 +2802,7 @@ export function createEditorApp({
     if (layer === PANEL_LAYERS.ENTITIES) draft.ui.panelSections.entities = true;
     if (layer === PANEL_LAYERS.DECOR) draft.ui.panelSections.decor = true;
     if (layer === PANEL_LAYERS.SOUND) draft.ui.panelSections.sound = true;
+    if (layer === PANEL_LAYERS.WORLD_AREAS) draft.ui.panelSections.worldAreas = true;
   };
 
   const setActiveLayer = (draft, layer) => {
@@ -2776,6 +2814,8 @@ export function createEditorApp({
         ? PANEL_LAYERS.ENTITIES
         : layer === PANEL_LAYERS.REACTIVE_DECOR
           ? PANEL_LAYERS.REACTIVE_DECOR
+        : layer === PANEL_LAYERS.WORLD_AREAS
+          ? PANEL_LAYERS.WORLD_AREAS
         : layer === PANEL_LAYERS.SOUND
           ? PANEL_LAYERS.SOUND
           : PANEL_LAYERS.TILES;
@@ -2797,8 +2837,10 @@ export function createEditorApp({
           )
         : activeLayer === PANEL_LAYERS.SOUND
           ? getSelectedSoundIndices(state.interaction).length
+          : activeLayer === PANEL_LAYERS.WORLD_AREAS
+            ? (state.interaction.selectedMirrorSurfaceAreaId ? 1 : 0)
           : 0;
-    const activeSelectionLabel = activeLayer === PANEL_LAYERS.BACKGROUND ? "Background" : activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.REACTIVE_DECOR ? "Reactive Decor" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : "Tiles";
+    const activeSelectionLabel = activeLayer === PANEL_LAYERS.BACKGROUND ? "Background" : activeLayer === PANEL_LAYERS.DECOR ? "Decor" : activeLayer === PANEL_LAYERS.ENTITIES ? "Entities" : activeLayer === PANEL_LAYERS.REACTIVE_DECOR ? "Reactive Decor" : activeLayer === PANEL_LAYERS.SOUND ? "Sound" : activeLayer === PANEL_LAYERS.WORLD_AREAS ? "World Areas" : "Tiles";
     const statusLabel = state.ui.importStatus || `Layer: ${activeSelectionLabel} · ${selectedCount || 0} selected`;
 
     topBarStatus.textContent = statusLabel;
@@ -4062,7 +4104,7 @@ export function createEditorApp({
   };
 
   const applyCanvasTarget = (draft, mode) => {
-    const nextMode = mode === "decor" ? "decor" : mode === "sound" ? "sound" : mode === "reactiveDecor" ? "reactiveDecor" : "entity";
+    const nextMode = mode === "decor" ? "decor" : mode === "sound" ? "sound" : mode === "reactiveDecor" ? "reactiveDecor" : mode === "worldAreas" ? "worldAreas" : "entity";
     resumeObjectPlacementPreviews(draft, `canvas target ${nextMode}`);
     setCanvasSelectionMode(draft, nextMode);
     setActiveLayer(
@@ -4073,6 +4115,8 @@ export function createEditorApp({
           ? PANEL_LAYERS.SOUND
           : nextMode === "reactiveDecor"
             ? PANEL_LAYERS.REACTIVE_DECOR
+            : nextMode === "worldAreas"
+              ? PANEL_LAYERS.WORLD_AREAS
             : PANEL_LAYERS.ENTITIES,
     );
     draft.interaction.boxSelection = null;
@@ -4106,6 +4150,17 @@ export function createEditorApp({
       if (!getSelectedSoundIndices(draft.interaction, draft.document.active?.sounds || []).length) {
         draft.interaction.selectedCell = null;
       }
+      return;
+    }
+
+    if (nextMode === "worldAreas") {
+      clearReactiveGrassPatchSelection(draft.interaction);
+      clearEntitySelection(draft.interaction);
+      clearDecorSelection(draft.interaction);
+      clearSoundSelection(draft.interaction);
+      draft.interaction.hoveredEntityIndex = null;
+      setHoveredDecor(draft, null);
+      clearHoveredSound(draft.interaction);
       return;
     }
 
@@ -4165,6 +4220,17 @@ export function createEditorApp({
       clearHoveredSound(draft.interaction);
       draft.interaction.entityDrag = null;
       draft.interaction.decorDrag = null;
+      return;
+    }
+
+    if (nextMode === "worldAreas") {
+      clearReactiveGrassPatchSelection(draft.interaction);
+      clearEntitySelection(draft.interaction);
+      clearDecorSelection(draft.interaction);
+      clearSoundSelection(draft.interaction);
+      draft.interaction.hoveredEntityIndex = null;
+      setHoveredDecor(draft, null);
+      clearHoveredSound(draft.interaction);
       return;
     }
 
@@ -5452,6 +5518,45 @@ export function createEditorApp({
     });
   };
 
+  const updateWorldArea = (index, field, value) => {
+    void index;
+    void value;
+    store.setState((draft) => {
+      if (field !== "arm-mirror-surface") return;
+      const shouldArm = draft.interaction.activeWorldAreaType !== "mirror_surface" || draft.interaction.activeLayer !== PANEL_LAYERS.WORLD_AREAS;
+      draft.interaction.activeWorldAreaType = shouldArm ? "mirror_surface" : null;
+      draft.interaction.activeEntityPresetId = null;
+      draft.interaction.activeDecorPresetId = null;
+      draft.interaction.activeSoundPresetId = null;
+      draft.interaction.activeTool = EDITOR_TOOLS.INSPECT;
+      draft.interaction.mirrorSurfaceAreaPlacementDrag = null;
+      draft.interaction.mirrorSurfaceAreaDrag = null;
+      setCanvasSelectionMode(draft, "worldAreas");
+      setActiveLayer(draft, PANEL_LAYERS.WORLD_AREAS);
+      clearReactiveGrassPatchSelection(draft.interaction);
+      clearEntitySelection(draft.interaction);
+      clearDecorSelection(draft.interaction);
+      clearSoundSelection(draft.interaction);
+    });
+  };
+
+  const deleteSelectedMirrorSurfaceArea = (draft) => {
+    const areas = Array.isArray(draft.document.active?.mirrorSurfaceAreas) ? draft.document.active.mirrorSurfaceAreas : [];
+    const selectedId = typeof draft.interaction.selectedMirrorSurfaceAreaId === "string" && draft.interaction.selectedMirrorSurfaceAreaId.trim() ? draft.interaction.selectedMirrorSurfaceAreaId.trim() : null;
+    const selectedIndex = selectedId ? areas.findIndex((area) => area?.id === selectedId) : draft.interaction.selectedMirrorSurfaceAreaIndex;
+    if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= areas.length) return false;
+    const previousArea = { ...areas[selectedIndex] };
+    areas.splice(selectedIndex, 1);
+    pushHistoryEntry(draft.history, createMirrorSurfaceAreaEditEntry("delete", {
+      objectId: typeof previousArea.id === "string" ? previousArea.id : null,
+      index: selectedIndex,
+      previousSnapshot: previousArea,
+    }));
+    clearMirrorSurfaceAreaSelection(draft.interaction);
+    draft.interaction.mirrorSurfaceAreaDrag = null;
+    return true;
+  };
+
   const updateDecor = (index, field, value) => {
     store.setState((draft) => {
       const doc = draft.document.active;
@@ -5793,6 +5898,34 @@ export function createEditorApp({
         nextSnapshot: { ...patch },
       }));
       setReactiveCrystalPatchSelection(draft, resolvedPatchIndex);
+    });
+  };
+
+  const updateMirrorSurfaceArea = (field, value, options = {}) => {
+    const supportedFields = new Set(["x", "y", "width", "height", "yOffset", "enabled", "visible"]);
+    if (!supportedFields.has(field)) return;
+    store.setState((draft) => {
+      const areas = Array.isArray(draft.document.active?.mirrorSurfaceAreas) ? draft.document.active.mirrorSurfaceAreas : null;
+      if (!areas?.length) return;
+      const selectedAreaId = typeof options.areaId === "string" && options.areaId.trim()
+        ? options.areaId.trim()
+        : typeof draft.interaction.selectedMirrorSurfaceAreaId === "string" && draft.interaction.selectedMirrorSurfaceAreaId.trim()
+          ? draft.interaction.selectedMirrorSurfaceAreaId.trim()
+          : null;
+      const selectedAreaIndex = Number.isInteger(draft.interaction.selectedMirrorSurfaceAreaIndex) ? draft.interaction.selectedMirrorSurfaceAreaIndex : -1;
+      const resolvedIndex = selectedAreaId ? areas.findIndex((area) => area?.id === selectedAreaId) : selectedAreaIndex;
+      if (!Number.isInteger(resolvedIndex) || resolvedIndex < 0 || resolvedIndex >= areas.length) return;
+      const previousArea = { ...areas[resolvedIndex] };
+      const nextArea = updateMirrorSurfaceAreaField(previousArea, field, value);
+      if (JSON.stringify(previousArea) === JSON.stringify(nextArea)) return;
+      areas[resolvedIndex] = nextArea;
+      pushHistoryEntry(draft.history, createMirrorSurfaceAreaEditEntry("update", {
+        objectId: typeof nextArea.id === "string" ? nextArea.id : null,
+        index: resolvedIndex,
+        previousSnapshot: previousArea,
+        nextSnapshot: nextArea,
+      }));
+      setMirrorSurfaceAreaSelection(draft, resolvedIndex);
     });
   };
 
@@ -6325,9 +6458,30 @@ export function createEditorApp({
     const hitReactiveGrassPatchIndex = findReactiveGrassPatchAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitReactiveBloomPatchIndex = findReactiveBloomPatchAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitReactiveCrystalPatchIndex = findReactiveCrystalPatchAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+    const hitMirrorSurfaceAreaIndex = findMirrorSurfaceAreaAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const activeEntityPresetId = state.interaction.activeEntityPresetId;
     const activeDecorPresetId = state.interaction.activeDecorPresetId;
     const activeSoundPresetId = state.interaction.activeSoundPresetId;
+
+    if (activeLayer === PANEL_LAYERS.WORLD_AREAS && state.interaction.activeWorldAreaType === "mirror_surface" && isMomentaryPlacementTrigger(event)) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        draft.interaction.hoverCell = cell;
+        draft.interaction.selectedCell = cell;
+        draft.interaction.mirrorSurfaceAreaPlacementDrag = {
+          active: true,
+          type: "mirror_surface",
+          startCell: { ...cell },
+          endCell: { ...cell },
+        };
+        clearReactiveGrassPatchSelection(draft.interaction);
+        clearEntitySelection(draft.interaction);
+        clearDecorSelection(draft.interaction);
+        clearSoundSelection(draft.interaction);
+      });
+      return true;
+    }
 
     if (activeLayer === PANEL_LAYERS.ENTITIES && activeEntityPresetId && isMomentaryPlacementTrigger(event)) {
       if (isSpecialVolumeEntityType(activeEntityPresetId)) {
@@ -6481,6 +6635,26 @@ if (event.shiftKey) {
 
     if (activeLayer === PANEL_LAYERS.TILES || activeLayer === PANEL_LAYERS.BACKGROUND) {
       return false;
+    }
+
+    if (activeLayer === PANEL_LAYERS.WORLD_AREAS) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        draft.interaction.selectedCell = cell;
+        setMirrorSurfaceAreaSelection(draft, hitMirrorSurfaceAreaIndex);
+        if (hitMirrorSurfaceAreaIndex >= 0 && draft.interaction.selectedMirrorSurfaceAreaIndex === hitMirrorSurfaceAreaIndex) {
+          const area = draft.document.active?.mirrorSurfaceAreas?.[hitMirrorSurfaceAreaIndex];
+          draft.interaction.mirrorSurfaceAreaDrag = {
+            active: true,
+            areaId: area?.id || null,
+            anchorCell: { ...cell },
+            originArea: area ? { ...area } : null,
+            previewDelta: { x: 0, y: 0 },
+          };
+        }
+      });
+      return true;
     }
 
     if (activeLayer === PANEL_LAYERS.REACTIVE_DECOR) {
@@ -6750,6 +6924,21 @@ if (event.shiftKey) {
       return;
     }
 
+    if (state.interaction.mirrorSurfaceAreaDrag?.active) {
+      if ((event.buttons & 1) !== 1) return;
+      const point = getCanvasPointFromMouseEvent(canvas, event);
+      const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+      if (!cell) return;
+      store.setState((draft) => {
+        const drag = draft.interaction.mirrorSurfaceAreaDrag;
+        if (!drag?.active || !drag.originArea) return;
+        const tileSize = Math.max(1, Number(draft.document.active?.dimensions?.tileSize) || 24);
+        drag.previewDelta = { x: (cell.x - drag.anchorCell.x) * tileSize, y: (cell.y - drag.anchorCell.y) * tileSize };
+        draft.interaction.hoverCell = cell;
+      });
+      return;
+    }
+
     if (state.interaction.volumePlacementDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
       const point = getCanvasPointFromMouseEvent(canvas, event);
@@ -6759,6 +6948,21 @@ if (event.shiftKey) {
         const volumePlacementDrag = draft.interaction.volumePlacementDrag;
         if (!volumePlacementDrag?.active) return;
         volumePlacementDrag.endCell = { ...cell };
+        draft.interaction.hoverCell = cell;
+        draft.interaction.selectedCell = cell;
+      });
+      return;
+    }
+
+    if (state.interaction.mirrorSurfaceAreaPlacementDrag?.active) {
+      if ((event.buttons & 1) !== 1) return;
+      const point = getCanvasPointFromMouseEvent(canvas, event);
+      const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+      if (!cell) return;
+      store.setState((draft) => {
+        const placementDrag = draft.interaction.mirrorSurfaceAreaPlacementDrag;
+        if (!placementDrag?.active) return;
+        placementDrag.endCell = { ...cell };
         draft.interaction.hoverCell = cell;
         draft.interaction.selectedCell = cell;
       });
@@ -6986,6 +7190,59 @@ if (event.shiftKey) {
         commitCleanRoomEntityDrag(draft, entityDrag);
         draft.interaction.entityDrag = null;
         updateEntitySelectionCell(draft);
+      });
+      return;
+    }
+
+    if (state.interaction.mirrorSurfaceAreaDrag?.active) {
+      store.setState((draft) => {
+        const drag = draft.interaction.mirrorSurfaceAreaDrag;
+        if (!drag?.active || !drag.originArea) return;
+        const areas = Array.isArray(draft.document.active?.mirrorSurfaceAreas) ? draft.document.active.mirrorSurfaceAreas : [];
+        const index = drag.areaId ? areas.findIndex((area) => area?.id === drag.areaId) : draft.interaction.selectedMirrorSurfaceAreaIndex;
+        if (!Number.isInteger(index) || index < 0 || index >= areas.length) {
+          draft.interaction.mirrorSurfaceAreaDrag = null;
+          return;
+        }
+        const previousArea = { ...areas[index] };
+        const delta = drag.previewDelta || { x: 0, y: 0 };
+        const nextArea = moveMirrorSurfaceArea(drag.originArea, delta.x, delta.y);
+        if (JSON.stringify(previousArea) !== JSON.stringify(nextArea)) {
+          areas[index] = nextArea;
+          pushHistoryEntry(draft.history, createMirrorSurfaceAreaEditEntry("update", {
+            objectId: typeof nextArea.id === "string" ? nextArea.id : null,
+            index,
+            previousSnapshot: previousArea,
+            nextSnapshot: nextArea,
+          }));
+          setMirrorSurfaceAreaSelection(draft, index);
+        }
+        draft.interaction.mirrorSurfaceAreaDrag = null;
+      });
+      return;
+    }
+
+    if (state.interaction.mirrorSurfaceAreaPlacementDrag?.active) {
+      store.setState((draft) => {
+        const placementDrag = draft.interaction.mirrorSurfaceAreaPlacementDrag;
+        if (!placementDrag?.active) return;
+        const createdArea = createMirrorSurfaceAreaFromDrag(
+          draft.document.active,
+          placementDrag.startCell,
+          placementDrag.endCell || placementDrag.startCell,
+        );
+        if (createdArea) {
+          if (!Array.isArray(draft.document.active.mirrorSurfaceAreas)) draft.document.active.mirrorSurfaceAreas = [];
+          const createdIndex = draft.document.active.mirrorSurfaceAreas.length;
+          draft.document.active.mirrorSurfaceAreas.push(createdArea);
+          pushHistoryEntry(draft.history, createMirrorSurfaceAreaEditEntry("create", {
+            objectId: typeof createdArea.id === "string" ? createdArea.id : null,
+            index: createdIndex,
+            nextSnapshot: createdArea,
+          }));
+          setMirrorSurfaceAreaSelection(draft, createdIndex);
+        }
+        draft.interaction.mirrorSurfaceAreaPlacementDrag = null;
       });
       return;
     }
@@ -7782,6 +8039,11 @@ if (event.shiftKey) {
         return;
       }
 
+      if (layer === PANEL_LAYERS.WORLD_AREAS) {
+        applyCanvasTarget(draft, "worldAreas");
+        return;
+      }
+
       resumeObjectPlacementPreviews(draft, `panel layer ${layer}`);
       setActiveLayer(draft, layer === PANEL_LAYERS.BACKGROUND ? PANEL_LAYERS.BACKGROUND : PANEL_LAYERS.TILES);
       draft.interaction.activeEntityPresetId = null;
@@ -7908,6 +8170,8 @@ if (event.shiftKey) {
             ? getSelectedSoundIndices(state.interaction).length
             : activeLayer === PANEL_LAYERS.ENTITIES
               ? getSelectedEntityIndices(state.interaction).length
+              : activeLayer === PANEL_LAYERS.WORLD_AREAS
+                ? (state.interaction.selectedMirrorSurfaceAreaId ? 1 : 0)
               : 0;
       if (!hasSelection) return;
 
@@ -7925,6 +8189,10 @@ if (event.shiftKey) {
         }
         if (activeLayer === PANEL_LAYERS.ENTITIES) {
           deleteSelectedEntity(draft);
+          return;
+        }
+        if (activeLayer === PANEL_LAYERS.WORLD_AREAS) {
+          deleteSelectedMirrorSurfaceArea(draft);
         }
       });
       return;
@@ -9186,11 +9454,14 @@ if (event.shiftKey) {
         state.interaction.soundDrag = null;
         state.interaction.scanDrag = null;
         state.interaction.volumePlacementDrag = null;
+        state.interaction.mirrorSurfaceAreaPlacementDrag = null;
+        state.interaction.mirrorSurfaceAreaDrag = null;
         state.interaction.decorScatterMode = false;
         state.interaction.decorScatterDrag = null;
         state.interaction.activeEntityPresetId = null;
         state.interaction.activeDecorPresetId = null;
         state.interaction.activeSoundPresetId = null;
+        state.interaction.activeWorldAreaType = null;
         state.interaction.objectPlacementPreviewSuppressed = false;
         state.ui.newLevelSize = {
           isOpen: false,
@@ -9231,6 +9502,7 @@ if (event.shiftKey) {
     onReactiveGrassPatchUpdate: updateReactiveGrassPatch,
     onReactiveBloomPatchUpdate: updateReactiveBloomPatch,
     onReactiveCrystalPatchUpdate: updateReactiveCrystalPatch,
+    onMirrorSurfaceAreaUpdate: updateMirrorSurfaceArea,
     onScanUpdate: updateScanControl,
   };
   const unbindInspectorPanel = bindInspectorPanel(inspector, store, panelBindingOptions);
@@ -9243,6 +9515,7 @@ if (event.shiftKey) {
     onReactiveBloomPatchUpdate: updateReactiveBloomPatch,
     onReactiveCrystalPatchUpdate: updateReactiveCrystalPatch,
     onVolumeUpdate: updateVolume,
+    onWorldAreaUpdate: updateWorldArea,
     onCanvasTargetChange: setActiveCanvasTarget,
     onLayerChange: setActiveLayerFromPanel,
     onScanUpdate: updateScanControl,

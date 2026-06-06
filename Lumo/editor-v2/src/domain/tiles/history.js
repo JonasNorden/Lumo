@@ -55,6 +55,10 @@ function cloneReactiveCrystalPatchSnapshot(patch) {
   return patch && typeof patch === "object" ? { ...patch } : null;
 }
 
+function cloneMirrorSurfaceAreaSnapshot(area) {
+  return area && typeof area === "object" ? { ...area } : null;
+}
+
 export function createReactiveGrassEditEntry(mode, payload = {}) {
   const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
   const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
@@ -104,6 +108,54 @@ export function createReactiveCrystalEditEntry(mode, payload = {}) {
 }
 
 
+export function createMirrorSurfaceAreaEditEntry(mode, payload = {}) {
+  const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
+  const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
+  const index = Number.isInteger(payload.index) ? payload.index : null;
+  return {
+    kind: "mirror-surface-area",
+    mode: normalizedMode,
+    objectId,
+    index,
+    previousSnapshot: cloneMirrorSurfaceAreaSnapshot(payload.previousSnapshot),
+    nextSnapshot: cloneMirrorSurfaceAreaSnapshot(payload.nextSnapshot),
+  };
+}
+
+function applyArrayObjectUndo(doc, entry, field, cloneSnapshot) {
+  if (!Array.isArray(doc[field])) doc[field] = [];
+  const items = doc[field];
+  const targetId = typeof entry.objectId === "string" && entry.objectId.trim() ? entry.objectId.trim() : null;
+  const authoredIndex = Number.isInteger(entry.index) ? Math.max(0, Math.min(items.length, entry.index)) : items.length;
+  const existingIndex = targetId ? items.findIndex((item) => item?.id === targetId) : -1;
+  if (entry.mode === "create") {
+    if (existingIndex >= 0) items.splice(existingIndex, 1);
+    return true;
+  }
+  const snapshot = cloneSnapshot(entry.previousSnapshot);
+  if (!snapshot) return false;
+  if (existingIndex >= 0) items[existingIndex] = snapshot;
+  else items.splice(authoredIndex, 0, snapshot);
+  return true;
+}
+
+function applyArrayObjectRedo(doc, entry, field, cloneSnapshot) {
+  if (!Array.isArray(doc[field])) doc[field] = [];
+  const items = doc[field];
+  const targetId = typeof entry.objectId === "string" && entry.objectId.trim() ? entry.objectId.trim() : null;
+  const authoredIndex = Number.isInteger(entry.index) ? Math.max(0, Math.min(items.length, entry.index)) : items.length;
+  const existingIndex = targetId ? items.findIndex((item) => item?.id === targetId) : -1;
+  if (entry.mode === "delete") {
+    if (existingIndex >= 0) items.splice(existingIndex, 1);
+    return true;
+  }
+  const snapshot = cloneSnapshot(entry.nextSnapshot);
+  if (!snapshot) return false;
+  if (existingIndex >= 0) items[existingIndex] = snapshot;
+  else items.splice(authoredIndex, 0, snapshot);
+  return true;
+}
+
 function getHistoryEntryDomain(entry) {
   if (entry?.type === "batch") {
     const editDomains = [...new Set((entry.edits || []).map((edit) => getHistoryEntryDomain(edit)).filter(Boolean))];
@@ -115,6 +167,7 @@ function getHistoryEntryDomain(entry) {
   if (entry?.kind === "reactive-grass") return "reactive-grass";
   if (entry?.kind === "reactive-bloom") return "reactive-bloom";
   if (entry?.kind === "reactive-crystal") return "reactive-crystal";
+  if (entry?.kind === "mirror-surface-area") return "mirror-surface-area";
   if (entry?.kind === "background") return "background";
   if (entry?.kind === "background-sized") return "background";
   return "tile";
@@ -226,6 +279,9 @@ function applyUndoEntry(doc, entry) {
   if (isObjectLayerKind(entry.kind)) {
     return applyObjectLayerUndoEntry(doc, entry);
   }
+  if (entry.kind === "mirror-surface-area") {
+    return applyArrayObjectUndo(doc, entry, "mirrorSurfaceAreas", cloneMirrorSurfaceAreaSnapshot);
+  }
   if (entry.kind === "reactive-grass") {
     if (!Array.isArray(doc.reactiveGrassPatches)) doc.reactiveGrassPatches = [];
     const patches = doc.reactiveGrassPatches;
@@ -330,6 +386,9 @@ function applyRedoEntry(doc, entry) {
 
   if (isObjectLayerKind(entry.kind)) {
     return applyObjectLayerRedoEntry(doc, entry);
+  }
+  if (entry.kind === "mirror-surface-area") {
+    return applyArrayObjectRedo(doc, entry, "mirrorSurfaceAreas", cloneMirrorSurfaceAreaSnapshot);
   }
   if (entry.kind === "reactive-grass") {
     if (!Array.isArray(doc.reactiveGrassPatches)) doc.reactiveGrassPatches = [];
