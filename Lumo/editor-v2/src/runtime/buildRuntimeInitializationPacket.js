@@ -49,6 +49,7 @@ function resolveWorldSnapshot(worldPacket) {
     layers: {
       tiles: Array.isArray(layers?.tiles) ? [...layers.tiles] : [],
     },
+    mirrorSurfaceAreas: Array.isArray(worldPacket?.mirrorSurfaceAreas) ? [...worldPacket.mirrorSurfaceAreas] : [],
     id: typeof identity?.id === "string" && identity.id.length > 0 ? identity.id : null,
     formatVersion: identity?.formatVersion ?? null,
     themeId: typeof identity?.themeId === "string" && identity.themeId.length > 0 ? identity.themeId : null,

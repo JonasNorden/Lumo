@@ -35,6 +35,7 @@ function cloneSessionForStep(sessionState) {
       layers: {
         tiles: Array.isArray(source?.world?.layers?.tiles) ? [...source.world.layers.tiles] : [],
       },
+      mirrorSurfaceAreas: Array.isArray(source?.world?.mirrorSurfaceAreas) ? [...source.world.mirrorSurfaceAreas] : [],
     },
     player: {
       ...(source.player ?? {}),

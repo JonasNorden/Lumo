@@ -26,6 +26,7 @@ export function loadLevelDocument(data) {
   const identity = validateIdentity(normalizedInput.identity, errors);
   const world = validateWorld(normalizedInput.world, errors);
   const layers = normalizeLayers(normalizedInput.layers, errors, warnings);
+  const mirrorSurfaceAreas = normalizeMirrorSurfaceAreas(normalizedInput.mirrorSurfaceAreas);
 
   if (errors.length > 0) {
     return buildResult({ level: null, errors, warnings });
@@ -37,6 +38,7 @@ export function loadLevelDocument(data) {
     meta: isPlainObject(normalizedInput.meta) ? { ...normalizedInput.meta } : null,
     world,
     layers,
+    mirrorSurfaceAreas,
     systems: isPlainObject(normalizedInput.systems) ? { ...normalizedInput.systems } : null,
   };
 
@@ -104,8 +106,8 @@ function convertEditorV2ToRecharged(editorLevel, warnings) {
       decor: convertEditorDecor(editorLevel),
       entities: convertEditorEntities(editorLevel),
       audio: convertEditorAudio(editorLevel),
-      mirrorSurfaceAreas: convertEditorMirrorSurfaceAreas(editorLevel),
     },
+    mirrorSurfaceAreas: convertEditorMirrorSurfaceAreas(editorLevel),
     systems: {
       sourceFormat: "editor-v2",
     },
@@ -533,7 +535,6 @@ export function normalizeLayers(layersInput, errors, warnings) {
     decor: normalizeDecor(levelLayers.decor, errors, warnings),
     entities: normalizeEntities(levelLayers.entities, errors),
     audio: normalizeAudio(levelLayers.audio, errors),
-    mirrorSurfaceAreas: normalizeMirrorSurfaceAreas(layersInput.mirrorSurfaceAreas),
   };
 }
 
@@ -760,7 +761,6 @@ function createEmptyLayers() {
     decor: [],
     entities: [],
     audio: [],
-    mirrorSurfaceAreas: [],
   };
 }
 

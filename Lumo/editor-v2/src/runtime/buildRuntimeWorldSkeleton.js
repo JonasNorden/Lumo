@@ -50,7 +50,6 @@ export function buildRuntimeWorldSkeleton(level) {
     decor: Array.isArray(level?.layers?.decor) ? level.layers.decor : [],
     entities: Array.isArray(level?.layers?.entities) ? level.layers.entities : [],
     audio: Array.isArray(level?.layers?.audio) ? level.layers.audio : [],
-    mirrorSurfaceAreas: Array.isArray(level?.layers?.mirrorSurfaceAreas) ? level.layers.mirrorSurfaceAreas : [],
   };
 
   return {
@@ -59,5 +58,6 @@ export function buildRuntimeWorldSkeleton(level) {
     world,
     spawn,
     layers,
+    mirrorSurfaceAreas: Array.isArray(level?.mirrorSurfaceAreas) ? level.mirrorSurfaceAreas : [],
   };
 }
