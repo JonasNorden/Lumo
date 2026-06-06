@@ -55,6 +55,17 @@ const MIRROR_SURFACE_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
   fade: { min: 0, max: 1, integer: false, inputMode: "decimal" },
 });
 
+const STONE_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
+  x: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
+  y: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
+  width: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
+  height: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
+  density: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+  sizeVariation: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+  rotationVariation: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+  clusterStrength: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+});
+
 const REACTIVE_CRYSTAL_NUMERIC_FIELD_CONFIG = Object.freeze({
   x: { min: -100000, max: 100000, integer: false, inputMode: "decimal" },
   y: { min: -100000, max: 100000, integer: false, inputMode: "decimal" },
@@ -1029,6 +1040,59 @@ function renderMirrorSurfaceAreaInspector(area) {
     renderMirrorSurfaceAreaCheckboxField("visible", "visible", area?.visible, areaId),
   ].join(""));
 }
+
+function renderStoneAreaNumberField(label, field, value, areaId) {
+  const config = STONE_AREA_NUMERIC_FIELD_CONFIG[field];
+  if (!config) return renderReadOnlyField(label, value);
+  const normalizedValue = Number.isFinite(Number(value)) ? String(value) : "";
+  return `
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
+      <span class="label">${escapeHtml(label)}</span>
+      <input
+        type="text"
+        value="${escapeHtml(normalizedValue)}"
+        inputmode="${escapeHtml(config.inputMode)}"
+        data-stone-area-field="${escapeHtml(field)}"
+        data-stone-area-id="${escapeHtml(areaId || "")}"
+        data-stone-area-editable="number"
+        data-stone-area-committed-value="${escapeHtml(normalizedValue)}"
+        aria-label="${escapeHtml(label)}"
+      />
+    </label>
+  `;
+}
+
+function renderStoneAreaCheckboxField(label, field, value, areaId) {
+  return `
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionCheckboxField">
+      <span class="label">${escapeHtml(label)}</span>
+      <input type="checkbox" ${value !== false ? "checked" : ""} data-stone-area-field="${escapeHtml(field)}" data-stone-area-id="${escapeHtml(areaId || "")}" />
+    </label>
+  `;
+}
+
+function renderStoneAreaInspector(area) {
+  const areaId = typeof area?.id === "string" ? area.id : "";
+  return renderSelectionFields([
+    `<div class="statusCard assetSelectionCard assetSelectionCardCompact">
+      <div class="assetSelectionMeta">
+        <span class="statusCardMeta">Stone Area · World Phenomena / Areas</span>
+      </div>
+    </div>`,
+    renderReadOnlyField("id", area?.id),
+    renderStoneAreaNumberField("x", "x", area?.x, areaId),
+    renderStoneAreaNumberField("y", "y", area?.y, areaId),
+    renderStoneAreaNumberField("width", "width", area?.width, areaId),
+    renderStoneAreaNumberField("height", "height", area?.height, areaId),
+    renderStoneAreaNumberField("Density", "density", area?.density, areaId),
+    renderStoneAreaNumberField("Size variation", "sizeVariation", area?.sizeVariation, areaId),
+    renderStoneAreaNumberField("Rotation variation", "rotationVariation", area?.rotationVariation, areaId),
+    renderStoneAreaNumberField("Cluster strength", "clusterStrength", area?.clusterStrength, areaId),
+    renderStoneAreaCheckboxField("enabled", "enabled", area?.enabled, areaId),
+    renderStoneAreaCheckboxField("visible", "visible", area?.visible, areaId),
+  ].join(""));
+}
+
 function renderReactiveCrystalPatchInspector(patch) {
   const patchId = typeof patch?.id === "string" ? patch.id : "";
   return renderSelectionFields([
@@ -1108,6 +1172,9 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   const selectedMirrorSurfaceAreaId = typeof state?.interaction?.selectedMirrorSurfaceAreaId === "string" && state.interaction.selectedMirrorSurfaceAreaId.trim() ? state.interaction.selectedMirrorSurfaceAreaId.trim() : null;
   const selectedMirrorSurfaceAreaIndex = Number.isInteger(state?.interaction?.selectedMirrorSurfaceAreaIndex) ? state.interaction.selectedMirrorSurfaceAreaIndex : null;
   const selectedMirrorSurfaceArea = selectedMirrorSurfaceAreaId ? (active.mirrorSurfaceAreas || []).find((area) => area?.id === selectedMirrorSurfaceAreaId) || null : Number.isInteger(selectedMirrorSurfaceAreaIndex) && selectedMirrorSurfaceAreaIndex >= 0 ? active.mirrorSurfaceAreas?.[selectedMirrorSurfaceAreaIndex] || null : null;
+  const selectedStoneAreaId = typeof state?.interaction?.selectedStoneAreaId === "string" && state.interaction.selectedStoneAreaId.trim() ? state.interaction.selectedStoneAreaId.trim() : null;
+  const selectedStoneAreaIndex = Number.isInteger(state?.interaction?.selectedStoneAreaIndex) ? state.interaction.selectedStoneAreaIndex : null;
+  const selectedStoneArea = selectedStoneAreaId ? (active.stoneAreas || []).find((area) => area?.id === selectedStoneAreaId) || null : Number.isInteger(selectedStoneAreaIndex) && selectedStoneAreaIndex >= 0 ? active.stoneAreas?.[selectedStoneAreaIndex] || null : null;
 
   const selectedReactiveGrassPatchId = typeof state?.interaction?.selectedReactiveGrassPatchId === "string" && state.interaction.selectedReactiveGrassPatchId.trim()
     ? state.interaction.selectedReactiveGrassPatchId.trim()
@@ -1145,6 +1212,10 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
 
   if (selectedMirrorSurfaceArea) {
     return { markup: renderMirrorSurfaceAreaInspector(selectedMirrorSurfaceArea), isEmpty: false };
+  }
+
+  if (selectedStoneArea) {
+    return { markup: renderStoneAreaInspector(selectedStoneArea), isEmpty: false };
   }
 
   if (selectedReactiveCrystalPatch) {
@@ -1264,7 +1335,7 @@ export function renderSelectionEditorPanel(panel, state, options = {}) {
 }
 
 export function bindSelectionEditorPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate, onReactiveBloomPatchUpdate, onReactiveCrystalPatchUpdate, onMirrorSurfaceAreaUpdate } = options;
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate, onReactiveBloomPatchUpdate, onReactiveCrystalPatchUpdate, onMirrorSurfaceAreaUpdate, onStoneAreaUpdate } = options;
   let numberStepperSession = null;
   const getEditorPane = () => panel.querySelector("[data-bottom-panel-editor]");
   const getSelectedReactiveGrassPatch = (patchId) => {
@@ -1314,12 +1385,49 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     return selectedAreaId ? areas.find((area) => area?.id === selectedAreaId) || null : areas[selectedAreaIndex] || null;
   };
 
+  const getSelectedStoneArea = (areaId) => {
+    const state = typeof store?.getState === "function" ? store.getState() : null;
+    const areas = Array.isArray(state?.document?.active?.stoneAreas) ? state.document.active.stoneAreas : [];
+    const selectedAreaId = typeof areaId === "string" && areaId.trim() ? areaId.trim() : typeof state?.interaction?.selectedStoneAreaId === "string" && state.interaction.selectedStoneAreaId.trim() ? state.interaction.selectedStoneAreaId.trim() : null;
+    const selectedAreaIndex = Number.isInteger(state?.interaction?.selectedStoneAreaIndex) ? state.interaction.selectedStoneAreaIndex : -1;
+    return selectedAreaId ? areas.find((area) => area?.id === selectedAreaId) || null : areas[selectedAreaIndex] || null;
+  };
+
   const parseMirrorSurfaceAreaNumericValue = (field, rawValue) => {
     const config = MIRROR_SURFACE_AREA_NUMERIC_FIELD_CONFIG[field];
     if (!config) return null;
     const parsed = Number(rawValue);
     if (!Number.isFinite(parsed) || parsed < config.min || parsed > config.max) return null;
     return config.integer ? Math.round(parsed) : parsed;
+  };
+
+
+  const parseStoneAreaNumericValue = (field, rawValue) => {
+    const config = STONE_AREA_NUMERIC_FIELD_CONFIG[field];
+    if (!config) return null;
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed) || parsed < config.min || parsed > config.max) return null;
+    return config.integer ? Math.round(parsed) : parsed;
+  };
+
+  const commitStoneAreaNumericInput = (input) => {
+    if (!isTextInputElement(input) || input.dataset.stoneAreaEditable !== "number") return false;
+    const field = input.dataset.stoneAreaField;
+    if (!STONE_AREA_NUMERIC_FIELD_CONFIG[field]) return false;
+    const areaId = typeof input.dataset.stoneAreaId === "string" && input.dataset.stoneAreaId.trim() ? input.dataset.stoneAreaId.trim() : null;
+    const areaSnapshot = getSelectedStoneArea(areaId);
+    if (!areaSnapshot) return false;
+    const previousValue = Number(areaSnapshot[field]);
+    const parsedValue = parseStoneAreaNumericValue(field, input.value);
+    if (parsedValue === null || Object.is(parsedValue, previousValue)) {
+      input.value = Number.isFinite(previousValue) ? String(previousValue) : "";
+      clearInputDraft(input);
+      return parsedValue !== null;
+    }
+    onStoneAreaUpdate?.(field, parsedValue, { areaId });
+    input.dataset.stoneAreaCommittedValue = String(parsedValue);
+    clearInputDraft(input);
+    return true;
   };
 
   const commitMirrorSurfaceAreaNumericInput = (input) => {
@@ -1534,10 +1642,20 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       if (target.dataset.mirrorSurfaceAreaEditable === "number") {
         if (commitMirrorSurfaceAreaNumericInput(target)) return;
       }
+      if (target.dataset.stoneAreaEditable === "number") {
+        if (commitStoneAreaNumericInput(target)) return;
+      }
       const mirrorSurfaceAreaField = target.dataset.mirrorSurfaceAreaField;
       if (mirrorSurfaceAreaField === "enabled" || mirrorSurfaceAreaField === "visible") {
         const areaId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedMirrorSurfaceAreaId : null;
         onMirrorSurfaceAreaUpdate?.(mirrorSurfaceAreaField, target.checked, { areaId });
+        clearInputDraft(target);
+        return;
+      }
+      const stoneAreaField = target.dataset.stoneAreaField;
+      if (stoneAreaField === "enabled" || stoneAreaField === "visible") {
+        const areaId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedStoneAreaId : null;
+        onStoneAreaUpdate?.(stoneAreaField, target.checked, { areaId });
         clearInputDraft(target);
         return;
       }

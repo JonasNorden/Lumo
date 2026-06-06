@@ -4732,6 +4732,121 @@
         : [];
     }
 
+
+    function hashRechargedStoneString(value) {
+      const text = String(value || "stone_area");
+      let hash = 2166136261;
+      for (let i = 0; i < text.length; i += 1) {
+        hash ^= text.charCodeAt(i);
+        hash = Math.imul(hash, 16777619);
+      }
+      return hash >>> 0;
+    }
+
+    function createRechargedStoneRandom(seed) {
+      let state = seed >>> 0;
+      return () => {
+        state = (state + 0x6D2B79F5) >>> 0;
+        let t = state;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function readRechargedStoneAreas(payload) {
+      const sourceAreas = Array.isArray(payload?.stoneAreas) ? payload.stoneAreas : [];
+      return sourceAreas
+        .map((area, index) => ({
+          id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `stone_area_${index + 1}`,
+          x: Number.isFinite(area?.x) ? area.x : null,
+          y: Number.isFinite(area?.y) ? area.y : null,
+          width: Number.isFinite(area?.width) && area.width > 0 ? area.width : null,
+          height: Number.isFinite(area?.height) && area.height > 0 ? area.height : null,
+          density: Number.isFinite(area?.density) ? Math.max(0, Math.min(1, Number(area.density))) : 0.35,
+          sizeVariation: Number.isFinite(area?.sizeVariation) ? Math.max(0, Math.min(1, Number(area.sizeVariation))) : 0.45,
+          rotationVariation: Number.isFinite(area?.rotationVariation) ? Math.max(0, Math.min(1, Number(area.rotationVariation))) : 0.65,
+          clusterStrength: Number.isFinite(area?.clusterStrength) ? Math.max(0, Math.min(1, Number(area.clusterStrength))) : 0.5,
+          enabled: area?.enabled !== false,
+          visible: area?.visible !== false,
+        }))
+        .filter((area) => area.x !== null && area.y !== null && area.width !== null && area.height !== null && area.enabled && area.visible);
+    }
+
+    function getRechargedStoneAreaSeed(area, index) {
+      if (Number.isInteger(area?.seed)) return area.seed >>> 0;
+      return hashRechargedStoneString(`${area.id}|${Math.round(area.x)}|${Math.round(area.y)}|${Math.round(area.width)}|${Math.round(area.height)}|${index}`);
+    }
+
+    const rechargedStoneLayoutCache = new Map();
+    function buildRechargedStoneLayout(area, index, tileSize) {
+      if (!area || area.density <= 0 || area.width <= 0 || area.height <= 0) return [];
+      const cacheKey = `${area.id}|${area.x}|${area.y}|${area.width}|${area.height}|${area.density}|${area.sizeVariation}|${area.rotationVariation}|${area.clusterStrength}|${area.seed ?? ""}`;
+      if (rechargedStoneLayoutCache.has(cacheKey)) return rechargedStoneLayoutCache.get(cacheKey);
+      const baseTile = Math.max(1, Number.isFinite(tileSize) ? tileSize : 24);
+      const targetCount = Math.max(0, Math.round(((area.width * area.height) / (baseTile * baseTile)) * area.density * 3.2));
+      if (targetCount <= 0) {
+        rechargedStoneLayoutCache.set(cacheKey, []);
+        return [];
+      }
+      const random = createRechargedStoneRandom(getRechargedStoneAreaSeed(area, index));
+      const clusterCount = Math.max(1, Math.round(1 + area.clusterStrength * Math.sqrt(targetCount)));
+      const clusters = Array.from({ length: clusterCount }, () => ({
+        x: area.x + random() * area.width,
+        y: area.y + random() * area.height,
+        radius: Math.max(baseTile * 0.45, (0.2 + random() * 0.55) * Math.min(area.width, area.height)),
+      }));
+      const stones = [];
+      let guard = targetCount * 12;
+      while (stones.length < targetCount && guard > 0) {
+        guard -= 1;
+        const cluster = clusters[Math.floor(random() * clusters.length)] || clusters[0];
+        const useCluster = random() < area.clusterStrength;
+        const angle = random() * Math.PI * 2;
+        const distance = Math.pow(random(), 1.7) * cluster.radius;
+        const rawX = useCluster ? cluster.x + Math.cos(angle) * distance : area.x + random() * area.width;
+        const rawY = useCluster ? cluster.y + Math.sin(angle) * distance : area.y + random() * area.height;
+        if (rawX < area.x || rawX > area.x + area.width || rawY < area.y || rawY > area.y + area.height) continue;
+        const baseSize = 8 + random() * 8;
+        const size = baseSize * (1 - area.sizeVariation * 0.45 + random() * area.sizeVariation * 0.9);
+        stones.push({ x: rawX, y: rawY, radiusX: size * (0.75 + random() * 0.5), radiusY: size * (0.45 + random() * 0.35), rotation: (random() - 0.5) * Math.PI * area.rotationVariation, shade: 0.72 + random() * 0.24 });
+      }
+      rechargedStoneLayoutCache.set(cacheKey, stones);
+      return stones;
+    }
+
+    function drawRechargedStoneAreas(ctx, mapper, stoneAreas, options = {}) {
+      if (!ctx || !mapper || !Array.isArray(stoneAreas) || stoneAreas.length === 0) return false;
+      const tileSize = Number.isFinite(options.tileSize) && options.tileSize > 0 ? options.tileSize : 24;
+      let drewAny = false;
+      for (let areaIndex = 0; areaIndex < stoneAreas.length; areaIndex += 1) {
+        const stones = buildRechargedStoneLayout(stoneAreas[areaIndex], areaIndex, tileSize);
+        for (const stone of stones) {
+          const rect = mapper.worldToCanvasRect(stone.x - stone.radiusX, stone.y - stone.radiusY, stone.radiusX * 2, stone.radiusY * 2);
+          if (rect.w <= 0 || rect.h <= 0) continue;
+          ctx.save();
+          ctx.translate(rect.x + rect.w * 0.5, rect.y + rect.h * 0.5);
+          ctx.rotate(stone.rotation || 0);
+          const shade = Math.max(0, Math.min(1, Number.isFinite(stone.shade) ? stone.shade : 0.82));
+          const base = Math.round(92 * shade);
+          const gradient = ctx.createRadialGradient(-rect.w * 0.18, -rect.h * 0.22, 1, 0, 0, Math.max(rect.w, rect.h) * 0.55);
+          gradient.addColorStop(0, `rgb(${base + 70}, ${base + 64}, ${base + 54})`);
+          gradient.addColorStop(0.72, `rgb(${base + 34}, ${base + 31}, ${base + 25})`);
+          gradient.addColorStop(1, `rgb(${base + 16}, ${base + 14}, ${base + 12})`);
+          ctx.fillStyle = gradient;
+          ctx.strokeStyle = `rgba(${base + 68}, ${base + 60}, ${base + 48}, 0.55)`;
+          ctx.lineWidth = Math.max(0.75, Math.min(rect.w, rect.h) * 0.06);
+          ctx.beginPath();
+          ctx.ellipse(0, 0, Math.max(0.5, rect.w * 0.5), Math.max(0.5, rect.h * 0.5), 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+          drewAny = true;
+        }
+      }
+      return drewAny;
+    }
+
     function readRechargedMirrorSurfaceAreas(payload) {
       const sourceAreas = Array.isArray(payload?.mirrorSurfaceAreas) ? payload.mirrorSurfaceAreas : [];
       return sourceAreas
@@ -6291,6 +6406,7 @@
         const worldUnitsToPx = coordinatesLookTileBased ? tileSize : 1;
         // Editor V2 exports mirror surface rectangles in pixel world coordinates, matching player snapshots.
         const mirrorSurfaceAreas = readRechargedMirrorSurfaceAreas(payload);
+        const stoneAreas = readRechargedStoneAreas(payload);
         const worldWidthPx = Math.max(tileSize, Math.round(worldWidthRaw * worldUnitsToPx));
         const worldHeightPx = Math.max(tileSize, Math.round(worldHeightRaw * worldUnitsToPx));
         const hudGameplayViewport = getRechargedHudV2GameplayViewport(canvas);
@@ -6552,6 +6668,8 @@
         }
 
         // Decor stays above tiles and below gameplay actors to avoid blocking entities/player.
+        drawRechargedStoneAreas(ctx, mapper, stoneAreas, { tileSize });
+
         for (const decor of decorWorldLane) {
           drawRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw);
         }

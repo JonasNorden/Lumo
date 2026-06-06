@@ -94,6 +94,9 @@ export function buildRuntimeWorldPacket(parts) {
     mirrorSurfaceAreas: Array.isArray(skeleton?.mirrorSurfaceAreas)
       ? [...skeleton.mirrorSurfaceAreas]
       : [],
+    stoneAreas: Array.isArray(skeleton?.stoneAreas)
+      ? [...skeleton.stoneAreas]
+      : [],
     tileBounds,
     tileMap,
   };

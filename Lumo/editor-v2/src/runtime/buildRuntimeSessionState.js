@@ -31,6 +31,7 @@ function resolveSessionWorld(world) {
       audio: Array.isArray(world?.layers?.audio) ? [...world.layers.audio] : [],
     },
     mirrorSurfaceAreas: Array.isArray(world?.mirrorSurfaceAreas) ? [...world.mirrorSurfaceAreas] : [],
+    stoneAreas: Array.isArray(world?.stoneAreas) ? [...world.stoneAreas] : [],
     width: isFiniteNumber(world?.width) ? world.width : null,
     height: isFiniteNumber(world?.height) ? world.height : null,
     tileSize: isFiniteNumber(world?.tileSize) ? world.tileSize : null,
