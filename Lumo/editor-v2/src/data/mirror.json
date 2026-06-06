@@ -23591,7 +23591,9 @@
       "visible": true,
       "variant": "a",
       "flipX": false,
-      "params": {}
+      "params": {
+        "variant": 1
+      }
     },
     {
       "id": "decor-2",
@@ -23602,7 +23604,9 @@
       "visible": true,
       "variant": "a",
       "flipX": false,
-      "params": {}
+      "params": {
+        "variant": 1
+      }
     },
     {
       "id": "decor-3",
@@ -23656,14 +23660,80 @@
       "width": 888,
       "height": 93,
       "yOffset": 0,
+      "reflectionHeight": 72,
+      "reflectionStrength": 0.35,
+      "distortion": 0.12,
+      "surfaceStrength": 0.25,
+      "fade": 0.65,
       "enabled": true,
       "visible": true
     }
   ],
   "extra": {},
-  "reactiveGrassPatches": [],
-  "reactiveBloomPatches": [],
-  "reactiveCrystalPatches": [],
+  "reactiveGrassPatches": [
+    {
+      "id": "reactive_grass-1",
+      "kind": "reactive_grass",
+      "x": 516,
+      "y": 432,
+      "width": 696,
+      "density": 416,
+      "heightMin": 12,
+      "heightMax": 44,
+      "heightProfile": "organic_wave",
+      "heightVariation": 1,
+      "baseColor": "#2f6f3a",
+      "topColor": "#7fd66b",
+      "variant": "lush_default",
+      "seed": 454259738
+    }
+  ],
+  "reactiveBloomPatches": [
+    {
+      "id": "reactive_bloom-1",
+      "kind": "reactive_bloom",
+      "x": 384,
+      "y": 432,
+      "clusterCount": 5,
+      "width": 336,
+      "heightMin": 28,
+      "heightMax": 86,
+      "triggerRadius": 80,
+      "auraSensitivity": 1,
+      "openSpeed": 1,
+      "closeDelayMs": 1000,
+      "closeSpeed": 1,
+      "stemColor": "#2f6f3a",
+      "petalInnerColor": "#ffd6f0",
+      "petalOuterColor": "#9f5cff",
+      "coreColor": "#fff2a8",
+      "variant": "lush_bloom_default",
+      "seed": 894109
+    }
+  ],
+  "reactiveCrystalPatches": [
+    {
+      "id": "reactive_crystal-1",
+      "kind": "reactive_crystal",
+      "x": 1032,
+      "y": 432,
+      "clusterCount": 7,
+      "width": 400,
+      "heightMin": 18,
+      "heightMax": 60,
+      "triggerRadius": 132,
+      "auraSensitivity": 1,
+      "wakeSpeed": 1,
+      "settleDelayMs": 520,
+      "settleSpeed": 1,
+      "baseColor": "#335c88",
+      "glowColor": "#83e6ff",
+      "coreColor": "#d4f8ff",
+      "edgeColor": "#7d8dff",
+      "variant": "default",
+      "seed": 920973
+    }
+  ],
   "layers": {
     "background": [
       {
