@@ -42,6 +42,14 @@ const REACTIVE_BLOOM_NUMERIC_FIELD_CONFIG = Object.freeze({
   closeSpeed: { min: 0.1, max: 5, integer: false, inputMode: "decimal" },
   seed: { min: 1, max: 999999999, integer: true, inputMode: "numeric" },
 });
+const MIRROR_SURFACE_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
+  x: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
+  y: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
+  width: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
+  height: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
+  yOffset: { min: -1000, max: 1000, integer: false, inputMode: "decimal" },
+});
+
 const REACTIVE_CRYSTAL_NUMERIC_FIELD_CONFIG = Object.freeze({
   x: { min: -100000, max: 100000, integer: false, inputMode: "decimal" },
   y: { min: -100000, max: 100000, integer: false, inputMode: "decimal" },
@@ -122,6 +130,9 @@ function buildTrackedDataset(target) {
     "reactiveGrassField",
     "reactiveGrassId",
     "reactiveGrassEditable",
+    "mirrorSurfaceAreaField",
+    "mirrorSurfaceAreaId",
+    "mirrorSurfaceAreaEditable",
   ];
 
   const dataset = {};
@@ -959,6 +970,55 @@ function renderReactiveBloomPatchInspector(patch) {
 }
 
 
+
+function renderMirrorSurfaceAreaNumberField(label, field, value, areaId) {
+  const config = MIRROR_SURFACE_AREA_NUMERIC_FIELD_CONFIG[field];
+  if (!config) return renderReadOnlyField(label, value);
+  const normalizedValue = Number.isFinite(Number(value)) ? String(value) : "";
+  return `
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
+      <span class="label">${escapeHtml(label)}</span>
+      <input
+        type="text"
+        value="${escapeHtml(normalizedValue)}"
+        inputmode="${escapeHtml(config.inputMode)}"
+        data-mirror-surface-area-field="${escapeHtml(field)}"
+        data-mirror-surface-area-id="${escapeHtml(areaId || "")}"
+        data-mirror-surface-area-editable="number"
+        data-mirror-surface-area-committed-value="${escapeHtml(normalizedValue)}"
+        aria-label="${escapeHtml(label)}"
+      />
+    </label>
+  `;
+}
+
+function renderMirrorSurfaceAreaCheckboxField(label, field, value, areaId) {
+  return `
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionCheckboxField">
+      <span class="label">${escapeHtml(label)}</span>
+      <input type="checkbox" ${value !== false ? "checked" : ""} data-mirror-surface-area-field="${escapeHtml(field)}" data-mirror-surface-area-id="${escapeHtml(areaId || "")}" />
+    </label>
+  `;
+}
+
+function renderMirrorSurfaceAreaInspector(area) {
+  const areaId = typeof area?.id === "string" ? area.id : "";
+  return renderSelectionFields([
+    `<div class="statusCard assetSelectionCard assetSelectionCardCompact">
+      <div class="assetSelectionMeta">
+        <span class="statusCardMeta">Mirror Surface Area · World Phenomena / Areas</span>
+      </div>
+    </div>`,
+    renderReadOnlyField("id", area?.id),
+    renderMirrorSurfaceAreaNumberField("x", "x", area?.x, areaId),
+    renderMirrorSurfaceAreaNumberField("y", "y", area?.y, areaId),
+    renderMirrorSurfaceAreaNumberField("width", "width", area?.width, areaId),
+    renderMirrorSurfaceAreaNumberField("height", "height", area?.height, areaId),
+    renderMirrorSurfaceAreaNumberField("yOffset", "yOffset", area?.yOffset, areaId),
+    renderMirrorSurfaceAreaCheckboxField("enabled", "enabled", area?.enabled, areaId),
+    renderMirrorSurfaceAreaCheckboxField("visible", "visible", area?.visible, areaId),
+  ].join(""));
+}
 function renderReactiveCrystalPatchInspector(patch) {
   const patchId = typeof patch?.id === "string" ? patch.id : "";
   return renderSelectionFields([
@@ -1035,6 +1095,10 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
     .map((index) => active.sounds?.[index] || null)
     .filter(Boolean);
   const themeId = active?.meta?.themeId;
+  const selectedMirrorSurfaceAreaId = typeof state?.interaction?.selectedMirrorSurfaceAreaId === "string" && state.interaction.selectedMirrorSurfaceAreaId.trim() ? state.interaction.selectedMirrorSurfaceAreaId.trim() : null;
+  const selectedMirrorSurfaceAreaIndex = Number.isInteger(state?.interaction?.selectedMirrorSurfaceAreaIndex) ? state.interaction.selectedMirrorSurfaceAreaIndex : null;
+  const selectedMirrorSurfaceArea = selectedMirrorSurfaceAreaId ? (active.mirrorSurfaceAreas || []).find((area) => area?.id === selectedMirrorSurfaceAreaId) || null : Number.isInteger(selectedMirrorSurfaceAreaIndex) && selectedMirrorSurfaceAreaIndex >= 0 ? active.mirrorSurfaceAreas?.[selectedMirrorSurfaceAreaIndex] || null : null;
+
   const selectedReactiveGrassPatchId = typeof state?.interaction?.selectedReactiveGrassPatchId === "string" && state.interaction.selectedReactiveGrassPatchId.trim()
     ? state.interaction.selectedReactiveGrassPatchId.trim()
     : null;
@@ -1067,6 +1131,10 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
       return { markup: "", isEmpty: true };
     }
     return { markup: renderBatchSoundEditor(selectedSounds, resolvedSelectedSoundIndex, themeId), isEmpty: false };
+  }
+
+  if (selectedMirrorSurfaceArea) {
+    return { markup: renderMirrorSurfaceAreaInspector(selectedMirrorSurfaceArea), isEmpty: false };
   }
 
   if (selectedReactiveCrystalPatch) {
@@ -1186,7 +1254,7 @@ export function renderSelectionEditorPanel(panel, state, options = {}) {
 }
 
 export function bindSelectionEditorPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate, onReactiveBloomPatchUpdate, onReactiveCrystalPatchUpdate } = options;
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate, onReactiveBloomPatchUpdate, onReactiveCrystalPatchUpdate, onMirrorSurfaceAreaUpdate } = options;
   let numberStepperSession = null;
   const getEditorPane = () => panel.querySelector("[data-bottom-panel-editor]");
   const getSelectedReactiveGrassPatch = (patchId) => {
@@ -1226,6 +1294,43 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     if (selectedPatchId) return patches.find((patch) => patch?.id === selectedPatchId) || null;
     const selectedPatchIndex = Number.isInteger(state?.interaction?.selectedReactiveCrystalPatchIndex) ? state.interaction.selectedReactiveCrystalPatchIndex : -1;
     return selectedPatchIndex >= 0 ? patches[selectedPatchIndex] || null : null;
+  };
+
+  const getSelectedMirrorSurfaceArea = (areaId) => {
+    const state = typeof store?.getState === "function" ? store.getState() : null;
+    const areas = Array.isArray(state?.document?.active?.mirrorSurfaceAreas) ? state.document.active.mirrorSurfaceAreas : [];
+    const selectedAreaId = typeof areaId === "string" && areaId.trim() ? areaId.trim() : typeof state?.interaction?.selectedMirrorSurfaceAreaId === "string" && state.interaction.selectedMirrorSurfaceAreaId.trim() ? state.interaction.selectedMirrorSurfaceAreaId.trim() : null;
+    const selectedAreaIndex = Number.isInteger(state?.interaction?.selectedMirrorSurfaceAreaIndex) ? state.interaction.selectedMirrorSurfaceAreaIndex : -1;
+    return selectedAreaId ? areas.find((area) => area?.id === selectedAreaId) || null : areas[selectedAreaIndex] || null;
+  };
+
+  const parseMirrorSurfaceAreaNumericValue = (field, rawValue) => {
+    const config = MIRROR_SURFACE_AREA_NUMERIC_FIELD_CONFIG[field];
+    if (!config) return null;
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed) || parsed < config.min || parsed > config.max) return null;
+    return config.integer ? Math.round(parsed) : parsed;
+  };
+
+  const commitMirrorSurfaceAreaNumericInput = (input) => {
+    if (!isTextInputElement(input) || input.dataset.mirrorSurfaceAreaEditable !== "number") return false;
+    const field = input.dataset.mirrorSurfaceAreaField;
+    if (!MIRROR_SURFACE_AREA_NUMERIC_FIELD_CONFIG[field]) return false;
+    const areaId = typeof input.dataset.mirrorSurfaceAreaId === "string" && input.dataset.mirrorSurfaceAreaId.trim() ? input.dataset.mirrorSurfaceAreaId.trim() : null;
+    const areaSnapshot = getSelectedMirrorSurfaceArea(areaId);
+    if (!areaSnapshot) return false;
+    const previousValue = Number(areaSnapshot[field]);
+    const parsedValue = parseMirrorSurfaceAreaNumericValue(field, input.value);
+    if (parsedValue === null || Object.is(parsedValue, previousValue)) {
+      input.value = Number.isFinite(previousValue) ? String(previousValue) : "";
+      input.dataset.mirrorSurfaceAreaCommittedValue = Number.isFinite(previousValue) ? String(previousValue) : "";
+      clearInputDraft(input);
+      return true;
+    }
+    onMirrorSurfaceAreaUpdate?.(field, parsedValue, { areaId });
+    input.dataset.mirrorSurfaceAreaCommittedValue = String(parsedValue);
+    clearInputDraft(input);
+    return true;
   };
 
   const parseReactiveGrassNumericValue = (field, rawValue, patchSnapshot) => {
@@ -1416,6 +1521,16 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     if (!isTextInputElement(target) && !isSelectElement(target)) return;
 
     if (isTextInputElement(target)) {
+      if (target.dataset.mirrorSurfaceAreaEditable === "number") {
+        if (commitMirrorSurfaceAreaNumericInput(target)) return;
+      }
+      const mirrorSurfaceAreaField = target.dataset.mirrorSurfaceAreaField;
+      if (mirrorSurfaceAreaField === "enabled" || mirrorSurfaceAreaField === "visible") {
+        const areaId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedMirrorSurfaceAreaId : null;
+        onMirrorSurfaceAreaUpdate?.(mirrorSurfaceAreaField, target.checked, { areaId });
+        clearInputDraft(target);
+        return;
+      }
       if (target.dataset.reactiveGrassEditable === "number") {
         if (commitReactiveGrassNumericInput(target)) return;
       }

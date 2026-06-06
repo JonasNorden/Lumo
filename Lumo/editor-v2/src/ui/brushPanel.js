@@ -30,6 +30,7 @@ const PANEL_LAYERS = {
   DECOR: "decor",
   REACTIVE_DECOR: "reactive-decor",
   SOUND: "sound",
+  WORLD_AREAS: "world-areas",
 };
 
 const VISIBLE_TOOL_OPTIONS = TOOL_OPTIONS.filter((option) => (
@@ -46,6 +47,7 @@ const COLLAPSIBLE_PANEL_DEFAULTS = {
   entities: false,
   fogVolumes: false,
   sound: false,
+  worldAreas: false,
 };
 
 function escapeHtml(value) {
@@ -131,6 +133,7 @@ function renderLayerSection(state) {
       <button class="toolButton ${activeLayer === PANEL_LAYERS.DECOR ? "isActive" : ""}" type="button" data-layer="decor">Decor</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.REACTIVE_DECOR ? "isActive" : ""}" type="button" data-layer="reactive-decor">Reactive Decor</button>
       <button class="toolButton ${activeLayer === PANEL_LAYERS.SOUND ? "isActive" : ""}" type="button" data-layer="sound">Sound</button>
+      <button class="toolButton ${activeLayer === PANEL_LAYERS.WORLD_AREAS ? "isActive" : ""}" type="button" data-layer="world-areas">Areas</button>
     </div>
   `;
 }
@@ -425,6 +428,26 @@ function renderReactiveDecorSettings(state) {
     </label>
   `;
 }
+
+function renderWorldAreasSettings(state) {
+  const armed = state?.interaction?.activeLayer === PANEL_LAYERS.WORLD_AREAS
+    && state?.interaction?.activeWorldAreaType === "mirror_surface";
+  const count = Array.isArray(state?.document?.active?.mirrorSurfaceAreas) ? state.document.active.mirrorSurfaceAreas.length : 0;
+  return `
+    <div class="statusRow compactStatusRow">
+      <span class="label">Mirror Surface</span>
+      <span class="value">${count} authored</span>
+    </div>
+    <div class="compactActionRow compactActionRowSingle">
+      <button type="button" class="toolButton ${armed ? "isActive" : ""}" data-world-area-action="arm-mirror-surface">
+        ${armed ? "Mirror placement armed" : "Create Mirror Surface"}
+      </button>
+    </div>
+    <div class="statusRow compactStatusRow">
+      <span class="value">Click-drag over 24×24 tile surfaces, then use Inspect to select, move, resize, or delete.</span>
+    </div>
+  `;
+}
 function renderSoundSection(activePresetId, isOpen) {
   const activePreset = SOUND_PRESETS.find((preset) => preset.id === activePresetId) || null;
 
@@ -491,12 +514,13 @@ export function renderBrushPanel(panel, state) {
     ${state.document.active ? renderSection("entities", "ENTITIES", panelSections.entities, renderEntitiesSettings(state)) : ""}
     ${state.document.active ? renderSection("fogVolumes", "SPECIAL VOLUMES", panelSections.fogVolumes, renderFogVolumeSettings(state)) : ""}
     ${state.document.active ? renderSection("reactiveDecor", "REACTIVE DECOR", true, renderReactiveDecorSettings(state)) : ""}
+    ${state.document.active ? renderSection("worldAreas", "WORLD PHENOMENA / AREAS", panelSections.worldAreas, renderWorldAreasSettings(state)) : ""}
     ${state.document.active ? renderSoundSection(state.interaction.activeSoundPresetId, panelSections.sound) : ""}
   `;
 }
 
 export function bindBrushPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onVolumeUpdate, onCanvasTargetChange, onLayerChange } = options;
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onVolumeUpdate, onWorldAreaUpdate, onCanvasTargetChange, onLayerChange } = options;
 
   const onChange = (event) => {
     const target = event.target;
@@ -610,6 +634,12 @@ export function bindBrushPanel(panel, store, options = {}) {
       return;
     }
 
+    const worldAreaActionButton = target.closest("[data-world-area-action]");
+    if (worldAreaActionButton instanceof HTMLButtonElement) {
+      onWorldAreaUpdate?.(-1, worldAreaActionButton.dataset.worldAreaAction || "", null);
+      return;
+    }
+
     const volumeActionButton = target.closest("[data-volume-action]");
     if (volumeActionButton instanceof HTMLButtonElement) {
       onVolumeUpdate?.(-1, volumeActionButton.dataset.volumeAction || "", null);
@@ -663,10 +693,10 @@ export function bindBrushPanel(panel, store, options = {}) {
     const layerButton = target.closest("[data-layer]");
     if (layerButton instanceof HTMLButtonElement) {
       const nextLayer = layerButton.dataset.layer;
-      if (![PANEL_LAYERS.BACKGROUND, PANEL_LAYERS.TILES, PANEL_LAYERS.ENTITIES, PANEL_LAYERS.DECOR, PANEL_LAYERS.REACTIVE_DECOR, PANEL_LAYERS.SOUND].includes(nextLayer)) return;
+      if (![PANEL_LAYERS.BACKGROUND, PANEL_LAYERS.TILES, PANEL_LAYERS.ENTITIES, PANEL_LAYERS.DECOR, PANEL_LAYERS.REACTIVE_DECOR, PANEL_LAYERS.SOUND, PANEL_LAYERS.WORLD_AREAS].includes(nextLayer)) return;
       onLayerChange?.(nextLayer);
-      if (nextLayer === PANEL_LAYERS.DECOR || nextLayer === PANEL_LAYERS.SOUND || nextLayer === PANEL_LAYERS.ENTITIES || nextLayer === PANEL_LAYERS.REACTIVE_DECOR) {
-        onCanvasTargetChange?.(nextLayer === PANEL_LAYERS.DECOR ? "decor" : nextLayer === PANEL_LAYERS.SOUND ? "sound" : nextLayer === PANEL_LAYERS.REACTIVE_DECOR ? "reactiveDecor" : "entity");
+      if (nextLayer === PANEL_LAYERS.DECOR || nextLayer === PANEL_LAYERS.SOUND || nextLayer === PANEL_LAYERS.ENTITIES || nextLayer === PANEL_LAYERS.REACTIVE_DECOR || nextLayer === PANEL_LAYERS.WORLD_AREAS) {
+        onCanvasTargetChange?.(nextLayer === PANEL_LAYERS.DECOR ? "decor" : nextLayer === PANEL_LAYERS.SOUND ? "sound" : nextLayer === PANEL_LAYERS.REACTIVE_DECOR ? "reactiveDecor" : nextLayer === PANEL_LAYERS.WORLD_AREAS ? "worldAreas" : "entity");
       }
       return;
     }

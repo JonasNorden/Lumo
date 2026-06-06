@@ -7,6 +7,7 @@ import { renderDecor } from "./layers/decorLayer.js";
 import { renderReactiveGrassPatches } from "./layers/reactiveGrassLayer.js";
 import { renderReactiveBloomPatches } from "./layers/reactiveBloomLayer.js";
 import { renderReactiveCrystalPatches } from "./layers/reactiveCrystalLayer.js";
+import { renderMirrorSurfaceAreas } from "./layers/mirrorSurfaceAreaLayer.js";
 import { renderSounds } from "./layers/soundLayer.js";
 import { renderProximityOverlays } from "./layers/proximityOverlayLayer.js";
 import { renderScanOverlay } from "./layers/scanLayer.js";
@@ -71,6 +72,7 @@ export function renderEditorFrame(ctx, state) {
   renderReactiveCrystalPatches(worldCtx, doc, state.viewport, state.interaction);
   renderDecor(worldCtx, doc, state.viewport, state.interaction);
   renderTiles(worldCtx, doc, state.viewport);
+  renderMirrorSurfaceAreas(worldCtx, doc, state.viewport, state.interaction);
   renderEntities(worldCtx, doc, state.viewport, state.interaction);
   worldCtx.restore();
 
