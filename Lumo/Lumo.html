@@ -4732,7 +4732,7 @@
     }
 
     function readRechargedMirrorSurfaceAreas(payload) {
-      const sourceAreas = Array.isArray(payload?.layers?.mirrorSurfaceAreas) ? payload.layers.mirrorSurfaceAreas : [];
+      const sourceAreas = Array.isArray(payload?.mirrorSurfaceAreas) ? payload.mirrorSurfaceAreas : [];
       return sourceAreas
         .map((area, index) => ({
           id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `mirror_surface_${index + 1}`,

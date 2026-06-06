@@ -30,6 +30,7 @@ function resolveSessionWorld(world) {
       // Preserve authored Editor V2 audio entries into runtime session world state for live snapshot use/debuggability.
       audio: Array.isArray(world?.layers?.audio) ? [...world.layers.audio] : [],
     },
+    mirrorSurfaceAreas: Array.isArray(world?.mirrorSurfaceAreas) ? [...world.mirrorSurfaceAreas] : [],
     width: isFiniteNumber(world?.width) ? world.width : null,
     height: isFiniteNumber(world?.height) ? world.height : null,
     tileSize: isFiniteNumber(world?.tileSize) ? world.tileSize : null,

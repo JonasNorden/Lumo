@@ -523,12 +523,11 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
       bgVisualOverrides: runtimeBackgroundVisualOverrides,
       tileVisualOverrides: buildRuntimeTileVisualOverrides(levelDocument, tileSize),
       ents: [],
-      mirrorSurfaceAreas: normalizeRuntimeMirrorSurfaceAreas(levelDocument),
     },
+    mirrorSurfaceAreas: normalizeRuntimeMirrorSurfaceAreas(levelDocument),
     editor: {
       bg: runtimeBackgroundBase.slice(0),
       bgVisualOverrides: { ...runtimeBackgroundVisualOverrides },
-      mirrorSurfaceAreas: normalizeRuntimeMirrorSurfaceAreas(levelDocument),
     },
   };
 

@@ -450,7 +450,7 @@ function buildWorldSnapshot(worldState) {
       .filter((audio) => audio.x !== null && audio.y !== null)
     : [];
 
-  const mirrorSurfaceAreas = normalizeMirrorSurfaceAreas(worldState?.layers?.mirrorSurfaceAreas);
+  const mirrorSurfaceAreas = normalizeMirrorSurfaceAreas(worldState?.mirrorSurfaceAreas);
 
   return {
     ok: worldState && typeof worldState === "object",

@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { validateLevelDocument } from "../src/domain/level/levelDocument.js";
+import { serializeLevelDocument } from "../src/data/exportLevelDocument.js";
 import { loadLevelDocument } from "../src/runtime/loadLevelDocument.js";
 import { createRuntimeGameSession } from "../src/runtime/createRuntimeGameSession.js";
 import { createLumoRechargedBootAdapter } from "../src/runtime/createLumoRechargedBootAdapter.js";
@@ -36,10 +37,15 @@ function withMirrorArea(source) {
   };
 }
 
-function runEditorValidationCheck() {
+function assertCanonicalMirrorPath(holder, label, expectedLength = 1) {
+  assert.equal(Array.isArray(holder?.mirrorSurfaceAreas), true, `${label} must expose top-level mirrorSurfaceAreas`);
+  assert.equal(holder.mirrorSurfaceAreas.length, expectedLength, `${label} top-level mirrorSurfaceAreas length`);
+  assert.equal(holder?.layers?.mirrorSurfaceAreas, undefined, `${label} must not expose layers.mirrorSurfaceAreas`);
+}
+
+function runEditorSaveCheck() {
   const validated = validateLevelDocument(withMirrorArea(loadFixture()));
-  assert.equal(Array.isArray(validated.mirrorSurfaceAreas), true);
-  assert.equal(validated.mirrorSurfaceAreas.length, 1);
+  assertCanonicalMirrorPath(validated, "Editor save document");
   assert.deepEqual(validated.mirrorSurfaceAreas[0], {
     id: "mirror-row-1",
     x: 48,
@@ -50,57 +56,61 @@ function runEditorValidationCheck() {
     enabled: true,
     visible: true,
   });
-  console.log("mirror surface editor validation ok");
+  console.log("mirror surface editor save path ok");
 }
 
-function runExportCheck() {
+function runEditorExportCheck() {
+  const exported = JSON.parse(serializeLevelDocument(withMirrorArea(loadFixture())));
+  assertCanonicalMirrorPath(exported, "Editor exported level");
+  assert.equal(exported.mirrorSurfaceAreas[0].id, "mirror-row-1");
+  assert.equal(exported.mirrorSurfaceAreas[0].width, 96);
+  console.log("mirror surface editor export path ok");
+}
+
+function runRuntimeLevelObjectCheck() {
   const { runtimeLevel } = v2ToRuntimeLevelObject(withMirrorArea(loadFixture()));
-  assert.equal(Array.isArray(runtimeLevel.layers.mirrorSurfaceAreas), true);
-  assert.equal(runtimeLevel.layers.mirrorSurfaceAreas[0].id, "mirror-row-1");
-  assert.equal(runtimeLevel.layers.mirrorSurfaceAreas[0].width, 96);
+  assertCanonicalMirrorPath(runtimeLevel, "Runtime level object");
+  assert.equal(runtimeLevel.mirrorSurfaceAreas[0].id, "mirror-row-1");
+  assert.equal(runtimeLevel.mirrorSurfaceAreas[0].width, 96);
   assert.equal(Array.isArray(runtimeLevel.layers.ents), true, "mirror surface must not export as an entity");
   assert.equal(runtimeLevel.layers.ents.some((entity) => entity?.id === "mirror_surface_area"), false);
-  console.log("mirror surface v2 export ok");
+  console.log("mirror surface runtime level object path ok");
 }
 
-async function runRechargedBootCheck() {
+async function runRechargedPipelineCheck() {
   const loaded = loadLevelDocument(withMirrorArea(loadFixture()));
   assert.equal(loaded.ok, true);
-  assert.equal(Array.isArray(loaded.level.layers.mirrorSurfaceAreas), true);
-  assert.equal(loaded.level.layers.mirrorSurfaceAreas.length, 1);
+  assertCanonicalMirrorPath(loaded.level, "Runtime level");
 
   const session = createRuntimeGameSession({ levelDocument: loaded.level });
   assert.equal(session.start().ok, true);
   const worldSnapshot = session.getWorldSnapshot();
-  assert.equal(Array.isArray(worldSnapshot.mirrorSurfaceAreas), true);
+  assertCanonicalMirrorPath(worldSnapshot, "Runtime world packet");
   assert.equal(worldSnapshot.mirrorSurfaceAreas[0].id, "mirror-row-1");
 
   const adapter = createLumoRechargedBootAdapter({ sourceDescriptor: loaded.level });
   assert.equal((await adapter.prepare()).ok, true);
   assert.equal((await adapter.boot()).ok, true);
   const bootPayload = adapter.getBootPayload();
-  assert.equal(Array.isArray(bootPayload.mirrorSurfaceAreas), true);
+  assertCanonicalMirrorPath(bootPayload, "Boot payload");
   assert.equal(bootPayload.mirrorSurfaceAreas[0].id, "mirror-row-1");
-  assert.equal(Array.isArray(bootPayload.layers?.mirrorSurfaceAreas), true);
-  assert.equal(bootPayload.layers.mirrorSurfaceAreas[0].id, "mirror-row-1");
-  console.log("mirror surface recharged boot ok");
+  console.log("mirror surface recharged pipeline path ok");
 }
 
-async function runNoFallbackCheck() {
+async function runEmptyNoOpCheck() {
   const source = loadFixture();
   delete source.mirrorSurfaceAreas;
   const loaded = loadLevelDocument(source);
   assert.equal(loaded.ok, true);
+  assertCanonicalMirrorPath(loaded.level, "Empty runtime level", 0);
   const session = createRuntimeGameSession({ levelDocument: loaded.level });
   assert.equal(session.start().ok, true);
-  assert.deepEqual(session.getWorldSnapshot().mirrorSurfaceAreas, []);
+  assertCanonicalMirrorPath(session.getWorldSnapshot(), "Empty runtime world packet", 0);
   const adapter = createLumoRechargedBootAdapter({ sourceDescriptor: loaded.level });
   await adapter.prepare();
   await adapter.boot();
-  const emptyPayload = adapter.getBootPayload();
-  assert.deepEqual(emptyPayload.mirrorSurfaceAreas, []);
-  assert.deepEqual(emptyPayload.layers?.mirrorSurfaceAreas, []);
-  console.log("mirror surface empty no fallback ok");
+  assertCanonicalMirrorPath(adapter.getBootPayload(), "Empty boot payload", 0);
+  console.log("mirror surface empty no-op path ok");
 }
 
 async function runQueryBootPathCheck() {
@@ -118,14 +128,13 @@ async function runQueryBootPathCheck() {
           worldHeight: 6,
           tileSize: 24,
           mirrorSurfaceAreas: [bootArea],
-          layers: { mirrorSurfaceAreas: [bootArea] },
         }),
       };
     },
   });
   assert.equal(result.ok, true);
-  assert.equal(Array.isArray(result.layers?.mirrorSurfaceAreas), true);
-  assert.equal(result.layers.mirrorSurfaceAreas[0].id, "mirror-row-1");
+  assertCanonicalMirrorPath(result, "Query boot payload");
+  assert.equal(result.mirrorSurfaceAreas[0].id, "mirror-row-1");
   console.log("mirror surface query boot path ok");
 }
 
@@ -133,17 +142,18 @@ function runLumoRenderContractCheck() {
   const html = fs.readFileSync(lumoHtmlPath, "utf8");
   assert.equal(html.includes("function readRechargedMirrorSurfaceAreas"), true);
   assert.equal(html.includes("function drawRechargedMirrorSurfaceAreas"), true);
-  assert.match(html, /const sourceAreas = Array\.isArray\(payload\?\.layers\?\.mirrorSurfaceAreas\)/, "Lumo.html must read authored mirror areas from payload.layers.mirrorSurfaceAreas");
-  assert.doesNotMatch(html, /const sourceAreas = Array\.isArray\(payload\?\.mirrorSurfaceAreas\)/, "Lumo.html must not render from the old direct payload.mirrorSurfaceAreas path");
-  assert.match(html, /const verticalReach = Math\.max\(RECHARGED_PLAYER_HITBOX_HEIGHT \* 1\.25, surfaceH \* 4, 48\)/, "proximity must allow a visible local reflection near the authored surface");
-  assert.match(html, /ctx\.rect\(clipRect\.x, clipRect\.y, clipRect\.w, clipRect\.h\);\n\s*ctx\.clip\(\);/, "reflection must stay clipped to the authored mirror area");
-  assert.match(html, /ctx\.drawImage\(sprite, -spriteW \* 0\.5, -spriteH, spriteW, spriteH\)/, "flipped reflection sprite must draw down into the clipped mirror area");
-  console.log("mirror surface Lumo.html render contract ok");
+  assert.match(html, /const sourceAreas = Array\.isArray\(payload\?\.mirrorSurfaceAreas\)/, "Lumo.html must read authored mirror areas from payload.mirrorSurfaceAreas");
+  assert.doesNotMatch(html, /const sourceAreas = Array\.isArray\(payload\?\.layers\?\.mirrorSurfaceAreas\)/, "Lumo.html must not render from layers.mirrorSurfaceAreas");
+  assert.match(html, /const mirrorSurfaceAreas = readRechargedMirrorSurfaceAreas\(payload\);/, "non-empty authored mirrorSurfaceAreas must enter the final render path");
+  assert.match(html, /drawRechargedMirrorSurfaceAreas\(ctx, mapper, state, mirrorSurfaceAreas, \{/, "final render must consume the normalized mirrorSurfaceAreas array");
+  assert.match(html, /if \(!ctx \|\| !mapper \|\| !state \|\| !Array\.isArray\(mirrorSurfaceAreas\) \|\| mirrorSurfaceAreas\.length === 0\) \{\n\s*return false;/, "empty arrays must remain a draw no-op");
+  console.log("mirror surface Lumo.html render path ok");
 }
 
-runEditorValidationCheck();
-runExportCheck();
-await runRechargedBootCheck();
-await runNoFallbackCheck();
+runEditorSaveCheck();
+runEditorExportCheck();
+runRuntimeLevelObjectCheck();
+await runRechargedPipelineCheck();
+await runEmptyNoOpCheck();
 await runQueryBootPathCheck();
 runLumoRenderContractCheck();
