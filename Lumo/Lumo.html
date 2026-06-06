@@ -252,6 +252,44 @@
       return frames[frameIndex] || frames[0] || spriteCache.run || spriteCache.idle || null;
     }
 
+    function resolveRechargedPlayerRenderVisual(state, spriteCache, playerSnapshot, nowMs) {
+      if (!state || !spriteCache) {
+        return null;
+      }
+
+      const snapshotFacingX = Number.isFinite(playerSnapshot?.facingX) ? playerSnapshot.facingX : 0;
+      const snapshotVelocityX = Number.isFinite(playerSnapshot?.velocity?.x) ? playerSnapshot.velocity.x : 0;
+      if (Math.abs(snapshotFacingX) > 0) {
+        state.playerFacing = snapshotFacingX < 0 ? -1 : 1;
+      } else if (Math.abs(snapshotVelocityX) > RECHARGED_PLAYER_HORIZONTAL_SPEED_EPSILON) {
+        state.playerFacing = snapshotVelocityX < 0 ? -1 : 1;
+      } else if (!Number.isFinite(state.playerFacing) || state.playerFacing === 0) {
+        state.playerFacing = 1;
+      }
+
+      const animationState = resolveRechargedPlayerAnimationState(
+        playerSnapshot,
+        typeof state.playerAnimationState === "string" ? state.playerAnimationState : "idle",
+      );
+      state.playerAnimationState = animationState;
+
+      const safeNowMs = Number.isFinite(nowMs) ? nowMs : (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
+      const activeSprite = animationState === "idle"
+        ? resolveRechargedIdleSpriteFrame(state, spriteCache, animationState, safeNowMs)
+        : (animationState === "run"
+          ? resolveRechargedRunSpriteFrame(state, spriteCache, animationState, playerSnapshot, safeNowMs)
+          : (spriteCache[animationState] || spriteCache.idle));
+      const safeSprite = activeSprite?.complete === true
+        ? activeSprite
+        : (animationState === "run" ? spriteCache.run : spriteCache.idle);
+
+      return {
+        sprite: safeSprite?.complete === true ? safeSprite : null,
+        animationState,
+        facing: (state.playerFacing || 1) < 0 ? -1 : 1,
+      };
+    }
+
     function createLumoRechargedCanvasVerificationState() {
       return {
         active: false,
@@ -2275,7 +2313,7 @@
     function drawRechargedHudV2(canvas, ctx, state, hudSnapshot) {
       if (!canvas || !ctx || !hudSnapshot) return;
       const frame = Number.isFinite(state?.frameCount) ? state.frameCount : 0;
-      const nowSec = (typeof performance?.now === "function" ? performance.now() : Date.now()) / 1000;
+      const nowSec = (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000;
       const prevNowSec = Number.isFinite(state?.hudLastVisualNowSec) ? state.hudLastVisualNowSec : nowSec;
       const visualDt = Math.max(1 / 240, Math.min(0.05, nowSec - prevNowSec));
       const visualTime = Math.max(0, Number(state?.hudVisualTimeSec || 0) + visualDt);
@@ -2378,7 +2416,7 @@
       const snapshot = buildRechargedHudSnapshot(payload, state);
       const energyRatio = Number.isFinite(snapshot.energy) ? Math.max(0, Math.min(1, snapshot.energy)) : 0;
       const flareStash = Number.isFinite(snapshot.flareStash) ? Math.max(0, Math.floor(snapshot.flareStash)) : 0;
-      const nowMs = typeof performance?.now === "function" ? performance.now() : Date.now();
+      const nowMs = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
       const previousMs = Number.isFinite(state?.lastHudUpdateAtMs) ? state.lastHudUpdateAtMs : nowMs;
       const dt = Math.max(0, (nowMs - previousMs) / 1000);
 
@@ -3945,7 +3983,7 @@
       if (!ctx || !mapper || !Array.isArray(liquidVolumes) || liquidVolumes.length === 0) {
         return;
       }
-      const nowSeconds = (typeof performance?.now === "function" ? performance.now() : Date.now()) * 0.001;
+      const nowSeconds = (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) * 0.001;
       const hash01 = (seed) => {
         const x = Math.sin(seed * 127.1) * 43758.5453123;
         return x - Math.floor(x);
@@ -4845,6 +4883,28 @@
       return rechargedStoneVisualGeometryCache.get(cacheKey);
     }
 
+    function getRechargedStoneVisualContactOffsetY(stone = {}) {
+      const visual = stone.visual || getRechargedStoneVisualGeometry(stone);
+      const radiusX = Math.max(0, Number(stone.radiusX) || 0);
+      const radiusY = Math.max(0, Number(stone.radiusY) || 0);
+      const rotation = Number.isFinite(stone.rotation) ? stone.rotation : 0;
+      const sin = Math.sin(rotation);
+      const cos = Math.cos(rotation);
+      let maxY = 0;
+      const points = Array.isArray(visual?.points) ? visual.points : [];
+      for (const point of points) {
+        const localX = (Number(point?.x) || 0) * radiusX;
+        const localY = (Number(point?.y) || 0) * radiusY;
+        maxY = Math.max(maxY, (localX * sin) + (localY * cos));
+      }
+      return maxY;
+    }
+
+    function getRechargedStoneVisualWorldBottomY(stone = {}) {
+      const centerY = Number.isFinite(stone.y) ? stone.y : 0;
+      return centerY + getRechargedStoneVisualContactOffsetY(stone);
+    }
+
     const rechargedStoneLayoutCache = new Map();
     function buildRechargedStoneLayout(area, index, tileSize) {
       if (!area || area.density <= 0 || area.width <= 0 || area.height <= 0) return [];
@@ -4876,16 +4936,22 @@
         if (rawX < area.x || rawX > area.x + area.width || rawY < area.y || rawY > area.y + area.height) continue;
         const baseSize = 8 + random() * 8;
         const size = baseSize * (1 - area.sizeVariation * 0.45 + random() * area.sizeVariation * 0.9);
+        const radiusX = size * (0.75 + random() * 0.5);
+        const radiusY = size * (0.45 + random() * 0.35);
         const stone = {
           id: `${area.id}-stone-${stones.length + 1}`,
           x: rawX,
-          y: rawY,
-          radiusX: size * (0.75 + random() * 0.5),
-          radiusY: size * (0.45 + random() * 0.35),
+          y: 0,
+          radiusX,
+          radiusY,
           rotation: (random() - 0.5) * Math.PI * area.rotationVariation,
           shade: 0.72 + random() * 0.24,
         };
         stone.visual = getRechargedStoneVisualGeometry(stone);
+        const baselineY = area.y + area.height;
+        const contactOffsetY = getRechargedStoneVisualContactOffsetY(stone);
+        const groundedJitter = Math.min(1.2, Math.max(0, radiusY * 0.08)) * random();
+        stone.y = baselineY - contactOffsetY - groundedJitter;
         stones.push(stone);
       }
       rechargedStoneLayoutCache.set(cacheKey, stones);
@@ -6787,13 +6853,24 @@
           drawRechargedDecorVisual(ctx, mapper, state, decor, worldUnitsToPx, tileSize, worldWidthRaw, worldHeightRaw);
         }
 
+        const playerVisual = player.hidden !== true
+          ? resolveRechargedPlayerRenderVisual(
+            state,
+            ensureRechargedPlayerSpriteCache(state),
+            currentSnapshot,
+            (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now(),
+          )
+          : null;
+
         drawRechargedMirrorSurfaceAreas(ctx, mapper, state, mirrorSurfaceAreas, {
           playerCenterX,
           playerFootY,
           tileSize,
           boostSnapshot,
           playerSnapshot: currentSnapshot,
+          playerVisual,
           decorSnapshots: decorWorldLane,
+          stoneAreas,
           reactiveDecor: {
             grassPatches: reactiveGrassPatches,
             bloomPatches: reactiveBloomPatches,
@@ -7252,7 +7329,7 @@
 
         // Player is drawn after entities so Lumo visibility is never lost behind actor fills.
         if (player.hidden !== true) {
-          drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, currentSnapshot);
+          drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, currentSnapshot, playerVisual);
         }
 
         // V1 layering parity: rear fog for render.lumoBehindFog=true + front veil always after Lumo.
@@ -7729,6 +7806,92 @@
       }
     }
 
+    function buildRechargedMirrorStoneReflectionCandidates(mapper, area, stoneAreas, options = {}) {
+      if (!mapper || !area || !Array.isArray(stoneAreas) || stoneAreas.length === 0) return [];
+      const surfaceX = area.x;
+      const surfaceY = area.y + (Number.isFinite(area.yOffset) ? area.yOffset : 0);
+      const surfaceW = area.width;
+      const surfaceH = area.height;
+      const reflectionHeight = Math.max(0, Number.isFinite(area.reflectionHeight) ? Number(area.reflectionHeight) : 72);
+      const tileSize = Number.isFinite(options.tileSize) && options.tileSize > 0 ? options.tileSize : 24;
+      if (!Number.isFinite(surfaceX) || !Number.isFinite(surfaceY) || !Number.isFinite(surfaceW) || !Number.isFinite(surfaceH) || surfaceW <= 0 || surfaceH <= 0 || reflectionHeight <= 0) return [];
+
+      const candidates = [];
+      for (let areaIndex = 0; areaIndex < stoneAreas.length; areaIndex += 1) {
+        const stones = buildRechargedStoneLayout(stoneAreas[areaIndex], areaIndex, tileSize);
+        for (const stone of stones) {
+          const radiusX = Math.max(0, Number(stone.radiusX) || 0);
+          const radiusY = Math.max(0, Number(stone.radiusY) || 0);
+          const stoneLeft = stone.x - radiusX;
+          const stoneRight = stone.x + radiusX;
+          if (stoneRight < surfaceX || stoneLeft > surfaceX + surfaceW) continue;
+          const stoneBottomY = getRechargedStoneVisualWorldBottomY(stone);
+          const distanceToSurface = surfaceY - stoneBottomY;
+          if (distanceToSurface < -surfaceH || distanceToSurface > reflectionHeight) continue;
+          const drawRect = mapper.worldToCanvasRect(stone.x - radiusX, stone.y - radiusY, radiusX * 2, radiusY * 2);
+          if (drawRect.w <= 0 || drawRect.h <= 0) continue;
+          candidates.push({ stone, drawRect, stoneBottomY, distanceToSurface, verticalReach: Math.max(1, reflectionHeight) });
+        }
+      }
+      return candidates;
+    }
+
+    function drawRechargedStoneMirrorReflections(ctx, mapper, area, stoneCandidates, clipRect, options = {}) {
+      if (!ctx || !mapper || !area || !Array.isArray(stoneCandidates) || stoneCandidates.length === 0 || !clipRect) return false;
+      const surfaceX = area.x;
+      const surfaceY = area.y + (Number.isFinite(area.yOffset) ? area.yOffset : 0);
+      const reflectionStrength = Math.max(0, Math.min(1, Number.isFinite(area.reflectionStrength) ? Number(area.reflectionStrength) : 0.35));
+      const distortion = Math.max(0, Math.min(1, Number.isFinite(area.distortion) ? Number(area.distortion) : 0.12));
+      const fade = Math.max(0, Math.min(1, Number.isFinite(area.fade) ? Number(area.fade) : 0.65));
+      if (reflectionStrength <= 0) return false;
+
+      const surfaceCanvasY = mapper.worldToCanvasRect(surfaceX, surfaceY, 1, 1).y;
+      const shimmerTime = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+      let drewAny = false;
+      for (const candidate of stoneCandidates) {
+        const stone = candidate.stone;
+        const fadeProgress = Math.max(0, Math.min(1, Math.max(0, candidate.distanceToSurface) / Math.max(1, candidate.verticalReach)));
+        const alpha = reflectionStrength * (1 - (fadeProgress * fade)) * 0.74;
+        if (alpha <= 0.003) continue;
+        const rect = candidate.drawRect;
+        const centerX = rect.x + rect.w * 0.5;
+        const centerY = rect.y + rect.h * 0.5;
+        const reflectedCenterY = surfaceCanvasY + (surfaceCanvasY - centerY);
+        const visual = stone.visual || getRechargedStoneVisualGeometry(stone);
+        const tones = getRechargedStoneTonePalette(stone);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        drawRechargedMirrorSubjectWithLocalShimmer(ctx, clipRect, distortion, surfaceX, stone.x, shimmerTime, () => {
+          ctx.save();
+          ctx.translate(centerX, reflectedCenterY);
+          ctx.scale(1, -1);
+          ctx.rotate(stone.rotation || 0);
+          ctx.scale(Math.max(0.5, rect.w * 0.5), Math.max(0.5, rect.h * 0.5));
+          if (traceRechargedStonePolygon(ctx, visual.points)) {
+            ctx.fillStyle = tones[2];
+            ctx.fill();
+          }
+          ctx.save();
+          if (traceRechargedStonePolygon(ctx, visual.points)) ctx.clip();
+          for (const facet of visual.facets) {
+            if (!traceRechargedStonePolygon(ctx, facet.points)) continue;
+            ctx.fillStyle = tones[Math.max(0, Math.min(tones.length - 1, facet.tone || 0))];
+            ctx.fill();
+          }
+          ctx.restore();
+          if (traceRechargedStonePolygon(ctx, visual.points)) {
+            ctx.strokeStyle = "rgba(45, 37, 29, 0.22)";
+            ctx.lineWidth = Math.max(0.035, 1.1 / Math.max(rect.w * 0.5, rect.h * 0.5));
+            ctx.stroke();
+          }
+          ctx.restore();
+        });
+        ctx.restore();
+        drewAny = true;
+      }
+      return drewAny;
+    }
+
     function drawRechargedMirrorSurfaceAreas(ctx, mapper, state, mirrorSurfaceAreas, options = {}) {
       if (!ctx || !mapper || !state || !Array.isArray(mirrorSurfaceAreas) || mirrorSurfaceAreas.length === 0) {
         return false;
@@ -7760,7 +7923,8 @@
         const isPlayerHorizontallyNear = hasPlayerReflectionAnchor && playerCenterX >= surfaceX - horizontalPad && playerCenterX <= surfaceX + surfaceW + horizontalPad;
         const isPlayerVerticallyNear = hasPlayerReflectionAnchor && reflectionHeight > 0 && distanceToSurface >= -surfaceH && distanceToSurface <= verticalReach;
         const decorReflectionCandidates = buildRechargedMirrorDecorReflectionCandidates(ctx, mapper, state, area, decorSnapshots, options);
-        if ((!isPlayerHorizontallyNear || !isPlayerVerticallyNear) && decorReflectionCandidates.length === 0) {
+        const stoneReflectionCandidates = buildRechargedMirrorStoneReflectionCandidates(mapper, area, options.stoneAreas, options);
+        if ((!isPlayerHorizontallyNear || !isPlayerVerticallyNear) && decorReflectionCandidates.length === 0 && stoneReflectionCandidates.length === 0) {
           continue;
         }
 
@@ -7791,6 +7955,10 @@
           drewAnyReflection = true;
         }
 
+        if (drawRechargedStoneMirrorReflections(ctx, mapper, area, stoneReflectionCandidates, clipRect, options)) {
+          drewAnyReflection = true;
+        }
+
         for (const decorVisual of decorReflectionCandidates) {
           const decorSurfaceDistance = Math.max(0, decorVisual.distanceToSurface);
           const fadeProgress = Math.max(0, Math.min(1, decorSurfaceDistance / Math.max(1, decorVisual.verticalReach)));
@@ -7814,8 +7982,10 @@
           drewAnyReflection = true;
         }
 
-        const spriteCache = hasPlayerReflectionAnchor ? ensureRechargedPlayerSpriteCache(state) : null;
-        const sprite = spriteCache?.idle?.complete === true ? spriteCache.idle : null;
+        const playerVisual = options.playerVisual || (hasPlayerReflectionAnchor
+          ? resolveRechargedPlayerRenderVisual(state, ensureRechargedPlayerSpriteCache(state), options.playerSnapshot, (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now())
+          : null);
+        const sprite = playerVisual?.sprite || null;
         if (sprite && isPlayerHorizontallyNear && isPlayerVerticallyNear) {
           const anchorRect = mapper.worldToCanvasRect(
             playerCenterX - (RECHARGED_PLAYER_HITBOX_WIDTH * 0.5),
@@ -7823,8 +7993,22 @@
             RECHARGED_PLAYER_HITBOX_WIDTH,
             RECHARGED_PLAYER_HITBOX_HEIGHT,
           );
-          const spriteH = Math.max(1, anchorRect.h * (RECHARGED_PLAYER_SPRITE_HEIGHT / RECHARGED_PLAYER_HITBOX_HEIGHT));
-          const spriteW = Math.max(1, anchorRect.w * (RECHARGED_PLAYER_SPRITE_WIDTH / RECHARGED_PLAYER_HITBOX_WIDTH));
+          const sourceWidth = Math.max(1, sprite.naturalWidth || sprite.width || 1);
+          const sourceHeight = Math.max(1, sprite.naturalHeight || sprite.height || 1);
+          let spriteH = Math.max(1, anchorRect.h * (RECHARGED_PLAYER_SPRITE_HEIGHT / RECHARGED_PLAYER_HITBOX_HEIGHT));
+          let spriteW = Math.max(1, anchorRect.w * (RECHARGED_PLAYER_SPRITE_WIDTH / RECHARGED_PLAYER_HITBOX_WIDTH));
+          if (playerVisual.animationState === "brake") {
+            const brakeTargetHeight = anchorRect.h * (RECHARGED_PLAYER_BRAKE_SPRITE_HEIGHT / RECHARGED_PLAYER_HITBOX_HEIGHT);
+            const brakeScale = brakeTargetHeight / sourceHeight;
+            spriteH = Math.max(1, sourceHeight * brakeScale);
+            spriteW = Math.max(1, sourceWidth * brakeScale);
+            const maxBrakeWidth = anchorRect.w * (RECHARGED_PLAYER_BRAKE_SPRITE_MAX_WIDTH / RECHARGED_PLAYER_HITBOX_WIDTH);
+            if (spriteW > maxBrakeWidth) {
+              const shrink = maxBrakeWidth / spriteW;
+              spriteW *= shrink;
+              spriteH *= shrink;
+            }
+          }
           const playerFootCanvasY = anchorRect.y + anchorRect.h;
           const surfaceCanvasY = mapper.worldToCanvasRect(surfaceX, surfaceY, 1, 1).y;
           const reflectedFootY = surfaceCanvasY + (surfaceCanvasY - playerFootCanvasY);
@@ -7838,7 +8022,7 @@
           drawRechargedMirrorSubjectWithLocalShimmer(ctx, clipRect, distortion, surfaceX, playerCenterX, shimmerTime, () => {
             ctx.save();
             ctx.translate(drawX + spriteW * 0.5, drawY);
-            ctx.scale(1, -1);
+            ctx.scale(playerVisual.facing < 0 ? -1 : 1, -1);
             ctx.drawImage(sprite, -spriteW * 0.5, -spriteH, spriteW, spriteH);
             ctx.restore();
           });
@@ -7860,7 +8044,7 @@
       return drewAnyReflection;
     }
 
-    function drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, playerSnapshot) {
+    function drawRechargedPlayerSprite(ctx, mapper, state, playerCenterX, playerFootY, tileSize, boostSnapshot, playerSnapshot, playerVisual = null) {
       if (!ctx || !mapper || !state) {
         return;
       }
@@ -7870,32 +8054,15 @@
         return;
       }
 
-      const snapshotFacingX = Number.isFinite(playerSnapshot?.facingX) ? playerSnapshot.facingX : 0;
-      const snapshotVelocityX = Number.isFinite(playerSnapshot?.velocity?.x) ? playerSnapshot.velocity.x : 0;
-      if (Math.abs(snapshotFacingX) > 0) {
-        state.playerFacing = snapshotFacingX < 0 ? -1 : 1;
-      } else if (Math.abs(snapshotVelocityX) > RECHARGED_PLAYER_HORIZONTAL_SPEED_EPSILON) {
-        state.playerFacing = snapshotVelocityX < 0 ? -1 : 1;
-      } else if (!Number.isFinite(state.playerFacing) || state.playerFacing === 0) {
-        state.playerFacing = 1;
-      }
-      state.previousRenderPlayerCenterX = playerCenterX;
-
-      const animationState = resolveRechargedPlayerAnimationState(
+      const renderVisual = playerVisual || resolveRechargedPlayerRenderVisual(
+        state,
+        spriteCache,
         playerSnapshot,
-        typeof state.playerAnimationState === "string" ? state.playerAnimationState : "idle",
+        typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now(),
       );
-      state.playerAnimationState = animationState;
-
-      const nowMs = typeof performance?.now === "function" ? performance.now() : Date.now();
-      const activeSprite = animationState === "idle"
-        ? resolveRechargedIdleSpriteFrame(state, spriteCache, animationState, nowMs)
-        : (animationState === "run"
-          ? resolveRechargedRunSpriteFrame(state, spriteCache, animationState, playerSnapshot, nowMs)
-          : (spriteCache[animationState] || spriteCache.idle));
-      const safeSprite = activeSprite?.complete === true
-        ? activeSprite
-        : (animationState === "run" ? spriteCache.run : spriteCache.idle);
+      const safeSprite = renderVisual?.sprite || null;
+      const animationState = renderVisual?.animationState || "idle";
+      state.previousRenderPlayerCenterX = playerCenterX;
       if (!safeSprite?.complete) {
         return;
       }
@@ -7955,7 +8122,7 @@
       ctx.globalAlpha = Number.isFinite(playerSnapshot?.renderAlpha)
         ? Math.max(0, Math.min(1, playerSnapshot.renderAlpha))
         : 1;
-      if ((state.playerFacing || 1) < 0) {
+      if ((renderVisual?.facing || state.playerFacing || 1) < 0) {
         const centerX = drawX + spriteWidth * 0.5;
         ctx.translate(centerX, 0);
         ctx.scale(-1, 1);

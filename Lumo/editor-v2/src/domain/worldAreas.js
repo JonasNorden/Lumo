@@ -308,6 +308,24 @@ export function getStoneVisualGeometry(stone = {}) {
   return stoneVisualGeometryCache.get(cacheKey);
 }
 
+
+export function getStoneVisualContactOffsetY(stone = {}) {
+  const visual = stone.visual || getStoneVisualGeometry(stone);
+  const radiusX = Math.max(0, Number(stone.radiusX) || 0);
+  const radiusY = Math.max(0, Number(stone.radiusY) || 0);
+  const rotation = Number.isFinite(stone.rotation) ? stone.rotation : 0;
+  const sin = Math.sin(rotation);
+  const cos = Math.cos(rotation);
+  let maxY = 0;
+  const points = Array.isArray(visual?.points) ? visual.points : [];
+  for (const point of points) {
+    const localX = (Number(point?.x) || 0) * radiusX;
+    const localY = (Number(point?.y) || 0) * radiusY;
+    maxY = Math.max(maxY, (localX * sin) + (localY * cos));
+  }
+  return maxY;
+}
+
 export function getStoneAreaSeed(area = {}, index = 0) {
   if (Number.isInteger(area?.seed)) return area.seed >>> 0;
   const normalized = normalizeStoneAreaForEditor(area, index);
@@ -342,16 +360,22 @@ export function generateStoneAreaLayout(area = {}, index = 0) {
     if (rawX < normalized.x || rawX > normalized.x + normalized.width || rawY < normalized.y || rawY > normalized.y + normalized.height) continue;
     const baseSize = 8 + random() * 8;
     const size = baseSize * (1 - normalized.sizeVariation * 0.45 + random() * normalized.sizeVariation * 0.9);
+    const radiusX = Math.round(size * (0.75 + random() * 0.5) * 100) / 100;
+    const radiusY = Math.round(size * (0.45 + random() * 0.35) * 100) / 100;
     const stone = {
       id: `${normalized.id}-stone-${stones.length + 1}`,
       x: Math.round(rawX * 100) / 100,
-      y: Math.round(rawY * 100) / 100,
-      radiusX: Math.round(size * (0.75 + random() * 0.5) * 100) / 100,
-      radiusY: Math.round(size * (0.45 + random() * 0.35) * 100) / 100,
+      y: 0,
+      radiusX,
+      radiusY,
       rotation: Math.round(((random() - 0.5) * Math.PI * normalized.rotationVariation) * 1000) / 1000,
       shade: Math.round((0.72 + random() * 0.24) * 1000) / 1000,
     };
     stone.visual = getStoneVisualGeometry(stone);
+    const contactOffsetY = getStoneVisualContactOffsetY(stone);
+    const baselineY = normalized.y + normalized.height;
+    const groundedJitter = Math.min(1.2, Math.max(0, radiusY * 0.08)) * random();
+    stone.y = Math.round((baselineY - contactOffsetY - groundedJitter) * 100) / 100;
     stones.push(stone);
   }
   return stones;
