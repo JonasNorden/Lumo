@@ -23658,11 +23658,11 @@
       "x": 168,
       "y": 432,
       "width": 888,
-      "height": 93,
+      "height": 24,
       "yOffset": 0,
-      "reflectionHeight": 72,
+      "reflectionHeight": 18,
       "reflectionStrength": 0.35,
-      "distortion": 0.12,
+      "distortion": 0.48,
       "surfaceStrength": 0.25,
       "fade": 0.65,
       "enabled": true,
@@ -23685,7 +23685,11 @@
       "baseColor": "#2f6f3a",
       "topColor": "#7fd66b",
       "variant": "lush_default",
-      "seed": 454259738
+      "seed": 454259738,
+      "windAmp": 13.5,
+      "reactFar": 176,
+      "reactMid": 94,
+      "reactNear": 36
     }
   ],
   "reactiveBloomPatches": [
