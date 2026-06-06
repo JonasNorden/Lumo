@@ -4732,7 +4732,7 @@
     }
 
     function readRechargedMirrorSurfaceAreas(payload) {
-      const sourceAreas = Array.isArray(payload?.mirrorSurfaceAreas) ? payload.mirrorSurfaceAreas : [];
+      const sourceAreas = Array.isArray(payload?.layers?.mirrorSurfaceAreas) ? payload.layers.mirrorSurfaceAreas : [];
       return sourceAreas
         .map((area, index) => ({
           id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `mirror_surface_${index + 1}`,
@@ -6202,7 +6202,6 @@
         const reactiveGrassPatches = readRechargedReactiveGrassPatches(payload);
         const reactiveBloomPatches = readRechargedReactiveBloomPatches(payload);
         const reactiveCrystalPatches = readRechargedReactiveCrystalPatches(payload);
-        const mirrorSurfaceAreas = readRechargedMirrorSurfaceAreas(payload);
         const previousSnapshot = readRechargedPlayerSnapshot({
           player: state?.previousPlayerSnapshot && typeof state.previousPlayerSnapshot === "object"
             ? state.previousPlayerSnapshot
@@ -6268,6 +6267,8 @@
           (maxSupportTileSpan > 0 && maxSupportTileSpan <= 4)
         );
         const worldUnitsToPx = coordinatesLookTileBased ? tileSize : 1;
+        // Editor V2 exports mirror surface rectangles in pixel world coordinates, matching player snapshots.
+        const mirrorSurfaceAreas = readRechargedMirrorSurfaceAreas(payload);
         const worldWidthPx = Math.max(tileSize, Math.round(worldWidthRaw * worldUnitsToPx));
         const worldHeightPx = Math.max(tileSize, Math.round(worldHeightRaw * worldUnitsToPx));
         const hudGameplayViewport = getRechargedHudV2GameplayViewport(canvas);
@@ -7413,8 +7414,8 @@
           continue;
         }
 
-        const horizontalPad = Math.max(8, surfaceH * 0.5);
-        const verticalReach = Math.max(32, surfaceH * 3.5);
+        const horizontalPad = Math.max(RECHARGED_PLAYER_HITBOX_WIDTH * 0.75, surfaceH * 0.5, 8);
+        const verticalReach = Math.max(RECHARGED_PLAYER_HITBOX_HEIGHT * 1.25, surfaceH * 4, 48);
         const isHorizontallyNear = playerCenterX >= surfaceX - horizontalPad && playerCenterX <= surfaceX + surfaceW + horizontalPad;
         const distanceToSurface = surfaceY - playerFootY;
         const isVerticallyNear = distanceToSurface >= -surfaceH && distanceToSurface <= verticalReach;
@@ -7458,7 +7459,7 @@
           ctx.globalAlpha = 0.24 * fadeByDistance;
           ctx.translate(drawX + spriteW * 0.5, drawY);
           ctx.scale(1, -1);
-          ctx.drawImage(sprite, -spriteW * 0.5, 0, spriteW, spriteH);
+          ctx.drawImage(sprite, -spriteW * 0.5, -spriteH, spriteW, spriteH);
           ctx.restore();
           drewAnyReflection = true;
         }

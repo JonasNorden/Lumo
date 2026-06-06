@@ -862,6 +862,9 @@ export function createLumoRechargedBootAdapter(options = {}) {
         decorItems: world.decorItems,
         audioItems: world.audioItems,
         mirrorSurfaceAreas: world.mirrorSurfaceAreas,
+        layers: {
+          mirrorSurfaceAreas: world.mirrorSurfaceAreas,
+        },
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,
@@ -996,6 +999,9 @@ export function createLumoRechargedBootAdapter(options = {}) {
           decorItems: world.decorItems,
           audioItems: world.audioItems,
           mirrorSurfaceAreas: world.mirrorSurfaceAreas,
+          layers: {
+            mirrorSurfaceAreas: world.mirrorSurfaceAreas,
+          },
           playerStatus: player.locomotion,
           playerX: player.x,
           playerY: player.y,
