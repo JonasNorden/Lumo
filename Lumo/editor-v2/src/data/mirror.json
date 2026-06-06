@@ -23662,7 +23662,7 @@
       "yOffset": 0,
       "reflectionHeight": 26,
       "reflectionStrength": 0.88,
-      "distortion": 0.78,
+      "distortion": 0.38,
       "surfaceStrength": 0.44,
       "fade": 0.65,
       "enabled": true,
