@@ -25,12 +25,13 @@ export const DUST_AREA_DEFAULTS = Object.freeze({
   driftStrength: 0.35,
 });
 
-export const GLOW_AREA_MOTION_MODES = Object.freeze(["ambient", "updraft"]);
+export const GLOW_AREA_DIRECTIONS = Object.freeze(["random", "up", "down", "left", "right"]);
 export const GLOW_AREA_DEFAULTS = Object.freeze({
   density: 0.32,
   sizeVariation: 0.38,
   strength: 0.42,
-  motionMode: "ambient",
+  direction: "random",
+  speed: 0.35,
 });
 
 function clamp01(value, fallback) {
@@ -54,8 +55,11 @@ function toPositiveNumber(value, fallback = DEFAULT_TILE_SIZE) {
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
-function normalizeGlowAreaMotionMode(value) {
-  return value === "updraft" ? "updraft" : "ambient";
+export function normalizeGlowAreaDirection(value, legacyMotionMode = null) {
+  if (value === "up" || value === "down" || value === "left" || value === "right" || value === "random") return value;
+  if (legacyMotionMode === "updraft" || value === "updraft") return "up";
+  if (legacyMotionMode === "ambient" || value === "ambient") return "random";
+  return GLOW_AREA_DEFAULTS.direction;
 }
 
 function normalizeStoneHeightRange(area = {}, normalizedAreaHeight = DEFAULT_TILE_SIZE) {
@@ -255,7 +259,8 @@ export function normalizeGlowAreaForEditor(area = {}, index = 0) {
     density: clamp01(area?.density, GLOW_AREA_DEFAULTS.density),
     sizeVariation: clamp01(area?.sizeVariation, GLOW_AREA_DEFAULTS.sizeVariation),
     strength: clamp01(area?.strength, GLOW_AREA_DEFAULTS.strength),
-    motionMode: normalizeGlowAreaMotionMode(area?.motionMode),
+    direction: normalizeGlowAreaDirection(area?.direction, area?.motionMode),
+    speed: clamp01(area?.speed, GLOW_AREA_DEFAULTS.speed),
     enabled: area?.enabled !== false,
     visible: area?.visible !== false,
   };
@@ -317,8 +322,9 @@ export function updateGlowAreaField(area, field, value) {
   if (field === "enabled" || field === "visible") return { ...normalized, [field]: Boolean(value) };
   if (field === "x" || field === "y") return { ...normalized, [field]: Math.max(0, toFiniteNumber(value, normalized[field])) };
   if (field === "width" || field === "height") return resizeGlowArea(normalized, field === "width" ? value : normalized.width, field === "height" ? value : normalized.height);
-  if (field === "density" || field === "sizeVariation" || field === "strength") return { ...normalized, [field]: clamp01(value, normalized[field]) };
-  if (field === "motionMode") return { ...normalized, motionMode: normalizeGlowAreaMotionMode(value) };
+  if (field === "density" || field === "sizeVariation" || field === "strength" || field === "speed") return { ...normalized, [field]: clamp01(value, normalized[field]) };
+  if (field === "direction") return { ...normalized, direction: normalizeGlowAreaDirection(value) };
+  if (field === "motionMode") return { ...normalized, direction: normalizeGlowAreaDirection(value) };
   return normalized;
 }
 
@@ -551,7 +557,8 @@ function getGlowAreaLayoutCacheKey(area = {}, index = 0) {
     roundTo(normalized.density, 1000),
     roundTo(normalized.sizeVariation, 1000),
     roundTo(normalized.strength, 1000),
-    normalized.motionMode,
+    normalized.direction,
+    roundTo(normalized.speed, 1000),
     normalized.enabled ? 1 : 0,
     normalized.visible ? 1 : 0,
     Number.isInteger(area?.seed) ? area.seed >>> 0 : "auto",
@@ -588,16 +595,19 @@ export function generateGlowAreaLayout(area = {}, index = 0) {
       driftX: roundTo((0.42 + random() * 1.85) * (0.45 + sizeVariation * 0.55), 100),
       driftY: roundTo((0.7 + random() * 1.9) * (0.5 + sizeVariation * 0.6), 100),
       rise: roundTo(0.12 + random() * 0.42, 100),
-      updraftSpeed: roundTo(0.012 + random() * 0.026, 1000),
-      speed: roundTo(0.018 + random() * 0.036, 1000),
+      travelSpeed: roundTo(0.002 + normalized.speed * (0.018 + random() * 0.026), 1000),
+      speed: roundTo((0.006 + normalized.speed * (0.018 + random() * 0.036)), 1000),
       phase: roundTo(random() * Math.PI * 2, 1000),
       alphaSpeed: roundTo(0.022 + random() * 0.044, 1000),
       alphaPhase: roundTo(random() * Math.PI * 2, 1000),
       alphaMin: roundTo(Math.max(0.045, baseAlpha), 1000),
       alphaMax: roundTo(Math.min(0.38, Math.max(baseAlpha + 0.055, alphaMax)), 1000),
+      areaX: roundTo(normalized.x, 100),
       areaY: roundTo(normalized.y, 100),
+      areaWidth: roundTo(normalized.width, 100),
       areaHeight: roundTo(normalized.height, 100),
-      motionMode: normalized.motionMode,
+      direction: normalized.direction,
+      authoredSpeed: roundTo(normalized.speed, 1000),
       color: `rgba(${red}, ${green}, ${blue}, 1)`,
       auraColor: `rgba(${red}, ${green}, ${blue}, 1)`,
       coreColor: `rgba(255, ${Math.min(245, green + 30)}, ${Math.min(190, blue + 64)}, 1)`,

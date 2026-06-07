@@ -1,4 +1,4 @@
-import { generateGlowAreaLayout, normalizeGlowAreaForEditor } from "../domain/worldAreas.js";
+import { generateGlowAreaLayout, normalizeGlowAreaDirection, normalizeGlowAreaForEditor } from "../domain/worldAreas.js";
 
 function toFinite(value, fallback = 0) {
   const number = Number(value);
@@ -18,14 +18,26 @@ function positiveModulo(value, divisor) {
   return ((value % divisor) + divisor) % divisor;
 }
 
+export function getRuntimeGlowPointDirection(point) {
+  return normalizeGlowAreaDirection(point?.direction, point?.motionMode);
+}
+
 export function getRuntimeGlowPointMotionMode(point) {
-  return point?.motionMode === "updraft" ? "updraft" : "ambient";
+  return getRuntimeGlowPointDirection(point) === "up" ? "updraft" : "ambient";
+}
+
+export function getRuntimeGlowPointTravelPhase(point, timeSeconds = 0) {
+  const basePhase = positiveModulo(toFinite(point?.phase), Math.PI * 2) / (Math.PI * 2);
+  const speed = toFinite(point?.travelSpeed, 0.014);
+  return positiveModulo(basePhase + toFinite(timeSeconds) * speed, 1);
 }
 
 export function getRuntimeGlowPointUpdraftPhase(point, timeSeconds = 0) {
-  const basePhase = positiveModulo(toFinite(point?.phase), Math.PI * 2) / (Math.PI * 2);
-  const speed = toFinite(point?.updraftSpeed, 0.018);
-  return positiveModulo(basePhase + toFinite(timeSeconds) * speed, 1);
+  return getRuntimeGlowPointTravelPhase(point, timeSeconds);
+}
+
+function getAuthoredSpeedScale(point) {
+  return 0.12 + clamp(toFinite(point?.authoredSpeed, 0.35), 0, 1) * 0.88;
 }
 
 export function getRuntimeGlowPointOffsetX(point, timeSeconds = 0) {
@@ -33,29 +45,45 @@ export function getRuntimeGlowPointOffsetX(point, timeSeconds = 0) {
   const speed = toFinite(point?.speed, 0.02);
   const time = toFinite(timeSeconds);
   const driftX = toFinite(point?.driftX);
-  if (getRuntimeGlowPointMotionMode(point) === "updraft") {
-    return Math.sin(time * (speed * 1.55) + phase) * driftX * 0.55
-      + Math.sin(time * (speed * 0.61) + phase * 2.17) * driftX * 0.22;
+  const direction = getRuntimeGlowPointDirection(point);
+  const speedScale = getAuthoredSpeedScale(point);
+  if (direction === "up" || direction === "down") {
+    return Math.sin(time * (speed * 1.55) + phase) * driftX * 0.55 * speedScale
+      + Math.sin(time * (speed * 0.61) + phase * 2.17) * driftX * 0.22 * speedScale;
   }
-  return Math.sin(time * speed + phase) * driftX
-    + Math.sin(time * (speed * 0.43) + phase * 2.31) * driftX * 0.34;
+  if (direction === "left" || direction === "right") {
+    const areaX = toFinite(point?.areaX, toFinite(point?.x));
+    const areaWidth = Math.max(1, toFinite(point?.areaWidth, 1));
+    const phase01 = getRuntimeGlowPointTravelPhase(point, time);
+    const targetX = direction === "right" ? areaX + areaWidth * phase01 : areaX + areaWidth * (1 - phase01);
+    const wobble = Math.sin(time * (speed * 0.67) + phase * 1.29) * Math.min(2.4, driftX * 0.34) * speedScale;
+    return targetX + wobble - toFinite(point?.x);
+  }
+  return (Math.sin(time * speed + phase) * driftX
+    + Math.sin(time * (speed * 0.43) + phase * 2.31) * driftX * 0.34) * speedScale;
 }
 
 export function getRuntimeGlowPointOffsetY(point, timeSeconds = 0) {
   const phase = toFinite(point?.phase);
   const speed = toFinite(point?.speed, 0.02);
   const time = toFinite(timeSeconds);
-  if (getRuntimeGlowPointMotionMode(point) === "updraft") {
+  const direction = getRuntimeGlowPointDirection(point);
+  const speedScale = getAuthoredSpeedScale(point);
+  if (direction === "up" || direction === "down") {
     const areaY = toFinite(point?.areaY, toFinite(point?.y));
     const areaHeight = Math.max(1, toFinite(point?.areaHeight, 1));
-    const phase01 = getRuntimeGlowPointUpdraftPhase(point, time);
-    const targetY = areaY + areaHeight * (1 - phase01);
-    const verticalWobble = Math.sin(time * (speed * 0.73) + phase * 1.43) * Math.min(2.2, toFinite(point?.driftY, 1.2) * 0.38);
+    const phase01 = getRuntimeGlowPointTravelPhase(point, time);
+    const targetY = direction === "down" ? areaY + areaHeight * phase01 : areaY + areaHeight * (1 - phase01);
+    const verticalWobble = Math.sin(time * (speed * 0.73) + phase * 1.43) * Math.min(2.2, toFinite(point?.driftY, 1.2) * 0.38) * speedScale;
     return targetY + verticalWobble - toFinite(point?.y);
+  }
+  if (direction === "left" || direction === "right") {
+    return Math.sin(time * (speed * 0.82) + phase * 1.53) * toFinite(point?.driftY) * 0.58 * speedScale
+      + Math.sin(time * (speed * 0.31) + phase * 0.67) * toFinite(point?.rise, 0.25) * 1.15 * speedScale;
   }
   const float = Math.sin(time * (speed * 0.71) + phase * 1.53) * toFinite(point?.driftY);
   const irregular = Math.sin(time * (speed * 0.29) + phase * 0.67) * toFinite(point?.rise, 0.25) * 1.9;
-  return float - irregular;
+  return (float - irregular) * speedScale;
 }
 
 export function getRuntimeGlowPointAlpha(point, timeSeconds = 0) {
@@ -65,10 +93,11 @@ export function getRuntimeGlowPointAlpha(point, timeSeconds = 0) {
   const alphaPhase = toFinite(point?.alphaPhase, toFinite(point?.phase));
   const breathe = (Math.sin(toFinite(timeSeconds) * alphaSpeed + alphaPhase) + 1) * 0.5;
   const ambientAlpha = minAlpha + (maxAlpha - minAlpha) * smoothstep01(breathe);
-  if (getRuntimeGlowPointMotionMode(point) !== "updraft") return ambientAlpha;
-  const phase01 = getRuntimeGlowPointUpdraftPhase(point, timeSeconds);
-  const fadeIn = smoothstep01(phase01 / 0.16);
-  const fadeOut = 1 - smoothstep01((phase01 - 0.74) / 0.26);
+  const direction = getRuntimeGlowPointDirection(point);
+  if (direction === "random") return ambientAlpha;
+  const phase01 = getRuntimeGlowPointTravelPhase(point, timeSeconds);
+  const fadeIn = smoothstep01(phase01 / 0.14);
+  const fadeOut = 1 - smoothstep01((phase01 - 0.8) / 0.2);
   return ambientAlpha * clamp(0.12 + fadeIn * fadeOut * 0.88, 0.12, 1);
 }
 

@@ -4827,6 +4827,12 @@
     }
 
 
+    function normalizeRechargedGlowDirection(direction, motionMode) {
+      if (direction === "up" || direction === "down" || direction === "left" || direction === "right" || direction === "random") return direction;
+      if (motionMode === "updraft" || direction === "updraft") return "up";
+      return "random";
+    }
+
     function readRechargedGlowAreas(payload) {
       const sourceAreas = Array.isArray(payload?.glowAreas) ? payload.glowAreas : [];
       return sourceAreas
@@ -4839,7 +4845,8 @@
           density: Number.isFinite(area?.density) ? Math.max(0, Math.min(1, Number(area.density))) : 0.32,
           sizeVariation: Number.isFinite(area?.sizeVariation) ? Math.max(0, Math.min(1, Number(area.sizeVariation))) : 0.38,
           strength: Number.isFinite(area?.strength) ? Math.max(0, Math.min(1, Number(area.strength))) : 0.42,
-          motionMode: area?.motionMode === "updraft" ? "updraft" : "ambient",
+          direction: normalizeRechargedGlowDirection(area?.direction, area?.motionMode),
+          speed: Number.isFinite(area?.speed) ? Math.max(0, Math.min(1, Number(area.speed))) : 0.35,
           enabled: area?.enabled !== false,
           visible: area?.visible !== false,
         }))
@@ -4865,7 +4872,7 @@
       const areaTiles = (area.width * area.height) / Math.max(1, tileSize * tileSize);
       const targetCount = Math.max(0, Math.round(areaTiles * area.density * 1.85));
       if (targetCount <= 0) return [];
-      const cacheKey = [area.id, Math.round(area.x * 100), Math.round(area.y * 100), Math.round(area.width * 100), Math.round(area.height * 100), Math.round(area.density * 1000), Math.round(area.sizeVariation * 1000), Math.round(area.strength * 1000), area.motionMode].join("|");
+      const cacheKey = [area.id, Math.round(area.x * 100), Math.round(area.y * 100), Math.round(area.width * 100), Math.round(area.height * 100), Math.round(area.density * 1000), Math.round(area.sizeVariation * 1000), Math.round(area.strength * 1000), area.direction, Math.round(area.speed * 1000)].join("|");
       if (rechargedGlowLayoutCache.has(cacheKey)) return rechargedGlowLayoutCache.get(cacheKey);
       const random = createRechargedStoneRandom(getRechargedGlowAreaSeed(area, index));
       const points = [];
@@ -4888,16 +4895,19 @@
           driftX: (0.42 + random() * 1.85) * (0.45 + area.sizeVariation * 0.55),
           driftY: (0.7 + random() * 1.9) * (0.5 + area.sizeVariation * 0.6),
           rise: 0.12 + random() * 0.42,
-          updraftSpeed: 0.012 + random() * 0.026,
-          speed: 0.018 + random() * 0.036,
+          travelSpeed: 0.002 + area.speed * (0.018 + random() * 0.026),
+          speed: 0.006 + area.speed * (0.018 + random() * 0.036),
           phase: random() * Math.PI * 2,
           alphaSpeed: 0.022 + random() * 0.044,
           alphaPhase: random() * Math.PI * 2,
           alphaMin: Math.max(0.045, baseAlpha),
           alphaMax: Math.min(0.38, Math.max(baseAlpha + 0.055, alphaMax)),
+          areaX: area.x,
           areaY: area.y,
+          areaWidth: area.width,
           areaHeight: area.height,
-        motionMode: area.motionMode === "updraft" ? "updraft" : "ambient",
+          direction: area.direction,
+          authoredSpeed: area.speed,
           color: `rgba(${red}, ${green}, ${blue}, 1)`,
           auraColor: `rgba(${red}, ${green}, ${blue}, 1)`,
           coreColor: `rgba(255, ${Math.min(245, green + 30)}, ${Math.min(190, blue + 64)}, 1)`,
@@ -4905,6 +4915,17 @@
       }
       rechargedGlowLayoutCache.set(cacheKey, points);
       return points;
+    }
+
+    function smoothRechargedGlow01(value) {
+      const t = Math.max(0, Math.min(1, value));
+      return t * t * (3 - 2 * t);
+    }
+
+    function getRechargedGlowTravelPhase(point, timeSeconds) {
+      const phase = Number.isFinite(point.phase) ? point.phase : 0;
+      const basePhase = ((((phase % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2));
+      return ((basePhase + timeSeconds * (Number.isFinite(point.travelSpeed) ? point.travelSpeed : 0.014)) % 1 + 1) % 1;
     }
 
     function drawRechargedGlowAreas(ctx, mapper, glowAreas, options = {}) {
@@ -4919,22 +4940,27 @@
         for (const point of points) {
           const phase = Number.isFinite(point.phase) ? point.phase : 0;
           const speed = Number.isFinite(point.speed) ? point.speed : 0.02;
-          const motionMode = point.motionMode === "updraft" ? "updraft" : "ambient";
-          const x = motionMode === "updraft"
-            ? point.x + Math.sin(timeSeconds * speed * 1.55 + phase) * point.driftX * 0.55 + Math.sin(timeSeconds * speed * 0.61 + phase * 2.17) * point.driftX * 0.22
-            : point.x + Math.sin(timeSeconds * speed + phase) * point.driftX + Math.sin(timeSeconds * speed * 0.43 + phase * 2.31) * point.driftX * 0.34;
-          const basePhase = ((((phase % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2));
-          const updraftPhase = ((basePhase + timeSeconds * (Number.isFinite(point.updraftSpeed) ? point.updraftSpeed : 0.018)) % 1 + 1) % 1;
-          const y = motionMode === "updraft"
-            ? (point.areaY || 0) + Math.max(1, point.areaHeight || 1) * (1 - updraftPhase) + Math.sin(timeSeconds * speed * 0.73 + phase * 1.43) * Math.min(2.2, point.driftY * 0.38)
-            : point.y + Math.sin(timeSeconds * speed * 0.71 + phase * 1.53) * point.driftY - Math.sin(timeSeconds * speed * 0.29 + phase * 0.67) * point.rise * 1.9;
+          const direction = normalizeRechargedGlowDirection(point.direction);
+          const speedScale = 0.12 + Math.max(0, Math.min(1, Number.isFinite(point.authoredSpeed) ? point.authoredSpeed : 0.35)) * 0.88;
+          const travelPhase = getRechargedGlowTravelPhase(point, timeSeconds);
+          let x = point.x;
+          let y = point.y;
+          if (direction === "up" || direction === "down") {
+            x += (Math.sin(timeSeconds * speed * 1.55 + phase) * point.driftX * 0.55 + Math.sin(timeSeconds * speed * 0.61 + phase * 2.17) * point.driftX * 0.22) * speedScale;
+            y = point.areaY + Math.max(1, point.areaHeight || 1) * (direction === "down" ? travelPhase : 1 - travelPhase) + Math.sin(timeSeconds * speed * 0.73 + phase * 1.43) * Math.min(2.2, point.driftY * 0.38) * speedScale;
+          } else if (direction === "left" || direction === "right") {
+            x = point.areaX + Math.max(1, point.areaWidth || 1) * (direction === "right" ? travelPhase : 1 - travelPhase) + Math.sin(timeSeconds * speed * 0.67 + phase * 1.29) * Math.min(2.4, point.driftX * 0.34) * speedScale;
+            y += (Math.sin(timeSeconds * speed * 0.82 + phase * 1.53) * point.driftY * 0.58 + Math.sin(timeSeconds * speed * 0.31 + phase * 0.67) * point.rise * 1.15) * speedScale;
+          } else {
+            x += (Math.sin(timeSeconds * speed + phase) * point.driftX + Math.sin(timeSeconds * speed * 0.43 + phase * 2.31) * point.driftX * 0.34) * speedScale;
+            y += (Math.sin(timeSeconds * speed * 0.71 + phase * 1.53) * point.driftY - Math.sin(timeSeconds * speed * 0.29 + phase * 0.67) * point.rise * 1.9) * speedScale;
+          }
           const breathe = (Math.sin(timeSeconds * point.alphaSpeed + point.alphaPhase) + 1) * 0.5;
-          const smooth = breathe * breathe * (3 - 2 * breathe);
-          const ambientAlpha = point.alphaMin + (point.alphaMax - point.alphaMin) * smooth;
-          const fadeIn = Math.max(0, Math.min(1, updraftPhase / 0.16));
-          const fadeOut = 1 - Math.max(0, Math.min(1, (updraftPhase - 0.74) / 0.26));
-          const updraftFade = 0.12 + (fadeIn * fadeIn * (3 - 2 * fadeIn)) * (fadeOut * fadeOut * (3 - 2 * fadeOut)) * 0.88;
-          const alpha = motionMode === "updraft" ? ambientAlpha * Math.max(0.12, Math.min(1, updraftFade)) : ambientAlpha;
+          const ambientAlpha = point.alphaMin + (point.alphaMax - point.alphaMin) * smoothRechargedGlow01(breathe);
+          const fadeIn = smoothRechargedGlow01(travelPhase / 0.14);
+          const fadeOut = 1 - smoothRechargedGlow01((travelPhase - 0.8) / 0.2);
+          const directionalFade = 0.12 + fadeIn * fadeOut * 0.88;
+          const alpha = direction === "random" ? ambientAlpha : ambientAlpha * Math.max(0.12, Math.min(1, directionalFade));
           const auraRadius = Math.max(point.radius * 2.4, point.auraRadius || point.radius * 3.1);
           const coreRadius = Math.max(0.35, point.coreRadius || point.radius * 0.46);
           const auraRect = mapper.worldToCanvasRect(x - auraRadius, y - auraRadius, auraRadius * 2, auraRadius * 2);
