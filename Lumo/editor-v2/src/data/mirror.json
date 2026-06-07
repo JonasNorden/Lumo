@@ -45375,9 +45375,9 @@
       "y": 72,
       "width": 3432,
       "height": 360,
-      "density": 0.35,
-      "sizeVariation": 0.1,
-      "driftStrength": 0.35,
+      "density": 0.78,
+      "sizeVariation": 0.7,
+      "driftStrength": 0.75,
       "enabled": true,
       "visible": true
     }
