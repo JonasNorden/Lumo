@@ -236,6 +236,7 @@ function buildWorldSnapshot(snapshot) {
   const dustAreas = normalizeDustAreas(source.dustAreas);
   const glowAreas = normalizeGlowAreas(source.glowAreas);
   const smokeAreas = normalizeSmokeAreas(source.smokeAreas);
+  const waterDropAreas = Array.isArray(source.waterDropAreas) ? source.waterDropAreas.map((area) => ({ ...area })) : [];
 
   return {
     worldId: typeof source.worldId === "string" ? source.worldId : "",
@@ -253,6 +254,7 @@ function buildWorldSnapshot(snapshot) {
     dustAreas,
     glowAreas,
     smokeAreas,
+    waterDropAreas,
   };
 }
 
@@ -794,6 +796,7 @@ export function createRechargedRuntimeOrchestrator(options = {}) {
         dustAreas: world.dustAreas,
         glowAreas: world.glowAreas,
         smokeAreas: world.smokeAreas,
+        waterDropAreas: world.waterDropAreas,
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,

@@ -9,7 +9,7 @@ import { BACKGROUND_MATERIAL_OPTIONS, DEFAULT_BACKGROUND_MATERIAL_ID, normalizeB
 import { normalizeSizedPlacements } from "../tiles/sizedPlacements.js";
 import { normalizeSpawnAndExitEntities } from "../entities/spawnExitRules.js";
 import { normalizeThemeId } from "../theme/themeCatalog.js";
-import { DUST_AREA_DEFAULTS, GLOW_AREA_DEFAULTS, MIRROR_SURFACE_DEFAULTS, SMOKE_AREA_DEFAULTS, STONE_AREA_DEFAULTS, normalizeGlowAreaDirection, normalizeSmokeAreaDirection } from "../worldAreas.js";
+import { DUST_AREA_DEFAULTS, GLOW_AREA_DEFAULTS, MIRROR_SURFACE_DEFAULTS, SMOKE_AREA_DEFAULTS, STONE_AREA_DEFAULTS, WATER_DROP_AREA_DEFAULTS, normalizeGlowAreaDirection, normalizeSmokeAreaDirection } from "../worldAreas.js";
 
 const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
 const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
@@ -116,6 +116,7 @@ function parseFlowerVariant(value) {
  * @property {{id: string, x: number, y: number, width: number, height: number, density: number, sizeVariation: number, driftStrength: number, enabled: boolean, visible: boolean}[]} dustAreas
  * @property {{id: string, x: number, y: number, width: number, height: number, density: number, sizeVariation: number, strength: number, direction: string, speed: number, enabled: boolean, visible: boolean}[]} glowAreas
  * @property {{id: string, x: number, y: number, width: number, height: number, density: number, size: number, strength: number, direction: string, speed: number, enabled: boolean, visible: boolean}[]} smokeAreas
+ * @property {{id: string, x: number, y: number, mode: string, density: number, speed: number, size: number, length: number, height: number, enabled: boolean, visible: boolean}[]} waterDropAreas
  * @property {{id: string, kind: string, x: number, y: number, clusterCount: number, width: number, heightMin: number, heightMax: number, triggerRadius: number, auraSensitivity: number, wakeSpeed: number, settleDelayMs: number, settleSpeed: number, baseColor: string, glowColor: string, coreColor: string, edgeColor: string, variant: string, seed: number}[]} reactiveCrystalPatches
  * @property {{notes?: string}} extra
  */
@@ -375,6 +376,25 @@ function normalizeSmokeArea(area, index) {
   };
 }
 
+function normalizeWaterDropArea(area, index) {
+  const sourceArea = area && typeof area === "object" ? area : {};
+  const mode = sourceArea.mode === "line" ? "line" : WATER_DROP_AREA_DEFAULTS.mode;
+  const length = Number.isFinite(sourceArea.length) && sourceArea.length > 0 ? Number(sourceArea.length) : WATER_DROP_AREA_DEFAULTS.length;
+  return {
+    id: typeof sourceArea.id === "string" && sourceArea.id.trim() ? sourceArea.id.trim() : `water_drop_area_${index + 1}`,
+    x: Number.isFinite(sourceArea.x) ? Number(sourceArea.x) : 0,
+    y: Number.isFinite(sourceArea.y) ? Number(sourceArea.y) : 0,
+    mode,
+    density: Math.max(0, Math.min(100, Number.isFinite(sourceArea.density) ? Number(sourceArea.density) : WATER_DROP_AREA_DEFAULTS.density)),
+    speed: Math.max(0, Math.min(100, Number.isFinite(sourceArea.speed) ? Number(sourceArea.speed) : WATER_DROP_AREA_DEFAULTS.speed)),
+    size: Math.max(0, Math.min(100, Number.isFinite(sourceArea.size) ? Number(sourceArea.size) : WATER_DROP_AREA_DEFAULTS.size)),
+    length: mode === "line" ? length : 0,
+    width: mode === "line" ? length : 1,
+    height: Number.isFinite(sourceArea.height) && sourceArea.height > 0 ? Number(sourceArea.height) : 144,
+    enabled: typeof sourceArea.enabled === "boolean" ? sourceArea.enabled : true,
+    visible: typeof sourceArea.visible === "boolean" ? sourceArea.visible : true,
+  };
+}
 
 function normalizeGlowArea(area, index) {
   const sourceArea = area && typeof area === "object" ? area : {};
@@ -587,6 +607,8 @@ export function validateLevelDocument(doc) {
   doc.glowAreas = rawGlowAreas.map((area, index) => normalizeGlowArea(area, index));
   const rawSmokeAreas = Array.isArray(doc.smokeAreas) ? doc.smokeAreas : [];
   doc.smokeAreas = rawSmokeAreas.map((area, index) => normalizeSmokeArea(area, index));
+  const rawWaterDropAreas = Array.isArray(doc.waterDropAreas) ? doc.waterDropAreas : [];
+  doc.waterDropAreas = rawWaterDropAreas.map((area, index) => normalizeWaterDropArea(area, index));
   const rawReactiveBloomPatches = Array.isArray(doc.reactiveBloomPatches) ? doc.reactiveBloomPatches : [];
   doc.reactiveBloomPatches = rawReactiveBloomPatches.map((patch, index) => normalizeReactiveBloomPatch(patch, index));
   const rawReactiveCrystalPatches = Array.isArray(doc.reactiveCrystalPatches) ? doc.reactiveCrystalPatches : [];

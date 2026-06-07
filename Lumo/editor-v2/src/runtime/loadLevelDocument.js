@@ -1,7 +1,7 @@
 import { resolveLegacyBehaviorByTileId } from "./runtimeTileBehavior.js";
 import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 import { getAuthoredSoundSource, resolveSoundCatalogSource } from "../domain/sound/sourceReference.js";
-import { normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeSmokeAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
+import { normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeSmokeAreaForEditor, normalizeStoneAreaForEditor, normalizeWaterDropAreaForEditor } from "../domain/worldAreas.js";
 
 // Recharged level loader v1.
 // This module validates and normalizes the new level document shape without
@@ -32,6 +32,7 @@ export function loadLevelDocument(data) {
   const dustAreas = normalizeDustAreas(normalizedInput.dustAreas);
   const glowAreas = normalizeGlowAreas(normalizedInput.glowAreas);
   const smokeAreas = normalizeSmokeAreas(normalizedInput.smokeAreas);
+  const waterDropAreas = normalizeWaterDropAreas(normalizedInput.waterDropAreas);
 
   if (errors.length > 0) {
     return buildResult({ level: null, errors, warnings });
@@ -48,6 +49,7 @@ export function loadLevelDocument(data) {
     dustAreas,
     glowAreas,
     smokeAreas,
+    waterDropAreas,
     systems: isPlainObject(normalizedInput.systems) ? { ...normalizedInput.systems } : null,
   };
 
@@ -121,6 +123,7 @@ function convertEditorV2ToRecharged(editorLevel, warnings) {
     dustAreas: convertEditorDustAreas(editorLevel),
     glowAreas: convertEditorGlowAreas(editorLevel),
     smokeAreas: convertEditorSmokeAreas(editorLevel),
+    waterDropAreas: normalizeWaterDropAreas(editorLevel.waterDropAreas),
     systems: {
       sourceFormat: "editor-v2",
     },
@@ -579,6 +582,11 @@ function convertEditorDustAreas(editorLevel) {
 function normalizeSmokeAreas(areas) {
   if (!Array.isArray(areas)) return [];
   return areas.map((area, index) => isPlainObject(area) ? normalizeSmokeAreaForEditor(area, index) : null).filter(Boolean);
+}
+
+function normalizeWaterDropAreas(areas) {
+  if (!Array.isArray(areas)) return [];
+  return areas.map((area, index) => isPlainObject(area) ? normalizeWaterDropAreaForEditor(area, index) : null).filter(Boolean);
 }
 
 function convertEditorSmokeAreas(editorLevel) {

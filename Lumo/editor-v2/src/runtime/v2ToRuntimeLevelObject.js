@@ -3,7 +3,7 @@ import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 import { findEntityPresetById } from "../domain/entities/entityPresets.js";
 import { getTileAssetByTileValue } from "../domain/tiles/tileSpriteCatalog.js";
-import { normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeSmokeAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
+import { normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeSmokeAreaForEditor, normalizeStoneAreaForEditor, normalizeWaterDropAreaForEditor } from "../domain/worldAreas.js";
 
 const SUPPORTED_RUNTIME_ENTITY_IDS = new Set([
   "start_01",
@@ -312,6 +312,10 @@ function normalizeRuntimeSmokeAreas(levelDocument) {
     .filter(Boolean);
 }
 
+function normalizeWaterDropAreas(areas) {
+  if (!Array.isArray(areas)) return [];
+  return areas.map((area, index) => normalizeWaterDropAreaForEditor(area, index)).filter((area) => Number.isFinite(area.x) && Number.isFinite(area.y));
+}
 
 function normalizeRuntimeGlowAreas(levelDocument) {
   const areas = Array.isArray(levelDocument?.glowAreas) ? levelDocument.glowAreas : [];
@@ -580,6 +584,7 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
     dustAreas: normalizeRuntimeDustAreas(levelDocument),
     glowAreas: normalizeRuntimeGlowAreas(levelDocument),
     smokeAreas: normalizeRuntimeSmokeAreas(levelDocument),
+    waterDropAreas: normalizeWaterDropAreas(levelDocument.waterDropAreas),
     editor: {
       bg: runtimeBackgroundBase.slice(0),
       bgVisualOverrides: { ...runtimeBackgroundVisualOverrides },

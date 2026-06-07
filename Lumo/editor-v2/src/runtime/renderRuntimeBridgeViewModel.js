@@ -255,6 +255,7 @@ export function renderRuntimeBridgeViewModel(input = {}) {
   const dustAreas = toArray(session?.world?.dustAreas).length > 0 ? toArray(session?.world?.dustAreas) : toArray(worldSource?.dustAreas);
   const glowAreas = toArray(session?.world?.glowAreas).length > 0 ? toArray(session?.world?.glowAreas) : toArray(worldSource?.glowAreas);
   const smokeAreas = toArray(session?.world?.smokeAreas).length > 0 ? toArray(session?.world?.smokeAreas) : toArray(worldSource?.smokeAreas);
+  const waterDropAreas = toArray(session?.world?.waterDropAreas).length > 0 ? toArray(session?.world?.waterDropAreas) : toArray(worldSource?.waterDropAreas);
 
   const runtimeTick = toFiniteOrNull(session?.runtime?.tick) ?? toFiniteOrNull(bridgeSummary?.runtimeTick);
   const bridgeStatus = toStringOrNull(bridgeSummary?.bridgeStatus) ?? "invalid";
@@ -283,6 +284,7 @@ export function renderRuntimeBridgeViewModel(input = {}) {
       dustAreas: dustAreas.length,
       glowAreas: glowAreas.length,
       smokeAreas: smokeAreas.length,
+      waterDropAreas: waterDropAreas.length,
     },
     input: input?.browserInputSnapshot?.input ?? { moveX: 0, jump: false, run: false },
     loopActive: input?.browserLoop?.active === true || input?.browserLoop?.running === true,
@@ -308,6 +310,7 @@ export function renderRuntimeBridgeViewModel(input = {}) {
     audio,
     dustAreas,
     glowAreas,
+    waterDropAreas,
     spawn,
     player,
     overlay,

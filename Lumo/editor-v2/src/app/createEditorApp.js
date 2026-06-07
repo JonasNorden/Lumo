@@ -73,6 +73,7 @@ import {
   createDustAreaEditEntry,
   createGlowAreaEditEntry,
   createSmokeAreaEditEntry,
+  createWaterDropAreaEditEntry,
   createReactiveGrassEditEntry,
   createSizedPlacementEditEntry,
   createTileEditEntry,
@@ -90,16 +91,19 @@ import {
   createDustAreaFromDrag,
   createGlowAreaFromDrag,
   createSmokeAreaFromDrag,
+  createWaterDropAreaFromDrag,
   createMirrorSurfaceAreaFromDrag,
   createStoneAreaFromDrag,
   moveDustArea,
   moveGlowArea,
   moveSmokeArea,
+  moveWaterDropArea,
   moveMirrorSurfaceArea,
   moveStoneArea,
   updateDustAreaField,
   updateGlowAreaField,
   updateSmokeAreaField,
+  updateWaterDropAreaField,
   updateMirrorSurfaceAreaField,
   updateStoneAreaField,
 } from "../domain/worldAreas.js";
@@ -119,6 +123,7 @@ import { findStoneAreaAtCanvasPoint } from "../render/layers/stoneAreaLayer.js";
 import { findDustAreaAtCanvasPoint } from "../render/layers/dustAreaLayer.js";
 import { findGlowAreaAtCanvasPoint } from "../render/layers/glowAreaLayer.js";
 import { findSmokeAreaAtCanvasPoint } from "../render/layers/smokeAreaLayer.js";
+import { findWaterDropAreaAtCanvasPoint } from "../render/layers/waterDropAreaLayer.js";
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
 import {
   DEFAULT_ENTITY_PRESET_ID,
@@ -1645,6 +1650,8 @@ export function createEditorApp({
     interaction.selectedGlowAreaId = null;
     interaction.selectedSmokeAreaIndex = null;
     interaction.selectedSmokeAreaId = null;
+    interaction.selectedWaterDropAreaIndex = null;
+    interaction.selectedWaterDropAreaId = null;
   };
 
   const clearReactiveBloomPatchSelection = (interaction) => {
@@ -1665,6 +1672,8 @@ export function createEditorApp({
     interaction.selectedGlowAreaId = null;
     interaction.selectedSmokeAreaIndex = null;
     interaction.selectedSmokeAreaId = null;
+    interaction.selectedWaterDropAreaIndex = null;
+    interaction.selectedWaterDropAreaId = null;
   };
 
   const clearMirrorSurfaceAreaSelection = (interaction) => {
@@ -1678,6 +1687,8 @@ export function createEditorApp({
     interaction.selectedGlowAreaId = null;
     interaction.selectedSmokeAreaIndex = null;
     interaction.selectedSmokeAreaId = null;
+    interaction.selectedWaterDropAreaIndex = null;
+    interaction.selectedWaterDropAreaId = null;
   };
 
   const clearStoneAreaSelection = (interaction) => {
@@ -1689,6 +1700,8 @@ export function createEditorApp({
     interaction.selectedGlowAreaId = null;
     interaction.selectedSmokeAreaIndex = null;
     interaction.selectedSmokeAreaId = null;
+    interaction.selectedWaterDropAreaIndex = null;
+    interaction.selectedWaterDropAreaId = null;
   };
 
   const setMirrorSurfaceAreaSelection = (draft, areaIndex = null) => {
@@ -1725,6 +1738,8 @@ export function createEditorApp({
     interaction.selectedGlowAreaId = null;
     interaction.selectedSmokeAreaIndex = null;
     interaction.selectedSmokeAreaId = null;
+    interaction.selectedWaterDropAreaIndex = null;
+    interaction.selectedWaterDropAreaId = null;
   };
 
   const setDustAreaSelection = (draft, areaIndex = null) => {
@@ -1746,6 +1761,8 @@ export function createEditorApp({
     interaction.selectedGlowAreaId = null;
     interaction.selectedSmokeAreaIndex = null;
     interaction.selectedSmokeAreaId = null;
+    interaction.selectedWaterDropAreaIndex = null;
+    interaction.selectedWaterDropAreaId = null;
   };
 
   const setGlowAreaSelection = (draft, areaIndex = null) => {
@@ -1776,6 +1793,22 @@ export function createEditorApp({
     clearSoundSelection(draft.interaction);
     draft.interaction.selectedSmokeAreaIndex = nextArea ? areaIndex : null;
     draft.interaction.selectedSmokeAreaId = typeof nextArea?.id === "string" && nextArea.id.trim() ? nextArea.id.trim() : null;
+    draft.interaction.selectedCell = nextArea ? { x: Math.floor(Number(nextArea.x || 0) / Math.max(1, Number(draft.document.active?.dimensions?.tileSize) || 24)), y: Math.floor(Number(nextArea.y || 0) / Math.max(1, Number(draft.document.active?.dimensions?.tileSize) || 24)) } : null;
+  };
+
+  const setWaterDropAreaSelection = (draft, areaIndex = null) => {
+    const areas = Array.isArray(draft.document.active?.waterDropAreas) ? draft.document.active.waterDropAreas : [];
+    const nextArea = Number.isInteger(areaIndex) && areaIndex >= 0 && areaIndex < areas.length ? areas[areaIndex] : null;
+    clearReactiveGrassPatchSelection(draft.interaction);
+    clearMirrorSurfaceAreaSelection(draft.interaction);
+    clearStoneAreaSelection(draft.interaction);
+    clearDustAreaSelection(draft.interaction);
+    clearGlowAreaSelection(draft.interaction);
+    clearEntitySelection(draft.interaction);
+    clearDecorSelection(draft.interaction);
+    clearSoundSelection(draft.interaction);
+    draft.interaction.selectedWaterDropAreaIndex = nextArea ? areaIndex : null;
+    draft.interaction.selectedWaterDropAreaId = typeof nextArea?.id === "string" && nextArea.id.trim() ? nextArea.id.trim() : null;
     draft.interaction.selectedCell = nextArea ? { x: Math.floor(Number(nextArea.x || 0) / Math.max(1, Number(draft.document.active?.dimensions?.tileSize) || 24)), y: Math.floor(Number(nextArea.y || 0) / Math.max(1, Number(draft.document.active?.dimensions?.tileSize) || 24)) } : null;
   };
 
@@ -5653,7 +5686,7 @@ export function createEditorApp({
     void index;
     void value;
     store.setState((draft) => {
-      const requestedType = field === "arm-smoke-area" ? "smoke_area" : field === "arm-glow-area" ? "glow_area" : field === "arm-dust-area" ? "dust_area" : field === "arm-stone-area" ? "stone_area" : field === "arm-mirror-surface" ? "mirror_surface" : null;
+      const requestedType = field === "arm-water-drop-area" ? "water_drop_area" : field === "arm-smoke-area" ? "smoke_area" : field === "arm-glow-area" ? "glow_area" : field === "arm-dust-area" ? "dust_area" : field === "arm-stone-area" ? "stone_area" : field === "arm-mirror-surface" ? "mirror_surface" : null;
       if (!requestedType) return;
       const shouldArm = draft.interaction.activeWorldAreaType !== requestedType || draft.interaction.activeLayer !== PANEL_LAYERS.WORLD_AREAS;
       draft.interaction.activeWorldAreaType = shouldArm ? requestedType : null;
@@ -5669,6 +5702,7 @@ export function createEditorApp({
       draft.interaction.dustAreaDrag = null;
       draft.interaction.glowAreaPlacementDrag = null;
       draft.interaction.smokeAreaPlacementDrag = null;
+      draft.interaction.waterDropAreaPlacementDrag = null;
       draft.interaction.glowAreaDrag = null;
       draft.interaction.smokeAreaDrag = null;
       setCanvasSelectionMode(draft, "worldAreas");
@@ -6224,6 +6258,37 @@ export function createEditorApp({
         nextSnapshot: nextArea,
       }));
       setSmokeAreaSelection(draft, resolvedIndex);
+    });
+  };
+
+  const deleteSelectedWaterDropArea = (draft) => {
+    const areas = Array.isArray(draft.document.active?.waterDropAreas) ? draft.document.active.waterDropAreas : null;
+    if (!areas?.length) return false;
+    const selectedId = typeof draft.interaction.selectedWaterDropAreaId === "string" && draft.interaction.selectedWaterDropAreaId.trim() ? draft.interaction.selectedWaterDropAreaId.trim() : null;
+    const selectedIndex = selectedId ? areas.findIndex((area) => area?.id === selectedId) : draft.interaction.selectedWaterDropAreaIndex;
+    if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= areas.length) return false;
+    const [removed] = areas.splice(selectedIndex, 1);
+    pushHistoryEntry(draft.history, createWaterDropAreaEditEntry("delete", { objectId: typeof removed?.id === "string" ? removed.id : null, index: selectedIndex, previousSnapshot: removed, nextSnapshot: null }));
+    setWaterDropAreaSelection(draft, null);
+    return true;
+  };
+
+  const updateWaterDropArea = (field, value, options = {}) => {
+    const supportedFields = new Set(["x", "y", "mode", "density", "speed", "size", "length", "enabled", "visible"]);
+    if (!supportedFields.has(field)) return;
+    store.setState((draft) => {
+      const areas = Array.isArray(draft.document.active?.waterDropAreas) ? draft.document.active.waterDropAreas : null;
+      if (!areas?.length) return;
+      const selectedAreaId = typeof options.areaId === "string" && options.areaId.trim() ? options.areaId.trim() : typeof draft.interaction.selectedWaterDropAreaId === "string" && draft.interaction.selectedWaterDropAreaId.trim() ? draft.interaction.selectedWaterDropAreaId.trim() : null;
+      const selectedAreaIndex = Number.isInteger(draft.interaction.selectedWaterDropAreaIndex) ? draft.interaction.selectedWaterDropAreaIndex : -1;
+      const resolvedIndex = selectedAreaId ? areas.findIndex((area) => area?.id === selectedAreaId) : selectedAreaIndex;
+      if (!Number.isInteger(resolvedIndex) || resolvedIndex < 0 || resolvedIndex >= areas.length) return;
+      const previousArea = { ...areas[resolvedIndex] };
+      const nextArea = updateWaterDropAreaField(previousArea, field, value);
+      if (JSON.stringify(previousArea) === JSON.stringify(nextArea)) return;
+      areas[resolvedIndex] = nextArea;
+      pushHistoryEntry(draft.history, createWaterDropAreaEditEntry("update", { objectId: typeof nextArea.id === "string" ? nextArea.id : null, index: resolvedIndex, previousSnapshot: previousArea, nextSnapshot: nextArea }));
+      setWaterDropAreaSelection(draft, resolvedIndex);
     });
   };
 
@@ -6789,6 +6854,7 @@ export function createEditorApp({
     const hitDustAreaIndex = findDustAreaAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitGlowAreaIndex = findGlowAreaAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitSmokeAreaIndex = findSmokeAreaAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+    const hitWaterDropAreaIndex = findWaterDropAreaAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const activeEntityPresetId = state.interaction.activeEntityPresetId;
     const activeDecorPresetId = state.interaction.activeDecorPresetId;
     const activeSoundPresetId = state.interaction.activeSoundPresetId;
@@ -6870,6 +6936,25 @@ export function createEditorApp({
           startCell: { ...cell },
           endCell: { ...cell },
         };
+        clearReactiveGrassPatchSelection(draft.interaction);
+        clearMirrorSurfaceAreaSelection(draft.interaction);
+        clearStoneAreaSelection(draft.interaction);
+        clearDustAreaSelection(draft.interaction);
+        clearGlowAreaSelection(draft.interaction);
+        clearEntitySelection(draft.interaction);
+        clearDecorSelection(draft.interaction);
+        clearSoundSelection(draft.interaction);
+      });
+      return true;
+    }
+
+    if (activeLayer === PANEL_LAYERS.WORLD_AREAS && state.interaction.activeWorldAreaType === "water_drop_area" && isMomentaryPlacementTrigger(event)) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        draft.interaction.hoverCell = cell;
+        draft.interaction.selectedCell = cell;
+        draft.interaction.waterDropAreaPlacementDrag = { active: true, type: "water_drop_area", startCell: { ...cell }, endCell: { ...cell } };
         clearReactiveGrassPatchSelection(draft.interaction);
         clearMirrorSurfaceAreaSelection(draft.interaction);
         clearStoneAreaSelection(draft.interaction);
@@ -7073,6 +7158,12 @@ if (event.shiftKey) {
             originArea: area ? { ...area } : null,
             previewDelta: { x: 0, y: 0 },
           };
+          return;
+        }
+        if (hitWaterDropAreaIndex >= 0) {
+          setWaterDropAreaSelection(draft, hitWaterDropAreaIndex);
+          const area = draft.document.active?.waterDropAreas?.[hitWaterDropAreaIndex];
+          draft.interaction.waterDropAreaDrag = { active: true, areaId: area?.id || null, anchorCell: { ...cell }, originArea: area ? { ...area } : null, previewDelta: { x: 0, y: 0 } };
           return;
         }
         if (hitSmokeAreaIndex >= 0) {
@@ -7393,13 +7484,13 @@ if (event.shiftKey) {
       return;
     }
 
-    if (state.interaction.mirrorSurfaceAreaDrag?.active || state.interaction.stoneAreaDrag?.active || state.interaction.dustAreaDrag?.active || state.interaction.glowAreaDrag?.active || state.interaction.smokeAreaDrag?.active) {
+    if (state.interaction.mirrorSurfaceAreaDrag?.active || state.interaction.stoneAreaDrag?.active || state.interaction.dustAreaDrag?.active || state.interaction.glowAreaDrag?.active || state.interaction.smokeAreaDrag?.active || state.interaction.waterDropAreaDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
       const point = getCanvasPointFromMouseEvent(canvas, event);
       const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
       if (!cell) return;
       store.setState((draft) => {
-        const drag = draft.interaction.mirrorSurfaceAreaDrag || draft.interaction.stoneAreaDrag || draft.interaction.dustAreaDrag || draft.interaction.glowAreaDrag || draft.interaction.smokeAreaDrag;
+        const drag = draft.interaction.mirrorSurfaceAreaDrag || draft.interaction.stoneAreaDrag || draft.interaction.dustAreaDrag || draft.interaction.glowAreaDrag || draft.interaction.smokeAreaDrag || draft.interaction.waterDropAreaDrag;
         if (!drag?.active || !drag.originArea) return;
         const tileSize = Math.max(1, Number(draft.document.active?.dimensions?.tileSize) || 24);
         drag.previewDelta = { x: (cell.x - drag.anchorCell.x) * tileSize, y: (cell.y - drag.anchorCell.y) * tileSize };
@@ -7423,13 +7514,13 @@ if (event.shiftKey) {
       return;
     }
 
-    if (state.interaction.mirrorSurfaceAreaPlacementDrag?.active || state.interaction.stoneAreaPlacementDrag?.active || state.interaction.dustAreaPlacementDrag?.active || state.interaction.glowAreaPlacementDrag?.active || state.interaction.smokeAreaPlacementDrag?.active) {
+    if (state.interaction.mirrorSurfaceAreaPlacementDrag?.active || state.interaction.stoneAreaPlacementDrag?.active || state.interaction.dustAreaPlacementDrag?.active || state.interaction.glowAreaPlacementDrag?.active || state.interaction.smokeAreaPlacementDrag?.active || state.interaction.waterDropAreaPlacementDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
       const point = getCanvasPointFromMouseEvent(canvas, event);
       const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
       if (!cell) return;
       store.setState((draft) => {
-        const placementDrag = draft.interaction.mirrorSurfaceAreaPlacementDrag || draft.interaction.stoneAreaPlacementDrag || draft.interaction.dustAreaPlacementDrag || draft.interaction.glowAreaPlacementDrag || draft.interaction.smokeAreaPlacementDrag;
+        const placementDrag = draft.interaction.mirrorSurfaceAreaPlacementDrag || draft.interaction.stoneAreaPlacementDrag || draft.interaction.dustAreaPlacementDrag || draft.interaction.glowAreaPlacementDrag || draft.interaction.smokeAreaPlacementDrag || draft.interaction.waterDropAreaPlacementDrag;
         if (!placementDrag?.active) return;
         placementDrag.endCell = { ...cell };
         draft.interaction.hoverCell = cell;
@@ -7748,6 +7839,26 @@ if (event.shiftKey) {
     }
 
 
+    if (state.interaction.waterDropAreaDrag?.active) {
+      store.setState((draft) => {
+        const drag = draft.interaction.waterDropAreaDrag;
+        if (!drag?.active || !drag.originArea) return;
+        const areas = Array.isArray(draft.document.active?.waterDropAreas) ? draft.document.active.waterDropAreas : [];
+        const index = drag.areaId ? areas.findIndex((area) => area?.id === drag.areaId) : draft.interaction.selectedWaterDropAreaIndex;
+        if (!Number.isInteger(index) || index < 0 || index >= areas.length) { draft.interaction.waterDropAreaDrag = null; return; }
+        const previousArea = { ...areas[index] };
+        const delta = drag.previewDelta || { x: 0, y: 0 };
+        const nextArea = moveWaterDropArea(drag.originArea, delta.x, delta.y);
+        if (JSON.stringify(previousArea) !== JSON.stringify(nextArea)) {
+          areas[index] = nextArea;
+          pushHistoryEntry(draft.history, createWaterDropAreaEditEntry("update", { objectId: typeof nextArea.id === "string" ? nextArea.id : null, index, previousSnapshot: previousArea, nextSnapshot: nextArea }));
+          setWaterDropAreaSelection(draft, index);
+        }
+        draft.interaction.waterDropAreaDrag = null;
+      });
+      return;
+    }
+
     if (state.interaction.smokeAreaDrag?.active) {
       store.setState((draft) => {
         const drag = draft.interaction.smokeAreaDrag;
@@ -7883,6 +7994,23 @@ if (event.shiftKey) {
     }
 
 
+    if (state.interaction.waterDropAreaPlacementDrag?.active) {
+      store.setState((draft) => {
+        const placementDrag = draft.interaction.waterDropAreaPlacementDrag;
+        if (!placementDrag?.active) return;
+        const createdArea = createWaterDropAreaFromDrag(draft.document.active, placementDrag.startCell, placementDrag.endCell || placementDrag.startCell);
+        if (createdArea) {
+          if (!Array.isArray(draft.document.active.waterDropAreas)) draft.document.active.waterDropAreas = [];
+          const createdIndex = draft.document.active.waterDropAreas.length;
+          draft.document.active.waterDropAreas.push(createdArea);
+          pushHistoryEntry(draft.history, createWaterDropAreaEditEntry("create", { objectId: typeof createdArea.id === "string" ? createdArea.id : null, index: createdIndex, previousSnapshot: null, nextSnapshot: createdArea }));
+          setWaterDropAreaSelection(draft, createdIndex);
+        }
+        draft.interaction.waterDropAreaPlacementDrag = null;
+      });
+      return;
+    }
+
     if (state.interaction.smokeAreaPlacementDrag?.active) {
       store.setState((draft) => {
         const placementDrag = draft.interaction.smokeAreaPlacementDrag;
@@ -7931,6 +8059,7 @@ if (event.shiftKey) {
         }
         draft.interaction.glowAreaPlacementDrag = null;
       draft.interaction.smokeAreaPlacementDrag = null;
+      draft.interaction.waterDropAreaPlacementDrag = null;
       });
       return;
     }
@@ -8880,7 +9009,7 @@ if (event.shiftKey) {
           return;
         }
         if (activeLayer === PANEL_LAYERS.WORLD_AREAS) {
-          if (!deleteSelectedSmokeArea(draft) && !deleteSelectedGlowArea(draft) && !deleteSelectedDustArea(draft) && !deleteSelectedStoneArea(draft)) deleteSelectedMirrorSurfaceArea(draft);
+          if (!deleteSelectedWaterDropArea(draft) && !deleteSelectedSmokeArea(draft) && !deleteSelectedGlowArea(draft) && !deleteSelectedDustArea(draft) && !deleteSelectedStoneArea(draft)) deleteSelectedMirrorSurfaceArea(draft);
         }
       });
       return;
@@ -10195,6 +10324,7 @@ if (event.shiftKey) {
       onDustAreaUpdate: updateDustArea,
     onGlowAreaUpdate: updateGlowArea,
     onSmokeAreaUpdate: updateSmokeArea,
+    onWaterDropAreaUpdate: updateWaterDropArea,
     onScanUpdate: updateScanControl,
   };
   const unbindInspectorPanel = bindInspectorPanel(inspector, store, panelBindingOptions);

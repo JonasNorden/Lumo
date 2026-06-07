@@ -542,6 +542,7 @@ function buildWorldSnapshot(worldState) {
   const dustAreas = normalizeDustAreas(worldState?.dustAreas);
   const glowAreas = normalizeGlowAreas(worldState?.glowAreas);
   const smokeAreas = normalizeSmokeAreas(worldState?.smokeAreas);
+  const waterDropAreas = Array.isArray(worldState?.waterDropAreas) ? worldState.waterDropAreas.map((area) => ({ ...area })) : [];
 
   return {
     ok: worldState && typeof worldState === "object",
@@ -560,6 +561,7 @@ function buildWorldSnapshot(worldState) {
     dustAreas,
     glowAreas,
     smokeAreas,
+    waterDropAreas,
   };
 }
 

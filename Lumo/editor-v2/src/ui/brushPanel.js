@@ -438,11 +438,13 @@ function renderWorldAreasSettings(state) {
   const dustArmed = activeWorldAreaType === "dust_area";
   const glowArmed = activeWorldAreaType === "glow_area";
   const smokeArmed = activeWorldAreaType === "smoke_area";
+  const waterDropArmed = activeWorldAreaType === "water_drop_area";
   const mirrorCount = Array.isArray(state?.document?.active?.mirrorSurfaceAreas) ? state.document.active.mirrorSurfaceAreas.length : 0;
   const stoneCount = Array.isArray(state?.document?.active?.stoneAreas) ? state.document.active.stoneAreas.length : 0;
   const dustCount = Array.isArray(state?.document?.active?.dustAreas) ? state.document.active.dustAreas.length : 0;
   const glowCount = Array.isArray(state?.document?.active?.glowAreas) ? state.document.active.glowAreas.length : 0;
   const smokeCount = Array.isArray(state?.document?.active?.smokeAreas) ? state.document.active.smokeAreas.length : 0;
+  const waterDropCount = Array.isArray(state?.document?.active?.waterDropAreas) ? state.document.active.waterDropAreas.length : 0;
   return `
     <div class="statusRow compactStatusRow">
       <span class="label">Mirror Surface</span>
@@ -478,6 +480,16 @@ function renderWorldAreasSettings(state) {
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton ${smokeArmed ? "isActive" : ""}" data-world-area-action="arm-smoke-area">
         ${smokeArmed ? "Smoke placement armed" : "Create Smoke Area"}
+      </button>
+    </div>
+
+    <div class="statusRow compactStatusRow">
+      <span class="label">Water Drop Area</span>
+      <span class="value">${waterDropCount} authored</span>
+    </div>
+    <div class="compactActionRow compactActionRowSingle">
+      <button type="button" class="toolButton ${waterDropArmed ? "isActive" : ""}" data-world-area-action="arm-water-drop-area">
+        ${waterDropArmed ? "Water Drop placement armed" : "Create Water Drop Area"}
       </button>
     </div>
     <div class="statusRow compactStatusRow">

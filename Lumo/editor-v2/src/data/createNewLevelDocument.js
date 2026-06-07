@@ -79,6 +79,7 @@ export function createNewLevelDocument(options = {}) {
     dustAreas: [],
     glowAreas: [],
     smokeAreas: [],
+    waterDropAreas: [],
     extra: {},
   });
 }
