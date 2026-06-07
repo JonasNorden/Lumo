@@ -35,6 +35,7 @@ const rendererPath = path.resolve(__dirname, "../src/render/renderer.js");
 const brushPanelPath = path.resolve(__dirname, "../src/ui/brushPanel.js");
 const createEditorAppPath = path.resolve(__dirname, "../src/app/createEditorApp.js");
 const worldAreasPath = path.resolve(__dirname, "../src/domain/worldAreas.js");
+const lumoHtmlPath = path.resolve(__dirname, "../../Lumo.html");
 
 const baseDoc = {
   meta: { id: "glow-area-test", name: "Glow Area Test", version: "2.0.0" },
@@ -91,9 +92,10 @@ const baseDoc = {
   assert.ok(new Set(first.map((point) => point.speed)).size > 1, "points receive independent drift speeds");
   assert.ok(new Set(first.map((point) => point.alphaPhase)).size > 1, "points receive independent alpha phases");
   assert.ok(new Set(first.map((point) => point.alphaSpeed)).size > 1, "points receive independent alpha speeds");
-  assert.ok(first.every((point) => point.radius <= 1.6), "default glow points remain tiny instead of becoming blobs");
-  assert.ok(first.every((point) => point.alphaMin > 0 && point.alphaMax > point.alphaMin && point.alphaMax <= 0.18), "points keep a non-zero floor and dim ceiling");
-  assert.ok(first.some((point) => ["warm_gold", "pale_cyan", "crystal_blue"].includes(point.palette)), "glow uses the authored subtle magic palette");
+  assert.ok(first.every((point) => point.radius <= 2.6 && point.coreRadius < point.radius && point.auraRadius > point.radius), "default glow motes keep a tiny core with a larger soft aura instead of becoming blobs");
+  assert.ok(first.every((point) => point.alphaMin > 0 && point.alphaMax > point.alphaMin && point.alphaMax <= 0.38), "points keep a non-zero floor and readable ember ceiling");
+  assert.ok(first.some((point) => ["ember_orange", "warm_gold", "deep_ember", "pale_gold"].includes(point.palette)), "glow uses the warm ember/gold default palette");
+  assert.ok(first.filter((point) => ["ember_orange", "warm_gold", "deep_ember", "pale_gold"].includes(point.palette)).length === first.length, "warm ember/gold tones dominate Glow Area V2 by default");
   assert.ok(generateGlowAreaLayout({ ...area, strength: 1, id: "bright" })[0].alphaMax > generateGlowAreaLayout({ ...area, strength: 0.1, id: "dim" })[0].alphaMax, "strength affects brightness");
 }
 
@@ -107,7 +109,7 @@ const baseDoc = {
   assert.ok(Math.abs(getRuntimeGlowPointAlpha(point, 1) - getRuntimeGlowPointAlpha(point, 2)) < 0.01, "alpha changes smoothly without blinking");
   assert.ok(getRuntimeGlowPointAlpha(point, 900) > 0.008, "alpha never hard-blinks off");
   assert.notEqual(getRuntimeGlowPointOffsetX(points[0], 180), getRuntimeGlowPointOffsetX(points[1], 180), "independent point phases/speeds avoid synchronized waves");
-  assert.match(getRuntimeGlowPointColor(point), /rgba\((1[0-9][0-9]|2[0-3][0-9]), (1[5-9][0-9]|2[0-2][0-9]), (9[0-9]|1[0-9][0-9]|2[0-2][0-9]), 1\)/, "runtime glow color remains soft and non-white");
+  assert.match(getRuntimeGlowPointColor(point), /rgba\((1[8-9][0-9]|2[0-5][0-9]), ([8-9][0-9]|1[0-9][0-9]|2[0-3][0-9]), ([2-9][0-9]|1[0-6][0-9]), 1\)/, "runtime glow color remains warm ember/gold and non-white");
 }
 
 {
@@ -127,7 +129,19 @@ const baseDoc = {
   assert.equal(renderRuntimeGlowAreas(ctx, [{ id: "hidden", visible: false, width: 120, height: 120, density: 1 }], {}, 120), 0, "hidden Glow Areas are runtime no-op");
   assert.equal(renderRuntimeGlowAreas(ctx, [{ id: "disabled", enabled: false, width: 120, height: 120, density: 1 }], {}, 120), 0, "disabled Glow Areas are runtime no-op");
   assert.equal(renderRuntimeGlowAreas(ctx, [{ id: "empty", width: 120, height: 120, density: 0 }], {}, 120), 0, "empty Glow Areas are runtime no-op");
+  assert.equal(renderRuntimeGlowAreas(ctx, [{ id: "zero-strength", width: 120, height: 120, density: 1, strength: 0 }], {}, 120), 0, "strength 0 Glow Areas render no visible glow");
   assert.equal(calls.length, 0, "runtime no-op Glow Areas do not draw points");
+
+  const brightArea = { id: "bright-runtime", x: 0, y: 0, width: 120, height: 120, density: 1, sizeVariation: 0.5, strength: 1, enabled: true, visible: true };
+  const dimArea = { ...brightArea, id: "dim-runtime", strength: 0.5 };
+  const dimPoint = generateGlowAreaLayout(dimArea)[0];
+  const brightPoint = generateGlowAreaLayout(brightArea)[0];
+  assert.ok(brightPoint.alphaMax > dimPoint.alphaMax, "strength affects generated alpha/brightness");
+  assert.equal(renderRuntimeGlowAreas(ctx, [brightArea], {}, 120), generateGlowAreaLayout(brightArea).length, "strength 1 renders all visible mote anchors");
+  const brightArcs = calls.filter((call) => call.radius > 0);
+  assert.ok(brightArcs.length >= generateGlowAreaLayout(brightArea).length * 3, "strength 1 produces visible aura, mote, and core draw calls");
+  assert.ok(brightArcs.some((call) => call.radius > brightPoint.radius * 2), "runtime glow draws a low-alpha outer aura");
+  assert.ok(brightArcs.some((call) => call.radius <= brightPoint.radius), "runtime glow draws a tiny bright core/mote");
 }
 
 {
@@ -200,6 +214,9 @@ const baseDoc = {
     glowAreas: [{ id: "preview-glow", x: 24, y: 48, width: 96, height: 72, density: 0.45, sizeVariation: 0.4, strength: 0.7, enabled: true, visible: true }],
   }, { offsetX: 10, offsetY: 20, zoom: 2 }, { selectedGlowAreaId: "preview-glow" });
   assert.ok(calls.some((call) => call.type === "arc"), "Glow Area preview render contract draws glow points");
+  const previewArcs = calls.filter((call) => call.type === "arc");
+  assert.ok(previewArcs.length >= generateGlowAreaLayout({ id: "preview-glow", x: 24, y: 48, width: 96, height: 72, density: 0.45, sizeVariation: 0.4, strength: 0.7, enabled: true, visible: true }).length * 3, "Editor preview uses visible aura, mote, and core styling");
+  assert.ok(previewArcs.some((call) => /rgba\(255,/.test(call.fillStyle || "")), "Editor preview includes a bright ember core fill");
   assert.deepEqual(
     calls.find((call) => call.type === "roundRect"),
     { type: "roundRect", x: 58, y: 116, width: 192, height: 144, radius: 12 },
@@ -214,6 +231,7 @@ const baseDoc = {
   const viewportSource = fs.readFileSync(viewportPath, "utf8");
   const worldAreasSource = fs.readFileSync(worldAreasPath, "utf8");
   const rendererSource = fs.readFileSync(rendererPath, "utf8");
+  const lumoHtmlSource = fs.readFileSync(lumoHtmlPath, "utf8");
   const brushSource = fs.readFileSync(brushPanelPath, "utf8");
   const appSource = fs.readFileSync(createEditorAppPath, "utf8");
   assert.match(brushSource, /arm-glow-area/, "World Areas panel exposes Glow Area creation");
@@ -231,6 +249,13 @@ const baseDoc = {
   assert.doesNotMatch(runtimeGlowSource, /\.filter\s*=/, "runtime glow must not use canvas filters");
   assert.doesNotMatch(runtimeGlowSource, /shadowBlur|shadowColor/, "runtime glow must not use glow/shadow rendering");
   assert.doesNotMatch(runtimeGlowSource, /spawn|despawn|lifecycle/i, "runtime glow must not expose an emitter lifecycle");
+  assert.doesNotMatch(runtimeGlowSource, /createRadialGradient|drawImage|getImageData|putImageData/, "runtime glow must not use fullscreen passes, textures, or expensive image operations");
+  assert.doesNotMatch(glowLayerSource, /\.filter\s*=|shadowBlur|shadowColor/, "editor Glow Area preview must not use canvas filters or shadow blur");
+  const lumoGlowSlice = lumoHtmlSource.slice(lumoHtmlSource.indexOf("function buildRechargedGlowLayout"), lumoHtmlSource.indexOf("function getRechargedStoneAreaSeed"));
+  assert.match(lumoGlowSlice, /coreRadius/, "Lumo.html runtime Glow Area draws bright ember cores");
+  assert.match(lumoGlowSlice, /auraRadius/, "Lumo.html runtime Glow Area draws larger low-alpha auras");
+  assert.doesNotMatch(lumoGlowSlice, /Math\.random/, "Lumo.html Glow Area layout must not use Math.random");
+  assert.doesNotMatch(lumoGlowSlice, /\.filter\s*=|shadowBlur|shadowColor|createRadialGradient|drawImage|getImageData|putImageData/, "Lumo.html Glow Area must avoid filters, shadow blur, fullscreen passes, textures, and image operations");
 }
 
-console.log("Glow Area V1 contract checks passed");
+console.log("Glow Area V2 ember mote contract checks passed");

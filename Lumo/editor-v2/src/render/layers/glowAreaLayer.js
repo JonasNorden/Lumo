@@ -11,16 +11,26 @@ function worldToCanvas(viewport, x, y) {
 function drawGlowPreviewPoint(ctx, viewport, point, alphaScale = 1) {
   const center = worldToCanvas(viewport, point.x, point.y);
   const zoom = viewport?.zoom || 1;
-  const radius = Math.max(0.7, point.radius * zoom);
+  const moteRadius = Math.max(0.85, point.radius * zoom);
+  const auraRadius = Math.max(moteRadius * 2.4, (point.auraRadius || point.radius * 3.1) * zoom);
+  const coreRadius = Math.max(0.55, (point.coreRadius || point.radius * 0.46) * zoom);
+  const glowAlpha = Math.max(0.12, Math.min(0.84, point.alphaMax * alphaScale * 1.45));
   ctx.save();
-  ctx.globalAlpha = Math.max(0.08, Math.min(0.72, point.alphaMax * alphaScale * 4.2));
+  ctx.globalCompositeOperation = "lighter";
+  ctx.globalAlpha = glowAlpha * 0.46;
+  ctx.fillStyle = point.auraColor || point.color;
+  ctx.beginPath();
+  ctx.arc(center.x, center.y, auraRadius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = Math.min(0.9, glowAlpha * 0.9);
   ctx.fillStyle = point.color;
   ctx.beginPath();
-  ctx.arc(center.x, center.y, radius * 1.85, 0, Math.PI * 2);
+  ctx.arc(center.x, center.y, moteRadius, 0, Math.PI * 2);
   ctx.fill();
-  ctx.globalAlpha = Math.max(0.12, Math.min(0.82, point.alphaMax * alphaScale * 5.5));
+  ctx.globalAlpha = Math.min(1, glowAlpha * 1.15);
+  ctx.fillStyle = point.coreColor || "rgba(255, 234, 150, 1)";
   ctx.beginPath();
-  ctx.arc(center.x, center.y, radius * 0.62, 0, Math.PI * 2);
+  ctx.arc(center.x, center.y, coreRadius, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
