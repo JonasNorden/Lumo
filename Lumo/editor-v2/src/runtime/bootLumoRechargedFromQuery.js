@@ -29,6 +29,7 @@ function createBaseResult(overrides = {}) {
     dustAreas: [],
     glowAreas: [],
     smokeAreas: [],
+    waterDropAreas: [],
     worldWidth: null,
     worldHeight: null,
     tileSize: null,
@@ -319,6 +320,7 @@ export async function bootLumoRechargedFromQuery(options = {}) {
       dustAreas: Array.isArray(payload.dustAreas) ? payload.dustAreas : [],
       glowAreas: Array.isArray(payload.glowAreas) ? payload.glowAreas : [],
       smokeAreas: Array.isArray(payload.smokeAreas) ? payload.smokeAreas : [],
+      waterDropAreas: Array.isArray(payload.waterDropAreas) ? payload.waterDropAreas : [],
       decorItems: Array.isArray(payload.decorItems) ? payload.decorItems : [],
       background: Array.isArray(payload.background) ? payload.background : [],
       bg: payload?.bg && typeof payload.bg === "object"

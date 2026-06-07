@@ -12,7 +12,7 @@ import {
 } from "../domain/sound/audioAssetCatalog.js";
 import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 import { getThemeDefaultAmbientAssetPath, rankSoundAssetOptionsForTheme } from "../domain/theme/themeProfiles.js";
-import { GLOW_AREA_DIRECTIONS, SMOKE_AREA_DIRECTIONS, normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeGlowAreaDirection, normalizeSmokeAreaDirection, normalizeSmokeAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
+import { GLOW_AREA_DIRECTIONS, SMOKE_AREA_DIRECTIONS, normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeGlowAreaDirection, normalizeSmokeAreaDirection, normalizeSmokeAreaForEditor, normalizeStoneAreaForEditor, normalizeWaterDropAreaForEditor } from "../domain/worldAreas.js";
 import { stopNativeInputKeyboardPropagation } from "./nativeInputGuards.js";
 
 const MIXED_FIELD_VALUE = "__mixed__";
@@ -76,6 +76,15 @@ const SMOKE_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
   size: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
   strength: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
   speed: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+});
+
+const WATER_DROP_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
+  x: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
+  y: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
+  density: { min: 0, max: 100, integer: true, inputMode: "numeric", step: 1, largeStep: 10 },
+  speed: { min: 0, max: 100, integer: true, inputMode: "numeric", step: 1, largeStep: 10 },
+  size: { min: 0, max: 100, integer: true, inputMode: "numeric", step: 1, largeStep: 10 },
+  length: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
 });
 
 const GLOW_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
@@ -1180,6 +1189,28 @@ function renderGlowAreaInspector(area) {
   ].join(""));
 }
 
+function renderWaterDropAreaNumberField(label, field, value, areaId) {
+  const config = WATER_DROP_AREA_NUMERIC_FIELD_CONFIG[field];
+  return renderAreaNumberField({ label, field, value, areaId, config, dataPrefix: "water-drop-area", ariaSuffix: field === "density" || field === "speed" || field === "size" ? " (0 to 100)" : "" });
+}
+
+function renderWaterDropAreaInspector(area) {
+  const areaId = typeof area?.id === "string" ? area.id : "";
+  return renderSelectionFields([
+    `<div class="statusCard assetSelectionCard assetSelectionCardCompact"><div class="assetSelectionMeta"><span class="statusCardMeta">Water Drop Area · World Phenomena / Areas</span></div></div>`,
+    renderReadOnlyField("id", area?.id),
+    renderWaterDropAreaNumberField("x", "x", area?.x, areaId),
+    renderWaterDropAreaNumberField("y", "y", area?.y, areaId),
+    `<label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField"><span class="label">Mode</span><select data-water-drop-area-field="mode" data-water-drop-area-id="${escapeHtml(areaId || "")}"><option value="spot" ${area?.mode === "spot" ? "selected" : ""}>Spot</option><option value="line" ${area?.mode === "line" ? "selected" : ""}>Line</option></select></label>`,
+    renderWaterDropAreaNumberField("Density", "density", area?.density, areaId),
+    renderWaterDropAreaNumberField("Speed", "speed", area?.speed, areaId),
+    renderWaterDropAreaNumberField("Size", "size", area?.size, areaId),
+    area?.mode === "line" ? renderWaterDropAreaNumberField("Length", "length", area?.length, areaId) : "",
+    `<label class="fieldRow fieldRowCompact selectionInlineField selectionCheckboxField"><span class="label">enabled</span><input type="checkbox" ${area?.enabled !== false ? "checked" : ""} data-water-drop-area-field="enabled" data-water-drop-area-id="${escapeHtml(areaId || "")}" /></label>`,
+    `<label class="fieldRow fieldRowCompact selectionInlineField selectionCheckboxField"><span class="label">visible</span><input type="checkbox" ${area?.visible !== false ? "checked" : ""} data-water-drop-area-field="visible" data-water-drop-area-id="${escapeHtml(areaId || "")}" /></label>`,
+  ].join(""));
+}
+
 function renderSmokeAreaNumberField(label, field, value, areaId) {
   const config = SMOKE_AREA_NUMERIC_FIELD_CONFIG[field];
   return renderAreaNumberField({ label, field, value, areaId, config, dataPrefix: "smoke-area", ariaSuffix: isPercentStyleAreaField(config) ? " (0 to 100)" : "" });
@@ -1390,6 +1421,9 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   const selectedDustArea = selectedDustAreaId ? (active.dustAreas || []).find((area) => area?.id === selectedDustAreaId) || null : Number.isInteger(selectedDustAreaIndex) && selectedDustAreaIndex >= 0 ? active.dustAreas?.[selectedDustAreaIndex] || null : null;
   const selectedSmokeAreaId = typeof state?.interaction?.selectedSmokeAreaId === "string" && state.interaction.selectedSmokeAreaId.trim() ? state.interaction.selectedSmokeAreaId.trim() : null;
   const selectedSmokeAreaIndex = Number.isInteger(state?.interaction?.selectedSmokeAreaIndex) ? state.interaction.selectedSmokeAreaIndex : null;
+  const selectedWaterDropAreaId = typeof state?.interaction?.selectedWaterDropAreaId === "string" && state.interaction.selectedWaterDropAreaId.trim() ? state.interaction.selectedWaterDropAreaId.trim() : null;
+  const selectedWaterDropAreaIndex = Number.isInteger(state?.interaction?.selectedWaterDropAreaIndex) ? state.interaction.selectedWaterDropAreaIndex : null;
+  const selectedWaterDropArea = selectedWaterDropAreaId ? (active.waterDropAreas || []).find((area) => area?.id === selectedWaterDropAreaId) || null : Number.isInteger(selectedWaterDropAreaIndex) && selectedWaterDropAreaIndex >= 0 ? active.waterDropAreas?.[selectedWaterDropAreaIndex] || null : null;
   const selectedSmokeArea = selectedSmokeAreaId ? (active.smokeAreas || []).find((area) => area?.id === selectedSmokeAreaId) || null : Number.isInteger(selectedSmokeAreaIndex) && selectedSmokeAreaIndex >= 0 ? active.smokeAreas?.[selectedSmokeAreaIndex] || null : null;
   const selectedGlowAreaId = typeof state?.interaction?.selectedGlowAreaId === "string" && state.interaction.selectedGlowAreaId.trim() ? state.interaction.selectedGlowAreaId.trim() : null;
   const selectedGlowAreaIndex = Number.isInteger(state?.interaction?.selectedGlowAreaIndex) ? state.interaction.selectedGlowAreaIndex : null;
@@ -1441,6 +1475,11 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   if (selectedGlowArea) {
     const normalizedSelectedGlowArea = normalizeGlowAreaForEditor(selectedGlowArea, selectedGlowAreaIndex ?? 0);
     return { markup: renderGlowAreaInspector(normalizedSelectedGlowArea), isEmpty: false };
+  }
+
+  if (selectedWaterDropArea) {
+    const normalizedSelectedWaterDropArea = normalizeWaterDropAreaForEditor(selectedWaterDropArea, selectedWaterDropAreaIndex ?? 0);
+    return { markup: renderWaterDropAreaInspector(normalizedSelectedWaterDropArea), isEmpty: false };
   }
 
   if (selectedSmokeArea) {
@@ -1570,7 +1609,7 @@ export function renderSelectionEditorPanel(panel, state, options = {}) {
 }
 
 export function bindSelectionEditorPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate, onReactiveBloomPatchUpdate, onReactiveCrystalPatchUpdate, onMirrorSurfaceAreaUpdate, onStoneAreaUpdate, onDustAreaUpdate, onGlowAreaUpdate, onSmokeAreaUpdate } = options;
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate, onReactiveBloomPatchUpdate, onReactiveCrystalPatchUpdate, onMirrorSurfaceAreaUpdate, onStoneAreaUpdate, onDustAreaUpdate, onGlowAreaUpdate, onSmokeAreaUpdate, onWaterDropAreaUpdate } = options;
   let numberStepperSession = null;
   const getEditorPane = () => panel.querySelector("[data-bottom-panel-editor]");
   const getSelectedReactiveGrassPatch = (patchId) => {
@@ -1650,6 +1689,33 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const selectedAreaIndex = Number.isInteger(state?.interaction?.selectedGlowAreaIndex) ? state.interaction.selectedGlowAreaIndex : -1;
     const resolvedIndex = selectedAreaId ? areas.findIndex((area) => area?.id === selectedAreaId) : selectedAreaIndex;
     return Number.isInteger(resolvedIndex) && resolvedIndex >= 0 ? areas[resolvedIndex] || null : null;
+  };
+
+
+  const getSelectedWaterDropArea = (areaId) => {
+    const state = typeof store?.getState === "function" ? store.getState() : null;
+    const areas = Array.isArray(state?.document?.active?.waterDropAreas) ? state.document.active.waterDropAreas : [];
+    const selectedAreaId = typeof areaId === "string" && areaId.trim() ? areaId.trim() : typeof state?.interaction?.selectedWaterDropAreaId === "string" && state.interaction.selectedWaterDropAreaId.trim() ? state.interaction.selectedWaterDropAreaId.trim() : null;
+    const selectedAreaIndex = Number.isInteger(state?.interaction?.selectedWaterDropAreaIndex) ? state.interaction.selectedWaterDropAreaIndex : -1;
+    const resolvedIndex = selectedAreaId ? areas.findIndex((area) => area?.id === selectedAreaId) : selectedAreaIndex;
+    return Number.isInteger(resolvedIndex) && resolvedIndex >= 0 ? areas[resolvedIndex] || null : null;
+  };
+
+  const commitWaterDropAreaNumericInput = (input) => {
+    const field = input?.dataset?.waterDropAreaField;
+    if (!field || input?.dataset?.waterDropAreaEditable !== "number" || !WATER_DROP_AREA_NUMERIC_FIELD_CONFIG[field]) return false;
+    const areaSnapshot = getSelectedWaterDropArea(input.dataset.waterDropAreaId || null);
+    if (!areaSnapshot) return true;
+    const previousValue = Number(areaSnapshot[field]);
+    const parsedValue = toAreaRuntimeValue(input.value, WATER_DROP_AREA_NUMERIC_FIELD_CONFIG[field]);
+    if (parsedValue === null || Object.is(parsedValue, previousValue)) {
+      input.value = Number.isFinite(previousValue) ? toAreaEditorDisplayValue(previousValue, WATER_DROP_AREA_NUMERIC_FIELD_CONFIG[field]) : "";
+      clearInputDraft(input);
+      return true;
+    }
+    onWaterDropAreaUpdate?.(field, parsedValue, { areaId: input.dataset.waterDropAreaId || null });
+    clearInputDraft(input);
+    return true;
   };
 
   const getSelectedSmokeArea = (areaId) => {
@@ -1983,6 +2049,9 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       if (target.dataset.dustAreaEditable === "number") {
         if (commitDustAreaNumericInput(target)) return;
       }
+      if (target.dataset.waterDropAreaEditable === "number") {
+        if (commitWaterDropAreaNumericInput(target)) return;
+      }
       if (target.dataset.smokeAreaEditable === "number") {
         if (commitSmokeAreaNumericInput(target)) return;
       }
@@ -2004,6 +2073,19 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       if (glowAreaField === "enabled" || glowAreaField === "visible") {
         const areaId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedGlowAreaId : null;
         onGlowAreaUpdate?.(glowAreaField, target.checked, { areaId });
+        clearInputDraft(target);
+        return;
+      }
+      const waterDropAreaField = target.dataset.waterDropAreaField;
+      if (waterDropAreaField === "enabled" || waterDropAreaField === "visible") {
+        const areaId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedWaterDropAreaId : null;
+        onWaterDropAreaUpdate?.(waterDropAreaField, target.checked, { areaId });
+        clearInputDraft(target);
+        return;
+      }
+      if (waterDropAreaField === "mode") {
+        const areaId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedWaterDropAreaId : null;
+        onWaterDropAreaUpdate?.("mode", target.value, { areaId });
         clearInputDraft(target);
         return;
       }

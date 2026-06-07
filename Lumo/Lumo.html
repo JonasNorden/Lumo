@@ -4998,6 +4998,102 @@
       return "up";
     }
 
+
+    function readRechargedWaterDropAreas(payload) {
+      const sourceAreas = Array.isArray(payload?.waterDropAreas) ? payload.waterDropAreas : [];
+      return sourceAreas.map((area, index) => ({
+        id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `water_drop_area_${index + 1}`,
+        x: Number.isFinite(area?.x) ? area.x : null,
+        y: Number.isFinite(area?.y) ? area.y : null,
+        mode: area?.mode === "line" ? "line" : "spot",
+        density: Number.isFinite(area?.density) ? Math.max(0, Math.min(100, Number(area.density))) : 35,
+        speed: Number.isFinite(area?.speed) ? Math.max(0, Math.min(100, Number(area.speed))) : 35,
+        size: Number.isFinite(area?.size) ? Math.max(0, Math.min(100, Number(area.size))) : 35,
+        length: Number.isFinite(area?.length) && area.length > 0 ? area.length : 96,
+        height: Number.isFinite(area?.height) && area.height > 0 ? area.height : 144,
+        enabled: area?.enabled !== false,
+        visible: area?.visible !== false,
+      })).filter((area) => area.x !== null && area.y !== null && area.enabled && area.visible && area.density > 0 && area.size > 0);
+    }
+
+    const rechargedWaterDropLayoutCache = new Map();
+    function buildRechargedWaterDropLayout(area, index, tileSize = 24) {
+      const sourceTiles = area.mode === "line" ? Math.max(1, area.length / Math.max(1, tileSize)) : 1;
+      const targetCount = Math.max(0, Math.round((2 + sourceTiles * 2.35) * (area.density / 100)));
+      if (targetCount <= 0) return [];
+      const cacheKey = [area.id, Math.round(area.x * 100), Math.round(area.y * 100), area.mode, Math.round(area.length * 100), Math.round(area.height * 100), Math.round(area.density * 100), Math.round(area.speed * 100), Math.round(area.size * 100)].join("|");
+      if (rechargedWaterDropLayoutCache.has(cacheKey)) return rechargedWaterDropLayoutCache.get(cacheKey);
+      const seed = Number.isInteger(area.seed) ? area.seed >>> 0 : hashRechargedStoneString(`${area.id}|${Math.round(area.x)}|${Math.round(area.y)}|${area.mode}|${Math.round(area.length)}|${index}`);
+      const random = createRechargedStoneRandom(seed);
+      const drops = [];
+      for (let dropIndex = 0; dropIndex < targetCount; dropIndex += 1) {
+        const radius = 1.15 + (area.size / 100) * 2.6 + random() * 0.65;
+        drops.push({
+          sourceX: area.x + (area.mode === "line" ? random() * area.length : 0),
+          sourceY: area.y,
+          phase: random(),
+          fallDistance: area.height * (0.88 + random() * 0.2),
+          fallSpeed: 18 + (area.speed / 100) * 118 + random() * 22,
+          radius,
+          length: radius * (2.2 + (area.speed / 100) * 2.2),
+          alpha: 0.34 + random() * 0.22,
+        });
+      }
+      rechargedWaterDropLayoutCache.set(cacheKey, drops);
+      return drops;
+    }
+
+    function getRechargedWaterDropY(drop, timeSeconds, collisionRects = []) {
+      const sourceY = Number.isFinite(drop.sourceY) ? drop.sourceY : 0;
+      let collisionY = sourceY + Math.max(1, Number.isFinite(drop.fallDistance) ? drop.fallDistance : 144);
+      const x = Number.isFinite(drop.sourceX) ? drop.sourceX : 0;
+      for (const rect of Array.isArray(collisionRects) ? collisionRects : []) {
+        const rx = Number.isFinite(rect?.x) ? rect.x : Number.isFinite(rect?.worldX) ? rect.worldX : NaN;
+        const ry = Number.isFinite(rect?.y) ? rect.y : Number.isFinite(rect?.worldY) ? rect.worldY : NaN;
+        const rw = Number.isFinite(rect?.w) ? rect.w : Number.isFinite(rect?.width) ? rect.width : Number.isFinite(rect?.worldW) ? rect.worldW : 0;
+        if (!Number.isFinite(rx) || !Number.isFinite(ry) || rw <= 0) continue;
+        if (x >= rx && x <= rx + rw && ry >= sourceY && ry < collisionY) collisionY = ry;
+      }
+      const travel = Math.max(1, collisionY - sourceY);
+      const cycleSeconds = Math.max(0.32, travel / Math.max(1, Number.isFinite(drop.fallSpeed) ? drop.fallSpeed : 60));
+      const phase = (((drop.phase + timeSeconds / cycleSeconds) % 1) + 1) % 1;
+      return Math.min(collisionY, sourceY + travel * phase);
+    }
+
+    function drawRechargedWaterDropVisual(ctx, x, y, drop, alphaScale = 1) {
+      const radius = Math.max(1, Number.isFinite(drop.radius) ? drop.radius : 2);
+      const length = Math.max(radius * 1.8, Number.isFinite(drop.length) ? drop.length : radius * 3);
+      ctx.save();
+      ctx.globalAlpha *= Math.max(0.08, Math.min(0.72, (Number.isFinite(drop.alpha) ? drop.alpha : 0.42) * alphaScale));
+      ctx.strokeStyle = "rgba(205, 238, 255, 0.78)";
+      ctx.fillStyle = "rgba(177, 222, 246, 0.82)";
+      ctx.lineWidth = Math.max(1, radius * 0.65);
+      ctx.beginPath();
+      ctx.moveTo(x, y - length * 0.5);
+      ctx.lineTo(x, y + length * 0.5);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(x, y + length * 0.48, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawRechargedWaterDropAreas(ctx, mapper, waterDropAreas, options = {}) {
+      if (!ctx || !mapper || !Array.isArray(waterDropAreas) || waterDropAreas.length === 0) return false;
+      const tileSize = Number.isFinite(options.tileSize) && options.tileSize > 0 ? options.tileSize : 24;
+      const timeSeconds = Number.isFinite(options.timeSeconds) ? options.timeSeconds : 0;
+      const collisionRects = Array.isArray(options.collisionRects) ? options.collisionRects : [];
+      let drew = false;
+      for (let areaIndex = 0; areaIndex < waterDropAreas.length; areaIndex += 1) {
+        for (const drop of buildRechargedWaterDropLayout(waterDropAreas[areaIndex], areaIndex, tileSize)) {
+          const rect = mapper.worldToCanvasRect(drop.sourceX, getRechargedWaterDropY(drop, timeSeconds, collisionRects), 1, 1);
+          drawRechargedWaterDropVisual(ctx, rect.x, rect.y, drop);
+          drew = true;
+        }
+      }
+      return drew;
+    }
+
     function readRechargedSmokeAreas(payload) {
       const sourceAreas = Array.isArray(payload?.smokeAreas) ? payload.smokeAreas : [];
       return sourceAreas
@@ -6986,6 +7082,7 @@
         const stoneAreas = readRechargedStoneAreas(payload);
         const glowAreas = readRechargedGlowAreas(payload);
         const smokeAreas = readRechargedSmokeAreas(payload);
+        const waterDropAreas = readRechargedWaterDropAreas(payload);
         const worldWidthPx = Math.max(tileSize, Math.round(worldWidthRaw * worldUnitsToPx));
         const worldHeightPx = Math.max(tileSize, Math.round(worldHeightRaw * worldUnitsToPx));
         const hudGameplayViewport = getRechargedHudV2GameplayViewport(canvas);
@@ -7131,6 +7228,7 @@
         }
 
         drawRechargedGlowAreas(ctx, mapper, glowAreas, { tileSize, timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000 });
+        drawRechargedWaterDropAreas(ctx, mapper, waterDropAreas, { tileSize, collisionRects: supportTiles, timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000 });
         drawRechargedSmokeAreas(ctx, mapper, smokeAreas, { tileSize, timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000 });
 
         // Draw support tiles with V1 tile assets/placement rules first.
@@ -7274,6 +7372,9 @@
           playerVisual,
           decorSnapshots: decorWorldLane,
           stoneAreas,
+          waterDropAreas,
+          collisionRects: supportTiles,
+          timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000,
           reactiveDecor: {
             grassPatches: reactiveGrassPatches,
             bloomPatches: reactiveBloomPatches,
@@ -8272,6 +8373,58 @@
       return drewAny;
     }
 
+
+    function buildRechargedMirrorWaterDropReflectionCandidates(mapper, area, waterDropAreas, options = {}) {
+      if (!mapper || !area || !Array.isArray(waterDropAreas) || waterDropAreas.length === 0) return [];
+      const tileSize = Number.isFinite(options.tileSize) && options.tileSize > 0 ? options.tileSize : 24;
+      const timeSeconds = Number.isFinite(options.timeSeconds) ? options.timeSeconds : 0;
+      const collisionRects = Array.isArray(options.collisionRects) ? options.collisionRects : [];
+      const surfaceX = area.x;
+      const surfaceY = area.y + (Number.isFinite(area.yOffset) ? area.yOffset : 0);
+      const surfaceW = area.width;
+      const reflectionHeight = Math.max(0, Number.isFinite(area.reflectionHeight) ? area.reflectionHeight : 72);
+      const candidates = [];
+      if (reflectionHeight <= 0) return candidates;
+      for (let areaIndex = 0; areaIndex < waterDropAreas.length; areaIndex += 1) {
+        for (const drop of buildRechargedWaterDropLayout(waterDropAreas[areaIndex], areaIndex, tileSize)) {
+          const y = getRechargedWaterDropY(drop, timeSeconds, collisionRects);
+          const x = Number.isFinite(drop.sourceX) ? drop.sourceX : 0;
+          const distanceToSurface = surfaceY - y;
+          if (x < surfaceX - 4 || x > surfaceX + surfaceW + 4 || distanceToSurface < -4 || distanceToSurface > reflectionHeight) continue;
+          candidates.push({ drop, x, y, distanceToSurface, verticalReach: reflectionHeight });
+        }
+      }
+      return candidates;
+    }
+
+    function drawRechargedWaterDropMirrorReflections(ctx, mapper, area, candidates, clipRect, options = {}) {
+      if (!ctx || !mapper || !area || !Array.isArray(candidates) || candidates.length === 0) return false;
+      const surfaceY = area.y + (Number.isFinite(area.yOffset) ? area.yOffset : 0);
+      const surfaceX = area.x;
+      const reflectionStrength = Math.max(0, Math.min(1, Number.isFinite(area.reflectionStrength) ? Number(area.reflectionStrength) : 0.35));
+      const distortion = Math.max(0, Math.min(1, Number.isFinite(area.distortion) ? Number(area.distortion) : 0.12));
+      const fade = Math.max(0, Math.min(1, Number.isFinite(area.fade) ? Number(area.fade) : 0.65));
+      if (reflectionStrength <= 0) return false;
+      const surfaceCanvasY = mapper.worldToCanvasRect(surfaceX, surfaceY, 1, 1).y;
+      const shimmerTime = typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+      let drewAny = false;
+      for (const candidate of candidates) {
+        const fadeProgress = Math.max(0, Math.min(1, Math.max(0, candidate.distanceToSurface) / Math.max(1, candidate.verticalReach)));
+        const alpha = reflectionStrength * (1 - (fadeProgress * fade)) * 0.62;
+        if (alpha <= 0.003) continue;
+        const rect = mapper.worldToCanvasRect(candidate.x, candidate.y, 1, 1);
+        const reflectedY = surfaceCanvasY + (surfaceCanvasY - rect.y);
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        drawRechargedMirrorSubjectWithLocalShimmer(ctx, clipRect, distortion, surfaceX, candidate.x, shimmerTime, () => {
+          drawRechargedWaterDropVisual(ctx, rect.x, reflectedY, candidate.drop, 0.82);
+        });
+        ctx.restore();
+        drewAny = true;
+      }
+      return drewAny;
+    }
+
     function drawRechargedMirrorSurfaceAreas(ctx, mapper, state, mirrorSurfaceAreas, options = {}) {
       if (!ctx || !mapper || !state || !Array.isArray(mirrorSurfaceAreas) || mirrorSurfaceAreas.length === 0) {
         return false;
@@ -8304,7 +8457,8 @@
         const isPlayerVerticallyNear = hasPlayerReflectionAnchor && reflectionHeight > 0 && distanceToSurface >= -surfaceH && distanceToSurface <= verticalReach;
         const decorReflectionCandidates = buildRechargedMirrorDecorReflectionCandidates(ctx, mapper, state, area, decorSnapshots, options);
         const stoneReflectionCandidates = buildRechargedMirrorStoneReflectionCandidates(mapper, area, options.stoneAreas, options);
-        if ((!isPlayerHorizontallyNear || !isPlayerVerticallyNear) && decorReflectionCandidates.length === 0 && stoneReflectionCandidates.length === 0) {
+        const waterDropReflectionCandidates = buildRechargedMirrorWaterDropReflectionCandidates(mapper, area, options.waterDropAreas, options);
+        if ((!isPlayerHorizontallyNear || !isPlayerVerticallyNear) && decorReflectionCandidates.length === 0 && stoneReflectionCandidates.length === 0 && waterDropReflectionCandidates.length === 0) {
           continue;
         }
 
@@ -8336,6 +8490,10 @@
         }
 
         if (drawRechargedStoneMirrorReflections(ctx, mapper, area, stoneReflectionCandidates, clipRect, options)) {
+          drewAnyReflection = true;
+        }
+
+        if (drawRechargedWaterDropMirrorReflections(ctx, mapper, area, waterDropReflectionCandidates, clipRect, options)) {
           drewAnyReflection = true;
         }
 

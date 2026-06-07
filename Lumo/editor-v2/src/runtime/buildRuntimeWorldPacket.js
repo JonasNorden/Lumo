@@ -106,6 +106,9 @@ export function buildRuntimeWorldPacket(parts) {
     smokeAreas: Array.isArray(skeleton?.smokeAreas)
       ? [...skeleton.smokeAreas]
       : [],
+    waterDropAreas: Array.isArray(skeleton?.waterDropAreas)
+      ? [...skeleton.waterDropAreas]
+      : [],
     tileBounds,
     tileMap,
   };

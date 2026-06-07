@@ -35,6 +35,7 @@ function resolveSessionWorld(world) {
     dustAreas: Array.isArray(world?.dustAreas) ? [...world.dustAreas] : [],
     glowAreas: Array.isArray(world?.glowAreas) ? [...world.glowAreas] : [],
     smokeAreas: Array.isArray(world?.smokeAreas) ? [...world.smokeAreas] : [],
+    waterDropAreas: Array.isArray(world?.waterDropAreas) ? [...world.waterDropAreas] : [],
     width: isFiniteNumber(world?.width) ? world.width : null,
     height: isFiniteNumber(world?.height) ? world.height : null,
     tileSize: isFiniteNumber(world?.tileSize) ? world.tileSize : null,

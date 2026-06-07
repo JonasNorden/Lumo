@@ -352,6 +352,7 @@ function buildWorldSnapshot(world) {
   const dustAreas = normalizeDustAreas(source.dustAreas);
   const glowAreas = normalizeGlowAreas(source.glowAreas);
   const smokeAreas = normalizeSmokeAreas(source.smokeAreas);
+  const waterDropAreas = Array.isArray(source.waterDropAreas) ? source.waterDropAreas.map((area) => ({ ...area })) : [];
 
   return {
     worldId: typeof source.worldId === "string" ? source.worldId : "",
@@ -369,6 +370,7 @@ function buildWorldSnapshot(world) {
     dustAreas,
     glowAreas,
     smokeAreas,
+    waterDropAreas,
   };
 }
 

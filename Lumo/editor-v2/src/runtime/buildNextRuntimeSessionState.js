@@ -40,6 +40,7 @@ function cloneSessionForStep(sessionState) {
       dustAreas: Array.isArray(source?.world?.dustAreas) ? [...source.world.dustAreas] : [],
       glowAreas: Array.isArray(source?.world?.glowAreas) ? [...source.world.glowAreas] : [],
       smokeAreas: Array.isArray(source?.world?.smokeAreas) ? [...source.world.smokeAreas] : [],
+      waterDropAreas: Array.isArray(source?.world?.waterDropAreas) ? [...source.world.waterDropAreas] : [],
     },
     player: {
       ...(source.player ?? {}),

@@ -75,6 +75,10 @@ function cloneSmokeAreaSnapshot(area) {
   return area && typeof area === "object" ? { ...area } : null;
 }
 
+function cloneWaterDropAreaSnapshot(area) {
+  return area && typeof area === "object" ? { ...area } : null;
+}
+
 export function createReactiveGrassEditEntry(mode, payload = {}) {
   const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
   const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
@@ -177,6 +181,20 @@ export function createSmokeAreaEditEntry(mode, payload = {}) {
     index,
     previousSnapshot: cloneSmokeAreaSnapshot(payload.previousSnapshot),
     nextSnapshot: cloneSmokeAreaSnapshot(payload.nextSnapshot),
+  };
+}
+
+export function createWaterDropAreaEditEntry(mode, payload = {}) {
+  const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
+  const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
+  const index = Number.isInteger(payload.index) ? payload.index : null;
+  return {
+    kind: "water-drop-area",
+    mode: normalizedMode,
+    objectId,
+    index,
+    previousSnapshot: cloneWaterDropAreaSnapshot(payload.previousSnapshot),
+    nextSnapshot: cloneWaterDropAreaSnapshot(payload.nextSnapshot),
   };
 }
 
@@ -368,6 +386,9 @@ function applyUndoEntry(doc, entry) {
   if (entry.kind === "smoke-area") {
     return applyArrayObjectUndo(doc, entry, "smokeAreas", cloneSmokeAreaSnapshot);
   }
+  if (entry.kind === "water-drop-area") {
+    return applyArrayObjectUndo(doc, entry, "waterDropAreas", cloneWaterDropAreaSnapshot);
+  }
   if (entry.kind === "reactive-grass") {
     if (!Array.isArray(doc.reactiveGrassPatches)) doc.reactiveGrassPatches = [];
     const patches = doc.reactiveGrassPatches;
@@ -487,6 +508,9 @@ function applyRedoEntry(doc, entry) {
   }
   if (entry.kind === "smoke-area") {
     return applyArrayObjectRedo(doc, entry, "smokeAreas", cloneSmokeAreaSnapshot);
+  }
+  if (entry.kind === "water-drop-area") {
+    return applyArrayObjectRedo(doc, entry, "waterDropAreas", cloneWaterDropAreaSnapshot);
   }
   if (entry.kind === "reactive-grass") {
     if (!Array.isArray(doc.reactiveGrassPatches)) doc.reactiveGrassPatches = [];

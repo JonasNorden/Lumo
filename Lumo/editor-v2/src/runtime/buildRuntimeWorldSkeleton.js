@@ -63,5 +63,6 @@ export function buildRuntimeWorldSkeleton(level) {
     dustAreas: Array.isArray(level?.dustAreas) ? level.dustAreas : [],
     glowAreas: Array.isArray(level?.glowAreas) ? level.glowAreas : [],
     smokeAreas: Array.isArray(level?.smokeAreas) ? level.smokeAreas : [],
+    waterDropAreas: Array.isArray(level?.waterDropAreas) ? level.waterDropAreas : [],
   };
 }

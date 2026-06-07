@@ -4,6 +4,7 @@ const STONE_AREA_MIN_SIZE = 1;
 const DUST_AREA_MIN_SIZE = 1;
 const GLOW_AREA_MIN_SIZE = 1;
 const SMOKE_AREA_MIN_SIZE = 1;
+const WATER_DROP_AREA_MIN_SIZE = 1;
 export const MIRROR_SURFACE_DEFAULTS = Object.freeze({
   reflectionHeight: 72,
   reflectionStrength: 0.35,
@@ -44,6 +45,15 @@ export const SMOKE_AREA_DEFAULTS = Object.freeze({
   speed: 0.28,
 });
 
+export const WATER_DROP_AREA_MODES = Object.freeze(["spot", "line"]);
+export const WATER_DROP_AREA_DEFAULTS = Object.freeze({
+  mode: "spot",
+  density: 35,
+  speed: 35,
+  size: 35,
+  length: DEFAULT_TILE_SIZE * 4,
+});
+
 function clamp01(value, fallback) {
   const number = Number(value);
   if (!Number.isFinite(number)) return fallback;
@@ -63,6 +73,12 @@ function toFiniteNumber(value, fallback = 0) {
 function toPositiveNumber(value, fallback = DEFAULT_TILE_SIZE) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+function clampHumanScale(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(0, Math.min(100, number));
 }
 
 export function normalizeSmokeAreaDirection(value) {
@@ -342,6 +358,143 @@ export function updateSmokeAreaField(area, field, value) {
   return normalized;
 }
 
+
+export function normalizeWaterDropAreaMode(value) {
+  return value === "line" ? "line" : WATER_DROP_AREA_DEFAULTS.mode;
+}
+
+export function normalizeWaterDropAreaForEditor(area = {}, index = 0) {
+  const mode = normalizeWaterDropAreaMode(area?.mode);
+  const length = Math.max(WATER_DROP_AREA_MIN_SIZE, toPositiveNumber(area?.length ?? area?.width, WATER_DROP_AREA_DEFAULTS.length));
+  return {
+    id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `water_drop_area_${index + 1}`,
+    x: toFiniteNumber(area?.x, 0),
+    y: toFiniteNumber(area?.y, 0),
+    mode,
+    density: clampHumanScale(area?.density, WATER_DROP_AREA_DEFAULTS.density),
+    speed: clampHumanScale(area?.speed, WATER_DROP_AREA_DEFAULTS.speed),
+    size: clampHumanScale(area?.size, WATER_DROP_AREA_DEFAULTS.size),
+    length: mode === "line" ? length : 0,
+    width: mode === "line" ? length : WATER_DROP_AREA_MIN_SIZE,
+    height: Math.max(WATER_DROP_AREA_MIN_SIZE, toPositiveNumber(area?.height, DEFAULT_TILE_SIZE * 6)),
+    enabled: area?.enabled !== false,
+    visible: area?.visible !== false,
+  };
+}
+
+export function createWaterDropAreaFromDrag(doc, startCell, endCell) {
+  if (!doc || !startCell) return null;
+  const tileSize = toPositiveNumber(doc?.dimensions?.tileSize, DEFAULT_TILE_SIZE);
+  const end = endCell || startCell;
+  const minCellX = Math.max(0, Math.min(startCell.x, end.x));
+  const maxCellX = Math.max(0, Math.max(startCell.x, end.x));
+  const minCellY = Math.max(0, Math.min(startCell.y, end.y));
+  const mode = maxCellX > minCellX ? "line" : WATER_DROP_AREA_DEFAULTS.mode;
+  const length = Math.max(tileSize, (maxCellX - minCellX + 1) * tileSize);
+  return {
+    id: getNextAreaId(doc.waterDropAreas || [], "water_drop_area"),
+    x: minCellX * tileSize,
+    y: minCellY * tileSize,
+    mode,
+    density: WATER_DROP_AREA_DEFAULTS.density,
+    speed: WATER_DROP_AREA_DEFAULTS.speed,
+    size: WATER_DROP_AREA_DEFAULTS.size,
+    length: mode === "line" ? length : 0,
+    width: mode === "line" ? length : WATER_DROP_AREA_MIN_SIZE,
+    height: tileSize * 6,
+    enabled: true,
+    visible: true,
+  };
+}
+
+export function getWaterDropAreaBounds(area, index = 0) {
+  const normalized = normalizeWaterDropAreaForEditor(area, index);
+  const width = normalized.mode === "line" ? normalized.length : WATER_DROP_AREA_MIN_SIZE;
+  return { x: normalized.x, y: normalized.y, width, height: normalized.height, right: normalized.x + width, bottom: normalized.y + normalized.height };
+}
+
+export function moveWaterDropArea(area, deltaX = 0, deltaY = 0) {
+  const normalized = normalizeWaterDropAreaForEditor(area);
+  return { ...normalized, x: Math.max(0, normalized.x + toFiniteNumber(deltaX, 0)), y: Math.max(0, normalized.y + toFiniteNumber(deltaY, 0)) };
+}
+
+export function updateWaterDropAreaField(area, field, value) {
+  const normalized = normalizeWaterDropAreaForEditor(area);
+  if (field === "enabled" || field === "visible") return { ...normalized, [field]: Boolean(value) };
+  if (field === "x" || field === "y") return { ...normalized, [field]: Math.max(0, toFiniteNumber(value, normalized[field])) };
+  if (field === "mode") return normalizeWaterDropAreaForEditor({ ...normalized, mode: normalizeWaterDropAreaMode(value) });
+  if (field === "length") return normalizeWaterDropAreaForEditor({ ...normalized, length: toPositiveNumber(value, normalized.length) });
+  if (field === "density" || field === "speed" || field === "size") return { ...normalized, [field]: clampHumanScale(value, normalized[field]) };
+  return normalized;
+}
+
+export function getWaterDropAreaSeed(area = {}, index = 0) {
+  if (Number.isInteger(area?.seed)) return area.seed >>> 0;
+  const normalized = normalizeWaterDropAreaForEditor(area, index);
+  return hashStringToUint32(`${normalized.id}|${Math.round(normalized.x)}|${Math.round(normalized.y)}|${normalized.mode}|${Math.round(normalized.length)}|${index}`);
+}
+
+export function getWaterDropAreaDropCount(area = {}, index = 0) {
+  const normalized = normalizeWaterDropAreaForEditor(area, index);
+  if (!normalized.enabled || !normalized.visible || normalized.density <= 0 || normalized.size <= 0) return 0;
+  const sourceTiles = normalized.mode === "line" ? Math.max(1, normalized.length / DEFAULT_TILE_SIZE) : 1;
+  return Math.max(0, Math.round((2 + sourceTiles * 2.35) * (normalized.density / 100)));
+}
+
+const waterDropAreaLayoutCache = new Map();
+const EMPTY_WATER_DROP_LAYOUT = Object.freeze([]);
+
+function getWaterDropAreaLayoutCacheKey(area = {}, index = 0) {
+  const normalized = normalizeWaterDropAreaForEditor(area, index);
+  return [normalized.id, roundTo(normalized.x,100), roundTo(normalized.y,100), normalized.mode, roundTo(normalized.length,100), roundTo(normalized.height,100), roundTo(normalized.density,100), roundTo(normalized.speed,100), roundTo(normalized.size,100), normalized.enabled?1:0, normalized.visible?1:0, Number.isInteger(area?.seed) ? area.seed >>> 0 : "auto"].join("|");
+}
+
+export function generateWaterDropAreaLayout(area = {}, index = 0) {
+  const normalized = normalizeWaterDropAreaForEditor(area, index);
+  const targetCount = getWaterDropAreaDropCount(normalized, index);
+  if (targetCount <= 0) return EMPTY_WATER_DROP_LAYOUT;
+  const cacheKey = getWaterDropAreaLayoutCacheKey(normalized, index);
+  if (waterDropAreaLayoutCache.has(cacheKey)) return waterDropAreaLayoutCache.get(cacheKey);
+  const random = mulberry32(getWaterDropAreaSeed(normalized, index));
+  const drops = [];
+  const fallDistance = Math.max(DEFAULT_TILE_SIZE, normalized.height);
+  for (let dropIndex = 0; dropIndex < targetCount; dropIndex += 1) {
+    const sourceOffset = normalized.mode === "line" ? random() * normalized.length : 0;
+    const radius = 1.15 + (normalized.size / 100) * 2.6 + random() * 0.65;
+    const fallSpeed = 18 + (normalized.speed / 100) * 118 + random() * 22;
+    drops.push(Object.freeze({
+      id: `${normalized.id}-drop-${dropIndex + 1}`,
+      sourceX: roundTo(normalized.x + sourceOffset, 100),
+      sourceY: roundTo(normalized.y, 100),
+      phase: roundTo(random(), 10000),
+      fallDistance: roundTo(fallDistance * (0.88 + random() * 0.2), 100),
+      fallSpeed: roundTo(fallSpeed, 100),
+      radius: roundTo(radius, 100),
+      length: roundTo(radius * (2.2 + (normalized.speed / 100) * 2.2), 100),
+      alpha: roundTo(0.34 + random() * 0.22, 1000),
+      mode: normalized.mode,
+    }));
+  }
+  const frozenDrops = Object.freeze(drops);
+  waterDropAreaLayoutCache.set(cacheKey, frozenDrops);
+  return frozenDrops;
+}
+
+export function resolveWaterDropCollisionY(drop, collisionRects = []) {
+  const x = toFiniteNumber(drop?.sourceX, 0);
+  const sourceY = toFiniteNumber(drop?.sourceY, 0);
+  const maxY = sourceY + Math.max(0, toFiniteNumber(drop?.fallDistance, DEFAULT_TILE_SIZE));
+  let bestY = maxY;
+  for (const rect of Array.isArray(collisionRects) ? collisionRects : []) {
+    const rx = toFiniteNumber(rect?.worldX ?? rect?.x, Number.NaN);
+    const ry = toFiniteNumber(rect?.worldY ?? rect?.y, Number.NaN);
+    const rw = toFiniteNumber(rect?.worldW ?? rect?.w ?? rect?.width, 0);
+    const rh = toFiniteNumber(rect?.worldH ?? rect?.h ?? rect?.height, 0);
+    if (!Number.isFinite(rx) || !Number.isFinite(ry) || rw <= 0 || rh <= 0) continue;
+    if (x >= rx && x <= rx + rw && ry >= sourceY && ry < bestY) bestY = ry;
+  }
+  return roundTo(bestY, 100);
+}
 
 export function normalizeGlowAreaForEditor(area = {}, index = 0) {
   return {
