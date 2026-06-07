@@ -17,7 +17,7 @@ import { buildRuntimeWorldSkeleton } from "../src/runtime/buildRuntimeWorldSkele
 import { buildRuntimeWorldPacket } from "../src/runtime/buildRuntimeWorldPacket.js";
 import { createLumoRechargedBootAdapter } from "../src/runtime/createLumoRechargedBootAdapter.js";
 import { createRechargedLevelSourceRuntime } from "../src/runtime/createRechargedLevelSourceRuntime.js";
-import { getSelectionEditorPanelContent } from "../src/ui/selectionEditorPanel.js";
+import { getSelectionEditorPanelContent, toAreaEditorDisplayValue, toAreaRuntimeValue } from "../src/ui/selectionEditorPanel.js";
 import {
   getRuntimeGlowPointAlpha,
   getRuntimeGlowPointColor,
@@ -231,8 +231,19 @@ const baseDoc = {
   assert.match(markup, />Direction</, "Glow Area inspector exposes Direction label");
   assert.match(markup, /data-glow-area-field="direction"/, "Glow direction is editable");
   assert.match(markup, /data-glow-area-field="speed"/, "Glow speed is editable");
+  assert.match(markup, /data-glow-area-field="density"[\s\S]*?value="80"/, "Glow density displays normalized 0.8 as human-readable 80");
+  assert.match(markup, /data-glow-area-field="strength"[\s\S]*?value="50"/, "Glow strength displays normalized 0.5 as human-readable 50");
+  assert.match(markup, /data-glow-area-field="speed"[\s\S]*?data-human-scale="percent-0-100"/, "Glow normalized controls declare percent-style human scaling");
+  assert.match(markup, /data-glow-area-field="speed"[\s\S]*?step="1"/, "Glow normalized controls expose stepper/native step metadata");
+  assert.match(markup, /selectionStepperButton/, "Glow Area inspector renders compact stepper controls");
   assert.match(markup, /fieldRowCompact selectionInlineField selectionCoordField/, "Glow Area inspector uses compact inline rows");
   assert.match(markup, /<option value="up" selected>up<\/option>/, "Glow direction select reflects authored up value");
+}
+
+{
+  const normalizedScale = { min: 0, max: 1, presentationScale: 100 };
+  assert.equal(toAreaEditorDisplayValue(0.65, normalizedScale), "65", "UI displays normalized 0.65 as 65");
+  assert.equal(toAreaRuntimeValue("80", normalizedScale), 0.8, "editing UI value 80 stores/runtime-normalizes to 0.8");
 }
 
 {

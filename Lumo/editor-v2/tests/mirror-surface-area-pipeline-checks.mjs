@@ -211,6 +211,12 @@ function runEditorPanelVisualFieldCheck() {
   for (const label of ["Reflection height", "Reflection strength", "Distortion", "Surface strength", "Fade"]) {
     assert.equal(markup.includes(label), true, `selection panel must expose ${label}`);
   }
+  assert.match(markup, /data-mirror-surface-area-field="reflectionStrength"[\s\S]*?value="80"/, "Mirror reflectionStrength displays normalized 0.8 as human-readable 80");
+  assert.match(markup, /data-mirror-surface-area-field="surfaceStrength"[\s\S]*?value="50"/, "Mirror surfaceStrength displays normalized 0.5 as human-readable 50");
+  assert.match(markup, /data-mirror-surface-area-field="fade"[\s\S]*?value="20"/, "Mirror fade displays normalized 0.2 as human-readable 20");
+  assert.match(markup, /data-mirror-surface-area-field="reflectionHeight"[\s\S]*?value="96"[\s\S]*?data-human-scale="units"/, "Mirror reflectionHeight remains a raw pixel/unit field");
+  assert.match(markup, /data-mirror-surface-area-field="reflectionStrength"[\s\S]*?data-human-scale="percent-0-100"/, "Mirror normalized controls declare percent-style human scaling");
+  assert.match(markup, /data-mirror-surface-area-field="reflectionStrength"[\s\S]*?step="1"/, "Mirror normalized controls expose step metadata for native/held steppers");
   const updated = updateMirrorSurfaceAreaField(area, "reflectionStrength", 0.6);
   assert.equal(updated.reflectionStrength, 0.6, "editor mirror field update must preserve authored reflection strength");
   assert.equal(updated.reflectionHeight, 96, "editor mirror field update must preserve authored reflection height");
