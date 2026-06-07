@@ -46008,6 +46008,62 @@
       "height": 144,
       "enabled": true,
       "visible": true
+    },
+    {
+      "id": "water_drop_area-2",
+      "x": 1776,
+      "y": 48,
+      "mode": "spot",
+      "density": 12,
+      "speed": 35,
+      "size": 35,
+      "length": 0,
+      "width": 1,
+      "height": 144,
+      "enabled": true,
+      "visible": true
+    },
+    {
+      "id": "water_drop_area-3",
+      "x": 1848,
+      "y": 24,
+      "mode": "spot",
+      "density": 18,
+      "speed": 35,
+      "size": 35,
+      "length": 0,
+      "width": 1,
+      "height": 144,
+      "enabled": true,
+      "visible": true
+    },
+    {
+      "id": "water_drop_area-4",
+      "x": 1896,
+      "y": 0,
+      "mode": "spot",
+      "density": 13,
+      "speed": 35,
+      "size": 35,
+      "length": 0,
+      "width": 1,
+      "height": 144,
+      "enabled": true,
+      "visible": true
+    },
+    {
+      "id": "water_drop_area-5",
+      "x": 1944,
+      "y": 48,
+      "mode": "spot",
+      "density": 15,
+      "speed": 35,
+      "size": 35,
+      "length": 0,
+      "width": 1,
+      "height": 144,
+      "enabled": true,
+      "visible": true
     }
   ]
 }
