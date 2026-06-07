@@ -5087,6 +5087,29 @@
     }
 
     const RECHARGED_WATER_DROP_IMPACT_POOL_LIMIT = 144;
+    const RECHARGED_WATER_DROP_IMPACT_MIN_LIFETIME = 0.8;
+    const RECHARGED_WATER_DROP_IMPACT_MAX_LIFETIME = 1.15;
+
+    function getRechargedWaterDropImpactRadiusBase(drop, area) {
+      const radius = Math.max(1, Number.isFinite(drop?.radius) ? drop.radius : 2);
+      const areaSizeScale = Math.max(0, Math.min(1, (Number.isFinite(area?.size) ? area.size : 35) / 100));
+      const radiusScale = Math.max(0, Math.min(1, (radius - 1) / 4));
+      return 16 + areaSizeScale * 7 + radiusScale * 5;
+    }
+
+    function getRechargedWaterDropImpactVerticalRadiusBase(drop, area) {
+      const radius = Math.max(1, Number.isFinite(drop?.radius) ? drop.radius : 2);
+      const areaSizeScale = Math.max(0, Math.min(1, (Number.isFinite(area?.size) ? area.size : 35) / 100));
+      const radiusScale = Math.max(0, Math.min(1, (radius - 1) / 4));
+      return 3 + areaSizeScale * 1.5 + radiusScale * 1.5;
+    }
+
+    function getRechargedWaterDropImpactLifetime(drop, area) {
+      const radius = Math.max(1, Number.isFinite(drop?.radius) ? drop.radius : 2);
+      const areaSizeScale = Math.max(0, Math.min(1, (Number.isFinite(area?.size) ? area.size : 35) / 100));
+      const radiusScale = Math.max(0, Math.min(1, (radius - 1) / 4));
+      return RECHARGED_WATER_DROP_IMPACT_MIN_LIFETIME + (RECHARGED_WATER_DROP_IMPACT_MAX_LIFETIME - RECHARGED_WATER_DROP_IMPACT_MIN_LIFETIME) * (areaSizeScale * 0.65 + radiusScale * 0.35);
+    }
 
     function createRechargedWaterDropImpactPool(maxEvents = RECHARGED_WATER_DROP_IMPACT_POOL_LIMIT) {
       return { maxEvents: Math.max(1, Math.floor(Number.isFinite(maxEvents) ? maxEvents : RECHARGED_WATER_DROP_IMPACT_POOL_LIMIT)), cursor: 0, events: [], lastCycles: new Map() };
@@ -5160,10 +5183,19 @@
           const motion = getRechargedWaterDropCycleMotion(drop, timeSeconds, collisionRects, collisionOptions);
           const previousCycle = pool.lastCycles.get(key);
           if (Number.isInteger(previousCycle) && motion.cycleIndex > previousCycle) {
-            const radius = Math.max(1, Number.isFinite(drop.radius) ? drop.radius : 2);
-            const sizeScale = Math.max(0, Math.min(1, Number.isFinite(area?.size) ? area.size / 100 : 0.35));
             const slotIndex = pool.events.length < pool.maxEvents ? pool.events.length : pool.cursor % pool.maxEvents;
-            pool.events[slotIndex] = { active: true, key, x: Number.isFinite(drop.sourceX) ? drop.sourceX : 0, y: motion.collisionY, bornAt: Number.isFinite(timeSeconds) ? timeSeconds : 0, lifetime: 0.34 + 0.28 * sizeScale, radiusBase: radius * (1.95 + sizeScale * 0.55), alpha: Math.max(0.16, Math.min(0.42, (Number.isFinite(drop.alpha) ? drop.alpha : 0.36) * 0.74)) };
+            pool.events[slotIndex] = {
+              active: true,
+              key,
+              x: Number.isFinite(drop.sourceX) ? drop.sourceX : 0,
+              y: motion.collisionY,
+              impactY: motion.collisionY,
+              bornAt: Number.isFinite(timeSeconds) ? timeSeconds : 0,
+              lifetime: getRechargedWaterDropImpactLifetime(drop, area),
+              radiusBase: getRechargedWaterDropImpactRadiusBase(drop, area),
+              radiusYBase: getRechargedWaterDropImpactVerticalRadiusBase(drop, area),
+              alpha: Math.max(0.35, Math.min(0.45, (Number.isFinite(drop.alpha) ? drop.alpha : 0.36) * 0.95)),
+            };
             pool.cursor = (slotIndex + 1) % pool.maxEvents;
           }
           pool.lastCycles.set(key, motion.cycleIndex);
@@ -5182,23 +5214,19 @@
       if (age < 0 || age >= lifetime) return false;
       const progress = Math.max(0, Math.min(1, age / lifetime));
       const eased = 1 - ((1 - progress) * (1 - progress));
-      const radiusBase = Math.max(1.5, Number.isFinite(event.radiusBase) ? event.radiusBase : 4);
-      const radius = radiusBase * (0.42 + eased * 1.42);
-      const alpha = Math.max(0, (1 - progress) * (1 - progress)) * (Number.isFinite(event.alpha) ? event.alpha : 0.24) * alphaScale;
-      if (alpha <= 0.003) return false;
+      const radiusBase = Math.max(16, Number.isFinite(event.radiusBase) ? event.radiusBase : 22);
+      const radiusYBase = Math.max(3, Number.isFinite(event.radiusYBase) ? event.radiusYBase : 4);
+      const radiusX = radiusBase * eased;
+      const radiusY = radiusYBase * eased;
+      const alpha = Math.max(0, 1 - progress) * (Number.isFinite(event.alpha) ? event.alpha : 0.42) * alphaScale;
+      if (alpha <= 0.003 || radiusX <= 0.01 || radiusY <= 0.01) return false;
       ctx.save();
       ctx.globalAlpha *= alpha;
-      ctx.strokeStyle = "rgba(190, 232, 250, 0.82)";
-      ctx.lineWidth = Math.max(0.55, radiusBase * 0.16);
+      ctx.strokeStyle = "rgba(120, 215, 255, 0.9)";
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.ellipse(x, y, radiusX, radiusY, 0, 0, Math.PI * 2);
       ctx.stroke();
-      if (radiusBase > 4.2) {
-        ctx.globalAlpha *= 0.36;
-        ctx.beginPath();
-        ctx.arc(x, y, radius * 0.58, 0, Math.PI * 2);
-        ctx.stroke();
-      }
       ctx.restore();
       return true;
     }
@@ -5212,11 +5240,11 @@
       ctx.fillStyle = "rgba(177, 222, 246, 0.82)";
       ctx.lineWidth = Math.max(1, radius * 0.65);
       ctx.beginPath();
-      ctx.moveTo(x, y - length * 0.5);
-      ctx.lineTo(x, y + length * 0.5);
+      ctx.moveTo(x, y - length);
+      ctx.lineTo(x, y);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(x, y + length * 0.48, radius, 0, Math.PI * 2);
+      ctx.arc(x, y - radius * 0.35, radius, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     }
@@ -7382,7 +7410,7 @@
 
         drawRechargedGlowAreas(ctx, mapper, glowAreas, { tileSize, timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000 });
         if (!state._rechargedWaterDropImpactPool) state._rechargedWaterDropImpactPool = createRechargedWaterDropImpactPool();
-        drawRechargedWaterDropAreas(ctx, mapper, waterDropAreas, { tileSize, collisionRects: supportTiles, worldBottomY: worldHeightPx, worldUnitsToPx, impactPool: state._rechargedWaterDropImpactPool, timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000 });
+        const rechargedWaterDropTimeSeconds = (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000;
         drawRechargedSmokeAreas(ctx, mapper, smokeAreas, { tileSize, timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000 });
 
         // Draw support tiles with V1 tile assets/placement rules first.
@@ -7429,6 +7457,7 @@
         const rechargedDecorTime = (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now();
 
         drawRechargedStoneAreas(ctx, mapper, stoneAreas, { tileSize });
+        drawRechargedWaterDropAreas(ctx, mapper, waterDropAreas, { tileSize, collisionRects: supportTiles, worldBottomY: worldHeightPx, worldUnitsToPx, impactPool: state._rechargedWaterDropImpactPool, timeSeconds: rechargedWaterDropTimeSeconds });
 
         renderReactiveGrass(
           ctx,

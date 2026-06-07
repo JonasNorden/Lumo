@@ -1,8 +1,8 @@
 import { generateWaterDropAreaLayout, normalizeWaterDropAreaForEditor, resolveWaterDropCollisionY } from "../domain/worldAreas.js";
 
 const DEFAULT_IMPACT_POOL_LIMIT = 144;
-const WATER_DROP_IMPACT_MIN_LIFETIME = 0.34;
-const WATER_DROP_IMPACT_MAX_LIFETIME = 0.62;
+const WATER_DROP_IMPACT_MIN_LIFETIME = 0.8;
+const WATER_DROP_IMPACT_MAX_LIFETIME = 1.15;
 
 function toFinite(value, fallback = 0) {
   const number = Number(value);
@@ -45,7 +45,15 @@ function getDropImpactKey(area, areaIndex, drop, dropIndex) {
 function getImpactRadiusBase(drop, area) {
   const radius = Math.max(1, toFinite(drop?.radius, 2));
   const areaSizeScale = clamp01(toFinite(area?.size, 35) / 100);
-  return radius * (1.95 + areaSizeScale * 0.55);
+  const radiusScale = clamp01((radius - 1) / 4);
+  return 16 + (areaSizeScale * 7) + (radiusScale * 5);
+}
+
+function getImpactVerticalRadiusBase(drop, area) {
+  const radius = Math.max(1, toFinite(drop?.radius, 2));
+  const areaSizeScale = clamp01(toFinite(area?.size, 35) / 100);
+  const radiusScale = clamp01((radius - 1) / 4);
+  return 3 + (areaSizeScale * 1.5) + (radiusScale * 1.5);
 }
 
 function getImpactLifetime(drop, area) {
@@ -88,10 +96,12 @@ export function updateRuntimeWaterDropImpactPool(pool, waterDropAreas, timeSecon
           key,
           x: toFinite(drop.sourceX),
           y: motion.collisionY,
+          impactY: motion.collisionY,
           bornAt: toFinite(timeSeconds),
           lifetime: getImpactLifetime(drop, area),
           radiusBase: getImpactRadiusBase(drop, area),
-          alpha: Math.max(0.16, Math.min(0.42, toFinite(drop.alpha, 0.36) * 0.74)),
+          radiusYBase: getImpactVerticalRadiusBase(drop, area),
+          alpha: Math.max(0.35, Math.min(0.45, toFinite(drop.alpha, 0.36) * 0.95)),
         };
         pool.cursor = (slotIndex + 1) % pool.maxEvents;
       }
@@ -127,23 +137,19 @@ export function drawRuntimeWaterDropImpactRing(ctx, event, cameraState, timeSeco
   const eased = 1 - ((1 - progress) * (1 - progress));
   const x = toFinite(event.x) - toFinite(cameraState?.cameraX);
   const y = toFinite(event.y) - toFinite(cameraState?.cameraY);
-  const radiusBase = Math.max(1.5, toFinite(event.radiusBase, 4));
-  const radius = radiusBase * (0.42 + eased * 1.42);
-  const alpha = Math.max(0, (1 - progress) * (1 - progress)) * toFinite(event.alpha, 0.24) * toFinite(alphaScale, 1);
-  if (alpha <= 0.003) return false;
+  const radiusBase = Math.max(16, toFinite(event.radiusBase, 22));
+  const radiusYBase = Math.max(3, toFinite(event.radiusYBase, 4));
+  const radiusX = radiusBase * eased;
+  const radiusY = radiusYBase * eased;
+  const alpha = Math.max(0, 1 - progress) * toFinite(event.alpha, 0.42) * toFinite(alphaScale, 1);
+  if (alpha <= 0.003 || radiusX <= 0.01 || radiusY <= 0.01) return false;
   ctx.save();
   ctx.globalAlpha *= alpha;
-  ctx.strokeStyle = "rgba(190, 232, 250, 0.82)";
-  ctx.lineWidth = Math.max(0.55, radiusBase * 0.16);
+  ctx.strokeStyle = "rgba(120, 215, 255, 0.9)";
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.ellipse(x, y, radiusX, radiusY, 0, 0, Math.PI * 2);
   ctx.stroke();
-  if (radiusBase > 4.2) {
-    ctx.globalAlpha *= 0.36;
-    ctx.beginPath();
-    ctx.arc(x, y, radius * 0.58, 0, Math.PI * 2);
-    ctx.stroke();
-  }
   ctx.restore();
   return true;
 }
@@ -171,11 +177,11 @@ export function renderRuntimeWaterDropAreas(ctx, waterDropAreas, cameraState, ti
       ctx.fillStyle = "rgba(177, 222, 246, 0.82)";
       ctx.lineWidth = Math.max(1, radius * 0.65);
       ctx.beginPath();
-      ctx.moveTo(x, y - length * 0.5);
-      ctx.lineTo(x, y + length * 0.5);
+      ctx.moveTo(x, y - length);
+      ctx.lineTo(x, y);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(x, y + length * 0.48, radius, 0, Math.PI * 2);
+      ctx.arc(x, y - radius * 0.35, radius, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
       rendered += 1;

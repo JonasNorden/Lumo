@@ -6,8 +6,10 @@ import { buildRuntimeCameraState } from "./buildRuntimeCameraState.js";
 import { renderRuntimeHudModel } from "./renderRuntimeHudModel.js";
 import { renderRuntimeDustAreas } from "./renderRuntimeDustAreas.js";
 import { renderRuntimeGlowAreas } from "./renderRuntimeGlowAreas.js";
-import { renderRuntimeWaterDropAreas } from "./renderRuntimeWaterDropAreas.js";
+import { createRuntimeWaterDropImpactPool, renderRuntimeWaterDropAreas } from "./renderRuntimeWaterDropAreas.js";
 import { renderRuntimeSmokeAreas } from "./renderRuntimeSmokeAreas.js";
+
+const runtimeBridgeWaterDropImpactPools = new WeakMap();
 
 const PLAYER_RENDER_COLORS = Object.freeze({
   body: "#60a5fa",
@@ -181,10 +183,10 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
   ctx.clip();
 
   drawBackgroundLayers(ctx, viewportWidthPx, viewportHeightPx, scale, cameraState, background, worldWidthPx);
-  renderRuntimeGlowAreas(ctx, Array.isArray(viewModel?.glowAreas) ? viewModel.glowAreas : [], cameraState, (Number(viewModel?.overlay?.runtimeTick) || 0) / 60);
-  renderRuntimeSmokeAreas(ctx, Array.isArray(viewModel?.smokeAreas) ? viewModel.smokeAreas : [], cameraState, (Number(viewModel?.overlay?.runtimeTick) || 0) / 60);
-  renderRuntimeWaterDropAreas(ctx, Array.isArray(viewModel?.waterDropAreas) ? viewModel.waterDropAreas : [], cameraState, (Number(viewModel?.overlay?.runtimeTick) || 0) / 60, { collisionRects: tiles, worldBottomY: worldHeightPx });
-  renderRuntimeDustAreas(ctx, Array.isArray(viewModel?.dustAreas) ? viewModel.dustAreas : [], cameraState, (Number(viewModel?.overlay?.runtimeTick) || 0) / 60);
+  const runtimeTimeSeconds = (Number(viewModel?.overlay?.runtimeTick) || 0) / 60;
+  renderRuntimeGlowAreas(ctx, Array.isArray(viewModel?.glowAreas) ? viewModel.glowAreas : [], cameraState, runtimeTimeSeconds);
+  renderRuntimeSmokeAreas(ctx, Array.isArray(viewModel?.smokeAreas) ? viewModel.smokeAreas : [], cameraState, runtimeTimeSeconds);
+  renderRuntimeDustAreas(ctx, Array.isArray(viewModel?.dustAreas) ? viewModel.dustAreas : [], cameraState, runtimeTimeSeconds);
 
   ctx.strokeStyle = "#60a5fa";
   ctx.lineWidth = 1;
@@ -202,6 +204,13 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
 
     ctx.fillRect(worldToScreen(cameraState, x), y - cameraState.cameraY, w, h);
   }
+
+  let waterDropImpactPool = runtimeBridgeWaterDropImpactPools.get(canvas);
+  if (!waterDropImpactPool) {
+    waterDropImpactPool = createRuntimeWaterDropImpactPool();
+    runtimeBridgeWaterDropImpactPools.set(canvas, waterDropImpactPool);
+  }
+  renderRuntimeWaterDropAreas(ctx, Array.isArray(viewModel?.waterDropAreas) ? viewModel.waterDropAreas : [], cameraState, runtimeTimeSeconds, { collisionRects: tiles, worldBottomY: worldHeightPx, impactPool: waterDropImpactPool });
 
   const decor = Array.isArray(viewModel?.decor) ? viewModel.decor : [];
   ctx.fillStyle = "#c084fc";
