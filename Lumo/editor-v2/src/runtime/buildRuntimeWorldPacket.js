@@ -100,6 +100,9 @@ export function buildRuntimeWorldPacket(parts) {
     dustAreas: Array.isArray(skeleton?.dustAreas)
       ? [...skeleton.dustAreas]
       : [],
+    glowAreas: Array.isArray(skeleton?.glowAreas)
+      ? [...skeleton.glowAreas]
+      : [],
     tileBounds,
     tileMap,
   };

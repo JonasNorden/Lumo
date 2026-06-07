@@ -4826,6 +4826,99 @@
         .filter((area) => area.x !== null && area.y !== null && area.width !== null && area.height !== null && area.enabled && area.visible);
     }
 
+
+    function readRechargedGlowAreas(payload) {
+      const sourceAreas = Array.isArray(payload?.glowAreas) ? payload.glowAreas : [];
+      return sourceAreas
+        .map((area, index) => ({
+          id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `glow_area_${index + 1}`,
+          x: Number.isFinite(area?.x) ? area.x : null,
+          y: Number.isFinite(area?.y) ? area.y : null,
+          width: Number.isFinite(area?.width) && area.width > 0 ? area.width : null,
+          height: Number.isFinite(area?.height) && area.height > 0 ? area.height : null,
+          density: Number.isFinite(area?.density) ? Math.max(0, Math.min(1, Number(area.density))) : 0.32,
+          sizeVariation: Number.isFinite(area?.sizeVariation) ? Math.max(0, Math.min(1, Number(area.sizeVariation))) : 0.38,
+          strength: Number.isFinite(area?.strength) ? Math.max(0, Math.min(1, Number(area.strength))) : 0.42,
+          enabled: area?.enabled !== false,
+          visible: area?.visible !== false,
+        }))
+        .filter((area) => area.x !== null && area.y !== null && area.width !== null && area.height !== null && area.enabled && area.visible && area.density > 0 && area.strength > 0);
+    }
+
+    function getRechargedGlowAreaSeed(area, index) {
+      if (Number.isInteger(area?.seed)) return area.seed >>> 0;
+      return hashRechargedStoneString(`${area.id}|${Math.round(area.x)}|${Math.round(area.y)}|${Math.round(area.width)}|${Math.round(area.height)}|${index}`);
+    }
+
+    const rechargedGlowLayoutCache = new Map();
+    const rechargedGlowPalette = [
+      { red: 232, green: 188, blue: 116 },
+      { red: 152, green: 216, blue: 224 },
+      { red: 111, green: 164, blue: 224 },
+    ];
+
+    function buildRechargedGlowLayout(area, index, tileSize = 24) {
+      const areaTiles = (area.width * area.height) / Math.max(1, tileSize * tileSize);
+      const targetCount = Math.max(0, Math.round(areaTiles * area.density * 1.85));
+      if (targetCount <= 0) return [];
+      const cacheKey = [area.id, Math.round(area.x * 100), Math.round(area.y * 100), Math.round(area.width * 100), Math.round(area.height * 100), Math.round(area.density * 1000), Math.round(area.sizeVariation * 1000), Math.round(area.strength * 1000)].join("|");
+      if (rechargedGlowLayoutCache.has(cacheKey)) return rechargedGlowLayoutCache.get(cacheKey);
+      const random = createRechargedStoneRandom(getRechargedGlowAreaSeed(area, index));
+      const points = [];
+      for (let pointIndex = 0; pointIndex < targetCount; pointIndex += 1) {
+        const palette = rechargedGlowPalette[Math.floor(random() * rechargedGlowPalette.length)] || rechargedGlowPalette[0];
+        const tint = 0.86 + random() * 0.14;
+        const radius = 0.48 + random() * (0.42 + area.sizeVariation * 1.05);
+        const baseAlpha = (0.035 + random() * 0.045) * (0.45 + area.strength * 0.75);
+        points.push({
+          x: area.x + random() * area.width,
+          y: area.y + random() * area.height,
+          radius,
+          driftX: (0.35 + random() * 1.75) * (0.45 + area.sizeVariation * 0.55),
+          driftY: (0.28 + random() * 1.45) * (0.45 + area.sizeVariation * 0.55),
+          speed: 0.012 + random() * 0.032,
+          phase: random() * Math.PI * 2,
+          alphaSpeed: 0.018 + random() * 0.042,
+          alphaPhase: random() * Math.PI * 2,
+          alphaMin: Math.max(0.012, baseAlpha),
+          alphaMax: Math.min(0.18, Math.max(baseAlpha + 0.012, baseAlpha + (0.026 + random() * 0.052) * area.strength)),
+          color: `rgba(${Math.round(palette.red * tint)}, ${Math.round(palette.green * tint)}, ${Math.round(palette.blue * tint)}, 1)`,
+        });
+      }
+      rechargedGlowLayoutCache.set(cacheKey, points);
+      return points;
+    }
+
+    function drawRechargedGlowAreas(ctx, mapper, glowAreas, options = {}) {
+      if (!ctx || !mapper || !Array.isArray(glowAreas) || glowAreas.length === 0) return false;
+      const tileSize = Number.isFinite(options.tileSize) && options.tileSize > 0 ? options.tileSize : 24;
+      const timeSeconds = Number.isFinite(options.timeSeconds) ? options.timeSeconds : 0;
+      let drew = false;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      for (let areaIndex = 0; areaIndex < glowAreas.length; areaIndex += 1) {
+        const points = buildRechargedGlowLayout(glowAreas[areaIndex], areaIndex, tileSize);
+        for (const point of points) {
+          const phase = Number.isFinite(point.phase) ? point.phase : 0;
+          const speed = Number.isFinite(point.speed) ? point.speed : 0.02;
+          const x = point.x + Math.sin(timeSeconds * speed + phase) * point.driftX;
+          const y = point.y + Math.sin(timeSeconds * speed * 0.71 + phase * 1.53) * point.driftY;
+          const breathe = (Math.sin(timeSeconds * point.alphaSpeed + point.alphaPhase) + 1) * 0.5;
+          const smooth = breathe * breathe * (3 - 2 * breathe);
+          const alpha = point.alphaMin + (point.alphaMax - point.alphaMin) * smooth;
+          const rect = mapper.worldToCanvasRect(x - point.radius * 2.2, y - point.radius * 2.2, point.radius * 4.4, point.radius * 4.4);
+          ctx.globalAlpha = alpha * 0.75;
+          ctx.fillStyle = point.color;
+          ctx.beginPath();
+          ctx.arc(rect.x + rect.w * 0.5, rect.y + rect.h * 0.5, Math.max(0.35, rect.w * 0.5), 0, Math.PI * 2);
+          ctx.fill();
+          drew = true;
+        }
+      }
+      ctx.restore();
+      return drew;
+    }
+
     function getRechargedStoneAreaSeed(area, index) {
       if (Number.isInteger(area?.seed)) return area.seed >>> 0;
       return hashRechargedStoneString(`${area.id}|${Math.round(area.x)}|${Math.round(area.y)}|${Math.round(area.width)}|${Math.round(area.height)}|${index}`);
@@ -6684,6 +6777,7 @@
         // Editor V2 exports mirror surface rectangles in pixel world coordinates, matching player snapshots.
         const mirrorSurfaceAreas = readRechargedMirrorSurfaceAreas(payload);
         const stoneAreas = readRechargedStoneAreas(payload);
+        const glowAreas = readRechargedGlowAreas(payload);
         const worldWidthPx = Math.max(tileSize, Math.round(worldWidthRaw * worldUnitsToPx));
         const worldHeightPx = Math.max(tileSize, Math.round(worldHeightRaw * worldUnitsToPx));
         const hudGameplayViewport = getRechargedHudV2GameplayViewport(canvas);
@@ -6827,6 +6921,8 @@
             }
           }
         }
+
+        drawRechargedGlowAreas(ctx, mapper, glowAreas, { tileSize, timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000 });
 
         // Draw support tiles with V1 tile assets/placement rules first.
         for (const supportTile of supportTiles) {

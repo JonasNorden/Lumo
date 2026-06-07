@@ -61,5 +61,6 @@ export function buildRuntimeWorldSkeleton(level) {
     mirrorSurfaceAreas: Array.isArray(level?.mirrorSurfaceAreas) ? level.mirrorSurfaceAreas : [],
     stoneAreas: Array.isArray(level?.stoneAreas) ? level.stoneAreas : [],
     dustAreas: Array.isArray(level?.dustAreas) ? level.dustAreas : [],
+    glowAreas: Array.isArray(level?.glowAreas) ? level.glowAreas : [],
   };
 }
