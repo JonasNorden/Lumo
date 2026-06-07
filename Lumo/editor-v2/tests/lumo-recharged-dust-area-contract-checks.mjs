@@ -16,6 +16,13 @@ import { loadLevelDocument } from "../src/runtime/loadLevelDocument.js";
 import { buildRuntimeWorldSkeleton } from "../src/runtime/buildRuntimeWorldSkeleton.js";
 import { buildRuntimeWorldPacket } from "../src/runtime/buildRuntimeWorldPacket.js";
 import { getSelectionEditorPanelContent } from "../src/ui/selectionEditorPanel.js";
+import {
+  getRuntimeDustParticleAlpha,
+  getRuntimeDustParticleColor,
+  getRuntimeDustParticleOffsetX,
+  getRuntimeDustParticleOffsetY,
+  renderRuntimeDustAreas,
+} from "../src/runtime/renderRuntimeDustAreas.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const editorDustLayerPath = path.resolve(__dirname, "../src/render/layers/dustAreaLayer.js");
@@ -78,6 +85,52 @@ const baseDoc = {
   assert.ok(still.every((particle) => particle.driftX === 0 && particle.driftY === 0), "zero driftStrength removes movement range");
   assert.ok(drifting.some((particle) => particle.driftX > 0 || particle.driftY > 0), "higher driftStrength creates movement range");
   assert.ok(new Set(first.map((particle) => particle.phase)).size > 1, "particles receive independent phases");
+  assert.ok(new Set(first.map((particle) => particle.speed)).size > 1, "particles receive independent drift speeds");
+  assert.ok(new Set(first.map((particle) => particle.alphaPhase)).size > 1, "particles receive independent alpha phases");
+  assert.ok(new Set(first.map((particle) => particle.alphaSpeed)).size > 1, "particles receive independent alpha speeds");
+  assert.ok(first.every((particle) => particle.radius <= 1.4), "default dust particles remain small instead of becoming blobs");
+  assert.ok(first.every((particle) => particle.alphaMin > 0 && particle.alphaMax > particle.alphaMin), "particles keep a non-zero alpha floor and a soft bright range");
+  assert.ok(first.some((particle) => /rgba\(2(0[3-9]|1[0-9]), 1(8[0-9]|9[0-9]), 1(2[0-9]|3[0-9]), 1\)/.test(particle.color)), "bright dust color path is warm amber/golden, not white");
+}
+
+{
+  const area = normalizeDustAreaForEditor({ id: "runtime-motion", x: 0, y: 0, width: 192, height: 120, density: 0.65, sizeVariation: 0.45, driftStrength: 0.75 });
+  const particles = generateDustAreaLayout(area);
+  const particle = particles[0];
+  assert.notEqual(getRuntimeDustParticleOffsetX(particle, 0), getRuntimeDustParticleOffsetX(particle, 180), "runtime time changes dust x offset");
+  assert.notEqual(getRuntimeDustParticleOffsetY(particle, 0), getRuntimeDustParticleOffsetY(particle, 180), "runtime time changes dust y offset");
+  assert.notEqual(getRuntimeDustParticleAlpha(particle, 0), getRuntimeDustParticleAlpha(particle, 180), "runtime time changes dust alpha");
+  assert.ok(Math.abs(getRuntimeDustParticleAlpha(particle, 1) - getRuntimeDustParticleAlpha(particle, 2)) < 0.02, "alpha breathes smoothly without frame-to-frame snapping");
+  assert.ok(getRuntimeDustParticleAlpha(particle, 540) > 0.006, "alpha never hard-blinks to zero");
+  assert.notEqual(getRuntimeDustParticleOffsetX(particles[0], 90), getRuntimeDustParticleOffsetX(particles[1], 90), "independent particle phases/speeds avoid synchronized x waves");
+  assert.notEqual(getRuntimeDustParticleOffsetY(particles[0], 90), getRuntimeDustParticleOffsetY(particles[1], 90), "independent particle phases/speeds avoid synchronized y waves");
+  const noDrift = generateDustAreaLayout({ ...area, id: "runtime-motion-no-drift", driftStrength: 0 })[0];
+  const fullDrift = generateDustAreaLayout({ ...area, id: "runtime-motion-full-drift", driftStrength: 1 })[0];
+  assert.ok(Math.abs(getRuntimeDustParticleOffsetX(noDrift, 120)) === 0, "zero driftStrength removes runtime x drift");
+  assert.ok(Math.abs(getRuntimeDustParticleOffsetY(noDrift, 120)) === 0, "zero driftStrength removes runtime y drift");
+  assert.ok(Math.abs(getRuntimeDustParticleOffsetX(fullDrift, 120)) > Math.abs(getRuntimeDustParticleOffsetX(noDrift, 120)), "driftStrength visibly affects runtime x drift range");
+  assert.ok(Math.abs(getRuntimeDustParticleOffsetY(fullDrift, 120)) > Math.abs(getRuntimeDustParticleOffsetY(noDrift, 120)), "driftStrength visibly affects runtime y drift range");
+  assert.match(getRuntimeDustParticleColor(particle), /rgba\(2(0[3-9]|1[0-9]), 1(8[0-9]|9[0-9]), 1(2[0-9]|3[0-9]), 1\)/, "runtime bright color remains warm amber/golden");
+}
+
+{
+  const calls = [];
+  const ctx = {
+    globalAlpha: 1,
+    save() {},
+    restore() {},
+    beginPath() {},
+    arc(x, y, radius) { calls.push({ x, y, radius, alpha: this.globalAlpha, fillStyle: this.fillStyle }); },
+    fill() {},
+    set globalCompositeOperation(value) { this._globalCompositeOperation = value; },
+    get globalCompositeOperation() { return this._globalCompositeOperation; },
+    set fillStyle(value) { this._fillStyle = value; },
+    get fillStyle() { return this._fillStyle; },
+  };
+  assert.equal(renderRuntimeDustAreas(ctx, [{ id: "hidden", visible: false, width: 120, height: 120, density: 1 }], {}, 120), 0, "hidden Dust Areas are runtime no-op");
+  assert.equal(renderRuntimeDustAreas(ctx, [{ id: "disabled", enabled: false, width: 120, height: 120, density: 1 }], {}, 120), 0, "disabled Dust Areas are runtime no-op");
+  assert.equal(renderRuntimeDustAreas(ctx, [{ id: "empty", width: 120, height: 120, density: 0 }], {}, 120), 0, "empty Dust Areas are runtime no-op");
+  assert.equal(calls.length, 0, "runtime no-op Dust Areas do not draw particles");
 }
 
 {
@@ -118,6 +171,7 @@ const baseDoc = {
 {
   const dustLayerSource = fs.readFileSync(editorDustLayerPath, "utf8");
   const runtimeDustSource = fs.readFileSync(runtimeDustPath, "utf8");
+  const worldAreasSource = fs.readFileSync(path.resolve(__dirname, "../src/domain/worldAreas.js"), "utf8");
   const rendererSource = fs.readFileSync(rendererPath, "utf8");
   const brushSource = fs.readFileSync(brushPanelPath, "utf8");
   const appSource = fs.readFileSync(createEditorAppPath, "utf8");
@@ -128,7 +182,11 @@ const baseDoc = {
   assert.match(rendererSource, /renderBackground\(worldCtx, doc, state\.viewport\);\n  renderDustAreas/, "editor preview renders Dust Areas in front of background");
   assert.match(dustLayerSource, /generateDustAreaLayout/, "editor preview uses deterministic generated dust anchors");
   assert.match(runtimeDustSource, /Math\.sin/, "runtime dust uses cheap sinusoidal drift");
+  assert.match(runtimeDustSource, /timeSeconds/, "runtime dust animation consumes runtime time input");
   assert.doesNotMatch(runtimeDustSource, /Math\.random/, "runtime dust rendering must not use Math.random");
+  assert.doesNotMatch(worldAreasSource, /Math\.random/, "dust layout generation must not use Math.random");
+  assert.doesNotMatch(runtimeDustSource, /\.filter\s*=/, "runtime dust must not use canvas filters");
+  assert.doesNotMatch(runtimeDustSource, /shadowBlur|shadowColor/, "runtime dust must not use glow/shadow rendering");
 }
 
 console.log("Dust Area contract checks passed");

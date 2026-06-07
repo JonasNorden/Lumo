@@ -5,6 +5,35 @@ function toFinite(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+export function getRuntimeDustParticleOffsetX(particle, timeSeconds = 0) {
+  const phase = toFinite(particle?.phase);
+  const speed = toFinite(particle?.speed, 0.08);
+  return Math.sin(toFinite(timeSeconds) * speed + phase) * toFinite(particle?.driftX);
+}
+
+export function getRuntimeDustParticleOffsetY(particle, timeSeconds = 0) {
+  const phase = toFinite(particle?.phase);
+  const speed = toFinite(particle?.speed, 0.08);
+  return Math.sin(toFinite(timeSeconds) * (speed * 0.77) + phase * 1.37) * toFinite(particle?.driftY);
+}
+
+export function getRuntimeDustParticleAlpha(particle, timeSeconds = 0) {
+  const minAlpha = clamp(toFinite(particle?.alphaMin, 0.02), 0.008, 0.09);
+  const maxAlpha = clamp(toFinite(particle?.alphaMax, 0.11), minAlpha + 0.01, 0.18);
+  const alphaSpeed = toFinite(particle?.alphaSpeed, 0.09);
+  const alphaPhase = toFinite(particle?.alphaPhase, toFinite(particle?.phase));
+  const breathe = (Math.sin(toFinite(timeSeconds) * alphaSpeed + alphaPhase) + 1) * 0.5;
+  return minAlpha + (maxAlpha - minAlpha) * (breathe * breathe * (3 - 2 * breathe));
+}
+
+export function getRuntimeDustParticleColor(particle) {
+  return typeof particle?.color === "string" ? particle.color : "rgba(210, 184, 130, 1)";
+}
+
 export function renderRuntimeDustAreas(ctx, dustAreas, cameraState, timeSeconds = 0) {
   if (!ctx || typeof ctx.save !== "function" || !Array.isArray(dustAreas) || !dustAreas.length) return 0;
   let rendered = 0;
@@ -14,22 +43,14 @@ export function renderRuntimeDustAreas(ctx, dustAreas, cameraState, timeSeconds 
     const area = normalizeDustAreaForEditor(dustAreas[areaIndex], areaIndex);
     if (!area.enabled || !area.visible || area.density <= 0 || area.width <= 0 || area.height <= 0) continue;
     for (const particle of generateDustAreaLayout(area, areaIndex)) {
-      const phase = toFinite(particle.phase);
-      const speed = toFinite(particle.speed, 0.08);
-      const t = timeSeconds * speed + phase;
-      const driftX = Math.sin(t) * toFinite(particle.driftX);
-      const driftY = Math.cos(t * 0.73 + phase * 0.37) * toFinite(particle.driftY);
-      const breathe = 0.72 + (Math.sin(t * 0.41 + phase) + 1) * 0.14;
-      const x = toFinite(particle.x) + driftX - toFinite(cameraState?.cameraX);
-      const y = toFinite(particle.y) + driftY - toFinite(cameraState?.cameraY);
-      const radius = Math.max(0.45, toFinite(particle.radius, 1));
-      const alpha = Math.max(0, Math.min(0.22, toFinite(particle.alpha, 0.14) * breathe));
-      if (alpha <= 0) continue;
+      const alpha = getRuntimeDustParticleAlpha(particle, timeSeconds);
+      const x = toFinite(particle.x) + getRuntimeDustParticleOffsetX(particle, timeSeconds) - toFinite(cameraState?.cameraX);
+      const y = toFinite(particle.y) + getRuntimeDustParticleOffsetY(particle, timeSeconds) - toFinite(cameraState?.cameraY);
+      const radius = Math.max(0.32, toFinite(particle.radius, 0.8));
+      if (alpha <= 0.006) continue;
       ctx.save();
       ctx.globalAlpha *= alpha;
-      ctx.shadowColor = "rgba(224, 213, 190, 0.28)";
-      ctx.shadowBlur = radius * 2.8;
-      ctx.fillStyle = "rgba(224, 213, 190, 0.55)";
+      ctx.fillStyle = getRuntimeDustParticleColor(particle);
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, Math.PI * 2);
       ctx.fill();

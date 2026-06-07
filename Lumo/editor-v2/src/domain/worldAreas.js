@@ -394,18 +394,29 @@ export function generateDustAreaLayout(area = {}, index = 0) {
   const particles = [];
   for (let particleIndex = 0; particleIndex < targetCount; particleIndex += 1) {
     const sizeVariation = normalized.sizeVariation;
-    const radius = 0.65 + random() * (1.25 + sizeVariation * 2.35);
-    const speed = 0.06 + random() * 0.13;
+    const radius = 0.38 + random() * (0.46 + sizeVariation * 0.92);
+    const speed = 0.035 + random() * 0.095;
+    const alphaMin = 0.018 + random() * 0.022;
+    const alphaMax = alphaMin + 0.045 + random() * 0.07;
+    const warmth = 0.45 + random() * 0.55;
+    const red = Math.round(190 + warmth * 28);
+    const green = Math.round(164 + warmth * 30);
+    const blue = Math.round(118 + warmth * 16);
     particles.push(Object.freeze({
       id: `${normalized.id}-dust-${particleIndex + 1}`,
       x: roundTo(normalized.x + random() * normalized.width, 100),
       y: roundTo(normalized.y + random() * normalized.height, 100),
       radius: roundTo(radius, 100),
-      driftX: roundTo((2 + random() * 9) * normalized.driftStrength, 100),
-      driftY: roundTo((1 + random() * 5) * normalized.driftStrength, 100),
+      driftX: roundTo((1.5 + random() * 6.5) * normalized.driftStrength, 100),
+      driftY: roundTo((1.1 + random() * 5.4) * normalized.driftStrength, 100),
       speed: roundTo(speed, 1000),
       phase: roundTo(random() * Math.PI * 2, 1000),
-      alpha: roundTo(0.10 + random() * 0.18, 1000),
+      alphaSpeed: roundTo(0.055 + random() * 0.115, 1000),
+      alphaPhase: roundTo(random() * Math.PI * 2, 1000),
+      alphaMin: roundTo(alphaMin, 1000),
+      alphaMax: roundTo(alphaMax, 1000),
+      warmth: roundTo(warmth, 1000),
+      color: `rgba(${red}, ${green}, ${blue}, 1)`,
     }));
   }
   const frozenParticles = Object.freeze(particles);

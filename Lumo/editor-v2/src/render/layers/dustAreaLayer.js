@@ -11,16 +11,12 @@ function worldToCanvas(viewport, x, y) {
 function drawDustParticle(ctx, viewport, particle, alphaMultiplier = 1) {
   const zoom = viewport?.zoom || 1;
   const center = worldToCanvas(viewport, particle.x, particle.y);
-  const radius = Math.max(0.45, Number(particle.radius) || 1) * zoom;
+  const radius = Math.max(0.38, Number(particle.radius) || 0.8) * zoom;
   ctx.save();
-  ctx.globalAlpha *= Math.max(0, Math.min(1, (Number(particle.alpha) || 0.14) * alphaMultiplier));
-  const gradient = ctx.createRadialGradient(center.x, center.y, 0, center.x, center.y, radius * 2.8);
-  gradient.addColorStop(0, "rgba(224, 213, 190, 0.62)");
-  gradient.addColorStop(0.55, "rgba(224, 213, 190, 0.20)");
-  gradient.addColorStop(1, "rgba(224, 213, 190, 0)");
-  ctx.fillStyle = gradient;
+  ctx.globalAlpha *= Math.max(0, Math.min(1, (Number(particle.alphaMax) || 0.09) * alphaMultiplier));
+  ctx.fillStyle = typeof particle.color === "string" ? particle.color : "rgba(210, 184, 130, 1)";
   ctx.beginPath();
-  ctx.arc(center.x, center.y, radius * 2.8, 0, Math.PI * 2);
+  ctx.arc(center.x, center.y, radius, 0, Math.PI * 2);
   ctx.fill();
   ctx.restore();
 }
