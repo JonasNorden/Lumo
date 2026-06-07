@@ -205,13 +205,6 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
     ctx.fillRect(worldToScreen(cameraState, x), y - cameraState.cameraY, w, h);
   }
 
-  let waterDropImpactPool = runtimeBridgeWaterDropImpactPools.get(canvas);
-  if (!waterDropImpactPool) {
-    waterDropImpactPool = createRuntimeWaterDropImpactPool();
-    runtimeBridgeWaterDropImpactPools.set(canvas, waterDropImpactPool);
-  }
-  renderRuntimeWaterDropAreas(ctx, Array.isArray(viewModel?.waterDropAreas) ? viewModel.waterDropAreas : [], cameraState, runtimeTimeSeconds, { collisionRects: tiles, worldBottomY: worldHeightPx, impactPool: waterDropImpactPool });
-
   const decor = Array.isArray(viewModel?.decor) ? viewModel.decor : [];
   ctx.fillStyle = "#c084fc";
   for (const item of decor) {
@@ -223,6 +216,14 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
 
     ctx.fillRect(worldToScreen(cameraState, x - 4), y - 4 - cameraState.cameraY, 8, 8);
   }
+
+  let waterDropImpactPool = runtimeBridgeWaterDropImpactPools.get(canvas);
+  if (!waterDropImpactPool) {
+    waterDropImpactPool = createRuntimeWaterDropImpactPool();
+    runtimeBridgeWaterDropImpactPools.set(canvas, waterDropImpactPool);
+  }
+  // Foreground atmospheric FX: above tiles/decor, still clipped to world view below HUD/debug text.
+  renderRuntimeWaterDropAreas(ctx, Array.isArray(viewModel?.waterDropAreas) ? viewModel.waterDropAreas : [], cameraState, runtimeTimeSeconds, { collisionRects: tiles, worldBottomY: worldHeightPx, impactPool: waterDropImpactPool });
 
   const entities = Array.isArray(viewModel?.entities) ? viewModel.entities : [];
   ctx.fillStyle = "#22d3ee";

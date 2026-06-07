@@ -74,7 +74,6 @@ export function renderEditorFrame(ctx, state) {
   renderBackground(worldCtx, doc, state.viewport);
   renderGlowAreas(worldCtx, doc, state.viewport, state.interaction);
   renderSmokeAreas(worldCtx, doc, state.viewport, state.interaction);
-  renderWaterDropAreas(worldCtx, doc, state.viewport, state.interaction);
   renderDustAreas(worldCtx, doc, state.viewport, state.interaction);
   renderStoneAreas(worldCtx, doc, state.viewport, state.interaction);
   renderReactiveGrassPatches(worldCtx, doc, state.viewport, state.interaction);
@@ -83,6 +82,8 @@ export function renderEditorFrame(ctx, state) {
   renderDecor(worldCtx, doc, state.viewport, state.interaction);
   renderTiles(worldCtx, doc, state.viewport);
   renderMirrorSurfaceAreas(worldCtx, doc, state.viewport, state.interaction);
+  // Foreground atmospheric FX preview: draw Water Drop Areas above world visuals, below editor overlays.
+  renderWaterDropAreas(worldCtx, doc, state.viewport, state.interaction);
   renderEntities(worldCtx, doc, state.viewport, state.interaction);
   worldCtx.restore();
 
