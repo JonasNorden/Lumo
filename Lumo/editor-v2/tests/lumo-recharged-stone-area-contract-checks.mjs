@@ -105,6 +105,10 @@ const baseDoc = {
   assert.match(markup, /aria-label="Max stone height"/, "Max stone height is exposed as an editable numeric input");
   assert.match(markup, /data-stone-area-field="minStoneHeight"[\s\S]*?value="24"/, "old Stone Areas render normalized minStoneHeight value in the inspector");
   assert.match(markup, /data-stone-area-field="maxStoneHeight"[\s\S]*?value="240"/, "old Stone Areas render normalized maxStoneHeight value in the inspector");
+  assert.match(markup, /data-stone-area-field="density"[\s\S]*?value="80"/, "Stone density displays normalized 0.8 as human-readable 80");
+  assert.match(markup, /data-stone-area-field="sizeVariation"[\s\S]*?value="100"/, "Stone sizeVariation displays normalized 1 as human-readable 100");
+  assert.match(markup, /data-stone-area-field="minStoneHeight"[\s\S]*?data-human-scale="units"/, "Stone minStoneHeight remains a raw unit field");
+  assert.match(markup, /data-stone-area-field="density"[\s\S]*?data-human-scale="percent-0-100"/, "Stone normalized controls declare percent-style human scaling");
 
   const selectionEditorPanelSource = fs.readFileSync(selectionEditorPanelPath, "utf8");
   assert.match(selectionEditorPanelSource, /"stoneAreaField"/, "Stone Area inputs participate in bottom-panel draft/focus tracking");

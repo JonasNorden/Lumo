@@ -50,10 +50,10 @@ const MIRROR_SURFACE_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
   height: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
   yOffset: { min: -1000, max: 1000, integer: false, inputMode: "decimal" },
   reflectionHeight: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
-  reflectionStrength: { min: 0, max: 1, integer: false, inputMode: "decimal" },
-  distortion: { min: 0, max: 1, integer: false, inputMode: "decimal" },
-  surfaceStrength: { min: 0, max: 1, integer: false, inputMode: "decimal" },
-  fade: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+  reflectionStrength: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  distortion: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  surfaceStrength: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  fade: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
 });
 
 const DUST_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
@@ -61,9 +61,9 @@ const DUST_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
   y: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
   width: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
   height: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
-  density: { min: 0, max: 1, integer: false, inputMode: "decimal" },
-  sizeVariation: { min: 0, max: 1, integer: false, inputMode: "decimal" },
-  driftStrength: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+  density: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  sizeVariation: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  driftStrength: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
 });
 
 
@@ -72,10 +72,10 @@ const GLOW_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
   y: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
   width: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
   height: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
-  density: { min: 0, max: 1, integer: false, inputMode: "decimal" },
-  sizeVariation: { min: 0, max: 1, integer: false, inputMode: "decimal" },
-  strength: { min: 0, max: 1, integer: false, inputMode: "decimal" },
-  speed: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+  density: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  sizeVariation: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  strength: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  speed: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
 });
 
 const STONE_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
@@ -85,10 +85,10 @@ const STONE_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
   height: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
   minStoneHeight: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
   maxStoneHeight: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
-  density: { min: 0, max: 1, integer: false, inputMode: "decimal" },
-  sizeVariation: { min: 0, max: 1, integer: false, inputMode: "decimal" },
-  rotationVariation: { min: 0, max: 1, integer: false, inputMode: "decimal" },
-  clusterStrength: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+  density: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  sizeVariation: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  rotationVariation: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  clusterStrength: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
 });
 
 const REACTIVE_CRYSTAL_NUMERIC_FIELD_CONFIG = Object.freeze({
@@ -326,6 +326,67 @@ function formatNumericDisplay(value) {
   if (!Number.isFinite(numericValue)) return "";
   if (Math.abs(numericValue) >= 1000 || Number.isInteger(numericValue)) return String(Math.round(numericValue * 1000) / 1000).replace(/\.0+$/, "");
   return numericValue.toFixed(3).replace(/\.?0+$/, "");
+}
+
+function isPercentStyleAreaField(config) {
+  return Number(config?.presentationScale) === 100;
+}
+
+export function toAreaEditorDisplayValue(value, config) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return "";
+  const displayValue = isPercentStyleAreaField(config) ? numericValue * 100 : numericValue;
+  return formatNumericDisplay(displayValue);
+}
+
+export function toAreaRuntimeValue(rawValue, config) {
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) return null;
+  const scale = Number(config?.presentationScale) || 1;
+  const normalizedValue = parsed / scale;
+  const min = Number(config?.min);
+  const max = Number(config?.max);
+  if ((Number.isFinite(min) && normalizedValue < min) || (Number.isFinite(max) && normalizedValue > max)) return null;
+  return config?.integer ? Math.round(normalizedValue) : Math.round(normalizedValue * 10000) / 10000;
+}
+
+function renderAreaNumberField({ label, field, value, areaId, config, dataPrefix, ariaSuffix = "" }) {
+  if (!config) return renderReadOnlyField(label, value);
+  const displayValue = toAreaEditorDisplayValue(value, config);
+  const displayMin = Number.isFinite(Number(config.min)) ? config.min * (Number(config.presentationScale) || 1) : "";
+  const displayMax = Number.isFinite(Number(config.max)) ? config.max * (Number(config.presentationScale) || 1) : "";
+  const step = Number.isFinite(Number(config.step)) ? config.step : 1;
+  const precision = config.integer || isPercentStyleAreaField(config) ? "int" : "float";
+  const humanScaleAttr = isPercentStyleAreaField(config) ? ` data-human-scale="percent-0-100"` : ` data-human-scale="units"`;
+  return `
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField" data-deferred-number="${escapeHtml(dataPrefix)}-${escapeHtml(field)}">
+      <span class="label">${escapeHtml(label)}</span>
+      <span class="selectionStepperInputGroup">
+        <input
+          type="number"
+          value="${escapeHtml(displayValue)}"
+          min="${escapeHtml(displayMin)}"
+          max="${escapeHtml(displayMax)}"
+          step="${escapeHtml(step)}"
+          inputmode="${escapeHtml(config.inputMode)}"
+          data-${dataPrefix}-field="${escapeHtml(field)}"
+          data-${dataPrefix}-id="${escapeHtml(areaId || "")}"
+          data-${dataPrefix}-editable="number"
+          data-${dataPrefix}-committed-value="${escapeHtml(displayValue)}"
+          data-number-commit="deferred"
+          data-number-step="${escapeHtml(step)}"
+          data-number-large-step="${escapeHtml(config.largeStep || step * 10)}"
+          data-number-precision="${escapeHtml(precision)}"
+          ${humanScaleAttr}
+          aria-label="${escapeHtml(`${label}${ariaSuffix}`)}"
+        />
+        <span class="selectionStepperButtons">
+          <button type="button" class="selectionStepperButton" data-step-direction="1" aria-label="Increase ${escapeHtml(label)}">+</button>
+          <button type="button" class="selectionStepperButton" data-step-direction="-1" aria-label="Decrease ${escapeHtml(label)}">−</button>
+        </span>
+      </span>
+    </label>
+  `;
 }
 
 function renderCheckboxField(prefix, fieldKey, label, value, selectedIndex, className = "", itemId = null) {
@@ -1023,23 +1084,7 @@ function renderReactiveBloomPatchInspector(patch) {
 
 function renderMirrorSurfaceAreaNumberField(label, field, value, areaId) {
   const config = MIRROR_SURFACE_AREA_NUMERIC_FIELD_CONFIG[field];
-  if (!config) return renderReadOnlyField(label, value);
-  const normalizedValue = Number.isFinite(Number(value)) ? String(value) : "";
-  return `
-    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
-      <span class="label">${escapeHtml(label)}</span>
-      <input
-        type="text"
-        value="${escapeHtml(normalizedValue)}"
-        inputmode="${escapeHtml(config.inputMode)}"
-        data-mirror-surface-area-field="${escapeHtml(field)}"
-        data-mirror-surface-area-id="${escapeHtml(areaId || "")}"
-        data-mirror-surface-area-editable="number"
-        data-mirror-surface-area-committed-value="${escapeHtml(normalizedValue)}"
-        aria-label="${escapeHtml(label)}"
-      />
-    </label>
-  `;
+  return renderAreaNumberField({ label, field, value, areaId, config, dataPrefix: "mirror-surface-area", ariaSuffix: isPercentStyleAreaField(config) ? " (0 to 100)" : "" });
 }
 
 function renderMirrorSurfaceAreaCheckboxField(label, field, value, areaId) {
@@ -1077,23 +1122,7 @@ function renderMirrorSurfaceAreaInspector(area) {
 
 function renderGlowAreaNumberField(label, field, value, areaId) {
   const config = GLOW_AREA_NUMERIC_FIELD_CONFIG[field];
-  if (!config) return renderReadOnlyField(label, value);
-  const normalizedValue = Number.isFinite(Number(value)) ? String(value) : "";
-  return `
-    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
-      <span class="label">${escapeHtml(label)}</span>
-      <input
-        type="text"
-        value="${escapeHtml(normalizedValue)}"
-        inputmode="${escapeHtml(config.inputMode)}"
-        data-glow-area-field="${escapeHtml(field)}"
-        data-glow-area-id="${escapeHtml(areaId || "")}"
-        data-glow-area-editable="number"
-        data-glow-area-committed-value="${escapeHtml(normalizedValue)}"
-        aria-label="${escapeHtml(label)}"
-      />
-    </label>
-  `;
+  return renderAreaNumberField({ label, field, value, areaId, config, dataPrefix: "glow-area", ariaSuffix: isPercentStyleAreaField(config) ? " (0 to 100)" : "" });
 }
 
 function renderGlowAreaCheckboxField(label, field, value, areaId) {
@@ -1142,23 +1171,7 @@ function renderGlowAreaInspector(area) {
 
 function renderDustAreaNumberField(label, field, value, areaId) {
   const config = DUST_AREA_NUMERIC_FIELD_CONFIG[field];
-  if (!config) return renderReadOnlyField(label, value);
-  const normalizedValue = Number.isFinite(Number(value)) ? String(value) : "";
-  return `
-    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
-      <span class="label">${escapeHtml(label)}</span>
-      <input
-        type="text"
-        value="${escapeHtml(normalizedValue)}"
-        inputmode="${escapeHtml(config.inputMode)}"
-        data-dust-area-field="${escapeHtml(field)}"
-        data-dust-area-id="${escapeHtml(areaId || "")}"
-        data-dust-area-editable="number"
-        data-dust-area-committed-value="${escapeHtml(normalizedValue)}"
-        aria-label="${escapeHtml(label)}"
-      />
-    </label>
-  `;
+  return renderAreaNumberField({ label, field, value, areaId, config, dataPrefix: "dust-area", ariaSuffix: isPercentStyleAreaField(config) ? " (0 to 100)" : "" });
 }
 
 function renderDustAreaCheckboxField(label, field, value, areaId) {
@@ -1193,23 +1206,7 @@ function renderDustAreaInspector(area) {
 
 function renderStoneAreaNumberField(label, field, value, areaId) {
   const config = STONE_AREA_NUMERIC_FIELD_CONFIG[field];
-  if (!config) return renderReadOnlyField(label, value);
-  const normalizedValue = Number.isFinite(Number(value)) ? String(value) : "";
-  return `
-    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
-      <span class="label">${escapeHtml(label)}</span>
-      <input
-        type="text"
-        value="${escapeHtml(normalizedValue)}"
-        inputmode="${escapeHtml(config.inputMode)}"
-        data-stone-area-field="${escapeHtml(field)}"
-        data-stone-area-id="${escapeHtml(areaId || "")}"
-        data-stone-area-editable="number"
-        data-stone-area-committed-value="${escapeHtml(normalizedValue)}"
-        aria-label="${escapeHtml(label)}"
-      />
-    </label>
-  `;
+  return renderAreaNumberField({ label, field, value, areaId, config, dataPrefix: "stone-area", ariaSuffix: isPercentStyleAreaField(config) ? " (0 to 100)" : "" });
 }
 
 function renderStoneAreaCheckboxField(label, field, value, areaId) {
@@ -1573,9 +1570,7 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
   const parseMirrorSurfaceAreaNumericValue = (field, rawValue) => {
     const config = MIRROR_SURFACE_AREA_NUMERIC_FIELD_CONFIG[field];
     if (!config) return null;
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed) || parsed < config.min || parsed > config.max) return null;
-    return config.integer ? Math.round(parsed) : parsed;
+    return toAreaRuntimeValue(rawValue, config);
   };
 
 
@@ -1589,11 +1584,9 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
   };
 
   const parseGlowAreaNumericValue = (field, rawValue) => {
-    const numeric = Number.parseFloat(rawValue);
-    if (!Number.isFinite(numeric)) return null;
     const config = GLOW_AREA_NUMERIC_FIELD_CONFIG[field];
-    if (!config || numeric < config.min || numeric > config.max) return null;
-    return config.integer ? Math.round(numeric) : numeric;
+    if (!config) return null;
+    return toAreaRuntimeValue(rawValue, config);
   };
 
   const commitGlowAreaNumericInput = (input) => {
@@ -1602,30 +1595,30 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const areaId = input.dataset.glowAreaId || null;
     const areaSnapshot = getSelectedGlowArea(areaId);
     if (!areaSnapshot) return true;
+    const previousValue = Number(areaSnapshot[field]);
     const parsedValue = parseGlowAreaNumericValue(field, input.value);
-    if (parsedValue === null) {
-      input.value = input.dataset.glowAreaCommittedValue || String(areaSnapshot[field] ?? 0);
+    if (parsedValue === null || Object.is(parsedValue, previousValue)) {
+      input.value = Number.isFinite(previousValue) ? toAreaEditorDisplayValue(previousValue, GLOW_AREA_NUMERIC_FIELD_CONFIG[field]) : "";
+      input.dataset.glowAreaCommittedValue = Number.isFinite(previousValue) ? toAreaEditorDisplayValue(previousValue, GLOW_AREA_NUMERIC_FIELD_CONFIG[field]) : "";
+      clearInputDraft(input);
       return true;
     }
     onGlowAreaUpdate?.(field, parsedValue, { areaId });
-    input.dataset.glowAreaCommittedValue = String(parsedValue);
+    input.dataset.glowAreaCommittedValue = toAreaEditorDisplayValue(parsedValue, GLOW_AREA_NUMERIC_FIELD_CONFIG[field]);
+    clearInputDraft(input);
     return true;
   };
 
   const parseDustAreaNumericValue = (field, rawValue) => {
     const config = DUST_AREA_NUMERIC_FIELD_CONFIG[field];
     if (!config) return null;
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed) || parsed < config.min || parsed > config.max) return null;
-    return config.integer ? Math.round(parsed) : parsed;
+    return toAreaRuntimeValue(rawValue, config);
   };
 
   const parseStoneAreaNumericValue = (field, rawValue) => {
     const config = STONE_AREA_NUMERIC_FIELD_CONFIG[field];
     if (!config) return null;
-    const parsed = Number(rawValue);
-    if (!Number.isFinite(parsed) || parsed < config.min || parsed > config.max) return null;
-    return config.integer ? Math.round(parsed) : parsed;
+    return toAreaRuntimeValue(rawValue, config);
   };
 
   const commitDustAreaNumericInput = (input) => {
@@ -1638,12 +1631,12 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const previousValue = Number(areaSnapshot[field]);
     const parsedValue = parseDustAreaNumericValue(field, input.value);
     if (parsedValue === null || Object.is(parsedValue, previousValue)) {
-      input.value = Number.isFinite(previousValue) ? String(previousValue) : "";
+      input.value = Number.isFinite(previousValue) ? toAreaEditorDisplayValue(previousValue, DUST_AREA_NUMERIC_FIELD_CONFIG[field]) : "";
       clearInputDraft(input);
       return parsedValue !== null;
     }
     onDustAreaUpdate?.(field, parsedValue, { areaId });
-    input.dataset.dustAreaCommittedValue = String(parsedValue);
+    input.dataset.dustAreaCommittedValue = toAreaEditorDisplayValue(parsedValue, DUST_AREA_NUMERIC_FIELD_CONFIG[field]);
     clearInputDraft(input);
     return true;
   };
@@ -1658,12 +1651,12 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const previousValue = Number(areaSnapshot[field]);
     const parsedValue = parseStoneAreaNumericValue(field, input.value);
     if (parsedValue === null || Object.is(parsedValue, previousValue)) {
-      input.value = Number.isFinite(previousValue) ? String(previousValue) : "";
+      input.value = Number.isFinite(previousValue) ? toAreaEditorDisplayValue(previousValue, STONE_AREA_NUMERIC_FIELD_CONFIG[field]) : "";
       clearInputDraft(input);
       return parsedValue !== null;
     }
     onStoneAreaUpdate?.(field, parsedValue, { areaId });
-    input.dataset.stoneAreaCommittedValue = String(parsedValue);
+    input.dataset.stoneAreaCommittedValue = toAreaEditorDisplayValue(parsedValue, STONE_AREA_NUMERIC_FIELD_CONFIG[field]);
     clearInputDraft(input);
     return true;
   };
@@ -1678,13 +1671,13 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const previousValue = Number(areaSnapshot[field]);
     const parsedValue = parseMirrorSurfaceAreaNumericValue(field, input.value);
     if (parsedValue === null || Object.is(parsedValue, previousValue)) {
-      input.value = Number.isFinite(previousValue) ? String(previousValue) : "";
-      input.dataset.mirrorSurfaceAreaCommittedValue = Number.isFinite(previousValue) ? String(previousValue) : "";
+      input.value = Number.isFinite(previousValue) ? toAreaEditorDisplayValue(previousValue, MIRROR_SURFACE_AREA_NUMERIC_FIELD_CONFIG[field]) : "";
+      input.dataset.mirrorSurfaceAreaCommittedValue = Number.isFinite(previousValue) ? toAreaEditorDisplayValue(previousValue, MIRROR_SURFACE_AREA_NUMERIC_FIELD_CONFIG[field]) : "";
       clearInputDraft(input);
       return true;
     }
     onMirrorSurfaceAreaUpdate?.(field, parsedValue, { areaId });
-    input.dataset.mirrorSurfaceAreaCommittedValue = String(parsedValue);
+    input.dataset.mirrorSurfaceAreaCommittedValue = toAreaEditorDisplayValue(parsedValue, MIRROR_SURFACE_AREA_NUMERIC_FIELD_CONFIG[field]);
     clearInputDraft(input);
     return true;
   };

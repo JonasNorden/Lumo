@@ -166,6 +166,10 @@ const baseDoc = {
   assert.match(markup, /data-dust-area-field="density"/, "Dust density is editable");
   assert.match(markup, /data-dust-area-field="sizeVariation"/, "Dust sizeVariation is editable");
   assert.match(markup, /data-dust-area-field="driftStrength"/, "Dust driftStrength is editable");
+  assert.match(markup, /data-dust-area-field="density"[\s\S]*?value="80"/, "Dust density displays normalized 0.8 as human-readable 80");
+  assert.match(markup, /data-dust-area-field="sizeVariation"[\s\S]*?value="100"/, "Dust sizeVariation displays normalized 1 as human-readable 100");
+  assert.match(markup, /data-dust-area-field="driftStrength"[\s\S]*?data-human-scale="percent-0-100"/, "Dust normalized controls declare percent-style human scaling");
+  assert.match(markup, /data-dust-area-field="driftStrength"[\s\S]*?step="1"/, "Dust normalized controls expose step metadata for native/held steppers");
 }
 
 {
