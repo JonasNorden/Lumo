@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lumo – DC flare consume + death dissolve demo</title>
+  <style>
+    :root {
+      --bg: #07111d;
+      --panel: rgba(6, 18, 34, 0.88);
+      --line: rgba(108, 190, 255, 0.18);
+      --text: #d9eeff;
+      --muted: #9ab3c9;
+      --accent: #7dd7ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(30, 67, 117, 0.24), transparent 35%),
+        radial-gradient(circle at 80% 10%, rgba(108, 34, 123, 0.18), transparent 28%),
+        linear-gradient(180deg, #08111b, #03070d 60%);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+    .wrap {
+      width: min(1100px, 100%);
+      display: grid;
+      gap: 14px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    }
+    .top {
+      padding: 14px 16px;
+      display: grid;
+      gap: 10px;
+    }
+    .title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+    .sub {
+      color: var(--muted);
+      line-height: 1.4;
+      font-size: 14px;
+    }
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    button, label.toggle {
+      border: 1px solid rgba(125, 215, 255, 0.22);
+      background: rgba(13, 31, 52, 0.92);
+      color: var(--text);
+      padding: 10px 13px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    button:hover, label.toggle:hover {
+      background: rgba(17, 41, 69, 0.98);
+    }
+    input[type="checkbox"] { margin-right: 8px; vertical-align: middle; }
+    .stage {
+      overflow: hidden;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      background:
+        linear-gradient(180deg, rgba(11, 19, 31, 0.95), rgba(7, 11, 18, 0.98));
+    }
+    .legend {
+      padding: 12px 16px 16px;
+      color: var(--muted);
+      display: grid;
+      gap: 6px;
+      font-size: 13px;
+    }
+    .legend strong { color: var(--text); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel top">
+      <div class="title">Lumo demo – DC äter flare-ljus + DC death dissolve</div>
+      <div class="sub">
+        Vänster: flare. Höger: Dark Creature med aggro-ring. När flare ligger i ringen dras små void-partiklar mot DC och flare-ljuset brinner ut snabbare.
+        Knappen <strong>Trigger death dissolve</strong> visar hur DC kan fadea bort medan mörklila bubbel-partiklar stiger upp från nederkanten.
+      </div>
+      <div class="controls">
+        <button id="resetBtn">Reset scene</button>
+        <button id="dissolveBtn">Trigger death dissolve</button>
+        <label class="toggle"><input id="aggroToggle" type="checkbox" checked>Show aggro ring</label>
+        <label class="toggle"><input id="consumeToggle" type="checkbox" checked>Show flare consume particles</label>
+      </div>
+    </div>
+
+    <div class="panel stage">
+      <canvas id="c" width="1080" height="620"></canvas>
+    </div>
+
+    <div class="panel legend">
+      <div><strong>Tanke med flare-effekten:</strong> DC tar ingen skada av flare-ljus, men flare förbrukas snabbare när den ligger inom aggro-radien.</div>
+      <div><strong>Tanke med death dissolve:</strong> DC fadear bort och mörklila partiklar startar vid nederkanten, stiger rakt upp, krymper och försvinner gradvis.</div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  const resetBtn = document.getElementById('resetBtn');
+  const dissolveBtn = document.getElementById('dissolveBtn');
+  const aggroToggle = document.getElementById('aggroToggle');
+  const consumeToggle = document.getElementById('consumeToggle');
+
+  const baseFlareLifetime = 7.0;
+  const burnMultiplierNearDC = 2.5;
+
+  let t = 0;
+  let last = performance.now();
+
+  const scene = {
+    floorY: 505,
+    dc: {
+      x: 780,
+      y: 465,
+      r: 26,
+      aggro: 255,
+      hover: 0,
+      fade: 1,
+      dissolving: false,
+      dead: false
+    },
+    flare: {
+      x: 610,
+      y: 495,
+      r: 10,
+      life: baseFlareLifetime,
+      maxLife: baseFlareLifetime,
+      lightRadius: 118
+    },
+    consumeParticles: [],
+    deathParticles: []
+  };
+
+  function resetScene() {
+    scene.dc.x = 780;
+    scene.dc.y = 465;
+    scene.dc.hover = 0;
+    scene.dc.fade = 1;
+    scene.dc.dissolving = false;
+    scene.dc.dead = false;
+
+    scene.flare.x = 610;
+    scene.flare.y = 495;
+    scene.flare.life = baseFlareLifetime;
+    scene.flare.maxLife = baseFlareLifetime;
+    scene.flare.lightRadius = 118;
+
+    scene.consumeParticles = [];
+    scene.deathParticles = [];
+  }
+
+  function triggerDissolve() {
+    if (scene.dc.dead || scene.dc.dissolving) return;
+    scene.dc.dissolving = true;
+  }
+
+  resetBtn.addEventListener('click', resetScene);
+  dissolveBtn.addEventListener('click', triggerDissolve);
+
+  function rand(min, max) {
+    return min + Math.random() * (max - min);
+  }
+
+  function dist(ax, ay, bx, by) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    return Math.hypot(dx, dy);
+  }
+
+  function drawBackground() {
+    const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    g.addColorStop(0, '#0a1421');
+    g.addColorStop(1, '#02060b');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let x = 0; x < canvas.width; x += 60) {
+      ctx.strokeStyle = 'rgba(105, 150, 210, 0.05)';
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, canvas.height);
+      ctx.stroke();
+    }
+
+    for (let y = 0; y < canvas.height; y += 60) {
+      ctx.strokeStyle = 'rgba(105, 150, 210, 0.04)';
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(canvas.width, y);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = '#111a22';
+    ctx.fillRect(0, scene.floorY, canvas.width, canvas.height - scene.floorY);
+
+    for (let i = 0; i < canvas.width; i += 46) {
+      ctx.fillStyle = i % 92 === 0 ? '#6c6a68' : '#5d5b59';
+      ctx.fillRect(i, scene.floorY + 14, 44, 42);
+      ctx.strokeStyle = 'rgba(30, 25, 20, 0.25)';
+      ctx.strokeRect(i, scene.floorY + 14, 44, 42);
+    }
+  }
+
+  function drawAggroRing() {
+    if (!aggroToggle.checked || scene.dc.dead) return;
+    ctx.save();
+    ctx.setLineDash([12, 10]);
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255, 72, 114, 0.65)';
+    ctx.beginPath();
+    ctx.arc(scene.dc.x, scene.dc.y + scene.dc.hover, scene.dc.aggro, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFlare() {
+    const lifeRatio = Math.max(0, scene.flare.life / scene.flare.maxLife);
+    const pulse = 1 + Math.sin(t * 7.4) * 0.06;
+
+    const lightR = Math.max(25, scene.flare.lightRadius * (0.45 + lifeRatio * 0.55) * pulse);
+    const glow = ctx.createRadialGradient(scene.flare.x, scene.flare.y, 0, scene.flare.x, scene.flare.y, lightR);
+    glow.addColorStop(0, `rgba(255, 240, 170, ${0.35 * lifeRatio})`);
+    glow.addColorStop(0.45, `rgba(255, 190, 70, ${0.18 * lifeRatio})`);
+    glow.addColorStop(1, 'rgba(255, 170, 60, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(scene.flare.x, scene.flare.y, lightR, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#2f1d10';
+    ctx.fillRect(scene.flare.x - 5, scene.flare.y + 5, 10, 11);
+
+    ctx.fillStyle = '#ffb032';
+    ctx.beginPath();
+    ctx.arc(scene.flare.x, scene.flare.y, scene.flare.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#ffd46c';
+    ctx.beginPath();
+    ctx.ellipse(scene.flare.x, scene.flare.y - 7, 8, 15, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#fff5bf';
+    ctx.beginPath();
+    ctx.ellipse(scene.flare.x, scene.flare.y - 10, 4, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawDC() {
+    if (scene.dc.dead) return;
+    const x = scene.dc.x;
+    const y = scene.dc.y + scene.dc.hover;
+    ctx.save();
+    ctx.globalAlpha = scene.dc.fade;
+
+    const glow = ctx.createRadialGradient(x, y, 2, x, y, 78);
+    glow.addColorStop(0, 'rgba(108, 0, 180, 0.30)');
+    glow.addColorStop(0.55, 'rgba(65, 0, 110, 0.16)');
+    glow.addColorStop(1, 'rgba(30, 0, 60, 0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(x, y, 78, 0, Math.PI * 2);
+    ctx.fill();
+
+    const body = ctx.createRadialGradient(x - 7, y - 10, 2, x, y, 36);
+    body.addColorStop(0, '#7d4af5');
+    body.addColorStop(0.18, '#4f148b');
+    body.addColorStop(0.45, '#140725');
+    body.addColorStop(1, '#05070d');
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.ellipse(x, y, 30, 23, -0.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.beginPath();
+    ctx.arc(x - 8, y - 7, 2.8, 0, Math.PI * 2);
+    ctx.arc(x + 5, y - 5, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawConsumeParticles() {
+    for (const p of scene.consumeParticles) {
+      ctx.save();
+      ctx.globalAlpha = p.a;
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3);
+      g.addColorStop(0, 'rgba(130, 72, 225, 0.95)');
+      g.addColorStop(0.5, 'rgba(88, 20, 155, 0.65)');
+      g.addColorStop(1, 'rgba(40, 0, 60, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(18, 6, 30, 0.95)';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawDeathParticles() {
+    for (const p of scene.deathParticles) {
+      ctx.save();
+      ctx.globalAlpha = p.a;
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3.2);
+      g.addColorStop(0, 'rgba(172, 108, 255, 0.95)');
+      g.addColorStop(0.45, 'rgba(111, 48, 190, 0.72)');
+      g.addColorStop(1, 'rgba(48, 0, 78, 0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 3.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(33, 7, 50, 0.95)';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function drawLabels(isInAggro) {
+    ctx.fillStyle = '#d7ebff';
+    ctx.font = '600 18px system-ui, sans-serif';
+    ctx.fillText('Flare', scene.flare.x - 20, scene.flare.y - 56);
+    if (!scene.dc.dead) ctx.fillText('Dark Creature', scene.dc.x - 64, scene.dc.y - 70);
+
+    ctx.font = '600 16px system-ui, sans-serif';
+    ctx.fillStyle = isInAggro ? '#ff8fb4' : '#9bb5cb';
+    ctx.fillText(isInAggro ? 'Flare inside aggro: light is being consumed' : 'Flare outside aggro: normal burn rate', 28, 42);
+
+    ctx.fillStyle = '#cfe6fb';
+    const remain = Math.max(0, scene.flare.life).toFixed(1);
+    ctx.fillText(`Flare lifetime: ${remain}s`, 28, 72);
+  }
+
+  function spawnConsumeParticle() {
+    const angle = rand(-0.35, 0.35);
+    const startX = scene.flare.x + rand(-10, 10);
+    const startY = scene.flare.y - rand(10, 24);
+    const targetX = scene.dc.x + rand(-8, 8);
+    const targetY = scene.dc.y + scene.dc.hover + rand(-8, 8);
+    scene.consumeParticles.push({
+      x: startX,
+      y: startY,
+      sx: startX,
+      sy: startY,
+      tx: targetX,
+      ty: targetY,
+      progress: 0,
+      speed: rand(1.0, 1.6),
+      arc: rand(18, 44) * (Math.random() < 0.5 ? -1 : 1),
+      drift: angle,
+      r: rand(2.2, 3.6),
+      a: rand(0.65, 0.95)
+    });
+  }
+
+  function spawnDeathBubble() {
+    const baseY = scene.floorY + 12;
+    scene.deathParticles.push({
+      x: scene.dc.x + rand(-28, 28),
+      y: baseY + rand(-2, 3),
+      vx: rand(-2, 2),
+      vy: rand(-18, -10),
+      r: rand(3.2, 6.2),
+      a: rand(0.6, 0.95),
+      life: rand(1.2, 2.2),
+      maxLife: 2.2
+    });
+  }
+
+  function update(dt) {
+    t += dt;
+    scene.dc.hover = Math.sin(t * 1.8) * 7;
+
+    const dcY = scene.dc.y + scene.dc.hover;
+    const inAggro = dist(scene.flare.x, scene.flare.y, scene.dc.x, dcY) <= scene.dc.aggro;
+
+    if (scene.flare.life > 0) {
+      const burnRate = inAggro ? burnMultiplierNearDC : 1.0;
+      scene.flare.life -= dt * burnRate;
+      scene.flare.lightRadius = 118;
+
+      if (inAggro && consumeToggle.checked && !scene.dc.dead && Math.random() < 0.40) {
+        spawnConsumeParticle();
+      }
+    }
+
+    scene.flare.life = Math.max(0, scene.flare.life);
+
+    scene.consumeParticles = scene.consumeParticles.filter(p => p.progress < 1);
+    for (const p of scene.consumeParticles) {
+      p.progress += dt * p.speed;
+      const k = p.progress;
+      const inv = 1 - k;
+      const mx = p.sx * inv + p.tx * k;
+      const my = p.sy * inv + p.ty * k;
+      p.x = mx;
+      p.y = my + Math.sin(k * Math.PI) * p.arc * 0.28;
+      p.a = Math.max(0, 0.95 - k * 0.92);
+      p.r *= 0.996;
+    }
+
+    if (scene.dc.dissolving) {
+      scene.dc.fade = Math.max(0, scene.dc.fade - dt * 0.55);
+      if (Math.random() < 0.65) spawnDeathBubble();
+      if (scene.dc.fade <= 0.02) {
+        scene.dc.fade = 0;
+        scene.dc.dissolving = false;
+        scene.dc.dead = true;
+      }
+    }
+
+    scene.deathParticles = scene.deathParticles.filter(p => p.life > 0 && p.a > 0.02);
+    for (const p of scene.deathParticles) {
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.r *= 0.992;
+      p.a = Math.max(0, p.life / p.maxLife);
+    }
+
+    return inAggro;
+  }
+
+  function draw(isInAggro) {
+    drawBackground();
+    drawAggroRing();
+    drawFlare();
+    drawConsumeParticles();
+    drawDC();
+    drawDeathParticles();
+    drawLabels(isInAggro);
+  }
+
+  function frame(now) {
+    const dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+    const inAggro = update(dt);
+    draw(inAggro);
+    requestAnimationFrame(frame);
+  }
+
+  resetScene();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

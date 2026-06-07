@@ -1,0 +1,1115 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Surface Bridge Lab v9</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#0b1012;color:#eaf0f2;font-family:system-ui,Segoe UI,Arial,sans-serif}
+canvas{display:block;width:100vw;height:100vh;background:#11171a}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// External asset version: sprites are regular PNG files next to this HTML file.
+// Built-in starter assets. New materials can be loaded at runtime with the LADDA SPRITE-MAPP button.
+// Put files in any folder as NAME_top.png + NAME_fill.png or NAME1.png + NAME2.png.
+const ASSET_FILES = {}; // Ingen automatisk fil-laddning: välj sprite-mapp i UI:t.
+const DEFAULT_MATERIALS = [];
+// SINGLE HTML MODE: inga fetch-anrop, ingen manifest, ingen root-scanning. Allt laddas via knappen LADDA SPRITE-MAPP.
+
+
+
+const canvas=document.getElementById('c');
+let ctx=canvas.getContext('2d',{alpha:false});
+let W=0,H=0,DPR=1,last=0,effectTime=0,playWorldCache=null,playWorldCacheKey='',showUI=true,showCollision=false,showGuides=false,seed=22;
+let labMode='edit';
+const TILE=24;
+const imgs={};
+let mats=[];
+let loaded=0;
+let loadingError='';
+let folderStatus='Klicka LADDA SPRITE-MAPP och välj mappen med PNG-par + lumo_idle.png/lumo_walk.png';
+let dynamicAssetUrls=[];
+let materialPage=0;
+const MATERIALS_PER_PAGE=6;
+
+function niceMaterialName(id){
+  return String(id || 'material').replace(/[_-]+/g,' ').replace(/\b\w/g,m=>m.toUpperCase());
+}
+function materialFromPair(id, topKey, fillKey){
+  return {id, name:niceMaterialName(id).toUpperCase(), sub:'External sprite pair', top:topKey, fill:fillKey,
+    accent:'#d8d8d8', friction:0.88, slide:0.14, upCost:1.65, downPush:0.18};
+}
+function addAssetFile(assetFiles, key, file){
+  if(!key || !file || assetFiles[key]) return;
+  assetFiles[key]=file;
+}
+function detectMaterialPairsFromFiles(assetFiles, fileNames){
+  const byStem=new Map();
+  for(const file of fileNames){
+    const clean=file.split('/').pop();
+    const m=clean.match(/^(.+?)(?:[_-])?(top|fill)\.(png|jpg|jpeg|webp)$/i) || clean.match(/^(.+?)(1|2)\.(png|jpg|jpeg|webp)$/i);
+    if(!m) continue;
+    const id=m[1].replace(/[^a-z0-9_-]+/ig,'_').replace(/^_+|_+$/g,'').toLowerCase();
+    const kind=(m[2].toLowerCase()==='top'||m[2]==='1')?'top':'fill';
+    if(!byStem.has(id)) byStem.set(id,{});
+    byStem.get(id)[kind]=clean;
+  }
+  const found=[];
+  for(const [id,pair] of byStem){
+    if(!pair.top || !pair.fill) continue;
+    const topKey=`${id}_top`;
+    const fillKey=`${id}_fill`;
+    addAssetFile(assetFiles, topKey, pair.top);
+    addAssetFile(assetFiles, fillKey, pair.fill);
+    found.push(materialFromPair(id, topKey, fillKey));
+  }
+  return found;
+}
+function parseDirectoryListing(html){
+  const files=[];
+  const re=/href=["']([^"']+)["']/ig;
+  let m;
+  while((m=re.exec(html))){
+    const href=decodeURIComponent(m[1]).split('?')[0].split('#')[0];
+    if(/\.(png|jpg|jpeg|webp)$/i.test(href) && !href.includes('/')) files.push(href);
+  }
+  return files;
+}
+
+async function readExternalManifest(assetFiles){
+  // Avstängt med flit. Lokal file:// får inte fetch:a mappar/manifest säkert.
+  return {materials:[]};
+}
+async function discoverRootSprites(assetFiles){
+  // Avstängt med flit. Använd LADDA SPRITE-MAPP.
+  return [];
+}
+function loadImage(key, src){
+  return new Promise(resolve=>{
+    const im=new Image();
+    im.onload=()=>{loaded++; imgs[key]=im; resolve();};
+    im.onerror=()=>{loadingError+='\nKunde inte ladda '+key+': '+src; loaded++; resolve();};
+    im.src=src;
+  });
+}
+function normalizeMaterials(list, assetFiles){
+  const out=[];
+  const seen=new Set();
+  for(const m of list){
+    if(!m || !m.top || !m.fill || !assetFiles[m.top] || !assetFiles[m.fill]) continue;
+    const id=m.id || `${m.top}_${m.fill}`;
+    if(seen.has(id)) continue;
+    seen.add(id);
+    out.push({...materialFromPair(id,m.top,m.fill), ...m});
+  }
+  return out;
+}
+
+function clearDynamicAssetUrls(){
+  for(const url of dynamicAssetUrls){
+    try{ URL.revokeObjectURL(url); }catch(err){}
+  }
+  dynamicAssetUrls=[];
+}
+function detectLumoSpritesFromFileObjects(files){
+  const found={};
+  for(const file of files){
+    const clean=(file.name || '').split('/').pop().toLowerCase();
+    if(!/\.(png|jpg|jpeg|webp)$/i.test(clean)) continue;
+
+    // Primära namn:
+    // lumo_idle.png / lumo-idle.png / lumo idle.png
+    // lumo_walk.png / lumo-walk.png / lumo walk.png
+    // Extra snäll fallback: idle.png och walk.png funkar också.
+    if(/(^|[_\-\s])lumo[_\-\s]*idle\.(png|jpg|jpeg|webp)$/i.test(clean) || /^idle\.(png|jpg|jpeg|webp)$/i.test(clean)){
+      found.lumo_idle=file;
+    }
+    if(/(^|[_\-\s])lumo[_\-\s]*walk\.(png|jpg|jpeg|webp)$/i.test(clean) || /^walk\.(png|jpg|jpeg|webp)$/i.test(clean)){
+      found.lumo_walk=file;
+    }
+  }
+  return found;
+}
+function detectMaterialPairsFromFileObjects(files){
+  const byStem=new Map();
+  for(const file of files){
+    const clean=(file.name || '').split('/').pop();
+    const lower=clean.toLowerCase();
+    // Lumo-sprites ska inte tolkas som materialpar.
+    if(lower.includes('lumo') || lower==='idle.png' || lower==='walk.png') continue;
+    const m=clean.match(/^(.+?)(?:[_-])?(top|fill)\.(png|jpg|jpeg|webp)$/i) || clean.match(/^(.+?)(1|2)\.(png|jpg|jpeg|webp)$/i);
+    if(!m) continue;
+    const id=m[1].replace(/[^a-z0-9_-]+/ig,'_').replace(/^_+|_+$/g,'').toLowerCase();
+    const kind=(m[2].toLowerCase()==='top'||m[2]==='1')?'top':'fill';
+    if(!byStem.has(id)) byStem.set(id,{});
+    byStem.get(id)[kind]=file;
+  }
+  const assetFiles={};
+  const found=[];
+  clearDynamicAssetUrls();
+
+  const lumo=detectLumoSpritesFromFileObjects(files);
+  for(const [key,file] of Object.entries(lumo)){
+    const url=URL.createObjectURL(file);
+    dynamicAssetUrls.push(url);
+    assetFiles[key]=url;
+  }
+
+  for(const [id,pair] of byStem){
+    if(!pair.top || !pair.fill) continue;
+    const topKey=`${id}_top`;
+    const fillKey=`${id}_fill`;
+    const topUrl=URL.createObjectURL(pair.top);
+    const fillUrl=URL.createObjectURL(pair.fill);
+    dynamicAssetUrls.push(topUrl, fillUrl);
+    assetFiles[topKey]=topUrl;
+    assetFiles[fillKey]=fillUrl;
+    found.push(materialFromPair(id, topKey, fillKey));
+  }
+  return {assetFiles, materials:found, lumo};
+}
+async function applyFolderFiles(files){
+  const list=Array.from(files || []).filter(f=>/\.(png|jpg|jpeg|webp)$/i.test(f.name || ''));
+  const detected=detectMaterialPairsFromFileObjects(list);
+  const hasLumo=!!(detected.lumo && (detected.lumo.lumo_idle || detected.lumo.lumo_walk));
+  if(!detected.materials.length && !hasLumo){
+    folderStatus='Hittade inga materialpar eller Lumo-sprites. Material: namn_top.png + namn_fill.png eller namn1.png + namn2.png. Lumo: lumo_idle.png + lumo_walk.png';
+    return;
+  }
+  loaded=0;
+  loadingError='';
+  const oldSelectedMat=mats.length ? (selectedThing==='platform' ? platforms[selectedPlatform].mat : bridgeMats[selectedBridge]) : 0;
+  mats=normalizeMaterials(detected.materials, detected.assetFiles);
+  await Promise.all(Object.entries(detected.assetFiles).map(([k,src])=>loadImage(k,src)));
+  const maxIndex=Math.max(0,mats.length-1);
+  for(const p of platforms) p.mat=clamp(p.mat,0,maxIndex);
+  bridgeMats=bridgeMats.map(v=>clamp(v,0,maxIndex));
+  materialPage=Math.floor(clamp(oldSelectedMat,0,maxIndex)/MATERIALS_PER_PAGE);
+  const lumoText=`Lumo idle:${imgs.lumo_idle?'JA':'NEJ'} walk:${imgs.lumo_walk?'JA':'NEJ'}`;
+  folderStatus=`Laddade ${detected.materials.length} materialpar. ${lumoText}`;
+  invalidateWorldCache();
+  resetPlayer();
+}
+async function chooseSpriteFolder(){
+  try{
+    if(window.showDirectoryPicker){
+      const dir=await window.showDirectoryPicker();
+      const files=[];
+      for await (const entry of dir.values()){
+        if(entry.kind==='file' && /\.(png|jpg|jpeg|webp)$/i.test(entry.name)) files.push(await entry.getFile());
+      }
+      await applyFolderFiles(files);
+      return;
+    }
+  }catch(err){
+    if(err && err.name==='AbortError') return;
+    folderStatus='Kunde inte läsa mappen: '+(err.message||err);
+    return;
+  }
+  const input=document.createElement('input');
+  input.type='file';
+  input.multiple=true;
+  input.accept='.png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp';
+  input.webkitdirectory=true;
+  input.style.display='none';
+  document.body.appendChild(input);
+  input.onchange=async()=>{
+    await applyFolderFiles(input.files);
+    input.remove();
+  };
+  input.click();
+}
+
+async function loadLabAssets(){
+  // Starta tomt. Inga PNG, inget manifest, ingen root-scanning.
+  // Tryck LADDA SPRITE-MAPP och välj mappen som innehåller både material och Lumo.
+  mats=[];
+  loaded=0;
+  loadingError='';
+  resetPlayer();
+  requestAnimationFrame(loop);
+}
+let selectedThing='platform';
+let selectedPlatform=1;
+let selectedBridge=0;
+let settings={
+  curve:0.55, rough:0.30, sliceW:1, topH:24, fillTiles:3, polish:0.78,
+  boostPower:1.0, slopePhysics:1
+};
+let platforms=[
+  {xTiles:0, y:0, mat:0, wTiles:5},
+  {xTiles:18, y:-36, mat:0, wTiles:5},
+  {xTiles:38, y:24, mat:1, wTiles:5}
+];
+let bridgeMats=[0,0];
+let bridgePhysics=[
+  {gravity:1.00, uphill:1.00, downhill:1.00, slide:1.00, grip:1.00},
+  {gravity:1.00, uphill:1.00, downhill:1.00, slide:1.00, grip:1.00}
+];
+let drag=null;
+let worldDrag=null;
+let player={x:0,y:0,vx:0,vy:0,on:false,dir:1,walkT:0,input:false,boostT:0,slope:0,mat:0};
+const keys={};
+function resize(){DPR=Math.min(2,devicePixelRatio||1);W=innerWidth;H=innerHeight;canvas.width=W*DPR;canvas.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0);invalidateWorldCache();resetPlayer();}
+addEventListener('resize',resize);resize();
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+
+  if(k==='tab'){
+    e.preventDefault();
+    labMode = labMode === 'edit' ? 'play' : 'edit';
+    showUI = labMode === 'edit';
+    resetPlayer();
+    return;
+  }
+
+  keys[k]=true;
+
+  if(k==='h' && labMode==='edit') showUI=!showUI;
+  if(k==='c') showCollision=!showCollision;
+  if(k==='g') showGuides=!showGuides;
+
+  if(labMode==='edit'){
+    if(k==='1'){matIndex=0; resetPlayer();}
+    if(k==='2'){matIndex=1; resetPlayer();}
+    if(k==='3'){matIndex=2; resetPlayer();}
+  }
+
+  if(k==='r') resetPlayer();
+});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function lerp(a,b,t){return a+(b-a)*t}
+function invLerp(a,b,v){return clamp((v-a)/(b-a),0,1)}
+function rnd(n){return Math.abs(Math.sin(n*127.17+seed*313.91)*43758.5453)%1}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}
+function getMat(i){return mats.length ? mats[clamp(i,0,mats.length-1)] : null;}
+function hasLoadedMaterial(mat){return !!(mat && imgs[mat.top] && imgs[mat.fill]);}
+
+function materialKind(mat){
+  const text=String([mat?.id,mat?.name,mat?.top,mat?.fill].join(' ')).toLowerCase();
+  if(/(^|[^a-z])(ice|is|frost|glacier|snow|frozen)([^a-z]|$)/.test(text) || text.includes('ice_blue')) return 'ice';
+  if(text.includes('grass')) return 'grass';
+  if(text.includes('crystal')) return 'crystal';
+  if(text.includes('crust') || text.includes('lava') || text.includes('magma')) return 'crust';
+  if(text.includes('marmor') || text.includes('marble')) return 'marmor';
+  if(text.includes('rock') || text.includes('stone') || text.includes('cave')) return 'rock';
+  return mat?.id || 'material';
+}
+function isIceMat(mat){ return materialKind(mat)==='ice'; }
+function isGrassMat(mat){ return materialKind(mat)==='grass'; }
+
+function drawMissingMaterialBlock(x,y,w,h){
+  ctx.save();
+  rr(x,y,w,h,4);ctx.clip();
+  ctx.fillStyle='#273033';ctx.fillRect(x,y,w,h);
+  ctx.fillStyle='#344044';
+  for(let yy=y;yy<y+h;yy+=TILE)for(let xx=x;xx<x+w;xx+=TILE){if(((xx+yy)/TILE)&1)ctx.fillRect(xx,yy,TILE,TILE)}
+  ctx.strokeStyle='rgba(246,209,29,.45)';ctx.lineWidth=1;ctx.strokeRect(x+.5,y+.5,w-1,h-1);
+  ctx.restore();
+}
+function drawLumoFallback(){
+  ctx.save();ctx.translate(player.x,player.y+34);
+  ctx.fillStyle='#f7b52c';ctx.beginPath();ctx.roundRect(-11,-34,22,34,7);ctx.fill();
+  ctx.fillStyle='#ffd766';ctx.beginPath();ctx.arc(0,-38,10,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+}
+function ew(){return TILE*5}
+function platformW(i){return TILE*Math.round(platforms[i]?.wTiles||5)}
+function platformLayout(){
+  const uiH=showUI?316:20;
+  const totalW=(platforms[2].xTiles-platforms[0].xTiles)*TILE + platformW(2);
+  const startX=Math.round((W-totalW)/2);
+  const baseY=Math.round((H-uiH)/2-42);
+  return platforms.map((p,i)=>({left:startX+p.xTiles*TILE, right:startX+p.xTiles*TILE+platformW(i), y:baseY+p.y, mat:p.mat, w:platformW(i)}));
+}
+function bridgeSegments(){
+  const ps=platformLayout();
+  return [
+    {i:0,x0:ps[0].right,y0:ps[0].y,x1:ps[1].left,y1:ps[1].y,mat:bridgeMats[0]},
+    {i:1,x0:ps[1].right,y0:ps[1].y,x1:ps[2].left,y1:ps[2].y,mat:bridgeMats[1]}
+  ];
+}
+function surfaceYInSeg(seg,x){
+  const w=Math.max(1,seg.x1-seg.x0);
+  const q=clamp((x-seg.x0)/w,0,1);
+  let y=lerp(seg.y0,seg.y1,q)+Math.sin(q*Math.PI)*settings.curve*TILE*2.1;
+  y+=(Math.sin(q*17+seed+seg.i*3)*7 + Math.sin(q*39+seg.i)*3.5 + (rnd(Math.floor(q*90)+seg.i*80)-0.5)*4)*settings.rough;
+  return y;
+}
+function segmentAt(x){
+  const segs=bridgeSegments();
+  if(x>=segs[0].x0 && x<=segs[0].x1)return segs[0];
+  if(x>=segs[1].x0 && x<=segs[1].x1)return segs[1];
+  return null;
+}
+function platformAt(x){
+  const ps=platformLayout();
+  for(let i=0;i<ps.length;i++) if(x>=ps[i].left && x<=ps[i].right) return i;
+  return -1;
+}
+function groundY(x){
+  const ps=platformLayout(), seg=segmentAt(x);
+  if(seg)return surfaceYInSeg(seg,x);
+  const pi=platformAt(x);
+  if(pi>=0)return ps[pi].y;
+  if(x<ps[0].left)return ps[0].y;
+  if(x>ps[2].right)return ps[2].y;
+  // tiny gaps should resolve to nearest end height
+  let best=ps[0],bd=1e9;
+  for(const p of ps){const d=Math.min(Math.abs(x-p.left),Math.abs(x-p.right)); if(d<bd){bd=d;best=p;}}
+  return best.y;
+}
+function matAt(x){
+  const seg=segmentAt(x); if(seg)return seg.mat;
+  const pi=platformAt(x); if(pi>=0)return platforms[pi].mat;
+  return platforms[0].mat;
+}
+function bridgePhysicsAt(x){
+  const seg=segmentAt(x);
+  if(!seg)return {gravity:1,uphill:1,downhill:1,slide:1,grip:1};
+  return bridgePhysics[seg.i] || {gravity:1,uphill:1,downhill:1,slide:1,grip:1};
+}
+
+function slopeAt(x){
+  const seg=segmentAt(x);
+  if(!seg)return 0;
+  const dx=8;
+  return clamp((groundY(x+dx)-groundY(x-dx))/(dx*2),-1.25,1.25);
+}
+function bg(){
+  ctx.fillStyle='#11171a';ctx.fillRect(0,0,W,H);
+  for(let y=0;y<H;y+=TILE)for(let x=0;x<W;x+=TILE){
+    ctx.fillStyle=((x/TILE+y/TILE)&1)?'rgba(255,255,255,.025)':'rgba(0,0,0,.12)';
+    ctx.fillRect(x,y,TILE,TILE);
+  }
+  ctx.fillStyle='rgba(0,0,0,.18)';ctx.fillRect(0,0,W,H);
+}
+function drawSpriteCrop(im,x,y,w,h,sx=0,sy=0,sw=im.width,sh=im.height){
+  ctx.save();rr(x,y,w,h,3);ctx.clip();ctx.drawImage(im,sx,sy,sw,sh,x,y,w,h);ctx.restore();
+}
+function drawSpriteCropTiled(im,x,y,w,h,sx=0,sy=0,sw=im.width,sh=im.height){
+  ctx.save();
+  rr(x,y,w,h,3);
+  ctx.clip();
+
+  // True tile repeat:
+  // draw whole 24x24 destination cells, never stretch a sprite over a larger area.
+  const cols=Math.max(1,Math.round(w/TILE));
+  const rows=Math.max(1,Math.ceil(h/TILE));
+
+  for(let cy=0;cy<rows;cy++){
+    for(let cx=0;cx<cols;cx++){
+      const dx=x+cx*TILE;
+      const dy=y+cy*TILE;
+      ctx.drawImage(im,sx,sy,sw,sh,dx,dy,TILE,TILE);
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawPlatform(idx){
+  const ps=platformLayout(), p=ps[idx], mat=getMat(p.mat);
+  if(!hasLoadedMaterial(mat)){drawMissingMaterialBlock(p.left,p.y,p.w,settings.topH+TILE*settings.fillTiles);return;}
+  const top=imgs[mat.top], fill=imgs[mat.fill];
+  const topCropH=Math.max(1,top.height*0.45);
+  const fillSy=mat.id==='grass'?Math.floor(top.height*0.36):0;
+  const fillSh=mat.id==='grass'?Math.floor(top.height*0.64):fill.height;
+  drawSpriteCropTiled(top,p.left,p.y,p.w,settings.topH,0,0,top.width,top.height);
+  drawSpriteCropTiled(fill,p.left,p.y+settings.topH,p.w,TILE*settings.fillTiles,0,0,fill.width,fill.height);
+  if(labMode==='edit'){
+    const active=selectedThing==='platform'&&selectedPlatform===idx;
+    if(active&&showUI){
+      ctx.strokeStyle='rgba(246,209,29,.9)';ctx.lineWidth=2;
+      ctx.strokeRect(p.left-2,p.y-2,p.w+4,settings.topH+TILE*settings.fillTiles+4);
+    }
+    // Small draggable handle so the platform feels editable, not just selectable.
+    const hx=p.left+p.w/2, hy=p.y-14;
+    ctx.save();
+    ctx.fillStyle=active?'rgba(246,209,29,.95)':'rgba(255,255,255,.42)';
+    ctx.strokeStyle='rgba(0,0,0,.45)';
+    ctx.lineWidth=1;
+    ctx.beginPath();
+    ctx.arc(hx,hy,5,0,Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+function drawBridge(seg){
+  if(seg.x1<=seg.x0+2)return;
+  const mat=getMat(seg.mat);
+  if(!hasLoadedMaterial(mat)){drawMissingMaterialBlock(seg.x0,Math.min(seg.y0,seg.y1),seg.x1-seg.x0,settings.topH+TILE*settings.fillTiles);return;}
+  const top=imgs[mat.top], fill=imgs[mat.fill], sw=settings.sliceW, w=seg.x1-seg.x0;
+
+  ctx.imageSmoothingEnabled=false;
+
+  /*
+    Bridge scale fix:
+    Use the same 24px material scale as platform tiles.
+    Each vertical slice samples from a repeating 24x24 destination-cell pattern.
+    The bridge is still fake-bent by moving each slice vertically along the curve,
+    but the texture no longer has its own larger/smaller scale.
+  */
+  for(let x=seg.x0;x<seg.x1;x+=sw){
+    const y=Math.round(surfaceYInSeg(seg,x));
+    const localX=x-seg.x0;
+    const cellX=((Math.floor(localX)%TILE)+TILE)%TILE;
+    const topSrcX=Math.floor((cellX/TILE)*top.width);
+    const fillSrcX=Math.floor((cellX/TILE)*fill.width);
+    const topSrcW=Math.max(1,Math.ceil((sw/TILE)*top.width));
+    const fillSrcW=Math.max(1,Math.ceil((sw/TILE)*fill.width));
+
+    // Top row: one 24px-tile-height band, same proportions as platform top cells.
+    ctx.drawImage(
+      top,
+      topSrcX,0,
+      Math.min(topSrcW,top.width-topSrcX),top.height,
+      Math.floor(x),y,
+      sw,settings.topH
+    );
+
+    // Fill rows: repeated 24px rows, not one stretched fill block.
+    const rows=Math.max(1,Math.round(settings.fillTiles));
+    for(let r=0;r<rows;r++){
+      const dy=y+settings.topH+r*TILE;
+      ctx.drawImage(
+        fill,
+        fillSrcX,0,
+        Math.min(fillSrcW,fill.width-fillSrcX),fill.height,
+        Math.floor(x),dy,
+        sw,TILE
+      );
+    }
+  }
+
+  ctx.imageSmoothingEnabled=true;
+  polish(seg,mat);
+  drawMaterialFx(seg,mat);
+}
+function polish(seg,mat){
+  const p=settings.polish;
+  ctx.beginPath();
+  for(let i=0;i<=120;i++){const x=lerp(seg.x0,seg.x1,i/120),y=surfaceYInSeg(seg,x)+1;if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}
+  ctx.strokeStyle=isIceMat(mat)?`rgba(255,255,255,${0.35+0.45*p})`:isGrassMat(mat)?`rgba(205,255,58,${0.22+0.45*p})`:`rgba(255,220,145,${0.18+0.38*p})`;
+  ctx.lineWidth=isIceMat(mat)?2+p*2:1.5+p*2;ctx.stroke();
+  if(isGrassMat(mat)){
+    for(let i=0;i<Math.floor(60+135*p);i++){const q=rnd(i+2+seg.i*100),x=lerp(seg.x0,seg.x1,q),y=surfaceYInSeg(seg,x)+rnd(i+3)*10;
+      ctx.strokeStyle=i%2?`rgba(130,230,28,${0.25+0.45*p})`:`rgba(42,115,23,${0.25+0.42*p})`;
+      ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+(rnd(i+8)-.5)*7,y-3-rnd(i+5)*8);ctx.stroke();
+    }
+  }
+  if(false && isIceMat(mat)){
+    ctx.save();ctx.globalCompositeOperation='screen';ctx.strokeStyle=`rgba(255,255,255,${0.25+0.45*p})`;ctx.lineWidth=.8;
+    for(let i=0;i<Math.floor(10+28*p);i++){let x=lerp(seg.x0,seg.x1,rnd(i+55+seg.i*30)),y=surfaceYInSeg(seg,x)+6+rnd(i)*TILE*settings.fillTiles;ctx.beginPath();ctx.moveTo(x,y);
+      for(let j=0;j<3;j++){x+=12+rnd(i*j+7)*38;y+=(rnd(i*j+4)-.5)*12;ctx.lineTo(x,y)}ctx.stroke();}
+    ctx.restore();
+  }
+  if(mat.id==='rock'){
+    for(let i=0;i<Math.floor(35+120*p);i++){const x=lerp(seg.x0,seg.x1,rnd(i+9+seg.i*50)),y=surfaceYInSeg(seg,x)+16+rnd(i+5)*(TILE*settings.fillTiles-8),r=1+rnd(i+6)*4;
+      ctx.fillStyle=i%2?`rgba(82,53,29,${0.25+0.38*p})`:`rgba(178,133,75,${0.18+0.35*p})`;
+      ctx.beginPath();ctx.ellipse(x,y,r*1.35,r,.4,0,Math.PI*2);ctx.fill();
+    }
+  }
+  if(selectedThing==='bridge'&&selectedBridge===seg.i&&showUI){
+    ctx.strokeStyle='rgba(246,209,29,.55)';ctx.lineWidth=1.5;
+    ctx.strokeRect(seg.x0,Math.min(seg.y0,seg.y1)-22,seg.x1-seg.x0,Math.abs(seg.y1-seg.y0)+TILE*settings.fillTiles+80);
+  }
+}
+
+function drawMaterialFx(seg,mat){
+  if(!seg || !mat)return;
+  const w=seg.x1-seg.x0;
+  if(w<=2)return;
+
+  ctx.save();
+
+  if(mat.id==='crystal'){
+    // Irregular short-lived sparkles. No marching line.
+    ctx.globalCompositeOperation='screen';
+    for(let i=0;i<16;i++){
+      const base=rnd(i*91+seg.i*37);
+      const life=(effectTime*0.55 + base*3.7) % 1;
+      const flicker=Math.sin(life*Math.PI);
+      if(flicker<=0.05)continue;
+
+      const anchorQ=rnd(i*17+seg.i*103);
+      const wobX=(Math.sin(effectTime*(1.1+rnd(i)*1.9)+i*2.31))*8*rnd(i+4);
+      const wobY=(Math.cos(effectTime*(1.3+rnd(i+2)*2.2)+i*1.71))*6*rnd(i+9);
+      const x=lerp(seg.x0,seg.x1,anchorQ)+wobX;
+      const y=surfaceYInSeg(seg,x)+settings.topH+8+rnd(i+seg.i*19)*TILE*settings.fillTiles*.62+wobY;
+
+      const a=0.10+flicker*.28;
+      const r=1.5+flicker*3.2*rnd(i+8);
+      ctx.fillStyle=`rgba(30,235,255,${a})`;
+      ctx.beginPath();
+      ctx.arc(x,y,r,0,Math.PI*2);
+      ctx.fill();
+
+      ctx.strokeStyle=`rgba(80,245,255,${a*.9})`;
+      ctx.lineWidth=1;
+      ctx.beginPath();
+      const ang=rnd(i+11)*Math.PI*2;
+      const len=5+flicker*10;
+      ctx.moveTo(x-Math.cos(ang)*len,y-Math.sin(ang)*len);
+      ctx.lineTo(x+Math.cos(ang)*len,y+Math.sin(ang)*len);
+      ctx.moveTo(x-Math.cos(ang+Math.PI/2)*len*.65,y-Math.sin(ang+Math.PI/2)*len*.65);
+      ctx.lineTo(x+Math.cos(ang+Math.PI/2)*len*.65,y+Math.sin(ang+Math.PI/2)*len*.65);
+      ctx.stroke();
+    }
+  }
+
+  if(materialKind(mat)==='crust'){
+    // Soft glowing heat pockets for lava/crust only. Ice uses the sprite texture itself, no extra streak overlays.
+    ctx.globalCompositeOperation='screen';
+    const cold=false;
+    for(let i=0;i<18;i++){
+      const q=rnd(i+seg.i*77);
+      const x=lerp(seg.x0,seg.x1,q);
+      const y=surfaceYInSeg(seg,x)+settings.topH+8+rnd(i+9)*TILE*settings.fillTiles*.68;
+      const glow=.30+.35*Math.sin(effectTime*(cold?1.7:3.0)+i);
+      const rx=cold ? 8+rnd(i)*16 : 10+rnd(i)*22;
+      const ry=cold ? 3+rnd(i+2)*7 : 2+rnd(i+2)*5;
+      ctx.fillStyle=cold
+        ? `rgba(70,220,255,${0.035+glow*.065})`
+        : `rgba(255,75,10,${0.08+glow*.12})`;
+      ctx.beginPath();
+      ctx.ellipse(x,y,rx,ry,rnd(i+4)*Math.PI,0,Math.PI*2);
+      ctx.fill();
+
+      ctx.strokeStyle=cold
+        ? `rgba(170,245,255,${0.025+glow*.045})`
+        : `rgba(255,120,20,${0.05+glow*.10})`;
+      ctx.lineWidth=1;
+      ctx.beginPath();
+      ctx.moveTo(x-rx*.7,y);
+      ctx.lineTo(x+rx*.7,y+(rnd(i+6)-.5)*5);
+      ctx.stroke();
+    }
+  }
+
+  if(materialKind(mat)==='marmor'){
+    ctx.globalAlpha=.18;
+    ctx.strokeStyle='rgba(255,255,255,.34)';
+    ctx.lineWidth=1;
+    for(let i=0;i<5;i++){
+      const q=rnd(i+144);
+      let x=lerp(seg.x0,seg.x1,q);
+      let y=surfaceYInSeg(seg,x)+settings.topH+8+rnd(i)*TILE*settings.fillTiles*.6;
+      ctx.beginPath();
+      ctx.moveTo(x,y);
+      for(let j=0;j<3;j++){
+        x+=18+rnd(i*j+5)*35;
+        y+=(rnd(i*j+9)-.5)*18;
+        ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+function drawDebug(){
+  const ps=platformLayout(), segs=bridgeSegments();
+  if(showCollision){
+    ctx.strokeStyle='rgba(0,255,130,.9)';ctx.lineWidth=1.5;ctx.beginPath();
+    const min=ps[0].left,max=ps[2].right;
+    for(let i=0;i<=260;i++){const x=lerp(min,max,i/260),y=groundY(x);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y)}
+    ctx.stroke();
+  }
+  if(showGuides){
+    ctx.setLineDash([4,4]);ctx.strokeStyle='rgba(255,255,255,.25)';
+    for(const seg of segs){ctx.beginPath();ctx.moveTo(seg.x0,seg.y0);ctx.lineTo(seg.x1,seg.y1);ctx.stroke();}
+    ctx.setLineDash([]);
+  }
+}
+function updatePlayer(dt){
+  const ps=platformLayout();
+  const left=keys.arrowleft||keys.d;
+  const right=keys.arrowright||keys.f;
+  const boost=keys[' '];
+
+  player.input=!!(left||right);
+
+  const inputDir = right ? 1 : left ? -1 : 0;
+  if(inputDir) player.dir=inputDir;
+
+  const matIndex = matAt(player.x);
+  const mat = getMat(matIndex) || {id:'grass',friction:0.86,slide:0.10,upCost:1.8,downPush:0.18};
+  const slope = slopeAt(player.x);
+  const bp = bridgePhysicsAt(player.x);
+  const steep = Math.min(1, Math.abs(slope));
+
+  player.slope = slope;
+  player.mat = matIndex;
+
+  // Slope physics v2:
+  // X beräknas först, Y snappar till marken efteråt.
+  // Uppför bromsar, nedför hjälper kontrollerat, is glider utan input.
+  const isIce = isIceMat(mat);
+  const uphillForInput = inputDir !== 0 && Math.sign(slope) === -inputDir;
+  const downhillForInput = inputDir !== 0 && Math.sign(slope) === inputDir;
+
+  let accel = 470;
+  let maxSpeed = isIce ? (boost ? 275 : 185) : (boost ? 215 : 138);
+
+  if(settings.slopePhysics){
+    if(uphillForInput){
+      const uphillPenalty = clamp(steep * (isIce ? 1.95 : 1.35) * bp.uphill, 0, boost ? 0.58 : 0.86);
+      accel *= (1 - uphillPenalty);
+      maxSpeed *= (1 - clamp(steep * 0.52, 0, boost ? 0.20 : 0.42));
+    } else if(downhillForInput){
+      accel *= (1 + steep * (isIce ? 0.46 : 0.13) * bp.downhill);
+      maxSpeed *= (1 + steep * 0.18);
+    }
+  }
+
+  if(boost){
+    accel *= 1.9 * (settings.boostPower || 1);
+    maxSpeed *= 1.25;
+    player.boostT=.12;
+  }
+
+  if(inputDir){
+    player.vx += inputDir * accel * dt;
+  }
+
+  if(player.on && settings.slopePhysics){
+    const downhillDir = slope > 0 ? 1 : slope < 0 ? -1 : 0;
+    if(downhillDir){
+      const slideAmount = steep * steep;
+      const naturalSlide = (isIce ? 520 : 45) * bp.gravity * bp.slide;
+
+      if(isIce || inputDir === downhillDir){
+        player.vx += downhillDir * naturalSlide * slideAmount * dt;
+      }
+
+      const movingUphill = Math.sign(player.vx) === -downhillDir;
+      if(movingUphill && !boost){
+        const brake = Math.max(0.72, 1 - steep * (isIce ? 0.28 : 0.22));
+        player.vx *= Math.pow(brake, dt*60);
+      }
+    }
+  }
+
+  if(!player.input){
+    player.vx *= Math.pow(isIce ? (1-0.004*bp.grip) : (1-0.16*bp.grip), dt*60);
+  } else {
+    player.vx *= Math.pow(isIce ? (1-0.002*bp.grip) : (1-0.015*bp.grip), dt*60);
+  }
+
+  player.vx = clamp(player.vx, -maxSpeed, maxSpeed);
+
+  player.x += player.vx*dt;
+  player.x = clamp(player.x, ps[0].left+12, ps[2].right-12);
+
+  const gy = groundY(player.x)-34;
+
+  if(player.on){
+    player.y = gy;
+    player.vy = 0;
+  } else {
+    player.vy += 900*dt;
+    player.y += player.vy*dt;
+    if(player.y>gy){
+      player.y=gy;
+      player.vy=0;
+      player.on=true;
+    }
+  }
+
+  if(keys.a && player.on){
+    player.vy=-430;
+    player.on=false;
+    keys.a=false;
+  }
+
+  if(player.input)player.walkT+=dt;
+  if(player.boostT>0)player.boostT-=dt;
+}
+function resetPlayer(){
+  const ps=platformLayout();
+  player.x=ps[0].left+TILE*2;
+  player.y=ps[0].y-34;
+  player.vx=0;player.vy=0;player.on=true;player.dir=1;player.walkT=0;player.input=false;player.boostT=0;
+}
+function drawLumo(){
+  const useWalk=player.input;
+  const im=useWalk?imgs.lumo_walk:imgs.lumo_idle;
+  if(!im){drawLumoFallback();return;}
+  const targetH=50, scale=targetH/im.height, w=im.width*scale,h=targetH;
+  ctx.save();ctx.translate(player.x,player.y+34);
+  if(player.boostT>0){
+    ctx.globalAlpha=.55;ctx.fillStyle='rgba(255,190,40,.4)';
+    ctx.beginPath();ctx.ellipse(-player.dir*19,-17,20,8,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+  }
+  if(player.dir<0)ctx.scale(-1,1);
+  ctx.drawImage(im,-w/2,-h,w,h);
+  ctx.restore();
+}
+function drawWorld(){
+  const ps=platformLayout(), segs=bridgeSegments();
+  for(let i=0;i<3;i++)drawPlatform(i);
+  for(const seg of segs)drawBridge(seg);
+  drawDebug();
+  if(labMode==='edit')drawLabel();
+  if(!mats.length){
+    ctx.save();
+    ctx.fillStyle='rgba(0,0,0,.55)';rr(W/2-260,70,520,76,8);ctx.fill();ctx.strokeStyle='rgba(246,209,29,.55)';ctx.stroke();
+    ctx.fillStyle='#f6d11d';ctx.font='bold 16px system-ui';ctx.fillText('Ladda din sprite-mapp först',W/2-230,100);
+    ctx.fillStyle='#dce4e7';ctx.font='13px system-ui';ctx.fillText('HTML-filen innehåller inga PNG och försöker inte läsa root automatiskt.',W/2-230,124);
+    ctx.restore();
+  }
+}
+function drawLabel(){
+  const ps=platformLayout();
+  const x=ps[0].left,y=ps[0].y-66,w=360,h=50;
+  rr(x,y,w,h,5);ctx.fillStyle='rgba(12,16,18,.78)';ctx.fill();ctx.strokeStyle='rgba(255,255,255,.2)';ctx.stroke();
+  ctx.fillStyle='#f6d11d';ctx.font='bold 13px system-ui';ctx.fillText('SURFACE BRIDGE · KANT-ANKRAD',x+12,y+18);
+  ctx.fillStyle='#dce4e7';ctx.font='12px system-ui';ctx.fillText(`${labMode==='edit'?'EDIT · dra P1/P2/P3 med musen':'PLAY · testa fysik'} · Space = boost`,x+12,y+38);
+}
+let uiRects=[];
+function addRect(kind,x,y,w,h,data){uiRects.push({kind,x,y,w,h,data});}
+function drawUI(){
+  uiRects=[];
+  if(!showUI)return;
+  const y=H-374;ctx.fillStyle='rgba(4,7,8,.72)';ctx.fillRect(0,y-10,W,384);
+  let x=12,gap=8;
+  const panel1W=Math.min(520, Math.max(470, Math.floor(W*0.28)));
+  box(x,y,panel1W,290,'1. VÄLJ DEL + MATERIAL');
+  const items=[
+    {kind:'platform',idx:0,label:'P1',mat:platforms[0].mat},
+    {kind:'bridge',idx:0,label:'BRO 1',mat:bridgeMats[0]},
+    {kind:'platform',idx:1,label:'P2',mat:platforms[1].mat},
+    {kind:'bridge',idx:1,label:'BRO 2',mat:bridgeMats[1]},
+    {kind:'platform',idx:2,label:'P3',mat:platforms[2].mat},
+  ];
+  const selectorW=330;
+  items.forEach((it,i)=>{
+    const yy=y+38+i*28, active=(it.kind===selectedThing && (it.kind==='platform'?selectedPlatform:selectedBridge)===it.idx);
+    rr(x+14,yy,selectorW,24,4);ctx.fillStyle=active?'rgba(246,209,29,.10)':'rgba(255,255,255,.035)';ctx.fill();ctx.strokeStyle=active?'rgba(246,209,29,.7)':'rgba(255,255,255,.12)';ctx.stroke();
+    const m=getMat(it.mat);
+    if(m && imgs[m.top]) drawThumb(imgs[m.top],x+20,yy+4,30,16); else {ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(x+20,yy+4,30,16);}
+    ctx.fillStyle='#e8edf2';ctx.font='bold 11px system-ui';ctx.fillText(`${it.label}: ${m?m.name:'INGET MATERIAL'}`.slice(0,34),x+62,yy+16);
+    addRect('selectThing',x+14,yy,selectorW,24,it);
+  });
+
+  const folderX=x+panel1W-142;
+  rr(folderX,y+38,122,58,5);ctx.fillStyle='rgba(255,255,255,.045)';ctx.fill();ctx.strokeStyle='rgba(255,255,255,.16)';ctx.stroke();
+  ctx.fillStyle='#dce4e7';ctx.font='bold 10px system-ui';ctx.fillText('LADDA',folderX+38,y+58);ctx.fillText('SPRITE-MAPP',folderX+24,y+74);
+  ctx.fillStyle='#8e979b';ctx.font='9px system-ui';ctx.fillText('top/fill eller 1/2',folderX+23,y+90);
+  addRect('folder',folderX,y+38,122,58,{});
+  ctx.fillStyle='#8e979b';ctx.font='9px system-ui';
+  const statusText=folderStatus.length>64 ? folderStatus.slice(0,61)+'...' : folderStatus;
+  ctx.fillText(statusText,x+18,y+170);
+  if(!mats.length){ctx.fillStyle='#f6d11d';ctx.font='bold 11px system-ui';ctx.fillText('Inga PNG-par laddade ännu.',x+18,y+193);ctx.fillStyle='#b8c0c4';ctx.font='10px system-ui';ctx.fillText('Exempel: grass_top.png + grass_fill.png + lumo_idle.png + lumo_walk.png',x+18,y+210);}
+
+  const pages=Math.max(1,Math.ceil(mats.length/MATERIALS_PER_PAGE));
+  materialPage=clamp(materialPage,0,pages-1);
+  ctx.fillStyle='#8e979b';ctx.font='11px system-ui';ctx.fillText(`Material på vald del · sida ${materialPage+1}/${pages}:`,x+18,y+190);
+  const start=materialPage*MATERIALS_PER_PAGE;
+  const end=Math.min(mats.length,start+MATERIALS_PER_PAGE);
+  const matCols=3;
+  const matW=Math.floor((panel1W-48)/matCols);
+  for(let j=start;j<end;j++){
+    const local=j-start;
+    const col=local%matCols;
+    const row=Math.floor(local/matCols);
+    const xx=x+18+col*matW;
+    const yy=y+216+row*24;
+    const active=selectedThing==='platform' ? platforms[selectedPlatform].mat===j : bridgeMats[selectedBridge]===j;
+    rr(xx-5,yy-14,matW-8,20,3);
+    ctx.fillStyle=active?'rgba(246,209,29,.12)':'rgba(255,255,255,.025)';
+    ctx.fill();
+    ctx.strokeStyle=active?'rgba(246,209,29,.58)':'rgba(255,255,255,.08)';
+    ctx.stroke();
+    ctx.fillStyle=active?(mats[j].accent||'#f6d11d'):'#c8d0d4';
+    ctx.font='bold 10px system-ui';
+    ctx.fillText(`${j+1}. ${mats[j].name}`.slice(0,18),xx,yy);
+    addRect('mat',xx-5,yy-14,matW-8,20,{i:j});
+  }
+  rr(x+18,y+258,86,18,3);ctx.fillStyle='rgba(255,255,255,.04)';ctx.fill();ctx.strokeStyle='rgba(255,255,255,.13)';ctx.stroke();ctx.fillStyle='#c8d0d4';ctx.font='bold 10px system-ui';ctx.fillText('◀ FÖRRA',x+29,y+271);addRect('matPagePrev',x+18,y+258,86,18,{});
+  rr(x+112,y+258,86,18,3);ctx.fillStyle='rgba(255,255,255,.04)';ctx.fill();ctx.strokeStyle='rgba(255,255,255,.13)';ctx.stroke();ctx.fillStyle='#c8d0d4';ctx.font='bold 10px system-ui';ctx.fillText('NÄSTA ▶',x+125,y+271);addRect('matPageNext',x+112,y+258,86,18,{});
+  x+=panel1W+gap;
+  box(x,y,380,270,'2. PLATTFORMAR / HÖJD / BREDD');
+  slider(x+18,y+48,108,platforms[0].y,-130,130,'P1 höjd',String(platforms[0].y),'p0y');
+  slider(x+18,y+76,108,platforms[1].y,-130,130,'P2 höjd',String(platforms[1].y),'p1y');
+  slider(x+18,y+104,108,platforms[2].y,-130,130,'P3 höjd',String(platforms[2].y),'p2y');
+  slider(x+18,y+132,108,platforms[1].xTiles,8,30,'P2 X tiles',String(platforms[1].xTiles),'p1x');
+  slider(x+18,y+160,108,platforms[2].xTiles,24,60,'P3 X tiles',String(platforms[2].xTiles),'p2x');
+  slider(x+18,y+188,108,platforms[0].wTiles,3,12,'P1 bredd tiles',String(platforms[0].wTiles),'p0w');
+  slider(x+18,y+216,108,platforms[1].wTiles,3,12,'P2 bredd tiles',String(platforms[1].wTiles),'p1w');
+  slider(x+18,y+244,108,platforms[2].wTiles,3,12,'P3 bredd tiles',String(platforms[2].wTiles),'p2w');
+  x+=380+gap;
+  box(x,y,360,228,'3. BROFORM / MATERIALKROPP');
+  slider(x+18,y+54,115,settings.curve,-0.7,1.35,'Kurvstyrka',settings.curve.toFixed(2),'curve');
+  slider(x+18,y+84,115,settings.rough,0,1,'Ojämnhet',settings.rough.toFixed(2),'rough');
+  slider(x+18,y+114,115,settings.sliceW,1,8,'Stav-bredd px',String(settings.sliceW),'sliceW');
+  slider(x+18,y+144,115,settings.topH,14,42,'Topphöjd px',String(settings.topH),'topH');
+  slider(x+18,y+174,115,settings.fillTiles,1,7,'Fyllnadsdjup tiles',String(settings.fillTiles),'fillTiles');
+  slider(x+18,y+204,115,settings.polish,0,1,'Detalj / polish',settings.polish.toFixed(2),'polish');
+  x+=360+gap;
+  box(x,y,620,228,'4. FYSIK PER BRO / DEBUG');
+  const bp=bridgePhysics[selectedBridge];
+
+  ctx.fillStyle='#8e979b';
+  ctx.font='11px system-ui';
+  ctx.fillText(`Vald bro: BRO ${selectedBridge+1}`,x+18,y+43);
+
+  // Left column: only sliders.
+  slider(x+18,y+70,120,bp.gravity,0,2,'Gravity pull',bp.gravity.toFixed(2),'bpGravity');
+  slider(x+18,y+100,120,bp.uphill,0,2.5,'Uppför motstånd',bp.uphill.toFixed(2),'bpUphill');
+  slider(x+18,y+130,120,bp.downhill,0,2.5,'Nedför accel',bp.downhill.toFixed(2),'bpDownhill');
+  slider(x+18,y+160,120,bp.slide,0,3,'Slide factor',bp.slide.toFixed(2),'bpSlide');
+  slider(x+18,y+190,120,bp.grip,0,2,'Grip / broms',bp.grip.toFixed(2),'bpGrip');
+
+  // Right column: only toggles/debug.
+  const rx=x+360;
+  checkbox(rx,y+58,settings.slopePhysics,'Slope physics','Global av/på');
+  checkbox(rx,y+104,showCollision,'Visa kollisionsyta','');
+  checkbox(rx,y+130,showGuides,'Visa hjälplinjer','');
+  addRect('toggleSlope',rx,y+52,220,24,{});
+  addRect('toggleCollision',rx,y+98,180,20,{});
+  addRect('toggleGuides',rx,y+124,180,20,{});
+
+  const segs=bridgeSegments();
+  const count=Math.ceil(((segs[0].x1-segs[0].x0)+(segs[1].x1-segs[1].x0))/settings.sliceW)*2;
+  ctx.fillStyle='#39ff65';
+  ctx.font='bold 12px system-ui';
+  ctx.fillText('Stavar: '+count,rx,y+174);
+
+  ctx.fillStyle='#aab3b7';
+  ctx.font='11px system-ui';
+  ctx.fillText(`Lutning: ${(player.slope||0).toFixed(2)} · VX: ${player.vx.toFixed(0)}`,rx,y+196);
+  ctx.fillText(`Material: ${getMat(player.mat||0)?.name || 'Ladda sprite-mapp'}`,rx,y+214);
+  controls(y+316);
+}
+function box(x,y,w,h,title){rr(x,y,w,h,5);ctx.fillStyle='rgba(17,23,25,.82)';ctx.fill();ctx.strokeStyle='rgba(255,255,255,.17)';ctx.stroke();ctx.fillStyle='#f6d11d';ctx.font='bold 13px system-ui';ctx.fillText(title,x+14,y+25)}
+function drawThumb(im,x,y,w,h){ctx.save();rr(x,y,w,h,3);ctx.clip();if(im)ctx.drawImage(im,x,y,w,h);else{ctx.fillStyle='rgba(255,255,255,.12)';ctx.fillRect(x,y,w,h);}ctx.restore();}
+function slider(x,y,w,v,min,max,label,text,key){
+  const q=invLerp(min,max,v);
+  ctx.fillStyle='#dbe2e5';ctx.font='12px system-ui';ctx.fillText(label,x,y);
+  ctx.strokeStyle='rgba(255,255,255,.14)';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x+128,y-4);ctx.lineTo(x+128+w,y-4);ctx.stroke();
+  ctx.fillStyle='#ddd7cc';ctx.beginPath();ctx.arc(x+128+w*q,y-4,5,0,7);ctx.fill();
+  rr(x+128+w+14,y-19,50,24,4);ctx.fillStyle='rgba(255,255,255,.045)';ctx.fill();ctx.strokeStyle='rgba(255,255,255,.08)';ctx.stroke();
+  ctx.fillStyle='#dbe2e5';ctx.fillText(text,x+128+w+27,y);
+  addRect('slider',x+128,y-12,w,18,{key,min,max});
+}
+function checkbox(x,y,on,label,sub){ctx.strokeStyle='rgba(255,255,255,.22)';ctx.strokeRect(x,y,14,14);if(on){ctx.fillStyle='#f6d11d';ctx.fillRect(x+3,y+3,8,8)}ctx.fillStyle='#e8edf2';ctx.font='12px system-ui';ctx.fillText(label,x+24,y+12);if(sub){ctx.fillStyle='#8e979b';ctx.font='11px system-ui';ctx.fillText(sub,x+24,y+30)}}
+function controls(y){rr(12,y,W-24,46,4);ctx.fillStyle='rgba(17,23,25,.72)';ctx.fill();ctx.strokeStyle='rgba(255,255,255,.15)';ctx.stroke();ctx.fillStyle='#f6d11d';ctx.font='bold 13px system-ui';ctx.fillText('KONTROLLER',30,y+28);const a=[['←/→','gå'],['A','hoppa'],['SPACE','boost'],['1 2 3','plattform'],['4 5','bro'],['R','reset'],['H','UI'],['C','collision']];let x=150;for(const it of a){ctx.fillStyle='#e8edf2';ctx.font='bold 12px system-ui';ctx.fillText(it[0],x,y+28);ctx.fillStyle='#b8c0c4';ctx.font='12px system-ui';ctx.fillText(it[1],x+(it[0].length>4?58:48),y+28);x+=it[0].length>4?135:108;}}
+
+function platformHitAt(pt){
+  const ps=platformLayout();
+  const h=settings.topH + TILE*settings.fillTiles;
+  for(let i=ps.length-1;i>=0;i--){
+    const p=ps[i];
+    if(pt.x>=p.left && pt.x<=p.right && pt.y>=p.y-10 && pt.y<=p.y+h+10){
+      return i;
+    }
+  }
+  return -1;
+}
+function startWorldPlatformDrag(pt){
+  const idx=platformHitAt(pt);
+  if(idx<0)return false;
+  selectedThing='platform';
+  selectedPlatform=idx;
+  const ps=platformLayout();
+  worldDrag={
+    platform:idx,
+    startX:pt.x,
+    startY:pt.y,
+    startXTiles:platforms[idx].xTiles,
+    startYValue:platforms[idx].y
+  };
+  return true;
+}
+function applyWorldPlatformDrag(pt){
+  if(!worldDrag)return;
+  const idx=worldDrag.platform;
+  const dxTiles=Math.round((pt.x-worldDrag.startX)/TILE);
+  const dy=Math.round(pt.y-worldDrag.startY);
+
+  // P1 stays as the left anchor in this lab, so drag it vertically only.
+  if(idx!==0){
+    let newX=worldDrag.startXTiles+dxTiles;
+    if(idx===1)newX=clamp(newX,platforms[0].xTiles+6,platforms[2].xTiles-6);
+    if(idx===2)newX=clamp(newX,platforms[1].xTiles+6,60);
+    platforms[idx].xTiles=newX;
+  }
+
+  platforms[idx].y=clamp(worldDrag.startYValue+dy,-130,130);
+}
+function pointer(e){const r=canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top};}
+function hit(pt,r){return pt.x>=r.x&&pt.x<=r.x+r.w&&pt.y>=r.y&&pt.y<=r.y+r.h}
+function setValue(key,v){
+  invalidateWorldCache();
+  if(key==='p0y')platforms[0].y=v;
+  else if(key==='p1y')platforms[1].y=v;
+  else if(key==='p2y')platforms[2].y=v;
+  else if(key==='p1x')platforms[1].xTiles=Math.min(v,platforms[2].xTiles-6);
+  else if(key==='p2x')platforms[2].xTiles=Math.max(v,platforms[1].xTiles+6);
+  else if(key==='p0w')platforms[0].wTiles=v;
+  else if(key==='p1w')platforms[1].wTiles=v;
+  else if(key==='p2w')platforms[2].wTiles=v;
+  else if(key.startsWith('bp')){
+    const prop=key.slice(2).toLowerCase();
+    bridgePhysics[selectedBridge][prop]=v;
+  }
+  else settings[key]=v;
+}
+function applySlider(pt){
+  if(!drag)return;
+  const q=clamp((pt.x-drag.x)/drag.w,0,1),d=drag.data;
+  let v=lerp(d.min,d.max,q);
+  if(['p0y','p1y','p2y','p1x','p2x','p0w','p1w','p2w','sliceW','topH','fillTiles'].includes(d.key))v=Math.round(v);
+  setValue(d.key,v);
+}
+canvas.addEventListener('mousedown',e=>{
+  if(labMode!=='edit')return;
+  const pt=pointer(e);
+
+  if(showUI){
+    for(const r of uiRects){
+      if(hit(pt,r)){
+        if(r.kind==='selectThing'){
+          selectedThing=r.data.kind;
+          if(r.data.kind==='platform')selectedPlatform=r.data.idx;
+          else selectedBridge=r.data.idx;
+          return;
+        }
+        if(r.kind==='mat'){
+          if(selectedThing==='platform')platforms[selectedPlatform].mat=r.data.i;
+          else bridgeMats[selectedBridge]=r.data.i;
+          invalidateWorldCache();
+          return;
+        }
+        if(r.kind==='folder'){chooseSpriteFolder();return;}
+        if(r.kind==='matPagePrev'){materialPage=Math.max(0,materialPage-1);return;}
+        if(r.kind==='matPageNext'){materialPage=Math.min(Math.ceil(mats.length/MATERIALS_PER_PAGE)-1,materialPage+1);return;}
+        if(r.kind==='toggleSlope'){settings.slopePhysics=settings.slopePhysics?0:1;return;}
+        if(r.kind==='toggleCollision'){showCollision=!showCollision;return;}
+        if(r.kind==='toggleGuides'){showGuides=!showGuides;return;}
+        if(r.kind==='slider'){drag=r;applySlider(pt);return;}
+      }
+    }
+  }
+
+  startWorldPlatformDrag(pt);
+});
+addEventListener('mousemove',e=>{const pt=pointer(e);if(drag)applySlider(pt);if(worldDrag){applyWorldPlatformDrag(pt);invalidateWorldCache();}});
+addEventListener('mouseup',()=>{drag=null;worldDrag=null;});
+
+function drawPlayBadge(){
+  if(labMode!=='play') return;
+  rr(14,14,230,42,6);
+  ctx.fillStyle='rgba(8,12,14,.74)';
+  ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.18)';
+  ctx.stroke();
+  ctx.fillStyle='#f6d11d';
+  ctx.font='bold 13px system-ui';
+  ctx.fillText('PLAY MODE',28,31);
+  ctx.fillStyle='#dce4e7';
+  ctx.font='12px system-ui';
+  ctx.fillText('cached world · TAB till Edit',108,31);
+}
+
+function buildWorldCacheKey(){
+  return JSON.stringify({
+    W,H,DPR,TILE,
+    settings:{
+      curve:settings.curve,
+      rough:settings.rough,
+      sliceW:settings.sliceW,
+      topH:settings.topH,
+      fillTiles:settings.fillTiles,
+      polish:settings.polish
+    },
+    platforms,
+    bridgeMats,
+    bridgePhysics
+  });
+}
+function invalidateWorldCache(){
+  playWorldCache=null;
+  playWorldCacheKey='';
+}
+function renderStaticWorldToCache(){
+  const key=buildWorldCacheKey();
+  if(playWorldCache && playWorldCacheKey===key)return;
+
+  playWorldCacheKey=key;
+  playWorldCache=document.createElement('canvas');
+  playWorldCache.width=Math.max(1,Math.ceil(W*DPR));
+  playWorldCache.height=Math.max(1,Math.ceil(H*DPR));
+
+  const oldCtx=ctx;
+  const cacheCtx=playWorldCache.getContext('2d');
+  cacheCtx.setTransform(DPR,0,0,DPR,0,0);
+
+  ctx=cacheCtx;
+  bg();
+  drawWorld();
+  ctx=oldCtx;
+}
+
+function loop(ts){
+  const dt=Math.min(.033,(ts-last)/1000||.016);last=ts;effectTime+=dt;
+  updatePlayer(dt);
+  if(labMode==='play'){
+    renderStaticWorldToCache();
+    ctx.fillStyle='#11171a';
+    ctx.fillRect(0,0,W,H);
+    ctx.drawImage(playWorldCache,0,0,W,H);
+  } else {
+    bg();
+    drawWorld();
+  }
+  drawLumo();
+  drawPlayBadge();
+  drawUI();
+  requestAnimationFrame(loop);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+loadLabAssets();
+</script>
+</body>
+</html>

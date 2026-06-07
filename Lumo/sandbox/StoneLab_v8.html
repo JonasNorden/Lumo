@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Stone Lab v7 - Procedural 2D Stone Generator</title>
+<style>
+:root{
+  --bg:#07111b;--panel:#0c1a28;--panel2:#102235;--stroke:#22394d;--text:#f3f7fb;--muted:#aab8c8;--green:#39d27a;
+}
+*{box-sizing:border-box} html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;overflow:auto}
+button,input{font:inherit} button{cursor:pointer;color:var(--text);background:#122438;border:1px solid #2b465d;border-radius:9px;padding:10px 14px;font-weight:700} button:hover{border-color:#52e58b} .primary{background:linear-gradient(#31b968,#198347);border-color:#53e88d}.active{outline:2px solid var(--green);background:#132c24}
+#app{min-height:100vh;display:grid;grid-template-rows:64px minmax(360px,52vh) auto 116px;gap:8px;padding:8px}
+header{display:flex;align-items:center;gap:18px;background:#07131f;border:1px solid #20384d;border-radius:10px;padding:8px 14px;box-shadow:0 8px 24px #0008}.brand{display:flex;align-items:center;gap:12px;margin-right:auto}.brand h1{font-size:28px;letter-spacing:2px;margin:0}.brand small{color:#cde0f6;font-weight:700}.rockIcon{font-size:28px;filter:drop-shadow(0 2px 2px #000)}
+.previewWrap{position:relative;background:linear-gradient(#182b40,#0b1825);border:1px solid #263f55;border-radius:10px;overflow:hidden;min-height:0}.toolbar{position:absolute;top:14px;left:16px;display:flex;gap:8px;z-index:2;align-items:center}.pill{background:#0a1724cc;border:1px solid #29445b;border-radius:8px;padding:9px 12px;color:#e8f2ff}.pill select{background:transparent;color:#fff;border:0;outline:0;font-weight:700}#canvas{width:100%;height:100%;display:block}.groundLine{position:absolute;left:0;right:0;bottom:46px;height:1px;background:#263e50;box-shadow:0 14px 30px #000}
+.mainControls{display:grid;grid-template-columns:1.05fr 1.15fr 1.05fr 1.1fr;gap:8px;min-height:0}.panel{background:linear-gradient(145deg,#0b1a29,#091522);border:1px solid #23394d;border-radius:10px;padding:13px;overflow:visible}.panel h2{font-size:15px;letter-spacing:.6px;margin:0 0 12px}.rule{font-size:13px;line-height:1.55;color:#e9f2fb}.rule ol{margin:8px 0 0 18px;padding:0}.row{display:grid;grid-template-columns:128px 1fr 48px;gap:10px;align-items:center;margin:9px 0}.row label{font-size:13px;color:#edf5ff}.val{background:#07131f;border:1px solid #263f55;border-radius:6px;padding:5px 6px;text-align:center;font-size:12px}input[type=range]{width:100%;accent-color:var(--green)}.toggleRow{display:flex;justify-content:space-between;align-items:center;margin:9px 0}.switch{width:38px;height:22px;border-radius:20px;background:#22364a;position:relative;border:1px solid #36536c}.switch.on{background:#2bbd69}.switch:after{content:"";position:absolute;width:18px;height:18px;border-radius:50%;background:#fff;top:1px;left:1px;transition:.15s}.switch.on:after{left:17px}.swatches{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:6px 0 12px}.sw{height:40px;border-radius:6px;border:1px solid #536777}.themes{display:flex;gap:8px;flex-wrap:wrap}.theme{width:55px;height:38px;border:2px solid #cbd4dd;border-radius:6px;display:flex;overflow:hidden}.theme.active{border-color:#2ce77e;box-shadow:0 0 0 2px #163}.theme i{flex:1}.lightBtns{display:flex;gap:9px;margin:6px 0 14px}.lightBtns button{width:44px;height:44px;padding:0;font-size:20px}.shapeBtns{display:flex;gap:8px}.shapeBtns button{flex:1}.legend{display:grid;grid-template-columns:80px 1fr;gap:10px;align-items:center;margin-top:12px}.miniRock{width:78px;height:85px}.paletteLabel{font-size:12px;color:#d9e6f6;text-align:center;margin-top:4px}
+footer{display:grid;grid-template-columns:145px 1fr 150px;gap:10px;background:#081623;border:1px solid #20384d;border-radius:10px;padding:10px;align-items:center;min-height:106px}.presetStrip{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;height:88px}.preset{background:linear-gradient(#16283b,#0d1b2a);border:1px solid #273f55;border-radius:8px;position:relative;overflow:hidden}.preset.active{outline:2px solid var(--green)}.preset canvas{width:100%;height:100%}.seedBox{display:flex;gap:8px;align-items:center;justify-content:flex-end}.seedBox input{background:#06111c;border:1px solid #274157;border-radius:7px;color:white;padding:9px;width:90px;text-align:center}.copied{position:absolute;right:18px;top:72px;background:#16301f;border:1px solid #39d27a;border-radius:9px;padding:10px 14px;opacity:0;transform:translateY(-8px);transition:.2s;z-index:6}.copied.show{opacity:1;transform:none}
+@media(max-width:1400px){#app{grid-template-rows:64px minmax(340px,48vh) auto 116px}.mainControls{grid-template-columns:1fr 1fr}.panel{font-size:12px}.brand h1{font-size:22px}.row{grid-template-columns:118px 1fr 45px;margin:7px 0}}
+@media(max-width:900px){#app{display:block}.previewWrap{height:380px;margin:8px 0}.mainControls{display:block}.panel{margin-bottom:8px}footer{display:block}.presetStrip{margin:8px 0}}
+</style>
+</head>
+<body>
+<div id="app">
+<header>
+  <div class="brand"><strong style="font-size:28px;letter-spacing:2px">STONE LAB</strong><span class="rockIcon">🪨</span><small>Procedural 2D Stone Generator for Lumo</small></div>
+  <button class="primary" id="generate">🎲 NY GENERERING</button>
+  <button id="shuffle">🔀 SLUMPA SEED</button>
+  <button id="copy">&lt;/&gt; KOPIERA DATA</button>
+</header>
+<section class="previewWrap">
+  <div class="toolbar"><span class="pill">FÖRHANDSVISNING</span><span class="pill">☀️ <select id="lightDir"><option value="left">Ljus från vänster</option><option value="topLeft">Ljus ovan vänster</option><option value="top">Ljus ovanifrån</option><option value="right">Ljus från höger</option></select></span></div>
+  <canvas id="canvas"></canvas><div class="groundLine"></div>
+</section>
+<section class="mainControls">
+  <div class="panel"><h2>STRÄCKA</h2><div id="rangeA"></div><hr style="border-color:#1b3043;border-style:solid none none;margin:12px 0"><h2>STORLEK</h2><div id="rangeB"></div><div class="toggleRow"><span>Gruppera stenar</span><span class="switch on" data-toggle="cluster"></span></div><div class="toggleRow"><span>Slumpad ordning</span><span class="switch on" data-toggle="randomOrder"></span></div></div>
+  <div class="panel"><h2>STENENS UTSEENDE</h2><div class="swatches" id="swatches"></div><div class="themes" id="themes"></div><div id="rangeC" style="margin-top:12px"></div><h2 style="margin-top:14px">FORMSTIL</h2><div class="shapeBtns"><button id="angular" class="active">KANTIG</button><button id="rounded">RUNDAD</button></div></div>
+  <div class="panel"><h2>LJUS & SKUGGA</h2><div class="lightBtns"><button data-light="left" class="active">☀←</button><button data-light="topLeft">☀↙</button><button data-light="top">☀↓</button><button data-light="right">☀→</button></div><div id="rangeD"></div><h2 style="margin-top:12px">MARKSKUGGA</h2><div id="rangeE"></div></div>
+  <div class="panel"><h2>REGLER <small style="color:#9fb0c4">(så fungerar modellen)</small></h2><div class="rule"><ol><li>Först skapas en oregelbunden silhuett.</li><li>Stenen delas i få stora färgytor, inga svarta linjer.</li><li>Färgen väljs av ytors riktning mot ljuset.</li><li>Intilliggande ytor får mjuka värdeskift, aldrig hårda konturlinjer.</li><li>Undersidan får låg, hård kontaktskugga.</li></ol></div><div class="legend"><canvas class="miniRock" id="mini"></canvas><div><div class="paletteLabel">Ljusast</div><div class="paletteLabel">Ljus</div><div class="paletteLabel">Mörk</div><div class="paletteLabel">Mörkast</div></div></div></div>
+</section>
+<footer><div><b>SNABBP森SETS</b><br><small style="color:#b4c2d2">Klicka för stil</small></div><div class="presetStrip" id="presetStrip"></div><div class="seedBox"><span>Seed:</span><input id="seed" value="548043"><button id="regen">↻</button></div></footer>
+</div><div id="copied" class="copied">Data kopierad</div>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const canvas=$('canvas'),ctx=canvas.getContext('2d');
+const mini=$('mini'),mctx=mini.getContext('2d');
+let W=0,H=0,DPR=1,rocks=[];
+const state={seed:548043,length:1205,count:18,minGap:0,maxGap:60,minW:16,maxW:110,minH:12,maxH:100,cluster:true,randomOrder:true,contrast:.72,variation:.58,softness:.82,lightStrength:.65,shadowStrength:.75,contact:12,baseline:0,palette:'cool',shape:'angular',light:'left'};
+const palettes={cool:['#d7c5aa','#8d8476','#4e5250','#121918'],warm:['#e1bd8b','#9a7553','#504235','#191512'],green:['#b8b88f','#747760','#41483b','#111714'],red:['#c89383','#8d5a4d','#4b3432','#171213'],snow:['#ebe9e2','#b8b8b4','#6d7479','#1e2529'],moss:['#b6b783','#767b50','#42472d','#12170f'],tan:['#dfc39e','#a58d70','#615348','#181514']};
+function mulberry32(a){return function(){let t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296}}
+let rnd=mulberry32(state.seed);const R=(a,b)=>a+rnd()*(b-a);const RI=(a,b)=>Math.floor(R(a,b+1));
+function hexToRgb(h){h=h.replace('#','');return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]}
+function rgbToHex(r,g,b){return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('')}
+function mix(a,b,t){const A=hexToRgb(a),B=hexToRgb(b);return rgbToHex(A[0]+(B[0]-A[0])*t,A[1]+(B[1]-A[1])*t,A[2]+(B[2]-A[2])*t)}
+function shade(base, amt){return mix(base, amt>0?'#ffffff':'#000000', Math.abs(amt))}
+function resize(){DPR=Math.min(2,devicePixelRatio||1);const r=canvas.getBoundingClientRect();W=Math.round(r.width*DPR);H=Math.round(r.height*DPR);canvas.width=W;canvas.height=H;draw();}addEventListener('resize',resize);
+function makeSlider(parent,key,label,min,max,step){const row=document.createElement('div');row.className='row';row.innerHTML=`<label>${label}</label><input type="range" min="${min}" max="${max}" step="${step}" value="${state[key]}"><span class="val"></span>`;const inp=row.children[1],out=row.children[2];const upd=()=>{state[key]=+inp.value;out.textContent=(step<1?state[key].toFixed(2):state[key]);scheduleGen(key.startsWith('min')||key.startsWith('max')||['length','count','minGap','maxGap'].includes(key));};inp.oninput=upd;upd();$(parent).appendChild(row)}
+function buildUI(){makeSlider('rangeA','length','Sträckans längd',300,1800,1);makeSlider('rangeA','count','Antal stenar',1,80,1);makeSlider('rangeA','minGap','Min mellanrum',0,80,1);makeSlider('rangeA','maxGap','Max mellanrum',0,160,1);makeSlider('rangeB','minW','Min bredd',1,180,1);makeSlider('rangeB','maxW','Max bredd',1,260,1);makeSlider('rangeB','minH','Min höjd',0,160,1);makeSlider('rangeB','maxH','Max höjd',0,190,1);makeSlider('rangeC','contrast','Kontrast',0,1.4,.01);makeSlider('rangeC','variation','Ytvariation',0,1,.01);makeSlider('rangeC','softness','Kant-mjukhet',0,1,.01);makeSlider('rangeD','lightStrength','Ljusstyrka',0,1.2,.01);makeSlider('rangeD','shadowStrength','Skuggstyrka',0,1.2,.01);makeSlider('rangeE','contact','Hård kontakt',0,28,1);makeSlider('rangeE','baseline','Baslinje',-80,80,1);
+ const th=$('themes');Object.keys(palettes).forEach((k,i)=>{const d=document.createElement('button');d.className='theme'+(k===state.palette?' active':'');palettes[k].forEach(c=>{const s=document.createElement('i');s.style.background=c;d.appendChild(s)});d.title=k;d.onclick=()=>{state.palette=k;[...th.children].forEach(x=>x.classList.remove('active'));d.classList.add('active');draw();};th.appendChild(d)});
+ document.querySelectorAll('.switch').forEach(s=>s.onclick=()=>{const k=s.dataset.toggle;state[k]=!state[k];s.classList.toggle('on',state[k]);generate();});
+ $('angular').onclick=()=>{state.shape='angular';$('angular').classList.add('active');$('rounded').classList.remove('active');generate();};$('rounded').onclick=()=>{state.shape='rounded';$('rounded').classList.add('active');$('angular').classList.remove('active');generate();};
+ document.querySelectorAll('[data-light]').forEach(b=>b.onclick=()=>{state.light=b.dataset.light;$('lightDir').value=state.light;document.querySelectorAll('[data-light]').forEach(x=>x.classList.toggle('active',x===b));draw();});$('lightDir').onchange=e=>{state.light=e.target.value;document.querySelectorAll('[data-light]').forEach(x=>x.classList.toggle('active',x.dataset.light===state.light));draw();};
+ $('generate').onclick=generate;$('regen').onclick=()=>{state.seed=+$('seed').value||1;generate()};$('shuffle').onclick=()=>{state.seed=Math.floor(Math.random()*999999);$('seed').value=state.seed;generate()};$('copy').onclick=copyData;
+ buildPresets();}
+let genTimer;function scheduleGen(heavy){clearTimeout(genTimer);genTimer=setTimeout(heavy?generate:draw,20)}
+function buildPresets(){const strip=$('presetStrip');['cool','warm','green','red','snow','moss','tan'].forEach((p,i)=>{const d=document.createElement('button');d.className='preset'+(i===0?' active':'');const c=document.createElement('canvas');c.width=240;c.height=86;d.appendChild(c);d.onclick=()=>{state.palette=p;[...strip.children].forEach(x=>x.classList.remove('active'));d.classList.add('active');generate()};strip.appendChild(d);drawPreset(c,p,i)})}
+function drawPreset(c,pal,off){const x=c.getContext('2d');x.fillStyle='#102032';x.fillRect(0,0,c.width,c.height);const old={...state};state.palette=pal;const rr=mulberry32(100+off);for(let i=0;i<6;i++){drawRockShape(x,20+i*36,70,20+rr()*20,18+rr()*38,makeRock(20+i*36,70,20+rr()*20,18+rr()*38,rr),.6)}Object.assign(state,old)}
+function makeRock(x,base,w,h,rand=rnd){let pts=[],n= state.shape==='rounded'?RI(11,15):RI(7,11);for(let i=0;i<n;i++){let a=Math.PI-(i/(n-1))*Math.PI;let nx=Math.cos(a),ny=-Math.sin(a);let jitter=(state.shape==='rounded'?0.08:0.18)*state.variation;let rad=1+(rand()-.5)*jitter*2;pts.push({x:x+nx*w*.5*rad,y:base+ny*h*rad});}pts.push({x:x+w*.48,y:base});pts.push({x:x-w*.48,y:base});
+ const cx=x,cy=base-h*.45;let facets=[];let bands=RI(3,5);for(let b=0;b<bands;b++){let yy=base-h*(0.12+b/(bands)*.78);let row=RI(2,4);for(let j=0;j<row;j++){let px=x-w*.35+(j/(row-1||1))*w*.7+R(-w*.08,w*.08);let py=yy+R(-h*.08,h*.08);facets.push({x:px,y:py})}}facets.push({x:x,y:base-h*.92});facets.push({x:x-w*.25,y:base-h*.25});facets.push({x:x+w*.25,y:base-h*.30});return{pts,facets,cx,cy,w,h,seed:rand()}}
+function generate(){rnd=mulberry32(+state.seed||1);$('seed').value=state.seed;rocks=[];let usable=Math.min(state.length,W/DPR-60);let start=(W/DPR-usable)/2+30;let base=(H/DPR)-48+state.baseline;let count=Math.round(state.count);let x=start;for(let i=0;i<count;i++){let w=R(state.minW,state.maxW),h=R(state.minH,state.maxH);if(state.cluster&&rnd()<.28){w*=R(.35,.65);h*=R(.3,.7)}let gap=R(state.minGap,state.maxGap);let rx=start+(i/(Math.max(1,count-1)))*usable+R(-gap,gap);if(!state.randomOrder)rx=x+w*.5;rocks.push(makeRock(rx,base,w,h));x+=w+gap;}rocks.sort((a,b)=>a.cx-b.cx);draw();}
+function pointInPoly(p,poly){let inside=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){let xi=poly[i].x,yi=poly[i].y,xj=poly[j].x,yj=poly[j].y;if(((yi>p.y)!=(yj>p.y))&&(p.x<(xj-xi)*(p.y-yi)/(yj-yi)+xi))inside=!inside}return inside}
+function clipPoly(poly,rect){let p=poly.filter(pt=>pointInPoly(pt,rect)||true);return p}
+function lightVec(){return state.light==='left'?[-1,-.25]:state.light==='topLeft'?[-.7,-.7]:state.light==='top'?[0,-1]:[1,-.25]}
+function facetColor(cx,cy,rock,poly,idx){let [lx,ly]=lightVec();let dx=(cx-rock.cx)/(rock.w*.55),dy=(cy-(rock.cy))/(rock.h*.75);let v=-(dx*lx+dy*ly);let level=Math.max(0,Math.min(3,Math.floor((v*.9+dy*.7+1.05)*1.45)));const pal=palettes[state.palette];let base=pal[Math.max(0,Math.min(3,level))];let amt=(rnd()-.5)*.13*state.variation + (3-level)*.035*state.lightStrength - level*.025*state.shadowStrength;return shade(base,amt)}
+function smoothPath(c,pts,closed=true){c.beginPath();if(state.shape==='rounded'&&state.softness>.15){c.moveTo((pts[0].x+pts[pts.length-1].x)/2,(pts[0].y+pts[pts.length-1].y)/2);for(let i=0;i<pts.length;i++){let p=pts[i],n=pts[(i+1)%pts.length];c.quadraticCurveTo(p.x,p.y,(p.x+n.x)/2,(p.y+n.y)/2)}}else{c.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)c.lineTo(pts[i].x,pts[i].y)}if(closed)c.closePath()}
+function drawRockShape(c,x,base,w,h,rock,scale=1){c.save();c.scale(scale,scale);drawSingleRock(c,rock||makeRock(x,base,w,h));c.restore()}
+function drawSingleRock(c,rock){const pal=palettes[state.palette];c.save();
+ // contact shadow low and hard only at ground
+ c.fillStyle='rgba(0,0,0,'+(0.45*state.shadowStrength)+')';c.beginPath();c.ellipse(rock.cx,rock.pts[rock.pts.length-1].y+1,rock.w*.48,Math.max(2,state.contact*.28),0,0,Math.PI*2);c.fill();
+ c.save();smoothPath(c,rock.pts);c.clip();
+ // base fill
+ let g=c.createLinearGradient(rock.cx-rock.w*.5,rock.cy-rock.h*.3,rock.cx+rock.w*.5,rock.cy+rock.h*.7);g.addColorStop(0,pal[1]);g.addColorStop(.55,pal[2]);g.addColorStop(1,pal[3]);c.fillStyle=g;c.fillRect(rock.cx-rock.w,rock.cy-rock.h,rock.w*2,rock.h*2.2);
+ // sculpted big areas without stroke lines: voronoi-like triangles around internal points
+ const pts=[...rock.facets,{x:rock.cx-rock.w*.5,y:rock.pts[rock.pts.length-1].y},{x:rock.cx+rock.w*.5,y:rock.pts[rock.pts.length-2].y},{x:rock.cx,y:rock.cy-rock.h*.95}];
+ rnd=mulberry32(Math.floor(rock.seed*999999));
+ for(let i=0;i<pts.length;i++){let p=pts[i];let near=[...pts].sort((a,b)=>(a.x-p.x)**2+(a.y-p.y)**2-((b.x-p.x)**2+(b.y-p.y)**2)).slice(1,4);let poly=[p,...near].sort((a,b)=>Math.atan2(a.y-p.y,a.x-p.x)-Math.atan2(b.y-p.y,b.x-p.x));let cx=poly.reduce((s,q)=>s+q.x,0)/poly.length,cy=poly.reduce((s,q)=>s+q.y,0)/poly.length;if(!pointInPoly({x:cx,y:cy},rock.pts))continue;c.fillStyle=facetColor(cx,cy,rock,poly,i);smoothPath(c,poly);c.globalAlpha=.88;c.fill();}
+ c.globalAlpha=1;
+ // soft top highlight, not lines
+ const hg=c.createLinearGradient(rock.cx,rock.cy-rock.h,rock.cx,rock.cy+rock.h*.4);hg.addColorStop(0,'rgba(255,255,255,'+(0.16*state.lightStrength)+')');hg.addColorStop(.45,'rgba(255,255,255,0)');c.fillStyle=hg;c.fillRect(rock.cx-rock.w,rock.cy-rock.h*1.2,rock.w*2,rock.h*2);
+ // bottom contact dark low only
+ const bg=c.createLinearGradient(0,rock.pts[rock.pts.length-1].y-rock.h*.35,0,rock.pts[rock.pts.length-1].y+2);bg.addColorStop(0,'rgba(0,0,0,0)');bg.addColorStop(1,'rgba(0,0,0,'+(0.42*state.shadowStrength)+')');c.fillStyle=bg;c.fillRect(rock.cx-rock.w,rock.pts[rock.pts.length-1].y-rock.h*.42,rock.w*2,rock.h*.45);
+ // subtle texture dots clipped, very few
+ c.fillStyle='rgba(10,12,12,.12)';for(let k=0;k<Math.max(1,rock.w*rock.h/950);k++){let px=R(rock.cx-rock.w*.38,rock.cx+rock.w*.38),py=R(rock.cy-rock.h*.4,rock.cy+rock.h*.55);if(pointInPoly({x:px,y:py},rock.pts)){c.beginPath();c.arc(px,py,R(.45,1.4),0,Math.PI*2);c.fill();}}
+ c.restore();
+ // silhouette only, very subtle, no internal outlines
+ c.strokeStyle='rgba(255,255,255,.06)';c.lineWidth=1;smoothPath(c,rock.pts);c.stroke();
+ c.restore();}
+function draw(){if(!W)return;ctx.clearRect(0,0,W,H);ctx.save();ctx.scale(DPR,DPR);const ww=W/DPR,hh=H/DPR;let bg=ctx.createLinearGradient(0,0,0,hh);bg.addColorStop(0,'#182a3e');bg.addColorStop(1,'#0a1521');ctx.fillStyle=bg;ctx.fillRect(0,0,ww,hh);ctx.fillStyle='rgba(0,0,0,.26)';ctx.fillRect(0,hh-50,ww,50);ctx.strokeStyle='#243d53';ctx.beginPath();ctx.moveTo(0,hh-50);ctx.lineTo(ww,hh-50);ctx.stroke();rocks.forEach(r=>drawSingleRock(ctx,r));ctx.restore();drawMini();updateSwatches();}
+function drawMini(){mini.width=156;mini.height=170;mctx.clearRect(0,0,156,170);const old={...state};const r=makeRock(78,145,88,120,mulberry32(12));drawSingleRock(mctx,r);Object.assign(state,old)}
+function updateSwatches(){const s=$('swatches');s.innerHTML='';palettes[state.palette].forEach(c=>{const d=document.createElement('div');d.className='sw';d.style.background=c;s.appendChild(d)})}
+function copyData(){const data={type:'lumoStoneScatter',version:7,settings:state,rocks:rocks.map(r=>({x:+r.cx.toFixed(1),w:+r.w.toFixed(1),h:+r.h.toFixed(1),seed:+r.seed.toFixed(6)}))};navigator.clipboard?.writeText(JSON.stringify(data,null,2));$('copied').classList.add('show');setTimeout(()=>$('copied').classList.remove('show'),1000)}
+buildUI();resize();generate();
+</script>
+</body>
+</html>
