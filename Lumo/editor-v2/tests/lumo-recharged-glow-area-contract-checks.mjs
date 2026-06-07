@@ -15,6 +15,8 @@ import { v2ToRuntimeLevelObject } from "../src/runtime/v2ToRuntimeLevelObject.js
 import { loadLevelDocument } from "../src/runtime/loadLevelDocument.js";
 import { buildRuntimeWorldSkeleton } from "../src/runtime/buildRuntimeWorldSkeleton.js";
 import { buildRuntimeWorldPacket } from "../src/runtime/buildRuntimeWorldPacket.js";
+import { createLumoRechargedBootAdapter } from "../src/runtime/createLumoRechargedBootAdapter.js";
+import { createRechargedLevelSourceRuntime } from "../src/runtime/createRechargedLevelSourceRuntime.js";
 import { getSelectionEditorPanelContent } from "../src/ui/selectionEditorPanel.js";
 import {
   getRuntimeGlowPointAlpha,
@@ -158,6 +160,22 @@ const baseDoc = {
   assert.equal(loaded.level.glowAreas.length, 1, "Recharged runtime loader preserves authored Glow Areas");
   const packet = buildRuntimeWorldPacket({ skeleton: buildRuntimeWorldSkeleton(loaded.level) });
   assert.equal(packet.glowAreas.length, 1, "runtime world packets carry Glow Areas");
+
+  const sourceRuntime = createRechargedLevelSourceRuntime({ levelSource: { levelDocument: loaded.level } });
+  assert.equal(sourceRuntime.ok, true, "Recharged level-source runtime accepts authored Glow Area levels");
+  assert.equal(sourceRuntime.initialize().ok, true, "Recharged level-source runtime initializes with authored Glow Areas");
+  assert.equal(sourceRuntime.start().ok, true, "Recharged level-source runtime starts with authored Glow Areas");
+  assert.equal(sourceRuntime.getWorldSnapshot().glowAreas.length, 1, "runtime world snapshot preserves canonical top-level glowAreas");
+  assert.equal(sourceRuntime.getBootPayload().glowAreas.length, 1, "runtime boot payload preserves canonical top-level glowAreas");
+
+  const adapter = createLumoRechargedBootAdapter({
+    sourceDescriptor: { levelDocument: loaded.level },
+  });
+  assert.equal(adapter.ok, true, "Lumo.html boot adapter can be created for authored Glow Area levels");
+  assert.equal((await adapter.prepare()).ok, true, "Lumo.html boot adapter prepares authored Glow Areas");
+  assert.equal((await adapter.boot()).ok, true, "Lumo.html boot adapter boots authored Glow Areas");
+  assert.equal(adapter.getWorldSnapshot().glowAreas.length, 1, "Lumo.html adapter world snapshot preserves canonical top-level glowAreas");
+  assert.equal(adapter.getBootPayload().glowAreas.length, 1, "Lumo.html receives non-empty authored glowAreas on the boot payload");
 }
 
 {
@@ -251,6 +269,11 @@ const baseDoc = {
   assert.doesNotMatch(runtimeGlowSource, /spawn|despawn|lifecycle/i, "runtime glow must not expose an emitter lifecycle");
   assert.doesNotMatch(runtimeGlowSource, /createRadialGradient|drawImage|getImageData|putImageData/, "runtime glow must not use fullscreen passes, textures, or expensive image operations");
   assert.doesNotMatch(glowLayerSource, /\.filter\s*=|shadowBlur|shadowColor/, "editor Glow Area preview must not use canvas filters or shadow blur");
+  assert.equal(lumoHtmlSource.includes("function readRechargedGlowAreas(payload) {\n      const sourceAreas = Array.isArray(payload?.glowAreas) ? payload.glowAreas : [];"), true, "Lumo.html reads the canonical top-level glowAreas payload path");
+  assert.doesNotMatch(lumoHtmlSource, /payload\?\.layers\?\.glowAreas/, "Lumo.html must not read Glow Areas from layers.glowAreas");
+  assert.match(lumoHtmlSource, /const glowAreas = readRechargedGlowAreas\(payload\);/, "Lumo.html resolves authored Glow Areas from the live boot payload");
+  assert.match(lumoHtmlSource, /drawRechargedGlowAreas\(ctx, mapper, glowAreas, \{ tileSize, timeSeconds:/, "Lumo.html invokes Glow Area rendering every frame with runtime timeSeconds");
+  assert.match(lumoHtmlSource, /drawBgMaterialRect[\s\S]*drawRechargedGlowAreas\(ctx, mapper, glowAreas[\s\S]*for \(const supportTile of supportTiles\)/, "Lumo.html renders Glow Areas after opaque background tilemap and before support/gameplay tiles");
   const lumoGlowSlice = lumoHtmlSource.slice(lumoHtmlSource.indexOf("function buildRechargedGlowLayout"), lumoHtmlSource.indexOf("function getRechargedStoneAreaSeed"));
   assert.match(lumoGlowSlice, /coreRadius/, "Lumo.html runtime Glow Area draws bright ember cores");
   assert.match(lumoGlowSlice, /auraRadius/, "Lumo.html runtime Glow Area draws larger low-alpha auras");
