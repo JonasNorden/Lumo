@@ -1,7 +1,7 @@
 import { resolveLegacyBehaviorByTileId } from "./runtimeTileBehavior.js";
 import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 import { getAuthoredSoundSource, resolveSoundCatalogSource } from "../domain/sound/sourceReference.js";
-import { normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
+import { normalizeDustAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
 
 // Recharged level loader v1.
 // This module validates and normalizes the new level document shape without
@@ -29,6 +29,7 @@ export function loadLevelDocument(data) {
   const layers = normalizeLayers(normalizedInput.layers, errors, warnings);
   const mirrorSurfaceAreas = normalizeMirrorSurfaceAreas(normalizedInput.mirrorSurfaceAreas);
   const stoneAreas = normalizeStoneAreas(normalizedInput.stoneAreas);
+  const dustAreas = normalizeDustAreas(normalizedInput.dustAreas);
 
   if (errors.length > 0) {
     return buildResult({ level: null, errors, warnings });
@@ -42,6 +43,7 @@ export function loadLevelDocument(data) {
     layers,
     mirrorSurfaceAreas,
     stoneAreas,
+    dustAreas,
     systems: isPlainObject(normalizedInput.systems) ? { ...normalizedInput.systems } : null,
   };
 
@@ -112,6 +114,7 @@ function convertEditorV2ToRecharged(editorLevel, warnings) {
     },
     mirrorSurfaceAreas: convertEditorMirrorSurfaceAreas(editorLevel),
     stoneAreas: convertEditorStoneAreas(editorLevel),
+    dustAreas: convertEditorDustAreas(editorLevel),
     systems: {
       sourceFormat: "editor-v2",
     },
@@ -555,6 +558,16 @@ function normalizeStoneAreas(areas) {
 function convertEditorStoneAreas(editorLevel) {
   const areas = Array.isArray(editorLevel?.stoneAreas) ? editorLevel.stoneAreas : [];
   return normalizeStoneAreas(areas);
+}
+
+function normalizeDustAreas(areas) {
+  if (!Array.isArray(areas)) return [];
+  return areas.map((area, index) => isPlainObject(area) ? normalizeDustAreaForEditor(area, index) : null).filter(Boolean);
+}
+
+function convertEditorDustAreas(editorLevel) {
+  const areas = Array.isArray(editorLevel?.dustAreas) ? editorLevel.dustAreas : [];
+  return normalizeDustAreas(areas);
 }
 
 function normalizeMirrorSurfaceAreas(areas) {

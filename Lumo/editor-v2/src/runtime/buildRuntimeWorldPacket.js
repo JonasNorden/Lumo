@@ -97,6 +97,9 @@ export function buildRuntimeWorldPacket(parts) {
     stoneAreas: Array.isArray(skeleton?.stoneAreas)
       ? [...skeleton.stoneAreas]
       : [],
+    dustAreas: Array.isArray(skeleton?.dustAreas)
+      ? [...skeleton.dustAreas]
+      : [],
     tileBounds,
     tileMap,
   };

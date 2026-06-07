@@ -4,6 +4,7 @@ const DEFAULT_OPTIONS = {
 };
 import { buildRuntimeCameraState } from "./buildRuntimeCameraState.js";
 import { renderRuntimeHudModel } from "./renderRuntimeHudModel.js";
+import { renderRuntimeDustAreas } from "./renderRuntimeDustAreas.js";
 
 const PLAYER_RENDER_COLORS = Object.freeze({
   body: "#60a5fa",
@@ -175,6 +176,7 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
   ctx.clip();
 
   drawBackgroundLayers(ctx, viewportWidthPx, viewportHeightPx, scale, cameraState, background, worldWidthPx);
+  renderRuntimeDustAreas(ctx, Array.isArray(viewModel?.dustAreas) ? viewModel.dustAreas : [], cameraState, (Number(viewModel?.overlay?.runtimeTick) || 0) / 60);
 
   ctx.strokeStyle = "#60a5fa";
   ctx.lineWidth = 1;

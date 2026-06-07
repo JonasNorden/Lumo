@@ -1,6 +1,7 @@
 const DEFAULT_TILE_SIZE = 24;
 const MIRROR_AREA_MIN_SIZE = 1;
 const STONE_AREA_MIN_SIZE = 1;
+const DUST_AREA_MIN_SIZE = 1;
 export const MIRROR_SURFACE_DEFAULTS = Object.freeze({
   reflectionHeight: 72,
   reflectionStrength: 0.35,
@@ -15,6 +16,12 @@ export const STONE_AREA_DEFAULTS = Object.freeze({
   sizeVariation: 0.45,
   rotationVariation: 0.65,
   clusterStrength: 0.5,
+});
+
+export const DUST_AREA_DEFAULTS = Object.freeze({
+  density: 0.35,
+  sizeVariation: 0.45,
+  driftStrength: 0.35,
 });
 
 function clamp01(value, fallback) {
@@ -149,6 +156,81 @@ export function deleteMirrorSurfaceAreaById(areas = [], areaId) {
 }
 
 
+export function normalizeDustAreaForEditor(area = {}, index = 0) {
+  return {
+    id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `dust_area_${index + 1}`,
+    x: toFiniteNumber(area?.x, 0),
+    y: toFiniteNumber(area?.y, 0),
+    width: Math.max(DUST_AREA_MIN_SIZE, toPositiveNumber(area?.width, DEFAULT_TILE_SIZE)),
+    height: Math.max(DUST_AREA_MIN_SIZE, toPositiveNumber(area?.height, DEFAULT_TILE_SIZE)),
+    density: clamp01(area?.density, DUST_AREA_DEFAULTS.density),
+    sizeVariation: clamp01(area?.sizeVariation, DUST_AREA_DEFAULTS.sizeVariation),
+    driftStrength: clamp01(area?.driftStrength, DUST_AREA_DEFAULTS.driftStrength),
+    enabled: area?.enabled !== false,
+    visible: area?.visible !== false,
+  };
+}
+
+export function createDustAreaFromDrag(doc, startCell, endCell) {
+  if (!doc || !startCell || !endCell) return null;
+  const tileSize = toPositiveNumber(doc?.dimensions?.tileSize, DEFAULT_TILE_SIZE);
+  const minCellX = Math.max(0, Math.min(startCell.x, endCell.x));
+  const maxCellX = Math.max(0, Math.max(startCell.x, endCell.x));
+  const minCellY = Math.max(0, Math.min(startCell.y, endCell.y));
+  const maxCellY = Math.max(0, Math.max(startCell.y, endCell.y));
+  const width = Math.max(tileSize, (maxCellX - minCellX + 1) * tileSize);
+  const height = Math.max(tileSize, (maxCellY - minCellY + 1) * tileSize);
+  return {
+    id: getNextAreaId(doc.dustAreas || [], "dust_area"),
+    x: minCellX * tileSize,
+    y: minCellY * tileSize,
+    width,
+    height,
+    ...DUST_AREA_DEFAULTS,
+    enabled: true,
+    visible: true,
+  };
+}
+
+export function getDustAreaBounds(area, index = 0) {
+  const normalized = normalizeDustAreaForEditor(area, index);
+  return {
+    x: normalized.x,
+    y: normalized.y,
+    width: normalized.width,
+    height: normalized.height,
+    right: normalized.x + normalized.width,
+    bottom: normalized.y + normalized.height,
+  };
+}
+
+export function moveDustArea(area, deltaX = 0, deltaY = 0) {
+  const normalized = normalizeDustAreaForEditor(area);
+  return {
+    ...normalized,
+    x: Math.max(0, normalized.x + toFiniteNumber(deltaX, 0)),
+    y: Math.max(0, normalized.y + toFiniteNumber(deltaY, 0)),
+  };
+}
+
+export function resizeDustArea(area, width, height) {
+  const normalized = normalizeDustAreaForEditor(area);
+  return {
+    ...normalized,
+    width: Math.max(DUST_AREA_MIN_SIZE, toPositiveNumber(width, normalized.width)),
+    height: Math.max(DUST_AREA_MIN_SIZE, toPositiveNumber(height, normalized.height)),
+  };
+}
+
+export function updateDustAreaField(area, field, value) {
+  const normalized = normalizeDustAreaForEditor(area);
+  if (field === "enabled" || field === "visible") return { ...normalized, [field]: Boolean(value) };
+  if (field === "x" || field === "y") return { ...normalized, [field]: Math.max(0, toFiniteNumber(value, normalized[field])) };
+  if (field === "width" || field === "height") return resizeDustArea(normalized, field === "width" ? value : normalized.width, field === "height" ? value : normalized.height);
+  if (field === "density" || field === "sizeVariation" || field === "driftStrength") return { ...normalized, [field]: clamp01(value, normalized[field]) };
+  return normalized;
+}
+
 export function normalizeStoneAreaForEditor(area = {}, index = 0) {
   const height = Math.max(STONE_AREA_MIN_SIZE, toPositiveNumber(area?.height, DEFAULT_TILE_SIZE));
   const stoneHeightRange = normalizeStoneHeightRange(area, height);
@@ -265,6 +347,70 @@ function mulberry32(seed) {
 
 function roundTo(value, precision = 100) {
   return Math.round(value * precision) / precision;
+}
+
+
+export function getDustAreaSeed(area = {}, index = 0) {
+  if (Number.isInteger(area?.seed)) return area.seed >>> 0;
+  const normalized = normalizeDustAreaForEditor(area, index);
+  return hashStringToUint32(`${normalized.id}|${Math.round(normalized.x)}|${Math.round(normalized.y)}|${Math.round(normalized.width)}|${Math.round(normalized.height)}`);
+}
+
+export function getDustAreaParticleCount(area = {}, index = 0) {
+  const normalized = normalizeDustAreaForEditor(area, index);
+  if (!normalized.enabled || !normalized.visible || normalized.density <= 0 || normalized.width <= 0 || normalized.height <= 0) return 0;
+  const areaTiles = (normalized.width * normalized.height) / (DEFAULT_TILE_SIZE * DEFAULT_TILE_SIZE);
+  return Math.max(0, Math.round(areaTiles * normalized.density * 2.4));
+}
+
+const dustAreaLayoutCache = new Map();
+const EMPTY_DUST_LAYOUT = Object.freeze([]);
+
+function getDustAreaLayoutCacheKey(area = {}, index = 0) {
+  const normalized = normalizeDustAreaForEditor(area, index);
+  return [
+    normalized.id,
+    roundTo(normalized.x, 100),
+    roundTo(normalized.y, 100),
+    roundTo(normalized.width, 100),
+    roundTo(normalized.height, 100),
+    roundTo(normalized.density, 1000),
+    roundTo(normalized.sizeVariation, 1000),
+    roundTo(normalized.driftStrength, 1000),
+    normalized.enabled ? 1 : 0,
+    normalized.visible ? 1 : 0,
+    Number.isInteger(area?.seed) ? area.seed >>> 0 : "auto",
+  ].join("|");
+}
+
+export function generateDustAreaLayout(area = {}, index = 0) {
+  const normalized = normalizeDustAreaForEditor(area, index);
+  const targetCount = getDustAreaParticleCount(normalized, index);
+  if (targetCount <= 0) return EMPTY_DUST_LAYOUT;
+  const cacheKey = getDustAreaLayoutCacheKey(normalized, index);
+  if (dustAreaLayoutCache.has(cacheKey)) return dustAreaLayoutCache.get(cacheKey);
+
+  const random = mulberry32(getDustAreaSeed(normalized, index));
+  const particles = [];
+  for (let particleIndex = 0; particleIndex < targetCount; particleIndex += 1) {
+    const sizeVariation = normalized.sizeVariation;
+    const radius = 0.65 + random() * (1.25 + sizeVariation * 2.35);
+    const speed = 0.06 + random() * 0.13;
+    particles.push(Object.freeze({
+      id: `${normalized.id}-dust-${particleIndex + 1}`,
+      x: roundTo(normalized.x + random() * normalized.width, 100),
+      y: roundTo(normalized.y + random() * normalized.height, 100),
+      radius: roundTo(radius, 100),
+      driftX: roundTo((2 + random() * 9) * normalized.driftStrength, 100),
+      driftY: roundTo((1 + random() * 5) * normalized.driftStrength, 100),
+      speed: roundTo(speed, 1000),
+      phase: roundTo(random() * Math.PI * 2, 1000),
+      alpha: roundTo(0.10 + random() * 0.18, 1000),
+    }));
+  }
+  const frozenParticles = Object.freeze(particles);
+  dustAreaLayoutCache.set(cacheKey, frozenParticles);
+  return frozenParticles;
 }
 
 const stoneVisualGeometryCache = new Map();

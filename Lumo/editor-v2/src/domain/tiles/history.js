@@ -63,6 +63,10 @@ function cloneStoneAreaSnapshot(area) {
   return area && typeof area === "object" ? { ...area } : null;
 }
 
+function cloneDustAreaSnapshot(area) {
+  return area && typeof area === "object" ? { ...area } : null;
+}
+
 export function createReactiveGrassEditEntry(mode, payload = {}) {
   const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
   const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
@@ -137,6 +141,20 @@ export function createStoneAreaEditEntry(mode, payload = {}) {
     index,
     previousSnapshot: cloneStoneAreaSnapshot(payload.previousSnapshot),
     nextSnapshot: cloneStoneAreaSnapshot(payload.nextSnapshot),
+  };
+}
+
+export function createDustAreaEditEntry(mode, payload = {}) {
+  const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
+  const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
+  const index = Number.isInteger(payload.index) ? payload.index : null;
+  return {
+    kind: "dust-area",
+    mode: normalizedMode,
+    objectId,
+    index,
+    previousSnapshot: cloneDustAreaSnapshot(payload.previousSnapshot),
+    nextSnapshot: cloneDustAreaSnapshot(payload.nextSnapshot),
   };
 }
 
@@ -304,6 +322,9 @@ function applyUndoEntry(doc, entry) {
   if (entry.kind === "stone-area") {
     return applyArrayObjectUndo(doc, entry, "stoneAreas", cloneStoneAreaSnapshot);
   }
+  if (entry.kind === "dust-area") {
+    return applyArrayObjectUndo(doc, entry, "dustAreas", cloneDustAreaSnapshot);
+  }
   if (entry.kind === "reactive-grass") {
     if (!Array.isArray(doc.reactiveGrassPatches)) doc.reactiveGrassPatches = [];
     const patches = doc.reactiveGrassPatches;
@@ -414,6 +435,9 @@ function applyRedoEntry(doc, entry) {
   }
   if (entry.kind === "stone-area") {
     return applyArrayObjectRedo(doc, entry, "stoneAreas", cloneStoneAreaSnapshot);
+  }
+  if (entry.kind === "dust-area") {
+    return applyArrayObjectRedo(doc, entry, "dustAreas", cloneDustAreaSnapshot);
   }
   if (entry.kind === "reactive-grass") {
     if (!Array.isArray(doc.reactiveGrassPatches)) doc.reactiveGrassPatches = [];

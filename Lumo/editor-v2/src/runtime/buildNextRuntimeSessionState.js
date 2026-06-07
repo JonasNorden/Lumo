@@ -37,6 +37,7 @@ function cloneSessionForStep(sessionState) {
       },
       mirrorSurfaceAreas: Array.isArray(source?.world?.mirrorSurfaceAreas) ? [...source.world.mirrorSurfaceAreas] : [],
       stoneAreas: Array.isArray(source?.world?.stoneAreas) ? [...source.world.stoneAreas] : [],
+      dustAreas: Array.isArray(source?.world?.dustAreas) ? [...source.world.dustAreas] : [],
     },
     player: {
       ...(source.player ?? {}),
