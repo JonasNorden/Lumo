@@ -1087,6 +1087,19 @@ function renderGlowAreaCheckboxField(label, field, value, areaId) {
   `;
 }
 
+function renderGlowAreaMotionModeField(value, areaId) {
+  const selected = value === "updraft" ? "updraft" : "ambient";
+  return `
+    <label class="fieldRow">
+      <span class="label">Motion mode</span>
+      <select data-glow-area-field="motionMode" data-glow-area-id="${escapeHtml(areaId || "")}">
+        <option value="ambient" ${selected === "ambient" ? "selected" : ""}>ambient</option>
+        <option value="updraft" ${selected === "updraft" ? "selected" : ""}>updraft</option>
+      </select>
+    </label>
+  `;
+}
+
 function renderGlowAreaInspector(area) {
   const areaId = typeof area?.id === "string" ? area.id : "";
   return `
@@ -1104,6 +1117,7 @@ function renderGlowAreaInspector(area) {
     renderGlowAreaNumberField("Density", "density", area?.density, areaId),
     renderGlowAreaNumberField("Size variation", "sizeVariation", area?.sizeVariation, areaId),
     renderGlowAreaNumberField("Strength", "strength", area?.strength, areaId),
+    renderGlowAreaMotionModeField(area?.motionMode, areaId),
     renderGlowAreaCheckboxField("enabled", "enabled", area?.enabled, areaId),
     renderGlowAreaCheckboxField("visible", "visible", area?.visible, areaId),
   ].join("")}
@@ -1852,8 +1866,10 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       if (target.dataset.stoneAreaEditable === "number") {
         if (commitStoneAreaNumericInput(target)) return;
       }
-      if (target.dataset.dustAreaEditable === "number") {
+      if (target.dataset.glowAreaEditable === "number") {
         if (commitGlowAreaNumericInput(target)) return;
+      }
+      if (target.dataset.dustAreaEditable === "number") {
         if (commitDustAreaNumericInput(target)) return;
       }
       const mirrorSurfaceAreaField = target.dataset.mirrorSurfaceAreaField;
@@ -1867,6 +1883,13 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       if (stoneAreaField === "enabled" || stoneAreaField === "visible") {
         const areaId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedStoneAreaId : null;
         onStoneAreaUpdate?.(stoneAreaField, target.checked, { areaId });
+        clearInputDraft(target);
+        return;
+      }
+      const glowAreaField = target.dataset.glowAreaField;
+      if (glowAreaField === "enabled" || glowAreaField === "visible") {
+        const areaId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedGlowAreaId : null;
+        onGlowAreaUpdate?.(glowAreaField, target.checked, { areaId });
         clearInputDraft(target);
         return;
       }
@@ -1909,6 +1932,14 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
         clearInputDraft(target);
         return;
       }
+    }
+
+    const glowAreaSelectField = target.dataset.glowAreaField;
+    if (glowAreaSelectField === "motionMode") {
+      const areaId = target.dataset.glowAreaId || null;
+      onGlowAreaUpdate?.("motionMode", target.value === "updraft" ? "updraft" : "ambient", { areaId });
+      clearInputDraft(target);
+      return;
     }
 
     if (handleChange(target, "entity", ["name", "type", "visible", "x", "y"], onEntityUpdate)) {
