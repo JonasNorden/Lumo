@@ -4839,6 +4839,7 @@
           density: Number.isFinite(area?.density) ? Math.max(0, Math.min(1, Number(area.density))) : 0.32,
           sizeVariation: Number.isFinite(area?.sizeVariation) ? Math.max(0, Math.min(1, Number(area.sizeVariation))) : 0.38,
           strength: Number.isFinite(area?.strength) ? Math.max(0, Math.min(1, Number(area.strength))) : 0.42,
+          motionMode: area?.motionMode === "updraft" ? "updraft" : "ambient",
           enabled: area?.enabled !== false,
           visible: area?.visible !== false,
         }))
@@ -4864,7 +4865,7 @@
       const areaTiles = (area.width * area.height) / Math.max(1, tileSize * tileSize);
       const targetCount = Math.max(0, Math.round(areaTiles * area.density * 1.85));
       if (targetCount <= 0) return [];
-      const cacheKey = [area.id, Math.round(area.x * 100), Math.round(area.y * 100), Math.round(area.width * 100), Math.round(area.height * 100), Math.round(area.density * 1000), Math.round(area.sizeVariation * 1000), Math.round(area.strength * 1000)].join("|");
+      const cacheKey = [area.id, Math.round(area.x * 100), Math.round(area.y * 100), Math.round(area.width * 100), Math.round(area.height * 100), Math.round(area.density * 1000), Math.round(area.sizeVariation * 1000), Math.round(area.strength * 1000), area.motionMode].join("|");
       if (rechargedGlowLayoutCache.has(cacheKey)) return rechargedGlowLayoutCache.get(cacheKey);
       const random = createRechargedStoneRandom(getRechargedGlowAreaSeed(area, index));
       const points = [];
@@ -4887,12 +4888,16 @@
           driftX: (0.42 + random() * 1.85) * (0.45 + area.sizeVariation * 0.55),
           driftY: (0.7 + random() * 1.9) * (0.5 + area.sizeVariation * 0.6),
           rise: 0.12 + random() * 0.42,
+          updraftSpeed: 0.012 + random() * 0.026,
           speed: 0.018 + random() * 0.036,
           phase: random() * Math.PI * 2,
           alphaSpeed: 0.022 + random() * 0.044,
           alphaPhase: random() * Math.PI * 2,
           alphaMin: Math.max(0.045, baseAlpha),
           alphaMax: Math.min(0.38, Math.max(baseAlpha + 0.055, alphaMax)),
+          areaY: area.y,
+          areaHeight: area.height,
+        motionMode: area.motionMode === "updraft" ? "updraft" : "ambient",
           color: `rgba(${red}, ${green}, ${blue}, 1)`,
           auraColor: `rgba(${red}, ${green}, ${blue}, 1)`,
           coreColor: `rgba(255, ${Math.min(245, green + 30)}, ${Math.min(190, blue + 64)}, 1)`,
@@ -4914,11 +4919,22 @@
         for (const point of points) {
           const phase = Number.isFinite(point.phase) ? point.phase : 0;
           const speed = Number.isFinite(point.speed) ? point.speed : 0.02;
-          const x = point.x + Math.sin(timeSeconds * speed + phase) * point.driftX;
-          const y = point.y + Math.sin(timeSeconds * speed * 0.71 + phase * 1.53) * point.driftY - Math.sin(timeSeconds * speed * 0.39 + phase * 0.67) * point.rise;
+          const motionMode = point.motionMode === "updraft" ? "updraft" : "ambient";
+          const x = motionMode === "updraft"
+            ? point.x + Math.sin(timeSeconds * speed * 1.55 + phase) * point.driftX * 0.55 + Math.sin(timeSeconds * speed * 0.61 + phase * 2.17) * point.driftX * 0.22
+            : point.x + Math.sin(timeSeconds * speed + phase) * point.driftX + Math.sin(timeSeconds * speed * 0.43 + phase * 2.31) * point.driftX * 0.34;
+          const basePhase = ((((phase % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2));
+          const updraftPhase = ((basePhase + timeSeconds * (Number.isFinite(point.updraftSpeed) ? point.updraftSpeed : 0.018)) % 1 + 1) % 1;
+          const y = motionMode === "updraft"
+            ? (point.areaY || 0) + Math.max(1, point.areaHeight || 1) * (1 - updraftPhase) + Math.sin(timeSeconds * speed * 0.73 + phase * 1.43) * Math.min(2.2, point.driftY * 0.38)
+            : point.y + Math.sin(timeSeconds * speed * 0.71 + phase * 1.53) * point.driftY - Math.sin(timeSeconds * speed * 0.29 + phase * 0.67) * point.rise * 1.9;
           const breathe = (Math.sin(timeSeconds * point.alphaSpeed + point.alphaPhase) + 1) * 0.5;
           const smooth = breathe * breathe * (3 - 2 * breathe);
-          const alpha = point.alphaMin + (point.alphaMax - point.alphaMin) * smooth;
+          const ambientAlpha = point.alphaMin + (point.alphaMax - point.alphaMin) * smooth;
+          const fadeIn = Math.max(0, Math.min(1, updraftPhase / 0.16));
+          const fadeOut = 1 - Math.max(0, Math.min(1, (updraftPhase - 0.74) / 0.26));
+          const updraftFade = 0.12 + (fadeIn * fadeIn * (3 - 2 * fadeIn)) * (fadeOut * fadeOut * (3 - 2 * fadeOut)) * 0.88;
+          const alpha = motionMode === "updraft" ? ambientAlpha * Math.max(0.12, Math.min(1, updraftFade)) : ambientAlpha;
           const auraRadius = Math.max(point.radius * 2.4, point.auraRadius || point.radius * 3.1);
           const coreRadius = Math.max(0.35, point.coreRadius || point.radius * 0.46);
           const auraRect = mapper.worldToCanvasRect(x - auraRadius, y - auraRadius, auraRadius * 2, auraRadius * 2);

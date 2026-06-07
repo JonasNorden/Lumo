@@ -114,7 +114,7 @@ function parseFlowerVariant(value) {
  * @property {{id: string, x: number, y: number, width: number, height: number, yOffset: number, reflectionHeight: number, reflectionStrength: number, distortion: number, surfaceStrength: number, fade: number, enabled: boolean, visible: boolean}[]} mirrorSurfaceAreas
  * @property {{id: string, x: number, y: number, width: number, height: number, density: number, minStoneHeight: number, maxStoneHeight: number, sizeVariation: number, rotationVariation: number, clusterStrength: number, enabled: boolean, visible: boolean}[]} stoneAreas
  * @property {{id: string, x: number, y: number, width: number, height: number, density: number, sizeVariation: number, driftStrength: number, enabled: boolean, visible: boolean}[]} dustAreas
- * @property {{id: string, x: number, y: number, width: number, height: number, density: number, sizeVariation: number, strength: number, enabled: boolean, visible: boolean}[]} glowAreas
+ * @property {{id: string, x: number, y: number, width: number, height: number, density: number, sizeVariation: number, strength: number, motionMode: string, enabled: boolean, visible: boolean}[]} glowAreas
  * @property {{id: string, kind: string, x: number, y: number, clusterCount: number, width: number, heightMin: number, heightMax: number, triggerRadius: number, auraSensitivity: number, wakeSpeed: number, settleDelayMs: number, settleSpeed: number, baseColor: string, glowColor: string, coreColor: string, edgeColor: string, variant: string, seed: number}[]} reactiveCrystalPatches
  * @property {{notes?: string}} extra
  */
@@ -367,6 +367,7 @@ function normalizeGlowArea(area, index) {
     density: clampMirrorSurfaceUnit(sourceArea.density, GLOW_AREA_DEFAULTS.density),
     sizeVariation: clampMirrorSurfaceUnit(sourceArea.sizeVariation, GLOW_AREA_DEFAULTS.sizeVariation),
     strength: clampMirrorSurfaceUnit(sourceArea.strength, GLOW_AREA_DEFAULTS.strength),
+    motionMode: sourceArea.motionMode === "updraft" ? "updraft" : "ambient",
     enabled: typeof sourceArea.enabled === "boolean" ? sourceArea.enabled : true,
     visible: typeof sourceArea.visible === "boolean" ? sourceArea.visible : true,
   };

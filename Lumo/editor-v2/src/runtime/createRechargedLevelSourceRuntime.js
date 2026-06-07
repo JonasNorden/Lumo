@@ -90,6 +90,7 @@ function normalizeGlowAreas(sourceAreas) {
         density: Number.isFinite(area?.density) ? Math.max(0, Math.min(1, Number(area.density))) : 0.32,
         sizeVariation: Number.isFinite(area?.sizeVariation) ? Math.max(0, Math.min(1, Number(area.sizeVariation))) : 0.38,
         strength: Number.isFinite(area?.strength) ? Math.max(0, Math.min(1, Number(area.strength))) : 0.42,
+        motionMode: area?.motionMode === "updraft" ? "updraft" : "ambient",
         enabled: area?.enabled !== false,
         visible: area?.visible !== false,
       }))
