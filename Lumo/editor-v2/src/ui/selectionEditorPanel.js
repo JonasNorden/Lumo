@@ -12,7 +12,7 @@ import {
 } from "../domain/sound/audioAssetCatalog.js";
 import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 import { getThemeDefaultAmbientAssetPath, rankSoundAssetOptionsForTheme } from "../domain/theme/themeProfiles.js";
-import { normalizeDustAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
+import { normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
 import { stopNativeInputKeyboardPropagation } from "./nativeInputGuards.js";
 
 const MIXED_FIELD_VALUE = "__mixed__";
@@ -1060,6 +1060,56 @@ function renderMirrorSurfaceAreaInspector(area) {
   ].join(""));
 }
 
+function renderGlowAreaNumberField(label, field, value, areaId) {
+  const normalizedValue = Number.isFinite(Number(value)) ? String(Number(value)) : "0";
+  return `
+    <label class="fieldRow">
+      <span class="label">${escapeHtml(label)}</span>
+      <input
+        type="number"
+        step="0.01"
+        value="${escapeHtml(normalizedValue)}"
+        data-glow-area-field="${escapeHtml(field)}"
+        data-glow-area-id="${escapeHtml(areaId || "")}"
+        data-glow-area-editable="number"
+        data-glow-area-committed-value="${escapeHtml(normalizedValue)}"
+      />
+    </label>
+  `;
+}
+
+function renderGlowAreaCheckboxField(label, field, value, areaId) {
+  return `
+    <label class="fieldRow checkboxRow">
+      <span class="label">${escapeHtml(label)}</span>
+      <input type="checkbox" ${value !== false ? "checked" : ""} data-glow-area-field="${escapeHtml(field)}" data-glow-area-id="${escapeHtml(areaId || "")}" />
+    </label>
+  `;
+}
+
+function renderGlowAreaInspector(area) {
+  const areaId = typeof area?.id === "string" ? area.id : "";
+  return `
+    <div class="selectionHeader">
+      <div>
+        <span class="statusCardTitle">${escapeHtml(areaId || "Glow Area")}</span>
+        <span class="statusCardMeta">Glow Area · World Phenomena / Areas</span>
+      </div>
+    </div>
+    ${[
+    renderGlowAreaNumberField("x", "x", area?.x, areaId),
+    renderGlowAreaNumberField("y", "y", area?.y, areaId),
+    renderGlowAreaNumberField("width", "width", area?.width, areaId),
+    renderGlowAreaNumberField("height", "height", area?.height, areaId),
+    renderGlowAreaNumberField("Density", "density", area?.density, areaId),
+    renderGlowAreaNumberField("Size variation", "sizeVariation", area?.sizeVariation, areaId),
+    renderGlowAreaNumberField("Strength", "strength", area?.strength, areaId),
+    renderGlowAreaCheckboxField("enabled", "enabled", area?.enabled, areaId),
+    renderGlowAreaCheckboxField("visible", "visible", area?.visible, areaId),
+  ].join("")}
+  `;
+}
+
 function renderDustAreaNumberField(label, field, value, areaId) {
   const config = DUST_AREA_NUMERIC_FIELD_CONFIG[field];
   if (!config) return renderReadOnlyField(label, value);
@@ -1250,6 +1300,9 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   const selectedDustAreaId = typeof state?.interaction?.selectedDustAreaId === "string" && state.interaction.selectedDustAreaId.trim() ? state.interaction.selectedDustAreaId.trim() : null;
   const selectedDustAreaIndex = Number.isInteger(state?.interaction?.selectedDustAreaIndex) ? state.interaction.selectedDustAreaIndex : null;
   const selectedDustArea = selectedDustAreaId ? (active.dustAreas || []).find((area) => area?.id === selectedDustAreaId) || null : Number.isInteger(selectedDustAreaIndex) && selectedDustAreaIndex >= 0 ? active.dustAreas?.[selectedDustAreaIndex] || null : null;
+  const selectedGlowAreaId = typeof state?.interaction?.selectedGlowAreaId === "string" && state.interaction.selectedGlowAreaId.trim() ? state.interaction.selectedGlowAreaId.trim() : null;
+  const selectedGlowAreaIndex = Number.isInteger(state?.interaction?.selectedGlowAreaIndex) ? state.interaction.selectedGlowAreaIndex : null;
+  const selectedGlowArea = selectedGlowAreaId ? (active.glowAreas || []).find((area) => area?.id === selectedGlowAreaId) || null : Number.isInteger(selectedGlowAreaIndex) && selectedGlowAreaIndex >= 0 ? active.glowAreas?.[selectedGlowAreaIndex] || null : null;
 
   const selectedReactiveGrassPatchId = typeof state?.interaction?.selectedReactiveGrassPatchId === "string" && state.interaction.selectedReactiveGrassPatchId.trim()
     ? state.interaction.selectedReactiveGrassPatchId.trim()
@@ -1292,6 +1345,11 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   if (selectedStoneArea) {
     const normalizedSelectedStoneArea = normalizeStoneAreaForEditor(selectedStoneArea, selectedStoneAreaIndex ?? 0);
     return { markup: renderStoneAreaInspector(normalizedSelectedStoneArea), isEmpty: false };
+  }
+
+  if (selectedGlowArea) {
+    const normalizedSelectedGlowArea = normalizeGlowAreaForEditor(selectedGlowArea, selectedGlowAreaIndex ?? 0);
+    return { markup: renderGlowAreaInspector(normalizedSelectedGlowArea), isEmpty: false };
   }
 
   if (selectedDustArea) {
@@ -1416,7 +1474,7 @@ export function renderSelectionEditorPanel(panel, state, options = {}) {
 }
 
 export function bindSelectionEditorPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate, onReactiveBloomPatchUpdate, onReactiveCrystalPatchUpdate, onMirrorSurfaceAreaUpdate, onStoneAreaUpdate, onDustAreaUpdate } = options;
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate, onReactiveBloomPatchUpdate, onReactiveCrystalPatchUpdate, onMirrorSurfaceAreaUpdate, onStoneAreaUpdate, onDustAreaUpdate, onGlowAreaUpdate } = options;
   let numberStepperSession = null;
   const getEditorPane = () => panel.querySelector("[data-bottom-panel-editor]");
   const getSelectedReactiveGrassPatch = (patchId) => {
@@ -1490,6 +1548,38 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     return config.integer ? Math.round(parsed) : parsed;
   };
 
+
+  const getSelectedGlowArea = (areaId) => {
+    const state = typeof store?.getState === "function" ? store.getState() : null;
+    const areas = Array.isArray(state?.document?.active?.glowAreas) ? state.document.active.glowAreas : [];
+    const selectedAreaId = typeof areaId === "string" && areaId.trim() ? areaId.trim() : typeof state?.interaction?.selectedGlowAreaId === "string" && state.interaction.selectedGlowAreaId.trim() ? state.interaction.selectedGlowAreaId.trim() : null;
+    const selectedAreaIndex = Number.isInteger(state?.interaction?.selectedGlowAreaIndex) ? state.interaction.selectedGlowAreaIndex : -1;
+    const resolvedIndex = selectedAreaId ? areas.findIndex((area) => area?.id === selectedAreaId) : selectedAreaIndex;
+    return Number.isInteger(resolvedIndex) && resolvedIndex >= 0 ? areas[resolvedIndex] || null : null;
+  };
+
+  const parseGlowAreaNumericValue = (field, rawValue) => {
+    const numeric = Number.parseFloat(rawValue);
+    if (!Number.isFinite(numeric)) return null;
+    if (field === "x" || field === "y" || field === "width" || field === "height") return Math.max(0, numeric);
+    return Math.max(0, Math.min(1, numeric));
+  };
+
+  const commitGlowAreaNumericInput = (input) => {
+    const field = input?.dataset?.glowAreaField;
+    if (!field || input?.dataset?.glowAreaEditable !== "number") return false;
+    const areaId = input.dataset.glowAreaId || null;
+    const areaSnapshot = getSelectedGlowArea(areaId);
+    if (!areaSnapshot) return true;
+    const parsedValue = parseGlowAreaNumericValue(field, input.value);
+    if (parsedValue === null) {
+      input.value = input.dataset.glowAreaCommittedValue || String(areaSnapshot[field] ?? 0);
+      return true;
+    }
+    onGlowAreaUpdate?.(field, parsedValue, { areaId });
+    input.dataset.glowAreaCommittedValue = String(parsedValue);
+    return true;
+  };
 
   const parseDustAreaNumericValue = (field, rawValue) => {
     const config = DUST_AREA_NUMERIC_FIELD_CONFIG[field];
@@ -1763,6 +1853,7 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
         if (commitStoneAreaNumericInput(target)) return;
       }
       if (target.dataset.dustAreaEditable === "number") {
+        if (commitGlowAreaNumericInput(target)) return;
         if (commitDustAreaNumericInput(target)) return;
       }
       const mirrorSurfaceAreaField = target.dataset.mirrorSurfaceAreaField;

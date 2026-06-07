@@ -52,6 +52,7 @@ function resolveWorldSnapshot(worldPacket) {
     mirrorSurfaceAreas: Array.isArray(worldPacket?.mirrorSurfaceAreas) ? [...worldPacket.mirrorSurfaceAreas] : [],
     stoneAreas: Array.isArray(worldPacket?.stoneAreas) ? [...worldPacket.stoneAreas] : [],
     dustAreas: Array.isArray(worldPacket?.dustAreas) ? [...worldPacket.dustAreas] : [],
+    glowAreas: Array.isArray(worldPacket?.glowAreas) ? [...worldPacket.glowAreas] : [],
     id: typeof identity?.id === "string" && identity.id.length > 0 ? identity.id : null,
     formatVersion: identity?.formatVersion ?? null,
     themeId: typeof identity?.themeId === "string" && identity.themeId.length > 0 ? identity.themeId : null,

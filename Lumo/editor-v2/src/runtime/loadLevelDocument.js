@@ -1,7 +1,7 @@
 import { resolveLegacyBehaviorByTileId } from "./runtimeTileBehavior.js";
 import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 import { getAuthoredSoundSource, resolveSoundCatalogSource } from "../domain/sound/sourceReference.js";
-import { normalizeDustAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
+import { normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
 
 // Recharged level loader v1.
 // This module validates and normalizes the new level document shape without
@@ -30,6 +30,7 @@ export function loadLevelDocument(data) {
   const mirrorSurfaceAreas = normalizeMirrorSurfaceAreas(normalizedInput.mirrorSurfaceAreas);
   const stoneAreas = normalizeStoneAreas(normalizedInput.stoneAreas);
   const dustAreas = normalizeDustAreas(normalizedInput.dustAreas);
+  const glowAreas = normalizeGlowAreas(normalizedInput.glowAreas);
 
   if (errors.length > 0) {
     return buildResult({ level: null, errors, warnings });
@@ -44,6 +45,7 @@ export function loadLevelDocument(data) {
     mirrorSurfaceAreas,
     stoneAreas,
     dustAreas,
+    glowAreas,
     systems: isPlainObject(normalizedInput.systems) ? { ...normalizedInput.systems } : null,
   };
 
@@ -115,6 +117,7 @@ function convertEditorV2ToRecharged(editorLevel, warnings) {
     mirrorSurfaceAreas: convertEditorMirrorSurfaceAreas(editorLevel),
     stoneAreas: convertEditorStoneAreas(editorLevel),
     dustAreas: convertEditorDustAreas(editorLevel),
+    glowAreas: convertEditorGlowAreas(editorLevel),
     systems: {
       sourceFormat: "editor-v2",
     },
@@ -568,6 +571,16 @@ function normalizeDustAreas(areas) {
 function convertEditorDustAreas(editorLevel) {
   const areas = Array.isArray(editorLevel?.dustAreas) ? editorLevel.dustAreas : [];
   return normalizeDustAreas(areas);
+}
+
+function normalizeGlowAreas(areas) {
+  if (!Array.isArray(areas)) return [];
+  return areas.map((area, index) => isPlainObject(area) ? normalizeGlowAreaForEditor(area, index) : null).filter(Boolean);
+}
+
+function convertEditorGlowAreas(editorLevel) {
+  const areas = Array.isArray(editorLevel?.glowAreas) ? editorLevel.glowAreas : [];
+  return normalizeGlowAreas(areas);
 }
 
 function normalizeMirrorSurfaceAreas(areas) {

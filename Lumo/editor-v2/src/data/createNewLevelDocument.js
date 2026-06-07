@@ -77,6 +77,7 @@ export function createNewLevelDocument(options = {}) {
     mirrorSurfaceAreas: [],
     stoneAreas: [],
     dustAreas: [],
+    glowAreas: [],
     extra: {},
   });
 }

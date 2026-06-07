@@ -378,6 +378,25 @@ function normalizeDustAreas(sourceAreas) {
     : [];
 }
 
+function normalizeGlowAreas(sourceAreas) {
+  return Array.isArray(sourceAreas)
+    ? sourceAreas
+      .map((area, index) => ({
+        id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `glow_area_${index + 1}`,
+        x: Number.isFinite(area?.x) ? area.x : null,
+        y: Number.isFinite(area?.y) ? area.y : null,
+        width: Number.isFinite(area?.width) && area.width > 0 ? area.width : null,
+        height: Number.isFinite(area?.height) && area.height > 0 ? area.height : null,
+        density: Number.isFinite(area?.density) ? Math.max(0, Math.min(1, Number(area.density))) : 0.32,
+        sizeVariation: Number.isFinite(area?.sizeVariation) ? Math.max(0, Math.min(1, Number(area.sizeVariation))) : 0.38,
+        strength: Number.isFinite(area?.strength) ? Math.max(0, Math.min(1, Number(area.strength))) : 0.42,
+        enabled: area?.enabled !== false,
+        visible: area?.visible !== false,
+      }))
+      .filter((area) => area.x !== null && area.y !== null && area.width !== null && area.height !== null)
+    : [];
+}
+
 function normalizeMirrorSurfaceAreas(sourceAreas) {
   return Array.isArray(sourceAreas)
     ? sourceAreas
@@ -497,6 +516,7 @@ function buildWorldSnapshot(worldState) {
   const mirrorSurfaceAreas = normalizeMirrorSurfaceAreas(worldState?.mirrorSurfaceAreas);
   const stoneAreas = normalizeStoneAreas(worldState?.stoneAreas);
   const dustAreas = normalizeDustAreas(worldState?.dustAreas);
+  const glowAreas = normalizeGlowAreas(worldState?.glowAreas);
 
   return {
     ok: worldState && typeof worldState === "object",
@@ -513,6 +533,7 @@ function buildWorldSnapshot(worldState) {
     mirrorSurfaceAreas,
     stoneAreas,
     dustAreas,
+    glowAreas,
   };
 }
 

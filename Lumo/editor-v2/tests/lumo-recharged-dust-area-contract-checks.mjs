@@ -179,7 +179,7 @@ const baseDoc = {
   assert.match(appSource, /createDustAreaFromDrag/, "Editor app can create Dust Areas from drag placement");
   assert.match(appSource, /moveDustArea/, "Editor app can move authored Dust Areas");
   assert.match(appSource, /deleteSelectedDustArea/, "Editor app can delete authored Dust Areas");
-  assert.match(rendererSource, /renderBackground\(worldCtx, doc, state\.viewport\);\n  renderDustAreas/, "editor preview renders Dust Areas in front of background");
+  assert.match(rendererSource, /renderBackground\(worldCtx, doc, state\.viewport\);[\s\S]*renderDustAreas/, "editor preview renders Dust Areas in front of background");
   assert.match(dustLayerSource, /generateDustAreaLayout/, "editor preview uses deterministic generated dust anchors");
   assert.match(runtimeDustSource, /Math\.sin/, "runtime dust uses cheap sinusoidal drift");
   assert.match(runtimeDustSource, /timeSeconds/, "runtime dust animation consumes runtime time input");

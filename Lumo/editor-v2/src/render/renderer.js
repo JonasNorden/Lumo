@@ -10,6 +10,7 @@ import { renderReactiveCrystalPatches } from "./layers/reactiveCrystalLayer.js";
 import { renderMirrorSurfaceAreas } from "./layers/mirrorSurfaceAreaLayer.js";
 import { renderStoneAreas } from "./layers/stoneAreaLayer.js";
 import { renderDustAreas } from "./layers/dustAreaLayer.js";
+import { renderGlowAreas } from "./layers/glowAreaLayer.js";
 import { renderSounds } from "./layers/soundLayer.js";
 import { renderProximityOverlays } from "./layers/proximityOverlayLayer.js";
 import { renderScanOverlay } from "./layers/scanLayer.js";
@@ -69,6 +70,7 @@ export function renderEditorFrame(ctx, state) {
   worldCtx.globalAlpha = 1;
   worldCtx.globalCompositeOperation = "source-over";
   renderBackground(worldCtx, doc, state.viewport);
+  renderGlowAreas(worldCtx, doc, state.viewport, state.interaction);
   renderDustAreas(worldCtx, doc, state.viewport, state.interaction);
   renderStoneAreas(worldCtx, doc, state.viewport, state.interaction);
   renderReactiveGrassPatches(worldCtx, doc, state.viewport, state.interaction);

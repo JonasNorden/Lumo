@@ -2,6 +2,7 @@ const DEFAULT_TILE_SIZE = 24;
 const MIRROR_AREA_MIN_SIZE = 1;
 const STONE_AREA_MIN_SIZE = 1;
 const DUST_AREA_MIN_SIZE = 1;
+const GLOW_AREA_MIN_SIZE = 1;
 export const MIRROR_SURFACE_DEFAULTS = Object.freeze({
   reflectionHeight: 72,
   reflectionStrength: 0.35,
@@ -22,6 +23,12 @@ export const DUST_AREA_DEFAULTS = Object.freeze({
   density: 0.35,
   sizeVariation: 0.45,
   driftStrength: 0.35,
+});
+
+export const GLOW_AREA_DEFAULTS = Object.freeze({
+  density: 0.32,
+  sizeVariation: 0.38,
+  strength: 0.42,
 });
 
 function clamp01(value, fallback) {
@@ -231,6 +238,82 @@ export function updateDustAreaField(area, field, value) {
   return normalized;
 }
 
+
+export function normalizeGlowAreaForEditor(area = {}, index = 0) {
+  return {
+    id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `glow_area_${index + 1}`,
+    x: toFiniteNumber(area?.x, 0),
+    y: toFiniteNumber(area?.y, 0),
+    width: Math.max(GLOW_AREA_MIN_SIZE, toPositiveNumber(area?.width, DEFAULT_TILE_SIZE)),
+    height: Math.max(GLOW_AREA_MIN_SIZE, toPositiveNumber(area?.height, DEFAULT_TILE_SIZE)),
+    density: clamp01(area?.density, GLOW_AREA_DEFAULTS.density),
+    sizeVariation: clamp01(area?.sizeVariation, GLOW_AREA_DEFAULTS.sizeVariation),
+    strength: clamp01(area?.strength, GLOW_AREA_DEFAULTS.strength),
+    enabled: area?.enabled !== false,
+    visible: area?.visible !== false,
+  };
+}
+
+export function createGlowAreaFromDrag(doc, startCell, endCell) {
+  if (!doc || !startCell || !endCell) return null;
+  const tileSize = toPositiveNumber(doc?.dimensions?.tileSize, DEFAULT_TILE_SIZE);
+  const minCellX = Math.max(0, Math.min(startCell.x, endCell.x));
+  const maxCellX = Math.max(0, Math.max(startCell.x, endCell.x));
+  const minCellY = Math.max(0, Math.min(startCell.y, endCell.y));
+  const maxCellY = Math.max(0, Math.max(startCell.y, endCell.y));
+  const width = Math.max(tileSize, (maxCellX - minCellX + 1) * tileSize);
+  const height = Math.max(tileSize, (maxCellY - minCellY + 1) * tileSize);
+  return {
+    id: getNextAreaId(doc.glowAreas || [], "glow_area"),
+    x: minCellX * tileSize,
+    y: minCellY * tileSize,
+    width,
+    height,
+    ...GLOW_AREA_DEFAULTS,
+    enabled: true,
+    visible: true,
+  };
+}
+
+export function getGlowAreaBounds(area, index = 0) {
+  const normalized = normalizeGlowAreaForEditor(area, index);
+  return {
+    x: normalized.x,
+    y: normalized.y,
+    width: normalized.width,
+    height: normalized.height,
+    right: normalized.x + normalized.width,
+    bottom: normalized.y + normalized.height,
+  };
+}
+
+export function moveGlowArea(area, deltaX = 0, deltaY = 0) {
+  const normalized = normalizeGlowAreaForEditor(area);
+  return {
+    ...normalized,
+    x: Math.max(0, normalized.x + toFiniteNumber(deltaX, 0)),
+    y: Math.max(0, normalized.y + toFiniteNumber(deltaY, 0)),
+  };
+}
+
+export function resizeGlowArea(area, width, height) {
+  const normalized = normalizeGlowAreaForEditor(area);
+  return {
+    ...normalized,
+    width: Math.max(GLOW_AREA_MIN_SIZE, toPositiveNumber(width, normalized.width)),
+    height: Math.max(GLOW_AREA_MIN_SIZE, toPositiveNumber(height, normalized.height)),
+  };
+}
+
+export function updateGlowAreaField(area, field, value) {
+  const normalized = normalizeGlowAreaForEditor(area);
+  if (field === "enabled" || field === "visible") return { ...normalized, [field]: Boolean(value) };
+  if (field === "x" || field === "y") return { ...normalized, [field]: Math.max(0, toFiniteNumber(value, normalized[field])) };
+  if (field === "width" || field === "height") return resizeGlowArea(normalized, field === "width" ? value : normalized.width, field === "height" ? value : normalized.height);
+  if (field === "density" || field === "sizeVariation" || field === "strength") return { ...normalized, [field]: clamp01(value, normalized[field]) };
+  return normalized;
+}
+
 export function normalizeStoneAreaForEditor(area = {}, index = 0) {
   const height = Math.max(STONE_AREA_MIN_SIZE, toPositiveNumber(area?.height, DEFAULT_TILE_SIZE));
   const stoneHeightRange = normalizeStoneHeightRange(area, height);
@@ -422,6 +505,83 @@ export function generateDustAreaLayout(area = {}, index = 0) {
   const frozenParticles = Object.freeze(particles);
   dustAreaLayoutCache.set(cacheKey, frozenParticles);
   return frozenParticles;
+}
+
+
+export function getGlowAreaSeed(area = {}, index = 0) {
+  if (Number.isInteger(area?.seed)) return area.seed >>> 0;
+  const normalized = normalizeGlowAreaForEditor(area, index);
+  return hashStringToUint32(`${normalized.id}|${Math.round(normalized.x)}|${Math.round(normalized.y)}|${Math.round(normalized.width)}|${Math.round(normalized.height)}`);
+}
+
+export function getGlowAreaPointCount(area = {}, index = 0) {
+  const normalized = normalizeGlowAreaForEditor(area, index);
+  if (!normalized.enabled || !normalized.visible || normalized.density <= 0 || normalized.strength <= 0 || normalized.width <= 0 || normalized.height <= 0) return 0;
+  const areaTiles = (normalized.width * normalized.height) / (DEFAULT_TILE_SIZE * DEFAULT_TILE_SIZE);
+  return Math.max(0, Math.round(areaTiles * normalized.density * 1.85));
+}
+
+const glowAreaLayoutCache = new Map();
+const EMPTY_GLOW_LAYOUT = Object.freeze([]);
+const GLOW_PALETTE = Object.freeze([
+  Object.freeze({ name: "warm_gold", red: 232, green: 188, blue: 116 }),
+  Object.freeze({ name: "pale_cyan", red: 152, green: 216, blue: 224 }),
+  Object.freeze({ name: "crystal_blue", red: 111, green: 164, blue: 224 }),
+]);
+
+function getGlowAreaLayoutCacheKey(area = {}, index = 0) {
+  const normalized = normalizeGlowAreaForEditor(area, index);
+  return [
+    normalized.id,
+    roundTo(normalized.x, 100),
+    roundTo(normalized.y, 100),
+    roundTo(normalized.width, 100),
+    roundTo(normalized.height, 100),
+    roundTo(normalized.density, 1000),
+    roundTo(normalized.sizeVariation, 1000),
+    roundTo(normalized.strength, 1000),
+    normalized.enabled ? 1 : 0,
+    normalized.visible ? 1 : 0,
+    Number.isInteger(area?.seed) ? area.seed >>> 0 : "auto",
+  ].join("|");
+}
+
+export function generateGlowAreaLayout(area = {}, index = 0) {
+  const normalized = normalizeGlowAreaForEditor(area, index);
+  const targetCount = getGlowAreaPointCount(normalized, index);
+  if (targetCount <= 0) return EMPTY_GLOW_LAYOUT;
+  const cacheKey = getGlowAreaLayoutCacheKey(normalized, index);
+  if (glowAreaLayoutCache.has(cacheKey)) return glowAreaLayoutCache.get(cacheKey);
+
+  const random = mulberry32(getGlowAreaSeed(normalized, index));
+  const points = [];
+  for (let pointIndex = 0; pointIndex < targetCount; pointIndex += 1) {
+    const sizeVariation = normalized.sizeVariation;
+    const palette = GLOW_PALETTE[Math.floor(random() * GLOW_PALETTE.length)] || GLOW_PALETTE[0];
+    const tint = 0.86 + random() * 0.14;
+    const radius = 0.48 + random() * (0.42 + sizeVariation * 1.05);
+    const baseAlpha = (0.035 + random() * 0.045) * (0.45 + normalized.strength * 0.75);
+    const alphaMax = baseAlpha + (0.026 + random() * 0.052) * normalized.strength;
+    points.push(Object.freeze({
+      id: `${normalized.id}-glow-${pointIndex + 1}`,
+      x: roundTo(normalized.x + random() * normalized.width, 100),
+      y: roundTo(normalized.y + random() * normalized.height, 100),
+      radius: roundTo(radius, 100),
+      driftX: roundTo((0.35 + random() * 1.75) * (0.45 + sizeVariation * 0.55), 100),
+      driftY: roundTo((0.28 + random() * 1.45) * (0.45 + sizeVariation * 0.55), 100),
+      speed: roundTo(0.012 + random() * 0.032, 1000),
+      phase: roundTo(random() * Math.PI * 2, 1000),
+      alphaSpeed: roundTo(0.018 + random() * 0.042, 1000),
+      alphaPhase: roundTo(random() * Math.PI * 2, 1000),
+      alphaMin: roundTo(Math.max(0.012, baseAlpha), 1000),
+      alphaMax: roundTo(Math.min(0.18, Math.max(baseAlpha + 0.012, alphaMax)), 1000),
+      color: `rgba(${Math.round(palette.red * tint)}, ${Math.round(palette.green * tint)}, ${Math.round(palette.blue * tint)}, 1)`,
+      palette: palette.name,
+    }));
+  }
+  const frozenPoints = Object.freeze(points);
+  glowAreaLayoutCache.set(cacheKey, frozenPoints);
+  return frozenPoints;
 }
 
 const stoneVisualGeometryCache = new Map();

@@ -436,9 +436,11 @@ function renderWorldAreasSettings(state) {
   const mirrorArmed = activeWorldAreaType === "mirror_surface";
   const stoneArmed = activeWorldAreaType === "stone_area";
   const dustArmed = activeWorldAreaType === "dust_area";
+  const glowArmed = activeWorldAreaType === "glow_area";
   const mirrorCount = Array.isArray(state?.document?.active?.mirrorSurfaceAreas) ? state.document.active.mirrorSurfaceAreas.length : 0;
   const stoneCount = Array.isArray(state?.document?.active?.stoneAreas) ? state.document.active.stoneAreas.length : 0;
   const dustCount = Array.isArray(state?.document?.active?.dustAreas) ? state.document.active.dustAreas.length : 0;
+  const glowCount = Array.isArray(state?.document?.active?.glowAreas) ? state.document.active.glowAreas.length : 0;
   return `
     <div class="statusRow compactStatusRow">
       <span class="label">Mirror Surface</span>
@@ -456,6 +458,15 @@ function renderWorldAreasSettings(state) {
     <div class="compactActionRow compactActionRowSingle">
       <button type="button" class="toolButton ${stoneArmed ? "isActive" : ""}" data-world-area-action="arm-stone-area">
         ${stoneArmed ? "Stone placement armed" : "Create Stone Area"}
+      </button>
+    </div>
+    <div class="statusRow compactStatusRow">
+      <span class="label">Glow Area</span>
+      <span class="value">${glowCount} authored</span>
+    </div>
+    <div class="compactActionRow compactActionRowSingle">
+      <button type="button" class="toolButton ${glowArmed ? "isActive" : ""}" data-world-area-action="arm-glow-area">
+        ${glowArmed ? "Glow placement armed" : "Create Glow Area"}
       </button>
     </div>
     <div class="statusRow compactStatusRow">
