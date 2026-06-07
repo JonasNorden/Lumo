@@ -6148,7 +6148,7 @@ export function createEditorApp({
 
 
   const updateGlowArea = (field, value, options = {}) => {
-    const supportedFields = new Set(["x", "y", "width", "height", "density", "sizeVariation", "strength", "motionMode", "enabled", "visible"]);
+    const supportedFields = new Set(["x", "y", "width", "height", "density", "sizeVariation", "strength", "direction", "speed", "motionMode", "enabled", "visible"]);
     if (!supportedFields.has(field)) return;
     store.setState((draft) => {
       const areas = Array.isArray(draft.document.active?.glowAreas) ? draft.document.active.glowAreas : null;

@@ -12,7 +12,7 @@ import {
 } from "../domain/sound/audioAssetCatalog.js";
 import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 import { getThemeDefaultAmbientAssetPath, rankSoundAssetOptionsForTheme } from "../domain/theme/themeProfiles.js";
-import { normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
+import { GLOW_AREA_DIRECTIONS, normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeGlowAreaDirection, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
 import { stopNativeInputKeyboardPropagation } from "./nativeInputGuards.js";
 
 const MIXED_FIELD_VALUE = "__mixed__";
@@ -64,6 +64,18 @@ const DUST_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
   density: { min: 0, max: 1, integer: false, inputMode: "decimal" },
   sizeVariation: { min: 0, max: 1, integer: false, inputMode: "decimal" },
   driftStrength: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+});
+
+
+const GLOW_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
+  x: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
+  y: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
+  width: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
+  height: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
+  density: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+  sizeVariation: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+  strength: { min: 0, max: 1, integer: false, inputMode: "decimal" },
+  speed: { min: 0, max: 1, integer: false, inputMode: "decimal" },
 });
 
 const STONE_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
@@ -168,6 +180,9 @@ function buildTrackedDataset(target) {
     "dustAreaField",
     "dustAreaId",
     "dustAreaEditable",
+    "glowAreaField",
+    "glowAreaId",
+    "glowAreaEditable",
   ];
 
   const dataset = {};
@@ -1061,18 +1076,21 @@ function renderMirrorSurfaceAreaInspector(area) {
 }
 
 function renderGlowAreaNumberField(label, field, value, areaId) {
-  const normalizedValue = Number.isFinite(Number(value)) ? String(Number(value)) : "0";
+  const config = GLOW_AREA_NUMERIC_FIELD_CONFIG[field];
+  if (!config) return renderReadOnlyField(label, value);
+  const normalizedValue = Number.isFinite(Number(value)) ? String(value) : "";
   return `
-    <label class="fieldRow">
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
       <span class="label">${escapeHtml(label)}</span>
       <input
-        type="number"
-        step="0.01"
+        type="text"
         value="${escapeHtml(normalizedValue)}"
+        inputmode="${escapeHtml(config.inputMode)}"
         data-glow-area-field="${escapeHtml(field)}"
         data-glow-area-id="${escapeHtml(areaId || "")}"
         data-glow-area-editable="number"
         data-glow-area-committed-value="${escapeHtml(normalizedValue)}"
+        aria-label="${escapeHtml(label)}"
       />
     </label>
   `;
@@ -1080,21 +1098,20 @@ function renderGlowAreaNumberField(label, field, value, areaId) {
 
 function renderGlowAreaCheckboxField(label, field, value, areaId) {
   return `
-    <label class="fieldRow checkboxRow">
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionCheckboxField">
       <span class="label">${escapeHtml(label)}</span>
       <input type="checkbox" ${value !== false ? "checked" : ""} data-glow-area-field="${escapeHtml(field)}" data-glow-area-id="${escapeHtml(areaId || "")}" />
     </label>
   `;
 }
 
-function renderGlowAreaMotionModeField(value, areaId) {
-  const selected = value === "updraft" ? "updraft" : "ambient";
+function renderGlowAreaDirectionField(value, areaId) {
+  const selected = normalizeGlowAreaDirection(value);
   return `
-    <label class="fieldRow">
-      <span class="label">Motion mode</span>
-      <select data-glow-area-field="motionMode" data-glow-area-id="${escapeHtml(areaId || "")}">
-        <option value="ambient" ${selected === "ambient" ? "selected" : ""}>ambient</option>
-        <option value="updraft" ${selected === "updraft" ? "selected" : ""}>updraft</option>
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
+      <span class="label">Direction</span>
+      <select data-glow-area-field="direction" data-glow-area-id="${escapeHtml(areaId || "")}">
+        ${GLOW_AREA_DIRECTIONS.map((direction) => `<option value="${escapeHtml(direction)}" ${direction === selected ? "selected" : ""}>${escapeHtml(direction)}</option>`).join("")}
       </select>
     </label>
   `;
@@ -1102,14 +1119,13 @@ function renderGlowAreaMotionModeField(value, areaId) {
 
 function renderGlowAreaInspector(area) {
   const areaId = typeof area?.id === "string" ? area.id : "";
-  return `
-    <div class="selectionHeader">
-      <div>
-        <span class="statusCardTitle">${escapeHtml(areaId || "Glow Area")}</span>
+  return renderSelectionFields([
+    `<div class="statusCard assetSelectionCard assetSelectionCardCompact">
+      <div class="assetSelectionMeta">
         <span class="statusCardMeta">Glow Area · World Phenomena / Areas</span>
       </div>
-    </div>
-    ${[
+    </div>`,
+    renderReadOnlyField("id", area?.id),
     renderGlowAreaNumberField("x", "x", area?.x, areaId),
     renderGlowAreaNumberField("y", "y", area?.y, areaId),
     renderGlowAreaNumberField("width", "width", area?.width, areaId),
@@ -1117,11 +1133,11 @@ function renderGlowAreaInspector(area) {
     renderGlowAreaNumberField("Density", "density", area?.density, areaId),
     renderGlowAreaNumberField("Size variation", "sizeVariation", area?.sizeVariation, areaId),
     renderGlowAreaNumberField("Strength", "strength", area?.strength, areaId),
-    renderGlowAreaMotionModeField(area?.motionMode, areaId),
+    renderGlowAreaDirectionField(area?.direction, areaId),
+    renderGlowAreaNumberField("Speed", "speed", area?.speed, areaId),
     renderGlowAreaCheckboxField("enabled", "enabled", area?.enabled, areaId),
     renderGlowAreaCheckboxField("visible", "visible", area?.visible, areaId),
-  ].join("")}
-  `;
+  ].join(""));
 }
 
 function renderDustAreaNumberField(label, field, value, areaId) {
@@ -1575,13 +1591,14 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
   const parseGlowAreaNumericValue = (field, rawValue) => {
     const numeric = Number.parseFloat(rawValue);
     if (!Number.isFinite(numeric)) return null;
-    if (field === "x" || field === "y" || field === "width" || field === "height") return Math.max(0, numeric);
-    return Math.max(0, Math.min(1, numeric));
+    const config = GLOW_AREA_NUMERIC_FIELD_CONFIG[field];
+    if (!config || numeric < config.min || numeric > config.max) return null;
+    return config.integer ? Math.round(numeric) : numeric;
   };
 
   const commitGlowAreaNumericInput = (input) => {
     const field = input?.dataset?.glowAreaField;
-    if (!field || input?.dataset?.glowAreaEditable !== "number") return false;
+    if (!field || input?.dataset?.glowAreaEditable !== "number" || !GLOW_AREA_NUMERIC_FIELD_CONFIG[field]) return false;
     const areaId = input.dataset.glowAreaId || null;
     const areaSnapshot = getSelectedGlowArea(areaId);
     if (!areaSnapshot) return true;
@@ -1935,9 +1952,9 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     }
 
     const glowAreaSelectField = target.dataset.glowAreaField;
-    if (glowAreaSelectField === "motionMode") {
+    if (glowAreaSelectField === "direction") {
       const areaId = target.dataset.glowAreaId || null;
-      onGlowAreaUpdate?.("motionMode", target.value === "updraft" ? "updraft" : "ambient", { areaId });
+      onGlowAreaUpdate?.("direction", normalizeGlowAreaDirection(target.value), { areaId });
       clearInputDraft(target);
       return;
     }

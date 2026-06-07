@@ -23,6 +23,8 @@ import {
   getRuntimeGlowPointColor,
   getRuntimeGlowPointOffsetX,
   getRuntimeGlowPointOffsetY,
+  getRuntimeGlowPointDirection,
+  getRuntimeGlowPointTravelPhase,
   getRuntimeGlowPointUpdraftPhase,
   renderRuntimeGlowAreas,
 } from "../src/runtime/renderRuntimeGlowAreas.js";
@@ -66,21 +68,26 @@ const baseDoc = {
   assert.equal(created.density, 0.32);
   assert.equal(created.sizeVariation, 0.38);
   assert.equal(created.strength, 0.42);
-  assert.equal(created.motionMode, "ambient");
+  assert.equal(created.direction, "random");
+  assert.equal(created.speed, 0.35);
 }
 
 {
-  const area = normalizeGlowAreaForEditor({ id: "field", width: 120, height: 80, density: 2, sizeVariation: -1, strength: 0.75, motionMode: "invalid-legacy" });
-  assert.equal(area.motionMode, "ambient", "old Glow Areas without a valid motionMode normalize to ambient");
+  const area = normalizeGlowAreaForEditor({ id: "field", width: 120, height: 80, density: 2, sizeVariation: -1, strength: 0.75, speed: 2, direction: "invalid-direction", motionMode: "invalid-legacy" });
+  assert.equal(area.direction, "random", "old Glow Areas without a valid direction normalize to random");
   assert.equal(area.density, 1);
   assert.equal(area.sizeVariation, 0);
   assert.equal(area.strength, 0.75);
+  assert.equal(area.speed, 1);
   assert.equal(updateGlowAreaField(area, "density", 0.25).density, 0.25);
   assert.equal(updateGlowAreaField(area, "sizeVariation", 2).sizeVariation, 1);
   assert.equal(updateGlowAreaField(area, "strength", -1).strength, 0);
   assert.equal(updateGlowAreaField(area, "width", 240).width, 240);
-  assert.equal(updateGlowAreaField(area, "motionMode", "updraft").motionMode, "updraft");
-  assert.equal(updateGlowAreaField(area, "motionMode", "sideways").motionMode, "ambient");
+  assert.equal(updateGlowAreaField(area, "speed", -1).speed, 0);
+  assert.equal(updateGlowAreaField(area, "direction", "left").direction, "left");
+  assert.equal(updateGlowAreaField(area, "direction", "sideways").direction, "random");
+  assert.equal(updateGlowAreaField(area, "motionMode", "ambient").direction, "random", "legacy ambient migrates to random");
+  assert.equal(updateGlowAreaField(area, "motionMode", "updraft").direction, "up", "legacy updraft migrates to up");
 }
 
 {
@@ -99,8 +106,9 @@ const baseDoc = {
   assert.ok(new Set(first.map((point) => point.speed)).size > 1, "points receive independent drift speeds");
   assert.ok(new Set(first.map((point) => point.alphaPhase)).size > 1, "points receive independent alpha phases");
   assert.ok(new Set(first.map((point) => point.alphaSpeed)).size > 1, "points receive independent alpha speeds");
-  assert.ok(first.every((point) => point.motionMode === "ambient"), "default generated glow motes carry ambient motion mode");
-  assert.ok(generateGlowAreaLayout({ ...area, id: "updraft-layout", motionMode: "updraft" }).every((point) => point.motionMode === "updraft" && Number.isFinite(point.updraftSpeed)), "updraft generated glow motes carry deterministic vertical phase data");
+  assert.ok(first.every((point) => point.direction === "random" && point.authoredSpeed === 0.35), "default generated glow motes carry random direction and authored speed");
+  assert.ok(generateGlowAreaLayout({ id: "updraft-layout", x: area.x, y: area.y, width: area.width, height: area.height, density: area.density, sizeVariation: area.sizeVariation, strength: area.strength, motionMode: "updraft" }).every((point) => point.direction === "up" && Number.isFinite(point.travelSpeed)), "legacy updraft generated glow motes migrate to up with deterministic travel speed");
+  assert.ok(generateGlowAreaLayout({ ...area, id: "left-layout", direction: "left", speed: 0.8 }).every((point) => point.direction === "left" && point.authoredSpeed === 0.8), "authored direction and speed survive deterministic layout generation");
   assert.ok(first.every((point) => point.radius <= 2.6 && point.coreRadius < point.radius && point.auraRadius > point.radius), "default glow motes keep a tiny core with a larger soft aura instead of becoming blobs");
   assert.ok(first.every((point) => point.alphaMin > 0 && point.alphaMax > point.alphaMin && point.alphaMax <= 0.38), "points keep a non-zero floor and readable ember ceiling");
   assert.ok(first.some((point) => ["ember_orange", "warm_gold", "deep_ember", "pale_gold"].includes(point.palette)), "glow uses the warm ember/gold default palette");
@@ -120,12 +128,22 @@ const baseDoc = {
   assert.notEqual(getRuntimeGlowPointOffsetX(points[0], 180), getRuntimeGlowPointOffsetX(points[1], 180), "independent point phases/speeds avoid synchronized waves");
   assert.match(getRuntimeGlowPointColor(point), /rgba\((1[8-9][0-9]|2[0-5][0-9]), ([8-9][0-9]|1[0-9][0-9]|2[0-3][0-9]), ([2-9][0-9]|1[0-6][0-9]), 1\)/, "runtime glow color remains warm ember/gold and non-white");
 
-  const updraftArea = normalizeGlowAreaForEditor({ ...area, id: "runtime-updraft-motion", motionMode: "updraft" });
-  const updraftPoint = generateGlowAreaLayout(updraftArea).find((candidate) => getRuntimeGlowPointUpdraftPhase(candidate, 0) > 0.2 && getRuntimeGlowPointUpdraftPhase(candidate, 0) < 0.6) || generateGlowAreaLayout(updraftArea)[0];
-  assert.ok(getRuntimeGlowPointOffsetY(updraftPoint, 8) < getRuntimeGlowPointOffsetY(updraftPoint, 0), "updraft moves motes upward over time before recycle");
-  const topTime = (0.92 - getRuntimeGlowPointUpdraftPhase(updraftPoint, 0)) / updraftPoint.updraftSpeed;
-  const midTime = (0.45 - getRuntimeGlowPointUpdraftPhase(updraftPoint, 0) + 1) / updraftPoint.updraftSpeed;
-  assert.ok(getRuntimeGlowPointAlpha(updraftPoint, topTime) < getRuntimeGlowPointAlpha(updraftPoint, midTime), "updraft fades motes near the top before soft recycle");
+  const updraftArea = normalizeGlowAreaForEditor({ ...area, id: "runtime-updraft-motion", direction: "up", speed: 0.6 });
+  const updraftPoint = generateGlowAreaLayout(updraftArea).find((candidate) => getRuntimeGlowPointTravelPhase(candidate, 0) > 0.2 && getRuntimeGlowPointTravelPhase(candidate, 0) < 0.6) || generateGlowAreaLayout(updraftArea)[0];
+  assert.equal(getRuntimeGlowPointDirection(updraftPoint), "up", "runtime recognizes authored upward direction");
+  assert.ok(getRuntimeGlowPointOffsetY(updraftPoint, 8) < getRuntimeGlowPointOffsetY(updraftPoint, 0), "up direction moves motes upward over time before recycle");
+  const topTime = (0.92 - getRuntimeGlowPointUpdraftPhase(updraftPoint, 0)) / updraftPoint.travelSpeed;
+  const midTime = (0.45 - getRuntimeGlowPointUpdraftPhase(updraftPoint, 0) + 1) / updraftPoint.travelSpeed;
+  assert.ok(getRuntimeGlowPointAlpha(updraftPoint, topTime) < getRuntimeGlowPointAlpha(updraftPoint, midTime), "directional glow fades motes near the travel edge before soft recycle");
+  const downPoint = generateGlowAreaLayout({ ...area, id: "runtime-down-motion", direction: "down", speed: 0.6 })[0];
+  assert.ok(getRuntimeGlowPointOffsetY(downPoint, 8) > getRuntimeGlowPointOffsetY(downPoint, 0), "down direction descends over time");
+  const leftPoint = generateGlowAreaLayout({ ...area, id: "runtime-left-motion", direction: "left", speed: 0.6 })[0];
+  assert.ok(getRuntimeGlowPointOffsetX(leftPoint, 8) < getRuntimeGlowPointOffsetX(leftPoint, 0), "left direction moves horizontally left over time");
+  const rightPoint = generateGlowAreaLayout({ ...area, id: "runtime-right-motion", direction: "right", speed: 0.6 })[0];
+  assert.ok(getRuntimeGlowPointOffsetX(rightPoint, 8) > getRuntimeGlowPointOffsetX(rightPoint, 0), "right direction moves horizontally right over time");
+  const slowPoint = generateGlowAreaLayout({ ...area, id: "runtime-slow-motion", direction: "right", speed: 0 })[0];
+  const fastPoint = generateGlowAreaLayout({ ...area, id: "runtime-fast-motion", direction: "right", speed: 1 })[0];
+  assert.ok(Math.abs(getRuntimeGlowPointOffsetX(fastPoint, 8) - getRuntimeGlowPointOffsetX(fastPoint, 0)) > Math.abs(getRuntimeGlowPointOffsetX(slowPoint, 8) - getRuntimeGlowPointOffsetX(slowPoint, 0)), "authored speed affects runtime movement distance");
 }
 
 {
@@ -163,20 +181,23 @@ const baseDoc = {
 {
   const authored = validateLevelDocument({
     ...baseDoc,
-    glowAreas: [{ id: "authored-glow", x: 24, y: 48, width: 144, height: 96, density: 0.5, sizeVariation: 0.6, strength: 0.8, motionMode: "updraft", enabled: true, visible: true }],
+    glowAreas: [{ id: "authored-glow", x: 24, y: 48, width: 144, height: 96, density: 0.5, sizeVariation: 0.6, strength: 0.8, direction: "down", speed: 0.72, enabled: true, visible: true }],
   });
   assert.equal(authored.glowAreas.length, 1, "Glow Area saves in the Editor V2 document shape");
   const exported = JSON.parse(serializeLevelDocument(authored));
   assert.equal(exported.glowAreas.length, 1, "Glow Area exports with the level document");
-  assert.equal(exported.glowAreas[0].motionMode, "updraft", "motionMode saves/exports with Glow Areas");
+  assert.equal(exported.glowAreas[0].direction, "down", "direction saves/exports with Glow Areas");
+  assert.equal(exported.glowAreas[0].speed, 0.72, "speed saves/exports with Glow Areas");
   const runtime = v2ToRuntimeLevelObject(authored);
   assert.equal(runtime.runtimeLevel.glowAreas.length, 1, "Runtime receives authored Glow Areas from the V2 bridge");
-  assert.equal(runtime.runtimeLevel.glowAreas[0].motionMode, "updraft", "Runtime receives authored motionMode from the V2 bridge");
+  assert.equal(runtime.runtimeLevel.glowAreas[0].direction, "down", "Runtime receives authored direction from the V2 bridge");
+  assert.equal(runtime.runtimeLevel.glowAreas[0].speed, 0.72, "Runtime receives authored speed from the V2 bridge");
   const loaded = loadLevelDocument(authored);
   assert.equal(loaded.level.glowAreas.length, 1, "Recharged runtime loader preserves authored Glow Areas");
   const packet = buildRuntimeWorldPacket({ skeleton: buildRuntimeWorldSkeleton(loaded.level) });
   assert.equal(packet.glowAreas.length, 1, "runtime world packets carry Glow Areas");
-  assert.equal(packet.glowAreas[0].motionMode, "updraft", "runtime world packets carry Glow Area motionMode");
+  assert.equal(packet.glowAreas[0].direction, "down", "runtime world packets carry Glow Area direction");
+  assert.equal(packet.glowAreas[0].speed, 0.72, "runtime world packets carry Glow Area speed");
 
   const sourceRuntime = createRechargedLevelSourceRuntime({ levelSource: { levelDocument: loaded.level } });
   assert.equal(sourceRuntime.ok, true, "Recharged level-source runtime accepts authored Glow Area levels");
@@ -193,12 +214,13 @@ const baseDoc = {
   assert.equal((await adapter.boot()).ok, true, "Lumo.html boot adapter boots authored Glow Areas");
   assert.equal(adapter.getWorldSnapshot().glowAreas.length, 1, "Lumo.html adapter world snapshot preserves canonical top-level glowAreas");
   assert.equal(adapter.getBootPayload().glowAreas.length, 1, "Lumo.html receives non-empty authored glowAreas on the boot payload");
-  assert.equal(adapter.getBootPayload().glowAreas[0].motionMode, "updraft", "Lumo.html receives motionMode on the boot payload");
+  assert.equal(adapter.getBootPayload().glowAreas[0].direction, "down", "Lumo.html receives direction on the boot payload");
+  assert.equal(adapter.getBootPayload().glowAreas[0].speed, 0.72, "Lumo.html receives speed on the boot payload");
 }
 
 {
   const state = {
-    document: { status: "ready", error: null, active: { ...baseDoc, glowAreas: [{ id: "selected-glow", x: 0, y: 0, width: 240, height: 120, density: 0.8, sizeVariation: 1, strength: 0.5, motionMode: "updraft", enabled: true, visible: true }] } },
+    document: { status: "ready", error: null, active: { ...baseDoc, glowAreas: [{ id: "selected-glow", x: 0, y: 0, width: 240, height: 120, density: 0.8, sizeVariation: 1, strength: 0.5, direction: "up", speed: 0.6, enabled: true, visible: true }] } },
     interaction: { selectedGlowAreaId: "selected-glow", selectedGlowAreaIndex: 0 },
   };
   const { markup } = getSelectionEditorPanelContent(state, { emptyMessage: "No selection" });
@@ -206,9 +228,11 @@ const baseDoc = {
   assert.match(markup, /data-glow-area-field="density"/, "Glow density is editable");
   assert.match(markup, /data-glow-area-field="sizeVariation"/, "Glow sizeVariation is editable");
   assert.match(markup, /data-glow-area-field="strength"/, "Glow strength is editable");
-  assert.match(markup, />Motion mode</, "Glow Area inspector exposes Motion mode label");
-  assert.match(markup, /data-glow-area-field="motionMode"/, "Glow motionMode is editable");
-  assert.match(markup, /<option value="updraft" selected>updraft<\/option>/, "Glow motionMode select reflects authored updraft value");
+  assert.match(markup, />Direction</, "Glow Area inspector exposes Direction label");
+  assert.match(markup, /data-glow-area-field="direction"/, "Glow direction is editable");
+  assert.match(markup, /data-glow-area-field="speed"/, "Glow speed is editable");
+  assert.match(markup, /fieldRowCompact selectionInlineField selectionCoordField/, "Glow Area inspector uses compact inline rows");
+  assert.match(markup, /<option value="up" selected>up<\/option>/, "Glow direction select reflects authored up value");
 }
 
 {
@@ -298,8 +322,9 @@ const baseDoc = {
   const lumoGlowSlice = lumoHtmlSource.slice(lumoHtmlSource.indexOf("function buildRechargedGlowLayout"), lumoHtmlSource.indexOf("function getRechargedStoneAreaSeed"));
   assert.match(lumoGlowSlice, /coreRadius/, "Lumo.html runtime Glow Area draws bright ember cores");
   assert.match(lumoGlowSlice, /auraRadius/, "Lumo.html runtime Glow Area draws larger low-alpha auras");
-  assert.match(lumoGlowSlice, /motionMode/, "Lumo.html render path uses Glow Area motionMode");
-  assert.match(lumoGlowSlice, /updraftPhase/, "Lumo.html render path computes deterministic updraft phase");
+  assert.match(lumoGlowSlice, /direction/, "Lumo.html render path uses Glow Area direction");
+  assert.match(lumoGlowSlice, /travelPhase/, "Lumo.html render path computes deterministic directional travel phase");
+  assert.match(lumoGlowSlice, /authoredSpeed/, "Lumo.html render path uses authored Glow Area speed");
   assert.doesNotMatch(lumoGlowSlice, /Math\.random/, "Lumo.html Glow Area layout must not use Math.random");
   assert.doesNotMatch(lumoGlowSlice, /\.filter\s*=|shadowBlur|shadowColor|createRadialGradient|drawImage|getImageData|putImageData/, "Lumo.html Glow Area must avoid filters, shadow blur, fullscreen passes, textures, and image operations");
 }
