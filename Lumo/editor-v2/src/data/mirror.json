@@ -6527,14 +6527,14 @@
       0,
       0,
       0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
+      15,
       0,
       0,
       0,
@@ -22989,6 +22989,54 @@
         "y": 21,
         "size": 1,
         "value": 12
+      },
+      {
+        "x": 15,
+        "y": 13,
+        "size": 1,
+        "value": 15
+      },
+      {
+        "x": 16,
+        "y": 13,
+        "size": 1,
+        "value": 15
+      },
+      {
+        "x": 17,
+        "y": 13,
+        "size": 1,
+        "value": 15
+      },
+      {
+        "x": 18,
+        "y": 13,
+        "size": 1,
+        "value": 15
+      },
+      {
+        "x": 19,
+        "y": 13,
+        "size": 1,
+        "value": 15
+      },
+      {
+        "x": 20,
+        "y": 13,
+        "size": 1,
+        "value": 15
+      },
+      {
+        "x": 21,
+        "y": 13,
+        "size": 1,
+        "value": 15
+      },
+      {
+        "x": 22,
+        "y": 13,
+        "size": 1,
+        "value": 15
       }
     ]
   },
@@ -45949,56 +45997,14 @@
   "waterDropAreas": [
     {
       "id": "water_drop_area-1",
-      "x": 144,
+      "x": 168,
       "y": 72,
       "mode": "line",
-      "density": 35,
-      "speed": 35,
+      "density": 6,
+      "speed": 29,
       "size": 35,
-      "length": 696,
-      "width": 696,
-      "height": 144,
-      "enabled": true,
-      "visible": true
-    },
-    {
-      "id": "water_drop_area-2",
-      "x": 1800,
-      "y": 72,
-      "mode": "spot",
-      "density": 35,
-      "speed": 35,
-      "size": 35,
-      "length": 0,
-      "width": 1,
-      "height": 144,
-      "enabled": true,
-      "visible": true
-    },
-    {
-      "id": "water_drop_area-3",
-      "x": 1608,
-      "y": 72,
-      "mode": "spot",
-      "density": 35,
-      "speed": 35,
-      "size": 35,
-      "length": 0,
-      "width": 1,
-      "height": 144,
-      "enabled": true,
-      "visible": true
-    },
-    {
-      "id": "water_drop_area-4",
-      "x": 2016,
-      "y": 72,
-      "mode": "spot",
-      "density": 35,
-      "speed": 35,
-      "size": 35,
-      "length": 0,
-      "width": 1,
+      "length": 721,
+      "width": 721,
       "height": 144,
       "enabled": true,
       "visible": true
