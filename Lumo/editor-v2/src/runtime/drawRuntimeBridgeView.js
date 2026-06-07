@@ -162,6 +162,8 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
     playbackStatus: viewModel?.overlay?.playbackStatus,
   });
 
+  const tiles = Array.isArray(viewModel?.tiles) ? viewModel.tiles : [];
+
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "#0b1220";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -181,14 +183,13 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
   drawBackgroundLayers(ctx, viewportWidthPx, viewportHeightPx, scale, cameraState, background, worldWidthPx);
   renderRuntimeGlowAreas(ctx, Array.isArray(viewModel?.glowAreas) ? viewModel.glowAreas : [], cameraState, (Number(viewModel?.overlay?.runtimeTick) || 0) / 60);
   renderRuntimeSmokeAreas(ctx, Array.isArray(viewModel?.smokeAreas) ? viewModel.smokeAreas : [], cameraState, (Number(viewModel?.overlay?.runtimeTick) || 0) / 60);
-  renderRuntimeWaterDropAreas(ctx, Array.isArray(viewModel?.waterDropAreas) ? viewModel.waterDropAreas : [], cameraState, (Number(viewModel?.overlay?.runtimeTick) || 0) / 60, { collisionRects: tiles });
+  renderRuntimeWaterDropAreas(ctx, Array.isArray(viewModel?.waterDropAreas) ? viewModel.waterDropAreas : [], cameraState, (Number(viewModel?.overlay?.runtimeTick) || 0) / 60, { collisionRects: tiles, worldBottomY: worldHeightPx });
   renderRuntimeDustAreas(ctx, Array.isArray(viewModel?.dustAreas) ? viewModel.dustAreas : [], cameraState, (Number(viewModel?.overlay?.runtimeTick) || 0) / 60);
 
   ctx.strokeStyle = "#60a5fa";
   ctx.lineWidth = 1;
   ctx.strokeRect(-cameraState.cameraX, -cameraState.cameraY, worldWidthPx, worldHeightPx);
 
-  const tiles = Array.isArray(viewModel?.tiles) ? viewModel.tiles : [];
   ctx.fillStyle = "#334155";
   for (const tile of tiles) {
     const x = toFiniteOrNull(tile?.worldX);

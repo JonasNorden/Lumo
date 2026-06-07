@@ -5017,6 +5017,7 @@
     }
 
     const rechargedWaterDropLayoutCache = new Map();
+    const rechargedWaterDropCollisionYCache = new WeakMap();
     function buildRechargedWaterDropLayout(area, index, tileSize = 24) {
       const sourceTiles = area.mode === "line" ? Math.max(1, area.length / Math.max(1, tileSize)) : 1;
       const targetCount = Math.max(0, Math.round((2 + sourceTiles * 2.35) * (area.density / 100)));
@@ -5043,17 +5044,42 @@
       return drops;
     }
 
-    function getRechargedWaterDropY(drop, timeSeconds, collisionRects = []) {
+    function getRechargedWaterDropY(drop, timeSeconds, collisionRects = [], options = {}) {
       const sourceY = Number.isFinite(drop.sourceY) ? drop.sourceY : 0;
-      let collisionY = sourceY + Math.max(1, Number.isFinite(drop.fallDistance) ? drop.fallDistance : 144);
+      const worldBottomY = Number.isFinite(options?.worldBottomY) && options.worldBottomY > sourceY ? options.worldBottomY : NaN;
+      let collisionY = Number.isFinite(worldBottomY) ? worldBottomY : sourceY + 12288;
       const x = Number.isFinite(drop.sourceX) ? drop.sourceX : 0;
+      const worldUnitsToPx = Number.isFinite(options?.worldUnitsToPx) && options.worldUnitsToPx > 0 ? options.worldUnitsToPx : 1;
+      const cacheKey = [Math.round(x * 100), Math.round(sourceY * 100), Math.round(collisionY * 100), Math.round(worldUnitsToPx * 100)].join("|");
+      let collisionCache = null;
+      if (Array.isArray(collisionRects)) {
+        collisionCache = rechargedWaterDropCollisionYCache.get(collisionRects);
+        if (!collisionCache) {
+          collisionCache = new Map();
+          rechargedWaterDropCollisionYCache.set(collisionRects, collisionCache);
+        } else if (collisionCache.has(cacheKey)) {
+          collisionY = collisionCache.get(cacheKey);
+          const cachedTravel = Math.max(1, collisionY - sourceY);
+          const cachedCycleSeconds = Math.max(0.32, cachedTravel / Math.max(1, Number.isFinite(drop.fallSpeed) ? drop.fallSpeed : 60));
+          const cachedPhase = (((drop.phase + timeSeconds / cachedCycleSeconds) % 1) + 1) % 1;
+          return Math.min(collisionY, sourceY + cachedTravel * cachedPhase);
+        }
+      }
       for (const rect of Array.isArray(collisionRects) ? collisionRects : []) {
-        const rx = Number.isFinite(rect?.x) ? rect.x : Number.isFinite(rect?.worldX) ? rect.worldX : NaN;
-        const ry = Number.isFinite(rect?.y) ? rect.y : Number.isFinite(rect?.worldY) ? rect.worldY : NaN;
-        const rw = Number.isFinite(rect?.w) ? rect.w : Number.isFinite(rect?.width) ? rect.width : Number.isFinite(rect?.worldW) ? rect.worldW : 0;
-        if (!Number.isFinite(rx) || !Number.isFinite(ry) || rw <= 0) continue;
+        const rawX = Number.isFinite(rect?.worldX) ? rect.worldX : Number.isFinite(rect?.x) ? rect.x : NaN;
+        const rawY = Number.isFinite(rect?.worldY) ? rect.worldY : Number.isFinite(rect?.y) ? rect.y : NaN;
+        const rawW = Number.isFinite(rect?.worldW) ? rect.worldW : Number.isFinite(rect?.w) ? rect.w : Number.isFinite(rect?.width) ? rect.width : 0;
+        const rawH = Number.isFinite(rect?.worldH) ? rect.worldH : Number.isFinite(rect?.h) ? rect.h : Number.isFinite(rect?.height) ? rect.height : 0;
+        const hasWorldCoords = Number.isFinite(rect?.worldX) || Number.isFinite(rect?.worldY) || Number.isFinite(rect?.worldW) || Number.isFinite(rect?.worldH);
+        const scale = hasWorldCoords ? 1 : worldUnitsToPx;
+        const rx = rawX * scale;
+        const ry = rawY * scale;
+        const rw = rawW * scale;
+        const rh = rawH * scale;
+        if (!Number.isFinite(rx) || !Number.isFinite(ry) || rw <= 0 || rh <= 0) continue;
         if (x >= rx && x <= rx + rw && ry >= sourceY && ry < collisionY) collisionY = ry;
       }
+      if (collisionCache) collisionCache.set(cacheKey, collisionY);
       const travel = Math.max(1, collisionY - sourceY);
       const cycleSeconds = Math.max(0.32, travel / Math.max(1, Number.isFinite(drop.fallSpeed) ? drop.fallSpeed : 60));
       const phase = (((drop.phase + timeSeconds / cycleSeconds) % 1) + 1) % 1;
@@ -5083,10 +5109,14 @@
       const tileSize = Number.isFinite(options.tileSize) && options.tileSize > 0 ? options.tileSize : 24;
       const timeSeconds = Number.isFinite(options.timeSeconds) ? options.timeSeconds : 0;
       const collisionRects = Array.isArray(options.collisionRects) ? options.collisionRects : [];
+      const collisionOptions = {
+        worldBottomY: Number.isFinite(options.worldBottomY) ? options.worldBottomY : NaN,
+        worldUnitsToPx: Number.isFinite(options.worldUnitsToPx) && options.worldUnitsToPx > 0 ? options.worldUnitsToPx : 1,
+      };
       let drew = false;
       for (let areaIndex = 0; areaIndex < waterDropAreas.length; areaIndex += 1) {
         for (const drop of buildRechargedWaterDropLayout(waterDropAreas[areaIndex], areaIndex, tileSize)) {
-          const rect = mapper.worldToCanvasRect(drop.sourceX, getRechargedWaterDropY(drop, timeSeconds, collisionRects), 1, 1);
+          const rect = mapper.worldToCanvasRect(drop.sourceX, getRechargedWaterDropY(drop, timeSeconds, collisionRects, collisionOptions), 1, 1);
           drawRechargedWaterDropVisual(ctx, rect.x, rect.y, drop);
           drew = true;
         }
@@ -7228,7 +7258,7 @@
         }
 
         drawRechargedGlowAreas(ctx, mapper, glowAreas, { tileSize, timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000 });
-        drawRechargedWaterDropAreas(ctx, mapper, waterDropAreas, { tileSize, collisionRects: supportTiles, timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000 });
+        drawRechargedWaterDropAreas(ctx, mapper, waterDropAreas, { tileSize, collisionRects: supportTiles, worldBottomY: worldHeightPx, worldUnitsToPx, timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000 });
         drawRechargedSmokeAreas(ctx, mapper, smokeAreas, { tileSize, timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000 });
 
         // Draw support tiles with V1 tile assets/placement rules first.
@@ -7374,6 +7404,8 @@
           stoneAreas,
           waterDropAreas,
           collisionRects: supportTiles,
+          worldBottomY: worldHeightPx,
+          worldUnitsToPx,
           timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000,
           reactiveDecor: {
             grassPatches: reactiveGrassPatches,
@@ -8379,6 +8411,10 @@
       const tileSize = Number.isFinite(options.tileSize) && options.tileSize > 0 ? options.tileSize : 24;
       const timeSeconds = Number.isFinite(options.timeSeconds) ? options.timeSeconds : 0;
       const collisionRects = Array.isArray(options.collisionRects) ? options.collisionRects : [];
+      const collisionOptions = {
+        worldBottomY: Number.isFinite(options.worldBottomY) ? options.worldBottomY : NaN,
+        worldUnitsToPx: Number.isFinite(options.worldUnitsToPx) && options.worldUnitsToPx > 0 ? options.worldUnitsToPx : 1,
+      };
       const surfaceX = area.x;
       const surfaceY = area.y + (Number.isFinite(area.yOffset) ? area.yOffset : 0);
       const surfaceW = area.width;
@@ -8387,7 +8423,7 @@
       if (reflectionHeight <= 0) return candidates;
       for (let areaIndex = 0; areaIndex < waterDropAreas.length; areaIndex += 1) {
         for (const drop of buildRechargedWaterDropLayout(waterDropAreas[areaIndex], areaIndex, tileSize)) {
-          const y = getRechargedWaterDropY(drop, timeSeconds, collisionRects);
+          const y = getRechargedWaterDropY(drop, timeSeconds, collisionRects, collisionOptions);
           const x = Number.isFinite(drop.sourceX) ? drop.sourceX : 0;
           const distanceToSurface = surfaceY - y;
           if (x < surfaceX - 4 || x > surfaceX + surfaceW + 4 || distanceToSurface < -4 || distanceToSurface > reflectionHeight) continue;

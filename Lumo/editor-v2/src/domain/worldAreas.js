@@ -5,6 +5,7 @@ const DUST_AREA_MIN_SIZE = 1;
 const GLOW_AREA_MIN_SIZE = 1;
 const SMOKE_AREA_MIN_SIZE = 1;
 const WATER_DROP_AREA_MIN_SIZE = 1;
+const WATER_DROP_SAFE_FALL_DISTANCE = DEFAULT_TILE_SIZE * 512;
 export const MIRROR_SURFACE_DEFAULTS = Object.freeze({
   reflectionHeight: 72,
   reflectionStrength: 0.35,
@@ -442,6 +443,7 @@ export function getWaterDropAreaDropCount(area = {}, index = 0) {
 }
 
 const waterDropAreaLayoutCache = new Map();
+const waterDropCollisionYCache = new WeakMap();
 const EMPTY_WATER_DROP_LAYOUT = Object.freeze([]);
 
 function getWaterDropAreaLayoutCacheKey(area = {}, index = 0) {
@@ -480,11 +482,25 @@ export function generateWaterDropAreaLayout(area = {}, index = 0) {
   return frozenDrops;
 }
 
-export function resolveWaterDropCollisionY(drop, collisionRects = []) {
+export function resolveWaterDropCollisionY(drop, collisionRects = [], options = {}) {
   const x = toFiniteNumber(drop?.sourceX, 0);
   const sourceY = toFiniteNumber(drop?.sourceY, 0);
-  const maxY = sourceY + Math.max(0, toFiniteNumber(drop?.fallDistance, DEFAULT_TILE_SIZE));
-  let bestY = maxY;
+  const authoredWorldBottomY = toFiniteNumber(options?.worldBottomY ?? options?.worldHeightPx, Number.NaN);
+  const fallbackY = Number.isFinite(authoredWorldBottomY) && authoredWorldBottomY > sourceY
+    ? authoredWorldBottomY
+    : sourceY + WATER_DROP_SAFE_FALL_DISTANCE;
+  const cacheKey = [roundTo(x, 100), roundTo(sourceY, 100), roundTo(fallbackY, 100)].join("|");
+  let collisionCache = null;
+  if (Array.isArray(collisionRects)) {
+    collisionCache = waterDropCollisionYCache.get(collisionRects);
+    if (!collisionCache) {
+      collisionCache = new Map();
+      waterDropCollisionYCache.set(collisionRects, collisionCache);
+    } else if (collisionCache.has(cacheKey)) {
+      return collisionCache.get(cacheKey);
+    }
+  }
+  let bestY = fallbackY;
   for (const rect of Array.isArray(collisionRects) ? collisionRects : []) {
     const rx = toFiniteNumber(rect?.worldX ?? rect?.x, Number.NaN);
     const ry = toFiniteNumber(rect?.worldY ?? rect?.y, Number.NaN);
@@ -493,7 +509,9 @@ export function resolveWaterDropCollisionY(drop, collisionRects = []) {
     if (!Number.isFinite(rx) || !Number.isFinite(ry) || rw <= 0 || rh <= 0) continue;
     if (x >= rx && x <= rx + rw && ry >= sourceY && ry < bestY) bestY = ry;
   }
-  return roundTo(bestY, 100);
+  const resolvedY = roundTo(bestY, 100);
+  if (collisionCache) collisionCache.set(cacheKey, resolvedY);
+  return resolvedY;
 }
 
 export function normalizeGlowAreaForEditor(area = {}, index = 0) {

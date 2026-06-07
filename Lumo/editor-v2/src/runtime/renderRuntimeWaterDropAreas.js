@@ -9,9 +9,9 @@ function positiveModulo(value, divisor) {
   return ((value % divisor) + divisor) % divisor;
 }
 
-export function getRuntimeWaterDropY(drop, timeSeconds = 0, collisionRects = []) {
+export function getRuntimeWaterDropY(drop, timeSeconds = 0, collisionRects = [], options = {}) {
   const sourceY = toFinite(drop?.sourceY);
-  const collisionY = resolveWaterDropCollisionY(drop, collisionRects);
+  const collisionY = resolveWaterDropCollisionY(drop, collisionRects, options);
   const travel = Math.max(1, collisionY - sourceY);
   const speed = Math.max(1, toFinite(drop?.fallSpeed, 60));
   const cycleSeconds = Math.max(0.32, travel / speed);
@@ -22,6 +22,7 @@ export function getRuntimeWaterDropY(drop, timeSeconds = 0, collisionRects = [])
 export function renderRuntimeWaterDropAreas(ctx, waterDropAreas, cameraState, timeSeconds = 0, options = {}) {
   if (!ctx || typeof ctx.save !== "function" || !Array.isArray(waterDropAreas) || !waterDropAreas.length) return 0;
   const collisionRects = Array.isArray(options.collisionRects) ? options.collisionRects : [];
+  const collisionOptions = { worldBottomY: toFinite(options.worldBottomY ?? options.worldHeightPx, Number.NaN) };
   let rendered = 0;
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
@@ -30,7 +31,7 @@ export function renderRuntimeWaterDropAreas(ctx, waterDropAreas, cameraState, ti
     if (!area.enabled || !area.visible || area.density <= 0 || area.size <= 0) continue;
     for (const drop of generateWaterDropAreaLayout(area, areaIndex)) {
       const x = toFinite(drop.sourceX) - toFinite(cameraState?.cameraX);
-      const y = getRuntimeWaterDropY(drop, timeSeconds, collisionRects) - toFinite(cameraState?.cameraY);
+      const y = getRuntimeWaterDropY(drop, timeSeconds, collisionRects, collisionOptions) - toFinite(cameraState?.cameraY);
       const radius = Math.max(1, toFinite(drop.radius, 2));
       const length = Math.max(radius * 1.8, toFinite(drop.length, radius * 3));
       ctx.save();
