@@ -26,6 +26,10 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const editorGlowLayerPath = path.resolve(__dirname, "../src/render/layers/glowAreaLayer.js");
+const editorDustLayerPath = path.resolve(__dirname, "../src/render/layers/dustAreaLayer.js");
+const editorStoneLayerPath = path.resolve(__dirname, "../src/render/layers/stoneAreaLayer.js");
+const editorMirrorSurfaceLayerPath = path.resolve(__dirname, "../src/render/layers/mirrorSurfaceAreaLayer.js");
+const viewportPath = path.resolve(__dirname, "../src/render/viewport.js");
 const runtimeGlowPath = path.resolve(__dirname, "../src/runtime/renderRuntimeGlowAreas.js");
 const rendererPath = path.resolve(__dirname, "../src/render/renderer.js");
 const brushPanelPath = path.resolve(__dirname, "../src/ui/brushPanel.js");
@@ -155,8 +159,59 @@ const baseDoc = {
 }
 
 {
+  const [glowLayer, rendererLayer, dustLayer, stoneLayer, mirrorSurfaceLayer, viewportModule] = await Promise.all([
+    import(editorGlowLayerPath),
+    import(rendererPath),
+    import(editorDustLayerPath),
+    import(editorStoneLayerPath),
+    import(editorMirrorSurfaceLayerPath),
+    import(viewportPath),
+  ]);
+  assert.equal(typeof glowLayer.renderGlowAreas, "function", "Editor V2 can import glowAreaLayer without module export errors");
+  assert.equal(typeof rendererLayer.renderEditorFrame, "function", "Editor V2 renderer can import the Glow Area layer without module export errors");
+  assert.equal(typeof dustLayer.renderDustAreas, "function", "Dust Area layer still imports correctly");
+  assert.equal(typeof stoneLayer.renderStoneAreas, "function", "Stone Area layer still imports correctly");
+  assert.equal(typeof mirrorSurfaceLayer.renderMirrorSurfaceAreas, "function", "Mirror Surface Area layer still imports correctly");
+  assert.equal(viewportModule.worldToCanvas, undefined, "viewport.js does not export worldToCanvas; Glow Area must not import it");
+
+  const calls = [];
+  const ctx = {
+    globalAlpha: 1,
+    save() { calls.push({ type: "save" }); },
+    restore() { calls.push({ type: "restore" }); },
+    beginPath() { calls.push({ type: "beginPath" }); },
+    arc(x, y, radius) { calls.push({ type: "arc", x, y, radius, alpha: this.globalAlpha, fillStyle: this.fillStyle }); },
+    fill() { calls.push({ type: "fill", alpha: this.globalAlpha, fillStyle: this.fillStyle }); },
+    stroke() { calls.push({ type: "stroke", strokeStyle: this.strokeStyle, lineWidth: this.lineWidth }); },
+    roundRect(x, y, width, height, radius) { calls.push({ type: "roundRect", x, y, width, height, radius }); },
+    fillText(text, x, y) { calls.push({ type: "fillText", text, x, y }); },
+    setLineDash(pattern) { calls.push({ type: "setLineDash", pattern }); },
+    set fillStyle(value) { this._fillStyle = value; },
+    get fillStyle() { return this._fillStyle; },
+    set strokeStyle(value) { this._strokeStyle = value; },
+    get strokeStyle() { return this._strokeStyle; },
+    set lineWidth(value) { this._lineWidth = value; },
+    get lineWidth() { return this._lineWidth; },
+    set font(value) { this._font = value; },
+    get font() { return this._font; },
+  };
+  glowLayer.renderGlowAreas(ctx, {
+    ...baseDoc,
+    glowAreas: [{ id: "preview-glow", x: 24, y: 48, width: 96, height: 72, density: 0.45, sizeVariation: 0.4, strength: 0.7, enabled: true, visible: true }],
+  }, { offsetX: 10, offsetY: 20, zoom: 2 }, { selectedGlowAreaId: "preview-glow" });
+  assert.ok(calls.some((call) => call.type === "arc"), "Glow Area preview render contract draws glow points");
+  assert.deepEqual(
+    calls.find((call) => call.type === "roundRect"),
+    { type: "roundRect", x: 58, y: 116, width: 192, height: 144, radius: 12 },
+    "Glow Area preview render contract maps authored world bounds through viewport offset and zoom",
+  );
+  assert.ok(calls.some((call) => call.type === "fillText" && call.text === "Glow Area"), "Glow Area preview render contract labels the editor area");
+}
+
+{
   const glowLayerSource = fs.readFileSync(editorGlowLayerPath, "utf8");
   const runtimeGlowSource = fs.readFileSync(runtimeGlowPath, "utf8");
+  const viewportSource = fs.readFileSync(viewportPath, "utf8");
   const worldAreasSource = fs.readFileSync(worldAreasPath, "utf8");
   const rendererSource = fs.readFileSync(rendererPath, "utf8");
   const brushSource = fs.readFileSync(brushPanelPath, "utf8");
@@ -167,6 +222,8 @@ const baseDoc = {
   assert.match(appSource, /deleteSelectedGlowArea/, "Editor app can delete authored Glow Areas");
   assert.match(rendererSource, /renderBackground\(worldCtx, doc, state\.viewport\);\n  renderGlowAreas/, "editor preview renders Glow Areas in front of background");
   assert.match(glowLayerSource, /generateGlowAreaLayout/, "editor preview uses deterministic generated glow anchors");
+  assert.doesNotMatch(glowLayerSource, /import\s*\{[^}]*worldToCanvas[^}]*\}\s*from\s*["']\.\.\/viewport\.js["']/, "Glow Area layer must not import missing viewport exports");
+  assert.doesNotMatch(viewportSource, /export function worldToCanvas\b/, "viewport.js still lacks a worldToCanvas export, preserving the regression fixture");
   assert.match(runtimeGlowSource, /Math\.sin/, "runtime glow uses cheap sinusoidal drift");
   assert.match(runtimeGlowSource, /timeSeconds/, "runtime glow animation consumes runtime time input");
   assert.doesNotMatch(runtimeGlowSource, /Math\.random/, "runtime glow rendering must not use Math.random");
