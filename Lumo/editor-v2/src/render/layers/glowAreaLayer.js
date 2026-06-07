@@ -1,5 +1,12 @@
 import { createGlowAreaFromDrag, generateGlowAreaLayout, getGlowAreaBounds, moveGlowArea, normalizeGlowAreaForEditor } from "../../domain/worldAreas.js";
-import { worldToCanvas } from "../viewport.js";
+
+function worldToCanvas(viewport, x, y) {
+  const zoom = viewport?.zoom || 1;
+  return {
+    x: (viewport?.offsetX || 0) + (x * zoom),
+    y: (viewport?.offsetY || 0) + (y * zoom),
+  };
+}
 
 function drawGlowPreviewPoint(ctx, viewport, point, alphaScale = 1) {
   const center = worldToCanvas(viewport, point.x, point.y);
