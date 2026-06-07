@@ -45934,7 +45934,8 @@
       "density": 0.32,
       "sizeVariation": 0.38,
       "strength": 0.42,
-      "motionMode": "ambient",
+      "direction": "random",
+      "speed": 0.35,
       "enabled": true,
       "visible": true
     },
@@ -45947,7 +45948,8 @@
       "density": 0.32,
       "sizeVariation": 0.38,
       "strength": 0.42,
-      "motionMode": "updraft",
+      "direction": "up",
+      "speed": 1,
       "enabled": true,
       "visible": true
     }
