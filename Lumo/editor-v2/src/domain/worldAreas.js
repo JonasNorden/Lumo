@@ -524,9 +524,12 @@ export function getGlowAreaPointCount(area = {}, index = 0) {
 const glowAreaLayoutCache = new Map();
 const EMPTY_GLOW_LAYOUT = Object.freeze([]);
 const GLOW_PALETTE = Object.freeze([
-  Object.freeze({ name: "warm_gold", red: 232, green: 188, blue: 116 }),
-  Object.freeze({ name: "pale_cyan", red: 152, green: 216, blue: 224 }),
-  Object.freeze({ name: "crystal_blue", red: 111, green: 164, blue: 224 }),
+  Object.freeze({ name: "ember_orange", red: 255, green: 151, blue: 54 }),
+  Object.freeze({ name: "warm_gold", red: 255, green: 203, blue: 103 }),
+  Object.freeze({ name: "deep_ember", red: 229, green: 91, blue: 34 }),
+  Object.freeze({ name: "pale_gold", red: 255, green: 226, blue: 151 }),
+  Object.freeze({ name: "ember_orange", red: 255, green: 151, blue: 54 }),
+  Object.freeze({ name: "warm_gold", red: 255, green: 203, blue: 103 }),
 ]);
 
 function getGlowAreaLayoutCacheKey(area = {}, index = 0) {
@@ -558,24 +561,33 @@ export function generateGlowAreaLayout(area = {}, index = 0) {
   for (let pointIndex = 0; pointIndex < targetCount; pointIndex += 1) {
     const sizeVariation = normalized.sizeVariation;
     const palette = GLOW_PALETTE[Math.floor(random() * GLOW_PALETTE.length)] || GLOW_PALETTE[0];
-    const tint = 0.86 + random() * 0.14;
-    const radius = 0.48 + random() * (0.42 + sizeVariation * 1.05);
-    const baseAlpha = (0.035 + random() * 0.045) * (0.45 + normalized.strength * 0.75);
-    const alphaMax = baseAlpha + (0.026 + random() * 0.052) * normalized.strength;
+    const tint = 0.92 + random() * 0.12;
+    const radius = 0.85 + random() * (0.55 + sizeVariation * 1.15);
+    const strengthAlpha = 0.42 + normalized.strength * 0.95;
+    const baseAlpha = (0.105 + random() * 0.07) * strengthAlpha;
+    const alphaMax = baseAlpha + (0.095 + random() * 0.09) * normalized.strength;
+    const red = Math.max(180, Math.min(255, Math.round(palette.red * tint)));
+    const green = Math.max(82, Math.min(236, Math.round(palette.green * tint)));
+    const blue = Math.max(26, Math.min(168, Math.round(palette.blue * tint)));
     points.push(Object.freeze({
       id: `${normalized.id}-glow-${pointIndex + 1}`,
       x: roundTo(normalized.x + random() * normalized.width, 100),
       y: roundTo(normalized.y + random() * normalized.height, 100),
       radius: roundTo(radius, 100),
-      driftX: roundTo((0.35 + random() * 1.75) * (0.45 + sizeVariation * 0.55), 100),
-      driftY: roundTo((0.28 + random() * 1.45) * (0.45 + sizeVariation * 0.55), 100),
-      speed: roundTo(0.012 + random() * 0.032, 1000),
+      auraRadius: roundTo(radius * (2.8 + random() * 0.95), 100),
+      coreRadius: roundTo(Math.max(0.42, radius * (0.42 + random() * 0.16)), 100),
+      driftX: roundTo((0.42 + random() * 1.85) * (0.45 + sizeVariation * 0.55), 100),
+      driftY: roundTo((0.7 + random() * 1.9) * (0.5 + sizeVariation * 0.6), 100),
+      rise: roundTo(0.12 + random() * 0.42, 100),
+      speed: roundTo(0.018 + random() * 0.036, 1000),
       phase: roundTo(random() * Math.PI * 2, 1000),
-      alphaSpeed: roundTo(0.018 + random() * 0.042, 1000),
+      alphaSpeed: roundTo(0.022 + random() * 0.044, 1000),
       alphaPhase: roundTo(random() * Math.PI * 2, 1000),
-      alphaMin: roundTo(Math.max(0.012, baseAlpha), 1000),
-      alphaMax: roundTo(Math.min(0.18, Math.max(baseAlpha + 0.012, alphaMax)), 1000),
-      color: `rgba(${Math.round(palette.red * tint)}, ${Math.round(palette.green * tint)}, ${Math.round(palette.blue * tint)}, 1)`,
+      alphaMin: roundTo(Math.max(0.045, baseAlpha), 1000),
+      alphaMax: roundTo(Math.min(0.38, Math.max(baseAlpha + 0.055, alphaMax)), 1000),
+      color: `rgba(${red}, ${green}, ${blue}, 1)`,
+      auraColor: `rgba(${red}, ${green}, ${blue}, 1)`,
+      coreColor: `rgba(255, ${Math.min(245, green + 30)}, ${Math.min(190, blue + 64)}, 1)`,
       palette: palette.name,
     }));
   }
