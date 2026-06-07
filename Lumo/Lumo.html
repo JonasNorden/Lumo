@@ -5089,6 +5089,7 @@
     const RECHARGED_WATER_DROP_IMPACT_POOL_LIMIT = 144;
     const RECHARGED_WATER_DROP_IMPACT_MIN_LIFETIME = 0.8;
     const RECHARGED_WATER_DROP_IMPACT_MAX_LIFETIME = 1.15;
+    const RECHARGED_WATER_DROP_IMPACT_VISUAL_Y_OFFSET_PX = 4;
 
     function getRechargedWaterDropImpactRadiusBase(drop, area) {
       const radius = Math.max(1, Number.isFinite(drop?.radius) ? drop.radius : 2);
@@ -5270,7 +5271,8 @@
       }
       for (const event of getRechargedWaterDropImpactEvents(impactPool, timeSeconds)) {
         const ring = mapper.worldToCanvasRect(event.x, event.y, 1, 1);
-        if (drawRechargedWaterDropImpactVisual(ctx, ring.x, ring.y, { ...event, drawTimeSeconds: timeSeconds })) drew = true;
+        const ringDrawY = ring.y + RECHARGED_WATER_DROP_IMPACT_VISUAL_Y_OFFSET_PX;
+        if (drawRechargedWaterDropImpactVisual(ctx, ring.x, ringDrawY, { ...event, drawTimeSeconds: timeSeconds })) drew = true;
       }
       return drew;
     }
@@ -8618,8 +8620,12 @@
         ctx.save();
         ctx.globalAlpha = alpha;
         drawRechargedMirrorSubjectWithLocalShimmer(ctx, clipRect, distortion, surfaceX, candidate.x, shimmerTime, () => {
-          if (candidate.kind === "impact") drawRechargedWaterDropImpactVisual(ctx, rect.x, reflectedY, { ...candidate.event, drawTimeSeconds: options.timeSeconds }, 0.78);
-          else drawRechargedWaterDropVisual(ctx, rect.x, reflectedY, candidate.drop, 0.82);
+          if (candidate.kind === "impact") {
+            const reflectedRingDrawY = reflectedY - RECHARGED_WATER_DROP_IMPACT_VISUAL_Y_OFFSET_PX;
+            drawRechargedWaterDropImpactVisual(ctx, rect.x, reflectedRingDrawY, { ...candidate.event, drawTimeSeconds: options.timeSeconds }, 0.78);
+          } else {
+            drawRechargedWaterDropVisual(ctx, rect.x, reflectedY, candidate.drop, 0.82);
+          }
         });
         ctx.restore();
         drewAny = true;
