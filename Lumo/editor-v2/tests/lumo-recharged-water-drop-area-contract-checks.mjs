@@ -19,7 +19,7 @@ import { buildRuntimeWorldSkeleton } from "../src/runtime/buildRuntimeWorldSkele
 import { buildRuntimeWorldPacket } from "../src/runtime/buildRuntimeWorldPacket.js";
 import { createLumoRechargedBootAdapter } from "../src/runtime/createLumoRechargedBootAdapter.js";
 import { getSelectionEditorPanelContent } from "../src/ui/selectionEditorPanel.js";
-import { getRuntimeWaterDropY, renderRuntimeWaterDropAreas } from "../src/runtime/renderRuntimeWaterDropAreas.js";
+import { createRuntimeWaterDropImpactPool, getActiveRuntimeWaterDropImpactEvents, getRuntimeWaterDropY, renderRuntimeWaterDropAreas, updateRuntimeWaterDropImpactPool } from "../src/runtime/renderRuntimeWaterDropAreas.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, "..");
@@ -101,6 +101,26 @@ const baseDoc = {
 }
 
 {
+  const area = { id: "impact", x: 12, y: 0, mode: "spot", density: 25, speed: 100, size: 35, height: 24, enabled: true, visible: true };
+  const drop = generateWaterDropAreaLayout(area, 0)[0];
+  const collisionRects = [{ x: drop.sourceX - 4, y: 28, width: 12, height: 12 }];
+  const collisionY = resolveWaterDropCollisionY(drop, collisionRects);
+  const cycleSeconds = Math.max(0.32, Math.max(1, collisionY - drop.sourceY) / drop.fallSpeed);
+  const pool = createRuntimeWaterDropImpactPool(2);
+  updateRuntimeWaterDropImpactPool(pool, [area], 0, { collisionRects });
+  assert.equal(getActiveRuntimeWaterDropImpactEvents(pool, 0).length, 0, "impact pool starts without fake impacts");
+  updateRuntimeWaterDropImpactPool(pool, [area], cycleSeconds * 1.05, { collisionRects });
+  const impacts = getActiveRuntimeWaterDropImpactEvents(pool, cycleSeconds * 1.05);
+  assert.equal(impacts.length, 1, "drop cycle wrap creates one impact event");
+  assert.equal(impacts[0].y, collisionY, "impact event uses existing Water Drop Area collision truth");
+  assert.ok(impacts[0].lifetime >= 0.3 && impacts[0].lifetime <= 0.8, "impact lifetime stays short");
+  updateRuntimeWaterDropImpactPool(pool, [area], cycleSeconds * 2.1, { collisionRects });
+  updateRuntimeWaterDropImpactPool(pool, [area], cycleSeconds * 3.15, { collisionRects });
+  assert.ok(pool.events.length <= 2, "impact pool reuses bounded event slots with no accumulation");
+  assert.equal(getActiveRuntimeWaterDropImpactEvents(pool, cycleSeconds * 3.15 + 1).length, 0, "expired impact rings disappear");
+}
+
+{
   const authored = validateLevelDocument({ ...baseDoc, waterDropAreas: [{ id: "water", x: 24, y: 24, mode: "line", length: 120, height: 144, density: 45, speed: 55, size: 35, enabled: true, visible: true }] });
   assert.equal(authored.waterDropAreas.length, 1, "Water Drop Area saves in editor document");
   assert.equal(JSON.parse(serializeLevelDocument(authored)).waterDropAreas.length, 1, "Water Drop Area exports at canonical top-level waterDropAreas path");
@@ -129,9 +149,10 @@ const baseDoc = {
   assert.match(sources, /waterDropAreas/, "canonical waterDropAreas path is wired through editor/export/runtime/Lumo.html");
   assert.match(sources, /drawRechargedWaterDropAreas/, "Lumo.html runtime draws Water Drop Areas");
   assert.match(sources, /drawRechargedMirrorSurfaceAreas[\s\S]*waterDropAreas|waterDropAreas[\s\S]*drawRechargedMirrorSurfaceAreas/, "Mirror Surface path receives Water Drop Areas for reflection compatibility");
+  assert.match(sources, /impactPool|WaterDropImpact/, "runtime uses a bounded Water Drop impact event pool for subtle landing rings");
   const waterDomainSlice = fs.readFileSync(worldAreasPath, "utf8").slice(fs.readFileSync(worldAreasPath, "utf8").indexOf("export function normalizeWaterDropAreaMode"), fs.readFileSync(worldAreasPath, "utf8").indexOf("export function normalizeGlowAreaForEditor"));
   assert.doesNotMatch(waterDomainSlice + fs.readFileSync(runtimeWaterPath, "utf8") + fs.readFileSync(waterLayerPath, "utf8"), /Math\.random/, "Water Drop Area implementation must not use Math.random");
-  assert.doesNotMatch(fs.readFileSync(runtimeWaterPath, "utf8"), /fluid|pool|splash|weather|rain|snow|storm|wind|shadowBlur|drawImage|getImageData|putImageData/i, "runtime Water Drop Area must stay cheap and avoid fluid/weather systems");
+  assert.doesNotMatch(fs.readFileSync(runtimeWaterPath, "utf8"), /fluid|splash|weather|rain|snow|storm|wind|shadowBlur|drawImage|getImageData|putImageData/i, "runtime Water Drop Area must stay cheap and avoid fluid/weather systems");
 }
 
-console.log("Water Drop Area V1 contract checks passed");
+console.log("Water Drop Area impact-ring contract checks passed");
