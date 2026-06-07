@@ -3,6 +3,7 @@ const MIRROR_AREA_MIN_SIZE = 1;
 const STONE_AREA_MIN_SIZE = 1;
 const DUST_AREA_MIN_SIZE = 1;
 const GLOW_AREA_MIN_SIZE = 1;
+const SMOKE_AREA_MIN_SIZE = 1;
 export const MIRROR_SURFACE_DEFAULTS = Object.freeze({
   reflectionHeight: 72,
   reflectionStrength: 0.35,
@@ -26,12 +27,21 @@ export const DUST_AREA_DEFAULTS = Object.freeze({
 });
 
 export const GLOW_AREA_DIRECTIONS = Object.freeze(["random", "up", "down", "left", "right"]);
+export const SMOKE_AREA_DIRECTIONS = Object.freeze(["random", "up", "down", "left", "right"]);
 export const GLOW_AREA_DEFAULTS = Object.freeze({
   density: 0.32,
   sizeVariation: 0.38,
   strength: 0.42,
   direction: "random",
   speed: 0.35,
+});
+
+export const SMOKE_AREA_DEFAULTS = Object.freeze({
+  density: 0.42,
+  size: 0.58,
+  strength: 0.46,
+  direction: "up",
+  speed: 0.28,
 });
 
 function clamp01(value, fallback) {
@@ -53,6 +63,11 @@ function toFiniteNumber(value, fallback = 0) {
 function toPositiveNumber(value, fallback = DEFAULT_TILE_SIZE) {
   const number = Number(value);
   return Number.isFinite(number) && number > 0 ? number : fallback;
+}
+
+export function normalizeSmokeAreaDirection(value) {
+  if (value === "up" || value === "down" || value === "left" || value === "right" || value === "random") return value;
+  return SMOKE_AREA_DEFAULTS.direction;
 }
 
 export function normalizeGlowAreaDirection(value, legacyMotionMode = null) {
@@ -245,6 +260,85 @@ export function updateDustAreaField(area, field, value) {
   if (field === "x" || field === "y") return { ...normalized, [field]: Math.max(0, toFiniteNumber(value, normalized[field])) };
   if (field === "width" || field === "height") return resizeDustArea(normalized, field === "width" ? value : normalized.width, field === "height" ? value : normalized.height);
   if (field === "density" || field === "sizeVariation" || field === "driftStrength") return { ...normalized, [field]: clamp01(value, normalized[field]) };
+  return normalized;
+}
+
+
+export function normalizeSmokeAreaForEditor(area = {}, index = 0) {
+  return {
+    id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `smoke_area_${index + 1}`,
+    x: toFiniteNumber(area?.x, 0),
+    y: toFiniteNumber(area?.y, 0),
+    width: Math.max(SMOKE_AREA_MIN_SIZE, toPositiveNumber(area?.width, DEFAULT_TILE_SIZE)),
+    height: Math.max(SMOKE_AREA_MIN_SIZE, toPositiveNumber(area?.height, DEFAULT_TILE_SIZE)),
+    density: clamp01(area?.density, SMOKE_AREA_DEFAULTS.density),
+    size: clamp01(area?.size, SMOKE_AREA_DEFAULTS.size),
+    strength: clamp01(area?.strength, SMOKE_AREA_DEFAULTS.strength),
+    direction: normalizeSmokeAreaDirection(area?.direction),
+    speed: clamp01(area?.speed, SMOKE_AREA_DEFAULTS.speed),
+    enabled: area?.enabled !== false,
+    visible: area?.visible !== false,
+  };
+}
+
+export function createSmokeAreaFromDrag(doc, startCell, endCell) {
+  if (!doc || !startCell || !endCell) return null;
+  const tileSize = toPositiveNumber(doc?.dimensions?.tileSize, DEFAULT_TILE_SIZE);
+  const minCellX = Math.max(0, Math.min(startCell.x, endCell.x));
+  const maxCellX = Math.max(0, Math.max(startCell.x, endCell.x));
+  const minCellY = Math.max(0, Math.min(startCell.y, endCell.y));
+  const maxCellY = Math.max(0, Math.max(startCell.y, endCell.y));
+  const width = Math.max(tileSize, (maxCellX - minCellX + 1) * tileSize);
+  const height = Math.max(tileSize, (maxCellY - minCellY + 1) * tileSize);
+  return {
+    id: getNextAreaId(doc.smokeAreas || [], "smoke_area"),
+    x: minCellX * tileSize,
+    y: minCellY * tileSize,
+    width,
+    height,
+    ...SMOKE_AREA_DEFAULTS,
+    enabled: true,
+    visible: true,
+  };
+}
+
+export function getSmokeAreaBounds(area, index = 0) {
+  const normalized = normalizeSmokeAreaForEditor(area, index);
+  return {
+    x: normalized.x,
+    y: normalized.y,
+    width: normalized.width,
+    height: normalized.height,
+    right: normalized.x + normalized.width,
+    bottom: normalized.y + normalized.height,
+  };
+}
+
+export function moveSmokeArea(area, deltaX = 0, deltaY = 0) {
+  const normalized = normalizeSmokeAreaForEditor(area);
+  return {
+    ...normalized,
+    x: Math.max(0, normalized.x + toFiniteNumber(deltaX, 0)),
+    y: Math.max(0, normalized.y + toFiniteNumber(deltaY, 0)),
+  };
+}
+
+export function resizeSmokeArea(area, width, height) {
+  const normalized = normalizeSmokeAreaForEditor(area);
+  return {
+    ...normalized,
+    width: Math.max(SMOKE_AREA_MIN_SIZE, toPositiveNumber(width, normalized.width)),
+    height: Math.max(SMOKE_AREA_MIN_SIZE, toPositiveNumber(height, normalized.height)),
+  };
+}
+
+export function updateSmokeAreaField(area, field, value) {
+  const normalized = normalizeSmokeAreaForEditor(area);
+  if (field === "enabled" || field === "visible") return { ...normalized, [field]: Boolean(value) };
+  if (field === "x" || field === "y") return { ...normalized, [field]: Math.max(0, toFiniteNumber(value, normalized[field])) };
+  if (field === "width" || field === "height") return resizeSmokeArea(normalized, field === "width" ? value : normalized.width, field === "height" ? value : normalized.height);
+  if (field === "density" || field === "size" || field === "strength" || field === "speed") return { ...normalized, [field]: clamp01(value, normalized[field]) };
+  if (field === "direction") return { ...normalized, direction: normalizeSmokeAreaDirection(value) };
   return normalized;
 }
 
@@ -519,6 +613,90 @@ export function generateDustAreaLayout(area = {}, index = 0) {
   const frozenParticles = Object.freeze(particles);
   dustAreaLayoutCache.set(cacheKey, frozenParticles);
   return frozenParticles;
+}
+
+
+export function getSmokeAreaSeed(area = {}, index = 0) {
+  if (Number.isInteger(area?.seed)) return area.seed >>> 0;
+  const normalized = normalizeSmokeAreaForEditor(area, index);
+  return hashStringToUint32(`${normalized.id}|${Math.round(normalized.x)}|${Math.round(normalized.y)}|${Math.round(normalized.width)}|${Math.round(normalized.height)}`);
+}
+
+export function getSmokeAreaPuffCount(area = {}, index = 0) {
+  const normalized = normalizeSmokeAreaForEditor(area, index);
+  if (!normalized.enabled || !normalized.visible || normalized.density <= 0 || normalized.strength <= 0 || normalized.width <= 0 || normalized.height <= 0) return 0;
+  const areaTiles = (normalized.width * normalized.height) / (DEFAULT_TILE_SIZE * DEFAULT_TILE_SIZE);
+  return Math.max(0, Math.round(areaTiles * normalized.density * 0.72));
+}
+
+const smokeAreaLayoutCache = new Map();
+const EMPTY_SMOKE_LAYOUT = Object.freeze([]);
+
+function getSmokeAreaLayoutCacheKey(area = {}, index = 0) {
+  const normalized = normalizeSmokeAreaForEditor(area, index);
+  return [
+    normalized.id,
+    roundTo(normalized.x, 100),
+    roundTo(normalized.y, 100),
+    roundTo(normalized.width, 100),
+    roundTo(normalized.height, 100),
+    roundTo(normalized.density, 1000),
+    roundTo(normalized.size, 1000),
+    roundTo(normalized.strength, 1000),
+    normalized.direction,
+    roundTo(normalized.speed, 1000),
+    normalized.enabled ? 1 : 0,
+    normalized.visible ? 1 : 0,
+    Number.isInteger(area?.seed) ? area.seed >>> 0 : "auto",
+  ].join("|");
+}
+
+export function generateSmokeAreaLayout(area = {}, index = 0) {
+  const normalized = normalizeSmokeAreaForEditor(area, index);
+  const targetCount = getSmokeAreaPuffCount(normalized, index);
+  if (targetCount <= 0) return EMPTY_SMOKE_LAYOUT;
+  const cacheKey = getSmokeAreaLayoutCacheKey(normalized, index);
+  if (smokeAreaLayoutCache.has(cacheKey)) return smokeAreaLayoutCache.get(cacheKey);
+
+  const random = mulberry32(getSmokeAreaSeed(normalized, index));
+  const puffs = [];
+  const minSpan = Math.max(1, Math.min(normalized.width, normalized.height));
+  const sizeBase = 8 + normalized.size * 28;
+  for (let puffIndex = 0; puffIndex < targetCount; puffIndex += 1) {
+    const radius = Math.min(minSpan * 0.78, sizeBase * (0.72 + random() * 0.86));
+    const warmth = random();
+    const red = Math.round(150 + warmth * 12);
+    const green = Math.round(153 + warmth * 10);
+    const blue = Math.round(158 + random() * 16);
+    const baseAlpha = (0.028 + random() * 0.035) * (0.42 + normalized.strength * 0.8);
+    puffs.push(Object.freeze({
+      id: `${normalized.id}-smoke-${puffIndex + 1}`,
+      x: roundTo(normalized.x + random() * normalized.width, 100),
+      y: roundTo(normalized.y + random() * normalized.height, 100),
+      radius: roundTo(radius, 100),
+      innerRadius: roundTo(radius * (0.46 + random() * 0.14), 100),
+      driftX: roundTo((2.2 + random() * 7.8) * (0.35 + normalized.size * 0.65), 100),
+      driftY: roundTo((2.4 + random() * 8.6) * (0.35 + normalized.size * 0.65), 100),
+      travelSpeed: roundTo(0.0015 + normalized.speed * (0.0065 + random() * 0.010), 10000),
+      speed: roundTo(0.006 + normalized.speed * (0.012 + random() * 0.018), 1000),
+      phase: roundTo(random() * Math.PI * 2, 1000),
+      alphaSpeed: roundTo(0.018 + random() * 0.032, 1000),
+      alphaPhase: roundTo(random() * Math.PI * 2, 1000),
+      alphaMin: roundTo(Math.max(0.012, baseAlpha * 0.72), 1000),
+      alphaMax: roundTo(Math.min(0.16, baseAlpha + normalized.strength * (0.045 + random() * 0.028)), 1000),
+      areaX: roundTo(normalized.x, 100),
+      areaY: roundTo(normalized.y, 100),
+      areaWidth: roundTo(normalized.width, 100),
+      areaHeight: roundTo(normalized.height, 100),
+      direction: normalized.direction,
+      authoredSpeed: roundTo(normalized.speed, 1000),
+      color: `rgba(${red}, ${green}, ${blue}, 1)`,
+      edgeColor: `rgba(${Math.max(120, red - 18)}, ${Math.max(122, green - 16)}, ${Math.min(178, blue + 8)}, 1)`,
+    }));
+  }
+  const frozenPuffs = Object.freeze(puffs);
+  smokeAreaLayoutCache.set(cacheKey, frozenPuffs);
+  return frozenPuffs;
 }
 
 

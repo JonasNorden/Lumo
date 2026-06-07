@@ -3,7 +3,7 @@ import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 import { findEntityPresetById } from "../domain/entities/entityPresets.js";
 import { getTileAssetByTileValue } from "../domain/tiles/tileSpriteCatalog.js";
-import { normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
+import { normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeSmokeAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
 
 const SUPPORTED_RUNTIME_ENTITY_IDS = new Set([
   "start_01",
@@ -301,6 +301,18 @@ function normalizeRuntimeDustAreas(levelDocument) {
     .filter(Boolean);
 }
 
+function normalizeRuntimeSmokeAreas(levelDocument) {
+  const areas = Array.isArray(levelDocument?.smokeAreas) ? levelDocument.smokeAreas : [];
+  return areas
+    .map((area, index) => {
+      const normalized = normalizeSmokeAreaForEditor(area, index);
+      if (!Number.isFinite(normalized.x) || !Number.isFinite(normalized.y) || normalized.width <= 0 || normalized.height <= 0) return null;
+      return normalized;
+    })
+    .filter(Boolean);
+}
+
+
 function normalizeRuntimeGlowAreas(levelDocument) {
   const areas = Array.isArray(levelDocument?.glowAreas) ? levelDocument.glowAreas : [];
   return areas
@@ -567,6 +579,7 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
     stoneAreas: normalizeRuntimeStoneAreas(levelDocument),
     dustAreas: normalizeRuntimeDustAreas(levelDocument),
     glowAreas: normalizeRuntimeGlowAreas(levelDocument),
+    smokeAreas: normalizeRuntimeSmokeAreas(levelDocument),
     editor: {
       bg: runtimeBackgroundBase.slice(0),
       bgVisualOverrides: { ...runtimeBackgroundVisualOverrides },

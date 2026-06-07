@@ -6,6 +6,7 @@ import { buildRuntimeCameraState } from "./buildRuntimeCameraState.js";
 import { renderRuntimeHudModel } from "./renderRuntimeHudModel.js";
 import { renderRuntimeDustAreas } from "./renderRuntimeDustAreas.js";
 import { renderRuntimeGlowAreas } from "./renderRuntimeGlowAreas.js";
+import { renderRuntimeSmokeAreas } from "./renderRuntimeSmokeAreas.js";
 
 const PLAYER_RENDER_COLORS = Object.freeze({
   body: "#60a5fa",
@@ -178,6 +179,7 @@ export function drawRuntimeBridgeView(canvas, viewModel, options = {}) {
 
   drawBackgroundLayers(ctx, viewportWidthPx, viewportHeightPx, scale, cameraState, background, worldWidthPx);
   renderRuntimeGlowAreas(ctx, Array.isArray(viewModel?.glowAreas) ? viewModel.glowAreas : [], cameraState, (Number(viewModel?.overlay?.runtimeTick) || 0) / 60);
+  renderRuntimeSmokeAreas(ctx, Array.isArray(viewModel?.smokeAreas) ? viewModel.smokeAreas : [], cameraState, (Number(viewModel?.overlay?.runtimeTick) || 0) / 60);
   renderRuntimeDustAreas(ctx, Array.isArray(viewModel?.dustAreas) ? viewModel.dustAreas : [], cameraState, (Number(viewModel?.overlay?.runtimeTick) || 0) / 60);
 
   ctx.strokeStyle = "#60a5fa";
