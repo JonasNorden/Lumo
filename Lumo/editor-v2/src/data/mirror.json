@@ -34207,21 +34207,6 @@
       "fade": 0.65,
       "enabled": true,
       "visible": true
-    },
-    {
-      "id": "mirror_surface-4",
-      "x": 1440,
-      "y": 432,
-      "width": 1800,
-      "height": 24,
-      "yOffset": 5,
-      "reflectionHeight": 20,
-      "reflectionStrength": 0.35,
-      "distortion": 0.12,
-      "surfaceStrength": 0.25,
-      "fade": 0.65,
-      "enabled": true,
-      "visible": true
     }
   ],
   "extra": {},
@@ -45379,6 +45364,20 @@
       "sizeVariation": 0.66,
       "rotationVariation": 0.3,
       "clusterStrength": 0.2,
+      "enabled": true,
+      "visible": true
+    }
+  ],
+  "dustAreas": [
+    {
+      "id": "dust_area-1",
+      "x": 24,
+      "y": 72,
+      "width": 3432,
+      "height": 360,
+      "density": 0.35,
+      "sizeVariation": 0.1,
+      "driftStrength": 0.35,
       "enabled": true,
       "visible": true
     }
