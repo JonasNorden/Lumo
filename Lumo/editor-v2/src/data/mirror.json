@@ -45381,5 +45381,19 @@
       "enabled": true,
       "visible": true
     }
+  ],
+  "glowAreas": [
+    {
+      "id": "glow_area-1",
+      "x": 2232,
+      "y": 192,
+      "width": 360,
+      "height": 240,
+      "density": 0.32,
+      "sizeVariation": 0.38,
+      "strength": 0.42,
+      "enabled": true,
+      "visible": true
+    }
   ]
 }
