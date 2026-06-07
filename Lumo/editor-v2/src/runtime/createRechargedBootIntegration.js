@@ -156,6 +156,28 @@ function normalizeDustAreas(sourceAreas) {
     : [];
 }
 
+function normalizeSmokeAreas(sourceAreas) {
+  return Array.isArray(sourceAreas)
+    ? sourceAreas
+      .map((area, index) => ({
+        id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `smoke_area_${index + 1}`,
+        x: Number.isFinite(area?.x) ? area.x : null,
+        y: Number.isFinite(area?.y) ? area.y : null,
+        width: Number.isFinite(area?.width) && area.width > 0 ? area.width : null,
+        height: Number.isFinite(area?.height) && area.height > 0 ? area.height : null,
+        density: Number.isFinite(area?.density) ? Math.max(0, Math.min(1, Number(area.density))) : 0.42,
+        size: Number.isFinite(area?.size) ? Math.max(0, Math.min(1, Number(area.size))) : 0.58,
+        strength: Number.isFinite(area?.strength) ? Math.max(0, Math.min(1, Number(area.strength))) : 0.46,
+        direction: area?.direction === "up" || area?.direction === "down" || area?.direction === "left" || area?.direction === "right" || area?.direction === "random" ? area.direction : "up",
+        speed: Number.isFinite(area?.speed) ? Math.max(0, Math.min(1, Number(area.speed))) : 0.28,
+        enabled: area?.enabled !== false,
+        visible: area?.visible !== false,
+      }))
+      .filter((area) => area.x !== null && area.y !== null && area.width !== null && area.height !== null)
+    : [];
+}
+
+
 function normalizeGlowAreas(sourceAreas) {
   return Array.isArray(sourceAreas)
     ? sourceAreas
@@ -285,6 +307,7 @@ function buildWorldSnapshot(snapshot) {
   const stoneAreas = normalizeStoneAreas(source.stoneAreas);
   const dustAreas = normalizeDustAreas(source.dustAreas);
   const glowAreas = normalizeGlowAreas(source.glowAreas);
+  const smokeAreas = normalizeSmokeAreas(source.smokeAreas);
 
   return {
     worldId: typeof source.worldId === "string" ? source.worldId : "",
@@ -301,6 +324,7 @@ function buildWorldSnapshot(snapshot) {
     stoneAreas,
     dustAreas,
     glowAreas,
+    smokeAreas,
   };
 }
 
@@ -456,6 +480,7 @@ export function createRechargedBootIntegration(options = {}) {
         stoneAreas: world.stoneAreas,
         dustAreas: world.dustAreas,
         glowAreas: world.glowAreas,
+        smokeAreas: world.smokeAreas,
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,
@@ -724,6 +749,7 @@ export function createRechargedBootIntegration(options = {}) {
         stoneAreas: world.stoneAreas,
         dustAreas: world.dustAreas,
         glowAreas: world.glowAreas,
+        smokeAreas: world.smokeAreas,
         playerStatus: player.locomotion,
         playerX: player.x,
         playerY: player.y,

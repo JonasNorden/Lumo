@@ -71,6 +71,10 @@ function cloneGlowAreaSnapshot(area) {
   return area && typeof area === "object" ? { ...area } : null;
 }
 
+function cloneSmokeAreaSnapshot(area) {
+  return area && typeof area === "object" ? { ...area } : null;
+}
+
 export function createReactiveGrassEditEntry(mode, payload = {}) {
   const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
   const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
@@ -162,6 +166,20 @@ export function createDustAreaEditEntry(mode, payload = {}) {
   };
 }
 
+export function createSmokeAreaEditEntry(mode, payload = {}) {
+  const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
+  const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
+  const index = Number.isInteger(payload.index) ? payload.index : null;
+  return {
+    kind: "smoke-area",
+    mode: normalizedMode,
+    objectId,
+    index,
+    previousSnapshot: cloneSmokeAreaSnapshot(payload.previousSnapshot),
+    nextSnapshot: cloneSmokeAreaSnapshot(payload.nextSnapshot),
+  };
+}
+
 export function createGlowAreaEditEntry(mode, payload = {}) {
   const normalizedMode = mode === "create" || mode === "delete" || mode === "update" ? mode : "update";
   const objectId = typeof payload.objectId === "string" && payload.objectId.trim() ? payload.objectId.trim() : null;
@@ -223,6 +241,7 @@ function getHistoryEntryDomain(entry) {
   if (entry?.kind === "reactive-crystal") return "reactive-crystal";
   if (entry?.kind === "mirror-surface-area") return "mirror-surface-area";
   if (entry?.kind === "stone-area") return "stone-area";
+  if (entry?.kind === "smoke-area") return "smoke-area";
   if (entry?.kind === "background") return "background";
   if (entry?.kind === "background-sized") return "background";
   return "tile";
@@ -346,6 +365,9 @@ function applyUndoEntry(doc, entry) {
   if (entry.kind === "glow-area") {
     return applyArrayObjectUndo(doc, entry, "glowAreas", cloneGlowAreaSnapshot);
   }
+  if (entry.kind === "smoke-area") {
+    return applyArrayObjectUndo(doc, entry, "smokeAreas", cloneSmokeAreaSnapshot);
+  }
   if (entry.kind === "reactive-grass") {
     if (!Array.isArray(doc.reactiveGrassPatches)) doc.reactiveGrassPatches = [];
     const patches = doc.reactiveGrassPatches;
@@ -462,6 +484,9 @@ function applyRedoEntry(doc, entry) {
   }
   if (entry.kind === "glow-area") {
     return applyArrayObjectRedo(doc, entry, "glowAreas", cloneGlowAreaSnapshot);
+  }
+  if (entry.kind === "smoke-area") {
+    return applyArrayObjectRedo(doc, entry, "smokeAreas", cloneSmokeAreaSnapshot);
   }
   if (entry.kind === "reactive-grass") {
     if (!Array.isArray(doc.reactiveGrassPatches)) doc.reactiveGrassPatches = [];

@@ -4993,6 +4993,144 @@
       return hashRechargedStoneString(`${area.id}|${Math.round(area.x)}|${Math.round(area.y)}|${Math.round(area.width)}|${Math.round(area.height)}|${index}`);
     }
 
+    function normalizeRechargedSmokeDirection(direction) {
+      if (direction === "up" || direction === "down" || direction === "left" || direction === "right" || direction === "random") return direction;
+      return "up";
+    }
+
+    function readRechargedSmokeAreas(payload) {
+      const sourceAreas = Array.isArray(payload?.smokeAreas) ? payload.smokeAreas : [];
+      return sourceAreas
+        .map((area, index) => ({
+          id: typeof area?.id === "string" && area.id.trim() ? area.id.trim() : `smoke_area_${index + 1}`,
+          x: Number.isFinite(area?.x) ? area.x : null,
+          y: Number.isFinite(area?.y) ? area.y : null,
+          width: Number.isFinite(area?.width) && area.width > 0 ? area.width : null,
+          height: Number.isFinite(area?.height) && area.height > 0 ? area.height : null,
+          density: Number.isFinite(area?.density) ? Math.max(0, Math.min(1, Number(area.density))) : 0.42,
+          size: Number.isFinite(area?.size) ? Math.max(0, Math.min(1, Number(area.size))) : 0.58,
+          strength: Number.isFinite(area?.strength) ? Math.max(0, Math.min(1, Number(area.strength))) : 0.46,
+          direction: normalizeRechargedSmokeDirection(area?.direction),
+          speed: Number.isFinite(area?.speed) ? Math.max(0, Math.min(1, Number(area.speed))) : 0.28,
+          enabled: area?.enabled !== false,
+          visible: area?.visible !== false,
+        }))
+        .filter((area) => area.x !== null && area.y !== null && area.width !== null && area.height !== null && area.enabled && area.visible && area.density > 0 && area.strength > 0);
+    }
+
+    function getRechargedSmokeAreaSeed(area, index) {
+      if (Number.isInteger(area?.seed)) return area.seed >>> 0;
+      return hashRechargedStoneString(`${area.id}|${Math.round(area.x)}|${Math.round(area.y)}|${Math.round(area.width)}|${Math.round(area.height)}|${index}`);
+    }
+
+    const rechargedSmokeLayoutCache = new Map();
+
+    function buildRechargedSmokeLayout(area, index, tileSize = 24) {
+      const areaTiles = (area.width * area.height) / Math.max(1, tileSize * tileSize);
+      const targetCount = Math.max(0, Math.round(areaTiles * area.density * 0.72));
+      if (targetCount <= 0) return [];
+      const cacheKey = [area.id, Math.round(area.x * 100), Math.round(area.y * 100), Math.round(area.width * 100), Math.round(area.height * 100), Math.round(area.density * 1000), Math.round(area.size * 1000), Math.round(area.strength * 1000), area.direction, Math.round(area.speed * 1000)].join("|");
+      if (rechargedSmokeLayoutCache.has(cacheKey)) return rechargedSmokeLayoutCache.get(cacheKey);
+      const random = createRechargedStoneRandom(getRechargedSmokeAreaSeed(area, index));
+      const puffs = [];
+      const minSpan = Math.max(1, Math.min(area.width, area.height));
+      const sizeBase = 8 + area.size * 28;
+      for (let puffIndex = 0; puffIndex < targetCount; puffIndex += 1) {
+        const radius = Math.min(minSpan * 0.78, sizeBase * (0.72 + random() * 0.86));
+        const warmth = random();
+        const red = Math.round(150 + warmth * 12);
+        const green = Math.round(153 + warmth * 10);
+        const blue = Math.round(158 + random() * 16);
+        const baseAlpha = (0.028 + random() * 0.035) * (0.42 + area.strength * 0.8);
+        puffs.push({
+          x: area.x + random() * area.width,
+          y: area.y + random() * area.height,
+          radius,
+          innerRadius: radius * (0.46 + random() * 0.14),
+          driftX: (2.2 + random() * 7.8) * (0.35 + area.size * 0.65),
+          driftY: (2.4 + random() * 8.6) * (0.35 + area.size * 0.65),
+          travelSpeed: 0.0015 + area.speed * (0.0065 + random() * 0.010),
+          speed: 0.006 + area.speed * (0.012 + random() * 0.018),
+          phase: random() * Math.PI * 2,
+          alphaSpeed: 0.018 + random() * 0.032,
+          alphaPhase: random() * Math.PI * 2,
+          alphaMin: Math.max(0.012, baseAlpha * 0.72),
+          alphaMax: Math.min(0.16, baseAlpha + area.strength * (0.045 + random() * 0.028)),
+          areaX: area.x,
+          areaY: area.y,
+          areaWidth: area.width,
+          areaHeight: area.height,
+          direction: area.direction,
+          authoredSpeed: area.speed,
+          color: `rgba(${red}, ${green}, ${blue}, 1)`,
+          edgeColor: `rgba(${Math.max(120, red - 18)}, ${Math.max(122, green - 16)}, ${Math.min(178, blue + 8)}, 1)`,
+        });
+      }
+      rechargedSmokeLayoutCache.set(cacheKey, puffs);
+      return puffs;
+    }
+
+    function getRechargedSmokeTravelPhase(puff, timeSeconds) {
+      const phase = Number.isFinite(puff.phase) ? puff.phase : 0;
+      const basePhase = ((((phase % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2));
+      return ((basePhase + timeSeconds * (Number.isFinite(puff.travelSpeed) ? puff.travelSpeed : 0.006)) % 1 + 1) % 1;
+    }
+
+    function drawRechargedSmokeAreas(ctx, mapper, smokeAreas, options = {}) {
+      if (!ctx || !mapper || !Array.isArray(smokeAreas) || smokeAreas.length === 0) return false;
+      const tileSize = Number.isFinite(options.tileSize) && options.tileSize > 0 ? options.tileSize : 24;
+      const timeSeconds = Number.isFinite(options.timeSeconds) ? options.timeSeconds : 0;
+      let drew = false;
+      ctx.save();
+      ctx.globalCompositeOperation = "source-over";
+      for (let areaIndex = 0; areaIndex < smokeAreas.length; areaIndex += 1) {
+        for (const puff of buildRechargedSmokeLayout(smokeAreas[areaIndex], areaIndex, tileSize)) {
+          const phase = Number.isFinite(puff.phase) ? puff.phase : 0;
+          const speed = Number.isFinite(puff.speed) ? puff.speed : 0.012;
+          const direction = normalizeRechargedSmokeDirection(puff.direction);
+          const speedScale = 0.1 + Math.max(0, Math.min(1, Number.isFinite(puff.authoredSpeed) ? puff.authoredSpeed : 0.28)) * 0.9;
+          const travelPhase = getRechargedSmokeTravelPhase(puff, timeSeconds);
+          let x = puff.x;
+          let y = puff.y;
+          if (direction === "up" || direction === "down") {
+            x += (Math.sin(timeSeconds * speed + phase) * puff.driftX * 0.42 + Math.sin(timeSeconds * speed * 0.37 + phase * 2.13) * puff.driftX * 0.28) * speedScale;
+            y = puff.areaY + Math.max(1, puff.areaHeight || 1) * (direction === "down" ? travelPhase : 1 - travelPhase) + Math.sin(timeSeconds * speed * 0.68 + phase * 1.31) * Math.min(7, puff.driftY * 0.35) * speedScale;
+          } else if (direction === "left" || direction === "right") {
+            x = puff.areaX + Math.max(1, puff.areaWidth || 1) * (direction === "right" ? travelPhase : 1 - travelPhase) + Math.sin(timeSeconds * speed * 0.73 + phase * 1.41) * Math.min(6, puff.driftX * 0.42) * speedScale;
+            y += (Math.sin(timeSeconds * speed * 0.83 + phase * 1.67) * puff.driftY * 0.38 - Math.sin(timeSeconds * speed * 0.29 + phase * 0.71) * puff.driftY * 0.2) * speedScale;
+          } else {
+            x += (Math.sin(timeSeconds * speed + phase) * puff.driftX * 0.42 + Math.sin(timeSeconds * speed * 0.37 + phase * 2.13) * puff.driftX * 0.28) * speedScale;
+            y += (Math.sin(timeSeconds * speed * 0.83 + phase * 1.67) * puff.driftY * 0.38 - Math.sin(timeSeconds * speed * 0.29 + phase * 0.71) * puff.driftY * 0.2) * speedScale;
+          }
+          const breathe = (Math.sin(timeSeconds * puff.alphaSpeed + puff.alphaPhase) + 1) * 0.5;
+          const ambientAlpha = puff.alphaMin + (puff.alphaMax - puff.alphaMin) * smoothRechargedGlow01(breathe);
+          const fadeIn = smoothRechargedGlow01(travelPhase / 0.18);
+          const fadeOut = 1 - smoothRechargedGlow01((travelPhase - 0.78) / 0.22);
+          const alpha = direction === "random" ? ambientAlpha : ambientAlpha * Math.max(0.18, Math.min(1, 0.18 + fadeIn * fadeOut * 0.82));
+          const puffRect = mapper.worldToCanvasRect(x - puff.radius, y - puff.radius, puff.radius * 2, puff.radius * 2);
+          const cx = puffRect.x + puffRect.w * 0.5;
+          const cy = puffRect.y + puffRect.h * 0.5;
+          const radius = Math.max(1.5, puffRect.w * 0.5);
+          ctx.globalAlpha = alpha;
+          const gradient = typeof ctx.createRadialGradient === "function" ? ctx.createRadialGradient(cx, cy, Math.max(1, radius * 0.46), cx, cy, radius) : null;
+          if (gradient) {
+            gradient.addColorStop(0, puff.color);
+            gradient.addColorStop(0.62, puff.edgeColor || puff.color);
+            gradient.addColorStop(1, "rgba(156, 154, 158, 0)");
+            ctx.fillStyle = gradient;
+          } else {
+            ctx.fillStyle = puff.color;
+          }
+          ctx.beginPath();
+          ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+          ctx.fill();
+          drew = true;
+        }
+      }
+      ctx.restore();
+      return drew;
+    }
+
     function roundRechargedStoneValue(value, precision = 100) {
       return Math.round(value * precision) / precision;
     }
@@ -6847,6 +6985,7 @@
         const mirrorSurfaceAreas = readRechargedMirrorSurfaceAreas(payload);
         const stoneAreas = readRechargedStoneAreas(payload);
         const glowAreas = readRechargedGlowAreas(payload);
+        const smokeAreas = readRechargedSmokeAreas(payload);
         const worldWidthPx = Math.max(tileSize, Math.round(worldWidthRaw * worldUnitsToPx));
         const worldHeightPx = Math.max(tileSize, Math.round(worldHeightRaw * worldUnitsToPx));
         const hudGameplayViewport = getRechargedHudV2GameplayViewport(canvas);
@@ -6992,6 +7131,7 @@
         }
 
         drawRechargedGlowAreas(ctx, mapper, glowAreas, { tileSize, timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000 });
+        drawRechargedSmokeAreas(ctx, mapper, smokeAreas, { tileSize, timeSeconds: (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now()) / 1000 });
 
         // Draw support tiles with V1 tile assets/placement rules first.
         for (const supportTile of supportTiles) {

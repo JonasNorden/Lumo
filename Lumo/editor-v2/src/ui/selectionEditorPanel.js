@@ -12,7 +12,7 @@ import {
 } from "../domain/sound/audioAssetCatalog.js";
 import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 import { getThemeDefaultAmbientAssetPath, rankSoundAssetOptionsForTheme } from "../domain/theme/themeProfiles.js";
-import { GLOW_AREA_DIRECTIONS, normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeGlowAreaDirection, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
+import { GLOW_AREA_DIRECTIONS, SMOKE_AREA_DIRECTIONS, normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeGlowAreaDirection, normalizeSmokeAreaDirection, normalizeSmokeAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
 import { stopNativeInputKeyboardPropagation } from "./nativeInputGuards.js";
 
 const MIXED_FIELD_VALUE = "__mixed__";
@@ -66,6 +66,17 @@ const DUST_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
   driftStrength: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
 });
 
+
+const SMOKE_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
+  x: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
+  y: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
+  width: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
+  height: { min: 1, max: 100000, integer: false, inputMode: "decimal" },
+  density: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  size: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  strength: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+  speed: { min: 0, max: 1, integer: false, inputMode: "numeric", presentationScale: 100, step: 1, largeStep: 10 },
+});
 
 const GLOW_AREA_NUMERIC_FIELD_CONFIG = Object.freeze({
   x: { min: 0, max: 100000, integer: false, inputMode: "decimal" },
@@ -1169,6 +1180,56 @@ function renderGlowAreaInspector(area) {
   ].join(""));
 }
 
+function renderSmokeAreaNumberField(label, field, value, areaId) {
+  const config = SMOKE_AREA_NUMERIC_FIELD_CONFIG[field];
+  return renderAreaNumberField({ label, field, value, areaId, config, dataPrefix: "smoke-area", ariaSuffix: isPercentStyleAreaField(config) ? " (0 to 100)" : "" });
+}
+
+function renderSmokeAreaCheckboxField(label, field, value, areaId) {
+  return `
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionCheckboxField">
+      <span class="label">${escapeHtml(label)}</span>
+      <input type="checkbox" ${value !== false ? "checked" : ""} data-smoke-area-field="${escapeHtml(field)}" data-smoke-area-id="${escapeHtml(areaId || "")}" />
+    </label>
+  `;
+}
+
+function renderSmokeAreaDirectionField(value, areaId) {
+  const selected = normalizeSmokeAreaDirection(value);
+  return `
+    <label class="fieldRow fieldRowCompact selectionInlineField selectionCoordField">
+      <span class="label">Direction</span>
+      <select data-smoke-area-field="direction" data-smoke-area-id="${escapeHtml(areaId || "")}">
+        ${SMOKE_AREA_DIRECTIONS.map((direction) => `<option value="${escapeHtml(direction)}" ${direction === selected ? "selected" : ""}>${escapeHtml(direction)}</option>`).join("")}
+      </select>
+    </label>
+  `;
+}
+
+function renderSmokeAreaInspector(area) {
+  const areaId = typeof area?.id === "string" ? area.id : "";
+  return renderSelectionFields([
+    `<div class="statusCard assetSelectionCard assetSelectionCardCompact">
+      <div class="assetSelectionMeta">
+        <span class="statusCardMeta">Smoke Area · World Phenomena / Areas</span>
+      </div>
+    </div>`,
+    renderReadOnlyField("id", area?.id),
+    renderSmokeAreaNumberField("x", "x", area?.x, areaId),
+    renderSmokeAreaNumberField("y", "y", area?.y, areaId),
+    renderSmokeAreaNumberField("width", "width", area?.width, areaId),
+    renderSmokeAreaNumberField("height", "height", area?.height, areaId),
+    renderSmokeAreaNumberField("Density", "density", area?.density, areaId),
+    renderSmokeAreaNumberField("Size", "size", area?.size, areaId),
+    renderSmokeAreaNumberField("Strength", "strength", area?.strength, areaId),
+    renderSmokeAreaDirectionField(area?.direction, areaId),
+    renderSmokeAreaNumberField("Speed", "speed", area?.speed, areaId),
+    renderSmokeAreaCheckboxField("enabled", "enabled", area?.enabled, areaId),
+    renderSmokeAreaCheckboxField("visible", "visible", area?.visible, areaId),
+  ].join(""));
+}
+
+
 function renderDustAreaNumberField(label, field, value, areaId) {
   const config = DUST_AREA_NUMERIC_FIELD_CONFIG[field];
   return renderAreaNumberField({ label, field, value, areaId, config, dataPrefix: "dust-area", ariaSuffix: isPercentStyleAreaField(config) ? " (0 to 100)" : "" });
@@ -1327,6 +1388,9 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   const selectedDustAreaId = typeof state?.interaction?.selectedDustAreaId === "string" && state.interaction.selectedDustAreaId.trim() ? state.interaction.selectedDustAreaId.trim() : null;
   const selectedDustAreaIndex = Number.isInteger(state?.interaction?.selectedDustAreaIndex) ? state.interaction.selectedDustAreaIndex : null;
   const selectedDustArea = selectedDustAreaId ? (active.dustAreas || []).find((area) => area?.id === selectedDustAreaId) || null : Number.isInteger(selectedDustAreaIndex) && selectedDustAreaIndex >= 0 ? active.dustAreas?.[selectedDustAreaIndex] || null : null;
+  const selectedSmokeAreaId = typeof state?.interaction?.selectedSmokeAreaId === "string" && state.interaction.selectedSmokeAreaId.trim() ? state.interaction.selectedSmokeAreaId.trim() : null;
+  const selectedSmokeAreaIndex = Number.isInteger(state?.interaction?.selectedSmokeAreaIndex) ? state.interaction.selectedSmokeAreaIndex : null;
+  const selectedSmokeArea = selectedSmokeAreaId ? (active.smokeAreas || []).find((area) => area?.id === selectedSmokeAreaId) || null : Number.isInteger(selectedSmokeAreaIndex) && selectedSmokeAreaIndex >= 0 ? active.smokeAreas?.[selectedSmokeAreaIndex] || null : null;
   const selectedGlowAreaId = typeof state?.interaction?.selectedGlowAreaId === "string" && state.interaction.selectedGlowAreaId.trim() ? state.interaction.selectedGlowAreaId.trim() : null;
   const selectedGlowAreaIndex = Number.isInteger(state?.interaction?.selectedGlowAreaIndex) ? state.interaction.selectedGlowAreaIndex : null;
   const selectedGlowArea = selectedGlowAreaId ? (active.glowAreas || []).find((area) => area?.id === selectedGlowAreaId) || null : Number.isInteger(selectedGlowAreaIndex) && selectedGlowAreaIndex >= 0 ? active.glowAreas?.[selectedGlowAreaIndex] || null : null;
@@ -1377,6 +1441,11 @@ function renderSelectionEditor(state, emptyMessage, options = {}) {
   if (selectedGlowArea) {
     const normalizedSelectedGlowArea = normalizeGlowAreaForEditor(selectedGlowArea, selectedGlowAreaIndex ?? 0);
     return { markup: renderGlowAreaInspector(normalizedSelectedGlowArea), isEmpty: false };
+  }
+
+  if (selectedSmokeArea) {
+    const normalizedSelectedSmokeArea = normalizeSmokeAreaForEditor(selectedSmokeArea, selectedSmokeAreaIndex ?? 0);
+    return { markup: renderSmokeAreaInspector(normalizedSelectedSmokeArea), isEmpty: false };
   }
 
   if (selectedDustArea) {
@@ -1501,7 +1570,7 @@ export function renderSelectionEditorPanel(panel, state, options = {}) {
 }
 
 export function bindSelectionEditorPanel(panel, store, options = {}) {
-  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate, onReactiveBloomPatchUpdate, onReactiveCrystalPatchUpdate, onMirrorSurfaceAreaUpdate, onStoneAreaUpdate, onDustAreaUpdate, onGlowAreaUpdate } = options;
+  const { onEntityUpdate, onDecorUpdate, onSoundUpdate, onReactiveGrassPatchUpdate, onReactiveBloomPatchUpdate, onReactiveCrystalPatchUpdate, onMirrorSurfaceAreaUpdate, onStoneAreaUpdate, onDustAreaUpdate, onGlowAreaUpdate, onSmokeAreaUpdate } = options;
   let numberStepperSession = null;
   const getEditorPane = () => panel.querySelector("[data-bottom-panel-editor]");
   const getSelectedReactiveGrassPatch = (patchId) => {
@@ -1581,6 +1650,38 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
     const selectedAreaIndex = Number.isInteger(state?.interaction?.selectedGlowAreaIndex) ? state.interaction.selectedGlowAreaIndex : -1;
     const resolvedIndex = selectedAreaId ? areas.findIndex((area) => area?.id === selectedAreaId) : selectedAreaIndex;
     return Number.isInteger(resolvedIndex) && resolvedIndex >= 0 ? areas[resolvedIndex] || null : null;
+  };
+
+  const getSelectedSmokeArea = (areaId) => {
+    const state = typeof store?.getState === "function" ? store.getState() : null;
+    const areas = Array.isArray(state?.document?.active?.smokeAreas) ? state.document.active.smokeAreas : [];
+    const selectedAreaId = typeof areaId === "string" && areaId.trim() ? areaId.trim() : typeof state?.interaction?.selectedSmokeAreaId === "string" && state.interaction.selectedSmokeAreaId.trim() ? state.interaction.selectedSmokeAreaId.trim() : null;
+    const selectedAreaIndex = Number.isInteger(state?.interaction?.selectedSmokeAreaIndex) ? state.interaction.selectedSmokeAreaIndex : -1;
+    const resolvedIndex = selectedAreaId ? areas.findIndex((area) => area?.id === selectedAreaId) : selectedAreaIndex;
+    return Number.isInteger(resolvedIndex) && resolvedIndex >= 0 ? areas[resolvedIndex] || null : null;
+  };
+
+  const parseSmokeAreaNumericValue = (field, rawValue) => {
+    const config = SMOKE_AREA_NUMERIC_FIELD_CONFIG[field];
+    if (!config) return null;
+    return toAreaRuntimeValue(rawValue, config);
+  };
+
+  const commitSmokeAreaNumericInput = (input) => {
+    const field = input?.dataset?.smokeAreaField;
+    if (!field || input?.dataset?.smokeAreaEditable !== "number" || !SMOKE_AREA_NUMERIC_FIELD_CONFIG[field]) return false;
+    const areaSnapshot = getSelectedSmokeArea(input.dataset.smokeAreaId || null);
+    if (!areaSnapshot) return true;
+    const previousValue = Number(areaSnapshot[field]);
+    const parsedValue = parseSmokeAreaNumericValue(field, input.value);
+    if (parsedValue === null || Object.is(parsedValue, previousValue)) {
+      input.value = Number.isFinite(previousValue) ? toAreaEditorDisplayValue(previousValue, SMOKE_AREA_NUMERIC_FIELD_CONFIG[field]) : "";
+      clearInputDraft(input);
+      return true;
+    }
+    onSmokeAreaUpdate?.(field, parsedValue, { areaId: input.dataset.smokeAreaId || null });
+    clearInputDraft(input);
+    return true;
   };
 
   const parseGlowAreaNumericValue = (field, rawValue) => {
@@ -1882,6 +1983,9 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       if (target.dataset.dustAreaEditable === "number") {
         if (commitDustAreaNumericInput(target)) return;
       }
+      if (target.dataset.smokeAreaEditable === "number") {
+        if (commitSmokeAreaNumericInput(target)) return;
+      }
       const mirrorSurfaceAreaField = target.dataset.mirrorSurfaceAreaField;
       if (mirrorSurfaceAreaField === "enabled" || mirrorSurfaceAreaField === "visible") {
         const areaId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedMirrorSurfaceAreaId : null;
@@ -1900,6 +2004,19 @@ export function bindSelectionEditorPanel(panel, store, options = {}) {
       if (glowAreaField === "enabled" || glowAreaField === "visible") {
         const areaId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedGlowAreaId : null;
         onGlowAreaUpdate?.(glowAreaField, target.checked, { areaId });
+        clearInputDraft(target);
+        return;
+      }
+      const smokeAreaField = target.dataset.smokeAreaField;
+      if (smokeAreaField === "enabled" || smokeAreaField === "visible") {
+        const areaId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedSmokeAreaId : null;
+        onSmokeAreaUpdate?.(smokeAreaField, target.checked, { areaId });
+        clearInputDraft(target);
+        return;
+      }
+      if (smokeAreaField === "direction") {
+        const areaId = typeof store?.getState === "function" ? store.getState()?.interaction?.selectedSmokeAreaId : null;
+        onSmokeAreaUpdate?.("direction", target.value, { areaId });
         clearInputDraft(target);
         return;
       }

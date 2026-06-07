@@ -1,7 +1,7 @@
 import { resolveLegacyBehaviorByTileId } from "./runtimeTileBehavior.js";
 import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 import { getAuthoredSoundSource, resolveSoundCatalogSource } from "../domain/sound/sourceReference.js";
-import { normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
+import { normalizeDustAreaForEditor, normalizeGlowAreaForEditor, normalizeSmokeAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
 
 // Recharged level loader v1.
 // This module validates and normalizes the new level document shape without
@@ -31,6 +31,7 @@ export function loadLevelDocument(data) {
   const stoneAreas = normalizeStoneAreas(normalizedInput.stoneAreas);
   const dustAreas = normalizeDustAreas(normalizedInput.dustAreas);
   const glowAreas = normalizeGlowAreas(normalizedInput.glowAreas);
+  const smokeAreas = normalizeSmokeAreas(normalizedInput.smokeAreas);
 
   if (errors.length > 0) {
     return buildResult({ level: null, errors, warnings });
@@ -46,6 +47,7 @@ export function loadLevelDocument(data) {
     stoneAreas,
     dustAreas,
     glowAreas,
+    smokeAreas,
     systems: isPlainObject(normalizedInput.systems) ? { ...normalizedInput.systems } : null,
   };
 
@@ -118,6 +120,7 @@ function convertEditorV2ToRecharged(editorLevel, warnings) {
     stoneAreas: convertEditorStoneAreas(editorLevel),
     dustAreas: convertEditorDustAreas(editorLevel),
     glowAreas: convertEditorGlowAreas(editorLevel),
+    smokeAreas: convertEditorSmokeAreas(editorLevel),
     systems: {
       sourceFormat: "editor-v2",
     },
@@ -572,6 +575,17 @@ function convertEditorDustAreas(editorLevel) {
   const areas = Array.isArray(editorLevel?.dustAreas) ? editorLevel.dustAreas : [];
   return normalizeDustAreas(areas);
 }
+
+function normalizeSmokeAreas(areas) {
+  if (!Array.isArray(areas)) return [];
+  return areas.map((area, index) => isPlainObject(area) ? normalizeSmokeAreaForEditor(area, index) : null).filter(Boolean);
+}
+
+function convertEditorSmokeAreas(editorLevel) {
+  const areas = Array.isArray(editorLevel?.smokeAreas) ? editorLevel.smokeAreas : [];
+  return normalizeSmokeAreas(areas);
+}
+
 
 function normalizeGlowAreas(areas) {
   if (!Array.isArray(areas)) return [];

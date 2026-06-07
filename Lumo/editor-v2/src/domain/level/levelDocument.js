@@ -9,7 +9,7 @@ import { BACKGROUND_MATERIAL_OPTIONS, DEFAULT_BACKGROUND_MATERIAL_ID, normalizeB
 import { normalizeSizedPlacements } from "../tiles/sizedPlacements.js";
 import { normalizeSpawnAndExitEntities } from "../entities/spawnExitRules.js";
 import { normalizeThemeId } from "../theme/themeCatalog.js";
-import { DUST_AREA_DEFAULTS, GLOW_AREA_DEFAULTS, MIRROR_SURFACE_DEFAULTS, STONE_AREA_DEFAULTS, normalizeGlowAreaDirection } from "../worldAreas.js";
+import { DUST_AREA_DEFAULTS, GLOW_AREA_DEFAULTS, MIRROR_SURFACE_DEFAULTS, SMOKE_AREA_DEFAULTS, STONE_AREA_DEFAULTS, normalizeGlowAreaDirection, normalizeSmokeAreaDirection } from "../worldAreas.js";
 
 const SUPPORTED_BACKGROUND_LAYER_TYPES = new Set(["color", "image", "gradient", "procedural"]);
 const DEFAULT_BACKGROUND_LAYER_COLOR = "#1b2436";
@@ -115,6 +115,7 @@ function parseFlowerVariant(value) {
  * @property {{id: string, x: number, y: number, width: number, height: number, density: number, minStoneHeight: number, maxStoneHeight: number, sizeVariation: number, rotationVariation: number, clusterStrength: number, enabled: boolean, visible: boolean}[]} stoneAreas
  * @property {{id: string, x: number, y: number, width: number, height: number, density: number, sizeVariation: number, driftStrength: number, enabled: boolean, visible: boolean}[]} dustAreas
  * @property {{id: string, x: number, y: number, width: number, height: number, density: number, sizeVariation: number, strength: number, direction: string, speed: number, enabled: boolean, visible: boolean}[]} glowAreas
+ * @property {{id: string, x: number, y: number, width: number, height: number, density: number, size: number, strength: number, direction: string, speed: number, enabled: boolean, visible: boolean}[]} smokeAreas
  * @property {{id: string, kind: string, x: number, y: number, clusterCount: number, width: number, heightMin: number, heightMax: number, triggerRadius: number, auraSensitivity: number, wakeSpeed: number, settleDelayMs: number, settleSpeed: number, baseColor: string, glowColor: string, coreColor: string, edgeColor: string, variant: string, seed: number}[]} reactiveCrystalPatches
  * @property {{notes?: string}} extra
  */
@@ -354,6 +355,27 @@ function normalizeDustArea(area, index) {
 }
 
 
+function normalizeSmokeArea(area, index) {
+  const sourceArea = area && typeof area === "object" ? area : {};
+  const width = Number.isFinite(sourceArea.width) && sourceArea.width > 0 ? Number(sourceArea.width) : 24;
+  const height = Number.isFinite(sourceArea.height) && sourceArea.height > 0 ? Number(sourceArea.height) : 24;
+  return {
+    id: typeof sourceArea.id === "string" && sourceArea.id.trim() ? sourceArea.id.trim() : `smoke_area_${index + 1}`,
+    x: Number.isFinite(sourceArea.x) ? Number(sourceArea.x) : 0,
+    y: Number.isFinite(sourceArea.y) ? Number(sourceArea.y) : 0,
+    width,
+    height,
+    density: clampMirrorSurfaceUnit(sourceArea.density, SMOKE_AREA_DEFAULTS.density),
+    size: clampMirrorSurfaceUnit(sourceArea.size, SMOKE_AREA_DEFAULTS.size),
+    strength: clampMirrorSurfaceUnit(sourceArea.strength, SMOKE_AREA_DEFAULTS.strength),
+    direction: normalizeSmokeAreaDirection(sourceArea.direction),
+    speed: clampMirrorSurfaceUnit(sourceArea.speed, SMOKE_AREA_DEFAULTS.speed),
+    enabled: typeof sourceArea.enabled === "boolean" ? sourceArea.enabled : true,
+    visible: typeof sourceArea.visible === "boolean" ? sourceArea.visible : true,
+  };
+}
+
+
 function normalizeGlowArea(area, index) {
   const sourceArea = area && typeof area === "object" ? area : {};
   const width = Number.isFinite(sourceArea.width) && sourceArea.width > 0 ? Number(sourceArea.width) : 24;
@@ -563,6 +585,8 @@ export function validateLevelDocument(doc) {
   doc.dustAreas = rawDustAreas.map((area, index) => normalizeDustArea(area, index));
   const rawGlowAreas = Array.isArray(doc.glowAreas) ? doc.glowAreas : [];
   doc.glowAreas = rawGlowAreas.map((area, index) => normalizeGlowArea(area, index));
+  const rawSmokeAreas = Array.isArray(doc.smokeAreas) ? doc.smokeAreas : [];
+  doc.smokeAreas = rawSmokeAreas.map((area, index) => normalizeSmokeArea(area, index));
   const rawReactiveBloomPatches = Array.isArray(doc.reactiveBloomPatches) ? doc.reactiveBloomPatches : [];
   doc.reactiveBloomPatches = rawReactiveBloomPatches.map((patch, index) => normalizeReactiveBloomPatch(patch, index));
   const rawReactiveCrystalPatches = Array.isArray(doc.reactiveCrystalPatches) ? doc.reactiveCrystalPatches : [];

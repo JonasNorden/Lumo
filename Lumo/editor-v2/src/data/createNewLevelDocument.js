@@ -78,6 +78,7 @@ export function createNewLevelDocument(options = {}) {
     stoneAreas: [],
     dustAreas: [],
     glowAreas: [],
+    smokeAreas: [],
     extra: {},
   });
 }
