@@ -7457,7 +7457,6 @@
         const rechargedDecorTime = (typeof performance !== "undefined" && typeof performance.now === "function") ? performance.now() : Date.now();
 
         drawRechargedStoneAreas(ctx, mapper, stoneAreas, { tileSize });
-        drawRechargedWaterDropAreas(ctx, mapper, waterDropAreas, { tileSize, collisionRects: supportTiles, worldBottomY: worldHeightPx, worldUnitsToPx, impactPool: state._rechargedWaterDropImpactPool, timeSeconds: rechargedWaterDropTimeSeconds });
 
         renderReactiveGrass(
           ctx,
@@ -7522,7 +7521,7 @@
           { mapper, clusters: reactiveCrystalPatches, wakeSources: reactiveCrystalWakeSources, debug: true },
         );
 
-        // Render lanes are explicit: tiles -> stone areas -> reactive decor -> decor(world) -> mirror surfaces -> entities -> player -> HUD.
+        // Render lanes are explicit: tiles -> stone areas -> reactive decor -> decor(world) -> mirror surfaces -> water FX -> entities -> player -> HUD.
         // Background decor lane is parsed for future support but intentionally not drawn yet.
         const decorWorldLane = [];
         for (const decor of decorSnapshots) {
@@ -7572,6 +7571,10 @@
           worldWidthRaw,
           worldHeightRaw,
         });
+
+        // Foreground atmospheric FX: Water Drop Area visuals stay above stone, reactive decor,
+        // foreground decor, and mirror surfaces while remaining below entities/player/HUD/UI.
+        drawRechargedWaterDropAreas(ctx, mapper, waterDropAreas, { tileSize, collisionRects: supportTiles, worldBottomY: worldHeightPx, worldUnitsToPx, impactPool: state._rechargedWaterDropImpactPool, timeSeconds: rechargedWaterDropTimeSeconds });
 
         const liquidEntityTypes = new Set(["water_volume", "lava_volume", "bubbling_liquid_volume"]);
         const hoverEyesAfterDarkness = [];
