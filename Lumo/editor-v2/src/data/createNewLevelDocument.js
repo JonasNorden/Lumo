@@ -75,6 +75,8 @@ export function createNewLevelDocument(options = {}) {
     entities: [],
     sounds: [],
     mirrorSurfaceAreas: [],
+    stoneAreas: [],
+    dustAreas: [],
     extra: {},
   });
 }

@@ -70,6 +70,7 @@ import {
   createReactiveCrystalEditEntry,
   createMirrorSurfaceAreaEditEntry,
   createStoneAreaEditEntry,
+  createDustAreaEditEntry,
   createReactiveGrassEditEntry,
   createSizedPlacementEditEntry,
   createTileEditEntry,
@@ -84,10 +85,13 @@ import {
 } from "../domain/tiles/history.js";
 import { createDefaultBackgroundLayer, getDefaultReactiveCrystalPatch, getTileIndex } from "../domain/level/levelDocument.js";
 import {
+  createDustAreaFromDrag,
   createMirrorSurfaceAreaFromDrag,
   createStoneAreaFromDrag,
+  moveDustArea,
   moveMirrorSurfaceArea,
   moveStoneArea,
+  updateDustAreaField,
   updateMirrorSurfaceAreaField,
   updateStoneAreaField,
 } from "../domain/worldAreas.js";
@@ -104,6 +108,7 @@ import { findReactiveBloomPatchAtCanvasPoint } from "../render/layers/reactiveBl
 import { findReactiveCrystalPatchAtCanvasPoint } from "../render/layers/reactiveCrystalLayer.js";
 import { findMirrorSurfaceAreaAtCanvasPoint } from "../render/layers/mirrorSurfaceAreaLayer.js";
 import { findStoneAreaAtCanvasPoint } from "../render/layers/stoneAreaLayer.js";
+import { findDustAreaAtCanvasPoint } from "../render/layers/dustAreaLayer.js";
 import { TILE_DEFINITIONS } from "../domain/tiles/tileTypes.js";
 import {
   DEFAULT_ENTITY_PRESET_ID,
@@ -1624,6 +1629,8 @@ export function createEditorApp({
     interaction.selectedMirrorSurfaceAreaId = null;
     interaction.selectedStoneAreaIndex = null;
     interaction.selectedStoneAreaId = null;
+    interaction.selectedDustAreaIndex = null;
+    interaction.selectedDustAreaId = null;
   };
 
   const clearReactiveBloomPatchSelection = (interaction) => {
@@ -1638,6 +1645,8 @@ export function createEditorApp({
     interaction.selectedMirrorSurfaceAreaId = null;
     interaction.selectedStoneAreaIndex = null;
     interaction.selectedStoneAreaId = null;
+    interaction.selectedDustAreaIndex = null;
+    interaction.selectedDustAreaId = null;
   };
 
   const clearMirrorSurfaceAreaSelection = (interaction) => {
@@ -1645,6 +1654,15 @@ export function createEditorApp({
     interaction.selectedMirrorSurfaceAreaId = null;
     interaction.selectedStoneAreaIndex = null;
     interaction.selectedStoneAreaId = null;
+    interaction.selectedDustAreaIndex = null;
+    interaction.selectedDustAreaId = null;
+  };
+
+  const clearStoneAreaSelection = (interaction) => {
+    interaction.selectedStoneAreaIndex = null;
+    interaction.selectedStoneAreaId = null;
+    interaction.selectedDustAreaIndex = null;
+    interaction.selectedDustAreaId = null;
   };
 
   const setMirrorSurfaceAreaSelection = (draft, areaIndex = null) => {
@@ -1671,6 +1689,25 @@ export function createEditorApp({
     clearSoundSelection(draft.interaction);
     draft.interaction.selectedStoneAreaIndex = nextArea ? areaIndex : null;
     draft.interaction.selectedStoneAreaId = typeof nextArea?.id === "string" && nextArea.id.trim() ? nextArea.id.trim() : null;
+    draft.interaction.selectedCell = nextArea ? { x: Math.floor(Number(nextArea.x || 0) / Math.max(1, Number(draft.document.active?.dimensions?.tileSize) || 24)), y: Math.floor(Number(nextArea.y || 0) / Math.max(1, Number(draft.document.active?.dimensions?.tileSize) || 24)) } : null;
+  };
+
+  const clearDustAreaSelection = (interaction) => {
+    interaction.selectedDustAreaIndex = null;
+    interaction.selectedDustAreaId = null;
+  };
+
+  const setDustAreaSelection = (draft, areaIndex = null) => {
+    const areas = Array.isArray(draft.document.active?.dustAreas) ? draft.document.active.dustAreas : [];
+    const nextArea = Number.isInteger(areaIndex) && areaIndex >= 0 && areaIndex < areas.length ? areas[areaIndex] : null;
+    clearReactiveGrassPatchSelection(draft.interaction);
+    clearMirrorSurfaceAreaSelection(draft.interaction);
+    clearStoneAreaSelection(draft.interaction);
+    clearEntitySelection(draft.interaction);
+    clearDecorSelection(draft.interaction);
+    clearSoundSelection(draft.interaction);
+    draft.interaction.selectedDustAreaIndex = nextArea ? areaIndex : null;
+    draft.interaction.selectedDustAreaId = typeof nextArea?.id === "string" && nextArea.id.trim() ? nextArea.id.trim() : null;
     draft.interaction.selectedCell = nextArea ? { x: Math.floor(Number(nextArea.x || 0) / Math.max(1, Number(draft.document.active?.dimensions?.tileSize) || 24)), y: Math.floor(Number(nextArea.y || 0) / Math.max(1, Number(draft.document.active?.dimensions?.tileSize) || 24)) } : null;
   };
 
@@ -5548,7 +5585,7 @@ export function createEditorApp({
     void index;
     void value;
     store.setState((draft) => {
-      const requestedType = field === "arm-stone-area" ? "stone_area" : field === "arm-mirror-surface" ? "mirror_surface" : null;
+      const requestedType = field === "arm-dust-area" ? "dust_area" : field === "arm-stone-area" ? "stone_area" : field === "arm-mirror-surface" ? "mirror_surface" : null;
       if (!requestedType) return;
       const shouldArm = draft.interaction.activeWorldAreaType !== requestedType || draft.interaction.activeLayer !== PANEL_LAYERS.WORLD_AREAS;
       draft.interaction.activeWorldAreaType = shouldArm ? requestedType : null;
@@ -5560,6 +5597,8 @@ export function createEditorApp({
       draft.interaction.mirrorSurfaceAreaDrag = null;
       draft.interaction.stoneAreaPlacementDrag = null;
       draft.interaction.stoneAreaDrag = null;
+      draft.interaction.dustAreaPlacementDrag = null;
+      draft.interaction.dustAreaDrag = null;
       setCanvasSelectionMode(draft, "worldAreas");
       setActiveLayer(draft, PANEL_LAYERS.WORLD_AREAS);
       clearReactiveGrassPatchSelection(draft.interaction);
@@ -5601,6 +5640,24 @@ export function createEditorApp({
     }));
     clearStoneAreaSelection(draft.interaction);
     draft.interaction.stoneAreaDrag = null;
+    return true;
+  };
+
+
+  const deleteSelectedDustArea = (draft) => {
+    const areas = Array.isArray(draft.document.active?.dustAreas) ? draft.document.active.dustAreas : [];
+    const selectedId = typeof draft.interaction.selectedDustAreaId === "string" && draft.interaction.selectedDustAreaId.trim() ? draft.interaction.selectedDustAreaId.trim() : null;
+    const selectedIndex = selectedId ? areas.findIndex((area) => area?.id === selectedId) : draft.interaction.selectedDustAreaIndex;
+    if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= areas.length) return false;
+    const previousArea = { ...areas[selectedIndex] };
+    areas.splice(selectedIndex, 1);
+    pushHistoryEntry(draft.history, createDustAreaEditEntry("delete", {
+      objectId: typeof previousArea.id === "string" ? previousArea.id : null,
+      index: selectedIndex,
+      previousSnapshot: previousArea,
+    }));
+    clearDustAreaSelection(draft.interaction);
+    draft.interaction.dustAreaDrag = null;
     return true;
   };
 
@@ -6002,6 +6059,35 @@ export function createEditorApp({
         nextSnapshot: nextArea,
       }));
       setStoneAreaSelection(draft, resolvedIndex);
+    });
+  };
+
+
+  const updateDustArea = (field, value, options = {}) => {
+    const supportedFields = new Set(["x", "y", "width", "height", "density", "sizeVariation", "driftStrength", "enabled", "visible"]);
+    if (!supportedFields.has(field)) return;
+    store.setState((draft) => {
+      const areas = Array.isArray(draft.document.active?.dustAreas) ? draft.document.active.dustAreas : null;
+      if (!areas?.length) return;
+      const selectedAreaId = typeof options.areaId === "string" && options.areaId.trim()
+        ? options.areaId.trim()
+        : typeof draft.interaction.selectedDustAreaId === "string" && draft.interaction.selectedDustAreaId.trim()
+          ? draft.interaction.selectedDustAreaId.trim()
+          : null;
+      const selectedAreaIndex = Number.isInteger(draft.interaction.selectedDustAreaIndex) ? draft.interaction.selectedDustAreaIndex : -1;
+      const resolvedIndex = selectedAreaId ? areas.findIndex((area) => area?.id === selectedAreaId) : selectedAreaIndex;
+      if (!Number.isInteger(resolvedIndex) || resolvedIndex < 0 || resolvedIndex >= areas.length) return;
+      const previousArea = { ...areas[resolvedIndex] };
+      const nextArea = updateDustAreaField(previousArea, field, value);
+      if (JSON.stringify(previousArea) === JSON.stringify(nextArea)) return;
+      areas[resolvedIndex] = nextArea;
+      pushHistoryEntry(draft.history, createDustAreaEditEntry("update", {
+        objectId: typeof nextArea.id === "string" ? nextArea.id : null,
+        index: resolvedIndex,
+        previousSnapshot: previousArea,
+        nextSnapshot: nextArea,
+      }));
+      setDustAreaSelection(draft, resolvedIndex);
     });
   };
 
@@ -6536,6 +6622,7 @@ export function createEditorApp({
     const hitReactiveCrystalPatchIndex = findReactiveCrystalPatchAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitMirrorSurfaceAreaIndex = findMirrorSurfaceAreaAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const hitStoneAreaIndex = findStoneAreaAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
+    const hitDustAreaIndex = findDustAreaAtCanvasPoint(state.document.active, state.viewport, point.x, point.y);
     const activeEntityPresetId = state.interaction.activeEntityPresetId;
     const activeDecorPresetId = state.interaction.activeDecorPresetId;
     const activeSoundPresetId = state.interaction.activeSoundPresetId;
@@ -6575,6 +6662,28 @@ export function createEditorApp({
         };
         clearReactiveGrassPatchSelection(draft.interaction);
         clearMirrorSurfaceAreaSelection(draft.interaction);
+        clearEntitySelection(draft.interaction);
+        clearDecorSelection(draft.interaction);
+        clearSoundSelection(draft.interaction);
+      });
+      return true;
+    }
+
+    if (activeLayer === PANEL_LAYERS.WORLD_AREAS && state.interaction.activeWorldAreaType === "dust_area" && isMomentaryPlacementTrigger(event)) {
+      interactionState.suppressNextClick = true;
+      event.preventDefault();
+      store.setState((draft) => {
+        draft.interaction.hoverCell = cell;
+        draft.interaction.selectedCell = cell;
+        draft.interaction.dustAreaPlacementDrag = {
+          active: true,
+          type: "dust_area",
+          startCell: { ...cell },
+          endCell: { ...cell },
+        };
+        clearReactiveGrassPatchSelection(draft.interaction);
+        clearMirrorSurfaceAreaSelection(draft.interaction);
+        clearStoneAreaSelection(draft.interaction);
         clearEntitySelection(draft.interaction);
         clearDecorSelection(draft.interaction);
         clearSoundSelection(draft.interaction);
@@ -6741,6 +6850,18 @@ if (event.shiftKey) {
       event.preventDefault();
       store.setState((draft) => {
         draft.interaction.selectedCell = cell;
+        if (hitDustAreaIndex >= 0) {
+          setDustAreaSelection(draft, hitDustAreaIndex);
+          const area = draft.document.active?.dustAreas?.[hitDustAreaIndex];
+          draft.interaction.dustAreaDrag = {
+            active: true,
+            areaId: area?.id || null,
+            anchorCell: { ...cell },
+            originArea: area ? { ...area } : null,
+            previewDelta: { x: 0, y: 0 },
+          };
+          return;
+        }
         if (hitStoneAreaIndex >= 0) {
           setStoneAreaSelection(draft, hitStoneAreaIndex);
           const area = draft.document.active?.stoneAreas?.[hitStoneAreaIndex];
@@ -7035,13 +7156,13 @@ if (event.shiftKey) {
       return;
     }
 
-    if (state.interaction.mirrorSurfaceAreaDrag?.active || state.interaction.stoneAreaDrag?.active) {
+    if (state.interaction.mirrorSurfaceAreaDrag?.active || state.interaction.stoneAreaDrag?.active || state.interaction.dustAreaDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
       const point = getCanvasPointFromMouseEvent(canvas, event);
       const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
       if (!cell) return;
       store.setState((draft) => {
-        const drag = draft.interaction.mirrorSurfaceAreaDrag || draft.interaction.stoneAreaDrag;
+        const drag = draft.interaction.mirrorSurfaceAreaDrag || draft.interaction.stoneAreaDrag || draft.interaction.dustAreaDrag;
         if (!drag?.active || !drag.originArea) return;
         const tileSize = Math.max(1, Number(draft.document.active?.dimensions?.tileSize) || 24);
         drag.previewDelta = { x: (cell.x - drag.anchorCell.x) * tileSize, y: (cell.y - drag.anchorCell.y) * tileSize };
@@ -7065,13 +7186,13 @@ if (event.shiftKey) {
       return;
     }
 
-    if (state.interaction.mirrorSurfaceAreaPlacementDrag?.active || state.interaction.stoneAreaPlacementDrag?.active) {
+    if (state.interaction.mirrorSurfaceAreaPlacementDrag?.active || state.interaction.stoneAreaPlacementDrag?.active || state.interaction.dustAreaPlacementDrag?.active) {
       if ((event.buttons & 1) !== 1) return;
       const point = getCanvasPointFromMouseEvent(canvas, event);
       const cell = getCellFromCanvasPoint(state.document.active, state.viewport, point.x, point.y);
       if (!cell) return;
       store.setState((draft) => {
-        const placementDrag = draft.interaction.mirrorSurfaceAreaPlacementDrag || draft.interaction.stoneAreaPlacementDrag;
+        const placementDrag = draft.interaction.mirrorSurfaceAreaPlacementDrag || draft.interaction.stoneAreaPlacementDrag || draft.interaction.dustAreaPlacementDrag;
         if (!placementDrag?.active) return;
         placementDrag.endCell = { ...cell };
         draft.interaction.hoverCell = cell;
@@ -7361,6 +7482,34 @@ if (event.shiftKey) {
       return;
     }
 
+    if (state.interaction.dustAreaDrag?.active) {
+      store.setState((draft) => {
+        const drag = draft.interaction.dustAreaDrag;
+        if (!drag?.active || !drag.originArea) return;
+        const areas = Array.isArray(draft.document.active?.dustAreas) ? draft.document.active.dustAreas : [];
+        const index = drag.areaId ? areas.findIndex((area) => area?.id === drag.areaId) : draft.interaction.selectedDustAreaIndex;
+        if (!Number.isInteger(index) || index < 0 || index >= areas.length) {
+          draft.interaction.dustAreaDrag = null;
+          return;
+        }
+        const previousArea = { ...areas[index] };
+        const delta = drag.previewDelta || { x: 0, y: 0 };
+        const nextArea = moveDustArea(drag.originArea, delta.x, delta.y);
+        if (JSON.stringify(previousArea) !== JSON.stringify(nextArea)) {
+          areas[index] = nextArea;
+          pushHistoryEntry(draft.history, createDustAreaEditEntry("update", {
+            objectId: typeof nextArea.id === "string" ? nextArea.id : null,
+            index,
+            previousSnapshot: previousArea,
+            nextSnapshot: nextArea,
+          }));
+          setDustAreaSelection(draft, index);
+        }
+        draft.interaction.dustAreaDrag = null;
+      });
+      return;
+    }
+
     if (state.interaction.mirrorSurfaceAreaPlacementDrag?.active) {
       store.setState((draft) => {
         const placementDrag = draft.interaction.mirrorSurfaceAreaPlacementDrag;
@@ -7411,6 +7560,31 @@ if (event.shiftKey) {
       return;
     }
 
+
+    if (state.interaction.dustAreaPlacementDrag?.active) {
+      store.setState((draft) => {
+        const placementDrag = draft.interaction.dustAreaPlacementDrag;
+        if (!placementDrag?.active) return;
+        const createdArea = createDustAreaFromDrag(
+          draft.document.active,
+          placementDrag.startCell,
+          placementDrag.endCell || placementDrag.startCell,
+        );
+        if (createdArea) {
+          if (!Array.isArray(draft.document.active.dustAreas)) draft.document.active.dustAreas = [];
+          const createdIndex = draft.document.active.dustAreas.length;
+          draft.document.active.dustAreas.push(createdArea);
+          pushHistoryEntry(draft.history, createDustAreaEditEntry("create", {
+            objectId: typeof createdArea.id === "string" ? createdArea.id : null,
+            index: createdIndex,
+            nextSnapshot: createdArea,
+          }));
+          setDustAreaSelection(draft, createdIndex);
+        }
+        draft.interaction.dustAreaPlacementDrag = null;
+      });
+      return;
+    }
 
     if (state.interaction.volumePlacementDrag?.active) {
       store.setState((draft) => {
@@ -8336,7 +8510,7 @@ if (event.shiftKey) {
             : activeLayer === PANEL_LAYERS.ENTITIES
               ? getSelectedEntityIndices(state.interaction).length
               : activeLayer === PANEL_LAYERS.WORLD_AREAS
-                ? (state.interaction.selectedMirrorSurfaceAreaId || state.interaction.selectedStoneAreaId ? 1 : 0)
+                ? (state.interaction.selectedMirrorSurfaceAreaId || state.interaction.selectedStoneAreaId || state.interaction.selectedDustAreaId ? 1 : 0)
               : 0;
       if (!hasSelection) return;
 
@@ -8357,7 +8531,7 @@ if (event.shiftKey) {
           return;
         }
         if (activeLayer === PANEL_LAYERS.WORLD_AREAS) {
-          if (!deleteSelectedStoneArea(draft)) deleteSelectedMirrorSurfaceArea(draft);
+          if (!deleteSelectedDustArea(draft) && !deleteSelectedStoneArea(draft)) deleteSelectedMirrorSurfaceArea(draft);
         }
       });
       return;
@@ -9669,6 +9843,7 @@ if (event.shiftKey) {
     onReactiveCrystalPatchUpdate: updateReactiveCrystalPatch,
     onMirrorSurfaceAreaUpdate: updateMirrorSurfaceArea,
     onStoneAreaUpdate: updateStoneArea,
+      onDustAreaUpdate: updateDustArea,
     onScanUpdate: updateScanControl,
   };
   const unbindInspectorPanel = bindInspectorPanel(inspector, store, panelBindingOptions);

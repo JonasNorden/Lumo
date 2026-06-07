@@ -252,6 +252,7 @@ export function renderRuntimeBridgeViewModel(input = {}) {
   const decor = buildDecorEntries(viewWorld);
   const entities = buildEntityEntries(viewWorld);
   const audio = buildAudioEntries(viewWorld);
+  const dustAreas = toArray(session?.world?.dustAreas).length > 0 ? toArray(session?.world?.dustAreas) : toArray(worldSource?.dustAreas);
 
   const runtimeTick = toFiniteOrNull(session?.runtime?.tick) ?? toFiniteOrNull(bridgeSummary?.runtimeTick);
   const bridgeStatus = toStringOrNull(bridgeSummary?.bridgeStatus) ?? "invalid";
@@ -277,6 +278,7 @@ export function renderRuntimeBridgeViewModel(input = {}) {
       decor: decor.length,
       entities: entities.length,
       audio: audio.length,
+      dustAreas: dustAreas.length,
     },
     input: input?.browserInputSnapshot?.input ?? { moveX: 0, jump: false, run: false },
     loopActive: input?.browserLoop?.active === true || input?.browserLoop?.running === true,
@@ -300,6 +302,7 @@ export function renderRuntimeBridgeViewModel(input = {}) {
     decor,
     entities,
     audio,
+    dustAreas,
     spawn,
     player,
     overlay,

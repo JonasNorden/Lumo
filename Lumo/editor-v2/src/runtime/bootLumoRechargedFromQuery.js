@@ -26,6 +26,7 @@ function createBaseResult(overrides = {}) {
     supportTiles: [],
     mirrorSurfaceAreas: [],
     stoneAreas: [],
+    dustAreas: [],
     worldWidth: null,
     worldHeight: null,
     tileSize: null,
@@ -313,6 +314,7 @@ export async function bootLumoRechargedFromQuery(options = {}) {
       supportTiles: Array.isArray(payload.supportTiles) ? payload.supportTiles : [],
       mirrorSurfaceAreas: Array.isArray(payload.mirrorSurfaceAreas) ? payload.mirrorSurfaceAreas : [],
       stoneAreas: Array.isArray(payload.stoneAreas) ? payload.stoneAreas : [],
+      dustAreas: Array.isArray(payload.dustAreas) ? payload.dustAreas : [],
       decorItems: Array.isArray(payload.decorItems) ? payload.decorItems : [],
       background: Array.isArray(payload.background) ? payload.background : [],
       bg: payload?.bg && typeof payload.bg === "object"

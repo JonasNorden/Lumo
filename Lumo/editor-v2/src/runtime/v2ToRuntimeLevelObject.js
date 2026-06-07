@@ -3,7 +3,7 @@ import { getAuthoredSoundSource } from "../domain/sound/sourceReference.js";
 import { getDecorVisual } from "../domain/decor/decorVisuals.js";
 import { findEntityPresetById } from "../domain/entities/entityPresets.js";
 import { getTileAssetByTileValue } from "../domain/tiles/tileSpriteCatalog.js";
-import { normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
+import { normalizeDustAreaForEditor, normalizeStoneAreaForEditor } from "../domain/worldAreas.js";
 
 const SUPPORTED_RUNTIME_ENTITY_IDS = new Set([
   "start_01",
@@ -290,6 +290,17 @@ function normalizeRuntimeStoneAreas(levelDocument) {
     .filter(Boolean);
 }
 
+function normalizeRuntimeDustAreas(levelDocument) {
+  const areas = Array.isArray(levelDocument?.dustAreas) ? levelDocument.dustAreas : [];
+  return areas
+    .map((area, index) => {
+      const normalized = normalizeDustAreaForEditor(area, index);
+      if (!Number.isFinite(normalized.x) || !Number.isFinite(normalized.y) || normalized.width <= 0 || normalized.height <= 0) return null;
+      return normalized;
+    })
+    .filter(Boolean);
+}
+
 function normalizeRuntimeEntityType(type) {
   const normalized = String(type || "").trim().toLowerCase();
   if (!normalized) return null;
@@ -543,6 +554,7 @@ export function v2ToRuntimeLevelObject(levelDocument, options = {}) {
     },
     mirrorSurfaceAreas: normalizeRuntimeMirrorSurfaceAreas(levelDocument),
     stoneAreas: normalizeRuntimeStoneAreas(levelDocument),
+    dustAreas: normalizeRuntimeDustAreas(levelDocument),
     editor: {
       bg: runtimeBackgroundBase.slice(0),
       bgVisualOverrides: { ...runtimeBackgroundVisualOverrides },
