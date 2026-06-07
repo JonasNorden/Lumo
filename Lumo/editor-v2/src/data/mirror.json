@@ -34343,34 +34343,10 @@
       }
     },
     {
-      "id": "decor-2",
-      "name": "Flower",
-      "type": "decor_flower_01",
-      "x": 39,
-      "y": 17,
-      "visible": true,
-      "variant": "a",
-      "flipX": false,
-      "params": {
-        "variant": 1
-      }
-    },
-    {
       "id": "decor-3",
       "name": "Apple",
       "type": "apple",
       "x": 24,
-      "y": 17,
-      "visible": true,
-      "variant": "a",
-      "flipX": false,
-      "params": {}
-    },
-    {
-      "id": "decor-4",
-      "name": "IceCream",
-      "type": "ice_cream",
-      "x": 41,
       "y": 17,
       "visible": true,
       "variant": "a",
@@ -45942,9 +45918,9 @@
     {
       "id": "glow_area-2",
       "x": 840,
-      "y": 288,
+      "y": 240,
       "width": 384,
-      "height": 72,
+      "height": 192,
       "density": 0.32,
       "sizeVariation": 0.38,
       "strength": 0.42,
