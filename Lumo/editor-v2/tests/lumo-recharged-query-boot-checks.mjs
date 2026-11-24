@@ -189,45 +189,20 @@ async function runLiveValueQueryBootPathChecks() {
 
 
 async function runSessionPayloadPriorityCheck() {
-  let loadedFromDescriptor = null;
-  const sessionStorageRef = {
-    getItem(key) {
-      if (key !== "lumo.editorPlay.level.v1") return null;
-      return JSON.stringify({
-        identity: { id: "session-priority", formatVersion: "1.0.0", themeId: "test", name: "Session" },
-        world: { width: 40, height: 20, tileSize: 24, spawn: { x: 24, y: 24 } },
-        layers: { tiles: [], background: [], decor: [], entities: [] },
-      });
-    },
-  };
-
+  let loadedFromDescriptor;
   const result = await bootLumoRechargedFromQuery({
-    search: "?recharged=1&level=memory://should-not-win",
-    sessionStorageRef,
-    createAdapter(options = {}) {
-      loadedFromDescriptor = options?.sourceDescriptor;
-      return {
-        async prepare() {
-          const loaded = await options.loadLevelDocument?.(options.sourceDescriptor);
-          assert.equal(typeof loaded?.levelDocument?.identity?.id, "string");
-          assert.equal(loaded.levelDocument.identity.id, "session-priority");
-          return { ok: true, prepared: true };
-        },
-        async boot() {
-          return { ok: true, booted: true };
-        },
-        getBootPayload() {
-          return { status: "running", tick: 1, worldId: "session-priority" };
-        },
-      };
+    search: "?recharged=1&level=http://localhost/current-B.json",
+    sessionStorageRef: { getItem() { throw new Error("Obsolete storage must not be read"); } },
+    loadLevelDocument: async () => ({ levelDocument: {} }),
+    createAdapter(options) {
+      loadedFromDescriptor = options.sourceDescriptor;
+      return createStubAdapter({ worldId: "current-B" });
     },
   });
-
-  assert.equal(result.levelSourceType, "editor-play-session");
+  assert.equal(result.levelSourceType, "url");
   assert.equal(result.booted, true);
-  assert.deepEqual(loadedFromDescriptor, { source: "editor-play-session" });
-
-  console.log("query boot session payload priority ok");
+  assert.deepEqual(loadedFromDescriptor, { url: "http://localhost/current-B.json" });
+  console.log("query boot explicit URL ignores stale storage ok");
 }
 await runLegacyModeCheck();
 await runDirectInjectedAdapterCheck();

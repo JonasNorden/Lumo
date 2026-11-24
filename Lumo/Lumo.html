@@ -44,6 +44,7 @@
   <script defer src="src/game/entities.js"></script>
   <script defer src="data/audio_global_config.js"></script>
   <script type="module" defer>
+    import { reportEditorPlayStatus } from "./editor-v2/src/runtime/editorPlaySessionBridge.js";
     import { bootLumoRechargedFromQuery } from "./editor-v2/src/runtime/bootLumoRechargedFromQuery.js";
     import { createLumoRechargedBootAdapter } from "./editor-v2/src/runtime/createLumoRechargedBootAdapter.js";
     import { loadNextRechargedLevelFromIntermission } from "./editor-v2/src/runtime/rechargedIntermissionNextLevelFlow.js";
@@ -8891,6 +8892,10 @@
           const payload = readLatestRechargedBootPayload() || {};
           updateRechargedHudOverlay(state?.hud, payload, state);
           renderRechargedCanvasFrame(canvas, state);
+          if (state.lastRenderOk && !state.editorPlayReadyReported) {
+            state.editorPlayReadyReported = true;
+            reportEditorPlayStatus("ready", { worldId: payload.worldId, playerX: payload.playerX, playerY: payload.playerY });
+          }
         } catch (_error) {
           state.lastRenderOk = false;
         }
@@ -8923,6 +8928,8 @@
 
     // Runs query-driven Recharged opt-in boot with safe legacy fallback behavior.
     async function bootLumoRuntime() {
+      const editorPlay = new URLSearchParams(window.location.search).has("editorPlay");
+      reportEditorPlayStatus("opened");
       const rechargedCanvasVerification = ensureLumoRechargedCanvasVerificationState();
       let queryBootResult = null;
       let liveAdapter = null;
@@ -8980,6 +8987,17 @@
 
       if (queryBootResult?.enabled === true && queryBootResult?.booted === true) {
         console.info("[Lumo] Recharged query boot active", queryBootResult);
+        return;
+      }
+
+      if (editorPlay) {
+        const message = `Play From Here failed: ${(queryBootResult?.errors || ["Runtime initialization failed."]).join(" ")}`;
+        reportEditorPlayStatus("failed", { error: message });
+        const errorPanel = document.createElement("pre");
+        errorPanel.setAttribute("role", "alert");
+        errorPanel.textContent = message;
+        document.body.appendChild(errorPanel);
+        console.error(message);
         return;
       }
 

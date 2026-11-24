@@ -205,6 +205,7 @@ function buildWorldSnapshot(snapshot) {
 
   const mirrorSurfaceAreas = normalizeMirrorSurfaceAreas(source.mirrorSurfaceAreas);
   const stoneAreas = normalizeStoneAreas(source.stoneAreas);
+  const dustAreas = Array.isArray(source.dustAreas) ? clonePlainData(source.dustAreas) : [];
   const glowAreas = normalizeGlowAreas(source.glowAreas);
   const smokeAreas = normalizeSmokeAreas(source.smokeAreas);
   const waterDropAreas = Array.isArray(source.waterDropAreas) ? source.waterDropAreas.map((area) => ({ ...area })) : [];
@@ -222,6 +223,7 @@ function buildWorldSnapshot(snapshot) {
     audioItems,
     mirrorSurfaceAreas,
     stoneAreas,
+    dustAreas,
     glowAreas,
     smokeAreas,
     waterDropAreas,
@@ -529,6 +531,7 @@ export function createRechargedLevelSourceRuntime(options = {}) {
         decorItems: world.decorItems,
         mirrorSurfaceAreas: world.mirrorSurfaceAreas,
         stoneAreas: world.stoneAreas,
+        dustAreas: world.dustAreas,
         glowAreas: world.glowAreas,
         smokeAreas: world.smokeAreas,
         waterDropAreas: world.waterDropAreas,
@@ -651,6 +654,7 @@ export function createRechargedLevelSourceRuntime(options = {}) {
         decorItems: world.decorItems,
         mirrorSurfaceAreas: world.mirrorSurfaceAreas,
         stoneAreas: world.stoneAreas,
+        dustAreas: world.dustAreas,
         glowAreas: world.glowAreas,
         smokeAreas: world.smokeAreas,
         waterDropAreas: world.waterDropAreas,
