@@ -1,10 +1,10 @@
 import { createLumoRechargedBootAdapter } from "./createLumoRechargedBootAdapter.js";
 import { loadLevelDocument as loadRuntimeLevelDocument } from "./loadLevelDocument.js";
+import { reportEditorPlayStatus } from "./editorPlaySessionBridge.js";
 
 const DEFAULT_LEVEL_URL = "editor-v2/src/data/testLevelDocument.v1.json";
 const VALID_LEVEL_QUERY_PROTOCOLS = new Set(["http:", "https:", "blob:", ""]);
 const DEFAULT_AUTOPLAY_STEPS = 4;
-const EDITOR_PLAY_LEVEL_KEY = "lumo.editorPlay.level.v1";
 const PFH_DEBUG_QUERY_KEY = "pfhDebug";
 
 function createBaseResult(overrides = {}) {
@@ -55,7 +55,7 @@ function normalizeSearchParams(search) {
 
     if (search && typeof search.get === "function") {
       const cloned = new URLSearchParams();
-      for (const key of ["recharged", "level", "autoplay"]) {
+      for (const key of ["recharged", "level", "autoplay", "editorPlay", "pfhDebug"]) {
         const value = search.get(key);
         if (typeof value === "string") {
           cloned.set(key, value);
@@ -98,66 +98,13 @@ function normalizeLevelQueryPath(level) {
   return resolved;
 }
 
-function readEditorPlayLevelFromSession(sessionStorageRef = globalThis.sessionStorage) {
-  if (!sessionStorageRef || typeof sessionStorageRef.getItem !== "function") {
-    return { found: false, levelDocument: null, warning: "sessionStorage unavailable" };
-  }
-
-  try {
-    const raw = sessionStorageRef.getItem(EDITOR_PLAY_LEVEL_KEY);
-    if (typeof raw !== "string" || raw.trim().length === 0) {
-      return { found: false, levelDocument: null, warning: "" };
-    }
-    const parsed = JSON.parse(raw);
-    const normalized = loadRuntimeLevelDocument(parsed);
-    if (normalized?.ok !== true || !normalized?.level) {
-      const firstError = Array.isArray(normalized?.errors) && normalized.errors[0] ? normalized.errors[0] : "Unknown level format error.";
-      return { found: true, levelDocument: null, warning: `invalid session payload: ${firstError}` };
-    }
-    return { found: true, levelDocument: normalized.level, warning: "" };
-  } catch (error) {
-    return { found: true, levelDocument: null, warning: `session payload parse failed: ${error?.message || "unknown error"}` };
-  }
-}
-
-function createSessionLevelDocumentLoader(levelDocument) {
-  return async function loadFromSessionPayload() {
-    return { levelDocument };
-  };
-}
-
-function buildSourceDescriptor(params, options = {}) {
-  const sessionPayload = readEditorPlayLevelFromSession(options?.sessionStorageRef);
-  if (sessionPayload.levelDocument) {
-    return {
-      descriptor: { source: "editor-play-session" },
-      levelSourceType: "editor-play-session",
-      warning: sessionPayload.warning || "",
-      loadLevelDocument: createSessionLevelDocumentLoader(sessionPayload.levelDocument),
-      sessionPayloadFound: true,
-      sessionPayloadKey: EDITOR_PLAY_LEVEL_KEY,
-    };
-  }
-
-  const rawLevel = params.get("level");
-  const level = normalizeLevelQueryPath(rawLevel);
-
-  if (level.length > 0) {
-    return {
-      descriptor: { url: level },
-      levelSourceType: "url",
-      warning: sessionPayload.warning || "",
-      sessionPayloadFound: sessionPayload.found === true,
-      sessionPayloadKey: EDITOR_PLAY_LEVEL_KEY,
-    };
-  }
-
+function buildSourceDescriptor(params) {
+  const level = normalizeLevelQueryPath(params.get("level"));
+  const editorPlay = params.has("editorPlay");
   return {
-    descriptor: { url: DEFAULT_LEVEL_URL },
-    levelSourceType: "default-url",
-    warning: sessionPayload.warning || "No level query provided; using fallback debug level document.",
-    sessionPayloadFound: sessionPayload.found === true,
-    sessionPayloadKey: EDITOR_PLAY_LEVEL_KEY,
+    descriptor: { url: level || (editorPlay ? "" : DEFAULT_LEVEL_URL) },
+    levelSourceType: editorPlay ? "editor-snapshot" : level ? "url" : "default-url",
+    warning: !level && !editorPlay ? "No level query provided; using fallback debug level document." : "",
   };
 }
 
@@ -223,7 +170,9 @@ async function defaultBrowserLoadLevelDocument(sourceDescriptor = {}) {
 // Boots opt-in Recharged runtime from query flags while preserving legacy default mode.
 export async function bootLumoRechargedFromQuery(options = {}) {
   const params = normalizeSearchParams(options?.search ?? "");
-  const enabled = params.get("recharged") === "1";
+  const editorLaunchId = params.get("editorPlay");
+  const editorPlay = params.has("editorPlay");
+  const enabled = editorPlay || params.get("recharged") === "1";
   const pfhDebugEnabled = params.get(PFH_DEBUG_QUERY_KEY) === "1";
 
   if (!enabled) {
@@ -234,23 +183,40 @@ export async function bootLumoRechargedFromQuery(options = {}) {
   const warnings = [];
   const autoplay = params.get("autoplay") === "1";
   const rawLevel = params.get("level");
-  if (typeof rawLevel === "string" && rawLevel.trim().length > 0 && normalizeLevelQueryPath(rawLevel).length === 0) {
+  if (!editorPlay && typeof rawLevel === "string" && rawLevel.trim().length > 0 && normalizeLevelQueryPath(rawLevel).length === 0) {
     warnings.push("Invalid level query path; using fallback debug level document.");
   }
-  const sourceInfo = buildSourceDescriptor(params, { sessionStorageRef: options?.sessionStorageRef });
+  const sourceInfo = buildSourceDescriptor(params);
   if (sourceInfo.warning) {
     warnings.push(sourceInfo.warning);
   }
 
   try {
+    if (editorPlay && (!editorLaunchId || !normalizeLevelQueryPath(params.get("level")))) {
+      throw new Error("Play From Here snapshot URL or launch identity is missing or invalid.");
+    }
     const createAdapter = typeof options?.createAdapter === "function"
       ? options.createAdapter
       : createLumoRechargedBootAdapter;
-    const loadLevelDocument = typeof sourceInfo?.loadLevelDocument === "function"
-      ? sourceInfo.loadLevelDocument
-      : (typeof options?.loadLevelDocument === "function"
-        ? options.loadLevelDocument
-        : defaultBrowserLoadLevelDocument);
+    const baseLoader = typeof options?.loadLevelDocument === "function"
+      ? options.loadLevelDocument : defaultBrowserLoadLevelDocument;
+    let snapshotError = null;
+    const loadLevelDocument = editorPlay ? async (descriptor) => {
+      try {
+        // Validate identity BEFORE normalization strips the transport metadata.
+        const response = await fetch(descriptor.url);
+        if (!response.ok) throw new Error(`Play snapshot fetch failed (${response.status}).`);
+        const raw = await response.json();
+        if (raw?.editorPlay?.launchId !== editorLaunchId) throw new Error("Play snapshot launch identity mismatch.");
+        const normalized = loadRuntimeLevelDocument(raw);
+        if (!normalized.ok) throw new Error(`Invalid play snapshot: ${normalized.errors.join(" ")}`);
+        reportEditorPlayStatus("loaded", { levelIdentity: normalized.level.identity, world: normalized.level.world, source: "editor-snapshot" });
+        return { levelDocument: normalized.level };
+      } catch (error) {
+        snapshotError = error;
+        throw error;
+      }
+    } : baseLoader;
 
     const adapter = createAdapter({
       sourceDescriptor: sourceInfo.descriptor,
@@ -272,6 +238,7 @@ export async function bootLumoRechargedFromQuery(options = {}) {
     }
 
     const prepareResult = await adapter.prepare?.();
+    if (snapshotError) throw snapshotError;
     if (prepareResult?.ok !== true) {
       errors.push("Recharged prepare failed.");
     }
@@ -294,7 +261,7 @@ export async function bootLumoRechargedFromQuery(options = {}) {
     if (pfhDebugEnabled) {
       console.info("[Lumo Recharged][PFH] source selection", {
         sessionPayloadFound: sourceInfo?.sessionPayloadFound === true,
-        sessionPayloadKey: sourceInfo?.sessionPayloadKey || EDITOR_PLAY_LEVEL_KEY,
+        sessionPayloadKey: "obsolete-storage-ignored",
         chosenLevelSource: sourceInfo?.levelSourceType || "none",
         levelPath: typeof sourceInfo?.descriptor?.url === "string" ? sourceInfo.descriptor.url : "",
       });

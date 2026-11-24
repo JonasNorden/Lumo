@@ -267,11 +267,11 @@ function getSelectedPlayFromHereCell(state) {
   const selectedCell = state?.interaction?.selectedCell;
   if (!doc || !selectedCell) return null;
 
-  const x = Number(selectedCell.x);
-  const y = Number(selectedCell.y);
+  const x = selectedCell.x;
+  const y = selectedCell.y;
   const width = Number(doc?.dimensions?.width);
   const height = Number(doc?.dimensions?.height);
-  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(width) || !Number.isFinite(height)) {
+  if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isFinite(width) || !Number.isFinite(height)) {
     return null;
   }
 
@@ -8720,64 +8720,39 @@ if (event.shiftKey) {
     closeTopBarMenu();
   };
 
-  const getAuthoredSpawnCell = (doc) => {
-    if (!doc || typeof doc !== "object") return null;
-    const worldSpawn = doc?.world?.spawn;
-    const entitySpawn = Array.isArray(doc.entities)
-      ? doc.entities.find((entity) => String(entity?.type || "").trim().toLowerCase() === "player-spawn")
-      : null;
-    const spawn = worldSpawn && typeof worldSpawn === "object" ? worldSpawn : entitySpawn;
-    if (!spawn || typeof spawn !== "object") return null;
-    const x = Number(spawn.x);
-    const y = Number(spawn.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    return { x: x | 0, y: y | 0 };
-  };
-
   const handlePlayFromHereLaunch = () => {
     const state = store.getState();
     const doc = state.document.active;
     if (!doc) return;
 
     const selectedPfhCell = getSelectedPlayFromHereCell(state);
-    const spawnOverride = selectedPfhCell || getAuthoredSpawnCell(doc);
-
-    let bridgeResult = null;
+    const spawnOverride = selectedPfhCell;
+    // A later click owns the status line; earlier windows cannot overwrite it.
+    const request = {};
+    handlePlayFromHereLaunch.current = request;
     try {
-      bridgeResult = v2ToRuntimeLevelObject(doc);
       launchEditorPlayRuntime({
-        runtimeLevel: bridgeResult.runtimeLevel,
         levelDocument: doc,
         spawnOverride,
+        onStatus(event) {
+          if (handlePlayFromHereLaunch.current !== request) return;
+          const labels = {
+            launching: "Launch started",
+            opened: "Runtime opened",
+            loaded: "Current snapshot loaded",
+            ready: "Runtime ready",
+            failed: "Launch failed",
+          };
+          store.setState((draft) => {
+            draft.ui.importStatus = `Play From Here: ${labels[event.status] || event.status}${event.error ? `: ${event.error}` : ""}`;
+          });
+        },
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown bridge failure.";
       store.setState((draft) => {
-        draft.ui.importStatus = `Play launch failed: ${message}`;
+        draft.ui.importStatus = `Play launch failed: ${error instanceof Error ? error.message : "Unknown failure."}`;
       });
-      return;
     }
-
-    const unsupportedCount = bridgeResult.unsupported.length;
-    const warningsCount = bridgeResult.warnings.length;
-    const diagnostics = [];
-    if (unsupportedCount) diagnostics.push(`${unsupportedCount} unsupported`);
-    if (warningsCount) diagnostics.push(`${warningsCount} warning${warningsCount === 1 ? "" : "s"}`);
-    const liquidOmissionDiagnostics = bridgeResult.unsupported
-      .filter((entry) => /unsupported liquid volume/i.test(String(entry)))
-      .slice(0, 2);
-    const liquidSuffix = liquidOmissionDiagnostics.length
-      ? ` Omitted liquid volumes: ${liquidOmissionDiagnostics.join(" ")}`
-      : "";
-
-    store.setState((draft) => {
-      const spawnSourceLabel = selectedPfhCell
-        ? `selected cell (${selectedPfhCell.x}, ${selectedPfhCell.y})`
-        : "authored/default spawn";
-      draft.ui.importStatus = diagnostics.length
-        ? `Play From Here launched (${spawnSourceLabel}). Bridge diagnostics: ${diagnostics.join(", ")}.${liquidSuffix}`
-        : `Play From Here launched from ${spawnSourceLabel}.`;
-    });
   };
 
   const handleImport = () => {
